@@ -33,7 +33,7 @@
     hyprland.url = "github:hyprwm/Hyprland/0bd11c7a04a63d2785abd53363f09d552175d67d";
 
     omarchy = {
-      url = "github:basecamp/omarchy/v4.0.1";
+      url = "github:basecamp/omarchy/v4.0.0";
       flake = false;
     };
 

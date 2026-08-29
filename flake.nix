@@ -82,6 +82,12 @@
           # simply follow nixpkgs the way most apps here do.
           hey-cli = final.callPackage ./pkgs/apps/hey-cli.nix { };
 
+          # Two of the four applications Omarchy writes itself. nixpkgs has
+          # none of them, which is why modules/nixos.nix cannot reproduce
+          # upstream's preinstall set; these two close half that gap.
+          omawrite = final.callPackage ./pkgs/apps/omawrite.nix { };
+          omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
+
           # nixpkgs' `retroarch` is `retroarch-with-cores` built with an
           # EMPTY core list, so installing it gives an emulator that can run
           # nothing. `retroarch-full` is the obvious fix and the wrong one:
@@ -207,6 +213,8 @@
           grok-bot
           retroarch
           hey-cli
+          omawrite
+          omacalc
           ;
 
         # Re-exported so programs.nixarchy.apps.zen resolves like any other

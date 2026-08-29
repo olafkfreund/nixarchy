@@ -364,6 +364,24 @@
     attr = "t3code";
     arch = "t3code-bin";
   };
+  omawrite = {
+    # No menuId: Omarchy has no install row for its own applications -- upstream
+    # installs omawrite, omacalc, omacut and aether as preinstalls instead. Here
+    # they cannot be preinstalls, because nixpkgs carries none of them, so this
+    # is the opt-in form: programs.nixarchy.apps.omawrite.
+    label = "Omawrite";
+    category = "Utility";
+    attr = "omawrite";
+    ours = true;
+  };
+  omacalc = {
+    # As omawrite. Ships no .desktop of its own, so the package writes one --
+    # see pkgs/apps/omacalc.nix.
+    label = "Omacalc";
+    category = "Utility";
+    attr = "omacalc";
+    ours = true;
+  };
   hey-cli = {
     # No menuId: Omarchy v4.0.1 ships no HEY row at all -- hey.com/agents asks
     # for "Omarchy 4.1 or later", which is unreleased, and v4.0.1's AI group is

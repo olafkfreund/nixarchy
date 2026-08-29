@@ -78,6 +78,32 @@ let
       off = (configWith { displayManager = false; }).services.displayManager.sddm.enable;
     };
 
+    # The greeter compositor. NixOS defaults this to weston, which on hybrid
+    # NVIDIA never comes up -- and the vendored default/sddm/hyprland.lua that
+    # replaces it was shipped for a long time with nothing pointing at it. The
+    # "off" half is a user who set their own: mkDefault has to yield, or this
+    # takes weston away from someone who asked for it.
+    #
+    # Asserting on the whole string rather than merely that it is non-empty:
+    # the option has a default, so "set" is true either way, and what matters
+    # is that it names Hyprland and the vendored config.
+    greeterCompositor =
+      let
+        cmd =
+          (configWith { displayManager = true; }).services.displayManager.sddm.wayland.compositorCommand;
+      in
+      {
+        on = (builtins.match ".*/bin/Hyprland --config .*/default/sddm/hyprland[.]lua" cmd) != null;
+        # Same predicate as `on`, against a config that set its own: false is
+        # the pass here, because mkDefault must have yielded.
+        off =
+          (builtins.match ".*/bin/Hyprland --config .*/default/sddm/hyprland[.]lua" (
+            (configBeside {
+              services.displayManager.sddm.wayland.compositorCommand = "weston --shell=kiosk";
+            }).services.displayManager.sddm.wayland.compositorCommand
+          )) != null;
+      };
+
     binaryCaches = {
       on =
         builtins.elem "https://nixarchy.cachix.org"

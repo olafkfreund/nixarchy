@@ -549,6 +549,38 @@ in
         # Without this SDDM uses its own stock theme -- a blue gradient with a
         # placeholder avatar -- as the first screen of an Omarchy machine.
         theme = lib.mkDefault "omarchy";
+
+        # etc/sddm.conf.d/10-wayland.conf, which was the one part of upstream's
+        # SDDM configuration this module never carried:
+        #
+        #     CompositorCommand=start-hyprland -- --config /usr/share/sddm/hyprland.lua
+        #
+        # The package vendors that greeter config at default/sddm/hyprland.lua
+        # -- animations off, no logo, no splash -- and until now nothing pointed
+        # at it. NixOS defaults the greeter compositor to `weston --shell=kiosk`,
+        # so weston won by omission and the vendored file was dead weight.
+        #
+        # That is not merely cosmetic. On a hybrid NVIDIA laptop weston's
+        # greeter does not come up at all: sddm-helper exits 1 with
+        # SDDM::Auth::HELPER_TTY_ERROR, systemd hits the restart limit, and the
+        # machine is left with no login manager. Hyprland is already the
+        # compositor the session itself runs on that hardware.
+        #
+        # `Hyprland` rather than upstream's `start-hyprland -- ...`: that
+        # wrapper wants a systemd user session the greeter user does not have
+        # when programs.hyprland.withUWSM is on, and SDDM execs this string
+        # itself rather than parsing it out of an INI file, so the `--`
+        # separator upstream needs has no meaning here.
+        #
+        # Off-label, and worth saying so: nixpkgs types this option `internal`
+        # and offers only weston and kwin through wayland.compositor, so nothing
+        # in nixpkgs tests a Hyprland greeter. mkDefault, so a machine that
+        # would rather keep weston -- or has its own answer -- only has to say
+        # so.
+        wayland.compositorCommand = lib.mkDefault (
+          "${config.programs.hyprland.package}/bin/Hyprland --config "
+          + "${cfg.package}/share/omarchy/default/sddm/hyprland.lua"
+        );
       };
 
       # Left at mkDefault true rather than derived from services.pulseaudio:

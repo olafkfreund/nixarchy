@@ -63,7 +63,6 @@
   tmux,
   inotify-tools,
   python3,
-
   # Application tier. These are commands the bins invoke directly, not
   # libraries: omarchy-launch-terminal execs `uwsm-app -- xdg-terminal-exec`,
   # theme-set retints whichever terminals are present, and the menus launch
@@ -106,10 +105,8 @@
   xdg-user-dirs,
   satty,
   wl-screenrec,
-
   # Branding: this is a NixOS port, so the menu button wears the snowflake.
   nixos-icons,
-
 }:
 let
   # Everything the 438 scripts in bin/ invoke. Kept explicit rather than
@@ -714,6 +711,73 @@ stdenvNoCC.mkDerivation {
                   # yet unreachable to the scripts that call it.
                   [ -e "$out/bin/$name" ] || ln -s "$target" "$out/bin/$name"
                 done
+
+                # Agent skills. omarchy-provision-user symlinks every directory under
+                # default/agents/skills/ into ~/.claude/skills, ~/.agents/skills,
+                # ~/.codex/skills and ~/.pi/agent/skills, so whatever is here is what an
+                # AI agent on this machine is told to do. Upstream's are written for
+                # Arch: they point at /usr/share/omarchy, and their decision framework
+                # answers "install a package" with `omarchy pkg add`, which is a script
+                # this repo replaced with one that deliberately refuses. Shipping them
+                # unchanged means an agent confidently doing imperative things a rebuild
+                # then wipes -- the one failure mode that looks like success.
+                #
+                # The `omarchy` skill is renamed to `nixarchy`, so the skill an agent
+                # loads is named for the system it is actually on, and a new `nixos`
+                # skill owns packages and system changes. `diagnose-crash` keeps its
+                # name: bin/omarchy-agent-crash reads that path literally.
+                #
+                # SKILL.md and contributing.md are replaced outright -- their guidance
+                # is wrong here, not merely misspelt -- while the rest are patched, so
+                # an upstream edit to a line we depend on fails the build instead of
+                # quietly shipping Arch instructions again.
+                #
+                # Every --replace-fail pattern AND replacement below is a single line
+                # on purpose. `nix fmt` re-indents multi-line strings inside this
+                # expression, which silently breaks a literal match against file
+                # content that was never indented.
+                mv $out/share/omarchy/default/agents/skills/omarchy \
+                   $out/share/omarchy/default/agents/skills/nixarchy
+                cp -r --no-preserve=mode ${./skills}/. \
+                   $out/share/omarchy/default/agents/skills/
+
+                skills=$out/share/omarchy/default/agents/skills
+
+                # Paths. $OMARCHY_PATH is exported for every one of these readers, and
+                # hardcoding a store hash into documentation would be wrong at the next
+                # bump anyway.
+                substituteInPlace $skills/nixarchy/theming.md \
+                  --replace-fail '2. See how an existing theme is done via `/usr/share/omarchy/themes/catppuccin`.' '2. See how an existing theme is done via `$OMARCHY_PATH/themes/catppuccin`.' \
+                  --replace-fail 'Never edit stock themes under `/usr/share/omarchy/themes/` — changes are lost' 'Stock themes live under `$OMARCHY_PATH/themes/` — a read-only store path, so' \
+                  --replace-fail 'on update. Two safe options:' 'editing one is not possible. Two safe options:' \
+                  --replace-fail 'cp /usr/share/omarchy/themes/catppuccin/colors.toml ~/.config/omarchy/themes/catppuccin/' 'cp --no-preserve=mode "$OMARCHY_PATH"/themes/catppuccin/colors.toml ~/.config/omarchy/themes/catppuccin/' \
+                  --replace-fail 'cp -r /usr/share/omarchy/themes/catppuccin ~/.config/omarchy/themes/catppuccin-custom' 'cp -r --no-preserve=mode "$OMARCHY_PATH"/themes/catppuccin ~/.config/omarchy/themes/catppuccin-custom'
+
+                # `omarchy refresh pacman` does not exist here, so neither does the hook
+                # that runs before it. Marked inert rather than deleted: an agent that
+                # sees the name mentioned upstream should find out here that it is dead.
+                substituteInPlace $skills/nixarchy/hooks.md \
+                  --replace-fail '├── pre-refresh-pacman.d/   # Before `omarchy refresh pacman` re-syncs packages' '├── pre-refresh-pacman.d/   # Arch only — never runs on NixOS' \
+                  --replace-fail '├── post-update.d/          # During `omarchy update`, after system packages and migrations' '├── post-update.d/          # During `omarchy update`, i.e. after nixos-rebuild switch'
+
+                # The crash skill is upstream's and mostly distro-neutral; three claims
+                # are not. Arch'"'"'s debuginfod does not serve nixpkgs builds, "recent
+                # package updates" has a far better answer here than mtimes, and a bug
+                # report has two possible destinations rather than one.
+                substituteInPlace $skills/diagnose-crash/SKILL.md \
+                  --replace-fail 'This is Arch, which runs a public debuginfod server:' 'No public debuginfod serves nixpkgs builds. Symbols resolve only if this machine runs `nixseparatedebuginfod` (which serves the whole store on 127.0.0.1:1949 and exports `DEBUGINFOD_URLS` itself) or the package was built with `separateDebugInfo`. Run it anyway — gdb degrades to an unsymbolized stack rather than failing:' \
+                  --replace-fail 'DEBUGINFOD_URLS="https://debuginfod.archlinux.org" \' 'DEBUGINFOD_URLS="''${DEBUGINFOD_URLS:-}" \' \
+                  --replace-fail '- **Recent package updates.** A crash that starts right after an update points at' '- **Recent system generations.** A crash that starts right after a rebuild points at' \
+                  --replace-fail '  the update.' '  the rebuild. `nix profile diff-closures --profile /nix/var/nix/profiles/system` names exactly what changed between generations — stronger evidence than any package log — and `sudo nixos-rebuild --rollback switch` tests the theory in one command.' \
+                  --replace-fail '## If it is an Omarchy bug' '## If it is a Nixarchy or Omarchy bug' \
+                  --replace-fail 'Most application crashes are upstream bugs in those applications, not Omarchy'"'"'s' 'Most application crashes are upstream bugs in those applications, not the distribution'"'"'s' \
+                  --replace-fail 'doing. In the minority of cases where the cause really does sit within Omarchy'"'"'s' 'doing. In the minority of cases where the cause really does sit within Nixarchy'"'"'s or Omarchy'"'"'s'
+
+                substituteInPlace $skills/diagnose-crash/reporting.md \
+                  --replace-fail '# Reporting a Crash Upstream to Omarchy' '# Reporting a Crash to Nixarchy or Omarchy' \
+                  --replace-fail 'Read this only after concluding that a crash is genuinely Omarchy'"'"'s to fix.' 'Read this only after concluding that a crash is genuinely the distribution'"'"'s to fix. Two projects can own it: Nixarchy (<https://github.com/olafkfreund/nixarchy>) for anything specific to NixOS — the store, a rebuild, `nixarchy-apply`, a hardcoded `/usr` path, a replaced `omarchy-*` command — and Omarchy (<https://github.com/basecamp/omarchy>) for anything that would happen identically on Arch. When unsure, file against Nixarchy; the `nixarchy` skill'"'"'s `contributing.md` has the full rule.' \
+                  --replace-fail 'Omarchy is a configuration layer over Arch Linux, so a crash' 'Omarchy is a configuration layer and Nixarchy packages it for NixOS, so a crash' \
+                  --replace-fail 'Include what happened, what was expected, steps to reproduce, system details from' 'Include what happened, what was expected, steps to reproduce, `nixos-version` and the locked inputs from `nix flake metadata`, system details from'
 
                 # The Arch-name lookup omarchy-pkg-add answers with. Generated rather than
                 # hand-written into the script: data/apps.nix already maps every Install

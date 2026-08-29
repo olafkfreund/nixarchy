@@ -49,6 +49,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
 | Branded boot splash | Omarchy's Plymouth theme, selected by `boot.plymouth.theme` |
+| **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
 
 ## Why vendoring
 
@@ -72,6 +73,46 @@ way, so a `pacman` shim only changes *how*: instead of `command not found`, you
 get told what replaced the command. It keeps pacman's contract (stderr,
 non-zero), so `omarchy version` and `omarchy debug`, which already wrap it in
 `2>/dev/null || fallback`, are unaffected.
+
+## AI agent skills
+
+Omarchy ships skills for coding agents, and `omarchy-provision-user` symlinks every
+one of them into `~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills` and
+`~/.pi/agent/skills`. Whatever is in that directory is what an agent on this machine
+is told to do.
+
+Upstream's are written for Arch. They point at `/usr/share/omarchy`, and their
+decision framework answers "install a package" with `omarchy pkg add` — a script
+this repo replaced with one that deliberately refuses. Shipping them unchanged means
+an agent confidently doing imperative things the next rebuild wipes, which is the
+one failure mode that looks like success.
+
+So three skills ship here instead:
+
+| skill | owns |
+|---|---|
+| **`nixarchy`** | The desktop: Hyprland, the bar, themes, capture. Upstream's `omarchy` skill, renamed and corrected |
+| **`nixos`** | Packages and system changes: `apps.nix`, the Install menu, `nixos-rebuild`, generations, rollback, option search. New — upstream has no equivalent because it does not need one |
+| **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
+
+The split is the point. `nixarchy`'s decision framework used to answer "is it a
+package install?" with a pacman command; now it hands off to `nixos`, which opens
+with the only rule that matters — **a package installed imperatively does not
+survive the next rebuild** — and routes to `nixarchy-app-enable`, a flake edit, or
+`nix shell` depending on which is actually being asked for.
+
+`diagnose-crash` gets three corrections that are not cosmetic: there is no public
+debuginfod serving nixpkgs builds, so it explains `nixseparatedebuginfod` instead
+of pointing at Arch's server; "recent package updates" becomes
+`nix profile diff-closures`, which names exactly what changed between generations;
+and a bug report now has two possible destinations rather than one.
+
+Only `SKILL.md` and `contributing.md` are replaced outright — their guidance is
+wrong here, not merely misspelt. Everything else is patched with `--replace-fail`,
+so an Omarchy bump that rewords a line this depends on fails the build rather than
+quietly restoring Arch instructions. CI additionally asserts that no skill code
+block contains a pacman, yay, `/usr/share/omarchy` or Arch-debuginfod line, because
+prose may contrast with Arch on purpose but a fenced block is what an agent copies.
 
 ## Installing apps
 

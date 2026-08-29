@@ -147,6 +147,56 @@ jobs:
           done
           echo "pacman bins replaced, metadata intact"
 
+      - name: Verify the agent skills are NixOS-aware
+        run: |
+          # omarchy-provision-user symlinks every directory here into
+          # ~/.claude/skills, ~/.agents/skills, ~/.codex/skills and
+          # ~/.pi/agent/skills, so this is what an AI agent on the machine is
+          # told to do. Upstream ships Arch instructions; an Omarchy bump that
+          # reworded a line we patch would put them back with nothing failing.
+          skills=result/share/omarchy/default/agents/skills
+
+          have=$(ls "$skills" | sort | tr '\n' ' ')
+          [ "$have" = "diagnose-crash nixarchy nixos " ] || {
+            echo "::error::unexpected skill set: $have"
+            exit 1
+          }
+
+          # bin/omarchy-agent-crash reads this exact path, so the rename must
+          # never reach it.
+          test -f "$skills/diagnose-crash/SKILL.md" || {
+            echo "::error::omarchy-agent-crash reads diagnose-crash/SKILL.md; it is gone"
+            exit 1
+          }
+
+          for d in "$skills"/*/; do
+            name=$(basename "$d")
+            fm=$(sed -n 's/^name: //p' "$d/SKILL.md" | head -1)
+            [ "$fm" = "$name" ] || {
+              echo "::error::$name/SKILL.md declares name: $fm; agents key on the directory"
+              exit 1
+            }
+          done
+
+          # Prose may contrast with Arch on purpose ("upstream runs pacman -S,
+          # here the menu edits apps.nix") -- that comparison is the point. What
+          # must never appear is an Arch command inside a fenced block, because
+          # that is what an agent copies and runs.
+          bad=$(find "$skills" -name '*.md' -print0 | xargs -0 awk '
+            /^```/ { fence = !fence; next }
+            # pre-refresh-pacman.d is a hook DIRECTORY name, not a command, and
+            # the line already says it never runs here. Named, not counted.
+            fence && /pre-refresh-pacman\.d/ { next }
+            fence && /pacman|[^n]yay |\/usr\/share\/omarchy|debuginfod\.archlinux\.org/ {
+              printf "%s:%d: %s\n", FILENAME, FNR, $0
+            }')
+          if [ -n "$bad" ]; then
+            echo "::error::Arch commands inside skill code blocks:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "agent skills are NixOS-aware"
+
       - name: Verify every Install row is mapped
         run: |
           # data/apps.nix claims CI keeps it from rotting. This is that check.

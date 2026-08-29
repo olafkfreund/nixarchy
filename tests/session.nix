@@ -76,6 +76,23 @@ pkgs.testers.runNixOSTest {
     # shell this test controls.
     environment.sessionVariables.WLR_RENDERER_ALLOW_SOFTWARE = "1";
 
+    # And the greeter, which is a different process in a different environment.
+    # environment.sessionVariables reaches user sessions through PAM; the SDDM
+    # greeter runs as the sddm system user out of display-manager.service and
+    # never sees it.
+    #
+    # This did not matter while the greeter compositor was weston, which starts
+    # without a GPU. It matters now that the module names Hyprland: wlroots
+    # refuses to start without one unless told this is acceptable, so the
+    # greeter died, SDDM never authenticated, and this test sat on the
+    # "Authentication for user omarchy successful" wait until its timeout -- a
+    # hang rather than a failure, which is the slowest way to learn anything.
+    systemd.services.display-manager.environment = {
+      WLR_RENDERER_ALLOW_SOFTWARE = "1";
+      WLR_NO_HARDWARE_CURSORS = "1";
+      LIBGL_ALWAYS_SOFTWARE = "1";
+    };
+
     # No extra GPU device. qemu-vm already gives the machine a display, and
     # machine.screenshot() dumps *that* one -- adding a second sent Hyprland
     # to the new device while the screenshot kept reading the original, which

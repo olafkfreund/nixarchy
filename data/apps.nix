@@ -364,6 +364,23 @@
     attr = "t3code";
     arch = "t3code-bin";
   };
+  hey-cli = {
+    # No menuId: Omarchy v4.0.1 ships no HEY row at all -- hey.com/agents asks
+    # for "Omarchy 4.1 or later", which is unreleased, and v4.0.1's AI group is
+    # chatgpt/dictation/grok-bot/lm-studio/ollama. The package is available now
+    # as programs.nixarchy.apps.hey-cli; the menu row arrives with the omarchy
+    # bump. The generator fails on a menuId upstream does not ship, which is
+    # what keeps this honest.
+    #
+    # `hey-cli` rather than `hey`, because nixpkgs already has a `hey` and it is
+    # an unrelated HTTP load generator. The binary still installs as `hey`; see
+    # meta.mainProgram in pkgs/apps/hey-cli.nix, which is what the Install menu
+    # and nixarchy-doctor use to notice you already have it.
+    label = "HEY CLI";
+    category = "AI";
+    attr = "hey-cli";
+    ours = true;
+  };
   once = {
     menuId = "install.service.once";
     label = "ONCE";

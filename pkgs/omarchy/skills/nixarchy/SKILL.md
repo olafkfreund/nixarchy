@@ -252,6 +252,31 @@ cp ~/.config/hypr/bindings.lua ~/.config/hypr/bindings.lua.bak.$(date +%s)
 None of this needs a rebuild. That is the point of the boundary: desktop
 customization is immediate, and only the flake half requires `nixos-rebuild`.
 
+### A rebuild does not update a running session
+
+`OMARCHY_PATH` and `PATH` are set at login and keep pointing at whichever store
+path was current then. A `nixos-rebuild switch` installs a new package at a new
+path and **cannot change the environment of a session that is already running**,
+so every `omarchy-*` command the desktop executes — every keybinding, every menu
+row — comes from the old build until the user logs out and back in.
+
+```bash
+# what the session is running vs what is installed
+echo "$OMARCHY_PATH"
+readlink -f /run/current-system/sw/bin/omarchy | sed 's|/bin/omarchy$||'
+```
+
+If they differ, say so and stop. **Do not conclude a fix failed**, and do not
+test one by running the script at its absolute installed path — that path works
+while the keybinding still does not, which looks like the fix working and is the
+most misleading result available here.
+
+This is NixOS-specific. On Arch the tree lives at a fixed `/usr/share/omarchy`
+that is overwritten in place, so a running session picks up a new version at
+once. Here the path itself changes.
+
+`nixarchy-doctor` reports this under **Session**.
+
 ### The menu is generated, not yours to edit
 
 `~/.config/omarchy/extensions/omarchy-menu.jsonc` is the one file under

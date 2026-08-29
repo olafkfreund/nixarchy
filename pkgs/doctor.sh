@@ -161,6 +161,37 @@ else
 fi
 say ""
 
+# ---- is the running session actually on the installed build? -------------
+# A rebuild cannot change the environment of a graphical session that is
+# already running. OMARCHY_PATH and PATH are set at login and keep pointing at
+# whichever store path was current then, so every omarchy-* command the session
+# runs -- every keybinding, every menu row -- comes from the old package until
+# the user logs out and back in.
+#
+# On Arch this cannot happen: the files live at a fixed /usr/share/omarchy that
+# is overwritten in place, so a running session picks up a new version
+# immediately. Here the path itself changes, which is why this needs saying.
+#
+# It cost an evening to find. A web-app keybinding kept failing after the bug
+# behind it had been fixed and the system rebuilt, because the session was
+# still executing the previous build's copy of the script.
+if [ -n "${OMARCHY_PATH:-}" ] && [ -e "$sw/bin/omarchy" ]; then
+  say "${bold}Session${off}"
+  installed=$(readlink -f "$sw/bin/omarchy" | sed 's|/bin/omarchy$||')
+  if [ "$OMARCHY_PATH" != "$installed" ]; then
+    finding "This session is running an older build" "$warn" ""
+    say "     ${dim}session:   $OMARCHY_PATH${off}"
+    say "     ${dim}installed: $installed${off}"
+    say "     Log out and back in. A rebuild cannot change a running session's"
+    say "     environment, so until you do, every keybinding and menu row still"
+    say "     runs the old package -- including anything you just fixed."
+    notes+=("Your session's OMARCHY_PATH points at an older store path than the installed package. Log out and back in; until then every omarchy-* command the desktop runs comes from the previous build, which is the usual reason a fix 'did not work'.")
+  else
+    finding "Session is on the installed build" "$ok" ""
+  fi
+  say ""
+fi
+
 # ---- the default browser, and whether the menu can change it -------------
 # Setup > Default browser runs omarchy-default-browser, which ends in
 #

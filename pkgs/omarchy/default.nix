@@ -406,6 +406,35 @@ stdenvNoCC.mkDerivation {
                     'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
                     'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium* | chromium*) ;;'
 
+                # Upstream's bug, carried here because it breaks every web app keybinding
+                # and the fix is one word.
+                #
+                # `xdg-settings get default-web-browser` does not read the mime database
+                # when $BROWSER is set. It takes $BROWSER as a command name and returns
+                # the FIRST .desktop under ~/.local/share/applications whose Exec matches
+                # it -- and a Chrome user has one of those per installed web app, all
+                # reading `Exec=google-chrome-stable --app-id=...`. So on a machine with
+                # `export BROWSER=google-chrome-stable` in its shell rc, this returns
+                # whichever PWA sorts first. Observed on a real host: it answered
+                # `chrome-aamlbainilhgmgbgbgcbcihnfgcnkgbd-Default.desktop`, which is
+                # Lidarr. That matches no arm of the case above, so every web app fell
+                # back to chromium -- a browser the user was not logged into -- and Email,
+                # Calendar and the rest opened nothing they recognised.
+                #
+                # Upstream already knows: omarchy-launch-browser, omarchy-default-browser
+                # and omarchy-remove-browser all guard the same call with `env -u BROWSER`.
+                # omarchy-launch-webapp is the one place they missed, and it is the one
+                # every SUPER+SHIFT web app binding goes through.
+                #
+                # Not NixOS-specific -- it breaks the same way on Arch -- so it belongs
+                # upstream, and --replace-fail is what makes this a loan rather than a
+                # fork: when they fix it, this line stops matching and the build fails,
+                # which is the reminder to delete it.
+                substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
+                  --replace-fail \
+                    'browser=$(xdg-settings get default-web-browser)' \
+                    'browser=$(env -u BROWSER xdg-settings get default-web-browser)'
+
                 # omarchy-launch-webapp and omarchy-launch-browser find the browser by
                 # reading its .desktop out of {~/.local,~/.nix-profile,/usr}/share/
                 # applications. On NixOS a system package's desktop file is under

@@ -147,6 +147,30 @@ jobs:
           done
           echo "pacman bins replaced, metadata intact"
 
+      - name: Verify the browser lookup ignores $BROWSER
+        run: |
+          # `xdg-settings get default-web-browser` does not read the mime database
+          # when $BROWSER is set: it treats $BROWSER as a command name and returns
+          # the first .desktop whose Exec matches, which on a Chrome user's machine
+          # is whichever web app sorts first. Every one of these scripts acts on the
+          # answer, so an unguarded call sends web apps to the wrong browser.
+          #
+          # Upstream guards three of the four. If a bump adds a fifth caller, or
+          # drops a guard, this is what says so.
+          for b in omarchy-launch-webapp omarchy-launch-browser \
+                   omarchy-default-browser omarchy-remove-browser; do
+            f="result/share/omarchy/bin/$b"
+            while IFS= read -r line; do
+              case "$line" in
+                *"env -u BROWSER xdg-settings get default-web-browser"*) ;;
+                *"xdg-settings get default-web-browser"*)
+                  echo "::error::$b reads default-web-browser without 'env -u BROWSER': $line"
+                  exit 1 ;;
+              esac
+            done < "$f"
+          done
+          echo "browser lookups all ignore \$BROWSER"
+
       - name: Verify the agent skills are NixOS-aware
         run: |
           # omarchy-provision-user symlinks every directory here into

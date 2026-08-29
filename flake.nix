@@ -87,6 +87,11 @@
           # upstream's preinstall set; these two close half that gap.
           omawrite = final.callPackage ./pkgs/apps/omawrite.nix { };
           omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
+          omacut = final.callPackage ./pkgs/apps/omacut.nix { };
+
+          # Not one of Omarchy's preinstalls -- a terminal-effects toy from the
+          # same authors, packaged because it was asked for.
+          ttfx = final.callPackage ./pkgs/apps/ttfx.nix { };
 
           # nixpkgs' `retroarch` is `retroarch-with-cores` built with an
           # EMPTY core list, so installing it gives an emulator that can run
@@ -215,6 +220,8 @@
           hey-cli
           omawrite
           omacalc
+          omacut
+          ttfx
           ;
 
         # Re-exported so programs.nixarchy.apps.zen resolves like any other

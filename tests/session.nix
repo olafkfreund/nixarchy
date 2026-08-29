@@ -213,7 +213,13 @@ pkgs.testers.runNixOSTest {
         " | grep -q 'Authentication for user .*omarchy.* successful'")
 
     # ---- session -------------------------------------------------------
-    machine.wait_for_unit("user@1000.service")
+    # systemd-logind starts user@1000.service asynchronously once the session
+    # opens, so there is a window where the unit is inactive with no job queued
+    # yet. wait_for_unit treats exactly that as a hard failure -- it raises
+    # "is inactive and there are no pending jobs" immediately rather than
+    # waiting -- so on a loaded runner it fails a session that was about to come
+    # up fine. Poll for "active" instead, which tolerates the window.
+    machine.wait_until_succeeds("systemctl is-active user@1000.service")
 
     # Long enough for omarchy-launch-shell to exhaust its supervision budget:
     # it gives up after 5 relaunches inside one minute.
@@ -318,6 +324,36 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test -s /home/omarchy/.config/starship.toml")
     machine.succeed("test -s /home/omarchy/.config/tmux/tmux.conf")
     machine.succeed("test -s /home/omarchy/.config/foot/foot.ini")
+
+    # Agent skills, linked into all four agent homes by the activation script
+    # in modules/home.nix rather than by omarchy-provision-user.
+    #
+    # provision-user does this too, and is guarded by a finalize-user marker, so
+    # it runs once in a machine's life. That is fine on Arch, where the skill
+    # directory is a fixed path overwritten in place, and wrong here: every bump
+    # moves the package to a new store path, so a once-only link keeps pointing
+    # at the previous one. A machine that took the omarchy -> nixarchy rename
+    # went on serving the old Arch skill from a path nothing would update again,
+    # which is what this asserts against.
+    #
+    # The names matter as much as the links: an agent keys on the directory
+    # name, so `omarchy` still being here would mean the rename never reached
+    # the only place it is read.
+    for home in [".agents/skills", ".claude/skills", ".codex/skills",
+                 ".pi/agent/skills"]:
+        for skill in ["nixarchy", "nixos", "diagnose-crash"]:
+            machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
+            # -e follows the link: a link into a store path that is not in this
+            # closure would pass -L and fail here, which is the stale case.
+            machine.succeed(f"test -e /home/omarchy/{home}/{skill}/SKILL.md")
+        machine.fail(f"test -e /home/omarchy/{home}/omarchy")
+    print("agent skills linked into all four agent homes, under the new names")
+
+    # bin/omarchy-agent-crash reads this path literally, so the rename must
+    # never reach it.
+    machine.succeed(
+        "grep -q 'agents/skills/diagnose-crash/SKILL.md' "
+        "$(readlink -f /run/current-system/sw/bin/omarchy-agent-crash)")
 
     # btop.conf asks for a theme literally named "current"; without the link
     # btop starts with no theme at all.

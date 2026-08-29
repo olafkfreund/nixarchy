@@ -85,7 +85,13 @@ pkgs.testers.runNixOSTest {
 
     # The bus the launch below needs belongs to the user manager, which
     # autologin starts -- so wait for it rather than assume it is up.
-    machine.wait_for_unit("user@1000.service")
+    # systemd-logind starts user@1000.service asynchronously once the session
+    # opens, so there is a window where the unit is inactive with no job queued
+    # yet. wait_for_unit treats exactly that as a hard failure -- it raises
+    # "is inactive and there are no pending jobs" immediately rather than
+    # waiting -- so on a loaded runner it fails a session that was about to come
+    # up fine. Poll for "active" instead, which tolerates the window.
+    machine.wait_until_succeeds("systemctl is-active user@1000.service")
     machine.wait_until_succeeds("test -S /run/user/1000/bus")
 
     # Launch the session the way a greeter would: whatever Exec= says.

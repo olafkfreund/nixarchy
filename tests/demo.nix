@@ -186,11 +186,14 @@ let
           " | grep -q 'Authentication for user .*omarchy.* successful'")
 
       # ---- the desktop ---------------------------------------------------
-      # A generous timeout rather than the default: authentication succeeding
-      # and the user manager being up are separated by however long it takes
-      # this machine to start one, and the default expired on a workstation
-      # busy building something else.
-      machine.wait_for_unit("user@1000.service", timeout=180)
+      # Poll rather than wait_for_unit, and not for the reason this comment
+      # used to give. The failure here was never a timeout -- wait_for_unit
+      # defaults to fifteen minutes and no workstation takes that long to start
+      # a user manager. systemd-logind starts user@1000.service asynchronously
+      # once the session opens, and wait_for_unit raises "is inactive and there
+      # are no pending jobs" the moment it looks during that window. The
+      # timeout=180 that used to be here addressed the wrong mechanism.
+      machine.wait_until_succeeds("systemctl is-active user@1000.service")
       # -f, matching the whole command line, not -x, matching the process name
       # exactly: on NixOS the running binary is a wrapper, so its name is not
       # literally "quickshell" and -x waits forever on a shell that is up and

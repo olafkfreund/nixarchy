@@ -161,6 +161,70 @@ else
 fi
 say ""
 
+# ---- the default browser, and whether the menu can change it -------------
+# Setup > Default browser runs omarchy-default-browser, which ends in
+#
+#   env -u BROWSER xdg-settings set default-web-browser "$desktop_id" || exit 1
+#
+# On a machine where mimeapps.list is a store symlink -- which is what
+# xdg.mimeApps in Home Manager produces, and the right way to declare this --
+# xdg-settings writes "Read-only file system" to stderr and STILL EXITS 0. The
+# `|| exit 1` never fires, the menu reports success, and the default does not
+# change. Nothing is broken and nothing says so, which is the only reason this
+# is worth a section: the failure is silent, and the fix lives in a file the
+# menu cannot reach.
+#
+# Only the two paths xdg-utils actually consults are checked. ~/.local/share/
+# mimeapps.list is NOT one of them -- it looks plausible and is never read.
+say "${bold}Default browser${off}"
+managed_mime=""
+for f in "$config_home/mimeapps.list" \
+  "${XDG_DATA_HOME:-$HOME/.local/share}/applications/mimeapps.list"; do
+  if [ -L "$f" ] && case "$(readlink -f "$f")" in /nix/store/*) true ;; *) false ;; esac; then
+    managed_mime="$f"
+    break
+  fi
+done
+
+if [ -n "$managed_mime" ]; then
+  finding "${managed_mime/#$HOME/\~} is store-managed" "$warn" "(home-manager, probably)"
+  say "     That is the correct way to declare it, and it means ${bold}Setup >${off}"
+  say "     ${bold}Default browser${off} cannot change it: xdg-settings fails on the"
+  say "     read-only file, exits 0 anyway, and the menu reports success while"
+  say "     nothing happens. Set it where it is declared instead:"
+  say "       xdg.mimeApps.defaultApplications.\"x-scheme-handler/https\" = \"firefox.desktop\";"
+  notes+=("Your mimeapps.list is a store symlink, so 'omarchy default browser' and any 'xdg-settings set' report success and change nothing. Declare the handler in xdg.mimeApps.defaultApplications; it is the same setting, in the place that survives a rebuild.")
+else
+  current_browser=$(env -u BROWSER xdg-settings get default-web-browser 2>/dev/null || true)
+  if [ -n "$current_browser" ]; then
+    finding "Default browser is $current_browser" "$ok" "the menu can change it"
+  else
+    finding "No default browser set" "$warn" ""
+    say "     Web app keybindings -- Email, Calendar -- resolve the browser"
+    say "     through it, and fall back to chromium without one."
+  fi
+fi
+
+# $BROWSER makes `xdg-settings get` skip the mime database entirely: it treats
+# the value as a command name and returns the first .desktop under
+# ~/.local/share/applications whose Exec matches. A Chrome user has one of
+# those per installed web app, so this reliably answers with whichever web app
+# sorts first. Observed on a real machine: it named a Lidarr web app, and every
+# web app keybinding opened that instead of a browser.
+if [ -n "${BROWSER:-}" ]; then
+  browser_via_env=$(xdg-settings get default-web-browser 2>/dev/null || true)
+  browser_via_mime=$(env -u BROWSER xdg-settings get default-web-browser 2>/dev/null || true)
+  if [ -n "$browser_via_env" ] && [ "$browser_via_env" != "$browser_via_mime" ]; then
+    finding "\$BROWSER=$BROWSER is shadowing it" "$warn" ""
+    say "     xdg-settings answers ${bold}$browser_via_env${off} with it set, and"
+    say "     ${bold}${browser_via_mime:-nothing}${off} without. Scripts that forget"
+    say "     ${dim}env -u BROWSER${off} get the first one -- usually a web app, not a"
+    say "     browser. Unset BROWSER; tools that want it fall back to xdg-open."
+    notes+=("\$BROWSER is set, and xdg-settings resolves it by scanning ~/.local/share/applications for the first Exec that matches -- which on a machine with Chrome web apps is one of those, not a browser. Changing its value does not help: google-chrome.desktop's own Exec is the same binary. Unset it.")
+  fi
+fi
+say ""
+
 # ---- things nixarchy defers on -------------------------------------------
 say "${bold}Services${off}"
 if systemctl is-enabled tlp.service >/dev/null 2>&1; then

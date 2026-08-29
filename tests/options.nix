@@ -89,19 +89,23 @@ let
     # is that it names Hyprland and the vendored config.
     greeterCompositor =
       let
-        cmd =
-          (configWith { displayManager = true; }).services.displayManager.sddm.wayland.compositorCommand;
+        greeterCmd = cfg: cfg.services.displayManager.sddm.wayland.compositorCommand;
+        isOurs = cmd: builtins.match ".*/bin/Hyprland --config .*/default/sddm/hyprland[.]lua" cmd != null;
       in
       {
-        on = (builtins.match ".*/bin/Hyprland --config .*/default/sddm/hyprland[.]lua" cmd) != null;
-        # Same predicate as `on`, against a config that set its own: false is
-        # the pass here, because mkDefault must have yielded.
-        off =
-          (builtins.match ".*/bin/Hyprland --config .*/default/sddm/hyprland[.]lua" (
-            (configBeside {
-              services.displayManager.sddm.wayland.compositorCommand = "weston --shell=kiosk";
-            }).services.displayManager.sddm.wayland.compositorCommand
-          )) != null;
+        on = isOurs (
+          greeterCmd (configWith {
+            displayManager = true;
+          })
+        );
+
+        # Same predicate, against a config that set its own: false is the pass
+        # here, because mkDefault has to yield to it.
+        off = isOurs (
+          greeterCmd (configBeside {
+            services.displayManager.sddm.wayland.compositorCommand = "weston --shell=kiosk";
+          })
+        );
       };
 
     binaryCaches = {

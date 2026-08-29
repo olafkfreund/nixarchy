@@ -769,6 +769,7 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'DEBUGINFOD_URLS="https://debuginfod.archlinux.org" \' 'DEBUGINFOD_URLS="''${DEBUGINFOD_URLS:-}" \' \
                   --replace-fail '- **Recent package updates.** A crash that starts right after an update points at' '- **Recent system generations.** A crash that starts right after a rebuild points at' \
                   --replace-fail '  the update.' '  the rebuild. `nix profile diff-closures --profile /nix/var/nix/profiles/system` names exactly what changed between generations — stronger evidence than any package log — and `sudo nixos-rebuild --rollback switch` tests the theory in one command.' \
+                  --replace-fail '  Covers reporting a confirmed Omarchy bug upstream — see reporting.md.' '  Covers reporting a confirmed Nixarchy or Omarchy bug — see reporting.md.' \
                   --replace-fail '## If it is an Omarchy bug' '## If it is a Nixarchy or Omarchy bug' \
                   --replace-fail 'Most application crashes are upstream bugs in those applications, not Omarchy'"'"'s' 'Most application crashes are upstream bugs in those applications, not the distribution'"'"'s' \
                   --replace-fail 'doing. In the minority of cases where the cause really does sit within Omarchy'"'"'s' 'doing. In the minority of cases where the cause really does sit within Nixarchy'"'"'s or Omarchy'"'"'s'

@@ -349,6 +349,49 @@ in
             "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc"
         fi
 
+        # Agent skills, relinked on every activation.
+        #
+        # Upstream does this in omarchy-provision-user, which is guarded by a
+        # `finalize-user` marker and therefore runs exactly once, ever. That is
+        # fine on Arch, where the skill directory is a fixed path that gets
+        # overwritten in place. Here every bump moves the package to a new store
+        # path, so a once-only link points at the previous one -- still resolving
+        # until it is garbage-collected, then dangling. Renaming the `omarchy`
+        # skill to `nixarchy` made it worse than stale: the machine kept serving
+        # the old Arch skill from a path nothing would update again.
+        #
+        # provision-user's own --force would fix the links and also replay
+        # /etc/skel over $HOME, which is not a thing to do for four symlinks.
+        # So: the same loop, declaratively, on every rebuild.
+        #
+        # Only symlinks whose target is itself a skills directory in the store
+        # are removed. That is what distinguishes a link this module or
+        # provision-user planted from a skill the user wrote by hand, which is a
+        # real directory and is never touched.
+        ${
+          let
+            skillsDir = "${omarchyPath}/default/agents/skills";
+          in
+          ''
+            for agentdir in .agents/skills .claude/skills .codex/skills .pi/agent/skills; do
+              dest="${config.home.homeDirectory}/$agentdir"
+              run mkdir -p "$dest"
+
+              for link in "$dest"/*; do
+                [ -L "$link" ] || continue
+                case "$(readlink "$link")" in
+                  /nix/store/*/agents/skills/*) run rm -f "$link" ;;
+                esac
+              done
+
+              ${pkgs.findutils}/bin/find ${skillsDir} -mindepth 1 -maxdepth 1 -type d |
+                while read -r skill; do
+                  run ln -sfn "$skill" "$dest/$(basename "$skill")"
+                done
+            done
+          ''
+        }
+
         # Declared plugins, linked in by the id their manifest claims.
         #
         # A symlink rather than a copy, and that is a supported shape rather
@@ -382,7 +425,7 @@ in
             fi
             run rm -f "${manifest}"
             ${lib.concatMapStringsSep "
-" (drv: ''
+        " (drv: ''
               id=$(cat ${drv}/id)
               if [ -e "${dir}/$id" ] && [ ! -L "${dir}/$id" ]; then
                 echo "nixarchy: ${dir}/$id is your own directory, not replacing it"

@@ -300,9 +300,14 @@ omarchy refresh <app>
 omarchy refresh config <config-file>
 ```
 
-**There is no `omarchy reinstall` here.** Upstream's nuclear option re-runs the Arch
-installer. The equivalent on NixOS is better: the previous working system is still on
-disk as a generation.
+**`omarchy reinstall` exists but cannot finish here.** Its first act is
+`omarchy-reinstall-pkgs`, which runs `pacman -Suu`. The shim refuses, `set -e` aborts
+the script, and `omarchy-reinstall-configs` never runs. The ordering is safe — it
+fails before touching anything — but it does mean the command is not a recovery
+route, despite prompting as though it were.
+
+To reset configs, use `omarchy refresh <app>` above. For anything else, the previous
+working system is still on disk as a generation:
 
 ```bash
 sudo nixos-rebuild --rollback switch    # back to the previous generation

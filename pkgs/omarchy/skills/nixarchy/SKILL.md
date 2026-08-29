@@ -136,7 +136,7 @@ Nixarchy is built on:
 | **NixOS** | Base OS | The flake (see the `nixos` skill), `~/.config/` |
 | **Hyprland** | Wayland compositor/WM | `~/.config/hypr/` |
 | **Omarchy shell** | Status bar + notifications (Quickshell) | `~/.config/omarchy/shell.json` |
-| **Launcher/menus** | Quickshell menu | `~/.config/omarchy/extensions/omarchy-menu.jsonc` |
+| **Launcher/menus** | Quickshell menu | `programs.nixarchy.menu.extraEntries` — the jsonc is generated, see below |
 | **Alacritty/Foot/Kitty/Ghostty** | Terminals | `~/.config/<terminal>/` |
 | **Omarchy OSD** | On-screen display | Quickshell plugin |
 
@@ -245,12 +245,47 @@ cp ~/.config/hypr/bindings.lua ~/.config/hypr/bindings.lua.bak.$(date +%s)
 # 4. Apply changes
 # - Hyprland: auto-reloads on save, but MUST validate with `hyprctl reload` and `hyprctl configerrors`
 # - Omarchy shell: shell.json and user plugin code under ~/.config/omarchy/plugins/ hot-reload on save
-# - Menus/launcher: ~/.config/omarchy/extensions/omarchy-menu.jsonc hot-reloads on save
+# - Menus/launcher: NOT editable here -- see "The menu is generated" below
 # - Terminals: apply with `omarchy restart terminal` (reloads running terminals; foot picks changes up in new windows)
 ```
 
 None of this needs a rebuild. That is the point of the boundary: desktop
 customization is immediate, and only the flake half requires `nixos-rebuild`.
+
+### The menu is generated, not yours to edit
+
+`~/.config/omarchy/extensions/omarchy-menu.jsonc` is the one file under
+`~/.config/omarchy/` that is **not** editable. It is a symlink to a read-only
+`/nix/store` path:
+
+```
+~/.config/omarchy/extensions/omarchy-menu.jsonc -> /etc/nixarchy/omarchy-menu.jsonc -> /nix/store/...
+```
+
+That is deliberate. This file carries the rewrite that points every `install.*`
+row at the Nix app selection instead of pacman, so it has to track the package.
+A copy would go stale the moment the package moved and leave the Install menu
+driving commands that no longer match.
+
+Upstream's documentation says this file hot-reloads on save. It does — but you
+cannot save it, and trying is worse than failing: replacing the symlink with a
+real file silently stops the menu tracking the package, and the next rebuild
+overwrites it anyway.
+
+Add rows declaratively instead:
+
+```nix
+programs.nixarchy.menu.extraEntries = {
+  "personal.notes" = {
+    icon = "󰎞";
+    label = "Notes";
+    action = "omarchy-launch-editor ~/notes";
+  };
+};
+```
+
+Nothing else in `~/.config/omarchy/` works this way — `shell.json`, the themes
+and the plugins directory are all real, writable, and yours.
 
 If a file under `~/.config/` turns out to be a symlink into `/nix/store`, it is
 managed by Home Manager and editing it is not possible. Change it in your Home

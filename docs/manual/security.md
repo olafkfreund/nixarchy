@@ -9,11 +9,11 @@ things Omarchy does for you. Here is how each of them lands on NixOS.
 
 | Upstream | nixarchy |
 |---|---|
-| Full-disk encryption, mandatory | Chosen when you install NixOS. LUKS is a checkbox in the installer; nixarchy has no installer and cannot add it afterwards. |
+| Full-disk encryption, mandatory | The nixarchy installer encrypts by default — LUKS2 on btrfs, and you opt out with Ctrl+C rather than in. Installing the flake onto NixOS you already run cannot add it afterwards; that is a decision made when the disk was partitioned. |
 | ufw, closed except 53317 | `networking.firewall`, closed except 53317. Same policy, different tool. |
 | Arch rolling updates | `nix flake update` moves nixpkgs; security fixes arrive with the next `omarchy update`. |
 | Omarchy's own package mirror | Everything comes from nixpkgs and this flake. There is no Omarchy repo and no AUR. |
-| Cloudflare in front of the ISOs | There are no ISOs. Builds are served by the nixarchy binary cache and cache.nixos.org. |
+| Cloudflare in front of the ISOs | The ISO is built from source with `nix build .#iso`, not downloaded — there is nothing in front of it because there is nothing hosted. Packages come from the nixarchy binary cache and cache.nixos.org, both signed. |
 
 ## The firewall
 

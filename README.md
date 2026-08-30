@@ -631,6 +631,47 @@ build from source. This is the one setting worth a deliberate decision:
 substituters are a list, so they merge into whatever you already trust without
 any conflict to warn you.
 
+## Installing on a fresh machine
+
+There is an ISO now. Build it, write it to a stick, boot it, and answer nine
+questions.
+
+```
+nix build github:olafkfreund/nixarchy#iso
+sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+No boot menu, no login prompt: the installer is what comes up.
+
+![The installer asks the same questions Omarchy does](docs/img/installer/01-keyboard.png)
+
+Keyboard, then your account, then the disk. Encryption is on unless you press
+Ctrl+C at the overwrite warning, and one password serves your user, root and the
+disk alike.
+
+Then it gets out of the way. The log goes to `/var/log/nixarchy-install.log`
+rather than the screen, because a wall of store paths tells nobody anything they
+can act on.
+
+![The install itself: a wordmark, a bar, and a tip](docs/img/installer/02-dashboard.png)
+
+![Installed nixarchy in 7m 32s](docs/img/installer/03-finish.png)
+
+Reboot and you are at the desktop. An encrypted install goes straight there —
+the passphrase you typed at boot already proved who you are, so there is no
+second password.
+
+**What you get is a flake you own.** `/etc/nixos` is a git repository holding a
+`flake.nix`, a `configuration.nix`, the disk layout that formatted the disk, and
+your app selection. Edit it and run `nh os switch`. Nothing the installer did is
+hidden from that directory, which is the point: a rebuild immediately after
+install builds nothing, because everything it did is described there.
+
+**Two caveats worth knowing before you write the stick.** The image needs a
+network, because it downloads the closure rather than carrying it — making the
+install offline and fast is the next phase of the work. And UEFI only: the layout
+is an ESP with systemd-boot and there is no BIOS path.
+
 ## Adding it to a machine you already run
 
 Start here:
@@ -1176,14 +1217,13 @@ someone would miss it:
 
 Known gaps in detail:
 
-- **There is no bare-metal installer.** This is a consumable flake: the section
-  above is titled *"Adding it to a machine you already run"*, and that is the only
-  way in. Someone with a blank drive installs NixOS by hand first. Omarchy's own
-  pitch is a USB stick and five questions, so this is the largest thing missing
-  rather than a rough edge — tracked as an epic with fourteen sub-issues covering
-  a `disko` layout, a reference host, an installer that generates a flake you own,
-  a VM test that installs and boots the result, and an ISO carrying the closure so
-  the install is a local copy rather than a download.
+- **The installer works, and it is not finished.** `nix build .#iso` produces a
+  bootable image that asks a handful of questions and installs onto a blank disk
+  in a few minutes — see *Installing on a fresh machine* above. What is missing
+  is the part that makes it fast and offline: the ISO still downloads the closure
+  rather than carrying it, so an install needs a network and takes as long as the
+  download does. The hermetic VM test that would keep the whole path from rotting
+  between releases is also not passing yet. Both are tracked on the epic.
 
 - `brave-origin` has no published source; use `apps.brave` with policies in
   `/etc/brave/policies/managed`

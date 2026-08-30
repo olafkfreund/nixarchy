@@ -8,13 +8,29 @@ There is no nixarchy installer, so there is no unattended installer either.
 
 Omarchy's ISO watches for a second drive labelled `cidata`, reads the wizard's
 answers off it, and installs with nobody at the keyboard — which makes it a
-good base image for disposable VMs. nixarchy has no ISO at all. It is a flake
-you add to a machine that already runs NixOS, and it does not ship anything
-that boots. An installer is tracked as
-[issue #6](https://github.com/olafkfreund/nixarchy/issues/6), an epic with 14
-sub-issues; until it lands, the upstream `cidata` mechanism described on
-[the upstream page](https://omarchy.org/manual/unattended-installs/) has no
-counterpart here.
+good base image for disposable VMs.
+
+**nixarchy has the answers file but not yet the drive.** `nixarchy-install
+--answers <file>` takes every answer the wizard asks for and installs with
+nobody at the keyboard — one `key=value` per line, parsed rather than sourced,
+and it names every missing key in one go instead of one per attempt:
+
+```ini
+device=/dev/vda
+encrypt=yes
+luks_passphrase=correct horse
+hostname=nixarchy
+username=alice
+password_hash=$6$...        # from `mkpasswd -m sha-512`; or
+password=hunter2            # plaintext, hashed by the installer
+timezone=Europe/London
+keymap=us
+```
+
+What is missing is the `cidata` half: the ISO does not yet look for a labelled
+drive and feed itself from it. That is
+[issue #14's follow-up](https://github.com/olafkfreund/nixarchy/issues/14) —
+the code path exists and only the detection is absent.
 
 ## What to do instead
 

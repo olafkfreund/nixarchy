@@ -8,12 +8,14 @@ There is no nixarchy installer, so there is no dual-boot installer either.
 
 Omarchy ships an ISO whose installer offers a **Free space install** next to
 Windows, encrypts the partition with LUKS, and then runs `limine-scan` to add
-the other operating systems to its bootloader. None of that exists here.
-nixarchy is a flake you add to a machine that already runs NixOS; it does not
-partition disks, and it does not ship boot media. A bare-metal installer is
-tracked as [issue #6](https://github.com/olafkfreund/nixarchy/issues/6), an
-epic with 14 sub-issues, and until it lands this page cannot honestly say more
-than the following.
+the other operating systems to its bootloader.
+
+**nixarchy has the ISO now, but not the free-space install.** Its installer
+formats a whole disk — that and nothing else. Installing alongside Windows is
+[issue #47](https://github.com/olafkfreund/nixarchy/issues/47), and it is the
+one piece of this work whose failure mode is destroying data that is not ours,
+so it is being done carefully rather than quickly. Until it lands, this page
+cannot honestly say more than the following.
 
 ## What to do instead
 

@@ -5,16 +5,48 @@ title: Getting Started
 # Getting Started
 
 Omarchy ships as an ISO: boot it, answer a few questions, and a machine comes
-out the other end. **nixarchy does not.** There is no ISO, no bare-metal
-installer, no dual-boot or unattended install. nixarchy is a flake that you add
-to a machine that already runs NixOS. Installing NixOS is your job; turning it
-into an Omarchy desktop is the flake's.
+out the other end. **nixarchy does that now too** — and it is also still a flake
+you can add to a machine that already runs NixOS. Two ways in, and which one you
+want depends on whether the drive is blank.
 
-A bare-metal installer is tracked as an epic (issue #6, 14 sub-issues). Until
-it lands, the path below is the only one, and the pages upstream devotes to
-[dual-boot](https://omarchy.org/manual/dual-boot-install/) and
-[unattended installs](https://omarchy.org/manual/unattended-installs/) do not
-apply here.
+## The ISO
+
+```
+nix build github:olafkfreund/nixarchy#iso
+sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+Boot it. There is no boot menu and no login prompt; the installer is what comes
+up. It asks for a keyboard layout, a username and password, a hostname, a
+timezone and a disk — the same questions upstream asks, in the same order.
+
+![The installer asks the same questions Omarchy does](../img/installer/01-keyboard.png)
+
+Encryption is on unless you press Ctrl+C at the overwrite warning, and one
+password serves your user, root and the disk alike.
+
+![The install itself](../img/installer/02-dashboard.png)
+
+![Installed nixarchy in 7m 32s](../img/installer/03-finish.png)
+
+Reboot and you are at the desktop. On an encrypted install you go straight
+there: the passphrase you typed at boot already proved who you are.
+
+What you end up with is **a flake you own** at `/etc/nixos` — a git repository
+holding `flake.nix`, `configuration.nix`, the disk layout that formatted the
+disk, and your app selection. Edit it, run `nh os switch`. A rebuild immediately
+after installing builds nothing, because everything the installer did is
+described in those files rather than done behind them.
+
+Two things to know first. **The image needs a network:** it downloads the
+closure rather than carrying it, so an install is as fast as your connection.
+Making it offline is the next phase of the work. And it is **UEFI only** — the
+layout is an ESP with systemd-boot, and there is no BIOS path.
+
+## Or: add it to NixOS you already run
+
+If the machine already runs NixOS, you do not want the ISO. The rest of this
+page is that path.
 
 ## 1. Install NixOS
 

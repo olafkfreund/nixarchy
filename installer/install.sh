@@ -395,6 +395,13 @@ write_flake() {
     subst "$f" '"@encrypt@"' "$encrypt"
     subst "$f" '"@autologin@"' "$encrypt"
   done
+
+  # A placeholder, because of an ordering the flake creates: configuration.nix
+  # imports ./hardware-configuration.nix, and the disko script that formats the
+  # disk is evaluated *out of this flake* -- so the flake has to evaluate before
+  # there is a mounted disk to generate a hardware config from. An empty module
+  # is enough for that evaluation and is replaced by the real one at step 7.
+  printf '{ ... }:\n{ }\n' >"$work/hardware-configuration.nix"
 }
 
 format_disk() {
@@ -406,8 +413,13 @@ format_disk() {
   # Evaluated from the USER'S flake, not ours: the same disk-config.nix the
   # installed machine imports is the one that formats the disk. That is the
   # whole reason the layout is a file rather than a parted script.
-  nix "${NIX_FLAGS[@]}" run \
-    "$work#nixosConfigurations.$hostname.config.system.build.diskoScript"
+  # Built and then executed, rather than `nix run`: diskoScript's output IS the
+  # script, and `nix run` looks for $out/bin/<name> inside it, which fails with
+  # "Not a directory".
+  local script
+  script=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths \
+    "$work#nixosConfigurations.$hostname.config.system.build.diskoScript")
+  "$script"
 
   rm -f /tmp/nixarchy-luks.key
 }
@@ -436,8 +448,18 @@ install_flake_dir() {
 }
 
 run_install() {
+  # What would have to be built, printed before doing it. On a machine with no
+  # network an unseeded build input is the difference between an install and a
+  # confusing cascade of source downloads, and this names it once rather than
+  # leaving it to be inferred from whatever failed first.
+  nix "${NIX_FLAGS[@]}" build --dry-run \
+    "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1 |
+    head -40 || true
+
+  # nixos-install takes --option, not --extra-experimental-features: it is not
+  # a nix subcommand and rejects the flag outright.
   nixos-install --root /mnt --flake "/mnt/etc/nixos#$hostname" --no-root-password \
-    "${NIX_FLAGS[@]}" \
+    --option extra-experimental-features "nix-command flakes" \
     --option extra-substituters "$SUBSTITUTERS" \
     --option extra-trusted-public-keys "$TRUSTED_KEYS"
 }
@@ -485,12 +507,11 @@ main() {
   write_flake
 
   if [ "$dry_run" = true ]; then
-    # Empty, and deliberately so: this stands in for what
-    # `nixos-generate-config --no-filesystems` produces, which defines no
-    # fileSystems at all. A stub that defines `/` conflicts with disko's
-    # definition of the same mountpoint and the flake stops evaluating -- which
-    # is the whole reason step 7 passes --no-filesystems.
-    printf '{ ... }:\n{ }\n' >"$work/hardware-configuration.nix"
+    # The placeholder write_flake left is exactly what a dry run wants: it
+    # stands in for `nixos-generate-config --no-filesystems`, which defines no
+    # fileSystems at all. A stub that defined `/` would conflict with disko's
+    # definition of the same mountpoint and the flake would stop evaluating --
+    # which is the whole reason step 7 passes --no-filesystems.
     git -C "$work" init -q
     git -C "$work" add -A
     echo "dry run: no disk touched. Flake written to:"

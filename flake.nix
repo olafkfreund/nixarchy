@@ -363,6 +363,12 @@
         # Boot the smoke test: `nix run .#vm`
         vm = self.nixosConfigurations.vm.config.system.build.vm;
 
+        # A VM that installs onto a blank disk, WITH a network -- which
+        # checks.install cannot have, because it is a sandboxed derivation and
+        # its whole point is that a rebuild afterwards cannot fetch anything.
+        # See installer/vm.nix.
+        installer-vm = self.nixosConfigurations.installer-vm.config.system.build.vm;
+
         # Every command the vendored scripts exec by name, in one prefix.
         # The bins are unwrapped on purpose, so an incomplete runtimeDeps list
         # produces a package that builds cleanly and then fails at the click
@@ -388,38 +394,46 @@
       # Smoke-test VM. Not a daily driver -- it exists to prove the QuickShell
       # bar comes up against Hyprland's Lua config before any packaging effort
       # is spent on the long tail.
-      nixosConfigurations.vm = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = { inherit inputs; };
-        modules = [
-          self.nixosModules.nixarchy
-          home-manager.nixosModules.home-manager
-          ./vm/configuration.nix
-        ];
-      };
+      nixosConfigurations = {
+        installer-vm = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [ ./installer/vm.nix ];
+        };
 
-      # The machine the installer produces, with the installer's own defaults.
-      # Built in CI so the install path cannot rot between releases, and baked
-      # into the ISO's store later so that installing copies rather than
-      # downloads -- which only works if this closure is a closure of something
-      # a real install actually produces.
-      #
-      # `device` is a placeholder: nothing here formats a disk. What matters is
-      # that the expensive derivations in this toplevel are the same ones a real
-      # install needs, and the device string is not one of them.
-      nixosConfigurations.reference = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = { inherit inputs; };
-        modules = [
-          self.nixosModules.nixarchy
-          home-manager.nixosModules.home-manager
-          inputs.disko.nixosModules.disko
-          (import ./installer/host.nix {
-            hostname = "nixarchy";
-            username = "omarchy";
-          })
-          (import ./installer/disk-config.nix { device = "/dev/vda"; })
-        ];
+        vm = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [
+            self.nixosModules.nixarchy
+            home-manager.nixosModules.home-manager
+            ./vm/configuration.nix
+          ];
+        };
+
+        # The machine the installer produces, with the installer's own defaults.
+        # Built in CI so the install path cannot rot between releases, and baked
+        # into the ISO's store later so that installing copies rather than
+        # downloads -- which only works if this closure is a closure of something
+        # a real install actually produces.
+        #
+        # `device` is a placeholder: nothing here formats a disk. What matters is
+        # that the expensive derivations in this toplevel are the same ones a real
+        # install needs, and the device string is not one of them.
+        reference = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [
+            self.nixosModules.nixarchy
+            home-manager.nixosModules.home-manager
+            inputs.disko.nixosModules.disko
+            (import ./installer/host.nix {
+              hostname = "nixarchy";
+              username = "omarchy";
+            })
+            (import ./installer/disk-config.nix { device = "/dev/vda"; })
+          ];
+        };
       };
 
       devShells = eachSystem (system: {
@@ -469,6 +483,12 @@
           inherit inputs;
           pkgs = pkgsFor.${system};
         };
+
+        # tests/install.nix is deliberately NOT wired in here yet: it does not
+        # pass. Wiring a failing check would break `nix flake check` for
+        # everyone and, worse, put the name `checks.install` in the output of a
+        # command people trust to mean "this works". #12 tracks finishing it;
+        # #13 wires it into CI once it is green.
 
         vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
 

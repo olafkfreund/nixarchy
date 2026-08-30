@@ -3,7 +3,6 @@
 # The template files carry @tokens@; the installer substitutes the answers it
 # collected. What cannot be a template file is the lock, so it is derived here.
 {
-  lib,
   runCommand,
   jq,
   self,
@@ -19,25 +18,24 @@ let
       or (throw "flake-template: build from a committed tree; the generated flake pins nixarchy by commit");
 
   url = "github:olafkfreund/nixarchy/${rev}";
-
-  # Every input of this repo becomes an input of the nixarchy node, so the
-  # generated lock is a pure superset of ours -- which is what keeps hyprland
-  # on hyprwm's cache rather than silently re-resolving through a follows.
-  inputNames = builtins.attrNames (builtins.fromJSON (builtins.readFile ../flake.lock))
-    .nodes.root.inputs;
 in
 runCommand "nixarchy-flake-template"
   {
     nativeBuildInputs = [ jq ];
     inherit rev url;
     inherit (self) narHash;
-    inputs = lib.concatStringsSep " " inputNames;
     passthru = { inherit url rev; };
   }
   ''
     mkdir -p $out
     cp ${./template}/flake.nix          $out/flake.nix
     cp ${./template}/configuration.nix  $out/configuration.nix
+
+    # Verbatim, never hand-maintained: the user's flake carries its own disk
+    # layout so their fileSystems stay declarative without depending on
+    # nixarchy's copy moving under them.
+    cp ${../installer/disk-config.nix}  $out/disk-config.nix
+
     # Written rather than shipped as a template file, matching what
     # vm/configuration.nix's activation script already does. The exact header
     # is load-bearing: nixarchy-pkg-add matches `{ ... }:` to rewrite it to
@@ -47,25 +45,34 @@ runCommand "nixarchy-flake-template"
     # generated here, where the linter cannot ask for it.
     printf '{ ... }:\n{ }\n' > $out/nixarchy-apps.nix
 
-    # Verbatim, never hand-maintained: the user's flake carries its own disk
-    # layout so their fileSystems stay declarative without depending on
-    # nixarchy's copy moving under them.
-    cp ${../installer/disk-config.nix}  $out/disk-config.nix
-
     # The lock is transformed rather than regenerated. `nix flake lock` on the
     # target would re-resolve every input against whatever is current, so the
     # first `nixos-rebuild switch` would build a different system from the one
     # just installed -- and it needs a network the offline ISO does not have.
-    #
-    # So: keep every node exactly as built, add a `nixarchy` node pinned to
-    # this revision, and make it the root's only input.
-    jq --arg rev "$rev" \
-       --arg narHash "$narHash" \
-       --arg url "$url" \
-       --arg inputs "$inputs" '
-      ($inputs | split(" ")) as $names
+    jq --arg rev "$rev" --arg narHash "$narHash" '
+      # nixarchy inherits our root inputs verbatim. NOT a name-to-name map:
+      # once nix has disambiguated names, root.nixpkgs points at a node called
+      # "nixpkgs_2", and inventing the mapping rather than copying it points
+      # the generated flake at a node that does not exist.
+      .nodes.root.inputs as $rootInputs
+
+      # An input whose value is an ARRAY is a follows path resolved from the
+      # ROOT: disko.nixpkgs is ["nixpkgs"], meaning "whatever the root calls
+      # nixpkgs". Once nixarchy is the root'"'"'s only input every one of those
+      # paths points at nothing, and nix refuses with "follows a non-existent
+      # input" while trying to update a lock it must never update. So re-root
+      # them all under nixarchy. There are around forty, nearly all beneath
+      # hyprland, which is why this is structural rather than a list.
+      | .nodes |= with_entries(
+          if .key == "root" or (.value | has("inputs") | not) then .
+          else .value.inputs |= with_entries(
+                 if (.value | type) == "array"
+                 then .value = ["nixarchy"] + .value
+                 else . end)
+          end)
+
       | .nodes.nixarchy = {
-          inputs: ($names | map({ (.): . }) | add),
+          inputs: $rootInputs,
           locked: {
             type: "github",
             owner: "olafkfreund",

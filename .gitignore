@@ -3,3 +3,9 @@ result-*
 .direnv/
 *.qcow2
 nixarchy-vm.qcow2
+
+# qemu writes its EFI variable store beside wherever the VM was started, and
+# `nix run .#installer-vm` uses UEFI. 540 KB of binary firmware state is not
+# repository content -- it got committed once already.
+nixos-efi-vars.fd
+*.fd

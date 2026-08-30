@@ -207,6 +207,48 @@
         # Omarchy session. Everything in checks/ runs in a machine with no GPU,
         # no Bluetooth radio, no network and no sound; this asks the questions
         # that leaves unanswered.
+        # `nix run github:olafkfreund/nixarchy#install`, as root, from a NixOS
+        # live ISO. Formats ONE disk with installer/disk-config.nix, writes the
+        # generated flake to /mnt/etc/nixos and runs nixos-install against it.
+        #
+        # Every answer ends up as text in that flake: the machine it produces
+        # belongs to the flake, not to this script.
+        install = pkgsFor.${system}.writeShellApplication {
+          name = "nixarchy-install";
+          runtimeInputs = with pkgsFor.${system}; [
+            gum
+            coreutils
+            gnused
+            gnugrep
+            gawk
+            findutils
+            util-linux # lsblk, findmnt
+            git
+            mkpasswd
+            nixos-install-tools # nixos-install, nixos-generate-config
+            nix
+            kbd # loadkeys, and the keymap list
+            tzdata # the timezone list
+          ];
+          # Spliced at build time the way doctor splices @apps@, so the script
+          # never has to find these itself and `nix run` works from anywhere.
+          text =
+            builtins.replaceStrings
+              [
+                "@template@"
+                "@gumenv@"
+                "@tzdata@"
+                "@kbd@"
+              ]
+              [
+                "${self.packages.${system}.flake-template}"
+                "${./installer/gum-env.sh}"
+                "${pkgsFor.${system}.tzdata}"
+                "${pkgsFor.${system}.kbd}"
+              ]
+              (builtins.readFile ./installer/install.sh);
+        };
+
         # The flake the installer writes to /etc/nixos: the template files with
         # their @tokens@ still in place, plus a lock derived from this repo's
         # own so the installed machine resolves to exactly what was built.

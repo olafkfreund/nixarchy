@@ -128,6 +128,35 @@
           version = omarchyVersion;
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
+
+          # nixpkgs is on 0.3.0, whose session lock aborts on DPMS.
+          #
+          # WlSessionLock::updateSurfaces reached qFatal -- "Tried to show
+          # lockscreen surfaces without active lock" -- when screens slept and
+          # woke while locked. quickshell dies, and because the Wayland
+          # session-lock protocol deliberately keeps the compositor locked when
+          # its lock client disappears, the machine is left blank with nothing to
+          # type a password into. Reboot is the only way out. Seen three times in
+          # one night, ~65-70 MB of coredump each.
+          #
+          # v0.3.1 fixes it, and says so in as many words: "Fixed session lock
+          # crashes on sleep, wake, DPMS, and unlocking." Three commits touch
+          # wayland/lock; 897fcdaa is this one -- it null-checks the wayland
+          # output and skips placeholder screens instead of asserting.
+          #
+          # overrideAttrs rather than a fork: nixpkgs keeps the build, the Qt
+          # wrapper and the dependency set, and only the tag moves. Passed here
+          # rather than set on the overlay, so a machine using quickshell for
+          # something of its own keeps nixpkgs'.
+          #
+          # DELETE THIS once nixpkgs ships >= 0.3.1.
+          quickshell = final.quickshell.overrideAttrs (_: rec {
+            version = "0.3.1";
+            src = final.fetchzip {
+              url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v${version}.tar.gz";
+              hash = "sha256-CLX2Zp5i5BuLbOxNOkwRd9YY84IOrACNxBV79o9/F9Y=";
+            };
+          });
         };
       };
 

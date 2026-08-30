@@ -32,6 +32,19 @@ SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
 TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
 
 dry_run=false
+answers_file=""
+
+# set -u: every answer the two paths share is initialised here, so a key the
+# answers file omits fails validation rather than aborting on an unbound
+# variable three functions later.
+device=""
+encrypt=""
+hostname=""
+username=""
+password_hash=""
+luks_passphrase=""
+timezone=""
+keymap=""
 
 usage() {
   cat <<'USAGE'
@@ -40,7 +53,23 @@ nixarchy-install -- install nixarchy onto a disk.
   nixarchy-install              ask, then install
   nixarchy-install --dry-run    ask, write the flake to a temp directory,
                                 touch no disk, print the directory and stop
+  nixarchy-install --answers F  take every answer from F and ask nothing
   nixarchy-install --help       this
+
+The answers file is one key=value per line, # for comments, no quoting:
+
+  device=/dev/vda           whole disk, not a partition
+  encrypt=yes               yes or no
+  luks_passphrase=...       required when encrypt=yes
+  hostname=nixarchy
+  username=alice
+  password_hash=$6$...      from `mkpasswd -m sha-512`; or
+  password=hunter2          plaintext, hashed here -- for tests
+  timezone=Europe/London
+  keymap=us
+
+It holds a password in clear, which is inherent to installing without being
+asked. Nothing copies it onto the installed machine.
 
 Run as root from a NixOS live medium, on a UEFI machine. It formats the disk
 you choose, completely. There is no dual-boot path yet.
@@ -90,22 +119,37 @@ ask_keymap() {
   loadkeys "$keymap" 2>/dev/null || true
 }
 
+# Shared by both paths on purpose: two copies of "what is a valid username"
+# diverge, and the divergence surfaces as an install that works interactively
+# and fails unattended, or worse the reverse.
+validate_username() {
+  [[ $1 =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+    echo "not a usable Linux username"
+    return 1
+  }
+  # root exists; nixbld* belong to the daemon. Creating either produces an
+  # install that fails late and confusingly.
+  case $1 in
+    root | nixbld*)
+      echo "that name is taken by the system"
+      return 1
+      ;;
+  esac
+}
+
+validate_hostname() {
+  [[ $1 =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || {
+    echo "letters, digits and hyphens; not starting or ending with one"
+    return 1
+  }
+}
+
 ask_identity() {
+  local why
   while :; do
     username=$(gum input --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ")
-    if ! [[ $username =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-      gum style --foreground 1 "Not a usable Linux username."
-      continue
-    fi
-    # root exists; nixbld* belong to the daemon. Creating either here produces
-    # an install that fails late and confusingly.
-    case $username in
-      root | nixbld*)
-        gum style --foreground 1 "That name is taken by the system."
-        continue
-        ;;
-    esac
-    break
+    why=$(validate_username "$username") && break
+    gum style --foreground 1 "$why"
   done
 
   while :; do
@@ -131,8 +175,8 @@ ask_identity() {
   while :; do
     hostname=$(gum input --placeholder "nixarchy" --prompt "Hostname> ")
     hostname=${hostname:-nixarchy}
-    [[ $hostname =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] && break
-    gum style --foreground 1 "Letters, digits and hyphens; not starting or ending with one."
+    why=$(validate_hostname "$hostname") && break
+    gum style --foreground 1 "$why"
   done
 
   timezone=$(
@@ -196,6 +240,136 @@ confirm_summary() {
     printf 'Encrypted,%s\n' "$encrypt"
   } | gum table --separator ',' --print --columns "Setting,Value"
   gum confirm "Does this look right?"
+}
+
+# ---------------------------------------------------------------------------
+# Unattended
+#
+# The answers file is parsed line by line and never sourced. It lives on
+# removable media or inside a test derivation, and running it as shell so that
+# a stray $ or backtick executes is a mistake waiting to happen.
+#
+# It also holds a plaintext password and a LUKS passphrase, unavoidably. The
+# installer never copies it anywhere that persists.
+# ---------------------------------------------------------------------------
+read_answers() {
+  local file=$1 line key value lineno=0 password=""
+  [ -r "$file" ] || {
+    echo "nixarchy-install: answers: cannot read $file" >&2
+    exit 2
+  }
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    lineno=$((lineno + 1))
+    line=${line%%#*}
+    line=${line#"${line%%[![:space:]]*}"}
+    line=${line%"${line##*[![:space:]]}"}
+    [ -n "$line" ] || continue
+
+    case $line in
+      *=*) ;;
+      *)
+        echo "nixarchy-install: answers: line $lineno: not key=value: $line" >&2
+        exit 2
+        ;;
+    esac
+    key=${line%%=*}
+    value=${line#*=}
+
+    # A fixed case rather than a dynamic assignment, which is the whole reason
+    # an unknown key can be caught at all. A silently ignored `hostnme=` is a
+    # machine called nixarchy that nobody asked for.
+    case $key in
+      device) device=$value ;;
+      encrypt) encrypt=$value ;;
+      luks_passphrase) luks_passphrase=$value ;;
+      hostname) hostname=$value ;;
+      username) username=$value ;;
+      password) password=$value ;;
+      password_hash) password_hash=$value ;;
+      timezone) timezone=$value ;;
+      keymap) keymap=$value ;;
+      *)
+        echo "nixarchy-install: answers: line $lineno: unknown key: $key" >&2
+        exit 2
+        ;;
+    esac
+  done <"$file"
+
+  # Hashing here rather than in validation keeps the plaintext's life short.
+  if [ -n "$password" ]; then
+    if [ -n "$password_hash" ]; then
+      echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
+      exit 2
+    fi
+    password_hash=$(mkpasswd -m sha-512 "$password")
+    # One password for user, root and disk, as the interactive path does.
+    [ -n "$luks_passphrase" ] || luks_passphrase=$password
+    unset password
+  fi
+}
+
+validate_answers() {
+  local problems=() why
+
+  # Collected rather than reported one at a time: a test author should not have
+  # to fix the same file eight times to learn what it is missing.
+  [ -n "$device" ] || problems+=("device: required")
+  [ -n "$encrypt" ] || problems+=("encrypt: required (yes or no)")
+  [ -n "$hostname" ] || problems+=("hostname: required")
+  [ -n "$username" ] || problems+=("username: required")
+  [ -n "$password_hash" ] || problems+=("password: one of password or password_hash is required")
+  [ -n "$timezone" ] || problems+=("timezone: required")
+  [ -n "$keymap" ] || problems+=("keymap: required")
+
+  if [ -n "$device" ]; then
+    if [ ! -b "$device" ]; then
+      problems+=("device: $device is not a block device")
+    elif [ "$(lsblk -dno TYPE "$device" 2>/dev/null)" != "disk" ]; then
+      # A partition here would be formatted as though it were the whole disk.
+      problems+=("device: $device is not a whole disk")
+    fi
+  fi
+
+  case $encrypt in
+    "" | yes | no) ;;
+    *) problems+=("encrypt: must be yes or no, got: $encrypt") ;;
+  esac
+  if [ "$encrypt" = yes ] && [ -z "$luks_passphrase" ]; then
+    problems+=("luks_passphrase: required when encrypt=yes")
+  fi
+
+  if [ -n "$hostname" ]; then
+    why=$(validate_hostname "$hostname") || problems+=("hostname: $why")
+  fi
+  if [ -n "$username" ]; then
+    why=$(validate_username "$username") || problems+=("username: $why")
+  fi
+
+  # Catches the person who pasted plaintext into password_hash.
+  case $password_hash in
+    "" | '$'*) ;;
+    *) problems+=("password_hash: not a crypt(3) hash (should start with \$)") ;;
+  esac
+
+  [ -z "$timezone" ] || [ -e "$TZDIR/$timezone" ] || problems+=("timezone: no such zone: $timezone")
+  if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then
+    problems+=("keymap: no such keymap: $keymap")
+  fi
+
+  if [ ${#problems[@]} -gt 0 ]; then
+    printf 'nixarchy-install: answers: %s\n' "${problems[@]}" >&2
+    exit 2
+  fi
+
+  # The file is the consent; there is no confirmation prompt. The summary is
+  # still printed so a test log shows what was about to happen.
+  printf 'hostname=%s username=%s device=%s encrypt=%s timezone=%s keymap=%s\n' \
+    "$hostname" "$username" "$device" "$encrypt" "$timezone" "$keymap"
+
+  # The rest of the script speaks true/false; the file speaks yes/no because
+  # that is what a person writing one expects.
+  [ "$encrypt" = yes ] && encrypt=true || encrypt=false
 }
 
 # ---------------------------------------------------------------------------
@@ -272,6 +446,14 @@ main() {
   while [ $# -gt 0 ]; do
     case $1 in
       --dry-run) dry_run=true ;;
+      --answers)
+        shift
+        [ $# -gt 0 ] || {
+          echo "nixarchy-install: --answers needs a file" >&2
+          exit 2
+        }
+        answers_file=$1
+        ;;
       -h | --help)
         usage
         exit 0
@@ -289,11 +471,16 @@ main() {
     require_root_and_uefi
   fi
 
-  ask_keymap
-  ask_identity
-  ask_device
-  ask_encrypt
-  confirm_summary || exit 1
+  if [ -n "$answers_file" ]; then
+    read_answers "$answers_file"
+    validate_answers
+  else
+    ask_keymap
+    ask_identity
+    ask_device
+    ask_encrypt
+    confirm_summary || exit 1
+  fi
 
   write_flake
 

@@ -80,8 +80,9 @@ yourself is exactly what `omarchy update` does. The only thing you lose by
 running them by hand is the confirmation prompt.
 
 The more useful distinction is between updating everything and updating one
-input. `omarchy update` moves all of them; `nix flake update nixpkgs --flake
-<flake>` moves one. When you are chasing a specific fix, the second is the
+input. `omarchy update` moves all of them;
+`nix flake update nixpkgs --flake <flake>` moves one. When you are chasing a
+specific fix, the second is the
 better habit — see [Updating NixOS](updating-nixos.md#the-long-way-and-when-you-want-it).
 
 ## Rolling back bad updates

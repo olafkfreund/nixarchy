@@ -1,7 +1,10 @@
 title: nixarchy
 description: Omarchy, vendored for NixOS
-theme: jekyll-theme-primer
-show_downloads: false
+url: "https://olafkfreund.github.io"
+baseurl: "/nixarchy"
+
+# No theme gem. The layouts in _layouts/ and assets/style.css are the whole
+# site, so what builds on GitHub Pages is exactly what is in this directory.
 
 # Only the manual is a site. The screenshots and the demo gif live in docs/
 # too and are linked from the README, so they must not become pages.
@@ -16,4 +19,25 @@ defaults:
   - scope:
       path: "manual"
     values:
-      layout: default
+      layout: manual
+
+# The sidebar, in reading order. Alphabetical would open the manual on "AI"
+# and bury "Getting Started", so the order is stated rather than derived.
+# A page added to manual/ and not listed here will not appear in the nav.
+nav:
+  - { path: /manual/,                      title: Welcome to nixarchy }
+  - { path: /manual/philosophy,            title: The NixOS Philosophy }
+  - { path: /manual/getting-started,       title: Getting Started }
+  - { path: /manual/updating-nixos,        title: Updating NixOS }
+  - { path: /manual/updates,               title: Updates }
+  - { path: /manual/other-packages,        title: Packages }
+  - { path: /manual/dotfiles,              title: Dotfiles }
+  - { path: /manual/making-your-own-theme, title: Making Your Own Theme }
+  - { path: /manual/development-tools,     title: Development Tools }
+  - { path: /manual/ai,                    title: AI }
+  - { path: /manual/gaming,                title: Gaming }
+  - { path: /manual/security,              title: Security }
+  - { path: /manual/system-snapshots,      title: System Snapshots }
+  - { path: /manual/dual-boot-install,     title: Dual Boot Install }
+  - { path: /manual/unattended-installs,   title: Unattended Installs }
+  - { path: /manual/troubleshooting,       title: Troubleshooting }

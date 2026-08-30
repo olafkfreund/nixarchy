@@ -7,10 +7,11 @@ title: AI
 Omarchy's agent tooling — the lazy-loaded launchers, the default agent, the
 agents panel in the top bar, crash diagnosis, the local-LLM recommendations —
 is upstream's tree running unchanged. `omarchy default agent <name>`,
-`Super + Shift + Ctrl + A`, `omarchy agent prompt "..."`, `omarchy agent crash
-<pid>`, `omarchy toggle crash-capture` and the `omarchy-agent-*` commands all
-work as [the upstream page](https://omarchy.org/manual/ai/) describes them, and
-that page is the reference for how to use them.
+`Super + Shift + Ctrl + A`, `omarchy agent prompt "..."`,
+`omarchy agent crash <pid>`, `omarchy toggle crash-capture` and the
+`omarchy-agent-*` commands all work as
+[the upstream page](https://omarchy.org/manual/ai/) describes them, and that
+page is the reference for how to use them.
 
 Two things differ, and the second matters more than it looks.
 

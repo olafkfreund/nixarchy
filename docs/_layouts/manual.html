@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.title }} — nixarchy manual</title>
+<meta name="description" content="{{ site.description }}">
+<link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+</head>
+<body>
+
+<header class="masthead">
+  <a class="wordmark" href="{{ '/' | relative_url }}">nixarchy</a>
+  <p class="tagline">The Manual</p>
+</header>
+
+<div class="page">
+  <nav class="sidebar" aria-label="Manual contents">
+    <input type="search" id="filter" class="filter" placeholder="Search" autocomplete="off" spellcheck="false">
+    <span class="filter-hint">/</span>
+
+    {%- comment -%}
+      page.url is /manual/foo.html (or /manual/ for the index). Normalise both
+      sides to a trailing slash so the current page highlights either way.
+    {%- endcomment -%}
+    {%- assign cur = page.url | remove: 'index.html' | remove: '.html' | append: '/' | replace: '//', '/' -%}
+    <ol class="toc">
+      {%- for item in site.nav -%}
+      {%- assign href = item.path | append: '/' | replace: '//', '/' -%}
+      <li{% if href == cur %} class="current"{% endif %}>
+        <a href="{{ item.path | relative_url }}">{{ item.title }}</a>
+      </li>
+      {%- endfor -%}
+    </ol>
+
+    <p class="offsite">
+      <a href="https://github.com/olafkfreund/nixarchy">Source</a> ·
+      <a href="https://omarchy.org/manual/">Omarchy's manual</a>
+    </p>
+  </nav>
+
+  <main class="content">
+    {{ content }}
+  </main>
+</div>
+
+<script src="{{ '/assets/manual.js' | relative_url }}"></script>
+</body>
+</html>

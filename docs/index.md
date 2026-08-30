@@ -1,8 +1,7 @@
 ---
 title: nixarchy
+layout: home
 ---
-
-# nixarchy
 
 [Omarchy](https://omarchy.org) — the Hyprland desktop — vendored for NixOS, with
 its menus rewired to Nix instead of pacman.
@@ -25,7 +24,7 @@ New to NixOS? Start with
 
 ## Elsewhere
 
-| | |
+| Where | What is there |
 |---|---|
 | [Source and README](https://github.com/olafkfreund/nixarchy) | installation, module options, design notes, what is left |
 | [Omarchy's own manual](https://omarchy.org/manual/) | the desktop itself — 38 of its 51 pages are true here unchanged |

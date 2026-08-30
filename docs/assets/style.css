@@ -1,0 +1,179 @@
+/* nixarchy manual — dark, monospace, sidebar. No framework, no theme gem. */
+
+:root {
+  --bg:        #22242e;
+  --fg:        #c9cddb;
+  --dim:       #6b7089;
+  --accent:    #a5cf5d;   /* the wordmark green */
+  --link:      #8ab4f8;
+  --rule:      #333747;
+  --code-bg:   #1a1c24;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code",
+          Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------- masthead ---------- */
+
+.masthead { padding: 3.5rem 1.5rem 2.5rem; text-align: center; }
+
+.wordmark {
+  display: inline-block;
+  color: var(--accent);
+  font-size: clamp(2.6rem, 9vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  text-decoration: none;
+}
+.wordmark:hover { text-decoration: none; }
+
+.tagline { margin: 0.6rem 0 0; color: var(--link); font-size: 1rem; }
+
+/* ---------- layout ---------- */
+
+.page {
+  display: grid;
+  grid-template-columns: 20rem minmax(0, 1fr);
+  gap: 3rem;
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 6rem;
+}
+
+/* ---------- sidebar ---------- */
+
+.sidebar { position: relative; align-self: start; position: sticky; top: 1.5rem; }
+
+.filter {
+  width: 100%;
+  padding: 0.4rem 1.5rem 0.6rem 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--fg);
+  font: inherit;
+}
+.filter::placeholder { color: var(--dim); }
+.filter:focus { outline: none; border-bottom-color: var(--link); }
+
+.filter-hint {
+  position: absolute;
+  top: 0.4rem;
+  right: 0;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.toc {
+  list-style: none;
+  counter-reset: item;
+  margin: 1.6rem 0 0;
+  padding: 0;
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.toc li { counter-increment: item; margin: 0 0 0.35rem; }
+
+/* The 01, 02, 03 gutter. Numbering follows the DOM, so a filtered list
+   keeps each page's real number rather than renumbering as you type. */
+.toc li::before {
+  content: counter(item, decimal-leading-zero);
+  display: inline-block;
+  width: 2.2rem;
+  color: var(--dim);
+}
+
+.toc li.current > a { color: var(--fg); font-weight: 700; }
+.toc li[hidden] { display: none; }
+
+.offsite { margin-top: 1.8rem; color: var(--dim); font-size: 0.85rem; }
+
+/* ---------- content ---------- */
+
+.content { min-width: 0; padding-top: 0.2rem; }
+
+.content--centred {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 6rem;
+}
+
+.content h1 { font-size: 1.9rem; margin: 0 0 1.6rem; }
+.content h2 { font-size: 1.35rem; margin: 2.6rem 0 1rem; }
+.content h3 { font-size: 1.1rem; margin: 2rem 0 0.8rem; }
+.content h1, .content h2, .content h3 { line-height: 1.3; }
+
+.content p, .content li { max-width: 46rem; }
+.content ul, .content ol { padding-left: 1.4rem; }
+.content li { margin: 0.3rem 0; }
+
+/* Blockquotes here are callouts, not asides -- they carry the sentence the
+   page most wants read, so they are marked out rather than dimmed down. */
+.content blockquote {
+  margin: 1.4rem 0;
+  padding: 0.4rem 0 0.4rem 1.1rem;
+  border-left: 2px solid var(--accent);
+}
+
+.content hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+
+code {
+  background: var(--code-bg);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+pre {
+  background: var(--code-bg);
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;      /* wide code scrolls itself, never the page */
+  line-height: 1.45;
+}
+pre code { background: none; padding: 0; font-size: 0.88rem; }
+
+/* Tables can be wide; give them their own scroller too. */
+.content table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1.4rem 0;
+  font-size: 0.92rem;
+}
+.content th, .content td {
+  border: 1px solid var(--rule);
+  padding: 0.45rem 0.8rem;
+  text-align: left;
+  vertical-align: top;
+}
+.content th { color: var(--fg); background: var(--code-bg); }
+
+.content img { max-width: 100%; height: auto; }
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 62rem) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .sidebar { position: static; }
+  .toc { max-height: none; }
+}

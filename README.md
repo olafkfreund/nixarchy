@@ -239,6 +239,55 @@ it buys the one property that matters: the picker cannot offer you a package
 that this machine then refuses to build. The options half substitutes from
 `cache.nixos.org`, so only the nixpkgs half is real work.
 
+### Neovim, and the config you may already have
+
+On Arch, Omarchy's Neovim setup arrives as an `omarchy-nvim` package. That
+package has no published source — it is not in the basecamp org and the
+repository serves binaries — but Omarchy carried the same files in-tree as
+`config/nvim` until v3.0.2, and `pkgs/omarchy-nvim/` is that tree, byte for
+byte, at the last revision anyone can read.
+
+It is three files and under three kilobytes, because it is not a Neovim
+distribution: it is **LazyVim**, plus what Omarchy changes about it. LazyVim
+still resolves and locks its own plugins at runtime, exactly as on Arch.
+
+Neovim itself is installed either way — it is one of the omarchy package's
+runtime dependencies, as it is one of upstream's base packages. The only
+question is `~/.config/nvim`, which is yours:
+
+```nix
+programs.nixarchy.neovim = "theme-only";   # the default
+```
+
+| | `theme-only` (default) | `adopt` | `off` |
+|---|---|---|---|
+| **no `~/.config/nvim`** — a fresh install | seed the config, link the theme | same | nothing |
+| **you have one, no `theme.lua`** | add only the theme link | same | nothing |
+| **you have a real `theme.lua`** | keep yours, say so | keep yours, and name what will collide | nothing |
+
+**Nothing here ever overwrites a file you wrote,** and there is no setting that
+does — an editor configuration is not this module's to replace. The seed fires
+only into a directory that does not exist, because half-seeding is worse than
+not seeding: LazyVim reads every `.lua` under `lua/plugins` as a plugin spec,
+so dropping Omarchy's into someone else's config means their setup silently
+loads two it never asked for.
+
+The theming is one symlink:
+
+```
+~/.config/nvim/lua/plugins/theme.lua → ~/.local/state/omarchy/current/theme/neovim.lua
+```
+
+All 22 themes ship a `neovim.lua`, and that link is what reads it. It is set
+only when the path is absent or already a symlink — the same rule upstream's
+own migrations follow.
+
+`adopt` adds nothing to what is written; it names the collisions instead. A
+`lua/plugins/colorscheme.lua` beside the link is two LazyVim specs setting
+`opts.colorscheme`, and a Home-Manager-owned `~/.config/nvim` is a tree the
+link cannot be written into at all. Both work alone and disagree together,
+which is the kind of thing worth being told once rather than debugging.
+
 ### Naming the user who runs the desktop
 
 ```nix

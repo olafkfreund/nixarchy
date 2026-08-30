@@ -13,6 +13,74 @@ let
   cfg = config.programs.nixarchy;
   omarchyPath = "${cfg.package}/share/omarchy";
 
+  # Through the overlay on *your* nixpkgs, for the same reason cfg.package's
+  # default takes that route: inputs.self.packages is built from nixarchy's own
+  # nixpkgs, and a second copy of anything in home.packages is a buildEnv
+  # collision. This one carries no dependencies, but the rule is the rule and
+  # the next person copying this line will be packaging something that does.
+  omarchyNvimConfig = (pkgs.extend inputs.self.overlays.default).omarchy-nvim-config;
+
+  # Omarchy's Neovim configuration, appended to the seed activation rather than
+  # wrapped around it: this is a string the activation interpolates, so adding
+  # it costs the diff it is worth instead of re-indenting three hundred lines
+  # of unrelated shell.
+  #
+  # It runs after the first-run theme, on purpose -- the colourscheme link
+  # points into the current theme, and that directory is what omarchy-theme-set
+  # has just created.
+  nvimActivation =
+    let
+      nvimDir = "${config.xdg.configHome}/nvim";
+      themeLink = "${nvimDir}/lua/plugins/theme.lua";
+      themeTarget = "${config.home.homeDirectory}/.local/state/omarchy/current/theme/neovim.lua";
+    in
+    lib.optionalString (cfg.neovim != "off") (
+      ''
+        # Seed only into nothing. `seed_dir` would already refuse to clobber a
+        # file, but a half-seeded editor config is worse than none: LazyVim
+        # reads every .lua under lua/plugins as a plugin spec, so dropping
+        # Omarchy's into somebody else's configuration means their setup now
+        # loads two specs it never asked for. All or nothing, and "nothing" is
+        # the answer whenever the directory exists.
+        if [ ! -e "${nvimDir}" ]; then
+          run mkdir -p "${nvimDir}"
+          run ${pkgs.coreutils}/bin/cp -rn --no-preserve=mode,ownership \
+            "${omarchyNvimConfig}/share/omarchy-nvim"/. "${nvimDir}"/ \
+            2>/dev/null || true
+          echo "nixarchy: seeded Omarchy's Neovim config into ${nvimDir}"
+        fi
+
+        # The colourscheme link, which is the whole of Omarchy's Neovim
+        # theming: every stock theme ships a neovim.lua and this is what reads
+        # it. Upstream's own migrations set this same link, and
+        # migrations/1785002349.sh will not touch the path unless it is already
+        # a symlink -- so neither does this. A theme.lua somebody wrote is
+        # theirs.
+        if [ ! -e "${themeLink}" ] || [ -L "${themeLink}" ]; then
+          run mkdir -p "$(dirname "${themeLink}")"
+          run ln -snf "${themeTarget}" "${themeLink}"
+        else
+          echo "nixarchy: kept your ${themeLink}, so Omarchy themes will not drive Neovim"
+        fi
+      ''
+      + lib.optionalString (cfg.neovim == "adopt") ''
+        # What `adopt` adds: naming the collisions rather than leaving them to
+        # be discovered. Both are configurations that work on their own and
+        # quietly disagree once the link above exists -- two LazyVim specs
+        # setting opts.colorscheme, or a Home-Manager-owned tree where the link
+        # cannot be written at all.
+        for f in colorscheme.lua colourscheme.lua; do
+          if [ -e "${nvimDir}/lua/plugins/$f" ]; then
+            echo "nixarchy: ${nvimDir}/lua/plugins/$f also sets a colourscheme; it and the Omarchy theme link will disagree"
+          fi
+        done
+        if [ -L "${nvimDir}/init.lua" ] \
+          && case "$(readlink "${nvimDir}/init.lua")" in /nix/store/*) true ;; *) false ;; esac; then
+          echo "nixarchy: ${nvimDir} is managed by Home Manager; add the theme link there rather than here"
+        fi
+      ''
+    );
+
   # Each declared plugin, checked at build time against the schema the shell
   # enforces, and carrying the id its own manifest claims.
   #
@@ -85,6 +153,38 @@ in
       default = (pkgs.extend inputs.self.overlays.default).omarchy;
       defaultText = lib.literalExpression "(pkgs.extend nixarchy.overlays.default).omarchy";
       description = "The vendored Omarchy tree providing OMARCHY_PATH.";
+    };
+
+    neovim = lib.mkOption {
+      type = lib.types.enum [
+        "theme-only"
+        "adopt"
+        "off"
+      ];
+      default = "theme-only";
+      description = ''
+        What to do about Omarchy's Neovim configuration, which on Arch arrives
+        as the `omarchy-nvim` package.
+
+        Neovim itself is installed either way -- it is one of the omarchy
+        package's runtime dependencies, as it is one of upstream's base
+        packages. This is only about `~/.config/nvim`, which is yours.
+
+        `theme-only` (the default) links Neovim's colourscheme to the Omarchy
+        theme, and seeds the rest of the configuration only when there is no
+        `~/.config/nvim` at all. On a machine that has never had Neovim
+        configured -- a fresh install -- that is the whole Omarchy setup. On a
+        machine that already has one, it is one file added and nothing touched.
+
+        `adopt` is the same, except it says out loud what it did not do, so a
+        configuration that was kept rather than replaced is visible rather than
+        silently ignored.
+
+        `off` leaves `~/.config/nvim` alone entirely, including the theme link.
+
+        Nothing here ever overwrites a file you wrote. There is no setting that
+        does: an editor configuration is not this module's to replace.
+      '';
     };
 
     defaultTheme = lib.mkOption {
@@ -223,254 +323,255 @@ in
       # read-only store symlinks would break. Existing files are never
       # overwritten.
       activation.nixarchySeed = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        seed_dir() {
-          local src="$1" dest="$2"
-          [ -d "$src" ] || return 0
-          run mkdir -p "$dest"
-          # --no-clobber: a file the user has edited is theirs, not ours.
-          run ${pkgs.coreutils}/bin/cp -rn --no-preserve=mode,ownership \
-            "$src"/. "$dest"/ 2>/dev/null || true
-        }
+                seed_dir() {
+                  local src="$1" dest="$2"
+                  [ -d "$src" ] || return 0
+                  run mkdir -p "$dest"
+                  # --no-clobber: a file the user has edited is theirs, not ours.
+                  run ${pkgs.coreutils}/bin/cp -rn --no-preserve=mode,ownership \
+                    "$src"/. "$dest"/ 2>/dev/null || true
+                }
 
-        # One shipped default, under a name of our choosing. A plain `cp -n` is
-        # not enough on its own: the sources are store paths, and a branding
-        # file that lands r--r--r-- is one the user cannot edit, which is the
-        # entire point of the two of them.
-        seed_file() {
-          local src="$1" dest="$2"
-          [ -f "$src" ] || return 0
-          if [ ! -e "$dest" ]; then
-            run mkdir -p "$(dirname "$dest")"
-            run ${pkgs.coreutils}/bin/cp --no-preserve=mode,ownership "$src" "$dest"
-          fi
-        }
+                # One shipped default, under a name of our choosing. A plain `cp -n` is
+                # not enough on its own: the sources are store paths, and a branding
+                # file that lands r--r--r-- is one the user cannot edit, which is the
+                # entire point of the two of them.
+                seed_file() {
+                  local src="$1" dest="$2"
+                  [ -f "$src" ] || return 0
+                  if [ ! -e "$dest" ]; then
+                    run mkdir -p "$(dirname "$dest")"
+                    run ${pkgs.coreutils}/bin/cp --no-preserve=mode,ownership "$src" "$dest"
+                  fi
+                }
 
-        # Report what was kept rather than replaced. Without this the seed is
-        # silent about the one case that matters -- a hyprland.lua owned by
-        # something else, which leaves Omarchy's session files unread.
-        note_kept() {
-          local src="$1" dest="$2" f
-          [ -d "$src" ] || return 0
-          for f in "$src"/*; do
-            [ -f "$f" ] || continue
-            if [ -e "$dest/$(basename "$f")" ] \
-              && ! ${pkgs.diffutils}/bin/diff -q \
-                "$f" "$dest/$(basename "$f")" >/dev/null 2>&1; then
-              echo "nixarchy: kept your $dest/$(basename "$f"), not Omarchy's"
-            fi
-          done
-        }
+                # Report what was kept rather than replaced. Without this the seed is
+                # silent about the one case that matters -- a hyprland.lua owned by
+                # something else, which leaves Omarchy's session files unread.
+                note_kept() {
+                  local src="$1" dest="$2" f
+                  [ -d "$src" ] || return 0
+                  for f in "$src"/*; do
+                    [ -f "$f" ] || continue
+                    if [ -e "$dest/$(basename "$f")" ] \
+                      && ! ${pkgs.diffutils}/bin/diff -q \
+                        "$f" "$dest/$(basename "$f")" >/dev/null 2>&1; then
+                      echo "nixarchy: kept your $dest/$(basename "$f"), not Omarchy's"
+                    fi
+                  done
+                }
 
-        # The whole of config/, not a chosen two of it. Upstream's own docs
-        # point at ~/.config/foot/foot.ini and ~/.config/starship.toml, and
-        # omarchy-theme-set-foot, btop's color_theme and the tmux keybindings
-        # all read from ~/.config -- so seeding only hypr and omarchy left
-        # starship on its stock prompt, tmux without Omarchy's prefix and
-        # keybindings, and foot and btop unthemed.
-        seed_dir "${omarchyPath}/config" "${config.xdg.configHome}"
-        note_kept "${omarchyPath}/config/hypr" "${config.xdg.configHome}/hypr"
+                # The whole of config/, not a chosen two of it. Upstream's own docs
+                # point at ~/.config/foot/foot.ini and ~/.config/starship.toml, and
+                # omarchy-theme-set-foot, btop's color_theme and the tmux keybindings
+                # all read from ~/.config -- so seeding only hypr and omarchy left
+                # starship on its stock prompt, tmux without Omarchy's prefix and
+                # keybindings, and foot and btop unthemed.
+                seed_dir "${omarchyPath}/config" "${config.xdg.configHome}"
+                note_kept "${omarchyPath}/config/hypr" "${config.xdg.configHome}/hypr"
 
-        # And say, once, which session to pick.
-        #
-        # The twelve-line warning that used to cover this fired on every
-        # rebuild of a machine that was already logging into Omarchy correctly.
-        # This is the same fact in one line, printed only when the situation
-        # applies: home-manager owns the hypr config, so Omarchy's own is not
-        # installed and the session entry is the way in.
-        if [ -e "${config.xdg.configHome}/hypr/hyprland.lua" ] \
-          && [ -L "${config.xdg.configHome}/hypr/hyprland.lua" ]; then
-          echo "nixarchy: ~/.config/hypr is yours; log in through the \"Omarchy\" session for Omarchy's desktop"
-        fi
-
-        # install/user/theme.sh. btop.conf asks for a theme named "current",
-        # and omarchy-theme-set-templates renders btop.theme into the current
-        # theme on every switch, so this one symlink is what makes btop follow
-        # the theme. Dangling until the first theme is set, which is fine.
-        run mkdir -p "${config.xdg.configHome}/btop/themes"
-        run ln -snf \
-          "${config.home.homeDirectory}/.local/state/omarchy/current/theme/btop.theme" \
-          "${config.xdg.configHome}/btop/themes/current.theme"
-
-        run mkdir -p "${config.home.homeDirectory}/.local/state/omarchy/current"
-
-        # The Hyprland toggles tree, and deliberately only flags.lua out of it.
-        #
-        # These flags are state, not config: a flag is *on* because its file is
-        # there, so copying all of default/hypr/toggles would bring the session
-        # up with no window gaps and every single window forced square.
-        # omarchy-hyprland-toggle copies the other two out of $OMARCHY_PATH the
-        # moment you ask for one, so nothing is lost by leaving them there --
-        # upstream's own omarchy-refresh-hyprland seeds exactly this one file.
-        #
-        # flags.lua is what makes the directory exist, and it has to exist
-        # before the shell starts rather than before the first toggle: the bar
-        # watches ~/.local/state/omarchy/toggles with a FileView to notice
-        # bar-off appearing, and a watch on a directory that is not there never
-        # fires. Hiding the bar wrote the flag and changed nothing on screen
-        # until the shell was restarted.
-        seed_file "${omarchyPath}/default/hypr/toggles/flags.lua" \
-          "${config.home.homeDirectory}/.local/state/omarchy/toggles/hypr/flags.lua"
-
-        # tensaku's shipped default. Nothing reads it yet -- tensaku-edit, the
-        # screenshot editor omarchy-capture-screenshot reaches for, is not
-        # packaged here -- but it is one of the files upstream's /etc/skel
-        # plants, and seeding it now means packaging tensaku later does not need
-        # a second pass over $HOME.
-        seed_dir "${omarchyPath}/default/tensaku" \
-          "${config.home.homeDirectory}/.local/state/tensaku"
-
-        # omarchy-branding-screensaver writes straight into this directory and
-        # never creates it, so editing the screensaver text failed with
-        # "E212: Can't open file for writing". Upstream's config skeleton does
-        # not ship it either.
-        run mkdir -p "${config.xdg.configHome}/omarchy/branding"
-
-        # And the two files that belong in it, which upstream seeds from
-        # /etc/skel. Without them the About window opens with an empty logo
-        # column -- fastfetch's config sources about.txt as its logo -- and the
-        # screensaver dies on the spot, because omarchy-screensaver hands
-        # screensaver.txt to ttfx as the art to animate.
-        #
-        # The same two sources `omarchy branding <about|screensaver> reset`
-        # copies back, so a reset returns to exactly what was seeded. logo.txt
-        # is this repo's NIXARCHY banner rather than upstream's, by the same
-        # reasoning as the menu's snowflake.
-        seed_file "${omarchyPath}/icon.txt" \
-          "${config.xdg.configHome}/omarchy/branding/about.txt"
-        seed_file "${omarchyPath}/logo.txt" \
-          "${config.xdg.configHome}/omarchy/branding/screensaver.txt"
-
-        # The menu extension is generated, not seeded: it carries the
-        # install-row rewrites, so it has to keep tracking the package. Add
-        # your own rows with programs.nixarchy.menu.extraEntries.
-        run mkdir -p "${config.xdg.configHome}/omarchy/extensions"
-        if [ -e /etc/nixarchy/omarchy-menu.jsonc ]; then
-          run ln -sfn /etc/nixarchy/omarchy-menu.jsonc \
-            "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc"
-        fi
-
-        # Agent skills, relinked on every activation.
-        #
-        # Upstream does this in omarchy-provision-user, which is guarded by a
-        # `finalize-user` marker and therefore runs exactly once, ever. That is
-        # fine on Arch, where the skill directory is a fixed path that gets
-        # overwritten in place. Here every bump moves the package to a new store
-        # path, so a once-only link points at the previous one -- still resolving
-        # until it is garbage-collected, then dangling. Renaming the `omarchy`
-        # skill to `nixarchy` made it worse than stale: the machine kept serving
-        # the old Arch skill from a path nothing would update again.
-        #
-        # provision-user's own --force would fix the links and also replay
-        # /etc/skel over $HOME, which is not a thing to do for four symlinks.
-        # So: the same loop, declaratively, on every rebuild.
-        #
-        # Only symlinks whose target is itself a skills directory in the store
-        # are removed. That is what distinguishes a link this module or
-        # provision-user planted from a skill the user wrote by hand, which is a
-        # real directory and is never touched.
-        ${
-          let
-            skillsDir = "${omarchyPath}/default/agents/skills";
-          in
-          ''
-            for agentdir in .agents/skills .claude/skills .codex/skills .pi/agent/skills; do
-              dest="${config.home.homeDirectory}/$agentdir"
-              run mkdir -p "$dest"
-
-              for link in "$dest"/*; do
-                [ -L "$link" ] || continue
-                case "$(readlink "$link")" in
-                  /nix/store/*/agents/skills/*) run rm -f "$link" ;;
-                esac
-              done
-
-              ${pkgs.findutils}/bin/find ${skillsDir} -mindepth 1 -maxdepth 1 -type d |
-                while read -r skill; do
-                  run ln -sfn "$skill" "$dest/$(basename "$skill")"
-                done
-            done
-          ''
-        }
-
-        # Declared plugins, linked in by the id their manifest claims.
-        #
-        # A symlink rather than a copy, and that is a supported shape rather
-        # than a trick: upstream's scan globs "$dir"/*/ , which matches a
-        # symlink to a directory, and omarchy-plugin-remove has an explicit
-        # branch for one -- it offers to "Unlink" and prints where it pointed.
-        # Its picker globs -type d -o -type l for the same reason.
-        #
-        # Only links this module planted are cleaned up, tracked in a
-        # .nixarchy-managed file beside them. A plugin you added yourself with
-        # `omarchy plugin add` is a real directory that this never touches, so
-        # the two ways of installing one live side by side.
-        run mkdir -p "${config.xdg.configHome}/omarchy/plugins"
-        ${
-          let
-            dir = "${config.xdg.configHome}/omarchy/plugins";
-            manifest = "${dir}/.nixarchy-managed";
-          in
-          ''
-            # Remove links from a previous generation before planting this
-            # one's, so a plugin dropped from the configuration goes away.
-            # Guarded on being a symlink: if you replaced one with a real
-            # checkout, that is yours and is left alone.
-            if [ -e "${manifest}" ]; then
-              while IFS= read -r stale; do
-                [ -n "$stale" ] || continue
-                if [ -L "${dir}/$stale" ]; then
-                  run rm -f "${dir}/$stale"
+                # And say, once, which session to pick.
+                #
+                # The twelve-line warning that used to cover this fired on every
+                # rebuild of a machine that was already logging into Omarchy correctly.
+                # This is the same fact in one line, printed only when the situation
+                # applies: home-manager owns the hypr config, so Omarchy's own is not
+                # installed and the session entry is the way in.
+                if [ -e "${config.xdg.configHome}/hypr/hyprland.lua" ] \
+                  && [ -L "${config.xdg.configHome}/hypr/hyprland.lua" ]; then
+                  echo "nixarchy: ~/.config/hypr is yours; log in through the \"Omarchy\" session for Omarchy's desktop"
                 fi
-              done < "${manifest}"
-            fi
-            run rm -f "${manifest}"
-            ${lib.concatMapStringsSep "
+
+                # install/user/theme.sh. btop.conf asks for a theme named "current",
+                # and omarchy-theme-set-templates renders btop.theme into the current
+                # theme on every switch, so this one symlink is what makes btop follow
+                # the theme. Dangling until the first theme is set, which is fine.
+                run mkdir -p "${config.xdg.configHome}/btop/themes"
+                run ln -snf \
+                  "${config.home.homeDirectory}/.local/state/omarchy/current/theme/btop.theme" \
+                  "${config.xdg.configHome}/btop/themes/current.theme"
+
+                run mkdir -p "${config.home.homeDirectory}/.local/state/omarchy/current"
+
+                # The Hyprland toggles tree, and deliberately only flags.lua out of it.
+                #
+                # These flags are state, not config: a flag is *on* because its file is
+                # there, so copying all of default/hypr/toggles would bring the session
+                # up with no window gaps and every single window forced square.
+                # omarchy-hyprland-toggle copies the other two out of $OMARCHY_PATH the
+                # moment you ask for one, so nothing is lost by leaving them there --
+                # upstream's own omarchy-refresh-hyprland seeds exactly this one file.
+                #
+                # flags.lua is what makes the directory exist, and it has to exist
+                # before the shell starts rather than before the first toggle: the bar
+                # watches ~/.local/state/omarchy/toggles with a FileView to notice
+                # bar-off appearing, and a watch on a directory that is not there never
+                # fires. Hiding the bar wrote the flag and changed nothing on screen
+                # until the shell was restarted.
+                seed_file "${omarchyPath}/default/hypr/toggles/flags.lua" \
+                  "${config.home.homeDirectory}/.local/state/omarchy/toggles/hypr/flags.lua"
+
+                # tensaku's shipped default. Nothing reads it yet -- tensaku-edit, the
+                # screenshot editor omarchy-capture-screenshot reaches for, is not
+                # packaged here -- but it is one of the files upstream's /etc/skel
+                # plants, and seeding it now means packaging tensaku later does not need
+                # a second pass over $HOME.
+                seed_dir "${omarchyPath}/default/tensaku" \
+                  "${config.home.homeDirectory}/.local/state/tensaku"
+
+                # omarchy-branding-screensaver writes straight into this directory and
+                # never creates it, so editing the screensaver text failed with
+                # "E212: Can't open file for writing". Upstream's config skeleton does
+                # not ship it either.
+                run mkdir -p "${config.xdg.configHome}/omarchy/branding"
+
+                # And the two files that belong in it, which upstream seeds from
+                # /etc/skel. Without them the About window opens with an empty logo
+                # column -- fastfetch's config sources about.txt as its logo -- and the
+                # screensaver dies on the spot, because omarchy-screensaver hands
+                # screensaver.txt to ttfx as the art to animate.
+                #
+                # The same two sources `omarchy branding <about|screensaver> reset`
+                # copies back, so a reset returns to exactly what was seeded. logo.txt
+                # is this repo's NIXARCHY banner rather than upstream's, by the same
+                # reasoning as the menu's snowflake.
+                seed_file "${omarchyPath}/icon.txt" \
+                  "${config.xdg.configHome}/omarchy/branding/about.txt"
+                seed_file "${omarchyPath}/logo.txt" \
+                  "${config.xdg.configHome}/omarchy/branding/screensaver.txt"
+
+                # The menu extension is generated, not seeded: it carries the
+                # install-row rewrites, so it has to keep tracking the package. Add
+                # your own rows with programs.nixarchy.menu.extraEntries.
+                run mkdir -p "${config.xdg.configHome}/omarchy/extensions"
+                if [ -e /etc/nixarchy/omarchy-menu.jsonc ]; then
+                  run ln -sfn /etc/nixarchy/omarchy-menu.jsonc \
+                    "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc"
+                fi
+
+                # Agent skills, relinked on every activation.
+                #
+                # Upstream does this in omarchy-provision-user, which is guarded by a
+                # `finalize-user` marker and therefore runs exactly once, ever. That is
+                # fine on Arch, where the skill directory is a fixed path that gets
+                # overwritten in place. Here every bump moves the package to a new store
+                # path, so a once-only link points at the previous one -- still resolving
+                # until it is garbage-collected, then dangling. Renaming the `omarchy`
+                # skill to `nixarchy` made it worse than stale: the machine kept serving
+                # the old Arch skill from a path nothing would update again.
+                #
+                # provision-user's own --force would fix the links and also replay
+                # /etc/skel over $HOME, which is not a thing to do for four symlinks.
+                # So: the same loop, declaratively, on every rebuild.
+                #
+                # Only symlinks whose target is itself a skills directory in the store
+                # are removed. That is what distinguishes a link this module or
+                # provision-user planted from a skill the user wrote by hand, which is a
+                # real directory and is never touched.
+                ${
+                  let
+                    skillsDir = "${omarchyPath}/default/agents/skills";
+                  in
+                  ''
+                    for agentdir in .agents/skills .claude/skills .codex/skills .pi/agent/skills; do
+                      dest="${config.home.homeDirectory}/$agentdir"
+                      run mkdir -p "$dest"
+
+                      for link in "$dest"/*; do
+                        [ -L "$link" ] || continue
+                        case "$(readlink "$link")" in
+                          /nix/store/*/agents/skills/*) run rm -f "$link" ;;
+                        esac
+                      done
+
+                      ${pkgs.findutils}/bin/find ${skillsDir} -mindepth 1 -maxdepth 1 -type d |
+                        while read -r skill; do
+                          run ln -sfn "$skill" "$dest/$(basename "$skill")"
+                        done
+                    done
+                  ''
+                }
+
+                # Declared plugins, linked in by the id their manifest claims.
+                #
+                # A symlink rather than a copy, and that is a supported shape rather
+                # than a trick: upstream's scan globs "$dir"/*/ , which matches a
+                # symlink to a directory, and omarchy-plugin-remove has an explicit
+                # branch for one -- it offers to "Unlink" and prints where it pointed.
+                # Its picker globs -type d -o -type l for the same reason.
+                #
+                # Only links this module planted are cleaned up, tracked in a
+                # .nixarchy-managed file beside them. A plugin you added yourself with
+                # `omarchy plugin add` is a real directory that this never touches, so
+                # the two ways of installing one live side by side.
+                run mkdir -p "${config.xdg.configHome}/omarchy/plugins"
+                ${
+                  let
+                    dir = "${config.xdg.configHome}/omarchy/plugins";
+                    manifest = "${dir}/.nixarchy-managed";
+                  in
+                  ''
+                    # Remove links from a previous generation before planting this
+                    # one's, so a plugin dropped from the configuration goes away.
+                    # Guarded on being a symlink: if you replaced one with a real
+                    # checkout, that is yours and is left alone.
+                    if [ -e "${manifest}" ]; then
+                      while IFS= read -r stale; do
+                        [ -n "$stale" ] || continue
+                        if [ -L "${dir}/$stale" ]; then
+                          run rm -f "${dir}/$stale"
+                        fi
+                      done < "${manifest}"
+                    fi
+                    run rm -f "${manifest}"
+                    ${lib.concatMapStringsSep "
         " (drv: ''
-              id=$(cat ${drv}/id)
-              if [ -e "${dir}/$id" ] && [ ! -L "${dir}/$id" ]; then
-                echo "nixarchy: ${dir}/$id is your own directory, not replacing it"
-              else
-                run ln -sfn "$(readlink -f ${drv}/plugin)" "${dir}/$id"
-                echo "$id" >> "${manifest}"
-              fi
-            '') (lib.attrValues validatedPlugins)}
-            # Only when this module actually planted something. The file
-            # exists to remember which links to clean up next time, and
-            # creating it for a user who declares no plugins leaves an empty
-            # file sitting in their plugins directory meaning nothing --
-            # noticed on a real machine, where it was the only thing in there.
-            if [ -s "${manifest}" ]; then
-              :
-            else
-              run rm -f "${manifest}"
-            fi
-          ''
-        }
+                      id=$(cat ${drv}/id)
+                      if [ -e "${dir}/$id" ] && [ ! -L "${dir}/$id" ]; then
+                        echo "nixarchy: ${dir}/$id is your own directory, not replacing it"
+                      else
+                        run ln -sfn "$(readlink -f ${drv}/plugin)" "${dir}/$id"
+                        echo "$id" >> "${manifest}"
+                      fi
+                    '') (lib.attrValues validatedPlugins)}
+                    # Only when this module actually planted something. The file
+                    # exists to remember which links to clean up next time, and
+                    # creating it for a user who declares no plugins leaves an empty
+                    # file sitting in their plugins directory meaning nothing --
+                    # noticed on a real machine, where it was the only thing in there.
+                    if [ -s "${manifest}" ]; then
+                      :
+                    else
+                      run rm -f "${manifest}"
+                    fi
+                  ''
+                }
 
-        # The app selection. Seeded once and never touched again -- it holds
-        # the user's picks, and clobbering it would silently undo them.
-        # /etc/nixarchy/apps-template.nix always holds the current full list,
-        # so a newly packaged app is discoverable with a diff against it.
-        run mkdir -p "${config.xdg.configHome}/nixarchy"
-        if [ ! -e "${config.xdg.configHome}/nixarchy/apps.nix" ] \
-          && [ -e /etc/nixarchy/apps-template.nix ]; then
-          run ${pkgs.coreutils}/bin/install -m600 /etc/nixarchy/apps-template.nix \
-            "${config.xdg.configHome}/nixarchy/apps.nix"
-        fi
+                # The app selection. Seeded once and never touched again -- it holds
+                # the user's picks, and clobbering it would silently undo them.
+                # /etc/nixarchy/apps-template.nix always holds the current full list,
+                # so a newly packaged app is discoverable with a diff against it.
+                run mkdir -p "${config.xdg.configHome}/nixarchy"
+                if [ ! -e "${config.xdg.configHome}/nixarchy/apps.nix" ] \
+                  && [ -e /etc/nixarchy/apps-template.nix ]; then
+                  run ${pkgs.coreutils}/bin/install -m600 /etc/nixarchy/apps-template.nix \
+                    "${config.xdg.configHome}/nixarchy/apps.nix"
+                fi
 
-        # First-run theme. omarchy-theme-set is the only thing that may write
-        # this tree; running it headless avoids poking a shell that is not up.
-        if [ ! -e "${config.home.homeDirectory}/.local/state/omarchy/current/theme.name" ]; then
-          # PATH, not just the absolute path to the script: omarchy-theme-set
-          # calls its siblings by bare name -- omarchy-theme-set-templates and
-          # omarchy-theme-color among them -- and has no `set -e`. Without the
-          # package on PATH they were simply not found and it carried on and
-          # exited 0, so no template was ever rendered: the first-run theme had
-          # no btop.theme, foot.ini, alacritty.toml or gum_env.lua at all.
-          run env OMARCHY_PATH="${omarchyPath}" OMARCHY_THEME_HEADLESS=1 \
-            PATH="${cfg.package}/bin:${lib.makeBinPath cfg.package.passthru.runtimeDeps}:$PATH" \
-            ${cfg.package}/bin/omarchy-theme-set "${cfg.defaultTheme}" || true
-        fi
+                # First-run theme. omarchy-theme-set is the only thing that may write
+                # this tree; running it headless avoids poking a shell that is not up.
+                if [ ! -e "${config.home.homeDirectory}/.local/state/omarchy/current/theme.name" ]; then
+                  # PATH, not just the absolute path to the script: omarchy-theme-set
+                  # calls its siblings by bare name -- omarchy-theme-set-templates and
+                  # omarchy-theme-color among them -- and has no `set -e`. Without the
+                  # package on PATH they were simply not found and it carried on and
+                  # exited 0, so no template was ever rendered: the first-run theme had
+                  # no btop.theme, foot.ini, alacritty.toml or gum_env.lua at all.
+                  run env OMARCHY_PATH="${omarchyPath}" OMARCHY_THEME_HEADLESS=1 \
+                    PATH="${cfg.package}/bin:${lib.makeBinPath cfg.package.passthru.runtimeDeps}:$PATH" \
+                    ${cfg.package}/bin/omarchy-theme-set "${cfg.defaultTheme}" || true
+                fi
+        ${nvimActivation}
       '';
     };
 

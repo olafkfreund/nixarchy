@@ -138,6 +138,14 @@
           );
         };
 
+        # Omarchy's Neovim configuration. A separate derivation rather than
+        # part of the omarchy package: it is seeded into a directory the user
+        # owns and may already have filled, so whether it is installed at all
+        # is a decision, and a decision needs something to point at.
+        omarchy-nvim-config = final.callPackage ./pkgs/omarchy-nvim {
+          inherit omarchyVersion;
+        };
+
         omarchy = final.callPackage ./pkgs/omarchy {
           src = omarchy;
           version = omarchyVersion;

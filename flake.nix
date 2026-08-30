@@ -207,6 +207,12 @@
         # Omarchy session. Everything in checks/ runs in a machine with no GPU,
         # no Bluetooth radio, no network and no sound; this asks the questions
         # that leaves unanswered.
+        # The flake the installer writes to /etc/nixos: the template files with
+        # their @tokens@ still in place, plus a lock derived from this repo's
+        # own so the installed machine resolves to exactly what was built.
+        # Requires a committed tree -- it pins nixarchy by commit.
+        flake-template = pkgsFor.${system}.callPackage ./installer/mkFlake.nix { inherit self; };
+
         verify = pkgsFor.${system}.writeShellApplication {
           name = "nixarchy-verify";
           runtimeInputs = with pkgsFor.${system}; [

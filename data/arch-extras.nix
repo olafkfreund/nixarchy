@@ -9,6 +9,12 @@
 # `kind` decides which option the advice names, because they are not
 # interchangeable: a font in environment.systemPackages is installed and still
 # not found by fontconfig.
+#
+# `binary` is optional and only needed when the command a package provides is
+# not its own name -- openssh provides sshd, not openssh. omarchy-pkg-add uses
+# it to tell "already installed" from "missing"; without it a package whose
+# name is not a command can never be found, and the caller aborts before the
+# configuration it was about to do. See #41.
 {
   # ── Style > Font ────────────────────────────────────────────────────────
   # Each row also calls omarchy-font-set with the family name, which works
@@ -106,6 +112,16 @@
     attr = "services.flatpak.enable = true";
     kind = "nixos-option";
     note = "then: flatpak install flathub com.nvidia.geforcenow";
+  };
+
+  # omarchy-setup-security-sshd opens with `omarchy-pkg-add openssh`, then
+  # configures sshd. On NixOS installing the package is not what starts the
+  # daemon, so the package advice would have been wrong even if it had been
+  # given -- and `binary` is what lets the guard see an already-running sshd.
+  openssh = {
+    attr = "services.openssh.enable = true";
+    kind = "nixos-option";
+    binary = "sshd";
   };
 
   # ── Install > AI ────────────────────────────────────────────────────────

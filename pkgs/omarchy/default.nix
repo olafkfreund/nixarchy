@@ -261,18 +261,24 @@ let
     # always present is exactly what the menu's dimming exists to prevent.
     ttfx
   ];
-  # arch-name<TAB>kind<TAB>attr<TAB>note, one per line. Apps come from
+  # arch-name<TAB>kind<TAB>attr<TAB>note<TAB>binary, one per line. Apps come from
   # data/apps.nix so the two cannot drift; everything the menu does not select
   # -- fonts, the packages omarchy-install-dev-env adds behind a language --
   # comes from data/arch-extras.nix.
+  #
+  # The fifth column is the command the package provides when that differs from
+  # its own name, and it is empty for almost every row. omarchy-pkg-add needs it
+  # to answer "is this already installed"; see #41.
   archTable =
     let
       apps = import ../../data/apps.nix;
       extras = import ../../data/arch-extras.nix;
-      appRows = lib.mapAttrsToList (name: app: "${app.arch}\tapp\t${name}\t") (
+      appRows = lib.mapAttrsToList (name: app: "${app.arch}\tapp\t${name}\t\t") (
         lib.filterAttrs (_: a: a ? arch) apps
       );
-      extraRows = lib.mapAttrsToList (arch: e: "${arch}\t${e.kind}\t${e.attr}\t${e.note or ""}") extras;
+      extraRows = lib.mapAttrsToList (
+        arch: e: "${arch}\t${e.kind}\t${e.attr}\t${e.note or ""}\t${e.binary or ""}"
+      ) extras;
     in
     writeText "nixarchy-arch-packages.tsv" (lib.concatStringsSep "\n" (appRows ++ extraRows) + "\n");
 in

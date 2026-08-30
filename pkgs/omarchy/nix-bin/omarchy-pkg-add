@@ -34,17 +34,64 @@ file="${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
 # that goes on to configure something that was never installed should stop.
 #
 # But once you have enabled the app declaratively and rebuilt, the package IS
-# there, and the only thing still missing is exactly that configuration. Failing
-# then leaves an app installed and unconfigured with no way to finish the job
-# short of reading the script and running its tail by hand.
+# there, and the only thing still missing is exactly that configuration.
 #
-# So: yield when every named package resolves. The caller carries on and does
-# its configuration against a package that genuinely exists, which is the
-# behaviour upstream has and the reason those tails were written.
+# Deciding that needs more than `command -v <package name>`, which is what the
+# first version of this guard used and why it only ever worked for single
+# packages whose name happened to be their command. The callers do not look like
+# that:
 #
-# omarchy-pkg-present is the same check the rest of this family uses, suffix
-# handling included -- brave-bin provides `brave`.
-if [ $# -gt 0 ] && omarchy-pkg-present "$@"; then
+#   omarchy-pkg-add php composer php-sqlite xdebug
+#   omarchy-pkg-add dropbox dropbox-cli libappindicator-gtk3 python-gpgme ...
+#
+# php-sqlite and xdebug are PHP extensions and libappindicator-gtk3 is a
+# library: none of them is a command, so none can ever be "found", so the whole
+# set was permanently unresolvable and the tail never ran. Hence three outcomes
+# per argument rather than two:
+#
+#   present  a command it provides is on PATH
+#   missing  we know what it is and it is not here
+#   neutral  it is not the kind of thing that has a command, or we do not know
+#            what it is -- absence is not evidence either way
+#
+# The guard yields when something is present and nothing is missing. Neutral
+# arguments abstain.
+#
+# ponytail: neutral covers "unknown to the table" as well as "known to have no
+# command", so a genuinely missing package we have never heard of will not stop
+# the caller. That is deliberate -- the alternative is the bug this replaces --
+# but it is why the answer is a heuristic and not a fact. Adding the package to
+# data/arch-extras.nix, with `binary` if its command differs from its name,
+# moves it out of neutral and makes the answer exact.
+present=0
+missing=0
+
+for pkg in "$@"; do
+  row=$(grep -m1 -E "^${pkg}	" "$table" 2>/dev/null || true)
+  kind=$(printf '%s' "$row" | cut -f2)
+  bin=$(printf '%s' "$row" | cut -f5)
+
+  # brave-bin provides `brave`; zen-browser-stable provides `zen-browser`.
+  for candidate in "$bin" "$pkg" "${pkg%-bin}" "${pkg%-stable}"; do
+    [ -n "$candidate" ] || continue
+    if command -v "$candidate" >/dev/null 2>&1; then
+      present=$((present + 1))
+      continue 2
+    fi
+  done
+
+  case "$kind" in
+    # A font is registered rather than run, a nixos-option is not a package at
+    # all, and a PHP extension is compiled into the interpreter. Asking PATH
+    # about any of them is meaningless.
+    font | nixos-option | php-extension) ;;
+    # Not in the table: could be a library, could be missing. No opinion.
+    "") ;;
+    *) missing=$((missing + 1)) ;;
+  esac
+done
+
+if [ "$present" -gt 0 ] && [ "$missing" -eq 0 ]; then
   echo
   echo "[$*] already installed. Nothing to add -- carrying on."
   exit 0

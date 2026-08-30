@@ -1160,6 +1160,22 @@ stdenvNoCC.mkDerivation {
                 python3 ${./nixarchy-logo.py} ${src}/logo.svg nixarchy-logo.svg
                 magick -background none nixarchy-logo.svg -resize 800x       -fill '#a8cd76' -colorize 100       $out/share/sddm/themes/omarchy/logo.png
 
+                # The same wordmark on the boot splash. Plymouth is what draws the
+                # screen you type a LUKS passphrase into, so leaving it upstream's
+                # means the first thing a person sees on their own machine, before
+                # they have logged in once, is another project's name.
+                #
+                # Overwritten in place rather than shipped as a second theme, which
+                # is what the greeter above already does: boot.plymouth.theme and
+                # themePackages have to move together or NixOS asserts on a theme
+                # that is not in the package list, and one asset swap avoids the
+                # whole dance.
+                #
+                # logos/oma.png is left alone deliberately -- omarchy.script does not
+                # draw it, and replacing files nothing reads is how a build starts
+                # carrying artwork no one can account for.
+                magick -background none nixarchy-logo.svg -resize 800x       -fill '#a8cd76' -colorize 100       $out/share/plymouth/themes/omarchy/logo.png
+
                 # The greeter's own compositor config, referenced by upstream's
                 # 10-wayland.conf. Nothing in the theme reaches outside its directory, so
                 # this is the only companion file it needs.

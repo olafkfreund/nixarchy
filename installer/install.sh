@@ -11,9 +11,27 @@
 #
 # No `set -x`, ever: a passphrase and a password hash pass through here.
 
-# The path is spliced in at build time, so shellcheck cannot follow it here.
+# Paths are spliced in at build time, so shellcheck cannot follow them here.
 # shellcheck source=./gum-env.sh disable=SC1091
 source @gumenv@
+# shellcheck source=./lib/ui.sh disable=SC1091
+source @ui@
+# Read by ui.sh, which shellcheck cannot follow through a build-time splice.
+export UI_LOGO_WIDE=@logo@
+export UI_LOGO_COMPACT=@logocompact@
+export UI_LOGO=@logo@
+export UI_TIPS=@tips@
+export UI_KEYMAPS=@keymaps@
+# shellcheck source=./lib/dashboard.sh disable=SC1091
+source @dashboard@
+
+# The denominator for the copy half of the progress bar. Measured, from a real
+# install onto a blank disk: 1875 paths. A constant rather than something
+# computed, because computing it honestly means realising the closure at build
+# time -- `nix build .#install` would build an entire desktop to produce one
+# number. #15 replaces it with the baked closure's own count.
+export UI_EXPECTED_PATHS=1875
+ui_palette
 
 TEMPLATE=@template@
 TZDIR=@tzdata@/share/zoneinfo
@@ -111,11 +129,16 @@ require_root_and_uefi() {
 # Questions. Order follows upstream: keyboard, account, disk.
 # ---------------------------------------------------------------------------
 
+# A curated list, not everything under share/keymaps. That directory holds
+# several hundred files including mod-dh-ansi-us-fatz-wide, which is not a
+# thing to offer a person who has just booted a disk. Upstream shows about
+# fifty human-readable layouts with English first; so does this.
 ask_keymap() {
-  local list
-  list=$(find "$KEYMAPS" -name '*.map.gz' -printf '%f\n' | sed 's/\.map\.gz$//' | sort -u)
-  keymap=$(printf '%s\n' "$list" | gum filter --placeholder "us" --value "us")
-  keymap=${keymap:-us}
+  ui_screen "Let's set up your keyboard..."
+  local choice
+  choice=$(cut -f1 "$UI_KEYMAPS" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select keyboard layout")
+  [ -n "$choice" ] || exit 1
+  keymap=$(grep -F "$choice"$'\t' "$UI_KEYMAPS" | cut -f2)
   loadkeys "$keymap" 2>/dev/null || true
 }
 
@@ -145,23 +168,24 @@ validate_hostname() {
 }
 
 ask_identity() {
+  ui_screen "Let's set up your user account..."
   local why
   while :; do
-    username=$(gum input --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ")
+    username=$(gum input --padding "$(ui_gum_pad)" --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ")
     why=$(validate_username "$username") && break
     gum style --foreground 1 "$why"
   done
 
   while :; do
     local pw pw2
-    pw=$(gum input --password --prompt "Password> ")
-    pw2=$(gum input --password --prompt "Confirm> ")
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
+    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ")
     if [ "$pw" != "$pw2" ]; then
-      gum style --foreground 1 "Those do not match."
+      ui_left "\e[31mThose do not match.\e[0m"
       continue
     fi
     if [ -z "$pw" ]; then
-      gum style --foreground 1 "An empty password would lock you out of sudo."
+      ui_left "\e[31mAn empty password would lock you out of sudo.\e[0m"
       continue
     fi
     # One password for the user, root and the disk, as upstream does: the
@@ -173,7 +197,7 @@ ask_identity() {
   done
 
   while :; do
-    hostname=$(gum input --placeholder "nixarchy" --prompt "Hostname> ")
+    hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ")
     hostname=${hostname:-nixarchy}
     why=$(validate_hostname "$hostname") && break
     gum style --foreground 1 "$why"
@@ -182,7 +206,7 @@ ask_identity() {
   timezone=$(
     find "$TZDIR" -type f -not -path '*/posix/*' -not -path '*/right/*' |
       sed "s#.*/zoneinfo/##" | grep '/' | sort |
-      gum filter --placeholder "UTC" --value "UTC"
+      gum filter --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --placeholder "Type to search" --value "UTC"
   )
   timezone=${timezone:-UTC}
 }
@@ -194,6 +218,7 @@ boot_medium() {
 }
 
 ask_device() {
+  ui_screen "Let's choose where to install nixarchy..."
   local exclude list
   exclude=$(boot_medium)
   # TYPE=="disk" drops the ISO's loop devices; the exclusion drops the stick.
@@ -205,7 +230,7 @@ ask_device() {
     echo "nixarchy-install: no disk to install onto." >&2
     exit 1
   fi
-  device=$(printf '%s\n' "$list" | gum choose | awk '{print $1}')
+  device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}')
   [ -n "$device" ] || exit 1
 }
 
@@ -213,14 +238,16 @@ ask_device() {
 # and Ctrl+C at the warning is the way out. That is upstream's shape, and it
 # means the safe answer is the one you get by doing nothing.
 ask_encrypt() {
-  gum style --foreground 3 "Everything on $device will be overwritten. There is no recovery possible."
-  gum style --faint "Press Ctrl+C for an unencrypted install."
+  ui_screen "Ready to install"
+  ui_left "\e[33mEverything on $device will be overwritten. There is no recovery possible.\e[0m"
+  ui_left "\e[90mPress Ctrl+C for an unencrypted install.\e[0m"
+  echo
 
   # Three outcomes, not two. Yes encrypts; No aborts, because "no" to a
   # destructive question should never mean "do it anyway, differently"; and an
   # interrupt is upstream's hidden opt-out, which gum reports as 130.
   local rc=0
-  gum confirm "Encrypt and install to $device?" || rc=$?
+  gum confirm --padding "$(ui_gum_pad)" "Encrypt and install to $device?" || rc=$?
   case $rc in
     0) encrypt=true ;;
     130) encrypt=false ;;
@@ -229,7 +256,7 @@ ask_encrypt() {
 }
 
 confirm_summary() {
-  gum style --bold "Ready to install:"
+  ui_screen "Ready to install"
   {
     printf 'Hostname,%s\n' "$hostname"
     printf 'Username,%s\n' "$username"
@@ -238,8 +265,9 @@ confirm_summary() {
     printf 'Keyboard,%s\n' "$keymap"
     printf 'Disk,%s\n' "$device"
     printf 'Encrypted,%s\n' "$encrypt"
-  } | gum table --separator ',' --print --columns "Setting,Value"
-  gum confirm "Does this look right?"
+  } | gum table --separator ',' --print --columns "Setting,Value" | ui_indent
+  echo
+  gum confirm --padding "$(ui_gum_pad)" "Does this look right?"
 }
 
 # ---------------------------------------------------------------------------
@@ -519,15 +547,46 @@ main() {
     exit 0
   fi
 
-  format_disk
-  generate_hardware_config
-  install_flake_dir
-  run_install
+  # From here the screen belongs to the dashboard and every phase writes to the
+  # log instead. A wall of store paths tells nobody anything they can act on,
+  # and it makes an ordinary install look like something going wrong.
+  local log=/var/log/nixarchy-install.log
+  local started rc=0 elapsed
+  started=$(date +%s)
 
-  gum style --bold "Done."
-  echo "Reboot, then log in as $username."
-  echo "This machine's configuration is /etc/nixos -- a git repository with"
-  echo "nothing committed yet. Edit it and run 'nh os switch'."
+  ui_dashboard_start
+  {
+    format_disk
+    generate_hardware_config
+    install_flake_dir
+    run_install
+  } >>"$log" 2>&1 || rc=$?
+  ui_dashboard_stop
+  # A frame already in flight when the drawer was killed can land AFTER the
+  # finish screen is drawn, painting a stale 99% dashboard back over it -- and
+  # a complete-looking dashboard that never changes again is indistinguishable
+  # from a hang. Let any such frame finish before taking the screen back.
+  sleep 1.2
+  elapsed=$(($(date +%s) - started))
+
+  # The log, on the serial line, whatever happened. The dashboard deliberately
+  # hides it on screen, which is right for someone watching an install and
+  # useless for someone diagnosing one -- and a screen that stops updating
+  # looks identical to a screen that has finished.
+  if [ -w /dev/ttyS0 ]; then
+    {
+      echo "=============== nixarchy install log (exit $rc) ==============="
+      cat "$log" 2>/dev/null
+      echo "=============== end ==============================="
+    } >/dev/ttyS0 2>&1 || true
+  fi
+
+  if [ "$rc" -ne 0 ]; then
+    ui_failed "$log" "$rc"
+    exit "$rc"
+  fi
+
+  ui_finished "$elapsed" "$username"
 }
 
 # Guarded so the functions above can be sourced and exercised without running

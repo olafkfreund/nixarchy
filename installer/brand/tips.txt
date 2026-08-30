@@ -1,0 +1,18 @@
+Super + Space opens the nixarchy menu -- everything is in there.
+Apps are declared, not installed. Pick one, then Apply changes.
+Nothing you install imperatively survives a rebuild. That is the point.
+`nh os switch` rebuilds and activates after you edit /etc/nixos.
+Every rebuild keeps the last one. A bad update is one reboot from undone.
+Super + K shows every key binding, including the ones you forgot.
+Your machine's configuration is /etc/nixos, and it is yours to edit.
+The Install menu writes to a file. You can read it, and change it by hand.
+`nixarchy-doctor` explains what is wrong before you have to ask.
+Themes change the terminal, the bar, the browser and the lock screen at once.
+Old generations are cleaned automatically after fourteen days.
+A rebuild does not update a running session. Log out to pick up new commands.
+`nix search nixpkgs <name>` finds anything the menu does not offer.
+The manual lives at olafkfreund.github.io/nixarchy.
+Super + Escape starts the screensaver, which is ASCII art all the way down.
+LocalSend is in the Install menu; the firewall port is already open for it.
+Rollback is in the boot menu. You do not need to remember how it works.
+This installer wrote a git repository. Commit when you are ready.

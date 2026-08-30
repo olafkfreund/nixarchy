@@ -227,6 +227,7 @@
             mkpasswd
             nixos-install-tools # nixos-install, nixos-generate-config
             nix
+            ncurses # clear and tput, which the screens are drawn with
             kbd # loadkeys, and the keymap list
             tzdata # the timezone list
           ];
@@ -237,12 +238,24 @@
               [
                 "@template@"
                 "@gumenv@"
+                "@ui@"
+                "@logo@"
+                "@logocompact@"
+                "@tips@"
+                "@keymaps@"
+                "@dashboard@"
                 "@tzdata@"
                 "@kbd@"
               ]
               [
                 "${self.packages.${system}.flake-template}"
                 "${./installer/gum-env.sh}"
+                "${./installer/lib/ui.sh}"
+                "${./installer/brand/logo.txt}"
+                "${./installer/brand/logo-compact.txt}"
+                "${./installer/brand/tips.txt}"
+                "${./installer/brand/keymaps.txt}"
+                "${./installer/lib/dashboard.sh}"
                 "${pkgsFor.${system}.tzdata}"
                 "${pkgsFor.${system}.kbd}"
               ]
@@ -363,6 +376,11 @@
         # Boot the smoke test: `nix run .#vm`
         vm = self.nixosConfigurations.vm.config.system.build.vm;
 
+        # The bootable image: boot it and answer the questions. Still online
+        # at this stage -- #15 bakes the closure onto it, #16 takes the
+        # network away.
+        iso = self.nixosConfigurations.iso.config.system.build.isoImage;
+
         # A VM that installs onto a blank disk, WITH a network -- which
         # checks.install cannot have, because it is a sandboxed derivation and
         # its whole point is that a rebuild afterwards cannot fetch anything.
@@ -395,6 +413,13 @@
       # bar comes up against Hyprland's Lua config before any packaging effort
       # is spent on the long tail.
       nixosConfigurations = {
+        # The live image. See installer/cd.nix.
+        iso = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [ ./installer/cd.nix ];
+        };
+
         installer-vm = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = { inherit inputs; };

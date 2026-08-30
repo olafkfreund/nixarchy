@@ -50,6 +50,9 @@ More in [`docs/screenshots/`](docs/screenshots).
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
 | Branded boot splash | Omarchy's Plymouth theme, selected by `boot.plymouth.theme` |
 | **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
+| **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
+| Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
+| Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
 
 ## Why vendoring
 
@@ -106,6 +109,16 @@ debuginfod serving nixpkgs builds, so it explains `nixseparatedebuginfod` instea
 of pointing at Arch's server; "recent package updates" becomes
 `nix profile diff-closures`, which names exactly what changed between generations;
 and a bug report now has two possible destinations rather than one.
+
+The `nixarchy` skill also carries two things an agent gets wrong by default here.
+That a rebuild does **not** update a running session, so a fix that looks like it
+failed may simply not have been loaded yet -- and specifically not to verify one
+by running the script at its absolute installed path, because that path works
+while the keybinding still does not, which is the most misleading result
+available. And that `~/.config/omarchy/extensions/omarchy-menu.jsonc` is the one
+file under `~/.config/omarchy/` that cannot be edited: it is generated, carries
+the rewrite pointing every `install.*` row at the Nix selection, and replacing
+the symlink with a real file silently stops the menu tracking the package.
 
 Only `SKILL.md` and `contributing.md` are replaced outright — their guidance is
 wrong here, not merely misspelt. Everything else is patched with `--replace-fail`,
@@ -468,6 +481,26 @@ nix run github:olafkfreund/nixarchy#doctor
 It reads the running system and prints the configuration that machine needs --
 before nixarchy is an input anywhere. It changes nothing.
 
+Two of the things it reports are worth knowing about in advance, because both
+fail *silently* rather than loudly:
+
+**Your session may be running an older build than the one installed.**
+`OMARCHY_PATH` and `PATH` are set at login and keep pointing at whichever store
+path was current then. A `nixos-rebuild switch` installs a new package at a new
+path and cannot change the environment of a session already running, so every
+`omarchy-*` command the desktop executes -- every keybinding, every menu row --
+comes from the old build until you log out and back in. The doctor compares the
+two and says so. On Arch this cannot happen: the tree lives at a fixed
+`/usr/share/omarchy` overwritten in place, and a running session picks up a new
+version at once. Here the path itself changes.
+
+**`Setup > Default browser` may report success and change nothing.** If
+`mimeapps.list` is a store symlink -- which is what `xdg.mimeApps` in Home
+Manager produces, and the right way to declare it -- `xdg-settings` fails on the
+read-only file and *still exits 0*. `omarchy-default-browser`'s `|| exit 1` never
+fires. Nothing is broken and nothing says so, which is the only reason it is
+worth a section: the fix lives in a file the menu cannot reach.
+
 Then, in order:
 
 1. **Add the input**, and import the NixOS module. Pin a release unless you
@@ -825,6 +858,30 @@ over the network, and the build sandbox has none.
 `inputs.nixpkgs.follows` is deliberately **not** set on it — hyprwm asks
 consumers not to, and overriding forfeits their binary cache.
 
+### quickshell is pinned ahead of nixpkgs too, but temporarily
+
+nixpkgs ships 0.3.0, whose session lock reaches `qFatal` when screens sleep and
+wake while locked:
+
+```
+FATAL: Tried to show lockscreen surfaces without active lock
+```
+
+in `WlSessionLock::updateSurfaces`. The process aborts — and because the Wayland
+session-lock protocol deliberately keeps the compositor locked when its lock
+client disappears, what is left is a blank screen with nothing to type a password
+into. Reboot is the only way out. That is the protocol working as designed on top
+of a crash.
+
+v0.3.1 fixes it and says so: *"Fixed session lock crashes on sleep, wake, DPMS,
+and unlocking."* An `overrideAttrs` rather than a fork — nixpkgs keeps the build,
+the Qt wrapper and the dependency set, and only the tag moves. It is passed to
+the omarchy package rather than set on the overlay, so a machine using quickshell
+for something of its own still gets nixpkgs'.
+
+Unlike the Hyprland pin, this one is meant to go away: delete it when nixpkgs
+ships ≥ 0.3.1. Tracked in issue #35.
+
 ## Releases
 
 ```nix
@@ -908,6 +965,11 @@ the last run in CI on each push; the last is two machines that boot it.
 | The session under Hyprland's watchdog | `checks.coexist` greps the journal for the warning 0.56 logs when the compositor is exec'd directly instead of through `start-hyprland` |
 | The shell rc files locating themselves | `checks.session` sources each with `OMARCHY_PATH` unset and asserts it resolves to the store, not to a `/usr` path that cannot exist |
 | **Two real machines** | a workstation and a laptop, both running it beside niri, Hyprland and GNOME behind greetd. `nixarchy-verify` inside the laptop's session: 16 passed, 0 failed |
+| Every desktop entry's command existing | CI derives the list from the shipped `.desktop` files rather than a hand-written one, and resolves each against the package and the runtime env — `Disk Usage` shipped launching a `dua` nothing installed |
+| Every app's `attr` naming a real package | CI resolves each `data/apps.nix` entry in the overlay. The doctor falls back to the attribute name when a lookup fails, which is right by luck when the attribute matches the binary and wrong when it does not: `zen` for a package installing `zen-beta`, `hey-cli` for one installing `hey` |
+| The browser lookup ignoring `$BROWSER` | CI asserts all four scripts that resolve a browser guard the call. `xdg-settings get` skips the mime database when `$BROWSER` is set and answers with the first `.desktop` whose `Exec` matches — on a Chrome user's machine, a web app rather than a browser |
+| The agent skills being NixOS-aware | CI asserts the skill set, that each `SKILL.md`'s frontmatter name matches its directory, and that **no fenced code block** contains a pacman, yay, `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch deliberately; a code block is what an agent copies |
+| Skill links surviving a rebuild | `checks.session` asserts all three skills are linked in all four agent homes and that each resolves to a `SKILL.md` **inside the current closure** — a stale link passes `-L` and fails `-e`, which is the case that matters |
 | The shell chain in bash, zsh and fish | asserted by running each shell and calling the functions, not by checking a file exists |
 | Compose keys, Bluetooth, UPower, the browser accent | asserted on the thing itself: the include resolves, the unit is enabled, the portal answers, the colour is the theme's |
 
@@ -952,6 +1014,15 @@ someone would miss it:
    still follows the theme live.
 
 Known gaps in detail:
+
+- **There is no bare-metal installer.** This is a consumable flake: the section
+  above is titled *"Adding it to a machine you already run"*, and that is the only
+  way in. Someone with a blank drive installs NixOS by hand first. Omarchy's own
+  pitch is a USB stick and five questions, so this is the largest thing missing
+  rather than a rough edge — tracked as an epic with fourteen sub-issues covering
+  a `disko` layout, a reference host, an installer that generates a flake you own,
+  a VM test that installs and boots the result, and an ISO carrying the closure so
+  the install is a local copy rather than a download.
 
 - `brave-origin` has no published source; use `apps.brave` with policies in
   `/etc/brave/policies/managed`

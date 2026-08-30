@@ -342,7 +342,7 @@ in
     ];
 
     nix.settings = {
-      # nixarchy-apply runs `nixos-rebuild switch --flake`, so flakes are not
+      # nixarchy-apply runs `nh os switch <flake>`, so flakes are not
       # optional here. mkDefault leaves a user free to manage this themselves.
       experimental-features = lib.mkDefault [
         "nix-command"

@@ -11,6 +11,12 @@
 # Updating a NixOS host means moving the flake inputs forward and rebuilding,
 # so that is what this does. Rollback is `nixos-rebuild --rollback` or the boot
 # menu, which is why no snapshot is taken.
+#
+# Both halves are one `nh os switch --update`. nh is a front end to the same
+# nixos-rebuild machinery, so nothing about the result differs -- what differs
+# is the reporting: a live view of what is building, and a diff of the packages
+# that actually changed once it lands. On an update that is the whole question,
+# and plain nixos-rebuild answers it with a wall of store paths.
 
 set -euo pipefail
 
@@ -50,14 +56,17 @@ case "$reply" in
 esac
 
 echo
-echo "==> nix flake update"
-nix flake update --flake "$flake"
-
-echo
-echo "==> nixos-rebuild switch"
+echo "==> nh os switch --update $flake"
+# No sudo: nh elevates itself, and wrapping it takes that decision away.
+#
+# The flake is named explicitly rather than left to nh's default, which reads
+# $NH_FLAKE -- exported on plenty of machines at whatever configuration its
+# owner usually works on. Updating the wrong flake is not a failure anyone
+# would read as one.
+#
 # Not exec'd: upstream's presentation wrapper prints a completion banner after
 # this returns, and exec would take that away.
-sudo nixos-rebuild switch --flake "$flake"
+nh os switch --update "$flake"
 
 echo
 echo "Updated. The previous generation is still in the boot menu if you need it."

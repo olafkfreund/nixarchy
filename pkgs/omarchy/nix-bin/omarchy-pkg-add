@@ -24,6 +24,32 @@ set -euo pipefail
 table=@table@
 file="${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
 
+# Already installed? Then say so and get out of the way.
+#
+# Sixteen shipped scripts open with this command under `set -e` --
+# omarchy-install-gaming-retroarch, -steam, -lutris, omarchy-setup-security-sshd
+# and the rest -- so exiting non-zero aborts them before the work that follows.
+# For retroarch that work is ~/Games, two config keys and the line telling you
+# where to put roms. Refusing was right when the package is missing; a caller
+# that goes on to configure something that was never installed should stop.
+#
+# But once you have enabled the app declaratively and rebuilt, the package IS
+# there, and the only thing still missing is exactly that configuration. Failing
+# then leaves an app installed and unconfigured with no way to finish the job
+# short of reading the script and running its tail by hand.
+#
+# So: yield when every named package resolves. The caller carries on and does
+# its configuration against a package that genuinely exists, which is the
+# behaviour upstream has and the reason those tails were written.
+#
+# omarchy-pkg-present is the same check the rest of this family uses, suffix
+# handling included -- brave-bin provides `brave`.
+if [ $# -gt 0 ] && omarchy-pkg-present "$@"; then
+  echo
+  echo "[$*] already installed. Nothing to add -- carrying on."
+  exit 0
+fi
+
 known=0
 unknown=()
 
@@ -86,12 +112,19 @@ if [ ${#unknown[@]} -gt 0 ]; then
   echo "If Omarchy's Install menu offers it, pick it there -- that uncomments a"
   echo "line in $file, and Apply changes rebuilds with it."
   echo
-  echo "Otherwise add it to your own configuration as environment.systemPackages"
-  echo "and rebuild. Search for it first:"
+  echo "Otherwise add it by nixpkgs attribute -- that appends it to the same"
+  echo "file and one apply builds it with everything else:"
+  echo
+  echo "  nixarchy-pkg-add ${unknown[*]}"
+  echo "  nixarchy-apply"
+  echo
+  echo "If that reports no such package, search for the right name:"
+  echo "  nix search nixpkgs ${unknown[0]}"
   echo "  https://search.nixos.org/packages"
   echo
 fi
 
-# Always non-zero: nothing was installed, and a caller that carries on to
-# configure what it thinks it just installed should stop here.
+# Non-zero, because nothing was installed and something is genuinely missing: a
+# caller that carries on to configure what it thinks it just installed should
+# stop here. The already-installed case returned 0 above, before any of this.
 exit 1

@@ -29,7 +29,7 @@ Three routes exist on a Nixarchy machine. Pick the highest one that fits.
 | The request | Route |
 |---|---|
 | An app Nixarchy already knows about | **`nixarchy-app-enable <id>`**, then `nixarchy-apply` |
-| Any other package, service, or system setting | **Edit the flake**, then `nixos-rebuild switch` |
+| Any other package, service, or system setting | **`nixarchy-pkg-add <attr>`** for a plain package; otherwise **edit the flake**, then `nixos-rebuild switch` |
 | A one-off, throwaway try — not a change to the machine | **`nix shell nixpkgs#<pkg>`** |
 
 Never reach past route 1 for an app it covers: it writes the same file the Install
@@ -59,7 +59,8 @@ nixarchy-apply                   # copy the selection into the flake, then rebui
 
 `nixarchy-apply` does three things: prints what is enabled, copies
 `~/.config/nixarchy/apps.nix` to `<flake>/nixarchy-apps.nix`, and offers to run
-`sudo nixos-rebuild switch --flake <flake>`.
+`nh os switch <flake>` (a front end to nixos-rebuild; no `sudo`, it elevates
+itself).
 
 **The copy is necessary and the import is the user's job.** A flake cannot read a
 file outside its own tree, so the selection has to be copied in. Something in the
@@ -85,7 +86,7 @@ needs an FHS wrapper, 1Password a setuid helper, Tailscale a daemon, Firefox its
 policy module. `nixarchy-app-enable` already knows which is which; that is why it
 exists rather than a `systemPackages` line.
 
-## Route 2: Edit the Flake
+## Route 2: Add a Package, or Edit the Flake
 
 For everything else. First, find where the configuration lives:
 
@@ -97,6 +98,23 @@ echo "${NIXARCHY_FLAKE:-/etc/nixos}"       # what Nixarchy's own commands use
 their configuration in a git repo under `~`. Confirm before editing anything.
 
 ### Adding a package
+
+For a plain package with no options to set, route 2 does the edit for you. It
+validates the attribute against the system's own nixpkgs, appends it to
+`~/.config/nixarchy/apps.nix` — the same file the Install menu writes — and
+leaves the rebuild to `nixarchy-apply`, so menu picks and hand-added packages
+build together:
+
+```bash
+nixarchy-pkg-add ripgrep jq
+nixarchy-apply
+```
+
+It refuses an attribute nixpkgs does not have, and redirects to
+`nixarchy-app-enable` for anything the curated list already covers as a module.
+
+Editing the flake by hand is the same thing, and is what you want when the
+package needs an override or belongs somewhere other than the machine-wide set:
 
 ```nix
 environment.systemPackages = with pkgs; [
@@ -236,7 +254,7 @@ evidence than a package log.
 ## Example Requests
 
 - "Install Brave" -> `nixarchy-app-enable brave && nixarchy-apply` (route 1)
-- "Install ripgrep" -> add to `environment.systemPackages`, rebuild (route 2)
+- "Install ripgrep" -> `nixarchy-pkg-add ripgrep && nixarchy-apply` (route 2)
 - "Enable Tailscale" -> `services.tailscale.enable = true;` — the module, not the package
 - "Try out helix quickly" -> `nix shell nixpkgs#helix`, and say it is temporary
 - "My package disappeared after reboot" -> it was installed imperatively; declare it properly

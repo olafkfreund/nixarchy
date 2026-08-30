@@ -145,6 +145,23 @@ let
     lib.mapAttrsToList (_: a: "#   ${a.label} — ${a.unavailable}\n") unavailable
   );
 
+  # Every nixpkgs attribute the curated list already covers, mapped back to
+  # its app id. nixarchy-pkg-add checks this first: typing `firefox` should
+  # get you `nixarchy-app-enable firefox`, which sets programs.firefox and
+  # brings policies and extensions with it, not a bare package in
+  # systemPackages that does none of that. Both the app id and its attribute
+  # are listed, because either is a plausible thing to type.
+  appAttrTable = pkgs.writeText "nixarchy-app-attrs.tsv" (
+    lib.concatStrings (
+      lib.mapAttrsToList (
+        name: app:
+        lib.concatMapStrings (key: "${key}\t${name}\n") (
+          lib.unique ([ name ] ++ lib.optional (app ? attr) app.attr)
+        )
+      ) available
+    )
+  );
+
   appsTemplate = pkgs.writeText "nixarchy-apps.nix" ''
     # Applications available through the Omarchy menu, as NixOS configuration.
     #
@@ -214,7 +231,7 @@ let
         "update.omarchy" = {
           icon = "󰭌";
           label = "Nixarchy";
-          description = "nix flake update, then nixos-rebuild switch --flake";
+          description = "nh os switch --update: move every flake input forward, then rebuild";
         };
 
         # Omarchy's release channels are a pacman repository choice. Here the
@@ -611,6 +628,193 @@ in
             '';
           })
 
+          # The answer to "I want a package the menu does not offer". Upstream's
+          # `omarchy pkg add` runs pacman; there is no imperative equivalent
+          # here, so this does the declarative thing instead -- appends the
+          # attribute to a list in the same file the menu already edits, so
+          # one `nixarchy-apply` builds curated apps and extras together.
+          #
+          # It deliberately does NOT touch the user's own NixOS configuration,
+          # which nixarchy does not own. ~/.config/nixarchy/apps.nix is already
+          # a full NixOS module, so a systemPackages list can sit beside the
+          # app selection with no new file and no new option.
+          (pkgs.writeShellApplication {
+            name = "nixarchy-pkg-add";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.gawk
+              pkgs.jq
+              config.nix.package
+              cfg.package # omarchy-notification-send
+            ];
+            text = ''
+              file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+              table=${appAttrTable}
+              nixpkgs=${pkgs.path}
+
+              if [ $# -eq 0 ]; then
+                echo "usage: nixarchy-pkg-add <nixpkgs-attribute>..." >&2
+                echo "  e.g. nixarchy-pkg-add ripgrep fd" >&2
+                exit 1
+              fi
+
+              [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+              # Every edit below is reverted as a unit if the result will not parse. The
+              # file is the user's own NixOS module; leaving it broken would take the whole
+              # system's evaluation down with it, not just this feature.
+              backup=$(mktemp)
+              cp "$file" "$backup"
+              trap 'rm -f "$backup"' EXIT
+              restore() { cp "$backup" "$file"; }
+
+              # The list this appends to does not exist in a freshly generated file: the
+              # template is all curated apps and nothing else. Create it once, in place,
+              # before the module's closing brace.
+              ensure_block() {
+                grep -q '#@pkgs-end' "$file" && return 0
+
+                # systemPackages needs `pkgs`, and the generated template takes `{ ... }:`.
+                if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
+                  sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgs, ... }:/' "$file"
+                fi
+
+                tmp=$(mktemp)
+                awk '
+                  !ins && /^}[[:space:]]*$/ {
+                    print "";
+                    print "  # ── Extra packages ──────────────────────────────────────────────";
+                    print "  # Plain nixpkgs attributes, added by nixarchy-pkg-add. These are";
+                    print "  # not part of the curated app list above: the Omarchy menu does";
+                    print "  # not offer them and will not remove them. The file stays yours --";
+                    print "  # reformat and annotate freely, the tool only ever inserts one";
+                    print "  # line before the end marker.";
+                    print "  environment.systemPackages = with pkgs; [  #@pkgs-begin";
+                    print "  ];  #@pkgs-end";
+                    ins = 1;
+                  }
+                  { print }
+                ' "$file" > "$tmp"
+                mv "$tmp" "$file"
+
+                if ! grep -q '#@pkgs-end' "$file"; then
+                  echo "nixarchy: could not find the closing '}' of $file." >&2
+                  echo "Add this to it by hand, then run this again:" >&2
+                  echo >&2
+                  echo "  environment.systemPackages = with pkgs; [  #@pkgs-begin" >&2
+                  echo "  ];  #@pkgs-end" >&2
+                  restore
+                  exit 1
+                fi
+
+                if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
+                  echo "nixarchy: $file does not take a 'pkgs' argument, so the list just" >&2
+                  echo "added cannot refer to it. Change its first line to:  { pkgs, ... }:" >&2
+                fi
+              }
+
+              added=()
+
+              for attr in "$@"; do
+                case "$attr" in
+                  "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+                    echo "'$attr' is not a nixpkgs attribute name." >&2
+                    exit 1
+                    ;;
+                esac
+
+                # The curated list first. Typing `firefox` should get you the app, which is
+                # a NixOS module and brings policies and extensions with it, not a bare
+                # package in systemPackages that does none of that.
+                app=$(awk -F'\t' -v a="$attr" '$1 == a { print $2; exit }' "$table")
+                if [ -n "$app" ]; then
+                  echo "$attr is on the curated app list, as '$app'. Enable it that way --"
+                  echo "that route knows whether it needs a NixOS module rather than a package:"
+                  echo
+                  echo "  nixarchy-app-enable $app"
+                  echo
+                  continue
+                fi
+
+                if grep -q "#@pkg $attr\$" "$file"; then
+                  echo "$attr is already in $file"
+                  continue
+                fi
+
+                # Resolved against the system's own nixpkgs rather than the flake registry,
+                # so the answer matches what a rebuild would actually build, and it works
+                # with no network. nix-instantiate rather than `nix eval`: no pure-eval mode
+                # to fight over an absolute store path, and no experimental flag to require.
+                # allowUnfree only so an unfree package reports as unfree instead of
+                # throwing here; nothing in this script decides your licence policy.
+                if ! info=$(nix-instantiate --eval --strict --json --expr "
+                  let
+                    p = import $nixpkgs { config.allowUnfree = true; };
+                    q = p.$attr;
+                    ls = if q.meta ? license then
+                           (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
+                         else [ ];
+                  in {
+                    inherit (q) name;
+                    description = q.meta.description or \"\";
+                    unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
+                    broken = q.meta.broken or false;
+                  }" 2>/dev/null); then
+                  echo "nixpkgs has no package '$attr'." >&2
+                  echo >&2
+                  echo "Search for the right name:" >&2
+                  echo "  nix search nixpkgs $attr" >&2
+                  echo "  https://search.nixos.org/packages" >&2
+                  exit 1
+                fi
+
+                ensure_block
+                sed -i "/#@pkgs-end/i\\    $attr  #@pkg $attr" "$file"
+
+                # sed reports success when its address matches nothing, which would leave
+                # this reporting a package it never wrote. Check the line is really there.
+                if ! grep -q "#@pkg $attr\$" "$file"; then
+                  restore
+                  echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                  exit 1
+                fi
+                added+=("$attr")
+
+                echo "added $attr ($(jq -r .name <<<"$info")) -- $(jq -r '.description // ""' <<<"$info")"
+                if [ "$(jq -r .unfree <<<"$info")" = true ]; then
+                  echo "  unfree: needs nixpkgs.config.allowUnfree in your configuration, or the build fails."
+                fi
+                if [ "$(jq -r .broken <<<"$info")" = true ]; then
+                  echo "  marked broken in nixpkgs: expect the build to fail."
+                fi
+              done
+
+              [ ''${#added[@]} -gt 0 ] || exit 0
+
+              if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                restore
+                echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                exit 1
+              fi
+
+              count=$(grep -c '#@pkg ' "$file" || true)
+
+              # A menu pick runs with no terminal attached, so stdout goes nowhere. Say it
+              # on the desktop instead, clickable, because a rebuild is what is still owed.
+              if command -v omarchy-notification-send >/dev/null 2>&1; then
+                omarchy-notification-send -r 8471 -t 8000 -u normal \
+                  "''${added[*]} queued -- not installed yet" \
+                  "$count extra package(s) selected. Click here, or Install > Apply changes, to run nixos-rebuild." \
+                  --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+              fi
+
+              echo
+              echo "run 'nixarchy-apply' when you have picked everything you want"
+            '';
+          })
+
           # Copies the selection into the flake and switches. Kept separate
           # from enabling so several apps can be picked before anything builds.
           (pkgs.writeShellApplication {
@@ -619,7 +823,14 @@ in
               pkgs.coreutils
               pkgs.diffutils
               pkgs.gnugrep
-              pkgs.nixos-rebuild
+              # nh rather than nixos-rebuild: a progress view that says what is
+              # building and how far along it is, and a package diff against the
+              # running generation once it lands. Both matter more here than
+              # anywhere else -- this is the command a menu pick runs, in front
+              # of someone who just clicked "install" and has no other signal
+              # that anything is happening. It is also the smaller closure of
+              # the two, by about 200 MiB.
+              pkgs.nh
             ];
             text = ''
               file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
@@ -683,8 +894,16 @@ in
 
               read -r -p "Build and switch now? [y/N] " reply
               case "$reply" in
-                [yY]*) exec sudo nixos-rebuild switch --flake "$flake" ;;
-                *) echo "Not switching. Run: sudo nixos-rebuild switch --flake $flake" ;;
+                # No sudo: nh elevates itself, and wrapping it means the
+                # elevation happens before nh can decide how to do it.
+                #
+                # The flake is passed explicitly rather than left to nh's own
+                # default. nh reads $NH_FLAKE, which plenty of people already
+                # export at whatever configuration they usually work on -- and
+                # an app selection copied into one flake then switched into
+                # another is a failure that looks like nothing happening.
+                [yY]*) exec nh os switch "$flake" ;;
+                *) echo "Not switching. Run: nh os switch $flake" ;;
               esac
             '';
           })

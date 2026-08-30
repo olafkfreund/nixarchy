@@ -42,7 +42,7 @@ declarative equivalent: **it edits a file and stops.**
 ```
 Install ▸ Brave          →  "brave queued — not installed yet"
 Install ▸ VSCode         →  "2 app(s) selected"
-Install ▸ Apply changes  →  nixos-rebuild switch --flake
+Install ▸ Apply changes  →  nh os switch <flake>
 ```
 
 Pick as many as you like; nothing is built until you apply. That is not a

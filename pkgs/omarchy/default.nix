@@ -109,6 +109,10 @@
   ttfx,
   # Branding: this is a NixOS port, so the menu button wears the snowflake.
   nixos-icons,
+  # omarchy-update drives the rebuild through nh. Unlike `nix` and
+  # `nixos-rebuild`, which every NixOS machine already has on PATH, nh is not
+  # guaranteed to be installed, so it has to be carried here.
+  nh,
 }:
 let
   # Everything the 438 scripts in bin/ invoke. Kept explicit rather than
@@ -165,6 +169,7 @@ let
     bluez
     networkmanager
     fastfetch
+    nh
     btop
     ripgrep
     fd

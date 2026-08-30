@@ -16,9 +16,11 @@ prunes packages, takes a snapper snapshot, refreshes the keyring and demands
 what updating a NixOS host actually means:
 
 ```sh
-nix flake update --flake /etc/nixos      # move every input forward
-sudo nixos-rebuild switch --flake /etc/nixos
+nh os switch --update /etc/nixos    # move every input forward, then rebuild
 ```
+
+`nh` is a front end to nixos-rebuild, so nothing about the result differs; it
+reports the build as it happens and diffs the packages that changed at the end.
 
 It asks before doing either, and it tells you afterwards that the previous
 generation is still in the boot menu. No snapshot is taken because none is

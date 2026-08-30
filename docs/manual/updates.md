@@ -23,9 +23,13 @@ and `flake.lock` pins each of them to an exact revision. `omarchy update`
 moves every pin forward and rebuilds:
 
 ```sh
-nix flake update --flake <flake>
-sudo nixos-rebuild switch --flake <flake>
+nh os switch --update <flake>
 ```
+
+That is one command for both halves. `nh` is a front end to the same
+nixos-rebuild machinery, so the result is identical -- what it adds is a live
+view of what is building and a diff of the packages that actually changed,
+which on an update is the only question worth asking.
 
 It asks first. A new Omarchy release arrives as a source bump of the `omarchy`
 input, so the menus, themes and commands come along with it. Your app

@@ -40,7 +40,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | `omarchy` CLI | all 429 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Remove menu** | deselects apps, never touches your own config |
-| **Update menu** | `nix flake update` + `nixos-rebuild switch --flake` |
+| **Update menu** | `nh os switch --update <flake>` |
 | 56 apps in the selection | 41 from nixpkgs, 5 as NixOS modules, 8 built here, 2 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
@@ -154,7 +154,7 @@ declarative system:
 ```
 Install ▸ Brave          →  "brave queued — not installed yet"
 Install ▸ VSCode         →  "2 app(s) selected"
-Install ▸ Apply changes  →  nixos-rebuild switch --flake
+Install ▸ Apply changes  →  nh os switch <flake>
 ```
 
 The notification is clickable and runs the rebuild.

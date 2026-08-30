@@ -22,7 +22,7 @@ Picking a row does not install anything. It uncomments one line in
 populated with every app and every line commented out. Pick five rows and you
 have five uncommented lines. Then _Install > Apply changes_ runs
 `nixarchy-apply`, which copies that file to `nixarchy-apps.nix` in your flake
-directory and offers to run `sudo nixos-rebuild switch --flake <flake>`.
+directory and offers to run `nh os switch <flake>`.
 
 The same thing from a terminal:
 

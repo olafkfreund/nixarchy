@@ -18,5 +18,10 @@ echo
 echo "Uncomment what you want -- or pick it from the Install menu, which"
 echo "uncomments it for you -- then run 'nixarchy-apply' to build and switch."
 echo
-echo "For something the menu does not offer, add it to your own configuration"
-echo "as environment.systemPackages."
+echo "For something the menu does not offer, add it by nixpkgs attribute:"
+echo
+echo "  nixarchy-pkg-add ripgrep"
+echo "  nixarchy-apply"
+echo
+echo "That appends it to the same file, so one apply builds it alongside the"
+echo "apps you picked from the menu."

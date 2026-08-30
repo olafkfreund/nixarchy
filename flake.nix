@@ -82,6 +82,21 @@
           # simply follow nixpkgs the way most apps here do.
           hey-cli = final.callPackage ./pkgs/apps/hey-cli.nix { };
 
+          # Not built here -- upstream's own flake, re-exported into the overlay
+          # so nixarchy-doctor and the Install menu can find it.
+          #
+          # Both ask pkgs for an app's meta.mainProgram to learn which command it
+          # puts on PATH, and fall back to the attribute name when the lookup
+          # fails. zen-browser lived only in packages.<system>, so the lookup
+          # returned null and the fallback answered "zen" -- a command that does
+          # not exist, because this package installs bin/zen-beta. The doctor
+          # could never report Zen as present and the menu never dimmed its row.
+          #
+          # Exactly the vscode/code trap the doctor was written to avoid, reached
+          # by a different road: not a wrong mainProgram, but a package the probe
+          # could not see.
+          zen-browser = zen-browser.packages.${final.stdenv.hostPlatform.system}.default;
+
           # Two of the four applications Omarchy writes itself. nixpkgs has
           # none of them, which is why modules/nixos.nix cannot reproduce
           # upstream's preinstall set; these two close half that gap.
@@ -189,7 +204,18 @@
                       let
                         probe = builtins.tryEval (
                           let
-                            p = nixpkgs.lib.attrByPath (nixpkgs.lib.splitString "." (app.attr or name)) null pkgs;
+                            # nixarchy-apps first, then the top level. Apps
+                            # this repo packages live under nixarchy-apps, so
+                            # probing only the top level returned null for every
+                            # one of them and the fallback answered with the
+                            # attribute name. That is right by luck when the
+                            # attribute matches the binary -- once, omacut,
+                            # ttfx -- and wrong when it does not: `zen` for a
+                            # package installing bin/zen-beta, `hey-cli` for one
+                            # installing bin/hey. Both were reported as absent
+                            # on machines that had them.
+                            path = nixpkgs.lib.splitString "." (app.attr or name);
+                            p = nixpkgs.lib.attrByPath path (nixpkgs.lib.attrByPath path null pkgs) pkgs.nixarchy-apps;
                           in
                           if p == null then null else (p.meta.mainProgram or null)
                         );

@@ -1082,6 +1082,97 @@ in
             '';
           })
 
+          # One name for the commands this repo adds, and a way through to
+          # the 431 it vendors.
+          #
+          # Not a rename of Omarchy. Upstream's commands keep upstream's name,
+          # because they are upstream's -- `omarchy theme set` is the same
+          # script here as on Arch, and a bug in it is a bug to report there.
+          # What this names is the other half: the six commands nixarchy wrote,
+          # which until now were six binaries on PATH with nothing tying them
+          # together and no way to discover them.
+          #
+          # Anything this does not own falls through to omarchy unchanged, so
+          # `nixarchy theme set catppuccin` works and does exactly what
+          # `omarchy theme set catppuccin` does. The fallthrough is the point:
+          # you should not have to know which half of the desktop you are
+          # talking to before you can type a command.
+          (pkgs.writeShellApplication {
+            name = "nixarchy";
+            runtimeInputs = [
+              pkgs.coreutils
+              cfg.package # omarchy, for the fallthrough
+            ];
+            text = ''
+              # Routed by hand rather than by scanning a bin/ directory the way
+              # upstream's dispatcher does: these commands are separate
+              # derivations on PATH, not siblings in one tree, so there is no
+              # directory to scan. Six entries is not a table worth generating.
+              case "''${1:-}" in
+                search)   shift; exec nixarchy-search "$@" ;;
+                apply)    shift; exec nixarchy-apply "$@" ;;
+                # Not installed on the system, on purpose: the doctor exists
+                # to be run *before* nixarchy is an input anywhere, which is
+                # the only entry point someone deciding whether to adopt it
+                # actually has. Route to the command that works rather than to
+                # a binary that is not there.
+                doctor)
+                  if command -v nixarchy-doctor >/dev/null 2>&1; then
+                    shift; exec nixarchy-doctor "$@"
+                  fi
+                  echo "The doctor is not installed -- it runs from the flake, so that it" >&2
+                  echo "works on a machine that has not adopted nixarchy yet:" >&2
+                  echo >&2
+                  echo "  nix run github:olafkfreund/nixarchy#doctor" >&2
+                  exit 1
+                  ;;
+                pkg)
+                  case "''${2:-}" in
+                    add) shift 2; exec nixarchy-pkg-add "$@" ;;
+                  esac
+                  ;;
+                app)
+                  case "''${2:-}" in
+                    enable)  shift 2; exec nixarchy-app-enable "$@" ;;
+                    disable) shift 2; exec nixarchy-app-disable "$@" ;;
+                    remove)  shift 2; exec nixarchy-app-remove "$@" ;;
+                  esac
+                  ;;
+                ""|--help|-h|help)
+                  cat <<'USAGE'
+              nixarchy -- the Omarchy desktop, vendored for NixOS.
+
+              Commands this port adds:
+
+                nixarchy search [query]     Every package, NixOS option and app, in one picker
+                nixarchy pkg add <attr>     Add a nixpkgs package to the app selection
+                nixarchy app enable <id>    Select an app from the curated list
+                nixarchy app disable <id>   Deselect one
+                nixarchy app remove         Pick what to deselect, interactively
+                nixarchy apply              Copy the selection into your flake and rebuild
+                nixarchy doctor             What this machine needs to run nixarchy
+
+              Everything else is Omarchy's own, and reaches it unchanged:
+
+                nixarchy theme set <name>   = omarchy theme set <name>
+                nixarchy update             = omarchy update
+                omarchy commands            Every one of them
+
+              Both names work for those. They are the same scripts as on Arch,
+              which is why they keep Omarchy's name: a bug in one is a bug to
+              report upstream, not here.
+              USAGE
+                  exit 0
+                  ;;
+              esac
+
+              # Anything else is Omarchy's. Not a warning and not a wrapper:
+              # exec, so the exit status, the terminal and the signals are the
+              # command's own.
+              exec omarchy "$@"
+            '';
+          })
+
           # Copies the selection into the flake and switches. Kept separate
           # from enabling so several apps can be picked before anything builds.
           (pkgs.writeShellApplication {

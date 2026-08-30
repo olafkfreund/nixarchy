@@ -26,9 +26,15 @@ file edit and a rebuild instead.
 
 Three routes exist on a Nixarchy machine. Pick the highest one that fits.
 
+`nixarchy` with no arguments lists what this port adds; anything it does not own
+falls through to `omarchy` unchanged, so `nixarchy theme set <name>` and
+`omarchy theme set <name>` are the same command. The `nixarchy-*` binaries are
+still there and still work — `nixarchy pkg add` and `nixarchy-pkg-add` are the
+same thing.
+
 | The request | Route |
 |---|---|
-| An app Nixarchy already knows about | **`nixarchy-app-enable <id>`**, then `nixarchy-apply` |
+| An app Nixarchy already knows about | **`nixarchy app enable <id>`**, then `nixarchy apply` |
 | Any other package, service, or system setting | **`nixarchy-pkg-add <attr>`** for a plain package; otherwise **edit the flake**, then `nixos-rebuild switch` |
 | A one-off, throwaway try — not a change to the machine | **`nix shell nixpkgs#<pkg>`** |
 

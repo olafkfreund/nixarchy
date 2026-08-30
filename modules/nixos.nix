@@ -38,14 +38,22 @@ let
   usingFcitx5 = config.i18n.inputMethod.enable && config.i18n.inputMethod.type == "fcitx5";
 
   # providedSessions has to match the .desktop basename or NixOS refuses it.
+  #
+  # The label is Nixarchy and the id stays `omarchy`, which is not an
+  # oversight. `Name=` is what a greeter prints; the basename is what it
+  # *remembers* -- SDDM, GDM and greetd all persist the last session by file
+  # id, so renaming the file would log everyone who already picked this
+  # session into whatever the greeter falls back to, once, with no
+  # explanation. A label costs nothing to change and an id costs a support
+  # thread.
   omarchySession =
     (pkgs.writeTextFile {
       name = "omarchy-wayland-session";
       destination = "/share/wayland-sessions/omarchy.desktop";
       text = ''
         [Desktop Entry]
-        Name=Omarchy
-        Comment=The Omarchy desktop, on Hyprland
+        Name=Nixarchy
+        Comment=Omarchy on NixOS, through Hyprland
         Exec=${omarchySessionLauncher}
         Type=Application
         DesktopNames=Hyprland
@@ -89,8 +97,10 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Register "Omarchy" as its own entry in wayland-sessions, so any
-        greeter can offer it alongside whatever else the machine runs.
+        Register "Nixarchy" as its own entry in wayland-sessions, so any
+        greeter can offer it alongside whatever else the machine runs. The
+        session id stays `omarchy`, so a greeter that already remembers this
+        session keeps remembering it.
 
         This is what makes nixarchy coexist with an existing Hyprland setup.
         The session names Omarchy's own hyprland.lua with Hyprland's --config,

@@ -41,6 +41,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | `omarchy` CLI | all 429 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 431 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 56 apps in the selection | 41 from nixpkgs, 5 as NixOS modules, 8 built here, 2 with no equivalent |
@@ -55,6 +56,37 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
 | Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
+
+## Two names, on purpose
+
+The desktop is Omarchy's. The port is nixarchy's. The commands say which is
+which, and `nixarchy` is the way in:
+
+```sh
+nixarchy                     # what this port adds, and what it defers to
+nixarchy search tailscale    # nixarchy-search
+nixarchy pkg add ripgrep     # nixarchy-pkg-add
+nixarchy apply               # nixarchy-apply
+nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
+```
+
+Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
+work and the exit status, terminal and signals stay the command's own.
+
+**Upstream's 431 commands keep upstream's name, deliberately.** `omarchy theme
+set` is the same script here as on Arch — a bug in it is a bug to report there,
+and renaming it would say otherwise. It would also cost the property this repo
+is built on: tracking a release is a source bump because nixarchy replaces 19
+scripts and patches ~100 strings, and renaming would make all 5,365 occurrences
+of `omarchy` a patch to re-apply on every bump. `omarchy.*` is also a reserved
+plugin namespace that `omarchy plugin validate` enforces and third-party
+plugins target.
+
+The branding you *do* see is nixarchy's: the session is **Nixarchy**, the menu
+button wears the snowflake, and the screensaver and About window carry the
+NIXARCHY banner. The session's id stays `omarchy` so a greeter that already
+remembers it keeps remembering it — `Name=` is what a greeter prints, the
+basename is what it stores.
 
 ## Why vendoring
 

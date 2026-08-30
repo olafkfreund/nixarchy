@@ -466,6 +466,12 @@ jobs:
       - name: Build the VM system closure
         run: nix build .#checks.x86_64-linux.vm-toplevel --print-build-logs
 
+      - name: Build the installed-machine closure
+        # The reference host: what the installer produces, with a real
+        # bootloader and disko filesystems. Built here so the install path
+        # cannot rot unnoticed between releases.
+        run: nix build .#checks.x86_64-linux.reference-toplevel --print-build-logs
+
       - name: Drive a session and the app-selection loop
         # Boots a machine, picks two apps through nixarchy-app-enable, checks
         # the file still parses, and checks nixarchy-apply copies the

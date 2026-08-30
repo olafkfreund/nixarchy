@@ -14,33 +14,30 @@
   # `virtualisation.vmVariant`: this configuration is never anything but a VM,
   # and the import is what supplies the root filesystem and bootloader that a
   # bare nixosSystem is missing.
-  imports = [ "${modulesPath}/virtualisation/qemu-vm.nix" ];
+  imports = [
+    "${modulesPath}/virtualisation/qemu-vm.nix"
 
-  programs.nixarchy.enable = true;
-
-  home-manager = {
-    useGlobalPkgs = true;
-    useUserPackages = true;
-    sharedModules = [ inputs.self.homeManagerModules.nixarchy ];
-    users.omarchy = {
-      programs.nixarchy.enable = true;
-      home.stateVersion = "25.05";
-    };
-  };
+    # The installed host, unchanged. Everything below this line is the
+    # difference between an Omarchy machine and a throwaway qemu guest, which
+    # is the only thing this file should still contain.
+    #
+    # The relative path resolves inside the store copy too, which matters: the
+    # activation script below writes a flake importing
+    # "${nixarchy}/vm/configuration.nix", and that copy must find
+    # ../installer/host.nix beside it. It does -- the flake source is one path.
+    (import ../installer/host.nix {
+      hostname = "nixarchy-vm";
+      username = "omarchy";
+    })
+  ];
 
   users.users.root.password = "omarchy"; # VM-only.
 
+  # Merged with host.nix's definition of the same user: it supplies the groups
+  # and isNormalUser, this supplies what only a throwaway guest should have.
   users.users.omarchy = {
-    isNormalUser = true;
     description = "Nixarchy smoke test";
     password = "omarchy"; # VM-only; never reachable off the host.
-    extraGroups = [
-      "wheel"
-      "video"
-      "input"
-      "docker"
-      "i2c"
-    ];
   };
 
   # Straight to a session -- a login prompt adds nothing to the smoke test.
@@ -130,8 +127,9 @@
   # The inputs are pinned by the same flake.lock this VM was built from, and
   # the nixarchy input is the store path that built it, so a rebuild resolves
   # everything already present and needs no network.
-  programs.nixarchy.flake = "/etc/nixos";
-
+  #
+  # programs.nixarchy.flake names this directory; host.nix sets it.
+  #
   # Written by an activation script rather than environment.etc, because
   # environment.etc produces read-only symlinks into the store and
   # nixarchy-apply has to copy the app selection into this directory.
@@ -182,10 +180,6 @@
   # because this VM is a throwaway; a real host should keep its prompt.
   security.sudo.wheelNeedsPassword = false;
 
-  # Unfree is on because most of what the Install menu offers is unfree, and
-  # discovering that through a licence error mid-rebuild helps nobody.
-  nixpkgs.config.allowUnfree = true;
-
   # Serial console keeps the journal readable from the host when the
   # graphical session is the thing that is broken.
   boot = {
@@ -202,14 +196,20 @@
     # boot.loader.external satisfies the assertion that some bootloader is
     # configured while installing nothing, which is right here: the next boot
     # comes from the host's run script, not from this disk.
-    loader.grub.enable = lib.mkForce false;
-    loader.external = {
-      enable = true;
-      installHook = lib.getExe (
-        pkgs.writeShellScriptBin "nixarchy-vm-no-bootloader" ''
-          echo "nixarchy VM: no bootloader to install (tmpfs root, booted via -kernel)"
-        ''
-      );
+    # Both, for the same reason: host.nix configures systemd-boot because a
+    # real machine needs one, and there is no disk here for either to install
+    # onto. Left enabled they are two bootloaders and the assertion fires.
+    loader = {
+      grub.enable = lib.mkForce false;
+      systemd-boot.enable = lib.mkForce false;
+      external = {
+        enable = true;
+        installHook = lib.getExe (
+          pkgs.writeShellScriptBin "nixarchy-vm-no-bootloader" ''
+            echo "nixarchy VM: no bootloader to install (tmpfs root, booted via -kernel)"
+          ''
+        );
+      };
     };
   };
 
@@ -245,15 +245,7 @@
     '';
   };
 
-  networking = {
-    hostName = "nixarchy-vm";
-    firewall.enable = lib.mkForce false;
-  };
+  networking.firewall.enable = lib.mkForce false;
 
-  environment.systemPackages = with pkgs; [
-    kitty
-    git
-  ];
-
-  system.stateVersion = "25.05";
+  environment.systemPackages = [ pkgs.kitty ];
 }

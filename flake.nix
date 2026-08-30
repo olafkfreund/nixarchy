@@ -350,6 +350,30 @@
         ];
       };
 
+      # The machine the installer produces, with the installer's own defaults.
+      # Built in CI so the install path cannot rot between releases, and baked
+      # into the ISO's store later so that installing copies rather than
+      # downloads -- which only works if this closure is a closure of something
+      # a real install actually produces.
+      #
+      # `device` is a placeholder: nothing here formats a disk. What matters is
+      # that the expensive derivations in this toplevel are the same ones a real
+      # install needs, and the device string is not one of them.
+      nixosConfigurations.reference = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inherit inputs; };
+        modules = [
+          self.nixosModules.nixarchy
+          home-manager.nixosModules.home-manager
+          inputs.disko.nixosModules.disko
+          (import ./installer/host.nix {
+            hostname = "nixarchy";
+            username = "omarchy";
+          })
+          (import ./installer/disk-config.nix { device = "/dev/vda"; })
+        ];
+      };
+
       devShells = eachSystem (system: {
         default = pkgsFor.${system}.callPackage ./shell.nix { };
       });
@@ -399,6 +423,11 @@
         };
 
         vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
+
+        # The installed machine, as opposed to the smoke-test guest: a real
+        # bootloader, disko-provided filesystems, nothing faked. If this builds
+        # and vm-toplevel builds, the extraction has not let the two drift.
+        reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
       });
     };
 }

@@ -25,7 +25,7 @@ timezone and a disk — the same questions upstream asks, in the same order.
 Encryption is on unless you press Ctrl+C at the overwrite warning, and one
 password serves your user, root and the disk alike.
 
-![The install itself](../img/installer/02-dashboard.png)
+![The whole install, four minutes at four-second intervals](../img/installer/install.gif)
 
 ![Installed nixarchy in 7m 32s](../img/installer/03-finish.png)
 

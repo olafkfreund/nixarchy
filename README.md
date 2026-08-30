@@ -653,7 +653,9 @@ Then it gets out of the way. The log goes to `/var/log/nixarchy-install.log`
 rather than the screen, because a wall of store paths tells nobody anything they
 can act on.
 
-![The install itself: a wordmark, a bar, and a tip](docs/img/installer/02-dashboard.png)
+![The install itself: a wordmark, a bar, and a tip](docs/img/installer/install.gif)
+
+*The whole install, four minutes at four-second intervals.*
 
 ![Installed nixarchy in 7m 32s](docs/img/installer/03-finish.png)
 

@@ -8,8 +8,12 @@
   --link:      #8ab4f8;
   --rule:      #333747;
   --code-bg:   #1a1c24;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code",
-          Menlo, Consolas, "Liberation Mono", monospace;
+  /* JetBrains Mono first, and not only for looks: the wordmark is built from
+     block-drawing characters, and it only reads as solid in a font that draws
+     them edge to edge. A stack that falls through to a system mono can render
+     it with hairline seams. */
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Fira Code",
+          "DejaVu Sans Mono", Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -32,16 +36,39 @@ a:hover { text-decoration: underline; }
 
 .masthead { padding: 3.5rem 1.5rem 2.5rem; text-align: center; }
 
-.wordmark {
-  display: inline-block;
+/* The wordmark is 92 columns of block characters (see _includes/logo.html).
+   Its width is therefore font-size * column count, with nothing to reflow, so
+   the size is driven off the viewport and clamped: the ceiling keeps it from
+   dominating a wide screen, the floor keeps it legible on a phone. Regenerate
+   the art at a different width and these numbers need redoing. */
+.logo {
+  display: block;
+  /* Not a code block: undo the pre rule further down, which would otherwise
+     sit the wordmark on a grey card. */
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  overflow: visible;
+
   color: var(--accent);
-  font-size: clamp(2.6rem, 9vw, 5.5rem);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: lowercase;
-  text-decoration: none;
+  font-size: clamp(0.3rem, 1.05vw, 0.88rem);
+  /* These two are not arbitrary and are not cosmetic. JetBrains Mono's full
+     block glyph does not quite meet its neighbours at fractional advances, so
+     at the honest values (0 and 1) the wordmark renders shot through with
+     hairline seams. The slight negative tracking and the over-1 line-height
+     pull the cells together until the strokes read as solid. Measured against
+     three alternatives; these are the only ones with no seams. Omarchy uses
+     the same pair, for the same reason. */
+  letter-spacing: -0.0425em;
+  line-height: 1.09375;
+  white-space: pre;
+  transition: color 0.15s ease;
 }
-.wordmark:hover { text-decoration: none; }
+
+.logo-link { display: inline-block; text-decoration: none; }
+.logo-link:hover { text-decoration: none; }
+.logo-link:hover .logo { color: var(--link); }
 
 .tagline { margin: 0.6rem 0 0; color: var(--link); font-size: 1rem; }
 
@@ -88,6 +115,13 @@ a:hover { text-decoration: underline; }
   max-height: 68vh;
   overflow-y: auto;
 }
+
+/* The default scrollbar renders as a bright bar against the dark theme, and
+   the nav is the one place here tall enough to show one. */
+.toc { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+.toc::-webkit-scrollbar { width: 6px; }
+.toc::-webkit-scrollbar-track { background: transparent; }
+.toc::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
 
 .toc li { counter-increment: item; margin: 0 0 0.35rem; }
 
@@ -139,6 +173,10 @@ code {
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
   font-size: 0.9em;
+  /* Inline code is often a long path or attribute with no space in it, which
+     on a phone is wide enough to push the whole page sideways. It has no
+     scroller of its own, so it has to be allowed to break. */
+  overflow-wrap: anywhere;
 }
 
 pre {

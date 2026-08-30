@@ -5,12 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ page.title }} — nixarchy manual</title>
 <meta name="description" content="{{ site.description }}">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
 <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
 </head>
 <body>
 
 <header class="masthead">
-  <a class="wordmark" href="{{ '/' | relative_url }}">nixarchy</a>
+  <a class="logo-link" href="{{ '/' | relative_url }}">{% include logo.html %}</a>
   <p class="tagline">The Manual</p>
 </header>
 

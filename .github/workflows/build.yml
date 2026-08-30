@@ -17,6 +17,7 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
@@ -36,6 +37,7 @@ jobs:
 
   omarchy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
@@ -348,6 +350,7 @@ jobs:
 
   system:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Its own concurrency group, and NOT cancel-in-progress. This job builds
     # Hyprland from source and takes ~20 minutes, so under the workflow-level
     # cancel-in-progress it is killed by any push landing within that window

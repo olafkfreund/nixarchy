@@ -577,9 +577,19 @@ in
         # in nixpkgs tests a Hyprland greeter. mkDefault, so a machine that
         # would rather keep weston -- or has its own answer -- only has to say
         # so.
-        wayland.compositorCommand = lib.mkDefault (
-          "${config.programs.hyprland.package}/bin/Hyprland --config "
-          + "${cfg.package}/share/omarchy/default/sddm/hyprland.lua"
+        #
+        # Guarded by cfg.displayManager, like `enable` above and unlike
+        # `theme`: someone who turned this module's display-manager handling
+        # off has their own greeter arrangement, and replacing its compositor
+        # underneath them is not a default to help itself to. The VM tests are
+        # exactly that case -- they set displayManager = false and bring their
+        # own SDDM -- and an unguarded definition put a Hyprland greeter into
+        # every one of them.
+        wayland.compositorCommand = lib.mkIf cfg.displayManager (
+          lib.mkDefault (
+            "${config.programs.hyprland.package}/bin/Hyprland --config "
+            + "${cfg.package}/share/omarchy/default/sddm/hyprland.lua"
+          )
         );
       };
 

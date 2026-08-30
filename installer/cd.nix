@@ -79,6 +79,22 @@
     consoleLogLevel = 0;
   };
 
+  # Give the console the whole screen.
+  #
+  # Without a DRM driver bound early the kernel keeps the VGA text console, and
+  # that console is 80x25 no matter how large the display is -- measured inside
+  # this ISO: stty says 25 80 while /sys/class/graphics/fb0 says 1600x900. The
+  # installer then correctly centres itself in 80 columns and correctly looks
+  # like it is hunched in the top-left corner of the screen.
+  #
+  # Real hardware usually binds i915/amdgpu/nouveau on its own; a VM needs to
+  # be told. These are cheap to carry and do nothing on a machine that has
+  # already sorted itself out.
+  boot.initrd.kernelModules = [
+    "virtio_gpu"
+    "bochs"
+  ];
+
   # The installer owns tty1.
   #
   # A systemd unit rather than a shell hook, and the choice matters: Ctrl-C

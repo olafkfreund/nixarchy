@@ -24,6 +24,20 @@ have five uncommented lines. Then _Install > Apply changes_ runs
 `nixarchy-apply`, which copies that file to `nixarchy-apps.nix` in your flake
 directory and offers to run `nh os switch <flake>`.
 
+## Finding it in the first place
+
+`nixarchy-search`, or _Install > Search_, is one fzf picker over every nixpkgs
+package, every NixOS option and the curated app list, with each entry's type,
+default and description in a preview pane. Picking a row routes it: an app is
+enabled as an app, a package is appended as a package, and an option is written
+as a line of its own -- booleans and enums get a value picker, anything more
+complicated is written commented out with its type and docs beside it, for you
+to fill in.
+
+The index comes from this machine's own nixpkgs and its own options rather than
+from search.nixos.org, which costs about a minute once per system generation and
+means the picker can never offer something this machine cannot build.
+
 The same thing from a terminal:
 
 ```sh

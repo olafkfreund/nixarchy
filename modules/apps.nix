@@ -162,6 +162,22 @@ let
     )
   );
 
+  # The curated list as search rows: id, label, category, note. Notes are
+  # flattened because the index this feeds is tab-separated and a note with a
+  # newline in it would silently become three broken rows -- the same reason
+  # templateRow collapses them.
+  appIndexTable = pkgs.writeText "nixarchy-app-index.tsv" (
+    lib.concatStrings (
+      lib.mapAttrsToList (
+        name: app:
+        let
+          flat = lib.replaceStrings [ "\n" "\t" ] [ " " " " ];
+        in
+        "${name}\t${app.label}\t${app.category}\t${flat (app.note or "")}\n"
+      ) available
+    )
+  );
+
   appsTemplate = pkgs.writeText "nixarchy-apps.nix" ''
     # Applications available through the Omarchy menu, as NixOS configuration.
     #
@@ -210,6 +226,17 @@ let
           action = "omarchy-launch-editor $HOME/.config/nixarchy/apps.nix";
           description = "Every Omarchy app, as NixOS options";
         };
+        # A new row, not an override: upstream has no equivalent because on
+        # Arch there is nothing to search that pacman does not already answer.
+        # The generator accepts an id upstream does not ship as long as the
+        # override names the row itself, which is why label and icon are here.
+        "install.search" = {
+          icon = "󰍉";
+          label = "Search";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-search";
+          description = "Every package, NixOS option and Omarchy app, in one picker";
+        };
+
         "install.aur" = {
           when = "false";
         };
@@ -812,6 +839,224 @@ in
 
               echo
               echo "run 'nixarchy-apply' when you have picked everything you want"
+            '';
+          })
+
+          # Search everything this machine could install, and route the choice
+          # to whichever writer is right for it.
+          #
+          # The three kinds are not interchangeable and the whole point of one
+          # picker over them is that you do not have to know which is which:
+          # an app becomes programs.<name>, a package becomes a systemPackages
+          # entry, an option becomes a line of its own. Picking Firefox from
+          # the app rows and picking `firefox` from the package rows are
+          # genuinely different configurations, and the rows say so.
+          #
+          # The index is built from this system's own nixpkgs and its own
+          # options, not from search.nixos.org. It is slower to build and it
+          # cannot go stale against the machine, which is the trade that
+          # matters: an index that offers a package nixarchy-pkg-add will then
+          # refuse is worse than no index.
+          (pkgs.writeShellApplication {
+            name = "nixarchy-search";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.gawk
+              pkgs.jq
+              pkgs.fzf
+              config.nix.package
+            ];
+            text = ''
+              file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+              cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nixarchy"
+              index="$cache/index.tsv"
+              stamp="$cache/stamp"
+
+              appindex=${appIndexTable}
+              optionsjson=${config.system.build.manual.optionsJSON}/share/doc/nixos/options.json
+              nixpkgs=${pkgs.path}
+
+              reindex=0
+              [ "''${1:-}" = "--reindex" ] && { reindex=1; shift; }
+
+              # One index, four tab-separated fields: kind, name, one-line summary, option
+              # type, and the preview text with its newlines escaped. The preview is carried
+              # in the line rather than looked up on selection because fzf runs the preview
+              # command on every keystroke, and a jq pass over 19 MB of package metadata is
+              # not something to do sixty times a second.
+              build_index() {
+                mkdir -p "$cache"
+                tmp=$(mktemp)
+
+                # Curated apps first, so they sort above the raw nixpkgs attribute of the
+                # same name. Enabling `firefox` as an app gets you programs.firefox; adding
+                # it as a package does not.
+                awk -F'\t' -v OFS='\t' '{
+                  note = ($4 == "" ? "" : "\\n\\n" $4)
+                  print "app", $1, $2 " (" $3 ")", "",
+                    "OMARCHY APP  " $1 "\\n\\n" $2 "\\n" $3 \
+                    note "\\n\\nEnabling this writes a line in your app selection:\\n  " \
+                    $1 ".enable = true;"
+                }' "$appindex" > "$tmp"
+
+                jq -r '
+                  def val(x):
+                    if x == null then "(none)"
+                    elif (x | type) == "object" then (x.text // (x | tostring))
+                    else (x | tostring) end;
+                  to_entries[] | .key as $k | .value as $v |
+                  [ "opt", $k,
+                    (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
+                    ($v.type // ""),
+                    ( "NIXOS OPTION  " + $k
+                      + "\n\ntype:     " + ($v.type // "?")
+                      + "\ndefault:  " + val($v.default)
+                      + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
+                      + "\n\n" + ($v.description // "(undocumented)")
+                      + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
+                    )
+                  ] | @tsv' "$optionsjson" >> "$tmp"
+
+                # The system's own nixpkgs, not the flake registry: an index that offers a
+                # package this machine cannot build is worse than no index. Slow enough to
+                # be worth saying so -- about a minute, once per system generation.
+                echo "  indexing nixpkgs (this takes about a minute)..." >&2
+                nix search --json --extra-experimental-features 'nix-command flakes' \
+                  "path:$nixpkgs" ^ 2>/dev/null |
+                  jq -r '
+                    to_entries[] | (.key | sub("^legacyPackages\\.[^.]+\\."; "")) as $a | .value as $v |
+                    [ "pkg", $a,
+                      (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
+                      "",
+                      ( "NIXPKGS PACKAGE  " + $a
+                        + "\n\nversion:  " + ($v.version // "?")
+                        + "\n\n" + ($v.description // "(no description)")
+                        + "\n\nAdding this writes it into your app selection:\n  "
+                        + "environment.systemPackages = with pkgs; [ " + $a + " ];"
+                      )
+                    ] | @tsv' >> "$tmp"
+
+                mv "$tmp" "$index"
+                readlink -f /run/current-system > "$stamp"
+              }
+
+              if [ "$reindex" = 1 ] || [ ! -s "$index" ] ||
+                 [ "$(cat "$stamp" 2>/dev/null)" != "$(readlink -f /run/current-system)" ]; then
+                echo "Building the search index. This happens once per system generation." >&2
+                build_index
+              fi
+
+              selection=$(fzf --multi \
+                --delimiter='\t' --with-nth=1,2,3 --nth=2,3 \
+                --preview 'printf "%b\n" {5}' \
+                --preview-window='right,58%,wrap' \
+                --prompt='nixarchy > ' \
+                --header='enter to select · tab for several · esc to cancel' \
+                --query="''${*:-}" < "$index") || exit 0
+              [ -n "$selection" ] || exit 0
+
+              [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+              backup=$(mktemp)
+              cp "$file" "$backup"
+              trap 'rm -f "$backup"' EXIT
+
+              changed=0
+              scaffolded=0
+              written=0
+
+              # Options are written at the module's top level, before its closing brace.
+              # Nothing here parses Nix: the brace is found textually and the result is
+              # checked with nix-instantiate before anything is kept.
+              insert_line() {
+                tmp=$(mktemp)
+                awk -v payload="$1" '
+                  !ins && /^}[[:space:]]*$/ { printf "%s", payload; ins = 1 }
+                  { print }
+                ' "$file" > "$tmp"
+                mv "$tmp" "$file"
+              }
+
+              add_option() {
+                path=$1
+                type=$2
+
+                if grep -q "#@opt $path\$" "$file"; then
+                  echo "$path is already in $file"
+                  return 0
+                fi
+
+                value=""
+                case "$type" in
+                  boolean)
+                    value=$(printf 'true\nfalse\n' | fzf --height=6 --prompt="$path = ") || return 0
+                    ;;
+                  "one of "*)
+                    value=$(printf '%s' "''${type#one of }" | grep -oE '"[^"]*"' |
+                      fzf --height=12 --prompt="$path = ") || return 0
+                    ;;
+                esac
+
+                if [ -n "$value" ]; then
+                  insert_line "\n  $path = $value;  #@opt $path\n"
+                  echo "set $path = $value"
+                  changed=1
+                  written=$((written + 1))
+                  return 0
+                fi
+
+                # Anything else. An option's value is arbitrary Nix -- a submodule, a
+                # function, a package, a list of them -- and a picker that pretended
+                # otherwise would write plausible-looking wrong configuration. So it writes
+                # what it does know, commented out, in the right file, and leaves the
+                # expression to you.
+                {
+                  printf '\n'
+                  grep -P "^opt\t\Q$path\E\t" "$index" | head -1 |
+                    cut -f5 | sed 's/\\n/\n/g' | sed 's/^/  # /'
+                  printf '  # %s = ;  #@opt %s\n' "$path" "$path"
+                } > "$cache/scaffold.$$"
+                insert_line "$(cat "$cache/scaffold.$$")
+              "
+                rm -f "$cache/scaffold.$$"
+                echo "scaffolded $path (commented out -- set the value and uncomment it)"
+                changed=1
+                written=$((written + 1))
+                scaffolded=$((scaffolded + 1))
+              }
+
+              while IFS=$'\t' read -r kind name _ type _; do
+                [ -n "$kind" ] || continue
+                case "$kind" in
+                  app) nixarchy-app-enable "$name" && changed=1 ;;
+                  pkg) nixarchy-pkg-add "$name" && changed=1 ;;
+                  opt) add_option "$name" "$type" ;;
+                esac
+              done <<< "$selection"
+
+              [ "$changed" = 1 ] || exit 0
+
+              if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                cp "$backup" "$file"
+                echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                exit 1
+              fi
+
+              if [ "$scaffolded" -gt 0 ]; then
+                echo
+                echo "$scaffolded option(s) are commented out in $file. Edit them first:"
+                echo "  omarchy-launch-editor $file"
+              fi
+
+              # Only when this script wrote something itself: nixarchy-app-enable and
+              # nixarchy-pkg-add each print this line already, and saying it twice reads
+              # like two separate things happened.
+              if [ "$written" -gt 0 ]; then
+                echo
+                echo "run 'nixarchy-apply' when you have picked everything you want"
+              fi
             '';
           })
 

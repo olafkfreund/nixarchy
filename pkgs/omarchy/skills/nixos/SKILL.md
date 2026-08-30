@@ -99,6 +99,20 @@ their configuration in a git repo under `~`. Confirm before editing anything.
 
 ### Adding a package
 
+Do not know the attribute name? `nixarchy-search` is an fzf picker over every
+nixpkgs package, every NixOS option and the curated app list at once, with the
+type, default and description in a preview pane. It routes what you pick to the
+right writer, so it covers all three routes below:
+
+```bash
+nixarchy-search            # or the Install > Search menu row
+nixarchy-search tailscale  # start with a query
+```
+
+The index is built from this system's own nixpkgs and options -- about a minute,
+once per system generation -- so it never offers something this machine cannot
+build.
+
 For a plain package with no options to set, route 2 does the edit for you. It
 validates the attribute against the system's own nixpkgs, appends it to
 `~/.config/nixarchy/apps.nix` — the same file the Install menu writes — and

@@ -169,6 +169,21 @@ ui_init() {
     UI_LOGO_COLS=$UI_LOGO_COMPACT_COLS
   fi
   export UI_LOGO UI_LOGO_COLS
+  # What every source actually said, on the serial line. Three attempts at
+  # centring have now failed on a width that looked plausible and was wrong,
+  # each time in an environment that could not be reproduced outside it.
+  if [ -w /dev/ttyS0 ] && [ -z "${UI_REPORTED:-}" ]; then
+    {
+      echo "[ui] stty(stdin)=[$(stty size 2>&1 | head -c 20)]"
+      echo "[ui] stty(/dev/tty)=[$( (stty size </dev/tty) 2>&1 | head -c 20)]"
+      echo "[ui] stty(/dev/tty1)=[$( (stty size </dev/tty1) 2>&1 | head -c 20)]"
+      echo "[ui] fb0=[$(cat /sys/class/graphics/fb0/virtual_size 2>&1 | head -c 20)]"
+      echo "[ui] TERM=[${TERM:-unset}] tput=[$(tput cols 2>&1 | head -c 12)]"
+      echo "[ui] chosen cols=$cols"
+    } >/dev/ttyS0 2>&1
+    UI_REPORTED=1
+  fi
+
   UI_PAD=$(((cols - UI_LOGO_COLS) / 2))
   [ "$UI_PAD" -lt 0 ] && UI_PAD=0
   export UI_PAD

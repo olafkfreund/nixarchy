@@ -82,6 +82,21 @@
           # simply follow nixpkgs the way most apps here do.
           hey-cli = final.callPackage ./pkgs/apps/hey-cli.nix { };
 
+          # Not built here -- upstream's own flake, re-exported into the overlay
+          # so nixarchy-doctor and the Install menu can find it.
+          #
+          # Both ask pkgs for an app's meta.mainProgram to learn which command it
+          # puts on PATH, and fall back to the attribute name when the lookup
+          # fails. zen-browser lived only in packages.<system>, so the lookup
+          # returned null and the fallback answered "zen" -- a command that does
+          # not exist, because this package installs bin/zen-beta. The doctor
+          # could never report Zen as present and the menu never dimmed its row.
+          #
+          # Exactly the vscode/code trap the doctor was written to avoid, reached
+          # by a different road: not a wrong mainProgram, but a package the probe
+          # could not see.
+          zen-browser = zen-browser.packages.${final.stdenv.hostPlatform.system}.default;
+
           # Two of the four applications Omarchy writes itself. nixpkgs has
           # none of them, which is why modules/nixos.nix cannot reproduce
           # upstream's preinstall set; these two close half that gap.
@@ -129,6 +144,34 @@
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
 
+          # nixpkgs is on 0.3.0, whose session lock aborts on DPMS.
+          #
+          # WlSessionLock::updateSurfaces reached qFatal -- "Tried to show
+          # lockscreen surfaces without active lock" -- when screens slept and
+          # woke while locked. quickshell dies, and because the Wayland
+          # session-lock protocol deliberately keeps the compositor locked when
+          # its lock client disappears, the machine is left blank with nothing to
+          # type a password into. Reboot is the only way out. Seen three times in
+          # one night, ~65-70 MB of coredump each.
+          #
+          # v0.3.1 fixes it, and says so in as many words: "Fixed session lock
+          # crashes on sleep, wake, DPMS, and unlocking." Three commits touch
+          # wayland/lock; 897fcdaa is this one -- it null-checks the wayland
+          # output and skips placeholder screens instead of asserting.
+          #
+          # overrideAttrs rather than a fork: nixpkgs keeps the build, the Qt
+          # wrapper and the dependency set, and only the tag moves. Passed here
+          # rather than set on the overlay, so a machine using quickshell for
+          # something of its own keeps nixpkgs'.
+          #
+          # DELETE THIS once nixpkgs ships >= 0.3.1.
+          quickshell = final.quickshell.overrideAttrs (_: rec {
+            version = "0.3.1";
+            src = final.fetchzip {
+              url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v${version}.tar.gz";
+              hash = "sha256-CLX2Zp5i5BuLbOxNOkwRd9YY84IOrACNxBV79o9/F9Y=";
+            };
+          });
           # The screensaver's text-effects engine, packaged in this repo rather
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
           # lives under nixarchy-apps, which callPackage does not search.
@@ -194,7 +237,18 @@
                       let
                         probe = builtins.tryEval (
                           let
-                            p = nixpkgs.lib.attrByPath (nixpkgs.lib.splitString "." (app.attr or name)) null pkgs;
+                            # nixarchy-apps first, then the top level. Apps
+                            # this repo packages live under nixarchy-apps, so
+                            # probing only the top level returned null for every
+                            # one of them and the fallback answered with the
+                            # attribute name. That is right by luck when the
+                            # attribute matches the binary -- once, omacut,
+                            # ttfx -- and wrong when it does not: `zen` for a
+                            # package installing bin/zen-beta, `hey-cli` for one
+                            # installing bin/hey. Both were reported as absent
+                            # on machines that had them.
+                            path = nixpkgs.lib.splitString "." (app.attr or name);
+                            p = nixpkgs.lib.attrByPath path (nixpkgs.lib.attrByPath path null pkgs) pkgs.nixarchy-apps;
                           in
                           if p == null then null else (p.meta.mainProgram or null)
                         );

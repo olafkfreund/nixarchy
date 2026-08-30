@@ -223,6 +223,51 @@ jobs:
           fi
           echo "agent skills are NixOS-aware"
 
+      - name: Verify every app's attr resolves to a real package
+        run: |
+          # nixarchy-doctor and the Install menu both ask pkgs for an app's
+          # meta.mainProgram to learn which command it puts on PATH, and fall
+          # back to the attribute name when the lookup fails. That fallback is
+          # right by luck when the attribute matches the binary and wrong when
+          # it does not -- it answered `zen` for a package installing zen-beta
+          # and `hey-cli` for one installing hey, so both were reported absent
+          # on machines that had them.
+          #
+          # A silent fallback is the whole problem, so make an unresolvable
+          # attr loud. Entries carrying `option` are NixOS modules rather than
+          # packages and have no attr to resolve; `unavailable` ones have no
+          # nixpkgs equivalent at all.
+          nix eval --impure --raw --expr '
+            let
+              f = builtins.getFlake (toString ./.);
+              lib = f.inputs.nixpkgs.lib;
+              pkgs = import f.inputs.nixpkgs {
+                localSystem = "x86_64-linux";
+                overlays = [ f.overlays.default ];
+              };
+              apps = import ./data/apps.nix;
+              usable = lib.filterAttrs (_: a: !(a ? unavailable) && !(a ? option)) apps;
+              resolves =
+                name: app:
+                let
+                  path = lib.splitString "." (app.attr or name);
+                  probe = builtins.tryEval (
+                    lib.attrByPath path (lib.attrByPath path null pkgs) pkgs.nixarchy-apps
+                  );
+                in
+                probe.success && probe.value != null;
+              broken = lib.attrNames (lib.filterAttrs (n: a: !(resolves n a)) usable);
+            in
+            lib.concatStringsSep " " broken
+          ' > /tmp/broken-attrs
+
+          broken=$(cat /tmp/broken-attrs)
+          if [ -n "$broken" ]; then
+            echo "::error::these data/apps.nix entries name an attr nothing provides:$broken"
+            exit 1
+          fi
+          echo "every app attr resolves to a package"
+
       - name: Verify every Install row is mapped
         run: |
           # data/apps.nix claims CI keeps it from rotting. This is that check.
@@ -296,6 +341,39 @@ jobs:
             exit 1
           fi
           echo "all checked runtime commands resolve ($(ls result/bin | wc -l) binaries)"
+
+      - name: Verify every desktop entry's command resolves
+        run: |
+          # The step above checks a hand-written list of command names. That
+          # list was built by grepping bin/, so a command referenced only by a
+          # .desktop file is invisible to it -- which is how "Disk Usage"
+          # shipped launching `dua`, opening a terminal that closed instantly.
+          #
+          # This derives the commands from the entries themselves, so a new
+          # launcher row in a future Omarchy release cannot introduce the same
+          # failure silently.
+          nix build .#omarchy --out-link result-omarchy
+          nix build .#omarchy-runtime --out-link result-runtime
+
+          missing=""
+          for f in result-omarchy/share/omarchy/applications/*.desktop; do
+            exec_line=$(sed -n 's/^Exec=//p' "$f" | head -1)
+            # Either `bash -c "cmd ..."` or a plain command as the first word.
+            cmd=$(printf '%s' "$exec_line" | sed -n 's/.*bash -c "\([a-zA-Z0-9_.-]*\).*/\1/p')
+            [ -z "$cmd" ] && cmd=$(printf '%s' "$exec_line" | awk '{print $1}')
+            [ -z "$cmd" ] && continue
+            # Omarchy's own bins live in the package; everything else must come
+            # from runtimeDeps.
+            if [ ! -x "result-omarchy/bin/$cmd" ] && [ ! -x "result-runtime/bin/$cmd" ]; then
+              missing="$missing $cmd($(basename "$f" .desktop))"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::desktop entries launch commands nothing provides:$missing"
+            exit 1
+          fi
+          echo "every desktop entry's command resolves"
 
       - name: Verify the generated menu extension and app template
         run: |

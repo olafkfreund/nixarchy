@@ -1176,6 +1176,25 @@ stdenvNoCC.mkDerivation {
                 # carrying artwork no one can account for.
                 magick -background none nixarchy-logo.svg -resize 800x       -fill '#a8cd76' -colorize 100       $out/share/plymouth/themes/omarchy/logo.png
 
+                # And the name the theme calls itself. Not drawn at boot -- the script
+                # renders logo.png and whatever message plymouth passes it -- but it is
+                # what `plymouth-set-default-theme --list` and omarchy-plymouth-current
+                # report, and a machine describing its own splash as another project's
+                # is wrong in the one place someone would go to check.
+                #
+                # The DIRECTORY stays `omarchy`. Renaming it means moving
+                # boot.plymouth.theme and themePackages together or NixOS asserts on a
+                # theme missing from the package list, which is the trap the bootSplash
+                # option's own comment already documents.
+                substituteInPlace $out/share/plymouth/themes/omarchy/omarchy.plymouth                   --replace-fail 'Name=Omarchy' 'Name=nixarchy'                   --replace-fail 'Description=Omarchy splash screen.' 'Description=nixarchy splash screen.'
+
+                # The rest of the theme -- progress_bar, progress_box, entry, lock,
+                # bullet -- is deliberately left alone. Measured: they are one to eleven
+                # colours of Tokyo Night chrome (#A9B1D6 bar, #292E42 track, #C0CAF5
+                # bullet), a padlock and a password dot. None carries a name or a mark,
+                # and replacing them would produce byte-different, pixel-identical
+                # files. Artwork nobody can tell apart is not branding, it is churn.
+
                 # The greeter's own compositor config, referenced by upstream's
                 # 10-wayland.conf. Nothing in the theme reaches outside its directory, so
                 # this is the only companion file it needs.

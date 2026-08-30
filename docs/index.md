@@ -13,6 +13,36 @@ parts that assume Arch, rather than reimplementing it in Nix.
 
 Tracking an upstream release is a source bump, not a re-port.
 
+## Search everything, install declaratively
+
+Omarchy's Install menu offers 56 applications. **Install ▸ Search** offers the
+rest of NixOS — one fuzzy picker over **137,599 rows**: every nixpkgs package,
+every NixOS option, and the app selection, with each entry's type, default and
+documentation in a preview pane.
+
+```
+nixarchy > tailscale
+app  tailscale                          Tailscale (Service)
+pkg  tailscale                          Node agent for Tailscale, a mesh VPN …
+opt  services.tailscale.enable          Whether to enable Tailscale client daemon
+opt  services.tailscale.authKeyFile     A file containing the auth key …
+```
+
+The three kinds are not interchangeable, and the rows say so: the app row gets
+you `services.tailscale` with its daemon, the package row gets you the CLI and
+nothing running. Picking routes to whichever writer is right — an app is
+enabled as an app, a package is validated and appended, an option is written as
+a line of its own. Booleans and enums get a value picker; anything more
+complicated is written commented out with its type and docs beside it, because
+an option's value is arbitrary Nix and a form that pretended otherwise would
+write plausible-looking wrong configuration.
+
+Nothing is built until you apply. The index comes from *this machine's* nixpkgs
+and options rather than from search.nixos.org, so it can never offer something
+the machine will then refuse to build.
+
+See **[other packages](manual/other-packages)** for the whole flow.
+
 ## → [The nixarchy manual](manual/)
 
 What is different here, and only that. Omarchy's manual covers the desktop; this

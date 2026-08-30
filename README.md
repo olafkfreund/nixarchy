@@ -11,9 +11,10 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 Tracking an upstream release is a source bump, not a re-port.
 
 What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **56 applications** are selectable that way, plugins and themes still
-install from a git URL at runtime the way upstream intends, and every command
-that assumed `/usr` either points at what NixOS uses or says why it cannot.
+pacman, **56 applications** are selectable that way, **every other package and
+NixOS option is one `Install ▸ Search` away**, plugins and themes still install
+from a git URL at runtime the way upstream intends, and every command that
+assumed `/usr` either points at what NixOS uses or says why it cannot.
 
 ![A tour of nixarchy: the greeter, the menus, themes and the app selection](docs/nixarchy-demo.gif)
 
@@ -39,6 +40,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
 | `omarchy` CLI | all 429 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
+| **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 56 apps in the selection | 41 from nixpkgs, 5 as NixOS modules, 8 built here, 2 with no equivalent |
@@ -158,6 +160,84 @@ Install ▸ Apply changes  →  nh os switch <flake>
 ```
 
 The notification is clickable and runs the rebuild.
+
+### Anything the menu does not offer
+
+The 56 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
+and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
+from a terminal:
+
+```
+  nixarchy > tailscale
+  ┌──────────────────────────────────────────┬──────────────────────────────────┐
+  │ app  tailscale    Tailscale (Service)    │ NIXOS OPTION                     │
+  │ pkg  tailscale    Node agent for Tails…  │ services.tailscale.enable        │
+  │ opt  services.tailscale.enable           │                                  │
+  │ opt  services.tailscale.useRoutingFea…   │ type:     boolean                │
+  │ opt  services.tailscale.authKeyFile      │ default:  false                  │
+  │ …                                        │ example:  true                   │
+  │                                          │                                  │
+  │                                          │ Whether to enable Tailscale      │
+  │                                          │ client daemon.                   │
+  │                                          │                                  │
+  │                                          │ declared in:                     │
+  │                                          │   nixos/modules/services/…       │
+  └──────────────────────────────────────────┴──────────────────────────────────┘
+  enter to select · tab for several · esc to cancel
+```
+
+**137,599 rows: 25,102 NixOS options, 112,443 packages, and 54 of the 56 apps
+(the two with no nixpkgs equivalent cannot be indexed).** Three kinds,
+one picker, because you should not have to know which kind you want before you
+can look. They are not interchangeable and the rows say so — picking Tailscale
+from the app rows gets you `services.tailscale` with its daemon; picking
+`tailscale` from the package rows gets you the CLI and nothing running.
+
+Selecting routes to whichever writer is right:
+
+| row | what it writes |
+|---|---|
+| `app` | `<name>.enable = true;` in the app selection — the module, if the app needs one |
+| `pkg` | an entry in `environment.systemPackages`, validated against nixpkgs first |
+| `opt` | the option itself, as a line of its own |
+
+Or by hand, if you already know the name:
+
+```sh
+nixarchy-pkg-add ripgrep fd     # refuses anything nixpkgs does not have
+nixarchy-apply                  # one rebuild for these and your menu picks
+```
+
+**Options are only written where they can be written honestly.** An option's
+value is arbitrary Nix — a submodule, a function, a package, a list of them — so
+booleans and enums get a value picker and land uncommented, and anything more
+complicated is written *commented out*, with its type, default, example,
+description and declaring file as comments beside it:
+
+```nix
+  services.tailscale.enable = true;  #@opt services.tailscale.enable
+
+  # NIXOS OPTION  services.nginx.virtualHosts
+  #
+  # type:     attribute set of (submodule)
+  # default:  { localhost = { }; }
+  #
+  # Declarative vhost config
+  #
+  # declared in:
+  #   nixos/modules/services/web-servers/nginx/default.nix
+  # services.nginx.virtualHosts = ;  #@opt services.nginx.virtualHosts
+```
+
+The tool does the discovery and the placement; the expression stays yours.
+Neither form can break a build — the scaffold is inert, and every edit is
+reverted as a unit if `nix-instantiate` cannot parse the result.
+
+**The index is built from this machine, not from search.nixos.org.** Its own
+nixpkgs and its own options — about a minute, once per system generation, and
+it buys the one property that matters: the picker cannot offer you a package
+that this machine then refuses to build. The options half substitutes from
+`cache.nixos.org`, so only the nixpkgs half is real work.
 
 ### Naming the user who runs the desktop
 

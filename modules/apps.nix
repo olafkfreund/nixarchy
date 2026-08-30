@@ -166,6 +166,21 @@ let
   # flattened because the index this feeds is tab-separated and a note with a
   # newline in it would silently become three broken rows -- the same reason
   # templateRow collapses them.
+  # The NixOS option index, or "" when this system has no manual to take it
+  # from. `system.build.manual` is defined under documentation.nixos.enable,
+  # which is on by default but off in every NixOS test node -- so a hard
+  # reference here evaluates fine on a real machine and fails the session
+  # check, which is exactly how it got through review.
+  #
+  # Built rather than fetched, but built by nixpkgs: it substitutes from
+  # cache.nixos.org, so it costs a 2.6 MiB download rather than an evaluation
+  # of every option on the machine.
+  optionsJsonPath =
+    let
+      manual = config.system.build.manual.optionsJSON or null;
+    in
+    if manual == null then "" else "${manual}/share/doc/nixos/options.json";
+
   appIndexTable = pkgs.writeText "nixarchy-app-index.tsv" (
     lib.concatStrings (
       lib.mapAttrsToList (
@@ -875,7 +890,7 @@ in
               stamp="$cache/stamp"
 
               appindex=${appIndexTable}
-              optionsjson=${config.system.build.manual.optionsJSON}/share/doc/nixos/options.json
+              optionsjson=${optionsJsonPath}
               nixpkgs=${pkgs.path}
 
               reindex=0
@@ -901,23 +916,30 @@ in
                     $1 ".enable = true;"
                 }' "$appindex" > "$tmp"
 
-                jq -r '
-                  def val(x):
-                    if x == null then "(none)"
-                    elif (x | type) == "object" then (x.text // (x | tostring))
-                    else (x | tostring) end;
-                  to_entries[] | .key as $k | .value as $v |
-                  [ "opt", $k,
-                    (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
-                    ($v.type // ""),
-                    ( "NIXOS OPTION  " + $k
-                      + "\n\ntype:     " + ($v.type // "?")
-                      + "\ndefault:  " + val($v.default)
-                      + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
-                      + "\n\n" + ($v.description // "(undocumented)")
-                      + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
-                    )
-                  ] | @tsv' "$optionsjson" >> "$tmp"
+                # Empty when this system builds no manual, in which case the
+                # picker is packages and apps only rather than not working at all.
+                if [ -n "$optionsjson" ] && [ -f "$optionsjson" ]; then
+                  jq -r '
+                    def val(x):
+                      if x == null then "(none)"
+                      elif (x | type) == "object" then (x.text // (x | tostring))
+                      else (x | tostring) end;
+                    to_entries[] | .key as $k | .value as $v |
+                    [ "opt", $k,
+                      (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
+                      ($v.type // ""),
+                      ( "NIXOS OPTION  " + $k
+                        + "\n\ntype:     " + ($v.type // "?")
+                        + "\ndefault:  " + val($v.default)
+                        + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
+                        + "\n\n" + ($v.description // "(undocumented)")
+                        + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
+                      )
+                    ] | @tsv' "$optionsjson" >> "$tmp"
+                else
+                  echo "  no option index: documentation.nixos.enable is off on this" >&2
+                  echo "  system, so there is no options.json to read." >&2
+                fi
 
                 # The system's own nixpkgs, not the flake registry: an index that offers a
                 # package this machine cannot build is worse than no index. Slow enough to

@@ -439,8 +439,8 @@ genesis-plus-gx.
 
 `retroarch-full` would be the obvious alternative and is the wrong one: it
 pulls unfree cores, and a single unfree package in the app list aborts the
-whole rebuild rather than failing on its own. To widen the set, set
-`nixpkgs.config.allowUnfree` and override the package:
+whole rebuild rather than failing on its own. nixarchy allows unfree by
+default, so widening the set is just the override:
 
 ```nix
 programs.nixarchy.apps.retroarch = {
@@ -1027,7 +1027,7 @@ Known gaps in detail:
 - `brave-origin` has no published source; use `apps.brave` with policies in
   `/etc/brave/policies/managed`
 - RetroArch's default core set is free-licensed only, so snes9x, genesis-plus-gx,
-  mame and dolphin need `allowUnfree` and a `withCores` override
+  mame and dolphin need a `withCores` override
 - in fish, `ga` and `gd` report where they went but leave you where you were.
   Every Omarchy function runs as upstream's bash behind a fish wrapper, and a
   wrapper cannot change its caller's directory. The other shells are unaffected

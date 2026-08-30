@@ -28,8 +28,8 @@ configuration first. The table is the whole page in short:
 | NVIDIA GeForce NOW | needs `services.flatpak.enable` in your config | — |
 
 The rows marked as packages or modules go into `~/.config/nixarchy/apps.nix`
-like every other app, and _Install > Apply changes_ rebuilds with them. Unfree
-rows need `nixpkgs.config.allowUnfree = true`.
+like every other app, and _Install > Apply changes_ rebuilds with them. Some
+rows are unfree; nixarchy allows unfree packages by default, so they just work.
 
 ## Steam
 
@@ -43,7 +43,7 @@ expected layout — and runs Steam inside it. That is why the row enables an
 option rather than adding a package, and why installing `pkgs.steam` by hand
 would not run.
 
-The row also needs `allowUnfree`. The 32-bit half of the graphics stack,
+The 32-bit half of the graphics stack,
 which upstream adds with `omarchy-install-gaming-gpu-lib32`, is one option on
 NixOS instead of a per-driver package:
 
@@ -57,9 +57,9 @@ Steam still takes 10–20 seconds to start with no feedback, as upstream warns.
 
 nixpkgs' `retroarch` is `retroarch-with-cores` built with an empty core
 list: it installs cleanly and emulates nothing. The obvious fix,
-`retroarch-full`, pulls in unfree cores, and an unfree package in the app
-selection aborts the entire rebuild for everyone who has not set
-`allowUnfree` — rather than failing on its own.
+`retroarch-full`, pulls in unfree cores — and an unfree package aborts the
+entire rebuild rather than failing on its own, for anyone who has turned
+nixarchy's `allowUnfree` default back off.
 
 So nixarchy builds its own `retroarch`: every core Omarchy's picker offers
 that nixpkgs ships under a free licence, minus the two largest. Thirteen
@@ -68,8 +68,8 @@ blastem for Mega Drive, beetle-pce-fast, beetle-psx-hw, parallel-n64,
 desmume, flycast, ppsspp, puae for Amiga and vice-x64 for the C64. snes9x and genesis-plus-gx are
 unfree in nixpkgs, which is why bsnes and blastem cover those systems.
 
-If you want the unfree ones — snes9x, genesis-plus-gx, mame, dolphin — set
-`allowUnfree` and override the package in your `nixarchy-apps.nix`:
+If you want the unfree ones — snes9x, genesis-plus-gx, mame, dolphin —
+override the package in your `nixarchy-apps.nix`:
 
 ```nix
 programs.nixarchy.apps.retroarch.package =

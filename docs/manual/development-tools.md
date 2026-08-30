@@ -8,8 +8,8 @@ title: Development tools
 
 Neovim ships by default. _Install > Editor_ offers VSCode, Cursor, Zed, Helix,
 Vim and Emacs, each a row in the app selection like any other: pick it, then
-_Install > Apply changes_. VSCode and Cursor are unfree and need
-`nixpkgs.config.allowUnfree = true` in your configuration.
+_Install > Apply changes_. VSCode and Cursor are unfree; nixarchy allows
+unfree packages by default, so they need nothing extra from you.
 
 Sublime Text is listed but disabled. nixpkgs marks `sublimetext4` broken over
 an insecure OpenSSL dependency, and enabling a broken package aborts the whole

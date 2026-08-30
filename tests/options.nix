@@ -137,6 +137,20 @@ let
         }).i18n.inputMethod.type == "fcitx5";
     };
 
+    # nixarchy allows unfree because most of the Install menu is unfree. The
+    # half worth testing is the other one: a user who wants nixpkgs' own policy
+    # back must be able to have it.
+    #
+    # This case exists because the first attempt did not work at all. mkDefault
+    # on nixpkgs.config.allowUnfree never resolves -- nixpkgs.config is a
+    # free-form attribute set, so the override attrset is stored verbatim and
+    # nixpkgs receives a set where it wants a bool. Nothing else would have
+    # caught that; the module still evaluated.
+    allowUnfree = {
+      on = (configWith { }).nixpkgs.config.allowUnfree or false;
+      off = (configWith { allowUnfree = false; }).nixpkgs.config.allowUnfree or false;
+    };
+
     browserThemeUser = {
       # null is the default, so this one reads the other way round: the rules
       # appear when a user is named.

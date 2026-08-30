@@ -91,6 +91,13 @@ Two lines deserve a second look:
   Install menu marks apps enabled, the rebuild succeeds, and nothing is ever
   installed. `nixarchy-apply` warns loudly when nothing imports the file, so
   read what it prints.
+- **Unfree packages are allowed by default.** Most of what the Install menu
+  offers is unfree — the browsers, the editors, Steam, the AI clients — so
+  enabling nixarchy sets `nixpkgs.config.allowUnfree`. Turn it off with
+  `programs.nixarchy.allowUnfree = false;` — and turn it off *there* rather
+  than setting `nixpkgs.config.allowUnfree = false` yourself, because
+  `nixpkgs.config` is a free-form attribute set where two definitions of the
+  same key do not resolve by priority, and yours would not win.
 
 ## 4. Rebuild, log out, pick Omarchy
 

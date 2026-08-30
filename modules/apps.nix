@@ -526,10 +526,14 @@ in
     lib.mkMerge [
       appModuleConfig
       {
+        # nixarchy defaults allowUnfree on, so reaching this warning means it
+        # was deliberately turned back off. Keep it: that user is exactly the
+        # one who needs the predicate escape hatch named.
         warnings = lib.optional (needsUnfree && !(config.nixpkgs.config.allowUnfree or false)) ''
           nixarchy: an enabled app is unfree but nixpkgs.config.allowUnfree is
-          not set, so the build will fail with a licence error. Set it, or add
-          the app to nixpkgs.config.allowUnfreePredicate.
+          off, so the build will fail with a licence error. nixarchy defaults it
+          on; something in your configuration sets it false. Allow it, or add just
+          this app to nixpkgs.config.allowUnfreePredicate.
         '';
 
         # Exported so the Home Manager module can seed it, and so a user can

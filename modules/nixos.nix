@@ -171,6 +171,27 @@ in
       '';
     };
 
+    allowUnfree = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Allow unfree packages.
+
+        Most of what the Install menu offers is unfree -- the browsers, the
+        editors, Steam, the AI clients. Leaving licence policy to the consumer
+        sounded principled and in practice meant picking an app, running
+        nixarchy-apply, and watching the rebuild die on a licence error with
+        nothing on screen explaining that the fix was a line in a file you had
+        never opened.
+
+        Set this to false for nixpkgs' own default instead. Turn it off HERE
+        rather than by writing nixpkgs.config.allowUnfree = false yourself:
+        nixpkgs.config is a free-form attribute set, so two definitions of the
+        same key do not resolve by priority the way a normal option does, and
+        yours would not win -- not even with mkForce.
+      '';
+    };
+
     binaryCaches = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -340,6 +361,36 @@ in
         '';
       }
     ];
+
+    # Most of what the Install menu offers is unfree: the browsers, the editors,
+    # Steam, the AI clients, several of the fonts. Leaving licence policy to the
+    # consumer sounded principled and in practice meant a new user picked an app,
+    # ran nixarchy-apply, and watched a rebuild die on a licence error partway
+    # through -- with nothing on screen explaining that the fix was a line in a
+    # file they had never opened.
+    #
+    # Behind an option rather than mkDefault, because mkDefault does not work
+    # here: nixpkgs.config is a free-form attribute set, so `mkDefault true` on
+    # one of its keys is stored as the override attrset itself and nixpkgs is
+    # handed { _type = "override"; ... } where it expects a bool. mkDefault on
+    # the whole set does resolve, but then any other nixpkgs.config key a user
+    # sets replaces our definition wholesale and unfree silently goes away.
+    #
+    # mkIf so that turning the option off removes the definition entirely rather
+    # than asserting false, and mkDefault so that ours is the one that yields
+    # wherever something else already owns nixpkgs.config. That is not
+    # hypothetical: a NixOS VM test takes its pkgs from outside and imports
+    # misc/nixpkgs/read-only.nix, which defines nixpkgs.config as a unique
+    # option -- so any definition of ours, at any priority above default, makes
+    # every runNixOSTest node fail to evaluate.
+    #
+    # The cost is that priorities filter before merging: a user who sets any
+    # other nixpkgs.config key, say permittedInsecurePackages, outranks this
+    # default and drops it, and unfree goes off again. That case is not silent,
+    # which is the only reason it is acceptable -- modules/apps.nix warns at
+    # evaluation time when an enabled app is unfree and allowUnfree is off, and
+    # names the fix.
+    nixpkgs.config = lib.mkIf cfg.allowUnfree (lib.mkDefault { allowUnfree = true; });
 
     nix.settings = {
       # nixarchy-apply runs `nh os switch <flake>`, so flakes are not

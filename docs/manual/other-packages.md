@@ -81,13 +81,14 @@ directly beside the selection and it lands in `services.tailscale`.
 ## Unfree software
 
 Chrome, VSCode, Cursor, Spotify, Steam and a few others are unfree in nixpkgs.
-An unfree package with `allowUnfree` off does not fail on its own; it aborts
-the whole evaluation, so nothing rebuilds. nixarchy warns at evaluation time
-when an enabled app is unfree and the flag is unset. The fix is one line in
-your own configuration:
+**nixarchy allows unfree packages by default**, so all of them install without
+you doing anything — most of what the Install menu offers is unfree, and a
+licence error partway through a rebuild helps nobody.
+
+To get nixpkgs' own policy back instead:
 
 ```nix
-nixpkgs.config.allowUnfree = true;
+programs.nixarchy.allowUnfree = false;
 ```
 
 or `nixpkgs.config.allowUnfreePredicate` if you would rather list them.

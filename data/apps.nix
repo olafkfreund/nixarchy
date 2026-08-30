@@ -15,8 +15,10 @@
 #              `apps.tailscale.settings.useRoutingFeatures` land in the right
 #              place. An app with an `option` must NOT also set `attr`: the
 #              module owns installing its own package.
-#   unfree     Needs nixpkgs.config.allowUnfree; surfaced as a template note
-#              rather than a build failure nobody can read.
+#   unfree     Marks a package nixpkgs licenses as unfree. nixarchy defaults
+#              allowUnfree on, so this is a note in the template rather than a
+#              build failure nobody can read -- it still matters to anyone who
+#              turns the default back off.
 #   note       Anything a reader would otherwise have to discover the hard way.
 #   arch       Upstream's Arch package name. Kept solely so the CI cross-check
 #              can match rows; nothing at runtime reads it.

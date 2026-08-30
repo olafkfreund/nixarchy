@@ -1,0 +1,19 @@
+title: nixarchy
+description: Omarchy, vendored for NixOS
+theme: jekyll-theme-primer
+show_downloads: false
+
+# Only the manual is a site. The screenshots and the demo gif live in docs/
+# too and are linked from the README, so they must not become pages.
+include:
+  - manual
+exclude:
+  - screenshots
+  - capture-screenshots.sh
+  - nixarchy-demo.gif
+
+defaults:
+  - scope:
+      path: "manual"
+    values:
+      layout: default

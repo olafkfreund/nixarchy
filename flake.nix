@@ -37,6 +37,18 @@
       flake = false;
     };
 
+    # The installer's one disk layout is a disko expression, and the installed
+    # machine imports the same file -- that is what keeps `fileSystems`
+    # declarative instead of frozen into a hardware-configuration.nix nobody
+    # re-derives. See installer/disk-config.nix and issue #7.
+    #
+    # `follows` is right here and wrong for hyprland above: disko needs little
+    # more than lib, and there is no binary cache to forfeit by overriding it.
+    disko = {
+      url = "github:nix-community/disko/latest";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Zen is not in nixpkgs and upstream maintains its own flake, which tracks
     # Zen's releases far more closely than a derivation here ever would.
     zen-browser = {

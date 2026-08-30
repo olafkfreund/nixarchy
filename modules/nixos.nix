@@ -644,7 +644,32 @@ in
 
     networking = {
       # install/config/firewall.sh (upstream uses ufw)
-      firewall.enable = lib.mkDefault true;
+      firewall = {
+        enable = lib.mkDefault true;
+
+        # The other half of that script, which this module left behind.
+        # Upstream's is not merely "turn the firewall on":
+        #
+        #     ufw default deny incoming
+        #     ufw allow 53317/udp
+        #     ufw allow 53317/tcp   # "Allow ports for LocalSend."
+        #
+        # Porting only the deny half enables a firewall that blocks the one
+        # service Omarchy's manual promises works out of the box: "Omarchy's
+        # firewall is closed by default except for LocalSend's port, so this
+        # works out of the box on a fresh install." On a machine taking this
+        # module's firewall default it did not -- Share > Receive listened on
+        # 53317 and nothing on the network could reach it.
+        #
+        # Discovery was never the missing part: services.avahi above already
+        # opens 5353. Only LocalSend's own transfer port was closed.
+        #
+        # Not mkDefault: these are list options, so they merge with whatever
+        # the user opens rather than replacing it. A mkDefault list would be
+        # dropped whole the moment they opened a port of their own.
+        allowedTCPPorts = [ 53317 ];
+        allowedUDPPorts = [ 53317 ];
+      };
       networkmanager.enable = lib.mkDefault true;
     };
 

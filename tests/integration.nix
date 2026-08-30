@@ -116,6 +116,13 @@ pkgs.runCommand "nixarchy-integration"
     toplevel = built.system.build.toplevel;
     inherit profile;
     wanted = ours.name;
+
+    # Omarchy's manual promises LocalSend "works out of the box on a
+    # fresh install" because the firewall is closed "except for
+    # LocalSend's port". This module enables that firewall, so it owes
+    # the exception -- and shipped the deny half without the allow half.
+    localsendTcp = builtins.toString (builtins.elem 53317 built.networking.firewall.allowedTCPPorts);
+    localsendUdp = builtins.toString (builtins.elem 53317 built.networking.firewall.allowedUDPPorts);
   }
   ''
     echo "configuration asked for: $wanted"
@@ -138,5 +145,12 @@ pkgs.runCommand "nixarchy-integration"
     esac
 
     echo "the configuration's own Hyprland survived, sessions included"
+
+    # 53317 on both protocols: LocalSend discovers over UDP and
+    # transfers over TCP, so opening one leaves Share > Receive
+    # visible and unusable.
+    [ "$localsendTcp" = "1" ] || { echo "firewall does not open TCP 53317 for LocalSend" >&2; exit 1; }
+    [ "$localsendUdp" = "1" ] || { echo "firewall does not open UDP 53317 for LocalSend" >&2; exit 1; }
+    echo "LocalSend's port is open on both protocols"
     touch $out
   ''

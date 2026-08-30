@@ -297,6 +297,39 @@ jobs:
           fi
           echo "all checked runtime commands resolve ($(ls result/bin | wc -l) binaries)"
 
+      - name: Verify every desktop entry's command resolves
+        run: |
+          # The step above checks a hand-written list of command names. That
+          # list was built by grepping bin/, so a command referenced only by a
+          # .desktop file is invisible to it -- which is how "Disk Usage"
+          # shipped launching `dua`, opening a terminal that closed instantly.
+          #
+          # This derives the commands from the entries themselves, so a new
+          # launcher row in a future Omarchy release cannot introduce the same
+          # failure silently.
+          nix build .#omarchy --out-link result-omarchy
+          nix build .#omarchy-runtime --out-link result-runtime
+
+          missing=""
+          for f in result-omarchy/share/omarchy/applications/*.desktop; do
+            exec_line=$(sed -n 's/^Exec=//p' "$f" | head -1)
+            # Either `bash -c "cmd ..."` or a plain command as the first word.
+            cmd=$(printf '%s' "$exec_line" | sed -n 's/.*bash -c "\([a-zA-Z0-9_.-]*\).*/\1/p')
+            [ -z "$cmd" ] && cmd=$(printf '%s' "$exec_line" | awk '{print $1}')
+            [ -z "$cmd" ] && continue
+            # Omarchy's own bins live in the package; everything else must come
+            # from runtimeDeps.
+            if [ ! -x "result-omarchy/bin/$cmd" ] && [ ! -x "result-runtime/bin/$cmd" ]; then
+              missing="$missing $cmd($(basename "$f" .desktop))"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::desktop entries launch commands nothing provides:$missing"
+            exit 1
+          fi
+          echo "every desktop entry's command resolves"
+
       - name: Verify the generated menu extension and app template
         run: |
           nix build .#nixosConfigurations.vm.config.system.build.toplevel \

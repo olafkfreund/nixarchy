@@ -58,6 +58,7 @@
   btop,
   ripgrep,
   fd,
+  dua,
   bat,
   fzf,
   tmux,
@@ -166,6 +167,12 @@ let
     btop
     ripgrep
     fd
+    # applications/Disk Usage.desktop runs `dua i /`. It is the only command any
+    # shipped .desktop entry needs that no script in bin/ also calls, which is
+    # exactly why it was missed: this list was built by grepping bin/, and the
+    # launcher entries were never part of that sweep. The entry opened a
+    # terminal that closed instantly.
+    dua
     bat
     fzf
     tmux

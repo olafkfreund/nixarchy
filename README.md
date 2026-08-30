@@ -11,7 +11,7 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 Tracking an upstream release is a source bump, not a re-port.
 
 What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **57 applications** are selectable that way, plugins and themes still
+pacman, **56 applications** are selectable that way, plugins and themes still
 install from a git URL at runtime the way upstream intends, and every command
 that assumed `/usr` either points at what NixOS uses or says why it cannot.
 
@@ -41,7 +41,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nix flake update` + `nixos-rebuild switch --flake` |
-| 57 apps in the selection | 41 from nixpkgs, 5 as NixOS modules, 9 built here, 2 with no equivalent |
+| 56 apps in the selection | 41 from nixpkgs, 5 as NixOS modules, 8 built here, 2 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -673,7 +673,7 @@ done
 
 Almost nothing here waits on a maintainer.
 
-**46 of the 57 apps never touch this repo.** Brave, VSCode, Signal and the rest
+**46 of the 56 apps never touch this repo.** Brave, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own
@@ -713,7 +713,7 @@ Most of it is not our job, and should not be:
 
 | where the app comes from | who updates it |
 |---|---|
-| nixpkgs (46 of 57 apps) | **nobody** — your own `nix flake update` |
+| nixpkgs (46 of 56 apps) | **nobody** — your own `nix flake update` |
 | pinned in this repo (2) | a weekly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |

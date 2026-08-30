@@ -128,6 +128,11 @@
           version = omarchyVersion;
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
+
+          # The screensaver's text-effects engine, packaged in this repo rather
+          # than nixpkgs. Passed explicitly for the same reason hyprland is: it
+          # lives under nixarchy-apps, which callPackage does not search.
+          inherit (final.nixarchy-apps) ttfx;
         };
       };
 

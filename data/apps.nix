@@ -390,15 +390,6 @@
     attr = "omacut";
     ours = true;
   };
-  ttfx = {
-    # Not an Omarchy preinstall and not in any Omarchy menu -- a terminal
-    # text-effects binary from the same authors, offered here because it was
-    # asked for. Available as programs.nixarchy.apps.ttfx.
-    label = "ttfx";
-    category = "Utility";
-    attr = "ttfx";
-    ours = true;
-  };
   hey-cli = {
     # No menuId: Omarchy v4.0.1 ships no HEY row at all -- hey.com/agents asks
     # for "Omarchy 4.1 or later", which is unreleased, and v4.0.1's AI group is

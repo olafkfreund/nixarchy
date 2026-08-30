@@ -105,6 +105,7 @@
   xdg-user-dirs,
   satty,
   wl-screenrec,
+  ttfx,
   # Branding: this is a NixOS port, so the menu button wears the snowflake.
   nixos-icons,
 }:
@@ -235,6 +236,18 @@ let
     xdg-user-dirs # xdg-user-dirs-update
     satty # screenshot annotation
     wl-screenrec # screen recording
+
+    # The screensaver is ASCII art driven through text effects, and ttfx is
+    # what drives it. Five scripts call it -- omarchy-screensaver,
+    # omarchy-launch-screensaver, omarchy-system-lock, omarchy-provision-owner
+    # and omarchy-debug-idle -- so it is not optional, it is what Super + Esc
+    # and the idle screensaver are made of.
+    #
+    # It was packaged here first as an opt-in app, on the mistaken reading that
+    # it was a standalone toy. It is a runtime dependency; the catalogue entry
+    # went away with this change, because offering to install something that is
+    # always present is exactly what the menu's dimming exists to prevent.
+    ttfx
   ];
   # arch-name<TAB>kind<TAB>attr<TAB>note, one per line. Apps come from
   # data/apps.nix so the two cannot drift; everything the menu does not select

@@ -800,6 +800,10 @@ can act on.
 
 *The whole install, four minutes at four-second intervals.*
 
+Measured, not estimated: `checks.install` reports the installer's own figure
+every run — around eight minutes in a VM with no network, and faster on real
+hardware. The number on the finish screen is the same one.
+
 ![Installed nixarchy in 7m 32s](docs/img/installer/03-finish.png)
 
 Reboot and you are at the desktop. An encrypted install goes straight there —
@@ -1394,11 +1398,15 @@ Known gaps in detail:
 
 - **The installer works, and it is not finished.** `nix build .#iso` produces a
   bootable image that asks a handful of questions and installs onto a blank disk
-  in a few minutes — see *Installing on a fresh machine* above. What is missing
-  is the part that makes it fast and offline: the ISO still downloads the closure
-  rather than carrying it, so an install needs a network and takes as long as the
-  download does. The hermetic VM test that would keep the whole path from rotting
-  between releases is also not passing yet. Both are tracked on the epic.
+  — see *Installing on a fresh machine* above. It carries the desktop rather
+  than downloading it: 5.6 GB of image holding a 15.3 GB closure, and an install
+  with no network at all is a store copy and an activation. `checks.install`
+  records the duration on every run and fails above a budget, so a package that
+  starts being built rather than copied turns a test red instead of quietly
+  costing everyone ten minutes.
+
+  What is missing is the rest of the product around it: a nightly image, release
+  automation, and installing alongside an existing OS. All tracked on the epic.
 
 - `brave-origin` has no published source; use `apps.brave` with policies in
   `/etc/brave/policies/managed`

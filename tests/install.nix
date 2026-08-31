@@ -130,6 +130,27 @@ let
     nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.stdenv.hostPlatform.system;
   };
 
+  # And the pin installer/install.sh adds underneath it.
+  #
+  # The installer forces both initrd lists to what the medium carries, so the
+  # machine can reuse the initrd already there instead of building a
+  # near-identical one -- see reuse_baked_initrd. That means the system this
+  # test seeds has to carry the same force, or the installed system differs
+  # from the seeded one by exactly an initrd and the install has to build it
+  # with no network. Which is not a subtle failure: it is the source bootstrap,
+  # and it ends by trying to download a patch from salsa.debian.org.
+  #
+  # reference-unencrypted, because this test installs with encrypt=no and LUKS
+  # adds a dozen crypto modules to the other one.
+  initrdPin =
+    let
+      ref = inputs.self.nixosConfigurations.reference-unencrypted.config;
+    in
+    {
+      boot.initrd.availableKernelModules = pkgs.lib.mkForce ref.boot.initrd.availableKernelModules;
+      boot.initrd.kernelModules = pkgs.lib.mkForce ref.boot.initrd.kernelModules;
+    };
+
   # The exact disko script the generated flake will evaluate to. The reference
   # host's is for /dev/vda -- its placeholder device -- and this test installs
   # to /dev/vdb, so they are different derivations and the VM would have to
@@ -172,6 +193,7 @@ let
           users.users.omarchy.hashedPassword = passwordHash;
         }
         (hardwareConfig cpuModule)
+        initrdPin
       ]
       ++ pkgs.lib.optional instrumented instrumentation;
     }).config.system.build;
@@ -381,6 +403,30 @@ pkgs.testers.runNixOSTest {
     print(installer.execute("cat /var/log/nixarchy-install.log 2>&1")[1])
     print("============================================================")
     assert rc == 0, f"nixarchy-install exited {rc}; the log above says why"
+
+    # ---- how long it took ----------------------------------------------
+    # The installer's own number, not the driver's: it excludes the time the
+    # test spent getting to the point of running it, and it is the same figure
+    # the finish screen shows the person doing the install.
+    import json
+    state = json.loads(installer.succeed("cat /run/nixarchy-install/state.json"))
+    seconds = state["seconds"]
+    print(f"install_seconds={seconds}")
+
+    # A ceiling, not the claim.
+    #
+    # This is a VM on a shared machine with an emulated disk; real hardware is
+    # faster, and the README quotes the real figure. What this catches is the
+    # regression that matters: with the closure on the medium an install is a
+    # copy and an activation, and the moment something falls out of the closure
+    # and gets built instead, the time does not drift -- it multiplies. Runs
+    # here land around 500s; the budget is set well clear of that so runner
+    # variance is not a flake, and a build is still nowhere near it.
+    budget = 1800
+    assert seconds < budget, (
+        f"the install took {seconds}s, over the {budget}s budget. Something "
+        "that used to be copied is now being built -- check the log above for "
+        "'will be built', and see #49.")
 
     # Asserted from this side, while the target is still mounted: it localises
     # a failure to "the install" rather than "the boot", which are very

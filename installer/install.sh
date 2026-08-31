@@ -786,6 +786,20 @@ main() {
   local started rc=0 elapsed
   started=$(date +%s)
 
+  # How long this took, written down where something other than a person
+  # watching the screen can read it.
+  #
+  # "As fast as Omarchy, or faster" is a requirement, and a requirement nobody
+  # measures is a wish. checks.install reads this and fails above a budget, so
+  # the install getting slower is a red test rather than a thing somebody
+  # eventually notices.
+  #
+  # In /run: it describes this boot of the installer, not the machine being
+  # built, and it must not survive into the installed system.
+  mkdir -p /run/nixarchy-install
+  printf '{"started":%s,"phase":"installing"}\n' "$started" \
+    >/run/nixarchy-install/state.json
+
   ui_dashboard_start
   {
     format_disk
@@ -800,6 +814,13 @@ main() {
   # from a hang. Let any such frame finish before taking the screen back.
   sleep 1.2
   elapsed=$(($(date +%s) - started))
+
+  # Written before the failure branch below, so a failed install is timed too:
+  # "it died after forty minutes" and "it died after forty seconds" are
+  # different bugs.
+  printf '{"started":%s,"finished":%s,"seconds":%s,"exit":%s}\n' \
+    "$started" "$(date +%s)" "$elapsed" "$rc" \
+    >/run/nixarchy-install/state.json
 
   # The log, on the serial line, whatever happened. The dashboard deliberately
   # hides it on screen, which is right for someone watching an install and

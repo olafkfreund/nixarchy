@@ -567,8 +567,63 @@ reuse_baked_initrd() {
     return 0
   fi
 
-  # Commented, not deleted. It is the user's file and the detection was real:
-  # uncomment the line and rebuild to use exactly what this machine reported.
+  # Pinned with mkForce, not just commented out.
+  #
+  # Commenting the detected line is not enough, and the reason is easy to miss:
+  # nixos-generate-config also writes an `imports` line, and
+  # profiles/qemu-guest.nix sets availableKernelModules itself -- virtio_net,
+  # 9p, virtiofs, and initrd.kernelModules of its own. A comment cannot undo an
+  # import. So the detected line is commented for the reader, and both lists
+  # are then forced to what the medium carries, which is what actually makes
+  # the initrd identical to the baked one.
+  #
+  # Both lists: availableKernelModules is what may be loaded, kernelModules is
+  # what is loaded unconditionally, and the profile adds to both.
+  # The file ends with its closing brace, and the pin has to go inside it.
+  # Guarded rather than assumed: if nixos-generate-config ever stops ending
+  # that way, this leaves the file alone rather than producing a flake that
+  # does not parse, three minutes before the disk is written to.
+  if [ "$(tail -n 1 "$file")" != "}" ]; then
+    echo "hardware: unexpected shape; keeping the detected initrd" >&2
+    return 0
+  fi
+
+  {
+    head -n -1 "$file"
+    cat <<PIN
+
+  # ---- added by the nixarchy installer -------------------------------------
+  # The initrd this machine boots is the one that came on the installer, which
+  # is why the install copied it rather than spending minutes building a
+  # near-identical one.
+  #
+  # Both lists are forced because a comment cannot undo an import: the line
+  # above sets availableKernelModules, but so does the profile this file
+  # imports (qemu-guest.nix, on a VM), and that contribution would survive.
+  #
+  # Delete this block to use exactly what was detected on this machine. That
+  # is a rebuild, and it needs a network the first time.
+  boot.initrd.availableKernelModules = lib.mkForce [ $(printf '"%s" ' @initrdmodules@) ];
+  boot.initrd.kernelModules = lib.mkForce [ $(printf '"%s" ' @initrdforced@) ];
+PIN
+    tail -n 1 "$file"
+  } >"$file.pinned" && mv "$file.pinned" "$file"
+
+  # ---- added by the nixarchy installer -------------------------------------
+  # The initrd this machine boots is the one that came on the installer, which
+  # is why the install copied it instead of spending several minutes building
+  # a near-identical one. Both lists are forced because an imported profile
+  # (qemu-guest.nix, on a VM) sets them too, and a commented-out line above
+  # would not have overridden it.
+  #
+  # Delete this block to use exactly what was detected on this machine. That
+  # is a rebuild, and it needs a network the first time.
+  boot.initrd.availableKernelModules = lib.mkForce [ $(printf '"%s" ' @initrdmodules@) ];
+  boot.initrd.kernelModules = lib.mkForce [ $(printf '"%s" ' @initrdforced@) ];
+PIN
+
+  # Commented as well, so the reader sees what was detected here rather than
+  # only what replaced it.
   sed -i \
     -e 's|^\( *\)boot\.initrd\.availableKernelModules|\1# Detected on this machine, and already covered by the module set nixarchy\
 \1# installs, so it is commented out: leaving it in would mean building an\

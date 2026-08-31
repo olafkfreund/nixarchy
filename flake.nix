@@ -247,6 +247,7 @@
                 "@tzdata@"
                 "@kbd@"
                 "@initrdmodules@"
+                "@initrdforced@"
               ]
               [
                 "${self.packages.${system}.flake-template}"

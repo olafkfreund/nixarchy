@@ -103,6 +103,30 @@ let
     ++ [
       pkgs.kmod
       pkgs.nukeReferences
+
+      # kmod's `dev` output, and it is worth saying why one output of one
+      # package gets its own entry.
+      #
+      # The installed machine has to build its own initrd, because a systemd
+      # initrd embeds the hostname -- initrd-hostname, initrd-group,
+      # initrd-release are all per-machine, so no baked initrd can ever match
+      # one belonging to a machine with a different name. Building it means
+      # building linux-<v>-modules-shrunk, and that wants kmod's dev output.
+      # Everything else it wants is here: stdenv, the module tree, nuke-refs,
+      # bash. Just not this.
+      #
+      # Nix does not degrade over a missing build input; it builds it. Building
+      # kmod means a compiler, which is not here either, so it works backwards
+      # to the source bootstrap and the install ends several minutes later
+      # trying to download a perl tarball from CPAN. Measured on this graph:
+      # without this line 619 derivations have to be built and the bootstrap is
+      # reachable; with it, 76, and it is not. All 76 are per-machine text
+      # files that assemble from parts already on the image.
+      #
+      # The general lesson, since this cost a day: a `-dev` output is a real
+      # build input. Seeding a package by name gives you `out`, and that is not
+      # the same thing.
+      pkgs.kmod.dev
     ];
 in
 {

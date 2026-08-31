@@ -421,8 +421,7 @@ pkgs.testers.runNixOSTest {
     # that anyone can read. The installer's own log is the diagnostic.
     rc, out = installer.execute(
         "nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=1800)
-    elapsed = int(time.time() - started)
-    print(f"install_seconds={elapsed}")
+    print(f"driver_seconds={int(time.time() - started)}")
     print(out)
     print("=============== /var/log/nixarchy-install.log ===============")
     print(installer.execute("cat /var/log/nixarchy-install.log 2>&1")[1])

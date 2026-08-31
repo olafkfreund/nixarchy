@@ -343,6 +343,31 @@ pkgs.testers.runNixOSTest {
         pkgs.jq
       ]
       ++ map (t: t.toplevel) targetSystems
+
+      # And the parts the few per-machine derivations are built FROM.
+      #
+      # The installed machine's hostname is not the reference's, and a systemd
+      # initrd embeds the hostname -- initrd-hostname, initrd-group,
+      # initrd-release. So an initrd has to be built here no matter what is
+      # seeded, and building it needs kmod's dev output, and the toplevel's
+      # own wrapper check needs libcap. Neither is in any runtime closure, so
+      # neither arrives with the systems above, and nix does not degrade over
+      # a missing build input -- it builds it, needs a compiler, has none, and
+      # walks back to the source bootstrap. The install then ends several
+      # minutes later trying to fetch a patch from salsa.debian.org.
+      #
+      # inputDerivation is nixpkgs' own "realise everything this is built
+      # from", which is exactly the question, and it keeps working when the
+      # answer changes. installer/cd.nix carries the same list for the ISO.
+      ++ map (t: t.toplevel.inputDerivation) targetSystems
+      ++ map (t: t.initialRamdisk.inputDerivation) targetSystems
+      ++ map (t: t.etc.inputDerivation) targetSystems
+      ++ [
+        pkgs.kmod
+        pkgs.kmod.dev
+        pkgs.libcap
+        pkgs.nukeReferences
+      ]
       ++ inputPaths;
 
       virtualisation = {

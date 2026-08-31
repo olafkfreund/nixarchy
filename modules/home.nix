@@ -21,15 +21,14 @@ let
   # `enable = false` when there is no osConfig: a standalone home-manager user
   # has no NixOS module to have turned this on, so every option below it is
   # inert and nothing is written.
-  localAi =
-    {
-      enable = false;
-      agents = [ ];
-      model = "";
-      contextWindow = 0;
-      resolved.endpoint = "";
-    }
-    // (osConfig.programs.nixarchy.localAi or { });
+  localAi = {
+    enable = false;
+    agents = [ ];
+    model = "";
+    contextWindow = 0;
+    resolved.endpoint = "";
+  }
+  // (osConfig.programs.nixarchy.localAi or { });
 
   # Through the overlay on *your* nixpkgs, for the same reason cfg.package's
   # default takes that route: inputs.self.packages is built from nixarchy's own
@@ -666,39 +665,41 @@ in
     # same way: both files already have an owner.
     home.activation.nixarchyOpencodeProvider =
       lib.mkIf (localAi.enable && builtins.elem "opencode" localAi.agents)
-        (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          conf="''${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
-          run mkdir -p "$(dirname "$conf")"
-          [ -s "$conf" ] || echo '{}' > "$conf"
+        (
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            conf="''${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
+            run mkdir -p "$(dirname "$conf")"
+            [ -s "$conf" ] || echo '{}' > "$conf"
 
-          # Written to a temp file and moved, so an interrupted activation
-          # cannot leave the user with half a config and no working agent.
-          tmp=$(${pkgs.coreutils}/bin/mktemp)
-          if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${
-            pkgs.writeText "opencode-provider.json" (
-              builtins.toJSON {
-                "$schema" = "https://opencode.ai/config.json";
-                provider.ollama = {
-                  npm = "@ai-sdk/openai-compatible";
-                  name = "Ollama (local)";
-                  options.baseURL = localAi.resolved.endpoint or "";
-                  models.${localAi.model} = {
-                    name = localAi.model;
-                    limit = {
-                      context = if localAi.contextWindow != null then localAi.contextWindow else 32768;
-                      output = 8192;
+            # Written to a temp file and moved, so an interrupted activation
+            # cannot leave the user with half a config and no working agent.
+            tmp=$(${pkgs.coreutils}/bin/mktemp)
+            if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${
+              pkgs.writeText "opencode-provider.json" (
+                builtins.toJSON {
+                  "$schema" = "https://opencode.ai/config.json";
+                  provider.ollama = {
+                    npm = "@ai-sdk/openai-compatible";
+                    name = "Ollama (local)";
+                    options.baseURL = localAi.resolved.endpoint or "";
+                    models.${localAi.model} = {
+                      name = localAi.model;
+                      limit = {
+                        context = if localAi.contextWindow != null then localAi.contextWindow else 32768;
+                        output = 8192;
+                      };
                     };
                   };
-                };
-              }
-            )
-          } > "$tmp"; then
-            run mv "$tmp" "$conf"
-          else
-            rm -f "$tmp"
-            echo "nixarchy: could not merge the local model into $conf" >&2
-          fi
-        '');
+                }
+              )
+            } > "$tmp"; then
+              run mv "$tmp" "$conf"
+            else
+              rm -f "$tmp"
+              echo "nixarchy: could not merge the local model into $conf" >&2
+            fi
+          ''
+        );
 
     # pi keeps its configuration in ~/.pi/agent, not under XDG.
     #
@@ -712,42 +713,44 @@ in
     # providers survive.
     home.activation.nixarchyPiProvider =
       lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
-        (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          conf="$HOME/.pi/agent/models.json"
-          run mkdir -p "$(dirname "$conf")"
-          [ -s "$conf" ] || echo '{}' > "$conf"
+        (
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            conf="$HOME/.pi/agent/models.json"
+            run mkdir -p "$(dirname "$conf")"
+            [ -s "$conf" ] || echo '{}' > "$conf"
 
-          tmp=$(${pkgs.coreutils}/bin/mktemp)
-          if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${
-            pkgs.writeText "pi-provider.json" (
-              builtins.toJSON {
-                providers.ollama = {
-                  baseUrl = localAi.resolved.endpoint or "";
-                  api = "openai-completions";
-                  # Ignored by Ollama, but pi requires the field to be present.
-                  apiKey = "ollama";
-                  # pi sends system instructions in the `developer` role to
-                  # reasoning-capable models. Ollama -- like vLLM and SGLang --
-                  # rejects a role it does not know, and every request then fails
-                  # with an error that does not name the cause.
-                  compat.supportsDeveloperRole = false;
-                  models = [
-                    {
-                      id = localAi.model;
-                      contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
-                      maxTokens = 8192;
-                    }
-                  ];
-                };
-              }
-            )
-          } > "$tmp"; then
-            run mv "$tmp" "$conf"
-          else
-            rm -f "$tmp"
-            echo "nixarchy: could not merge the local model into $conf" >&2
-          fi
-        '');
+            tmp=$(${pkgs.coreutils}/bin/mktemp)
+            if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${
+              pkgs.writeText "pi-provider.json" (
+                builtins.toJSON {
+                  providers.ollama = {
+                    baseUrl = localAi.resolved.endpoint or "";
+                    api = "openai-completions";
+                    # Ignored by Ollama, but pi requires the field to be present.
+                    apiKey = "ollama";
+                    # pi sends system instructions in the `developer` role to
+                    # reasoning-capable models. Ollama -- like vLLM and SGLang --
+                    # rejects a role it does not know, and every request then fails
+                    # with an error that does not name the cause.
+                    compat.supportsDeveloperRole = false;
+                    models = [
+                      {
+                        id = localAi.model;
+                        contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
+                        maxTokens = 8192;
+                      }
+                    ];
+                  };
+                }
+              )
+            } > "$tmp"; then
+              run mv "$tmp" "$conf"
+            else
+              rm -f "$tmp"
+              echo "nixarchy: could not merge the local model into $conf" >&2
+            fi
+          ''
+        );
 
     # settings.json is where pi reads defaultProvider/defaultModel, and it is
     # also where omarchy-theme-set-pi writes the theme -- with
@@ -759,21 +762,23 @@ in
     # the user and to theme-set, and nothing here touches it again.
     home.activation.nixarchyPiDefaultModel =
       lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
-        (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          settings="$HOME/.pi/agent/settings.json"
-          if [ ! -e "$settings" ]; then
-            run mkdir -p "$HOME/.pi/agent"
-            run install -m 0644 ${
-              pkgs.writeText "pi-settings.json" (
-                builtins.toJSON {
-                  defaultProvider = "ollama";
-                  defaultModel = localAi.model;
-                }
-              )
-            } "$settings"
-            echo "nixarchy: pointed pi at the local model (${localAi.model})"
-          fi
-        '');
+        (
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            settings="$HOME/.pi/agent/settings.json"
+            if [ ! -e "$settings" ]; then
+              run mkdir -p "$HOME/.pi/agent"
+              run install -m 0644 ${
+                pkgs.writeText "pi-settings.json" (
+                  builtins.toJSON {
+                    defaultProvider = "ollama";
+                    defaultModel = localAi.model;
+                  }
+                )
+              } "$settings"
+              echo "nixarchy: pointed pi at the local model (${localAi.model})"
+            fi
+          ''
+        );
 
     # Same extension point, on the other hook Omarchy already runs:
     # default/hypr/autostart.lua ends its startup with `omarchy-hook post-boot`.

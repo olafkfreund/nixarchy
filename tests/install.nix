@@ -255,27 +255,29 @@ pkgs.testers.runNixOSTest {
         require-sigs = false;
       };
 
-      # The answers the wizard would have collected. device is the blank second
-      # disk; /dev/vda is this node's own root.
-      environment.etc."nixarchy/answers".text = ''
-        device=/dev/vdb
-        encrypt=no
-        hostname=installed
-        username=omarchy
-        password_hash=${passwordHash}
-        timezone=UTC
-        keymap=us
-      '';
+      environment.etc = {
+        # The answers the wizard would have collected. device is the blank
+        # second disk; /dev/vda is this node's own root.
+        "nixarchy/answers".text = ''
+          device=/dev/vdb
+          encrypt=no
+          hostname=installed
+          username=omarchy
+          password_hash=${passwordHash}
+          timezone=UTC
+          keymap=us
+        '';
 
-      # Copied into the generated flake after the install; see the note on
-      # `instrumentation`. modulesPath rather than an absolute store path,
-      # because the flake it joins evaluates in pure mode.
-      environment.etc."nixarchy/test-instrumentation.nix".text = ''
-        { modulesPath, ... }:
-        {
-          imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
-        }
-      '';
+        # Copied into the generated flake after the install; see the note on
+        # `instrumentation`. modulesPath rather than an absolute store path,
+        # because the flake it joins evaluates in pure mode.
+        "nixarchy/test-instrumentation.nix".text = ''
+          { modulesPath, ... }:
+          {
+            imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
+          }
+        '';
+      };
 
       # Everything the install will copy or evaluate, already present: the test
       # meets the offline reality that the ISO phase will have to solve for

@@ -265,6 +265,9 @@
                 # install.sh compares what it detected against this list to
                 # decide whether the installed machine can reuse that initrd.
                 (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules)
+                # And the ones it loads unconditionally, which the same pin has
+                # to cover: an imported profile sets this list too.
+                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.kernelModules)
               ]
               (builtins.readFile ./installer/install.sh);
         };

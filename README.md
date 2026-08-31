@@ -55,6 +55,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
+| **Fresh-machine install** | a bootable ISO, seven questions, and the machine is a flake you own — with no network |
 | Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
 
 ## Two names, on purpose
@@ -810,20 +811,54 @@ Reboot and you are at the desktop. An encrypted install goes straight there —
 the passphrase you typed at boot already proved who you are, so there is no
 second password.
 
+**It does not need a network.** The image carries the desktop rather than
+downloading it — 5.6 GB of ISO holding a 15.3 GB closure — so an install is a
+store copy and an activation, not a download. Unplug the cable and it still
+works; `checks.install-iso` proves that by installing with no network device
+present at all. The 56 selectable apps are the exception, and are meant to be:
+they come from the Install menu after first boot, from your own nixpkgs.
+
+**You can answer the questions ahead of time.** `nixarchy-install --answers
+<file>` takes every answer from a file and asks nothing, which is how the VM
+tests drive it and how you reinstall a machine the same way twice:
+
+```
+device=/dev/nvme0n1
+encrypt=yes
+luks_passphrase=...
+hostname=kestrel
+username=you
+password=...
+timezone=Europe/Copenhagen
+keymap=us
+```
+
+`tests/install.nix` is the working reference for it.
+
 **What you get is a flake you own.** `/etc/nixos` is a git repository holding a
-`flake.nix`, a `configuration.nix`, the disk layout that formatted the disk, and
-your app selection. Edit it and run `nh os switch`. Nothing the installer did is
+`flake.nix`, a `configuration.nix`, the `disk-config.nix` that formatted the
+disk, a `nixarchy-apps.nix` for your app selection, and the `flake.lock` the
+image was built with — not a fresh one, because regenerating it would make your
+first boot differ from what was actually installed. `imports = [
+./nixarchy-apps.nix ];` is already written for you: forgetting that line is the
+silent failure the section below warns about for machines you configure by
+hand, and the installer does not let you make it. Edit it and run
+`nh os switch`. Nothing the installer did is
 hidden from that directory, which is the point: a rebuild immediately after
 install builds nothing, because everything it did is described there.
 
-**Three caveats worth knowing before you write the stick.**
+**Four caveats worth knowing before you write the stick.**
 
-The image **needs a network**: it downloads the closure rather than carrying it,
-so an install is as fast as your connection. Making it offline is the next phase
-of the work.
+It takes **the whole drive**. There is no partition picker and there is not
+going to be one: the layout is one file, `installer/disk-config.nix`, and the
+installer runs it against the disk you name. Anything already there is gone.
+Sharing a disk with Windows means editing that file and running `disko` by hand
+first, which is a thing you can do and not a thing this walks you through.
 
 It is **UEFI only** — the layout is an ESP with systemd-boot, and there is no
 BIOS path.
+
+**`x86_64-linux` only.** Nothing else is built or tested.
 
 And if you encrypt, **the passphrase prompt at boot comes before Bluetooth
 exists**. A wireless keyboard that pairs after the desktop is up cannot type
@@ -1381,15 +1416,26 @@ someone would miss it:
    own `.desktop` -- came up to a black desktop. That cause was not chased down,
    because the answer did not depend on it and guessing at one would be worse
    than saying so. The guards work; the branch is not somewhere to go.
-2. **fish's `ga` and `gd`** cannot change your directory, and never will: they
+2. **The installer takes the whole disk, and there is no Secure Boot and no
+   graphical installer.** Each is a decision rather than a gap. Sharing a disk
+   means partitioning it yourself, which `installer/disk-config.nix` lets you
+   do and the installer will not: a partition picker is the part of an
+   installer most likely to destroy something, and the layout being one
+   readable file is a better answer than a wizard that hides it. Secure Boot
+   needs signed shims and enrolled keys, which is a distribution-level
+   commitment rather than an installer feature. And the installer is a TUI
+   because it runs before there is a desktop to draw a GUI with -- Omarchy's
+   is too, for the same reason.
+
+3. **fish's `ga` and `gd`** cannot change your directory, and never will: they
    run as upstream's bash behind a wrapper.
-3. **Battle.net and GeForce NOW** need a hand each, named in their rows. The
+4. **Battle.net and GeForce NOW** need a hand each, named in their rows. The
    wine prefixes and Flatpaks behind them are not this repo's to own.
-4. **Rails, Laravel and Phoenix** are frameworks rather than packages, so they
+5. **Rails, Laravel and Phoenix** are frameworks rather than packages, so they
    are not in the selection: each wants a language plus a package manager
    plus a generator, and the language halves *are* there. Their Install rows
    answer with the nixpkgs names.
-5. **The boot splash cannot be re-themed at runtime.** Style > Unlock says so
+6. **The boot splash cannot be re-themed at runtime.** Style > Unlock says so
    rather than failing: the initrd is built from your configuration, so which
    splash you get is decided at rebuild time. Everything else under Style
    still follows the theme live.

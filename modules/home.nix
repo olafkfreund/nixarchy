@@ -620,6 +620,35 @@ in
       '';
     };
 
+    # Same extension point, on the other hook Omarchy already runs:
+    # default/hypr/autostart.lua ends its startup with `omarchy-hook post-boot`.
+    #
+    # A notification rather than a window. The installer leaves /etc/nixos as a
+    # repository with one staged, never-committed tree -- so there is something
+    # real to say -- but a terminal that seizes the screen on a first-ever boot
+    # arrives before the user has signed in to anything, which makes the one
+    # answer they can give "dismiss". The nudge is a notification they can act
+    # on when they are ready, and the script's own --check decides whether
+    # there is any point showing it: already committed and pushed, no agent
+    # chosen yet, or already answered once, and it stays quiet.
+    xdg.configFile."omarchy/hooks/post-boot.d/config-repo" = {
+      executable = true;
+      text = ''
+        #!/usr/bin/env bash
+        ${cfg.package}/bin/nixarchy-config-repo --check || exit 0
+
+        # --exec makes it clickable, which is the whole reason a notification
+        # works here at all: acting on it is one click when the user is ready,
+        # and ignoring it costs them nothing.
+        ${cfg.package}/bin/omarchy-notification-send \
+          -u normal \
+          "Back up your NixOS configuration" \
+          "Everything this machine is lives in one uncommitted directory. Click to set up a backup." \
+          --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
+            ${cfg.package}/bin/nixarchy-config-repo
+      '';
+    };
+
     # No systemd unit for the shell. Upstream starts it from Hyprland itself:
     #
     #   default/hypr/autostart.lua

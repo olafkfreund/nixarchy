@@ -114,7 +114,7 @@ let
     boot.initrd.kernelModules = [ ];
     boot.kernelModules = [ cpuModule ];
     boot.extraModulePackages = [ ];
-    nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.system;
+    nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.stdenv.hostPlatform.system;
   };
 
   # The exact disko script the generated flake will evaluate to. The reference

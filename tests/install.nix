@@ -241,10 +241,20 @@ pkgs.testers.runNixOSTest {
     import time
     import subprocess
     started = time.time()
-    print(installer.succeed(
-        "nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=1800))
+    # execute, not succeed. The dashboard sends every phase to a log file and
+    # keeps the screen for the progress bar, so a failed install prints nothing
+    # but the palette escapes -- and a test that asserts on that has no idea
+    # what went wrong. Take the status, then print the log either way, then
+    # assert. The log is the only place the answer ever exists.
+    rc, out = installer.execute(
+        "nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=1800)
     elapsed = int(time.time() - started)
     print(f"install_seconds={elapsed}")
+    print(out)
+    print("=============== /var/log/nixarchy-install.log ===============")
+    print(installer.execute("cat /var/log/nixarchy-install.log 2>&1")[1])
+    print("============================================================")
+    assert rc == 0, f"nixarchy-install exited {rc}; the log above says why"
 
     # Asserted from this side, while the target is still mounted: it localises
     # a failure to "the install" rather than "the boot", which are very

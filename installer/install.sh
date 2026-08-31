@@ -588,9 +588,18 @@ reuse_baked_initrd() {
     return 0
   fi
 
+  # The Nix lines are printf, not part of the heredoc: writeShellApplication
+  # runs shellcheck over this file, an unquoted heredoc is shell as far as it
+  # is concerned, and `boot.initrd.x = lib.mkForce [...]` reads to it as a
+  # command called `boot.initrd.x` with a stray `=`. A quoted heredoc for the
+  # prose and printf for the two generated lines keeps both readers happy.
+  local avail forced
+  avail=$(printf '"%s" ' @initrdmodules@)
+  forced=$(printf '"%s" ' @initrdforced@)
+
   {
     head -n -1 "$file"
-    cat <<PIN
+    cat <<'PIN'
 
   # ---- added by the nixarchy installer -------------------------------------
   # The initrd this machine boots is the one that came on the installer, which
@@ -603,9 +612,9 @@ reuse_baked_initrd() {
   #
   # Delete this block to use exactly what was detected on this machine. That
   # is a rebuild, and it needs a network the first time.
-  boot.initrd.availableKernelModules = lib.mkForce [ $(printf '"%s" ' @initrdmodules@) ];
-  boot.initrd.kernelModules = lib.mkForce [ $(printf '"%s" ' @initrdforced@) ];
 PIN
+    printf '  boot.initrd.availableKernelModules = lib.mkForce [ %s];\n' "$avail"
+    printf '  boot.initrd.kernelModules = lib.mkForce [ %s];\n' "$forced"
     tail -n 1 "$file"
   } >"$file.pinned" && mv "$file.pinned" "$file"
 

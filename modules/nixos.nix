@@ -67,7 +67,7 @@ in
   imports = [
     inputs.hyprland.nixosModules.default
     (import ./apps.nix inputs)
-    (import ./local-ai.nix inputs)
+    ./local-ai.nix
   ];
 
   options.programs.nixarchy = {

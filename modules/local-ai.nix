@@ -1,4 +1,3 @@
-inputs:
 {
   config,
   lib,
@@ -254,8 +253,7 @@ in
     services.ollama = {
       enable = true;
       package = ollamaPackage;
-      host = aiCfg.host;
-      port = aiCfg.port;
+      inherit (aiCfg) host port;
       loadModels = lib.optional aiCfg.pullModel aiCfg.model;
 
       environmentVariables = {

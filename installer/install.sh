@@ -544,7 +544,19 @@ generate_hardware_config() {
 # initrd -- which the medium can build from what it carries.
 reuse_baked_initrd() {
   local file=$1 detected m
-  local baked=" @initrdmodules@ "
+  local baked avail_src forced_src
+
+  # The list depends on the answer to the encryption question: LUKS pulls a
+  # dozen crypto modules into the initrd, so the two baked initrds have
+  # different module sets and pinning to the wrong one matches neither.
+  if [ "$encrypt" = "yes" ]; then
+    avail_src="@initrdmodules@"
+    forced_src="@initrdforced@"
+  else
+    avail_src="@initrdmodulesplain@"
+    forced_src="@initrdforcedplain@"
+  fi
+  baked=" $avail_src "
 
   detected=$(sed -n 's/.*boot\.initrd\.availableKernelModules = \[\(.*\)\];.*/\1/p' "$file" |
     tr -d '"')
@@ -579,6 +591,21 @@ reuse_baked_initrd() {
   #
   # Both lists: availableKernelModules is what may be loaded, kernelModules is
   # what is loaded unconditionally, and the profile adds to both.
+  # The comment goes first. Run the other way round, the sed below also
+  # matches the mkForce line just written and comments out the pin, which
+  # is exactly as broken as doing nothing and much harder to see.
+  # Commented as well, so the reader sees what was detected here rather than
+  # only what replaced it.
+  sed -i \
+    -e 's|^\( *\)boot\.initrd\.availableKernelModules|\1# Detected on this machine, and already covered by the module set nixarchy\
+\1# installs, so it is commented out: leaving it in would mean building an\
+\1# initrd instead of copying the one that came with the installer.\
+\1#\
+\1# Uncomment it to use exactly what was detected here. That is a rebuild,\
+\1# and it needs a network the first time.\
+\1# boot.initrd.availableKernelModules|' \
+    "$file"
+
   # The file ends with its closing brace, and the pin has to go inside it.
   # Guarded rather than assumed: if nixos-generate-config ever stops ending
   # that way, this leaves the file alone rather than producing a flake that
@@ -594,8 +621,10 @@ reuse_baked_initrd() {
   # command called `boot.initrd.x` with a stray `=`. A quoted heredoc for the
   # prose and printf for the two generated lines keeps both readers happy.
   local avail forced
-  avail=$(printf '"%s" ' @initrdmodules@)
-  forced=$(printf '"%s" ' @initrdforced@)
+  # shellcheck disable=SC2086  # deliberate word splitting: a module per word
+  avail=$(printf '"%s" ' $avail_src)
+  # shellcheck disable=SC2086
+  forced=$(printf '"%s" ' $forced_src)
 
   {
     head -n -1 "$file"
@@ -617,18 +646,6 @@ PIN
     printf '  boot.initrd.kernelModules = lib.mkForce [ %s];\n' "$forced"
     tail -n 1 "$file"
   } >"$file.pinned" && mv "$file.pinned" "$file"
-
-  # Commented as well, so the reader sees what was detected here rather than
-  # only what replaced it.
-  sed -i \
-    -e 's|^\( *\)boot\.initrd\.availableKernelModules|\1# Detected on this machine, and already covered by the module set nixarchy\
-\1# installs, so it is commented out: leaving it in would mean building an\
-\1# initrd instead of copying the one that came with the installer.\
-\1#\
-\1# Uncomment it to use exactly what was detected here. That is a rebuild,\
-\1# and it needs a network the first time.\
-\1# boot.initrd.availableKernelModules|' \
-    "$file"
 }
 
 install_flake_dir() {

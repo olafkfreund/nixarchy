@@ -248,6 +248,8 @@
                 "@kbd@"
                 "@initrdmodules@"
                 "@initrdforced@"
+                "@initrdmodulesplain@"
+                "@initrdforcedplain@"
               ]
               [
                 "${self.packages.${system}.flake-template}"
@@ -268,6 +270,13 @@
                 # And the ones it loads unconditionally, which the same pin has
                 # to cover: an imported profile sets this list too.
                 (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.kernelModules)
+                # And the same two for an unencrypted install. They are not the
+                # same lists: LUKS adds a dozen crypto modules to the initrd, so
+                # a machine installed without encryption that pinned the
+                # encrypted set would match neither baked initrd and build a
+                # third.
+                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.availableKernelModules)
+                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.kernelModules)
               ]
               (builtins.readFile ./installer/install.sh);
         };

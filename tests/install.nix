@@ -246,11 +246,11 @@ pkgs.testers.runNixOSTest {
     # but the palette escapes -- and a test that asserts on that has no idea
     # what went wrong. Take the status, then print the log either way, then
     # assert. The log is the only place the answer ever exists.
-    print("preconditions:", installer.execute(
-        "id -u; ls -d /sys/firmware/efi 2>&1; ls -l /dev/vdb")[1])
+    # Not `bash -x`. install.sh says at the top that a passphrase and a
+    # password hash pass through it, so a trace would put both in a build log
+    # that anyone can read. The installer's own log is the diagnostic.
     rc, out = installer.execute(
-        "bash -x $(command -v nixarchy-install) --answers /etc/nixarchy/answers 2>&1",
-        timeout=1800)
+        "nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=1800)
     elapsed = int(time.time() - started)
     print(f"install_seconds={elapsed}")
     print(out)

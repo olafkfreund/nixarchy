@@ -90,10 +90,20 @@
   # flake-registry = "" turns off the global fallback, so anything not pinned
   # here fails saying so rather than timing out against a network that may not
   # exist yet.
-  nix.registry = {
-    nixpkgs.flake = inputs.nixpkgs;
-    nixarchy.flake = inputs.self;
-  };
+  # nixpkgs only, deliberately.
+  #
+  # A `nixarchy.flake = inputs.self` entry here looks like the obvious
+  # companion and cannot work: the registry file records the flake's identity,
+  # and `self` is a path in a store when the flake is evaluated locally but a
+  # github pin on an installed machine. The two are never the same string, so
+  # the installed system's etc -- and therefore its toplevel -- can never match
+  # anything built anywhere else.
+  #
+  # That is not just a test problem. It means the machine's own toplevel is
+  # unreproducible from the flake it was installed from, which is Invariant 1,
+  # and it is why checks.install went red the moment this was added. nixpkgs is
+  # safe because both sides resolve the same lock entry to the same store path.
+  nix.registry.nixpkgs.flake = inputs.nixpkgs;
   nix.settings.flake-registry = "";
 
   # `nh os switch` is the loop the user lives in, and it only works with no

@@ -170,6 +170,116 @@ require_root_and_uefi() {
 # several hundred files including mod-dh-ansi-us-fatz-wide, which is not a
 # thing to offer a person who has just booted a disk. Upstream shows about
 # fifty human-readable layouts with English first; so does this.
+# Getting online, on the image that needs to be.
+#
+# The offline image carries the whole desktop and skips all of this: asking
+# someone to join a network so they can then not use it is a question with no
+# purpose. The network image cannot do anything without one, and the machine it
+# is installing onto may never have had a network configured -- the disk is
+# empty, and the desktop that would normally ask is the thing being installed.
+# So the installer has to ask, and this is the only place it can.
+#
+# Ethernet is not offered as a choice because it is not one. NetworkManager
+# takes DHCP on a plugged cable by itself, so a wired machine never sees this
+# screen, and a wired machine whose cable is not in yet wants "Try again"
+# rather than a menu entry.
+network_ready() {
+  # The real requirement, tested directly: not "is an interface up" and not
+  # NetworkManager's own connectivity check, which pings a URL that NixOS
+  # leaves unset and so reports "unknown" on a perfectly good network. What
+  # the install needs is the binary cache, so that is what is checked.
+  curl -sfI --max-time 8 https://cache.nixos.org/nix-cache-info >/dev/null 2>&1
+}
+
+connect_wifi() {
+  ui_screen "Let's get you on Wi-Fi..."
+  nmcli radio wifi on >/dev/null 2>&1 || true
+
+  # --rescan yes because the cached list is empty on a radio that came up
+  # seconds ago, which is every boot of a live image. Deduplicated on SSID:
+  # one network on three access points is three rows otherwise, and picking
+  # the wrong row of an identical three is a confusing way to fail.
+  local list ssid pw
+  list=$(nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan yes 2>/dev/null |
+    awk -F: 'NF && $1 != "" && !seen[$1]++ { printf "%s\t%s%%\t%s\n", $1, $2, ($3 == "" ? "open" : $3) }' |
+    sort -t"$(printf '\t')" -k2 -rn)
+
+  if [ -z "$list" ]; then
+    ui_left "\e[31mNo networks found.\e[0m"
+    ui_left "\e[90mA USB adapter may need a moment, or the driver may not be on this image.\e[0m"
+    sleep 3
+    return 1
+  fi
+
+  ssid=$(printf '%s\n' "$list" |
+    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select a network" |
+    cut -f1)
+  [ -n "$ssid" ] || return 1
+
+  # Asked for every network, including open ones, where an empty answer is
+  # correct and is passed as no password at all. One prompt that handles both
+  # beats detecting the security column and being wrong about WEP.
+  ui_left "\e[90mLeave blank if the network is open.\e[0m"
+  pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
+
+  if [ -z "$pw" ]; then
+    nmcli device wifi connect "$ssid" || return 1
+  else
+    nmcli device wifi connect "$ssid" password "$pw" || return 1
+  fi
+}
+
+ask_network() {
+  # Only the network image asks. Keyed on that image's own marker rather than
+  # on the absence of the offline one, and the difference is not cosmetic:
+  # checks.install installs unattended, in a sandbox, with no network and no
+  # marker of either kind. It works because its store is seeded, so "no offline
+  # marker" would have made a passing check demand a network and fail. What
+  # this screen is for is the one image that genuinely cannot proceed without
+  # one, and that image says so itself.
+  if [ ! -f /etc/nixarchy-iso-net ]; then
+    return 0
+  fi
+
+  if network_ready; then
+    return 0
+  fi
+
+  # Unattended. There is nobody to ask, so say what is wrong rather than
+  # hanging on a prompt no one will answer.
+  if [ -n "$answers_file" ]; then
+    echo "nixarchy-install: this image installs over the network and there is none." >&2
+    echo "nixarchy-install: connect a cable, or use the offline image, or configure" >&2
+    echo "nixarchy-install: the network before running with --answers." >&2
+    exit 1
+  fi
+
+  while true; do
+    ui_screen "Let's get you online..."
+    ui_left "This image downloads the desktop as it installs, so it needs a network."
+    ui_left "\e[90mA wired connection is picked up on its own -- plug it in and try again.\e[0m"
+    echo
+
+    local choice
+    choice=$(printf '%s\n' "Wi-Fi" "Try again" |
+      gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "No network yet")
+
+    case $choice in
+      "Wi-Fi") connect_wifi || true ;;
+      # Nothing to do but re-test: a cable plugged in during the last screen
+      # has had DHCP running behind it the whole time.
+      "Try again") ;;
+      # gum returns nothing on an interrupt. Leave, rather than loop forever
+      # on a screen someone is trying to escape.
+      *) exit 1 ;;
+    esac
+
+    if network_ready; then
+      return 0
+    fi
+  done
+}
+
 ask_keymap() {
   ui_screen "Let's set up your keyboard..."
   local choice
@@ -756,7 +866,9 @@ main() {
   if [ -n "$answers_file" ]; then
     read_answers "$answers_file"
     validate_answers
+    ask_network
   else
+    ask_network
     ask_keymap
     ask_identity
     ask_device

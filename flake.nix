@@ -230,6 +230,13 @@
             ncurses # clear and tput, which the screens are drawn with
             kbd # loadkeys, and the keymap list
             tzdata # the timezone list
+            # Both only used by ask_network, which the offline image returns
+            # from before it reaches either. Carried anyway rather than
+            # conditionally: this is one script, `nix run .#install` on a stock
+            # ISO needs them, and a runtime input that is missing on one image
+            # is a class of bug that only shows up on that image.
+            curl # the connectivity test -- can we reach the binary cache
+            networkmanager # nmcli, for joining a wireless network
           ];
           # Spliced at build time the way doctor splices @apps@, so the script
           # never has to find these itself and `nix run` works from anywhere.
@@ -404,6 +411,13 @@
         # network away.
         iso = self.nixosConfigurations.iso.config.system.build.isoImage;
 
+        # The same installer, without the desktop on it. Small enough to
+        # download over a hotel connection, and it fetches the closure from
+        # the binary caches instead of carrying it. Needs a working network
+        # before it can do anything, which is what the wizard's first screen
+        # is for.
+        iso-net = self.nixosConfigurations.iso-net.config.system.build.isoImage;
+
         # A VM that installs onto a blank disk, WITH a network -- which
         # checks.install cannot have, because it is a sandboxed derivation and
         # its whole point is that a rebuild afterwards cannot fetch anything.
@@ -439,7 +453,21 @@
         # The live image. See installer/cd.nix.
         iso = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          specialArgs = { inherit inputs; };
+          specialArgs = {
+            inherit inputs;
+            offline = true;
+          };
+          modules = [ ./installer/cd.nix ];
+        };
+
+        # Same module, one argument different. See the `offline` parameter in
+        # installer/cd.nix for what it turns off.
+        iso-net = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = {
+            inherit inputs;
+            offline = false;
+          };
           modules = [ ./installer/cd.nix ];
         };
 

@@ -14,6 +14,16 @@
 # \e]P<index><rrggbb> is the Linux framebuffer console's palette escape. It is
 # silently ignored elsewhere, which is the desired behaviour when someone runs
 # the installer from a terminal emulator that already has its own theme.
+# clear(1), without needing a terminfo database to look itself up in.
+#
+# `clear` is ncurses, and ncurses refuses to emit anything until it has found
+# an entry for $TERM -- so with the strict PATH writeShellApplication builds,
+# it exits 1 and set -e ends the install. The bytes it would have written are
+# these three: home, erase screen, erase scrollback. Every terminal that can
+# display this installer understands them, and a terminal that does not is one
+# where a failed clear was never the interesting problem.
+ui_clear() { printf '\e[H\e[2J\e[3J'; }
+
 ui_palette() {
   printf '\e]P01a1b26'  # black          background
   printf '\e]P1f7768e'  # red
@@ -32,7 +42,7 @@ ui_palette() {
   printf '\e]Pe7dcfff'
   printf '\e]Pfc0caf5'
   ui_init
-  clear
+  ui_clear
 }
 
 # stty first, tput second.
@@ -58,11 +68,14 @@ ui_dimension() {
     if [ "$src" = - ]; then
       size=$(stty size 2>/dev/null) || continue
     else
-      # Readability first: a failed redirect reports itself in the CALLING
-      # shell, so 2>/dev/null inside the substitution does not silence it and
-      # "Permission denied" prints across the installer.
+      # Readable is not openable: /dev/tty passes -r in a process with no
+      # controlling terminal and then fails to open, and the redirect is
+      # performed by the CALLING shell, so 2>/dev/null on stty does not silence
+      # it -- "No such device or address" printed across the installer. The
+      # brace group moves the redirect inside something whose stderr is already
+      # discarded.
       [ -r "$src" ] || continue
-      size=$(stty size <"$src" 2>/dev/null) || continue
+      size=$( { stty size <"$src"; } 2>/dev/null ) || continue
     fi
     [ -n "$size" ] || continue
     if [ "$field" = cols ]; then value=${size#* }; else value=${size%% *}; fi
@@ -141,6 +154,17 @@ UI_LOGO_COLS=92
 ui_init() {
   local cols
   UI_SIZE_UNCONFIRMED=""
+
+  # `clear` and `tput` refuse to run without TERM -- not degrade, refuse: they
+  # print "TERM environment variable not set." and exit 1, which under set -e
+  # ends the install before it has drawn anything or opened its log. Anything
+  # that is not a login shell arrives here with no TERM: a systemd unit (which
+  # installer/cd.nix works around by setting it on the service) and any
+  # non-interactive caller, the VM test among them.
+  #
+  # linux, because the console this is drawn on is the kernel's. A caller that
+  # has a TERM of its own keeps it.
+  export TERM=${TERM:-linux}
 
   # Wait, briefly, for the console to know how big it is.
   #
@@ -253,7 +277,7 @@ ui_screen() {
   # about the console size would otherwise persist for the whole install, and
   # that is exactly what happened.
   ui_init
-  clear
+  ui_clear
   echo
   ui_logo
   # Two tones, as upstream has: what we are doing in plain text, then the

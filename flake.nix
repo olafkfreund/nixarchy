@@ -509,11 +509,14 @@
           pkgs = pkgsFor.${system};
         };
 
-        # tests/install.nix is deliberately NOT wired in here yet: it does not
-        # pass. Wiring a failing check would break `nix flake check` for
-        # everyone and, worse, put the name `checks.install` in the output of a
-        # command people trust to mean "this works". #12 tracks finishing it;
-        # #13 wires it into CI once it is green.
+        # Installs onto a blank disk, reboots into the result on the
+        # bootloader the installer wrote, and asserts a rebuild builds
+        # nothing. See tests/install.nix for why the second machine is not a
+        # normal test node.
+        install = import ./tests/install.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
 
         vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
 

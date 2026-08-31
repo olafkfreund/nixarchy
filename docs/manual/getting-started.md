@@ -105,6 +105,50 @@ desktop is up has no way to type into it — the machine simply waits. Upstream'
 manual carries the same warning because people hit it. Use a wired keyboard for
 the first boot, or choose an unencrypted install with Ctrl+C.
 
+## Configuring it, once you are in
+
+Everything is behind one key.
+
+![The desktop, first boot](../img/desktop/desktop.jpg)
+
+**`Super + Space`** opens the menu — the same one upstream has, because it *is*
+upstream's. Nothing about the desktop was reimplemented.
+
+![The Omarchy menu](../img/desktop/menu.jpg)
+
+**`Super + K`** shows every key binding, which is the faster way in if you do
+not know what you are looking for yet.
+
+### Install ▸
+
+![The Install menu](../img/desktop/install.jpg)
+
+This is where nixarchy differs, and the difference is the whole point. Upstream's
+Install rows run `pacman -S`. Here they **write a line into
+`~/.config/nixarchy/apps.nix`** and nothing is installed until you apply.
+
+That is not a limitation being worked around. It is what makes the machine
+describable: an app you picked is a line someone can read, in a file you own,
+which survives every rebuild — and one you did not pick cannot linger because
+nothing ever installed it imperatively.
+
+Pick what you want, then **Install ▸ Apply changes**, which copies the selection
+into your flake and runs `nh os switch`.
+
+### Install ▸ Search
+
+![Searching all of nixpkgs from the menu](../img/desktop/search-results.jpg)
+
+Omarchy's menu offers 56 applications. **Search** offers the rest of NixOS: one
+fuzzy picker over every nixpkgs package, every NixOS option and the app
+selection — 137,526 rows in that screenshot, 3,554 of them matching
+`tailscale` — with each entry's type, default and documentation in the preview.
+
+The preview is the part worth noticing. It does not just name the package; it
+shows what selecting it *writes*. `tailscale.enable = true;` is a line you could
+have typed yourself, and the menu is only saving you the trip to
+search.nixos.org.
+
 ## Or: add it to NixOS you already run
 
 If the machine already runs NixOS, you do not want the ISO. The rest of this

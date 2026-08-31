@@ -341,13 +341,68 @@ pkgs.testers.runNixOSTest {
     # the only place it is read.
     for home in [".agents/skills", ".claude/skills", ".codex/skills",
                  ".pi/agent/skills"]:
-        for skill in ["nixarchy", "nixos", "diagnose-crash"]:
+        for skill in ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
+                      "nixos-services", "nixos-secrets", "nixos-performance",
+                      "nixos-security", "nixos-doctor", "nixos-config-repo",
+                      "diagnose-crash"]:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
             # -e follows the link: a link into a store path that is not in this
             # closure would pass -L and fail here, which is the stale case.
             machine.succeed(f"test -e /home/omarchy/{home}/{skill}/SKILL.md")
         machine.fail(f"test -e /home/omarchy/{home}/omarchy")
     print("agent skills linked into all four agent homes, under the new names")
+
+    # The config-repo nudge, and the two ways it is supposed to stay silent.
+    #
+    # The hook is the whole delivery mechanism: default/hypr/autostart.lua ends
+    # startup with `omarchy-hook post-boot`, which runs everything in this
+    # directory. Without the file there is no nudge at all, and nothing else in
+    # this test would notice.
+    machine.succeed(
+        "test -x /home/omarchy/.config/omarchy/hooks/post-boot.d/config-repo")
+
+    # It must call --check first and bail on a non-zero exit. A hook that
+    # notifies unconditionally is the failure mode this whole design exists to
+    # avoid, and it looks identical to a working one until it annoys someone.
+    machine.succeed(
+        "grep -q 'nixarchy-config-repo --check || exit 0' "
+        "/home/omarchy/.config/omarchy/hooks/post-boot.d/config-repo")
+
+    # Silence, gate one: no default agent. Omarchy deliberately ships without
+    # one, so this is the state of every machine whose owner has not finished
+    # setting up -- exactly who must not be interrupted. /etc/nixos here is a
+    # bare directory (activationScripts.testFlakeDir), so there is genuinely
+    # something to nudge about; the agent gate is the only reason it is quiet,
+    # which is what makes this an honest test of that gate.
+    machine.succeed("su - omarchy -c 'test -z \"$(omarchy-default-agent)\"'")
+    machine.fail("su - omarchy -c 'nixarchy-config-repo --check'")
+    print("config-repo nudge stays silent until an agent is set up")
+
+    # Silence, gate two: a configuration already in git with a remote. Nothing
+    # here is left for the nudge to offer, and asking anyway is how a user
+    # learns to dismiss Nixarchy's notifications without reading them.
+    #
+    # Checked against a repo of its own rather than /etc/nixos, so the assertion
+    # is about the detection and not about what the installer happens to leave
+    # behind. The done marker is removed first: --check short-circuits on it,
+    # which would let this pass without testing anything.
+    machine.succeed("su - omarchy -c 'rm -f ~/.local/state/omarchy/done/config-repo'")
+    machine.succeed(
+        "su - omarchy -c '"
+        "mkdir -p ~/donerepo && cd ~/donerepo && "
+        "git init -q && git config user.email t@example.com && "
+        "git config user.name Test && "
+        "echo \"{ }\" > flake.nix && git add -A && git commit -qm init && "
+        "git remote add origin https://example.com/x.git'")
+    machine.fail(
+        "su - omarchy -c 'NIXARCHY_FLAKE=$HOME/donerepo nixarchy-config-repo --check'")
+
+    # And having decided that, it says so permanently: a machine that arrived
+    # already in git costs its owner zero notifications, on this boot and every
+    # one after it.
+    machine.succeed(
+        "su - omarchy -c 'test -f ~/.local/state/omarchy/done/config-repo'")
+    print("config-repo nudge marks itself done on an already-published config")
 
     # bin/omarchy-agent-crash reads this path literally, so the rename must
     # never reach it.

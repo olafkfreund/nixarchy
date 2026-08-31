@@ -64,7 +64,16 @@ let
   # call mkpasswd, which salts randomly -- so the installed toplevel would be a
   # different store path on every run and could never match anything seeded
   # here. This is "omarchy", on a disposable VM.
-  passwordHash = "$6$rounds=100000$nixarchytestsalt$0PVDWmxAsp7Bl1nqmv9Nnvm5RG4KP7wQAZ4L6ULDJcmJvYQyLdDPSPBnk1LKtNCdlvHmDPKXQhcYW0m0FQ0lJ1";
+  #
+  # Generated, never typed. The value that stood here before was written out by
+  # hand and was not the hash of anything: the install completed, the machine
+  # booted, and the greeter rejected the only password the test knew, which
+  # reads as a broken desktop rather than a broken fixture. Regenerate with
+  #
+  #   mkpasswd -m sha-512 -R 100000 -S nixarchytestsalt omarchy
+  #
+  # and check it round-trips before trusting it.
+  passwordHash = "$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo.yhxsVpM6bgkeTdCG9D91zOaGX9Bu/YsQTlWLwuQF1SrOL0DY8Bu/V/";
 
   # The NixOS test backdoor, as a module the generated flake can import.
   #

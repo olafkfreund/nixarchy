@@ -283,6 +283,17 @@ pkgs.testers.runNixOSTest {
     print(installer.succeed(
         "nixos-generate-config --no-filesystems --show-hardware-config"))
 
+    tl = "${(targetSystemFor "kvm-amd").toplevel}"
+    print("toplevel valid on host:",
+          installer.execute(f"nix path-info {tl} 2>&1")[1])
+    print("signatures:",
+          installer.execute(f"nix path-info --json {tl} 2>&1 | head -c 600")[1])
+    print("trusted user:", installer.execute("nix config show | grep -E '^(trusted-users|require-sigs|substituters|trusted-substituters) '")[1])
+    print("copy into a scratch store via the substituter:",
+          installer.execute(
+            f"nix copy --to /tmp/scratch --substituters 'auto?trusted=1' {tl} 2>&1 | tail -5")[1])
+    raise Exception("diagnostic run")
+
     # ---- install -------------------------------------------------------
     import time
     import subprocess

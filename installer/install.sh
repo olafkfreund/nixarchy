@@ -222,12 +222,34 @@ ask_device() {
   local exclude list
   exclude=$(boot_medium)
   # TYPE=="disk" drops the ISO's loop devices; the exclusion drops the stick.
-  list=$(lsblk -dnpo NAME,SIZE,MODEL,TYPE | awk '$NF=="disk"' | sed 's/ disk$//')
+  #
+  # The size floor drops what TYPE alone does not: lsblk calls /dev/fd0 a disk,
+  # so a machine with a floppy controller -- which every qemu machine has by
+  # default -- offered a 4K device as the install target, first in the list and
+  # selected by default. Two presses of Return and the summary said
+  # "Disk: /dev/fd0". Anything that cannot hold the closure is not a target.
+  local min_bytes=$((8 * 1024 * 1024 * 1024))
+  list=$(
+    lsblk -dnpo NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}' | while read -r dev; do
+      # zram is compressed RAM and fd is a floppy controller every qemu machine
+      # has. Both answer "disk" and neither is somewhere to put an operating
+      # system.
+      case $dev in
+        /dev/zram* | /dev/fd*) continue ;;
+      esac
+      local_bytes=$(lsblk -bdno SIZE "$dev" 2>/dev/null) || continue
+      [ "${local_bytes:-0}" -ge "$min_bytes" ] || continue
+      printf '%s %s %s\n' "$dev" \
+        "$(lsblk -dno SIZE "$dev" 2>/dev/null | tr -d ' ')" \
+        "$(lsblk -dno MODEL "$dev" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    done | sed 's/[[:space:]]*$//'
+  )
   if [ -n "$exclude" ]; then
     list=$(printf '%s\n' "$list" | grep -v "^$exclude ") || true
   fi
   if [ -z "$list" ]; then
-    echo "nixarchy-install: no disk to install onto." >&2
+    echo "nixarchy-install: no disk large enough to install onto." >&2
+    echo "nixarchy needs at least 8 GiB; nothing attached qualifies." >&2
     exit 1
   fi
   device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}')

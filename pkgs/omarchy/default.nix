@@ -1200,6 +1200,40 @@ stdenvNoCC.mkDerivation {
                 # this is the only companion file it needs.
                 install -Dm644 ${src}/default/sddm/hyprland.lua $out/share/sddm/hyprland.lua
 
+                # Say when the machine is rebuilding.
+                #
+                # The one bar indicator that is ours rather than upstream's,
+                # and it exists because of the difference this distribution is
+                # built on: on Arch the Install menu finishes in seconds, here
+                # it starts a rebuild that runs for minutes behind a desktop
+                # that looks idle. See the file.
+                #
+                # An indicator is a bare .qml in indicators/ -- no manifest --
+                # picked up by name from the list in Indicators.qml, so adding
+                # one means installing the file and naming it there.
+                install -Dm644 ${./switch-indicator.qml} \
+                  $out/share/omarchy/shell/plugins/bar/indicators/SystemSwitch.qml
+
+                # The four properties the indicator inherits and sets. QML
+                # resolves them at runtime, so an upstream rename does not
+                # break the build -- it produces a bar with a dead icon on it,
+                # found by whoever next waits ten minutes for a rebuild with no
+                # sign it started. Checked here instead, where it is a build
+                # failure naming the property that moved.
+                for prop in active activeText inactiveText indicatorHost; do
+                  grep -q "property.* $prop\b" \
+                    $out/share/omarchy/shell/Ui/BarIndicator.qml \
+                    || { echo "BarIndicator no longer has '$prop'; SystemSwitch.qml needs updating" >&2; exit 1; }
+                done
+
+                # --replace-fail: if upstream reorders or renames this list,
+                # the build stops rather than quietly dropping the indicator
+                # and leaving rebuilds invisible again.
+                substituteInPlace $out/share/omarchy/shell/plugins/bar/widgets/Indicators.qml \
+                  --replace-fail \
+                  '[ "Dictation", "ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake" ]' \
+                  '[ "SystemSwitch", "Dictation", "ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake" ]'
+
                 # Wear the snowflake.
                 substitute ${./menu-bar-widget.qml} \
                   $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

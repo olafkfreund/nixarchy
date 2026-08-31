@@ -604,6 +604,10 @@ reuse_baked_initrd() {
 \1# Uncomment it to use exactly what was detected here. That is a rebuild,\
 \1# and it needs a network the first time.\
 \1# boot.initrd.availableKernelModules|' \
+    -e 's|^\( *\)boot\.initrd\.kernelModules|\1# Commented for the same reason, and also because it has to be: the pin\
+\1# below sets this too, and Nix rejects an attribute defined twice in one\
+\1# attrset -- the flake would not parse.\
+\1# boot.initrd.kernelModules|' \
     "$file"
 
   # The file ends with its closing brace, and the pin has to go inside it.

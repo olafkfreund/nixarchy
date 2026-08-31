@@ -274,7 +274,13 @@ pkgs.testers.runNixOSTest {
     installer.wait_for_console_text(r"[Pp]ower(ing)? off|System is powering down|reboot: Power down",
                                     timeout=300)
     time.sleep(5)
-    installer.send_monitor_command("quit")
+    # A backstop for a machine that did not power off, and nothing more. When
+    # poweroff DID work the monitor socket is already gone and this raises
+    # BrokenPipeError -- failing the test on the cleanest possible outcome.
+    try:
+        installer.send_monitor_command("quit")
+    except Exception:
+        pass
     time.sleep(3)
 
     # ---- boot what was installed ---------------------------------------

@@ -784,6 +784,18 @@ nix build github:olafkfreund/nixarchy#iso
 sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
+There are two images, and the difference is what they carry:
+
+| | Size | Needs a network | |
+|---|---|---|---|
+| `#iso` | 5.6 GB | no | carries the desktop; installs by copying |
+| `#iso-net` | 1.5 GB | yes | downloads the desktop as it installs |
+
+Take `#iso` unless the download is the thing you mind. It is the one the tests
+boot every night, it works on a machine that has never had a network, and it is
+faster once you have it. `#iso-net` is a quarter of the download and asks you
+to get online first — its first screen offers Wi-Fi if there is no cable.
+
 No boot menu, no login prompt: the installer is what comes up.
 
 ![Selecting a keyboard layout](docs/img/installer/step-01-keyboard.png)
@@ -811,11 +823,13 @@ Reboot and you are at the desktop. An encrypted install goes straight there —
 the passphrase you typed at boot already proved who you are, so there is no
 second password.
 
-**It does not need a network.** The image carries the desktop rather than
+**`#iso` does not need a network.** The image carries the desktop rather than
 downloading it — 5.6 GB of ISO holding a 15.3 GB closure — so an install is a
 store copy and an activation, not a download. Unplug the cable and it still
 works; `checks.install-iso` proves that by installing with no network device
-present at all. The 56 selectable apps are the exception, and are meant to be:
+present at all. `#iso-net` trades exactly this away: it fetches the same
+closure from `nixarchy.cachix.org` instead, which is why it is 1.5 GB rather
+than 5.6, and why it stops at a Wi-Fi prompt on a machine with no cable. The 56 selectable apps are the exception, and are meant to be:
 they come from the Install menu after first boot, from your own nixpkgs.
 
 **You can answer the questions ahead of time.** `nixarchy-install --answers

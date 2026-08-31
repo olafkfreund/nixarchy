@@ -61,6 +61,13 @@ jobs:
       - name: Build the ISO
         run: nix build .#iso --out-link result --print-build-logs
 
+      # The smaller image, for people who would rather download 1.5 GB and let
+      # the install fetch the rest. Not separately install-tested: it shares
+      # every line of the installer with the image below, and what differs --
+      # downloading rather than copying -- is what checks.install already does.
+      - name: Build the network ISO
+        run: nix build .#iso-net --out-link result-net --print-build-logs
+
       # The image nobody boots is the image that does not boot. This is the
       # same check the nightly runs, against the same expression, so it costs
       # an hour and buys the only guarantee that matters on a release page.
@@ -74,9 +81,15 @@ jobs:
           # on a release's total size, so the image ships in parts. 1900 MiB
           # leaves room under the cap without making a fourth part likely.
           iso=$(echo result/iso/*.iso)
+          net=$(echo result-net/iso/*.iso)
           base="nixarchy-${GITHUB_REF_NAME}.iso"
+          netbase="nixarchy-${GITHUB_REF_NAME}-net.iso"
           rm -rf out && mkdir out
           split -b 1900M -- "$iso" "out/$base.part-"
+
+          # The network image is 1.5 GiB and ships whole. Only the image that
+          # cannot fit gets taken apart.
+          cp -- "$net" "out/$netbase"
 
           # One SHA256SUMS covering the parts *and* the assembled image, so a
           # single `sha256sum -c` after reassembly checks both the download and
@@ -93,11 +106,14 @@ jobs:
             # reports PASS without having checked the image.
             printf '%s  %s\n' \
               "$(sha256sum < "$OLDPWD/$iso" | cut -d' ' -f1)" "$base" >> SHA256SUMS
+            sha256sum "$netbase" >> SHA256SUMS
           )
 
           {
             echo "iso=$base"
+            echo "netiso=$netbase"
             echo "size=$(du -h "$iso" | cut -f1)"
+            echo "netsize=$(du -h "$net" | cut -f1)"
             echo "parts=$(find out -name "$base.part-*" | wc -l)"
           } >> "$GITHUB_OUTPUT"
 
@@ -106,24 +122,40 @@ jobs:
           OMARCHY: ${{ steps.version.outputs.omarchy }}
           ISO: ${{ steps.split.outputs.iso }}
           SIZE: ${{ steps.split.outputs.size }}
+          NETISO: ${{ steps.split.outputs.netiso }}
+          NETSIZE: ${{ steps.split.outputs.netsize }}
         run: |
           # A fixed preamble; --generate-notes appends the PR list under it.
           # The README is the manual, so this says only what someone holding
           # the download needs and links to the rest.
           cat > notes.md <<EOF
-          Omarchy $OMARCHY, packaged for NixOS. The image is $SIZE and carries
-          the whole system closure, so the install copies rather than downloads
-          and needs no network.
+          Omarchy $OMARCHY, packaged for NixOS. Two images, and the difference
+          is what they carry.
 
-          GitHub will not take a file this size, so the image is split. Put it
-          back together and check it:
+          **\`$ISO\`** — $SIZE, carries the whole system closure. The install
+          copies rather than downloads and needs no network at all. Take this
+          one unless the download is what you mind.
+
+          GitHub will not accept a file that size, so it is split. Put it back
+          together and check it:
 
           \`\`\`
           cat $ISO.part-* > $ISO
-          sha256sum -c SHA256SUMS
+          sha256sum -c --ignore-missing SHA256SUMS
           \`\`\`
 
-          Then write it to a USB stick and boot it. See
+          **\`$NETISO\`** — $NETSIZE, downloads the desktop as it installs.
+          One file, no reassembly, and it needs a working network: its first
+          screen offers Wi-Fi if there is no cable.
+
+          \`\`\`
+          sha256sum -c --ignore-missing SHA256SUMS
+          \`\`\`
+
+          (\`--ignore-missing\` because one SHA256SUMS covers both images, and
+          nobody downloads both.)
+
+          Then write one to a USB stick and boot it. See
           [Fresh-machine install](https://github.com/${{ github.repository }}#fresh-machine-install)
           for what happens next.
           EOF

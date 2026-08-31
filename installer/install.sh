@@ -550,16 +550,22 @@ reuse_baked_initrd() {
     tr -d '"')
   [ -n "$detected" ] || return 0
 
+  # Every miss, not the first. One of these means a rebuild either way, and
+  # naming them all means whoever widens the set in installer/host.nix does it
+  # once rather than once per module.
+  local missing=""
   for m in $detected; do
     case $baked in
       *" $m "*) ;;
-      *)
-        echo "hardware: $m is not on this medium; keeping the detected initrd" >&2
-        echo "hardware: the install will build one, which needs a network." >&2
-        return 0
-        ;;
+      *) missing="$missing $m" ;;
     esac
   done
+
+  if [ -n "$missing" ]; then
+    echo "hardware: not on this medium:$missing" >&2
+    echo "hardware: keeping the detected initrd, which the install must build." >&2
+    return 0
+  fi
 
   # Commented, not deleted. It is the user's file and the detection was real:
   # uncomment the line and rebuild to use exactly what this machine reported.

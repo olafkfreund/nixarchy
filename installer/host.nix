@@ -70,6 +70,10 @@
     "sdhci_pci"
     "sdhci_acpi"
     "rtsx_pci_sdmmc"
+    # qemu's default machine has a floppy controller, so every VM install
+    # detects this and would otherwise be refused the baked initrd over a
+    # drive nobody has had for twenty years.
+    "floppy"
   ];
 
   # Point `nixpkgs#...` and `nixarchy#...` at what this machine was built from.

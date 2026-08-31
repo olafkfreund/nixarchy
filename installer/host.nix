@@ -35,6 +35,26 @@
     flake = "/etc/nixos";
   };
 
+  # Point `nixpkgs#...` and `nixarchy#...` at what this machine was built from.
+  #
+  # Without this, an indirect flake reference sends nix to
+  # channels.nixos.org for the global registry and then downloads a nixpkgs --
+  # a different one from the machine's, so `nix shell nixpkgs#foo` can hand you
+  # a binary built against a different glibc than the system's, and does it
+  # after a download the machine did not need. With it, both resolve to store
+  # paths that are already here, which also means they resolve with no network
+  # at all: the first thing someone does on a freshly installed laptop is often
+  # `nix shell nixpkgs#<the wifi tool they need>`.
+  #
+  # flake-registry = "" turns off the global fallback, so anything not pinned
+  # here fails saying so rather than timing out against a network that may not
+  # exist yet.
+  nix.registry = {
+    nixpkgs.flake = inputs.nixpkgs;
+    nixarchy.flake = inputs.self;
+  };
+  nix.settings.flake-registry = "";
+
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or
   # picks up $NH_FLAKE from somewhere else entirely.

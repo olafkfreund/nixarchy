@@ -13,28 +13,98 @@
 # Hyprland fetch before the first question. This is the answer to that, and it
 # is what Omarchy ships.
 #
-# Still online at this stage. Baking the closure onto the image (#15) and
-# making evaluation work with no network (#16) come after, and are separate
-# because they fail in different places and are worth telling apart.
+# This image installs with no network. Nothing is fetched, and the installer
+# is told not to try -- see `substituters` below for why being told matters as
+# much as having the paths.
 #
-# An ISO can only install from a PUBLISHED commit.
+# Two halves, which fail in different places and are worth telling apart:
+#
+#   storeContents puts the OUTPUTS on the image, so nixos-install copies a
+#   desktop instead of downloading one. A gap here reads as
+#   "cannot build ... hyprland ... no substituter".
+#
+#   extraDependencies puts the SOURCES on it, so `nix` can evaluate the
+#   generated flake at all. A gap here reads as "unable to download
+#   'https://api.github.com/...'", and it happens BEFORE any copying, which
+#   is what makes it easy to mistake for the other one.
+#
+# An ISO can still only install from a PUBLISHED commit.
 #
 # The flake this writes to /etc/nixos pins `github:olafkfreund/nixarchy/<rev>`,
-# and <rev> is whatever commit the image was built from. Build an ISO from an
-# unpushed commit and the install dies partway through with a 404 on
-# github.com/.../archive/<rev>.tar.gz -- after the disk has been partitioned,
-# which is the worst possible moment for it.
-#
-# Nothing here can fix that while the image is online: nix prefers to fetch a
-# locked github: input rather than resolve it from a store path that already
-# has the right narHash, so carrying the source on the image does not help.
-# Offline it does resolve from the store -- demonstrated in tests/install.nix
-# -- which is why #16 is what actually removes this constraint, and why #19
-# builds release images from tags.
+# and <rev> is whatever commit the image was built from. Offline that resolves
+# from the store by narHash and the rev is never dereferenced -- so an image
+# built from an unpushed commit installs fine and then hands its owner a flake
+# that 404s on the first `nix flake update`. Offline installs hide this rather
+# than fixing it; #19 builds release images from tags, which does fix it.
 #
 # nixosModules.nixarchy is deliberately NOT imported. The live image does not
 # need a desktop; importing the module would make it one, at several gigabytes,
 # to run a text installer for ninety seconds.
+let
+  # Every locked input, transitively, as a store path.
+  #
+  # Not the top-level inputs: hyprland does not follow nixpkgs, so it brings
+  # its own nixpkgs, aquamarine, hyprlang, hyprutils, hyprcursor, hyprgraphics,
+  # hyprwayland-scanner and xdph, and each of those brings more. Collected
+  # rather than listed, because a hand-written list goes stale on the next bump
+  # and the staleness only shows up as a network fetch on a machine that has no
+  # network.
+  collectInputs =
+    flake: [ flake.outPath ] ++ lib.concatMap collectInputs (lib.attrValues (flake.inputs or { }));
+
+  inputSources = lib.unique (collectInputs inputs.self);
+
+  # Both disk modes, because the installer offers both.
+  #
+  # The image bakes a machine that does not exist -- hostname "nixarchy", the
+  # placeholder disk -- so that the machine the user does install shares
+  # everything expensive with it. Encryption is the one answer that changes
+  # the shared part: 51 derivations differ between the two, 180 MiB, all of
+  # them unit files and etc fragments. Small, but not present is not present,
+  # and on an image with no network a missing text derivation means building
+  # stdenv to produce it, which means the source bootstrap, which means the
+  # install stops.
+  #
+  # Found the hard way: an image carrying only the encrypted reference
+  # installs an encrypted machine perfectly and dies partway through an
+  # unencrypted one.
+  referenceConfigs = map (c: c.config) [
+    inputs.self.nixosConfigurations.reference
+    inputs.self.nixosConfigurations.reference-unencrypted
+  ];
+
+  references = map (c: c.system.build) referenceConfigs;
+
+  # What an installed machine will have to BUILD, and therefore what it needs
+  # the parts for.
+  #
+  # A real machine gets a hardware-configuration.nix that the reference host
+  # does not have, and that is not a detail: it changes the initrd, which
+  # changes the module closure, which changes the toplevel. Twelve derivations
+  # differ -- measured, not guessed -- and every one of them has to be built on
+  # the target, from parts, with no network.
+  #
+  # inputDerivation is nixpkgs' own answer to "realise everything this
+  # derivation is built FROM". Seeding it for the toplevel, the initrd and etc
+  # puts their build inputs on the image, so building a differently-configured
+  # one is a matter of assembling parts rather than of finding a compiler.
+  #
+  # Without it the install gets a long way -- partitions the disk, evaluates
+  # the flake offline, starts copying -- and then tries to build the initrd,
+  # finds no stdenv to build it with, works backwards to the source bootstrap
+  # and dies fetching a perl tarball from CPAN.
+  buildInputsOfWhatChanges =
+    map (c: c.system.build.toplevel.inputDerivation) referenceConfigs
+    ++ map (c: c.system.build.initialRamdisk.inputDerivation) referenceConfigs
+    ++ map (c: c.system.build.etc.inputDerivation) referenceConfigs
+    # The module closure is shrunk from this tree by kmod, and neither the tree
+    # nor the tools are in any runtime closure.
+    ++ map (c: c.system.modulesTree) referenceConfigs
+    ++ [
+      pkgs.kmod
+      pkgs.nukeReferences
+    ];
+in
 {
   imports = [ "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix" ];
 
@@ -145,23 +215,138 @@
     volumeID = "NIXARCHY";
     makeEfiBootable = true;
     makeUsbBootable = true;
+
+    # The desktop, on the image. This is the difference between an install
+    # that copies and one that downloads, and it is most of the image's size:
+    # the reference closure is 15.3 GiB unpacked, and the squashfs is zstd.
+    #
+    # The REFERENCE host's closure, not the user's. Their hostname, username
+    # and disk differ, so their toplevel is a different store path and is not
+    # here -- but everything expensive underneath it is, and the handful of
+    # text derivations that differ are built on the spot from the build
+    # environment below.
+    #
+    # Not nixosConfigurations.vm: it imports qemu-vm.nix and carries guest
+    # tooling nobody installs on metal.
+    storeContents =
+      map (r: r.toplevel) references
+      # The installer runs this before anything else, and it is not part of
+      # any runtime closure.
+      ++ map (r: r.diskoScript) references;
   };
 
-  # The same caches the installed machine uses, so an install from this image
-  # never compiles a compositor. Keys copied from modules/nixos.nix -- do not
-  # retype them.
+  # Everything needed to EVALUATE the generated flake, and to build the few
+  # derivations that are genuinely per-machine.
+  #
+  # extraDependencies rather than storeContents for these: the option's stated
+  # purpose is "paths that must be in the store for this system to be usable",
+  # which is exactly the claim being made.
+  system.extraDependencies =
+    inputSources
+    ++ [
+      # nixos-install builds roughly twenty derivations for the real hostname,
+      # user and disk -- etc, users-groups.json, system-path, the bootloader
+      # entry, the toplevel -- and their build inputs are in no runtime
+      # closure. Measured by installing offline and reading what was missing,
+      # not guessed.
+      #
+      # isoImage.includeSystemBuildDependencies would cover this and is not
+      # usable: it pulls the entire build graph of the image's own system,
+      # compilers and source tarballs included, at tens of gigabytes.
+      pkgs.stdenv
+      pkgs.stdenvNoCC
+      pkgs.stdenv.cc
+      pkgs.gnumake
+      pkgs.gnutar
+      pkgs.diffutils
+      pkgs.patchelf
+      pkgs.file
+      pkgs.findutils
+      pkgs.gawk
+      pkgs.gnused
+      pkgs.gnugrep
+      pkgs.gzip
+      pkgs.xz
+      pkgs.bash
+      pkgs.bashInteractive
+      pkgs.coreutils
+      pkgs.perl
+      # systemd-boot-builder.
+      pkgs.python3
+      pkgs.jq
+    ]
+    ++ buildInputsOfWhatChanges;
+
   nix.settings = {
-    substituters = [
-      "https://cache.nixos.org"
-      "https://nixarchy.cachix.org"
-      "https://hyprland.cachix.org"
-    ];
-    trusted-public-keys = [
-      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-      "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
-      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
+    # Nothing to fetch, and nothing that may try.
+    #
+    # An empty list is not the same as an unreachable one. With a substituter
+    # configured and no network, nix waits out a connection timeout for every
+    # path before falling back to the local store, and an install that is
+    # actually working looks hung for several minutes. Saying there are none
+    # makes the store the first answer rather than the last.
+    #
+    # It also means the image's completeness is tested by everyone who uses
+    # it, rather than silently patched over on machines that happen to have a
+    # network.
+    substituters = lib.mkForce [ ];
+
+    # An indirect reference -- `nixpkgs#hello`, or any flake input that is not
+    # already locked -- sends nix to channels.nixos.org for the global
+    # registry. There is no network, so that is a timeout rather than an
+    # answer.
+    flake-registry = "";
+
+    # Never re-fetch a locked input whose source is already here.
+    #
+    # This is the line that makes the image offline, and it is not obvious.
+    # Every input's source IS on the image, and `nix eval --offline` resolves
+    # all of them from the store by narHash -- but the default tarball-ttl is
+    # an hour, so a locked github: input older than that is considered stale
+    # and nix goes to fetch it BEFORE looking in the store. With no network
+    # that is not a fallback, it is the end of the install:
+    #
+    #   error: unable to download
+    #   'https://github.com/olafkfreund/nixarchy/archive/<rev>.tar.gz':
+    #   Could not resolve host: github.com
+    #
+    # -- after the disk has been partitioned. An infinite ttl makes the store
+    # the first answer.
+    #
+    # This is the `tarball-ttl` half of what `nix --offline` sets. The other
+    # half, `substitute = false`, must NOT be set: nixos-install builds into
+    # the target store and copies from this one by declaring it a substituter,
+    # so turning substitution off would leave it rebuilding a desktop it
+    # already has.
+    tarball-ttl = 4294967295;
+
+    # Fail rather than hang, for anything that still tries. Five attempts at
+    # fifteen seconds each is over a minute of silence per path on an image
+    # that by construction has nothing to download.
+    connect-timeout = 1;
+    download-attempts = 0;
+
+    # flake-registry is a flakes setting, and nix.conf is validated at build
+    # time: setting it without this fails the ISO build with "Ignoring setting
+    # 'flake-registry' because experimental feature 'flakes' is not enabled",
+    # which is at least an honest error rather than a silently ignored line.
+    #
+    # install.sh passes --extra-experimental-features on every nix call
+    # because a stock live medium may not have them. This is not a stock live
+    # medium.
+    experimental-features = [
+      "nix-command"
+      "flakes"
     ];
   };
+
+  # Read by installer/install.sh, which uses it to decide that it is running
+  # from this image and must not reach for a substituter. A marker file rather
+  # than a kernel parameter: the installer can also be run by hand from a
+  # mounted image, and the file travels with the filesystem.
+  environment.etc."nixarchy-iso".text = ''
+    ${inputs.self.shortRev or "dirty"}
+  '';
 
   system.stateVersion = "25.05";
 }

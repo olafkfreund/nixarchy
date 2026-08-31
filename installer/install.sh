@@ -47,6 +47,26 @@ NIX_FLAGS=(--extra-experimental-features "nix-command flakes")
 # these the first install compiles Hyprland from source. Keys copied from
 # nix.settings in modules/nixos.nix -- do not retype them.
 SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
+TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
+
+# ...unless we are the offline image, which carries the whole closure.
+#
+# Not an optimisation. With a substituter configured and no network, nix waits
+# out a connection timeout for EVERY path before falling back to the local
+# store, so an install that is working perfectly sits there looking hung for
+# several minutes. Saying there are no substituters makes the store the first
+# answer rather than the last.
+#
+# It also means the image's completeness is tested by everyone who boots it. A
+# path missing from storeContents would otherwise be quietly downloaded by
+# anyone who happens to have a network, and found by the one person who does
+# not.
+#
+# installer/cd.nix writes the marker.
+if [ -f /etc/nixarchy-iso ]; then
+  SUBSTITUTERS=""
+  TRUSTED_KEYS=""
+fi
 
 # Copy the system rather than rebuild it.
 #
@@ -65,7 +85,6 @@ SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
 # when a copy is available. It still builds when it is not, so nothing is lost
 # where the reasoning did hold.
 SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
-TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
 
 dry_run=false
 answers_file=""
@@ -524,9 +543,48 @@ run_install() {
     "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1 |
     head -40 || true
 
+  # Build here, then install what was built. NOT `nixos-install --flake`.
+  #
+  # --flake makes nixos-install run `nix build --store /mnt`, and --store sets
+  # the EVALUATION store as well as the build one. Evaluating the generated
+  # flake against /mnt means resolving every locked input against a store that
+  # has just been created and contains nothing, so nix goes to the network for
+  # sources that are sitting in the store one directory up:
+  #
+  #   error: unable to download
+  #   'https://github.com/olafkfreund/nixarchy/archive/<rev>.tar.gz'
+  #
+  # -- on an image built precisely so that it would not have to. Building the
+  # toplevel here first evaluates against THIS store, where the sources are,
+  # and hands nixos-install a path with --system, which only copies.
+  #
+  # It is also the faster order. The build is the same either way, but this
+  # way it happens once, in the store that already holds every dependency,
+  # instead of inside a target store that has to have each one copied to it
+  # before it can be used.
+  local system
+  system=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
+    "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
+
+  # Checked, because set -e will not check it here. The whole install runs as
+  # `{ ...; } || rc=$?` so the dashboard can report a failure, and inside a
+  # compound command whose status is tested, errexit does not fire. A failed
+  # build therefore returned an empty string, and nixos-install was called with
+  # `--system ""` -- which it reads as no system at all, falls back to looking
+  # for a flake in the current directory, and reports
+  #
+  #   error: could not find a flake.nix file
+  #
+  # naming nothing that has anything to do with what actually went wrong.
+  if [ -z "$system" ]; then
+    echo "nixarchy-install: the system did not build; nothing was installed." >&2
+    echo "The build output is above, in /var/log/nixarchy-install.log." >&2
+    return 1
+  fi
+
   # nixos-install takes --option, not --extra-experimental-features: it is not
   # a nix subcommand and rejects the flag outright.
-  nixos-install --root /mnt --flake "/mnt/etc/nixos#$hostname" --no-root-password \
+  nixos-install --root /mnt --system "$system" --no-root-password \
     --option extra-experimental-features "nix-command flakes" \
     --option extra-substituters "$SUBSTITUTERS" \
     --option extra-trusted-public-keys "$TRUSTED_KEYS" \

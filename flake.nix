@@ -516,7 +516,29 @@
         # `device` is a placeholder: nothing here formats a disk. What matters is
         # that the expensive derivations in this toplevel are the same ones a real
         # install needs, and the device string is not one of them.
-        reference = nixpkgs.lib.nixosSystem {
+        reference = self.lib.mkReference { encrypt = true; };
+
+        # The same machine on an unencrypted disk.
+        #
+        # Not a variant anybody installs -- it exists so the ISO can carry
+        # both. The installer offers encryption on or off, and the two produce
+        # different systems: 51 derivations differ, all of them unit files and
+        # etc fragments, 180 MiB of content. Small, but not present is not
+        # present, and on an image with no network the difference between
+        # having them and not is a source bootstrap.
+        reference-unencrypted = self.lib.mkReference { encrypt = false; };
+      };
+
+      devShells = eachSystem (system: {
+        default = pkgsFor.${system}.callPackage ./shell.nix { };
+      });
+
+      # The installed machine, as the installer would produce it. Both disk
+      # modes come from here so they cannot drift apart, and so installer/cd.nix
+      # can bake each one onto the image without restating the host.
+      lib.mkReference =
+        { encrypt }:
+        nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = { inherit inputs; };
           modules = [
@@ -527,14 +549,12 @@
               hostname = "nixarchy";
               username = "omarchy";
             })
-            (import ./installer/disk-config.nix { device = "/dev/vda"; })
+            (import ./installer/disk-config.nix {
+              device = "/dev/vda";
+              inherit encrypt;
+            })
           ];
         };
-      };
-
-      devShells = eachSystem (system: {
-        default = pkgsFor.${system}.callPackage ./shell.nix { };
-      });
 
       formatter = eachSystem (system: pkgsFor.${system}.nixfmt-tree);
 
@@ -589,12 +609,26 @@
           pkgs = pkgsFor.${system};
         };
 
+        # The same question as checks.install, asked of the artefact people
+        # download rather than of a test node: boots the ISO with no network
+        # device at all and installs from what the image carries.
+        install-iso = import ./tests/install-iso.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
         vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
 
         # The installed machine, as opposed to the smoke-test guest: a real
         # bootloader, disko-provided filesystems, nothing faked. If this builds
         # and vm-toplevel builds, the extraction has not let the two drift.
         reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
+
+        # The other disk mode, built so the cache has it: installer/cd.nix
+        # bakes both onto the ISO, and an image built on a runner that has
+        # only one of them compiles the difference from source.
+        reference-unencrypted-toplevel =
+          self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel;
       });
     };
 }

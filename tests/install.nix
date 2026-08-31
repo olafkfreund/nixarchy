@@ -66,6 +66,27 @@ let
   # here. This is "omarchy", on a disposable VM.
   passwordHash = "$6$rounds=100000$nixarchytestsalt$0PVDWmxAsp7Bl1nqmv9Nnvm5RG4KP7wQAZ4L6ULDJcmJvYQyLdDPSPBnk1LKtNCdlvHmDPKXQhcYW0m0FQ0lJ1";
 
+  # The NixOS test backdoor, as a module the generated flake can import.
+  #
+  # An installed machine has no reason to carry it, and the installer is right
+  # not to write it -- but without it the driver cannot run a single command on
+  # the target: wait_for_unit, succeed and the rest all talk to a root shell on
+  # /dev/hvc0 that only this module provides. The alternative is to type every
+  # assertion into a getty and scrape the console for it, which is a worse test
+  # of the same things.
+  #
+  # So the installer runs untouched and writes what it would write; then this
+  # is added and nixos-install is run a second time, which is a copy rather
+  # than a build because the instrumented system is seeded too. What boots is
+  # the disk the installer produced, plus a serial shell.
+  #
+  # modulesPath, not an absolute store path: the generated flake evaluates in
+  # pure mode, where a path outside its own tree is an error, and modulesPath
+  # points into the nixpkgs the flake already has.
+  instrumentation = {
+    imports = [ "${inputs.nixpkgs}/nixos/modules/testing/test-instrumentation.nix" ];
+  };
+
   # What nixos-generate-config writes on the target, as a module.
   #
   # This is the file the install generates INSIDE the VM, and #12 called it
@@ -102,7 +123,10 @@ let
   # build one with no network. Seeding it here is what the ISO does for the
   # whole closure in #15; the test meets the same requirement early.
   targetSystemFor =
-    cpuModule:
+    {
+      cpuModule,
+      instrumented ? false,
+    }:
     (inputs.nixpkgs.lib.nixosSystem {
       inherit (pkgs) system;
       specialArgs = { inherit inputs; };
@@ -135,16 +159,27 @@ let
           users.users.omarchy.hashedPassword = passwordHash;
         }
         (hardwareConfig cpuModule)
-      ];
+      ]
+      ++ pkgs.lib.optional instrumented instrumentation;
     }).config.system.build;
 
-  # Both, because which one the target writes depends on whose CPU is running
-  # the test. They share all but a handful of derivations, so seeding the pair
-  # costs almost nothing and removes the only host-dependent variable.
-  targetSystems = map targetSystemFor [
-    "kvm-amd"
-    "kvm-intel"
-  ];
+  # Every system the target might end up being: two CPU vendors, with and
+  # without the backdoor. They share all but a handful of derivations, so the
+  # four cost barely more than one, and between them they remove the only two
+  # variables this test cannot control.
+  targetSystems =
+    pkgs.lib.concatMap
+      (cpuModule: [
+        (targetSystemFor { inherit cpuModule; })
+        (targetSystemFor {
+          inherit cpuModule;
+          instrumented = true;
+        })
+      ])
+      [
+        "kvm-amd"
+        "kvm-intel"
+      ];
 
   # The same helper nixpkgs' own boot tests use to pick a qemu binary, rather
   # than hardcoding qemu-system-x86_64 and losing KVM.
@@ -221,6 +256,16 @@ pkgs.testers.runNixOSTest {
         keymap=us
       '';
 
+      # Copied into the generated flake after the install; see the note on
+      # `instrumentation`. modulesPath rather than an absolute store path,
+      # because the flake it joins evaluates in pure mode.
+      environment.etc."nixarchy/test-instrumentation.nix".text = ''
+        { modulesPath, ... }:
+        {
+          imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
+        }
+      '';
+
       # Everything the install will copy or evaluate, already present: the test
       # meets the offline reality that the ISO phase will have to solve for
       # real. If something is missing it surfaces as a fetch attempt with no
@@ -228,7 +273,7 @@ pkgs.testers.runNixOSTest {
       system.extraDependencies = [
         reference.toplevel
         reference.diskoScript
-        (targetSystemFor "kvm-amd").diskoScript
+        (targetSystemFor { cpuModule = "kvm-amd"; }).diskoScript
         # The installed machine is not byte-identical to the seeded one: the
         # generated configuration.nix adds a timezone, a keymap, autologin and
         # a password hash, so a handful of aggregation derivations differ and
@@ -332,6 +377,28 @@ pkgs.testers.runNixOSTest {
     installer.succeed("test -d /mnt/etc/nixos/.git")
     installer.succeed("test -d /mnt/boot/EFI")
     print("install wrote a flake and an ESP")
+
+    # ---- make the result observable ------------------------------------
+    # Everything above this line is the product. Everything below adds the
+    # serial root shell the driver needs and nothing else; see the note on
+    # `instrumentation` for why it cannot be there from the start. The second
+    # nixos-install copies -- the instrumented system is seeded -- so if this
+    # step ever starts building, the seeding has drifted and the offline
+    # failure will say which derivation.
+    installer.succeed(
+        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/")
+    installer.succeed(
+        "sed -i 's|./hardware-configuration.nix|./hardware-configuration.nix\\n"
+        "    ./test-instrumentation.nix|' /mnt/etc/nixos/configuration.nix")
+    installer.succeed("grep -q test-instrumentation /mnt/etc/nixos/configuration.nix")
+    installer.succeed("git -C /mnt/etc/nixos add -A")
+    print(installer.succeed(
+        "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"
+        " --no-root-password"
+        " --option extra-experimental-features 'nix-command flakes'"
+        " --option always-allow-substitutes true 2>&1 | tail -20",
+        timeout=1800))
+    print("the installed flake now carries a serial root shell")
 
     # The name emptyDiskImages produces for a node called "installer". Asserted
     # rather than assumed: if the driver ever changes it, the failure should say

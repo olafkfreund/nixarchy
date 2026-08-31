@@ -266,7 +266,16 @@ pkgs.testers.runNixOSTest {
     step("ESP", 120, "it wrote a flake and an ESP")
     step("OFFLINE", 120, "and downloaded nothing")
 
-    installer.shutdown()
+    # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
+    # backdoor shell, which this image does not have, so it waits for a reply
+    # that cannot come -- the install passes, every assertion passes, and the
+    # test still fails when nix's build timeout kills it half an hour later.
+    installer.send_chars("sudo poweroff\n")
+    installer.wait_for_console_text(r"[Pp]ower(ing)? off|System is powering down|reboot: Power down",
+                                    timeout=300)
+    time.sleep(5)
+    installer.send_monitor_command("quit")
+    time.sleep(3)
 
     # ---- boot what was installed ---------------------------------------
     target = create_machine(

@@ -155,10 +155,15 @@ let
   # Both pflash drives, not just the code one. Without unit=1 the firmware has
   # nowhere to keep EFI variables, and a machine that cannot write them is a
   # different machine from the one a person installs onto.
+  # Without the disk, which is added at runtime: the driver starts qemu with
+  # cwd set to the TARGET's state directory, so a path relative to the test
+  # root -- vm-state-installer/empty0.qcow2, where the installer's second disk
+  # actually is -- resolves inside vm-state-target/ instead, and qemu exits
+  # before it says anything. The failure is a bare ConnectionResetError on the
+  # QMP socket, which names nothing.
   targetCommand = pkgs.lib.concatStringsSep " " [
     (qemuCommon.qemuBinary pkgs.qemu_test)
     "-cpu max -m 4096 -smp 4"
-    "-drive file=vm-state-installer/empty0.qcow2,if=virtio,werror=report"
     "-drive if=pflash,format=raw,unit=0,readonly=on,file=${pkgs.OVMF.firmware}"
     "-drive if=pflash,format=raw,unit=1,readonly=on,file=${pkgs.OVMF.variables}"
   ];
@@ -299,6 +304,7 @@ pkgs.testers.runNixOSTest {
         "nixos-generate-config --no-filesystems --show-hardware-config"))
 
     # ---- install -------------------------------------------------------
+    import os
     import time
     import subprocess
     started = time.time()
@@ -338,7 +344,11 @@ pkgs.testers.runNixOSTest {
     # ---- boot what was installed ---------------------------------------
     # A command string, not a dict: create_machine's signature is
     # (start_command: str, *, name, keep_machine_state) in current nixpkgs.
-    target = create_machine("${targetCommand}", name="target")
+    disk = os.path.abspath("vm-state-installer/empty0.qcow2")
+    assert os.path.exists(disk), f"the installer's target disk is not at {disk}"
+    target = create_machine(
+        "${targetCommand}" + f" -drive file={disk},if=virtio,werror=report",
+        name="target")
     target.start()
     target.wait_for_unit("multi-user.target")
     print("the installed disk booted on its own bootloader")

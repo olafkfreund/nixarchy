@@ -1,0 +1,143 @@
+name: nightly
+
+# The checks that cannot run on a hosted runner.
+#
+# `build.yml` covers everything that fits in fourteen gigabytes and ten
+# minutes. These two do not, and the numbers are the reason rather than a
+# preference: checks.install boots a VM and installs a desktop into it, and
+# checks.install-iso builds a 5.6 GB image, boots it with no network device at
+# all, and installs a 15.3 GB closure into a qcow2. That is about an hour and
+# roughly 16 GB of build directory, on a machine with /dev/kvm.
+#
+# So they run here, nightly, on p510 -- 40 cores, 94 GB, KVM, and a pool with
+# room for the images. See hosts/p510/nixos/github-runner.nix in the NixOS
+# config repo for the runner itself, including why the nix daemon's TMPDIR is
+# moved off the root filesystem.
+#
+# Nightly rather than per-push on purpose. An hour of wall clock per push would
+# make the queue the bottleneck, and what these protect against -- a package
+# falling out of the baked closure, an installer that stops booting -- does not
+# arrive between one push and the next. It arrives when an input moves.
+
+on:
+  schedule:
+    # 03:00 UTC. Late enough that a `nix flake update` merged during the day is
+    # covered, early enough that a failure is waiting in the morning.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+# One at a time. These are long, they want the whole machine, and two installs
+# competing for the same pool is how a disk fills.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: install onto a blank disk
+    runs-on: [self-hosted, nixos, kvm, big]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      # No installer action and no cachix: this runner is a NixOS machine with
+      # nix already on it and the store already warm, which is most of why it
+      # is fast enough to do this nightly.
+      - name: Install onto a blank disk and boot the result
+        run: nix build .#checks.x86_64-linux.install --print-build-logs
+
+      - name: Report the install duration
+        if: always()
+        run: |
+          # checks.install prints the installer's own figure and fails above a
+          # budget; this surfaces it in the job summary so a slow trend is
+          # visible before it crosses the line.
+          nix log .#checks.x86_64-linux.install 2>/dev/null \
+            | grep -E '^(driver|install)_seconds=' \
+            | tee -a "$GITHUB_STEP_SUMMARY" || echo "no timing recorded"
+
+  install-iso:
+    name: install from the ISO, with no network
+    runs-on: [self-hosted, nixos, kvm, big]
+    # The ISO build dominates: the squashfs alone is most of it.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the ISO
+        run: nix build .#iso --no-link --print-build-logs
+
+      - name: Report the ISO size
+        run: |
+          iso=$(nix build .#iso --no-link --print-out-paths)/iso
+          size=$(du -h "$iso"/*.iso | cut -f1)
+          closure=$(nix path-info -Sh \
+            .#nixosConfigurations.reference.config.system.build.toplevel \
+            | awk '{print $2}')
+          printf '| | |\n|---|---|\n| ISO | %s |\n| closure | %s |\n' \
+            "$size" "$closure" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install from it with no network device present
+        run: nix build .#checks.x86_64-linux.install-iso --print-build-logs
+
+      - name: Keep a date-stamped copy
+        run: |
+          # On the pool, not as a workflow artifact. A 5.6 GB upload every
+          # night would pass GitHub's free artifact storage in two days and
+          # cost money on the third, to produce a file that already exists on
+          # the machine that built it. Publishing belongs to a tag, which is
+          # what the release workflow is for.
+          #
+          # A symlink into the store rather than a copy: the store path is
+          # already immutable and already there, so this costs nothing until
+          # the store is garbage collected, and `nix-store --add-root` is what
+          # stops that happening.
+          out=$(nix build .#iso --no-link --print-out-paths)
+          iso=$(echo "$out"/iso/*.iso)
+          stamp=$(date -u +%Y-%m-%d)
+          dir=/mnt/img_pool/nixarchy-iso
+          mkdir -p "$dir"
+          nix-store --add-root "$dir/nixarchy-$stamp.iso" --indirect -r "$out" >/dev/null
+          ln -sfn "$iso" "$dir/nixarchy-latest.iso"
+
+          # Fourteen nights. Enough to bisect "it worked last week" without
+          # letting a nightly build fill 840 GB over a year.
+          find "$dir" -maxdepth 1 -name 'nixarchy-????-??-??.iso' -mtime +14 -delete
+
+          printf '| nightly ISO | `%s` |\n' "$dir/nixarchy-$stamp.iso" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # A failure at 03:00 that nobody sees until someone opens the Actions tab is
+  # a failure that costs a day. This turns one into an issue.
+  report:
+    name: report a failure
+    runs-on: ubuntu-latest
+    needs: [install, install-iso]
+    if: failure()
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update an issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="nightly: the install checks are failing"
+          # One issue, reopened and commented, rather than a new one each
+          # night: a check broken for a week should read as one problem, not
+          # seven.
+          body="The nightly install checks failed: $RUN"
+          body="$body
+
+          Both jobs run on the self-hosted runner on p510. If the failure is
+          'no space left', check /mnt/img_pool. If it is a hang partway through
+          an install, check that the nix daemon's TMPDIR is still on the pool
+          rather than the root filesystem -- a VM test that runs out of room
+          there does not fail cleanly, it wedges."
+          existing=$(gh issue list --state open --search "$title in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Still failing: $RUN"
+          else
+            gh issue create --title "$title" --label installer --body "$body"
+          fi

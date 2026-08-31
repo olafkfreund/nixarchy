@@ -38,10 +38,20 @@ disk, and your app selection. Edit it, run `nh os switch`. A rebuild immediately
 after installing builds nothing, because everything the installer did is
 described in those files rather than done behind them.
 
-Two things to know first. **The image needs a network:** it downloads the
-closure rather than carrying it, so an install is as fast as your connection.
-Making it offline is the next phase of the work. And it is **UEFI only** — the
-layout is an ESP with systemd-boot, and there is no BIOS path.
+Three things to know first.
+
+**The image needs a network.** It downloads the closure rather than carrying it,
+so an install is as fast as your connection. Making it offline is the next phase
+of the work.
+
+**It is UEFI only.** The layout is an ESP with systemd-boot, and there is no BIOS
+path — the installer checks and refuses rather than failing at the end.
+
+**A Bluetooth keyboard cannot unlock an encrypted disk.** The passphrase prompt
+happens in the initrd, before Bluetooth exists, so a keyboard that pairs once the
+desktop is up has no way to type into it — the machine simply waits. Upstream's
+manual carries the same warning because people hit it. Use a wired keyboard for
+the first boot, or choose an unencrypted install with Ctrl+C.
 
 ## Or: add it to NixOS you already run
 

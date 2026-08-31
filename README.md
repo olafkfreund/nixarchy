@@ -669,10 +669,20 @@ your app selection. Edit it and run `nh os switch`. Nothing the installer did is
 hidden from that directory, which is the point: a rebuild immediately after
 install builds nothing, because everything it did is described there.
 
-**Two caveats worth knowing before you write the stick.** The image needs a
-network, because it downloads the closure rather than carrying it — making the
-install offline and fast is the next phase of the work. And UEFI only: the layout
-is an ESP with systemd-boot and there is no BIOS path.
+**Three caveats worth knowing before you write the stick.**
+
+The image **needs a network**: it downloads the closure rather than carrying it,
+so an install is as fast as your connection. Making it offline is the next phase
+of the work.
+
+It is **UEFI only** — the layout is an ESP with systemd-boot, and there is no
+BIOS path.
+
+And if you encrypt, **the passphrase prompt at boot comes before Bluetooth
+exists**. A wireless keyboard that pairs after the desktop is up cannot type
+into the initrd, so the machine sits there waiting for a key you have no way to
+press. Upstream's manual carries the same warning because people hit it. Use a
+wired keyboard for the first boot, or do not encrypt.
 
 ## Adding it to a machine you already run
 
@@ -1155,6 +1165,7 @@ the last run in CI on each push; the last is two machines that boot it.
 | | proven by |
 | --- | --- |
 | The session, bar, themes and wallpaper | `checks.session` logs in through SDDM's greeter and asserts the desktop *renders* -- it compares the screen against the wallpaper, because every other check passed once while it was black |
+| Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. By hand, not in CI -- `checks.install` is written and not yet green, which is why this line says "two machines" above and not "every push" |
 | Adding it to a machine you already run | `checks.integration` **builds** the module onto a config that overrides a package Omarchy also uses, pins its own Hyprland and already greets with greetd |
 | Sitting beside an existing Hyprland | `checks.coexist` boots the Omarchy session with a foreign `hyprland.lua` in place and asserts the bar comes up anyway |
 | The CLI | `omarchy commands --check`, plus a count the build refuses to let drift |

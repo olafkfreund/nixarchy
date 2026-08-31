@@ -22,6 +22,7 @@ the documentation as much as the code.
 
 | | |
 |---|---|
+| [Getting Started](getting-started) | Two ways in: the ISO for a blank machine, the flake for NixOS you already run |
 | [The NixOS philosophy, and what it changes](philosophy) | Why the Install menu *queues* instead of installing, where the line between `~/.config` and your flake falls, and why nothing installed imperatively survives |
 | [Updating NixOS](updating-nixos) | `omarchy update`, what it does underneath, generations, rollback, and why a rebuild does not change the session you are sitting in |
 

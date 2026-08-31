@@ -13,6 +13,29 @@ parts that assume Arch, rather than reimplementing it in Nix.
 
 Tracking an upstream release is a source bump, not a re-port.
 
+## Install it on a blank machine
+
+```
+nix build github:olafkfreund/nixarchy#iso
+sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+Boot it. No boot menu and no login prompt — the installer is what comes up. It
+asks the questions Omarchy asks, in the same order, encrypts the disk unless you
+opt out, and is done in a few minutes.
+
+![Installing nixarchy](img/installer/install.gif)
+
+What you end up with is **a flake you own** at `/etc/nixos`: a git repository
+holding the disk layout, the configuration and your app selection. A rebuild
+straight after installing builds nothing, because everything the installer did
+is written there rather than done behind it.
+
+The ISO still downloads rather than carrying its own closure, so an install
+needs a network — [see the manual](manual/getting-started) for that and the
+other limits. Already running NixOS? Then you want the flake, not the ISO, and
+that is on the same page.
+
 ## Search everything, install declaratively
 
 Omarchy's Install menu offers 56 applications. **Install ▸ Search** offers the

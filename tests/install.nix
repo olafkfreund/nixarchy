@@ -66,12 +66,43 @@ let
   # here. This is "omarchy", on a disposable VM.
   passwordHash = "$6$rounds=100000$nixarchytestsalt$0PVDWmxAsp7Bl1nqmv9Nnvm5RG4KP7wQAZ4L6ULDJcmJvYQyLdDPSPBnk1LKtNCdlvHmDPKXQhcYW0m0FQ0lJ1";
 
+  # What nixos-generate-config writes on the target, as a module.
+  #
+  # This is the file the install generates INSIDE the VM, and #12 called it
+  # unknowable from outside -- which is why this check could not pass. It is
+  # not unknowable, it is just late: the machine is qemu, its devices are the
+  # ones the test driver gives it, and the output is the same every run. What
+  # is genuinely variable is one line, the host CPU's KVM module, so both
+  # values are seeded and the install picks whichever it wrote.
+  #
+  # The file's TEXT does not have to match. It is imported as Nix source, not
+  # copied to the store, so only the configuration it produces matters -- and
+  # that is what this reproduces. If qemu's devices ever change, the install
+  # falls back to building the difference, finds no network, and fails here
+  # with the derivation it wanted; update this to match.
+  hardwareConfig = cpuModule: {
+    imports = [ "${inputs.nixpkgs}/nixos/modules/profiles/qemu-guest.nix" ];
+    boot.initrd.availableKernelModules = [
+      "virtio_pci"
+      "uhci_hcd"
+      "ehci_pci"
+      "ahci"
+      "sr_mod"
+      "virtio_blk"
+    ];
+    boot.initrd.kernelModules = [ ];
+    boot.kernelModules = [ cpuModule ];
+    boot.extraModulePackages = [ ];
+    nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.system;
+  };
+
   # The exact disko script the generated flake will evaluate to. The reference
   # host's is for /dev/vda -- its placeholder device -- and this test installs
   # to /dev/vdb, so they are different derivations and the VM would have to
   # build one with no network. Seeding it here is what the ISO does for the
   # whole closure in #15; the test meets the same requirement early.
-  targetSystem =
+  targetSystemFor =
+    cpuModule:
     (inputs.nixpkgs.lib.nixosSystem {
       inherit (pkgs) system;
       specialArgs = { inherit inputs; };
@@ -103,8 +134,17 @@ let
           };
           users.users.omarchy.hashedPassword = passwordHash;
         }
+        (hardwareConfig cpuModule)
       ];
     }).config.system.build;
+
+  # Both, because which one the target writes depends on whose CPU is running
+  # the test. They share all but a handful of derivations, so seeding the pair
+  # costs almost nothing and removes the only host-dependent variable.
+  targetSystems = map targetSystemFor [
+    "kvm-amd"
+    "kvm-intel"
+  ];
 
   # The same helper nixpkgs' own boot tests use to pick a qemu binary, rather
   # than hardcoding qemu-system-x86_64 and losing KVM.
@@ -168,8 +208,7 @@ pkgs.testers.runNixOSTest {
       system.extraDependencies = [
         reference.toplevel
         reference.diskoScript
-        targetSystem.diskoScript
-        targetSystem.toplevel
+        (targetSystemFor "kvm-amd").diskoScript
         # The installed machine is not byte-identical to the seeded one: the
         # generated configuration.nix adds a timezone, a keymap, autologin and
         # a password hash, so a handful of aggregation derivations differ and
@@ -205,6 +244,7 @@ pkgs.testers.runNixOSTest {
         pkgs.python3
         pkgs.jq
       ]
+      ++ map (t: t.toplevel) targetSystems
       ++ inputPaths;
 
       virtualisation = {
@@ -236,6 +276,12 @@ pkgs.testers.runNixOSTest {
     print(installer.succeed("ls -d /nix/store/*-system-path 2>/dev/null | head -5 || echo NONE"))
     print("seeded toplevels present:")
     print(installer.succeed("ls -d /nix/store/*-nixos-system-* 2>/dev/null | head -5 || echo NONE"))
+
+    print("HWCONFIG-BEGIN")
+    print(installer.succeed(
+        "nixos-generate-config --no-filesystems --show-hardware-config"))
+    print("HWCONFIG-END")
+    raise Exception("diagnostic run")
 
     # ---- install -------------------------------------------------------
     import time

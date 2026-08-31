@@ -277,11 +277,11 @@ pkgs.testers.runNixOSTest {
     print("seeded toplevels present:")
     print(installer.succeed("ls -d /nix/store/*-nixos-system-* 2>/dev/null | head -5 || echo NONE"))
 
-    print("HWCONFIG-BEGIN")
+    # The hardware config the install is about to generate, printed because
+    # the seeding above claims to reproduce it. When that claim stops being
+    # true this is the first place a reader will look.
     print(installer.succeed(
         "nixos-generate-config --no-filesystems --show-hardware-config"))
-    print("HWCONFIG-END")
-    raise Exception("diagnostic run")
 
     # ---- install -------------------------------------------------------
     import time

@@ -187,6 +187,21 @@ pkgs.testers.runNixOSTest {
         # There is no network. Saying so explicitly turns "tried to fetch" into
         # a clear failure rather than a timeout that reads like flakiness.
         substituters = pkgs.lib.mkForce [ ];
+
+        # nixos-install builds with --store /mnt and offers the host store as
+        # a substituter (auto?trusted=1). Every path this test seeded was put
+        # there by the test itself and carries no signature, so with
+        # require-sigs on, /mnt refuses all of them -- "cannot add path ...
+        # because it lacks a signature by a trusted key" -- and falls back to
+        # building what it cannot copy. That is not a handful of derivations:
+        # building anything at all offline means building stdenv, so the whole
+        # source bootstrap from stage0-posix appears and the install dies
+        # fetching bash's tarball.
+        #
+        # The store is the test's own output, on a medium the test built. An
+        # offline ISO is in exactly the same position -- its closure is baked
+        # in unsigned -- so #15 and #16 will need this too.
+        require-sigs = false;
       };
 
       # The answers the wizard would have collected. device is the blank second
@@ -282,17 +297,6 @@ pkgs.testers.runNixOSTest {
     # true this is the first place a reader will look.
     print(installer.succeed(
         "nixos-generate-config --no-filesystems --show-hardware-config"))
-
-    tl = "${(targetSystemFor "kvm-amd").toplevel}"
-    print("toplevel valid on host:",
-          installer.execute(f"nix path-info {tl} 2>&1")[1])
-    print("signatures:",
-          installer.execute(f"nix path-info --json {tl} 2>&1 | head -c 600")[1])
-    print("trusted user:", installer.execute("nix config show | grep -E '^(trusted-users|require-sigs|substituters|trusted-substituters) '")[1])
-    print("copy into a scratch store via the substituter:",
-          installer.execute(
-            f"nix copy --to /tmp/scratch --substituters 'auto?trusted=1' {tl} 2>&1 | tail -5")[1])
-    raise Exception("diagnostic run")
 
     # ---- install -------------------------------------------------------
     import time

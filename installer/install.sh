@@ -517,6 +517,61 @@ generate_hardware_config() {
   # --root form would also write a configuration.nix over the template's.
   nixos-generate-config --root /mnt --no-filesystems --show-hardware-config \
     >"$work/hardware-configuration.nix"
+
+  reuse_baked_initrd "$work/hardware-configuration.nix"
+}
+
+# Use the initrd we already have, when it fits.
+#
+# nixos-generate-config lists the storage modules it found on this machine.
+# They are correct, and they are also the single most expensive line in the
+# file: a different module list is a different initrd, a different module
+# closure and a different toplevel, so a machine that states its own list
+# cannot use the one already sitting on the medium. It has to build one --
+# which needs a compiler, which on an image with no network means the source
+# bootstrap, which means the install stops.
+#
+# The reference host carries a superset (see installer/host.nix). When what
+# was detected fits inside it, the detected line is commented out and the
+# superset applies: the initrd is then byte-identical to the baked one and is
+# copied rather than built. When it does not fit -- some controller we do not
+# carry -- the line stays exactly as generated, because a machine that boots
+# slowly is better than one that does not boot.
+#
+# Only availableKernelModules is touched. boot.kernelModules is left alone:
+# it is where the CPU's KVM module lands, suppressing it would cost the user
+# virtualisation, and it perturbs seven text derivations rather than an
+# initrd -- which the medium can build from what it carries.
+reuse_baked_initrd() {
+  local file=$1 detected m
+  local baked=" @initrdmodules@ "
+
+  detected=$(sed -n 's/.*boot\.initrd\.availableKernelModules = \[\(.*\)\];.*/\1/p' "$file" |
+    tr -d '"')
+  [ -n "$detected" ] || return 0
+
+  for m in $detected; do
+    case $baked in
+      *" $m "*) ;;
+      *)
+        echo "hardware: $m is not on this medium; keeping the detected initrd" >&2
+        echo "hardware: the install will build one, which needs a network." >&2
+        return 0
+        ;;
+    esac
+  done
+
+  # Commented, not deleted. It is the user's file and the detection was real:
+  # uncomment the line and rebuild to use exactly what this machine reported.
+  sed -i \
+    -e 's|^\( *\)boot\.initrd\.availableKernelModules|\1# Detected on this machine, and already covered by the module set nixarchy\
+\1# installs, so it is commented out: leaving it in would mean building an\
+\1# initrd instead of copying the one that came with the installer.\
+\1#\
+\1# Uncomment it to use exactly what was detected here. That is a rebuild,\
+\1# and it needs a network the first time.\
+\1# boot.initrd.availableKernelModules|' \
+    "$file"
 }
 
 install_flake_dir() {

@@ -35,6 +35,43 @@
     flake = "/etc/nixos";
   };
 
+  # The storage this machine might boot from, decided before we know what it
+  # is.
+  #
+  # nixos-generate-config inspects the running machine and writes the modules
+  # it found. Those are correct and they are also the reason an install has to
+  # BUILD an initrd instead of copying the one already on the ISO -- a
+  # different module list is a different initrd is a different toplevel, and
+  # on an image with no network, building it means having a compiler, which
+  # means the source bootstrap, which means the install stops.
+  #
+  # So the reference host carries a superset instead, and the installer pins
+  # the installed machine to it when what it detected fits inside. NixOS's own
+  # default set (boot.initrd.includeDefaultModules) already has nvme, ahci,
+  # sd_mod, xhci_pci and mmc_block, which covers most real hardware; what it
+  # lacks is everything below.
+  #
+  # This is not a guess about what a machine needs. It is a promise that the
+  # ISO carries an initrd able to find these, so that the common cases never
+  # build anything. A machine needing something outside it is still installed
+  # correctly -- installer/install.sh notices and keeps the detected list,
+  # which costs a build.
+  boot.initrd.availableKernelModules = [
+    # Virtual machines, which is where this is tested and where the default
+    # set is weakest: without virtio_blk a guest cannot find its own root.
+    "virtio_pci"
+    "virtio_blk"
+    "virtio_scsi"
+    "virtio_mmio"
+    # Installing from, or booting off, USB.
+    "usb_storage"
+    "uas"
+    # SD and eMMC, on laptops and small machines.
+    "sdhci_pci"
+    "sdhci_acpi"
+    "rtsx_pci_sdmmc"
+  ];
+
   # Point `nixpkgs#...` and `nixarchy#...` at what this machine was built from.
   #
   # Without this, an indirect flake reference sends nix to

@@ -246,6 +246,7 @@
                 "@dashboard@"
                 "@tzdata@"
                 "@kbd@"
+                "@initrdmodules@"
               ]
               [
                 "${self.packages.${system}.flake-template}"
@@ -258,6 +259,11 @@
                 "${./installer/lib/dashboard.sh}"
                 "${pkgsFor.${system}.tzdata}"
                 "${pkgsFor.${system}.kbd}"
+                # The initrd modules the reference host carries, and therefore
+                # the ones already baked into any image built from this commit.
+                # install.sh compares what it detected against this list to
+                # decide whether the installed machine can reuse that initrd.
+                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules)
               ]
               (builtins.readFile ./installer/install.sh);
         };

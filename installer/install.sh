@@ -618,19 +618,6 @@ PIN
     tail -n 1 "$file"
   } >"$file.pinned" && mv "$file.pinned" "$file"
 
-  # ---- added by the nixarchy installer -------------------------------------
-  # The initrd this machine boots is the one that came on the installer, which
-  # is why the install copied it instead of spending several minutes building
-  # a near-identical one. Both lists are forced because an imported profile
-  # (qemu-guest.nix, on a VM) sets them too, and a commented-out line above
-  # would not have overridden it.
-  #
-  # Delete this block to use exactly what was detected on this machine. That
-  # is a rebuild, and it needs a network the first time.
-  boot.initrd.availableKernelModules = lib.mkForce [ $(printf '"%s" ' @initrdmodules@) ];
-  boot.initrd.kernelModules = lib.mkForce [ $(printf '"%s" ' @initrdforced@) ];
-PIN
-
   # Commented as well, so the reader sees what was detected here rather than
   # only what replaced it.
   sed -i \

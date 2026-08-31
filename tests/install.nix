@@ -114,17 +114,19 @@ let
   # with the derivation it wanted; update this to match.
   hardwareConfig = cpuModule: {
     imports = [ "${inputs.nixpkgs}/nixos/modules/profiles/qemu-guest.nix" ];
-    boot.initrd.availableKernelModules = [
-      "virtio_pci"
-      "uhci_hcd"
-      "ehci_pci"
-      "ahci"
-      "sr_mod"
-      "virtio_blk"
-    ];
-    boot.initrd.kernelModules = [ ];
-    boot.kernelModules = [ cpuModule ];
-    boot.extraModulePackages = [ ];
+    boot = {
+      initrd.availableKernelModules = [
+        "virtio_pci"
+        "uhci_hcd"
+        "ehci_pci"
+        "ahci"
+        "sr_mod"
+        "virtio_blk"
+      ];
+      initrd.kernelModules = [ ];
+      kernelModules = [ cpuModule ];
+      extraModulePackages = [ ];
+    };
     nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.stdenv.hostPlatform.system;
   };
 

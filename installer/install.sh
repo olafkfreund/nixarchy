@@ -47,6 +47,24 @@ NIX_FLAGS=(--extra-experimental-features "nix-command flakes")
 # these the first install compiles Hyprland from source. Keys copied from
 # nix.settings in modules/nixos.nix -- do not retype them.
 SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
+
+# Copy the system rather than rebuild it.
+#
+# nixos-install builds into the target store (--store /mnt) and offers this
+# machine's store as a substituter. Most of the system copies across fine, but
+# NixOS marks its own assembly derivations -- the toplevel, etc, system-units,
+# every X-Restart-Triggers-* -- preferLocalBuild with allowSubstitutes = false,
+# on the reasoning that a two-line text file is cheaper to rebuild than to
+# fetch. In a fresh store that reasoning inverts: rebuilding anything at all
+# means having stdenv there to rebuild it with, and stdenv is not there, so nix
+# works backwards to the source bootstrap and starts fetching bash's tarball.
+# On a machine with no network that is where the install ends; with one, it is
+# a needless multi-gigabyte download of a closure already sitting on the disk.
+#
+# always-allow-substitutes tells nix to ignore that attribute and take the copy
+# when a copy is available. It still builds when it is not, so nothing is lost
+# where the reasoning did hold.
+SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
 TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
 
 dry_run=false
@@ -502,7 +520,7 @@ run_install() {
   # network an unseeded build input is the difference between an install and a
   # confusing cascade of source downloads, and this names it once rather than
   # leaving it to be inferred from whatever failed first.
-  nix "${NIX_FLAGS[@]}" build --dry-run \
+  nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
     "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1 |
     head -40 || true
 
@@ -511,7 +529,8 @@ run_install() {
   nixos-install --root /mnt --flake "/mnt/etc/nixos#$hostname" --no-root-password \
     --option extra-experimental-features "nix-command flakes" \
     --option extra-substituters "$SUBSTITUTERS" \
-    --option extra-trusted-public-keys "$TRUSTED_KEYS"
+    --option extra-trusted-public-keys "$TRUSTED_KEYS" \
+    "${SUBSTITUTE_FLAGS[@]}"
 }
 
 main() {

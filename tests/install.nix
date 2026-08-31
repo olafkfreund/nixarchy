@@ -298,16 +298,6 @@ pkgs.testers.runNixOSTest {
     print(installer.succeed(
         "nixos-generate-config --no-filesystems --show-hardware-config"))
 
-    tl = "${(targetSystemFor "kvm-amd").toplevel}"
-    print("CONFIG:", installer.execute(
-        "nix config show | grep -E '^(require-sigs|substituters|trusted-users) '")[1])
-    print("PLAIN COPY:", installer.execute(
-        f"nix copy --to /tmp/dst1 {tl} 2>&1 | tail -3")[1])
-    print("DRY BUILD INTO A FRESH STORE:", installer.execute(
-        f"nix build --store /tmp/dst2 --substituters 'auto?trusted=1'"
-        f" --dry-run {tl} 2>&1 | tail -4")[1])
-    raise Exception("diagnostic run")
-
     # ---- install -------------------------------------------------------
     import time
     import subprocess

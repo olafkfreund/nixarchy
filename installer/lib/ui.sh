@@ -14,6 +14,16 @@
 # \e]P<index><rrggbb> is the Linux framebuffer console's palette escape. It is
 # silently ignored elsewhere, which is the desired behaviour when someone runs
 # the installer from a terminal emulator that already has its own theme.
+# clear(1), without needing a terminfo database to look itself up in.
+#
+# `clear` is ncurses, and ncurses refuses to emit anything until it has found
+# an entry for $TERM -- so with the strict PATH writeShellApplication builds,
+# it exits 1 and set -e ends the install. The bytes it would have written are
+# these three: home, erase screen, erase scrollback. Every terminal that can
+# display this installer understands them, and a terminal that does not is one
+# where a failed clear was never the interesting problem.
+ui_clear() { printf '\e[H\e[2J\e[3J'; }
+
 ui_palette() {
   printf '\e]P01a1b26'  # black          background
   printf '\e]P1f7768e'  # red
@@ -32,7 +42,7 @@ ui_palette() {
   printf '\e]Pe7dcfff'
   printf '\e]Pfc0caf5'
   ui_init
-  clear
+  ui_clear
 }
 
 # stty first, tput second.
@@ -267,7 +277,7 @@ ui_screen() {
   # about the console size would otherwise persist for the whole install, and
   # that is exactly what happened.
   ui_init
-  clear
+  ui_clear
   echo
   ui_logo
   # Two tones, as upstream has: what we are doing in plain text, then the

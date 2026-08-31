@@ -55,7 +55,7 @@ ui_dashboard_draw() {
   tip=$(sed -n "${idx}p" "$UI_TIPS")
 
   ui_init
-  clear
+  ui_clear
   echo
   ui_logo
   ui_centre "\e[1mInstalling nixarchy\e[0m" 19
@@ -104,7 +104,7 @@ ui_elapsed() {
 ui_finished() {
   local elapsed=$1 username=$2
   ui_init
-  clear
+  ui_clear
   echo
   ui_logo
   ui_centre "\e[1;32mInstalled nixarchy in $(ui_elapsed "$elapsed")\e[0m" $((25 + ${#elapsed}))
@@ -120,7 +120,7 @@ ui_finished() {
 ui_failed() {
   local log=$1 rc=$2
   ui_init
-  clear
+  ui_clear
   echo
   ui_logo
   ui_centre "\e[1;31mnixarchy installation stopped\e[0m" 28

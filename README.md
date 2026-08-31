@@ -643,9 +643,10 @@ sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=syn
 
 No boot menu, no login prompt: the installer is what comes up.
 
-![The installer asks the same questions Omarchy does](docs/img/installer/01-keyboard.png)
+![Selecting a keyboard layout](docs/img/installer/step-01-keyboard.png)
 
-Keyboard, then your account, then the disk. Encryption is on unless you press
+Keyboard, then your account, then the disk — [step by step in the
+manual](https://olafkfreund.github.io/nixarchy/manual/getting-started). Encryption is on unless you press
 Ctrl+C at the overwrite warning, and one password serves your user, root and the
 disk alike.
 

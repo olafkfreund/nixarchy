@@ -9,10 +9,10 @@ name: nightly
 # all, and installs a 15.3 GB closure into a qcow2. That is about an hour and
 # roughly 16 GB of build directory, on a machine with /dev/kvm.
 #
-# So they run here, nightly, on p510 -- 40 cores, 94 GB, KVM, and a pool with
-# room for the images. See hosts/p510/nixos/github-runner.nix in the NixOS
-# config repo for the runner itself, including why the nix daemon's TMPDIR is
-# moved off the root filesystem.
+# So they run here, nightly, on p510 -- 40 cores, 94 GB, KVM, and room for the
+# images: builds land in /home (its own disk, 829 GB free) and the ISO copies
+# below go on /mnt/img_pool (840 GB free). See hosts/p510/nixos/github-runner.nix
+# in the NixOS config repo for the runner itself.
 #
 # Nightly rather than per-push on purpose. An hour of wall clock per push would
 # make the queue the bottleneck, and what these protect against -- a package
@@ -130,10 +130,9 @@ jobs:
           body="$body
 
           Both jobs run on the self-hosted runner on p510. If the failure is
-          'no space left', check /mnt/img_pool. If it is a hang partway through
-          an install, check that the nix daemon's TMPDIR is still on the pool
-          rather than the root filesystem -- a VM test that runs out of room
-          there does not fail cleanly, it wedges."
+          'no space left', check both /home -- where the nix daemon builds --
+          and /mnt/img_pool, where the nightly ISO copies go. A VM test that
+          runs out of room does not fail cleanly, it wedges."
           existing=$(gh issue list --state open --search "$title in:title" \
             --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then

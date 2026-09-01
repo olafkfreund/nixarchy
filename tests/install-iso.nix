@@ -291,5 +291,24 @@ pkgs.testers.runNixOSTest {
     target.start()
     target.wait_for_console_text(r"isotest login:", timeout=900)
     print("the installed disk booted on its own bootloader")
+
+    # Kill it at the monitor, or this check never finishes.
+    #
+    # A machine made by create_machine is not reaped for us the way a declared
+    # node is: the script reaches its end with every assertion passing and the
+    # derivation then sits there forever with a qemu still running. That is
+    # not a hypothesis -- checks.install did exactly this for nine hours, and
+    # it presents as `cancelled` in CI because a timeout is recorded as a
+    # cancellation, which reads like a person stopped it rather than like a
+    # hang.
+    #
+    # `quit`, not shutdown(): this machine has no backdoor, which is why the
+    # line above waits on console text rather than asking it anything. Same
+    # treatment the installer machine gets above, and the same try/except --
+    # if qemu is already gone the monitor socket is gone with it.
+    try:
+        target.send_monitor_command("quit")
+    except Exception:
+        pass
   '';
 }

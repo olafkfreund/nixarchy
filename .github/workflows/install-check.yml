@@ -1,0 +1,61 @@
+name: install check
+
+# Its own workflow, and that is the entire point of the file.
+#
+# This lived in build.yml, where a workflow-level `concurrency` with
+# `cancel-in-progress: true` gives PR pushes the fast feedback they should
+# have. That setting cancels the whole RUN, and a job-level
+# `cancel-in-progress: false` cannot opt out of it -- job-level concurrency
+# governs queuing between runs, not whether the workflow-level rule reaps this
+# one. So the hour-long install job was cancelled by whatever landed on main
+# next, every time. It had never once finished in CI, and the job-level block
+# below is why I believed it had been protected.
+#
+# Splitting the file is the fix: this workflow has its own concurrency group,
+# nothing cancels it, and build.yml keeps its snappy PR behaviour.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: install-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: install
+    # p510: 40 cores, 94 GB, /dev/kvm, and a pool with room for the images.
+    # This job boots a VM, installs a desktop onto a blank disk, boots the
+    # result on its own bootloader and asserts a rebuild builds nothing. None
+    # of that fits on a hosted runner -- fourteen gigabytes of disk and no KVM
+    # worth the name -- and it is the only check that exercises the artefact a
+    # person actually receives.
+    runs-on: [self-hosted, nixos, kvm, big]
+
+    # No `if:` guarding pull_request, and no job-level concurrency: the `on:`
+    # and `concurrency:` at the top of this file already say both things, and
+    # saying them twice is how the first version came to look protected while
+    # being cancelled every time.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # No installer action, no cachix. The runner is a NixOS machine with a
+      # warm store, which is most of why this is ten minutes rather than an
+      # hour.
+      - name: Install onto a blank disk and boot the result
+        run: nix build .#checks.x86_64-linux.install --print-build-logs
+
+      - name: Report what it cost
+        if: always()
+        run: |
+          # The installer's own figure, not the driver's, and the same one the
+          # finish screen shows. checks.install already fails above a budget;
+          # this puts the number in the summary so a slow trend is visible
+          # before it crosses the line.
+          nix log .#checks.x86_64-linux.install 2>/dev/null \
+            | grep -E '^(driver|install)_seconds=' \
+            | tee -a "$GITHUB_STEP_SUMMARY" || echo "no timing recorded"

@@ -71,9 +71,12 @@ jobs:
         run: |
           iso=$(nix build .#iso --no-link --print-out-paths)/iso
           size=$(du -h "$iso"/*.iso | cut -f1)
-          closure=$(nix path-info -Sh \
-            .#nixosConfigurations.reference.config.system.build.toplevel \
-            | awk '{print $2}')
+          # `read`, not awk. The runner's step shell is a Nix bash whose PATH
+          # carries coreutils but not gawk, so the first real nightly died
+          # here with `awk: command not found` and exit 127 -- after the ISO
+          # had built perfectly well. Bash can split two fields by itself.
+          read -r _ closure < <(nix path-info -Sh \
+            .#nixosConfigurations.reference.config.system.build.toplevel)
           printf '| | |\n|---|---|\n| ISO | %s |\n| closure | %s |\n' \
             "$size" "$closure" | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -120,6 +123,11 @@ jobs:
       - name: Open or update an issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout, so `gh` has no git remote to infer the
+          # repository from and every call failed with "not a git repository".
+          # The safety net that tells you a nightly broke was itself broken,
+          # which is the worst place for this bug to have been.
+          GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="nightly: the install checks are failing"

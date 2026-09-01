@@ -149,17 +149,6 @@
   };
 
   # ── Services ────────────────────────────────────────────────────────────
-  tailscale = {
-    menuId = "install.service.tailscale";
-    label = "Tailscale";
-    category = "Service";
-    option = [
-      "services"
-      "tailscale"
-    ];
-    arch = "tailscale";
-    note = "A daemon. `settings.useRoutingFeatures = \"client\"` for exit nodes.";
-  };
   _1password = {
     menuId = "install.service.1password";
     label = "1Password";

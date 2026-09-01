@@ -455,6 +455,32 @@ let
           )
         ) (lib.filterAttrs (_: a: a ? menuId) apps)
       )
+      # The services catalogue, as menu rows.
+      #
+      # Most of these are ids upstream does not ship -- Omarchy's menu has no
+      # "turn on SSH" row because on Arch that is not a menu's business. The
+      # generator takes a new id as long as the override names the row itself,
+      # which is why label and icon are here; install.search arrived the same
+      # way. Where upstream DOES have a row, the catalogue entry carries its
+      # menuId and this overrides it in place -- tailscale is that case, and
+      # carrying the id across is what keeps the generator from failing on a
+      # row nothing maps.
+      // lib.listToAttrs (
+        lib.mapAttrsToList (
+          name: svc:
+          lib.nameValuePair (svc.menuId or "install.service.${name}") {
+            icon = svc.icon or "󰒓";
+            label = svc.label;
+            action = "nixarchy-service-enable ${name}";
+            # Dim when the marked line is live, which is the same question
+            # nixarchy-service-enable asks. Not the app rows' test: a plain
+            # entry's line begins with services.openssh, not with the id, so
+            # matching on the id would never fire.
+            disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+            description = svc.note;
+          }
+        ) serviceCatalogue
+      )
       // cfg.menu.extraEntries
     )
   );
@@ -641,6 +667,99 @@ in
           # Uncomments one app in ~/.config/nixarchy/apps.nix. Matching is on
           # the `#@ <id>` marker, not a line number or a label, so the file
           # survives being reformatted, reordered or annotated by hand.
+          (pkgs.writeShellApplication {
+            name = "nixarchy-service-enable";
+            runtimeInputs = [
+              pkgs.gnused
+              pkgs.gnugrep
+              pkgs.coreutils
+              cfg.package
+            ];
+            text = ''
+              file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+              id="''${1:?usage: nixarchy-service-enable <service-id>}"
+
+              # Validated before it reaches sed and grep, which the app scripts
+              # do not do: the id is interpolated into a regex, and an id with a
+              # slash or a bracket in it would either fail obscurely or match
+              # something nobody meant. Ids come from data/services.nix and look
+              # like this; anything else is a typo or a caller with a bug.
+              case "$id" in
+                *[!a-z0-9_-]* | "")
+                  echo "nixarchy: '$id' is not a service id" >&2
+                  exit 2
+                  ;;
+              esac
+
+              [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+              if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                echo "nixarchy: no service '$id' in $file" >&2
+                echo "  The full list is /etc/nixarchy/services-template.nix." >&2
+                exit 1
+              fi
+
+              # Already on if the marked line is not commented out.
+              #
+              # Deliberately not the app scripts' test, which greps for
+              # `^[[:space:]]*<id>.enable` -- that cannot work here, because a
+              # plain entry's line begins with services.openssh, not with the
+              # id. Asking whether the marked line is live is also the more
+              # honest question: it does not answer "yes" to `enable = false;`.
+              if grep -qE "^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)" "$file"; then
+                echo "$id is already enabled; run nixarchy-apply to build it"
+                exit 0
+              fi
+
+              sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+
+              queued=$(grep -cE "^[[:space:]]*[^#[:space:]].*#@ " "$file" || true)
+              if command -v omarchy-notification-send >/dev/null 2>&1; then
+                omarchy-notification-send -r 8471 -t 8000 -u normal \
+                  "$id queued -- not enabled yet" \
+                  "$queued selected. Click here, or Install > Apply changes, to run nixos-rebuild." \
+                  --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+              fi
+              echo "enabled $id in $file ($queued queued)"
+              echo "run 'nixarchy-apply' when you have picked everything you want"
+            '';
+          })
+
+          (pkgs.writeShellApplication {
+            name = "nixarchy-service-disable";
+            runtimeInputs = [
+              pkgs.gnused
+              pkgs.gnugrep
+              pkgs.coreutils
+            ];
+            text = ''
+              file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+              id="''${1:?usage: nixarchy-service-disable <service-id>}"
+
+              case "$id" in
+                *[!a-z0-9_-]* | "")
+                  echo "nixarchy: '$id' is not a service id" >&2
+                  exit 2
+                  ;;
+              esac
+
+              [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+              if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                echo "nixarchy: no service '$id' in $file" >&2
+                exit 1
+              fi
+
+              # Comment the marked line back out. Turning a service off is not
+              # the same as uninstalling it: the daemon stops, and whatever it
+              # wrote -- a Syncthing database, an authorised key -- stays where
+              # it is. Removing that is the user's call and not this script's.
+              sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+              echo "disabled $id in $file"
+              echo "run 'nixarchy-apply' to rebuild without it"
+            '';
+          })
+
           (pkgs.writeShellApplication {
             name = "nixarchy-app-enable";
             runtimeInputs = [

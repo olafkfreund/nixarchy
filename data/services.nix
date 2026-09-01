@@ -48,12 +48,20 @@
 #
 # If one of those should become a choice rather than a default, that is a
 # change to nixos.nix and an announcement, not a row added here.
-#
-# Tailscale is also absent, for a different reason: data/apps.nix still owns
-# it, and moving it means moving its menu row, which is #94. Adding it here
-# first would generate a template line for an option that does not exist yet.
+
 {
   # ── Network ─────────────────────────────────────────────────────────────
+  tailscale = {
+    label = "Tailscale";
+    category = "Network";
+    kind = "bundled";
+    # The row upstream's menu already has. data/apps.nix used to answer for
+    # it; the service does now, and the id moving with the entry is what
+    # stops the menu generator failing on an unmapped row.
+    menuId = "install.service.tailscale";
+    note = "A private network between your machines. Bundled because the firewall has to trust the interface or nothing reaches this host.";
+  };
+
   openssh = {
     label = "OpenSSH server";
     category = "Network";

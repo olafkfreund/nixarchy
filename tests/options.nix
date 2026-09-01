@@ -176,9 +176,16 @@ let
   # this file does not need a second one.
   menuFile = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy/default/omarchy/omarchy-menu.jsonc";
 
-  mappedRows = pkgs.lib.mapAttrsToList (_: a: a.menuId) (
-    pkgs.lib.filterAttrs (_: a: a ? menuId) (import ../data/apps.nix)
-  );
+  # An upstream Install row is "mapped" if data/apps.nix answers for it OR
+  # data/services.nix does. Both are now real answers: tailscale moved from
+  # one to the other when it gained a module, and the row went with it. A
+  # check that knew only about apps would have called that unmapped and been
+  # wrong -- the row is wired, just not by the file it used to be wired by.
+  mappedRows =
+    pkgs.lib.mapAttrsToList (_: a: a.menuId) (
+      pkgs.lib.filterAttrs (_: a: a ? menuId) (import ../data/apps.nix)
+    )
+    ++ pkgs.lib.mapAttrsToList (_: s: s.menuId) (pkgs.lib.filterAttrs (_: s: s ? menuId) services);
 
   # Rows that are actions rather than applications, plus the gaps the README
   # names. Fonts go through omarchy-install-font and the Arch-name map; the

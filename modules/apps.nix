@@ -470,7 +470,7 @@ let
           name: svc:
           lib.nameValuePair (svc.menuId or "install.service.${name}") {
             icon = svc.icon or "󰒓";
-            label = svc.label;
+            inherit (svc) label;
             action = "nixarchy-service-enable ${name}";
             # Dim when the marked line is live, which is the same question
             # nixarchy-service-enable asks. Not the app rows' test: a plain

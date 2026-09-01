@@ -776,13 +776,39 @@ any conflict to warn you.
 
 ## Installing on a fresh machine
 
-There is an ISO now. Build it, write it to a stick, boot it, and answer nine
+There is an ISO now. Download it, write it to a stick, boot it, and answer nine
 questions.
 
+**[Releases](https://github.com/olafkfreund/nixarchy/releases)** carry prebuilt
+images from `v4.0.1-3` onward, built and install-tested by CI on the machine
+that runs the nightly checks. The large one is split, because GitHub will not
+take a single file that size:
+
 ```
-nix build github:olafkfreund/nixarchy#iso
+cat nixarchy-v*.iso.part-* > nixarchy.iso     # the 5.6 GB image only
+sha256sum -c --ignore-missing SHA256SUMS
+sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+`--ignore-missing` because one `SHA256SUMS` covers both images and nobody
+downloads both.
+
+Or build it yourself, which is the same image from the same commit:
+
+```
+nix build --extra-experimental-features 'nix-command flakes' \
+  github:olafkfreund/nixarchy#iso
 sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
+
+The `--extra-experimental-features` flag is there because flakes are off by
+default on a stock Nix, and a machine that has never run one is exactly the
+machine someone builds an installer on. On NixOS with this module it is
+redundant and harmless. **Building on a non-NixOS host** also needs the Nix
+daemon running — `systemctl enable --now nix-daemon.socket`, and your user in
+the `nix-users` group on Arch. If `/nix/store` is missing, the Nix install did
+not finish; do not create it by hand, because a multi-user store wants
+`root:nixbld` and mode `1775` rather than whatever `mkdir` leaves behind.
 
 There are two images, and the difference is what they carry:
 
@@ -1319,6 +1345,10 @@ inputs.nixarchy = {
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
+
+From `v4.0.1-3` on, a tag also publishes the two ISOs and a `SHA256SUMS` to
+the [Releases](https://github.com/olafkfreund/nixarchy/releases) page, so a tag
+is both something to pin and something to install from.
 
 **The version names the Omarchy it vendors**, because that is the first thing
 anyone needs to know about a packaging repo: `v4.0.1-1` is Omarchy 4.0.1. The

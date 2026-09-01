@@ -80,6 +80,16 @@ jobs:
           printf '| | |\n|---|---|\n| ISO | %s |\n| closure | %s |\n' \
             "$size" "$closure" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # The number the size report prints is only useful if something acts on
+      # it. This is that. It builds the network image too, which is the one
+      # with a hard ceiling: over 2 GiB it stops fitting in a release as a
+      # single asset.
+      - name: Both images are inside their budgets
+        run: |
+          set -o pipefail
+          nix build .#checks.x86_64-linux.iso-budget --no-link --print-build-logs 2>&1 \
+            | tail -5 | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Install from it with no network device present
         run: nix build .#checks.x86_64-linux.install-iso --print-build-logs
 

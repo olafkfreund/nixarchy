@@ -676,6 +676,60 @@
         # only one of them compiles the difference from source.
         reference-unencrypted-toplevel =
           self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel;
+
+        # Both images, against the budgets recorded in installer/cd.nix.
+        #
+        # A check rather than a comment because a number nobody enforces is a
+        # number that drifts. The nightly runs this; it costs nothing beyond
+        # the ISO builds it already does.
+        #
+        # The iso-net budget is the load-bearing one, and it is not a taste
+        # question: GitHub refuses a release asset over 2 GiB, so an iso-net
+        # that crosses it stops being publishable as a single file and
+        # release.yml would have to start splitting it. Failing here says so
+        # while there is still something to do about it, rather than at the
+        # next tag.
+        iso-budget =
+          let
+            pkgs = pkgsFor.${system};
+            # MiB, as integers: nix has floats but this needs exact bytes, and
+            # 6656 is less to get wrong than 6.5 * 1073741824.
+            images = [
+              {
+                name = "iso";
+                drv = self.packages.${system}.iso;
+                mib = 6656; # 6.5 GiB, over a measured 5.6 GB
+              }
+              {
+                name = "iso-net";
+                drv = self.packages.${system}.iso-net;
+                mib = 2048; # GitHub's release-asset limit, not a preference
+              }
+            ];
+          in
+          pkgs.runCommand "iso-budget" { } (
+            "fail=0\n"
+            + nixpkgs.lib.concatMapStrings (i: ''
+              size=$(stat -Lc %s ${i.drv}/iso/*.iso)
+              budget=$((${toString i.mib} * 1048576))
+              awk -v n=${i.name} -v s="$size" -v b="$budget" \
+                'BEGIN { printf "%-8s %6.2f GiB   budget %5.2f GiB   %s\n", \
+                   n, s/1073741824, b/1073741824, (s > b ? "OVER" : "ok") }'
+              [ "$size" -le "$budget" ] || fail=1
+            '') images
+            + ''
+              if [ "$fail" -ne 0 ]; then
+                echo
+                echo "An image outgrew its budget. Either something large joined the"
+                echo "closure by accident, or the budget in installer/cd.nix needs"
+                echo "raising on purpose -- but iso-net's 2 GiB is GitHub's limit on"
+                echo "a release asset, and cannot be raised, only worked around by"
+                echo "splitting the image the way release.yml splits the other one."
+                exit 1
+              fi
+              touch $out
+            ''
+          );
       });
     };
 }

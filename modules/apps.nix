@@ -667,6 +667,124 @@ in
           # Uncomments one app in ~/.config/nixarchy/apps.nix. Matching is on
           # the `#@ <id>` marker, not a line number or a label, so the file
           # survives being reformatted, reordered or annotated by hand.
+          # What the catalogue offers that your file has never heard of.
+          #
+          # The seeded files are written once and never touched again, which is
+          # correct -- they are the user's, and overwriting one would silently
+          # undo a selection. The consequence is that an entry added after a
+          # machine was installed never appears on it: no `#@` marker, so
+          # nixarchy-app-enable answers "no app 'x' in $file" and the menu row
+          # is dead. Until now the only way to find that out was to diff
+          # against /etc/nixarchy/apps-template.nix by hand, and nothing said
+          # so.
+          (pkgs.writeShellApplication {
+            name = "nixarchy-catalogue-diff";
+            runtimeInputs = [
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.coreutils
+            ];
+            text = ''
+              add=false
+              case "''${1:-}" in
+                --add) add=true ;;
+                "") ;;
+                *)
+                  echo "usage: nixarchy-catalogue-diff [--add]" >&2
+                  exit 2
+                  ;;
+              esac
+
+              dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
+              total=0
+
+              for part in apps services advanced; do
+                user="$dir/$part.nix"
+                tpl="/etc/nixarchy/$part-template.nix"
+                [ -f "$user" ] && [ -f "$tpl" ] || continue
+
+                # Compared by marker, never by line: the file's own header
+                # invites reformatting, reordering and annotating, so anything
+                # positional would report a file somebody had tidied as full of
+                # holes. A marker with a space after #@ is a catalogue row; the
+                # others -- #@pkg, #@opt, #@pkgs-begin -- are the user's own and
+                # a template never has them.
+                missing=$(
+                  comm -23 \
+                    <(grep -oE "#@ [a-z0-9_.-]+" "$tpl" | sort -u) \
+                    <(grep -oE "#@ [a-z0-9_.-]+" "$user" | sort -u)
+                )
+                [ -n "$missing" ] || continue
+
+                count=$(printf '%s\n' "$missing" | grep -c . || true)
+                total=$((total + count))
+                echo "$part.nix is missing $count:"
+
+                rows=""
+                while IFS= read -r marker; do
+                  [ -n "$marker" ] || continue
+                  echo "  ''${marker#\#@ }"
+                  row=$(grep -F -- "$marker" "$tpl" | head -1)
+                  # App rows are written relative to programs.nixarchy.apps,
+                  # which they sit inside in the template. Appended at the end
+                  # of a file they would be outside it -- harmless while
+                  # commented and broken the moment somebody uncommented one.
+                  # Written in full they are correct wherever they land. A
+                  # second `programs.nixarchy.apps = { }` block would not be:
+                  # two definitions of one attribute in one set is an error,
+                  # not a merge.
+                  if [ "$part" = apps ]; then
+                    row=$(printf '%s' "$row" |
+                      sed -E "s/^([[:space:]]*#[[:space:]]*)/\1programs.nixarchy.apps./")
+                  fi
+                  rows="$rows$row
+              "
+                done <<MARKERS
+              $missing
+              MARKERS
+
+                if [ "$add" = true ]; then
+                  # Before the module's closing brace, not after it. Appending
+                  # to the end of the file puts the rows outside the attrset,
+                  # where they parse -- they are comments -- and stop parsing
+                  # the moment somebody uncomments one, because that is content
+                  # after the final `}`. Which is the same trap the full-path
+                  # rewrite above exists to avoid, one line further down.
+                  close=$(grep -n "^}" "$user" | tail -1 | cut -d: -f1)
+                  if [ -z "$close" ]; then
+                    echo "  $user has no closing brace on its own line;" >&2
+                    echo "  add these by hand rather than let this guess:" >&2
+                    printf '%s' "$rows" >&2
+                    continue
+                  fi
+                  tmp=$(mktemp)
+                  head -n "$((close - 1))" "$user" >"$tmp"
+                  {
+                    echo ""
+                    echo "  # ── Added by nixarchy-catalogue-diff, $(date +%Y-%m-%d) ──"
+                    printf '%s' "$rows"
+                  } >>"$tmp"
+                  tail -n "+$close" "$user" >>"$tmp"
+                  cat "$tmp" >"$user"
+                  rm -f "$tmp"
+                  echo "  appended to $user"
+                fi
+              done
+
+              if [ "$total" -eq 0 ]; then
+                echo "your files have everything the catalogue offers"
+                exit 0
+              fi
+
+              if [ "$add" = false ]; then
+                echo ""
+                echo "Run 'nixarchy-catalogue-diff --add' to append these as"
+                echo "commented-out lines. Nothing you have written changes:"
+                echo "only new lines, at the end, under a dated heading."
+              fi
+            '';
+          })
+
           (pkgs.writeShellApplication {
             name = "nixarchy-service-enable";
             runtimeInputs = [

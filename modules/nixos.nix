@@ -69,6 +69,7 @@ in
     (import ./apps.nix inputs)
     ./local-ai.nix
     ./services
+    inputs.nix-flatpak.nixosModules.nix-flatpak
   ];
 
   options.programs.nixarchy = {
@@ -181,6 +182,33 @@ in
         the theme without this, through the settings portal rather than a
         policy file -- so the browser is themed either way, just not tinted.
       '';
+    };
+
+    flatpaks = {
+      uninstallUnmanaged = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Remove Flatpaks that this configuration does not declare, including
+          ones installed by hand with `flatpak install`.
+
+          On, the file is the truth: the machine's Flatpaks are exactly what
+          your configuration lists, and anything else is gone at the next
+          rebuild. That is the same promise nixarchy already makes about
+          packages, and it is the reason someone would want this.
+
+          Off by default, and the default is the point. Removing software a
+          person installed themselves is the one thing this project has said
+          it will not do -- the README puts it as "deselecting is the only
+          removal nixarchy is allowed to perform. An app that arrived from
+          your own configuration is not this menu's to take away." Turning
+          this on crosses that line, deliberately, on a machine where you have
+          decided the configuration is the only truth.
+
+          Neither answer is wrong. What would be wrong is deleting somebody's
+          software without their having asked.
+        '';
+      };
     };
 
     allowUnfree = lib.mkOption {
@@ -600,6 +628,18 @@ in
     # mkForce their way out one option at a time. Their setting wins now, and
     # they lose only the feature that depended on it.
     services = {
+      # Passed straight through: nix-flatpak's own option carries the
+      # behaviour, ours carries the decision and its reasoning. mkDefault so a
+      # user who sets services.flatpak.uninstallUnmanaged directly keeps their
+      # value -- this is a convenience over an upstream option, not a
+      # replacement for it.
+      #
+      # In this block rather than as its own `services.flatpak...` line
+      # because statix rejects a second `services` key in the same attribute
+      # set, and it is right to: two places setting services is two places to
+      # look.
+      flatpak.uninstallUnmanaged = lib.mkDefault cfg.flatpaks.uninstallUnmanaged;
+
       # See programs.nixarchy.displayManager for why this is an option of our
       # own rather than a look at whether another greeter is already enabled.
       displayManager.sddm = {

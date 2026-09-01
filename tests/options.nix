@@ -221,6 +221,25 @@ let
   # rather than about an option.
   vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
 
+  # ---- nixarchy does not delete software somebody installed ----
+  #
+  # uninstallUnmanaged removes every Flatpak the configuration does not
+  # declare, including ones installed by hand. It is a real thing to want and
+  # it must never arrive by accident, so the default is asserted rather than
+  # trusted: this is precisely the kind of default that gets flipped later by
+  # someone tidying up who does not know what it costs.
+  #
+  # Both ends. The nixarchy option is what a person sets; the upstream option
+  # is what actually decides, and a passthrough that silently stopped passing
+  # would leave the first reading false while the second did the deleting.
+  flatpakDefaults = {
+    ours = (configWith { }).programs.nixarchy.flatpaks.uninstallUnmanaged;
+    theirs = (configWith { }).services.flatpak.uninstallUnmanaged;
+    # And that asking for it works, or the option is decoration.
+    onWhenAsked =
+      (configWith { flatpaks.uninstallUnmanaged = true; }).services.flatpak.uninstallUnmanaged;
+  };
+
   # ---- a bundled service yields to a user who already configured it ----
   #
   # This is the Mode A hazard in one assertion. Someone adds nixarchy to a
@@ -334,6 +353,9 @@ pkgs.runCommand "nixarchy-options"
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
+    flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
+    flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
+    flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
@@ -353,6 +375,20 @@ pkgs.runCommand "nixarchy-options"
       ''
           echo "$report"
           echo "the services catalogue is well formed ($serviceCount entries)"
+
+          # ---- flatpaks are not removed unless asked ---------------------
+          if [ "$flatpakOurs" != "false" ] || [ "$flatpakTheirs" != "false" ]; then
+            echo "uninstallUnmanaged defaults to on." >&2
+            echo "  programs.nixarchy.flatpaks.uninstallUnmanaged = $flatpakOurs" >&2
+            echo "  services.flatpak.uninstallUnmanaged          = $flatpakTheirs" >&2
+            echo "That deletes Flatpaks a person installed themselves." >&2
+            exit 1
+          fi
+          [ "$flatpakOn" = "true" ] || {
+            echo "asking for uninstallUnmanaged does not turn it on" >&2
+            exit 1
+          }
+          echo "flatpaks are left alone unless the machine's owner asks"
 
           # ---- composition: the user's definition wins -------------------
           [ "$syncthingDataDir" = "/srv/sync" ] || {

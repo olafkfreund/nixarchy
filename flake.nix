@@ -37,6 +37,31 @@
       flake = false;
     };
 
+    # Declarative Flatpaks, for the software nixpkgs genuinely does not carry.
+    #
+    # nixpkgs' own services.flatpak is infrastructure only -- the daemon, the
+    # portals, polkit, FUSE -- and manages no applications. It does not even
+    # add the flathub remote. So the honest answer this repo has been giving
+    # is data/arch-extras.nix's `note = "then: flatpak install flathub ..."`,
+    # which is advice to do the one thing this project exists to prevent:
+    # install something imperatively that will not survive a rebuild.
+    #
+    # This adds `services.flatpak.packages`, overloading the same option
+    # namespace nixpkgs uses -- worth knowing, because a reader will look for
+    # `packages` in nixpkgs' module and not find it.
+    #
+    # Declared, not reproducible, and the distinction is real: the app IDS are
+    # in your configuration and travel to a new machine, but the BITS are
+    # whatever Flathub serves that day unless every entry pins a commit.
+    # Rollback restores the list, not the version. Upstream nixpkgs has
+    # declined to bless the equivalent (PR #347605, open since October 2024)
+    # on exactly that objection. We take it anyway, because the alternative on
+    # offer is a shell command in a comment.
+    #
+    # No `follows`: v0.7.0 has no inputs at all, which makes this the cheapest
+    # kind of dependency -- nothing to override, nothing to drift.
+    nix-flatpak.url = "github:gmodena/nix-flatpak/v0.7.0";
+
     # The installer's one disk layout is a disko expression, and the installed
     # machine imports the same file -- that is what keeps `fileSystems`
     # declarative instead of frozen into a hardware-configuration.nix nobody

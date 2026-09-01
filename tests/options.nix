@@ -214,6 +214,33 @@ let
   # rather than about an option.
   vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
 
+  # ---- a bundled service yields to a user who already configured it ----
+  #
+  # This is the Mode A hazard in one assertion. Someone adds nixarchy to a
+  # machine they already run and already configure; if a module here sets a
+  # scalar at plain priority, they get "conflicting definition values" and
+  # their only escape is mkForce on their OWN configuration -- the burden
+  # backwards, and exactly what disko #441 and home-manager #5870 are.
+  #
+  # Evaluating at all is most of the proof: a priority clash is an evaluation
+  # error, so a regression here does not produce a wrong value, it produces a
+  # configuration that will not build. Reading the value back checks the other
+  # half, that ours yielded rather than merely tying.
+  syncthingBeside = configBeside {
+    programs.nixarchy = {
+      user = "someone";
+      services.syncthing.enable = true;
+    };
+    # What the user already had, at ordinary priority.
+    services.syncthing.dataDir = "/srv/sync";
+  };
+
+  # And the group the desktop user gets, which is the other half of #92: docker
+  # is enabled for every machine at nixos.nix:705 and was usable only on
+  # machines the installer built.
+  dockerGroups =
+    (configBeside { programs.nixarchy.user = "someone"; }).users.users.someone.extraGroups;
+
   # ---- the services catalogue is shaped the way the generator expects ----
   #
   # data/apps.nix has no schema check at all: it is read with `app ? field`
@@ -276,6 +303,8 @@ pkgs.runCommand "nixarchy-options"
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
+    syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
+    dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
     nativeBuildInputs = [ pkgs.python3 ];
@@ -291,6 +320,22 @@ pkgs.runCommand "nixarchy-options"
       ''
           echo "$report"
           echo "the services catalogue is well formed ($serviceCount entries)"
+
+          # ---- composition: the user's definition wins -------------------
+          [ "$syncthingDataDir" = "/srv/sync" ] || {
+            echo "a bundled service overrode a value the user had already set:" >&2
+            echo "  services.syncthing.dataDir is $syncthingDataDir, not /srv/sync" >&2
+            echo "every scalar a service module sets must be lib.mkDefault." >&2
+            exit 1
+          }
+          echo "a bundled service yields to configuration the user already had"
+
+          case " $dockerGroups " in
+            *" docker "*) echo "the desktop user can reach the docker socket" ;;
+            *) echo "docker is enabled but the desktop user is not in its group" >&2
+               echo "groups: $dockerGroups" >&2
+               exit 1 ;;
+          esac
           echo "every option adds what it should and removes it again"
 
           python3 ${./coverage.py}

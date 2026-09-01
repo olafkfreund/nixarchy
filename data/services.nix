@@ -37,6 +37,17 @@
 #              the field that does the teaching -- say what turning it on costs
 #              or opens, not what it is.
 #   unfree     Marks a service pulling unfree packages.
+# ## Not listed here, because they are already on
+#
+# modules/nixos.nix enables these for every nixarchy machine, at mkDefault, so
+# a catalogue entry would be an option that changes nothing:
+#
+#   virtualisation.docker.enable        nixos.nix:705
+#   services.printing.enable            nixos.nix:634
+#   services.avahi.{enable,nssmdns4}    nixos.nix:635-639
+#
+# If one of those should become a choice rather than a default, that is a
+# change to nixos.nix and an announcement, not a row added here.
 {
   # ── Network ─────────────────────────────────────────────────────────────
   openssh = {
@@ -57,21 +68,7 @@
     note = "A private network between your machines. Bundled because the firewall has to trust the interface or nothing reaches this host.";
   };
 
-  # ── Virtualisation ──────────────────────────────────────────────────────
-  docker = {
-    label = "Docker";
-    category = "Virtualisation";
-    kind = "bundled";
-    note = "Bundled because the useful part is group membership: without it every command needs sudo.";
-  };
-
   # ── Hardware ────────────────────────────────────────────────────────────
-  printing = {
-    label = "Printing";
-    category = "Hardware";
-    kind = "bundled";
-    note = "Bundled because a printer nobody can discover is not printing: cups alone finds nothing on a network.";
-  };
 
   graphics32 = {
     label = "32-bit graphics";

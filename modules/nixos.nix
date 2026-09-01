@@ -68,6 +68,7 @@ in
     inputs.hyprland.nixosModules.default
     (import ./apps.nix inputs)
     ./local-ai.nix
+    ./services
   ];
 
   options.programs.nixarchy = {
@@ -1008,7 +1009,22 @@ in
     # the alternative is guessing which of a machine's users logs into the
     # desktop.
     users.users = lib.optionalAttrs (cfg.user != null) {
-      ${cfg.user}.extraGroups = [ "input" ];
+      ${cfg.user}.extraGroups = [
+        "input"
+      ]
+      # Docker is enabled above, at mkDefault, for every machine. Enabled and
+      # unusable, until now: without this group every command wants sudo, and
+      # `docker ps` answers "permission denied while trying to connect to the
+      # Docker daemon socket" -- which reads like a broken install rather than
+      # a missing group.
+      #
+      # The installer has always put its user in `docker` directly
+      # (installer/host.nix), so this was only ever wrong for someone adding
+      # nixarchy to a machine they already run: they got the daemon and not
+      # the access. Conditioned on the option rather than set unconditionally,
+      # so turning Docker off does not leave a group behind that grants root
+      # to whatever installs a socket there later.
+      ++ lib.optional config.virtualisation.docker.enable "docker";
     };
 
     boot.plymouth = lib.mkMerge [

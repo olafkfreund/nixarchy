@@ -32,11 +32,13 @@ concurrency:
 
 jobs:
   iso:
-    name: build, verify and publish the ISO
+    name: build and publish the ISO
     runs-on: [self-hosted, nixos, kvm, big]
-    # The ISO build, then an install from it, then splitting and uploading
-    # 5.6 GB. nightly.yml allows 180 minutes for the first two.
-    timeout-minutes: 300
+    # Two ISO builds, then splitting and uploading 5.6 GB. Was 300 minutes
+    # when this also installed from the image; that step moved to the nightly,
+    # and a smaller window is part of the point -- a job that cannot finish in
+    # ninety minutes has gone wrong rather than gone slowly.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -68,11 +70,31 @@ jobs:
       - name: Build the network ISO
         run: nix build .#iso-net --out-link result-net --print-build-logs
 
-      # The image nobody boots is the image that does not boot. This is the
-      # same check the nightly runs, against the same expression, so it costs
-      # an hour and buys the only guarantee that matters on a release page.
-      - name: Install from it, with no network device present
-        run: nix build .#checks.x86_64-linux.install-iso --no-link --print-build-logs
+      # checks.install-iso is deliberately NOT here, and the reasoning is
+      # about survivability rather than about trusting the image less.
+      #
+      # It boots the 5.6 GB image and installs a desktop from it, which takes
+      # about an hour, and it ran here because "the image nobody boots is the
+      # image that does not boot". That argument is right and this still holds
+      # it: the nightly runs the same check, against the same expression, on
+      # the same machine.
+      #
+      # What changed is the measured cost of a long release. On 2026-09-01 two
+      # release attempts died before publishing anything -- one when a deploy
+      # restarted the runner mid-job, one when both runners lost their
+      # connection to GitHub while p510 carried on building (the runner
+      # afterwards logged the job as Succeeded, eight minutes after GitHub had
+      # given up on it). Neither was a fault in the image or in this workflow.
+      # A four-hour job is simply a large target: anything that interrupts it
+      # discards four hours and publishes nothing.
+      #
+      # Twenty minutes of building is a target small enough to hit. The image
+      # is still install-tested every night, and a tag is cut from a commit
+      # that has been on main -- so in practice the ISO published here is one
+      # the nightly has already booted.
+      #
+      # If that stops being true -- if tags start being cut faster than
+      # nightlies run -- this decision is worth revisiting.
 
       - name: Split it into pieces GitHub will accept
         id: split

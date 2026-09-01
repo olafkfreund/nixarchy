@@ -41,6 +41,29 @@ let
         mountpoint = "/var/log";
         inherit mountOptions;
       };
+
+      # Where snapper keeps snapshots, and it has to exist before snapper can
+      # take one: NixOS' snapper module does not create `.snapshots` itself
+      # (nixpkgs#34595; the fix, PR #368449, is still unmerged), so a machine
+      # without these subvolumes has a configured snapper that silently takes
+      # nothing.
+      #
+      # Separate subvolumes rather than plain directories, which is also the
+      # layout the ArchWiki recommends: a snapshot of `/` would otherwise
+      # contain every previous snapshot of `/`, nested, growing each time.
+      #
+      # No compression: the contents are already-compressed extents shared
+      # with the live subvolume, and snapshots cost nothing until the two
+      # diverge. Setting compress here would be describing a copy that does
+      # not happen.
+      "@snapshots" = {
+        mountpoint = "/.snapshots";
+        mountOptions = [ "noatime" ];
+      };
+      "@home-snapshots" = {
+        mountpoint = "/home/.snapshots";
+        mountOptions = [ "noatime" ];
+      };
     };
   };
 in

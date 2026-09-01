@@ -146,6 +146,57 @@
 
   networking.hostName = hostname;
 
+  # Snapshots, for the half of the machine generations do not cover.
+  #
+  # A NixOS generation restores the system closure and the /etc Nix writes.
+  # It does not restore /home, and it does not restore /var/lib -- so the
+  # config a person spent an evening on, and the state their services keep,
+  # have had no undo at all. That is what this is for, and it is the only
+  # thing it is for: the system half is already better served by generations
+  # and nixarchy-rollback.
+  #
+  # Deliberately in host.nix and not in modules/nixos.nix. This file is
+  # imported only by flakes the installer generated, so snapper reaches
+  # machines nixarchy built and never a machine where somebody imported the
+  # module into a configuration of their own. Taking snapshots of somebody
+  # else's disk, on a schedule they did not ask for, is not this module's
+  # business.
+  #
+  # Upstream takes a snapshot before every update and offers to boot one.
+  # Neither transfers. `@` here holds almost no operating system -- the
+  # kernels are on the ESP and the system is in `@nix`, a separate subvolume
+  # that these snapshots exclude -- so booting a snapshot of `@` would get you
+  # the same system with older /etc. Generations already are the bootable
+  # snapshot, which is why the bootloader is unchanged and there is no
+  # limine-snapper-sync here.
+  services.snapper = {
+    # Hourly timeline snapshots of the user's data, and a snapper the desktop
+    # user can drive without sudo -- ALLOW_USERS is what makes `snapper -c
+    # home list` and an undo of their own file something they can do.
+    configs.home = {
+      SUBVOLUME = "/home";
+      ALLOW_USERS = [ username ];
+      TIMELINE_CREATE = true;
+      TIMELINE_CLEANUP = true;
+    };
+
+    # Root gets a snapshot at boot and no timeline. The timeline is for data
+    # that changes while you work; /var/lib changes when a service decides to,
+    # and an hourly snapshot of it is mostly noise. One per boot is the useful
+    # one: it is the state you were in before whatever you are about to do.
+    configs.root = {
+      SUBVOLUME = "/";
+      TIMELINE_CREATE = false;
+      TIMELINE_CLEANUP = false;
+    };
+    snapshotRootOnBoot = true;
+
+    # A laptop is asleep at some point every day, and a non-persistent timer
+    # skips what it missed rather than running it late. On a machine that is
+    # only ever awake this changes nothing.
+    persistentTimer = true;
+  };
+
   boot.loader = {
     systemd-boot.enable = true;
     efi.canTouchEfiVariables = true;

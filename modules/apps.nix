@@ -346,16 +346,36 @@ let
 
         # Every rebuild leaves the last one bootable and nothing said so.
         #
-        # A new row rather than an override: upstream's equivalent is
-        # System > Snapshots, which is snapper and limine and does not exist
-        # here. What NixOS has instead is a generation per rebuild, which is
-        # better and completely invisible until someone reboots and reads the
-        # boot menu.
+        # Under System because it is the system this restores. Upstream's
+        # nearest equivalent is a snapper snapshot picked from the boot menu,
+        # which is a different thing on NixOS: `@` here holds almost no
+        # operating system, so a generation is what carries one. The snapshot
+        # rows under Trigger cover the other half -- home, and service state
+        # -- which no generation touches.
         "system.rollback" = {
           icon = "󰕍";
           label = "Roll back";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-rollback";
           description = "Switch to an earlier system generation. Your home directory is not touched";
+        };
+
+        # Snapshots under Trigger, beside the other "do a thing now" rows.
+        #
+        # Upstream's are taken by its updater and restored from the boot menu,
+        # and neither happens here. These are new rows, so they carry their
+        # own label and icon.
+        "trigger.snapshot" = {
+          icon = "󰆓";
+          label = "Snapshot home";
+          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot create";
+          description = "Save your home directory as it is now. Instant, and costs nothing until files change";
+        };
+
+        "trigger.snapshot.restore" = {
+          icon = "󰦛";
+          label = "Restore from snapshot";
+          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot restore";
+          description = "Open an earlier version of your home directory and copy back what you want";
         };
 
         "install.aur" = {

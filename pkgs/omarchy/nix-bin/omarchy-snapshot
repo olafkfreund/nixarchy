@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Snapshot your home directory, or go back to one
+# omarchy:examples=omarchy snapshot | omarchy snapshot create "before I broke it" | omarchy snapshot list
+
+# Replaces upstream's, which drives snapper through limine: `create` makes a
+# snapper snapshot per configured config, and `restore` execs
+# limine-snapper-restore so you can pick one from the boot menu.
+#
+# Half of that works here and half cannot. snapper is configured -- see
+# installer/host.nix -- but limine is not the bootloader and
+# limine-snapper-sync is not packaged for NixOS at all. More to the point it
+# would not do anything useful if it were: `@` on this machine holds almost no
+# operating system. The kernels are on the ESP and the whole system is in
+# `@nix`, a separate subvolume these snapshots exclude, so booting a snapshot
+# of `@` gets you the system you already have with an older /etc.
+#
+# NixOS generations already are the bootable snapshot, and `nixarchy-rollback`
+# is how you pick one. What snapshots are for here is the half generations do
+# not cover: /home, and the mutable state under /var/lib.
+#
+# So restore happens from the running system rather than from the boot menu,
+# which is also less dangerous: nothing is written to the ESP and a mistake
+# costs a reboot rather than a machine that will not start.
+
+set -euo pipefail
+
+red() { printf '\033[0;31m%s\033[0m\n' "$1"; }
+dim() { printf '\033[0;90m%s\033[0m\n' "$1"; }
+bold() { printf '\033[1m%s\033[0m\n' "$1"; }
+
+usage() {
+  cat <<'EOF'
+usage: omarchy snapshot [create [description] | list | restore]
+
+  create [desc]  snapshot /home now, with an optional description
+  list           show the snapshots that exist
+  restore        pick one and copy files back out of it
+
+Snapshots cover your home directory and service state. They do NOT cover the
+system -- that is what generations are for, and `nixarchy-rollback` picks one.
+
+Snapshots live on the same disk. They are an undo button, not a backup: they
+do not survive the disk failing.
+EOF
+}
+
+# Configured only on machines the nixarchy installer built. A machine where
+# somebody imported the module into their own configuration has no snapper
+# and should be told why rather than shown an error from snapper itself.
+if ! command -v snapper >/dev/null 2>&1; then
+  red "snapper is not installed on this machine."
+  echo
+  echo "  Snapshots are set up by the nixarchy installer, which configures"
+  echo "  snapper against the btrfs layout it creates. A machine that imported"
+  echo "  the nixarchy module into its own configuration keeps its own disk"
+  echo "  layout and its own backups, and nixarchy does not add either."
+  echo
+  echo "  For the system half, generations work everywhere: nixarchy-rollback."
+  exit 1
+fi
+
+case "${1:-list}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+
+  create)
+    desc="${2:-manual}"
+    snapper --config home create --description "$desc" --cleanup-algorithm number
+    bold "Snapshotted /home."
+    dim "It costs nothing until the files change; see 'omarchy snapshot list'."
+    ;;
+
+  list)
+    bold "/home"
+    snapper --config home list 2>/dev/null || dim "  (none yet)"
+    echo
+    bold "/ (taken at boot)"
+    sudo snapper --config root list 2>/dev/null || dim "  (needs sudo, or none yet)"
+    ;;
+
+  restore)
+    # Copying files out, not swapping the subvolume.
+    #
+    # Swapping is what upstream does and it is the wrong default here: it
+    # replaces the whole of /home in one step, including everything written
+    # since the snapshot, and it cannot be done while the subvolume is
+    # mounted and in use. Someone reaching for this has usually broken one
+    # config file, and the honest answer to that is a file manager pointed at
+    # a directory, not a procedure that can lose a day's work.
+    line=$(snapper --config home list --columns number,date,description 2>/dev/null |
+      tail -n +3 | gum choose --header "Restore from which snapshot?") || exit 0
+    [ -n "$line" ] || exit 0
+    num=$(echo "$line" | awk '{print $1}')
+    path="/home/.snapshots/$num/snapshot"
+
+    [ -d "$path" ] || {
+      red "snapshot $num is not at $path"
+      exit 1
+    }
+
+    echo
+    bold "Snapshot $num is readable at:"
+    echo "  $path"
+    echo
+    echo "Your files as they were are under $path/$USER/."
+    echo "Copy back what you want:"
+    echo
+    dim "  cp -r $path/$USER/.config/hypr ~/.config/"
+    echo
+    echo "To see what changed since then:"
+    dim "  snapper --config home status $num..0"
+    echo
+    dim "Nothing has been changed. Copying back is yours to do, deliberately."
+    ;;
+
+  *)
+    red "unknown: $1"
+    usage >&2
+    exit 2
+    ;;
+esac

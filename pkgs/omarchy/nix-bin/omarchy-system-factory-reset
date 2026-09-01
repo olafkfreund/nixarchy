@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Factory-reset this machine back to its freshly-installed state
+# omarchy:group=setup
+# omarchy:requires-sudo=true
+# omarchy:examples=sudo omarchy-system-factory-reset
+
+# Upstream's version swaps the running root for a fresh clone of an @factory
+# snapshot, then scrubs the machine's identity and re-keys LUKS for whoever
+# gets it next. It is a good design and it depends on one thing this installer
+# does not do: @factory is taken by the Omarchy Quattro ISO at install time,
+# and upstream already turns away machines that were upgraded rather than
+# installed from it.
+#
+# nixarchy's installer takes no such snapshot, so there is no baseline to
+# return to on any machine running today -- not one that could be created
+# retroactively either, since the point of the baseline is that it predates
+# everything the user did.
+#
+# Rather than fail with a btrfs error about a subvolume that was never made,
+# this says so, and says what does work. #112 tracks giving the installer a
+# baseline; until then a reinstall is the honest answer and, on a machine
+# whose configuration is a committed flake, a surprisingly complete one.
+set -euo pipefail
+
+cat >&2 <<'MSG'
+There is no factory snapshot on this machine to return to.
+
+  Upstream resets by swapping the running root for a clone of @factory, a
+  snapshot its installer takes before you ever log in. The nixarchy installer
+  does not take one, and it cannot be created now: a baseline made today would
+  contain everything you are trying to undo.
+
+  What does work, in order of how much it resets:
+
+    Your desktop config, one file at a time
+      omarchy refresh config hypr/bindings.lua
+    Restores the shipped default and keeps a timestamped backup beside it.
+
+    Your home directory, to an earlier point
+      omarchy snapshot list
+      omarchy snapshot restore
+    Snapper covers /home and service state. Not the system -- that is below.
+
+    The system, to an earlier build
+      nixarchy-rollback
+    Every rebuild left a generation behind. This picks one.
+
+    The whole machine
+      Reinstall from the ISO, then restore /etc/nixos from your git remote.
+    A committed flake makes this closer to a factory reset than it sounds:
+    the same commit produces the same system. It does not erase your data --
+    for a machine you are selling, wipe the disk rather than trusting this.
+
+  Whether your configuration is actually pushed anywhere:
+
+    nixarchy-config-repo
+
+MSG
+exit 1

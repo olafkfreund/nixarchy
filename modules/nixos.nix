@@ -402,12 +402,6 @@ in
       }
     ];
 
-    # Passed straight through: nix-flatpak's own option carries the behaviour,
-    # ours carries the decision and its reasoning. mkDefault so a user who
-    # sets services.flatpak.uninstallUnmanaged directly keeps their value --
-    # this is a convenience over an upstream option, not a replacement for it.
-    services.flatpak.uninstallUnmanaged = lib.mkDefault cfg.flatpaks.uninstallUnmanaged;
-
     # Most of what the Install menu offers is unfree: the browsers, the editors,
     # Steam, the AI clients, several of the fonts. Leaving licence policy to the
     # consumer sounded principled and in practice meant a new user picked an app,
@@ -634,6 +628,18 @@ in
     # mkForce their way out one option at a time. Their setting wins now, and
     # they lose only the feature that depended on it.
     services = {
+      # Passed straight through: nix-flatpak's own option carries the
+      # behaviour, ours carries the decision and its reasoning. mkDefault so a
+      # user who sets services.flatpak.uninstallUnmanaged directly keeps their
+      # value -- this is a convenience over an upstream option, not a
+      # replacement for it.
+      #
+      # In this block rather than as its own `services.flatpak...` line
+      # because statix rejects a second `services` key in the same attribute
+      # set, and it is right to: two places setting services is two places to
+      # look.
+      flatpak.uninstallUnmanaged = lib.mkDefault cfg.flatpaks.uninstallUnmanaged;
+
       # See programs.nixarchy.displayManager for why this is an option of our
       # own rather than a look at whether another greeter is already enabled.
       displayManager.sddm = {

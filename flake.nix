@@ -237,6 +237,12 @@
             # is a class of bug that only shows up on that image.
             curl # the connectivity test -- can we reach the binary cache
             networkmanager # nmcli, for joining a wireless network
+            # The failure and finish screens offer a way out of both. Present
+            # on the live medium anyway; named here so `nix run .#install` on
+            # some other host does not discover them missing at the one moment
+            # a person needs them.
+            systemd # systemctl reboot / poweroff
+            bashInteractive # the shell the failure screen drops into
           ];
           # Spliced at build time the way doctor splices @apps@, so the script
           # never has to find these itself and `nix run` works from anywhere.

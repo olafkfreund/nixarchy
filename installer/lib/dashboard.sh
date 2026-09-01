@@ -112,6 +112,21 @@ ui_finished() {
   ui_centre "Reboot, then log in as \e[1m$username\e[0m." $((23 + ${#username}))
   ui_centre "\e[90mYour configuration is /etc/nixos -- a git repository, yours to edit.\e[0m" 67
   echo
+
+  # One button, because there is exactly one thing left to do. Telling somebody
+  # to reboot and leaving them at a prompt makes them find the command; the
+  # install knows it, so it offers it.
+  #
+  # Skipped when nobody is watching: checks.install finishes here, and a
+  # prompt would hang the test rather than fail it.
+  ui_interactive || return 0
+  local choice
+  choice=$(printf '%s\n' "Reboot now" "Leave it running" |
+    gum choose --padding "$(ui_gum_pad)" --header "") || return 0
+  if [ "$choice" = "Reboot now" ]; then
+    systemctl reboot
+  fi
+  return 0
 }
 
 # When it goes wrong, the log is the only thing worth showing, and it is the
@@ -131,4 +146,33 @@ ui_failed() {
   echo
   ui_left "\e[90mThe whole log is at $log. Nothing was rebooted.\e[0m"
   echo
+
+  # Twenty-five lines is enough to recognise a failure and rarely enough to
+  # diagnose one, so offer the rest rather than making somebody remember a
+  # path and a pager on a machine with no desktop yet.
+  #
+  # A loop: reading the log should return here, not end the installer. Only
+  # rebooting, powering off or leaving on purpose gets out.
+  ui_interactive || return 0
+  local choice
+  while :; do
+    choice=$(printf '%s\n' \
+      "View the whole log" "Open a shell" "Reboot" "Power off" |
+      gum choose --padding "$(ui_gum_pad)" --header "What now?") || return 0
+    case $choice in
+      "View the whole log")
+        # gum's pager, not less: gum is already a dependency and less is not,
+        # and a live medium is a poor place to discover a missing binary.
+        gum pager <"$log" || true
+        ;;
+      "Open a shell")
+        ui_left "\e[90mThe install is stopped. Type exit to come back here.\e[0m"
+        echo
+        "${SHELL:-bash}" || true
+        ;;
+      "Reboot") systemctl reboot; return 0 ;;
+      "Power off") systemctl poweroff; return 0 ;;
+      *) return 0 ;;
+    esac
+  done
 }

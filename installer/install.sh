@@ -868,6 +868,7 @@ main() {
     validate_answers
     ask_network
   else
+    ui_greeter
     ask_network
     ask_keymap
     ask_identity
@@ -911,6 +912,15 @@ main() {
   mkdir -p /run/nixarchy-install
   printf '{"started":%s,"phase":"installing"}\n' "$started" \
     >/run/nixarchy-install/state.json
+
+  # An interrupt during the install has to land somewhere.
+  #
+  # Without this, Ctrl-C or a kill leaves the dashboard's redraw loop running,
+  # the cursor hidden and the screen owned by a program that is no longer
+  # there -- and the log, which is the only thing worth having at that point,
+  # unmentioned. The EXIT trap ui_dashboard_start sets restores the cursor;
+  # this adds the part that says what happened and where to read about it.
+  trap 'ui_dashboard_stop; ui_failed "$log" 130; exit 130' INT TERM
 
   ui_dashboard_start
   {

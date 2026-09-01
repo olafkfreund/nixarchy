@@ -269,6 +269,53 @@ ui_logo() {
   echo
 }
 
+# Is there a person out there?
+#
+# Every screen that waits for an answer has to ask this first. The installer
+# runs unattended in checks.install -- with --answers, no tty, and nobody to
+# press Return -- and a greeter that blocks there does not fail the test, it
+# hangs it, which is a far worse thing to debug. Learned the hard way: the
+# network prompt had to be re-gated for exactly this reason.
+#
+# Two conditions, not one. --answers says the caller means to be unattended;
+# the tty check catches a caller who forgot to say so.
+ui_interactive() {
+  [ -z "${answers_file:-}" ] && [ -t 0 ]
+}
+
+# The first thing anyone sees.
+#
+# Omarchy opens on its wordmark and waits for Return, and that pause is doing
+# real work: it says the machine is ready and the next thing that happens is
+# yours to start. Booting straight into a question makes an installer feel like
+# it began without asking.
+#
+# No animation. Upstream animates this with ttfx, which is packaged here as a
+# selectable app rather than as anything the live medium carries -- it is not
+# in the ISO's closure, so using it would mean adding a dependency to both
+# images for a decoration. The mark is drawn with ui_logo, which every other
+# screen already uses and which degrades correctly on a narrow console.
+ui_greeter() {
+  ui_interactive || return 0
+
+  ui_init
+  ui_clear
+  local rows pad
+  rows=$(ui_rows)
+  # Vertically centred, roughly: the mark is 6 lines and the text below it 4.
+  pad=$(((rows - 10) / 2))
+  [ "$pad" -lt 1 ] && pad=1
+  for ((i = 0; i < pad; i++)); do echo; done
+
+  ui_logo
+  ui_centre "\e[1mOmarchy, on NixOS.\e[0m" 18
+  echo
+  ui_centre "\e[90mPress Return to start the install.\e[0m" 34
+  # `|| true` because this is the function's last command and read returns
+  # non-zero at EOF. Under set -e that would end the install at the greeting.
+  read -r _ || true
+}
+
 # One screen: clear it, draw the mark, then the single line saying what this
 # screen is for. Every question the installer asks starts here, so a user is
 # never looking at a scrollback of what came before.

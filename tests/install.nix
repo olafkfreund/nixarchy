@@ -162,7 +162,11 @@ let
       instrumented ? false,
     }:
     (inputs.nixpkgs.lib.nixosSystem {
-      inherit (pkgs) system;
+      # Not `inherit (pkgs) system`: pkgs.system is deprecated in favour of
+      # stdenv.hostPlatform.system, and nixpkgs warns on every evaluation of
+      # this check. Written out rather than inherited because the inherit form
+      # is what hid it -- a grep for `pkgs.system` does not find it.
+      system = pkgs.stdenv.hostPlatform.system;
       specialArgs = { inherit inputs; };
       modules = [
         inputs.self.nixosModules.nixarchy
@@ -250,7 +254,7 @@ pkgs.testers.runNixOSTest {
       ];
 
       environment.systemPackages = [
-        inputs.self.packages.${pkgs.system}.install
+        inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
         pkgs.git
       ];
 

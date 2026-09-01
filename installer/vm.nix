@@ -35,7 +35,7 @@
   imports = [ "${modulesPath}/virtualisation/qemu-vm.nix" ];
 
   environment.systemPackages = [
-    inputs.self.packages.${pkgs.system}.install
+    inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
     pkgs.git
   ];
 

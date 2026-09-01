@@ -561,5 +561,19 @@ pkgs.testers.runNixOSTest {
     target.succeed("cd /etc/nixos && nixos-rebuild switch --flake .#installed")
     assert target.succeed("readlink -f /run/current-system").strip() == before
     print("a rebuild straight after install builds nothing (Invariant 1)")
+
+    # Shut the target down, or this check never finishes.
+    #
+    # `installer` is shut down above; `target` was not, and a machine made by
+    # create_machine is not reaped for us the way a declared node is. The test
+    # script would reach its end, every assertion passing, and the derivation
+    # would then sit forever with a qemu still running -- measured at nine
+    # hours against a script that finished in 510 seconds.
+    #
+    # That is why this check had never once produced a verdict: CI records the
+    # 45-minute timeout as `cancelled`, which reads like someone cancelled it
+    # rather than like a hang, so the passing test looked like an interrupted
+    # one every single time.
+    target.shutdown()
   '';
 }

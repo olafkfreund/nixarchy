@@ -44,7 +44,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 431 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 56 apps in the selection | 41 from nixpkgs, 5 as NixOS modules, 8 built here, 2 with no equivalent |
+| 55 apps in the selection | 41 from nixpkgs, 4 as NixOS modules, 8 built here, 2 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -338,7 +338,7 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 56 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
+The 55 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
 
@@ -361,7 +361,7 @@ from a terminal:
   enter to select · tab for several · esc to cancel
 ```
 
-**137,599 rows: 25,102 NixOS options, 112,443 packages, and 54 of the 56 apps
+**137,599 rows: 25,102 NixOS options, 112,443 packages, and 53 of the 55 apps
 (the two with no nixpkgs equivalent cannot be indexed).** Three kinds,
 one picker, because you should not have to know which kind you want before you
 can look. They are not interchangeable and the rows say so — picking Tailscale
@@ -1161,7 +1161,7 @@ done
 
 Almost nothing here waits on a maintainer.
 
-**46 of the 56 apps never touch this repo.** Brave, VSCode, Signal and the rest
+**45 of the 55 apps never touch this repo.** Brave, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own
@@ -1201,7 +1201,7 @@ Most of it is not our job, and should not be:
 
 | where the app comes from | who updates it |
 |---|---|
-| nixpkgs (46 of 56 apps) | **nobody** — your own `nix flake update` |
+| nixpkgs (45 of 55 apps) | **nobody** — your own `nix flake update` |
 | pinned in this repo (2) | a weekly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |

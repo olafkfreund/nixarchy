@@ -276,12 +276,18 @@ jobs:
           # appear in data/apps.nix or a new Omarchy app silently reaches the
           # menu as a row that still tries to run pacman.
           menu=result/share/omarchy/default/omarchy/omarchy-menu.jsonc
-          python3 - "$menu" data/apps.nix <<'PY'
+          # Both catalogues. A row is mapped if data/apps.nix claims its
+          # package or data/services.nix does -- tailscale moved from one to
+          # the other when it became a service, and its `arch` moved with it.
+          # A check that read only apps would have called that row unmapped,
+          # and been wrong: it is answered, just not by the file it used to be.
+          python3 - "$menu" data/apps.nix data/services.nix <<'PY'
           import re, sys
-          menu, appsfile = sys.argv[1], sys.argv[2]
+          menu, appsfile, svcfile = sys.argv[1], sys.argv[2], sys.argv[3]
           raw = open(menu).read()
           rows = re.sub(r'^\s*//[^\n]*(\n|$)', '', raw, flags=re.M)
           known = set(re.findall(r'arch = "([^"]+)"', open(appsfile).read()))
+          known |= set(re.findall(r'arch = "([^"]+)"', open(svcfile).read()))
           # Only the install tree: remove.* rows are derived from these.
           wanted = set()
           for rid, body in re.findall(r'"(install\.[a-z0-9.\-]+)":\s*(\{[^}]*\})', rows):

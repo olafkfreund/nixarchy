@@ -59,6 +59,12 @@
     # it; the service does now, and the id moving with the entry is what
     # stops the menu generator failing on an unmapped row.
     menuId = "install.service.tailscale";
+    # Upstream's Arch package name. Kept for exactly one reason, the same one
+    # data/apps.nix keeps it for: CI cross-checks every `omarchy-pkg-present
+    # <name>` in upstream's menu against these files, and a row whose package
+    # nothing claims is a row that still tries to run pacman. It came across
+    # with the entry.
+    arch = "tailscale";
     note = "A private network between your machines. Bundled because the firewall has to trust the interface or nothing reaches this host.";
   };
 

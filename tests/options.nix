@@ -214,6 +214,53 @@ let
   # rather than about an option.
   vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
 
+  # ---- the services catalogue is shaped the way the generator expects ----
+  #
+  # data/apps.nix has no schema check at all: it is read with `app ? field`
+  # and a missing field simply produces a row nobody notices is wrong. That is
+  # tolerable for a file one person edits rarely and not for a catalogue meant
+  # to grow, so this one is checked.
+  #
+  # What is NOT checked here: that a bundled entry has a module in
+  # modules/services/. Those modules do not exist yet, and an assertion that
+  # fails until they do would mean this file cannot land before them.
+  services = import ../data/services.nix;
+
+  serviceProblems = pkgs.lib.flatten (
+    pkgs.lib.mapAttrsToList (
+      id: svc:
+      let
+        need = field: cond: pkgs.lib.optional (!cond) "  ${id}: ${field}";
+      in
+      [
+        (need "no label" (svc ? label && svc.label != ""))
+        (need "no category" (svc ? category && svc.category != ""))
+        (need "kind must be \"plain\" or \"bundled\"" (
+          svc ? kind
+          && builtins.elem svc.kind [
+            "plain"
+            "bundled"
+          ]
+        ))
+        # A plain entry IS its option path -- the whole point is that the real
+        # upstream line lands in the user's file rather than an alias. Without
+        # the path there is no line to write.
+        (need "kind=plain needs an option path" (
+          (svc.kind or "") != "plain" || (svc ? option && svc.option != [ ])
+        ))
+        # And a bundled entry must not carry one, because its module decides
+        # what to set. A stray path here reads as though it were honoured.
+        (need "kind=bundled must not set option; its module decides" (
+          (svc.kind or "") != "bundled" || !(svc ? option)
+        ))
+        # The note is where the teaching happens. An entry without one is a
+        # row that says what a thing is called and nothing about what turning
+        # it on costs.
+        (need "no note" (svc ? note && svc.note != ""))
+      ]
+    ) services
+  );
+
   broken = pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) cases;
 
   report = pkgs.lib.concatStringsSep "\n" (
@@ -228,13 +275,22 @@ pkgs.runCommand "nixarchy-options"
     inherit menuFile vm;
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
+    serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
+    serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
     nativeBuildInputs = [ pkgs.python3 ];
   }
   (
-    if broken == { } then
+    if serviceProblems != [ ] then
+      ''
+        echo "data/services.nix has entries the generator cannot use:" >&2
+        echo "$serviceProblems" >&2
+        exit 1
+      ''
+    else if broken == { } then
       ''
           echo "$report"
+          echo "the services catalogue is well formed ($serviceCount entries)"
           echo "every option adds what it should and removes it again"
 
           python3 ${./coverage.py}

@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Go back to an earlier system generation
+# omarchy:examples=nixarchy rollback | nixarchy rollback --list
+
+# Every rebuild leaves the last one behind, bootable, and nothing surfaces that.
+#
+# Upstream's answer to "undo this" is omarchy-snapshot, which is snapper and
+# limine -- neither of which exists here, so both that and
+# omarchy-system-factory-reset fail on a nixarchy machine. What NixOS gives
+# instead is better for the system half and completely invisible: a generation
+# per rebuild, each one a complete bootable system, selectable at boot or from
+# a running desktop. The boot menu already lists them; this is the same thing
+# without rebooting to read it.
+#
+# What a generation restores, exactly: the system closure and the /etc that Nix
+# generates. NOT your home directory, NOT /var/lib service state, and NOT the
+# files in your flake -- rolling back does not edit configuration.nix. If what
+# you broke is in ~/.config, this is the wrong tool and `omarchy refresh config
+# <file>` is the right one.
+#
+# Generations are garbage collected. host.nix keeps 5, and anything older than
+# 14 days, so this is an undo button with a horizon rather than an archive.
+
+set -euo pipefail
+
+profile=/nix/var/nix/profiles/system
+
+red() { printf '\033[0;31m%s\033[0m\n' "$1"; }
+dim() { printf '\033[0;90m%s\033[0m\n' "$1"; }
+bold() { printf '\033[1m%s\033[0m\n' "$1"; }
+
+usage() {
+  cat <<'EOF'
+usage: nixarchy-rollback [--list]
+
+  (no arguments)  pick a generation to switch to
+  --list          show them and exit
+
+Rolls back the SYSTEM. Your home directory is not touched -- for a config
+file you edited and regret, use `omarchy refresh config <path>` instead,
+which restores the shipped default and keeps a timestamped backup.
+EOF
+}
+
+list_generations() {
+  nixos-rebuild list-generations --json 2>/dev/null
+}
+
+table() {
+  list_generations | jq -r '
+    .[] | [
+      (if .current then "*" else " " end),
+      (.generation|tostring),
+      .date,
+      .nixosVersion,
+      ("kernel " + .kernelVersion)
+    ] | @tsv' | column -t -s"$(printf '\t')"
+}
+
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  --list)
+    table
+    exit 0
+    ;;
+  "") ;;
+  *)
+    red "unknown argument: $1"
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if ! command -v jq >/dev/null 2>&1; then
+  red "jq is required."
+  exit 1
+fi
+
+generations=$(list_generations)
+count=$(printf '%s' "$generations" | jq 'length')
+if [ "$count" -lt 2 ]; then
+  dim "Only one generation exists. There is nothing to go back to yet."
+  exit 0
+fi
+
+current=$(printf '%s' "$generations" | jq -r '.[] | select(.current) | .generation')
+
+bold "System generations"
+echo
+table
+echo
+dim "* is the one running now. Your home directory is not affected by any of these."
+echo
+
+choice=$(
+  printf '%s' "$generations" |
+    jq -r '.[] | select(.current | not) |
+      "\(.generation)  \(.date)  \(.nixosVersion)  kernel \(.kernelVersion)"' |
+    gum choose --header "Switch to which generation?"
+) || exit 0
+[ -n "$choice" ] || exit 0
+
+target=${choice%% *}
+
+# The warning this command exists to give.
+#
+# A generation whose kernel differs from the running one activates fine and
+# then does not work properly: the modules loaded in memory came from the old
+# kernel and the userspace now on disk came from the new one. On an NVIDIA
+# machine that means the driver stops matching its module and the GPU goes
+# away until reboot -- measured, on a machine that lost its display stack for
+# an hour this way. switch-to-configuration cannot warn about this; it does
+# not know what you booted.
+target_kernel=$(printf '%s' "$generations" | jq -r --arg g "$target" '.[] | select(.generation == ($g|tonumber)) | .kernelVersion')
+running_kernel=$(uname -r | cut -d- -f1)
+
+if [ "$target_kernel" != "$running_kernel" ]; then
+  echo
+  red "Generation $target was built against kernel $target_kernel; you are running $running_kernel."
+  echo
+  echo "  Switching now activates it without rebooting, and anything that"
+  echo "  loaded a kernel module -- graphics drivers above all -- will be"
+  echo "  running userspace from one kernel against modules from another."
+  echo
+  echo "  Reboot and pick generation $target from the boot menu instead, or"
+  echo "  switch now and reboot promptly."
+  echo
+fi
+
+echo "What changes:"
+if command -v nvd >/dev/null 2>&1; then
+  nvd diff "$profile-$current-link" "$profile-$target-link" 2>/dev/null || true
+else
+  nix store diff-closures "$profile-$current-link" "$profile-$target-link" 2>/dev/null |
+    head -30 || dim "  (could not diff the closures)"
+fi
+echo
+
+gum confirm "Switch from generation $current to $target?" || {
+  dim "Nothing changed."
+  exit 0
+}
+
+# nixos-rebuild has --rollback, which only ever goes back one. Moving the
+# profile pointer and activating is the documented route to an arbitrary
+# generation, and it is two commands rather than one because the pointer and
+# the activation are genuinely separate things.
+sudo nix-env --switch-generation "$target" --profile "$profile"
+sudo "$profile/bin/switch-to-configuration" switch
+
+echo
+bold "Now on generation $target."
+dim "Your home directory was not touched. The generation you came from is still there."

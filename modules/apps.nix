@@ -344,6 +344,20 @@ let
           description = "Every package, NixOS option and Omarchy app, in one picker";
         };
 
+        # Every rebuild leaves the last one bootable and nothing said so.
+        #
+        # A new row rather than an override: upstream's equivalent is
+        # System > Snapshots, which is snapper and limine and does not exist
+        # here. What NixOS has instead is a generation per rebuild, which is
+        # better and completely invisible until someone reboots and reads the
+        # boot menu.
+        "system.rollback" = {
+          icon = "󰕍";
+          label = "Roll back";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-rollback";
+          description = "Switch to an earlier system generation. Your home directory is not touched";
+        };
+
         "install.aur" = {
           when = "false";
         };

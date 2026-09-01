@@ -21,6 +21,29 @@ on:
   push:
     tags: ["v*"]
 
+  # Because a release that is lost has to be recoverable without tag surgery.
+  #
+  # Four attempts failed before one published, and none of them failed on the
+  # image: a deploy restarted the runner mid-job, both runners lost their
+  # connection to GitHub while the machine carried on building, one ran out of
+  # the five hours it was given, and one run simply disappeared from the
+  # history with the tag still in place and nothing running.
+  #
+  # With `push: tags` as the only trigger there is no way to say "try that
+  # again". Re-running the old run replays the workflow as it was at that
+  # tag's commit, which is the wrong version once the workflow itself has been
+  # fixed, and deleting and re-pushing a tag is a thing to be careful with
+  # once anyone might have pinned it. So: a button.
+  #
+  # Takes the tag to build. It must exist and it must already point at the
+  # commit you want -- this re-runs a release, it does not create one.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish, e.g. v4.0.1-5"
+        required: true
+        type: string
+
 permissions:
   contents: write
 
@@ -40,7 +63,12 @@ jobs:
     # ninety minutes has gone wrong rather than gone slowly.
     timeout-minutes: 90
     steps:
+      # On a tag push this is the tag already. On a dispatch the default ref
+      # is the branch, so the tag has to be named explicitly or the release
+      # would be built from main and published under a tag's name.
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: The tag names the Omarchy the flake vendors
         run: |
@@ -48,10 +76,15 @@ jobs:
           # against an unchanged upstream, so only the first component is a
           # claim about Omarchy.
           vendored=$(nix eval --raw .#packages.x86_64-linux.omarchy.version)
-          tagged=${GITHUB_REF_NAME#v}
+          # GITHUB_REF_NAME is the tag on a push and the BRANCH on a dispatch,
+          # so every use of it -- this guard, the asset names, the release
+          # itself -- has to go through the input when there is one.
+          tag="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          tagged=${tag#v}
           tagged=${tagged%-*}
           if [ "$vendored" != "$tagged" ]; then
-            echo "::error::tag $GITHUB_REF_NAME claims Omarchy $tagged, the flake vendors $vendored"
+            echo "::error::tag $tag claims Omarchy $tagged, the flake vendors $vendored"
             exit 1
           fi
           echo "omarchy=$vendored" >> "$GITHUB_OUTPUT"
@@ -98,14 +131,16 @@ jobs:
 
       - name: Split it into pieces GitHub will accept
         id: split
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           # GitHub caps a single release asset at 2 GiB and there is no limit
           # on a release's total size, so the image ships in parts. 1900 MiB
           # leaves room under the cap without making a fourth part likely.
           iso=$(echo result/iso/*.iso)
           net=$(echo result-net/iso/*.iso)
-          base="nixarchy-${GITHUB_REF_NAME}.iso"
-          netbase="nixarchy-${GITHUB_REF_NAME}-net.iso"
+          base="nixarchy-${TAG}.iso"
+          netbase="nixarchy-${TAG}-net.iso"
           rm -rf out && mkdir out
           split -b 1900M -- "$iso" "out/$base.part-"
 
@@ -188,9 +223,10 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" out/* \
-            --title "$GITHUB_REF_NAME" \
+          gh release create "$TAG" out/* \
+            --title "$TAG" \
             --notes-file notes.md \
             --generate-notes \
             --prerelease

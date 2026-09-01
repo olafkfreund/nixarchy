@@ -284,6 +284,13 @@ let
         # row that says what a thing is called and nothing about what turning
         # it on costs.
         (need "no note" (svc ? note && svc.note != ""))
+        # #91 could not assert this: modules/services/ did not exist. It does
+        # now, and without this a bundled entry generates a template line for
+        # an option nobody declared -- which fails only when a user uncomments
+        # it, which is the worst moment to find out.
+        (need "kind=bundled needs modules/services/${id}.nix" (
+          (svc.kind or "") != "bundled" || builtins.pathExists ../modules/services/${id}.nix
+        ))
       ]
     ) services
   );

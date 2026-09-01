@@ -48,6 +48,10 @@
 #
 # If one of those should become a choice rather than a default, that is a
 # change to nixos.nix and an announcement, not a row added here.
+#
+# Tailscale is also absent, for a different reason: data/apps.nix still owns
+# it, and moving it means moving its menu row, which is #94. Adding it here
+# first would generate a template line for an option that does not exist yet.
 {
   # ── Network ─────────────────────────────────────────────────────────────
   openssh = {
@@ -59,13 +63,6 @@
       "openssh"
     ];
     note = "Remote login. Opens port 22 and NixOS defaults to keys only, not passwords.";
-  };
-
-  tailscale = {
-    label = "Tailscale";
-    category = "Network";
-    kind = "bundled";
-    note = "A private network between your machines. Bundled because the firewall has to trust the interface or nothing reaches this host.";
   };
 
   # ── Hardware ────────────────────────────────────────────────────────────

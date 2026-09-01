@@ -568,12 +568,19 @@ in
                 # the user's picks, and clobbering it would silently undo them.
                 # /etc/nixarchy/apps-template.nix always holds the current full list,
                 # so a newly packaged app is discoverable with a diff against it.
+                # Three files now: apps.nix, services.nix and advanced.nix.
+                # Each seeded independently and only when absent, so a machine
+                # that predates the split gains the two new ones and keeps the
+                # apps.nix it already has.
                 run mkdir -p "${config.xdg.configHome}/nixarchy"
-                if [ ! -e "${config.xdg.configHome}/nixarchy/apps.nix" ] \
-                  && [ -e /etc/nixarchy/apps-template.nix ]; then
-                  run ${pkgs.coreutils}/bin/install -m600 /etc/nixarchy/apps-template.nix \
-                    "${config.xdg.configHome}/nixarchy/apps.nix"
-                fi
+                for part in apps services advanced; do
+                  if [ ! -e "${config.xdg.configHome}/nixarchy/$part.nix" ] \
+                    && [ -e "/etc/nixarchy/$part-template.nix" ]; then
+                    run ${pkgs.coreutils}/bin/install -m600 \
+                      "/etc/nixarchy/$part-template.nix" \
+                      "${config.xdg.configHome}/nixarchy/$part.nix"
+                  fi
+                done
 
                 # First-run theme. omarchy-theme-set is the only thing that may write
                 # this tree; running it headless avoids poking a shell that is not up.

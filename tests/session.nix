@@ -167,8 +167,18 @@ pkgs.testers.runNixOSTest {
 
     # Answering "no" to the prompt asserts the copy, not a full rebuild.
     print(machine.succeed("su omarchy -c 'echo n | nixarchy-apply' 2>&1"))
-    machine.succeed("grep -q 'brave.enable' /etc/nixos/nixarchy-apps.nix")
-    print("selection reached /etc/nixos/nixarchy-apps.nix")
+    # Both halves of the layout, because either alone would pass while the
+    # machine was broken: the selection has to arrive in nixarchy/apps.nix,
+    # AND nixarchy-apps.nix has to import it. A copy nothing imports is the
+    # exact failure the warning in nixarchy-apply exists for -- apps marked
+    # enabled, a rebuild running to completion, and nothing installed.
+    machine.succeed("grep -q 'brave.enable' /etc/nixos/nixarchy/apps.nix")
+    machine.succeed("grep -q './nixarchy/apps.nix' /etc/nixos/nixarchy-apps.nix")
+    print("selection reached /etc/nixos/nixarchy/apps.nix, and the stub imports it")
+
+    # That the user's own configuration still imports nixarchy-apps.nix is
+    # asserted in tests/install.nix, on an installed machine that has a
+    # configuration.nix. This VM does not; its module comes from the flake.
 
     # ---- the greeter ---------------------------------------------------
     machine.wait_for_unit("display-manager.service")

@@ -441,7 +441,8 @@ let
       # part of the flow this VM can actually complete, so it is the part
       # worth asserting.
       machine.succeed("test -f /etc/nixos/nixarchy-apps.nix")
-      print("selection reached /etc/nixos/nixarchy-apps.nix")
+      machine.succeed("test -f /etc/nixos/nixarchy/apps.nix")
+      print("selection reached /etc/nixos/nixarchy/apps.nix")
       print("=== preinstalled desktop applications ===")
       print(machine.succeed(
           "ls /run/current-system/sw/share/applications/ | head -40"))

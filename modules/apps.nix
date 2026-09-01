@@ -193,6 +193,98 @@ let
     )
   );
 
+  # The catalogue from data/services.nix, as commented-out lines.
+  #
+  # Two shapes, because the catalogue has two kinds and the difference is the
+  # whole point. A "bundled" entry writes the nixarchy option, because nixarchy
+  # does something upstream does not. A "plain" entry writes the REAL upstream
+  # line -- `services.openssh.enable = true;` -- because there is nothing to
+  # add, and a nixarchy alias for a one-line toggle would only be a second
+  # vocabulary to unlearn the moment they read anyone else's configuration.
+  serviceCatalogue = import ../data/services.nix;
+
+  serviceRow =
+    name: svc:
+    let
+      suffix = if svc ? note then "  # ${svc.note}" else "";
+      line =
+        if svc.kind == "bundled" then
+          "programs.nixarchy.services.${name}.enable = true;"
+        else
+          "${lib.concatStringsSep "." svc.option}.${svc.optionAttr or "enable"} = true;";
+    in
+    "    # ${line}  #@ ${name}${suffix}\n";
+
+  serviceCategories = lib.unique (map (s: s.category) (lib.attrValues serviceCatalogue));
+
+  serviceCategoryBlock =
+    category:
+    let
+      rows = lib.filterAttrs (_: s: s.category == category) serviceCatalogue;
+      # A fixed rule rather than one padded to a column: the box-drawing
+      # character is three bytes and fixedWidthString counts bytes, so the
+      # arithmetic that looks right produces a negative width.
+      header = "    # ── ${category} ──────────────────────────────────────\n";
+    in
+    header + lib.concatStrings (lib.mapAttrsToList serviceRow rows) + "\n";
+
+  servicesTemplate = pkgs.writeText "nixarchy-services.nix" ''
+    # Services and system settings, as NixOS configuration.
+    #
+    # The companion to apps.nix. An app is a package; a service is a decision
+    # about the machine. Uncomment what you want -- or pick it from the menu --
+    # then run
+    #
+    #     nixarchy-apply
+    #
+    # Two kinds of line appear below and the difference is deliberate:
+    #
+    #   programs.nixarchy.services.X   nixarchy bundles several options here,
+    #                                  because turning the thing on usefully
+    #                                  takes more than one.
+    #
+    #   services.X.enable              the real NixOS option, because there was
+    #                                  nothing for nixarchy to add. This is the
+    #                                  line every wiki page will show you, and
+    #                                  it is the same line here.
+    #
+    # This file is a NixOS module and nothing stops you writing any option in
+    # it. Upstream's own settings work alongside ours -- if you enable
+    # syncthing below, `services.syncthing.settings.folders` still does what
+    # its documentation says.
+    #
+    # This file is yours. Nothing regenerates or overwrites it once created;
+    # the current full list is always at /etc/nixarchy/services-template.nix.
+    { ... }:
+    {
+    ${lib.concatStrings (map serviceCategoryBlock serviceCategories)}}
+  '';
+
+  # No catalogue, on purpose.
+  advancedTemplate = pkgs.writeText "nixarchy-advanced.nix" ''
+    # Anything at all.
+    #
+    # apps.nix is a list nixarchy generated and services.nix is a catalogue it
+    # curated. This file has neither, because at some point the answer to "how
+    # do I do X on NixOS" is a NixOS option nobody put on a list, and a curated
+    # desktop that has no room for that is a cage.
+    #
+    # It is an ordinary NixOS module. Every option in nixpkgs is available:
+    #
+    #   services.openssh.settings.PermitRootLogin = "no";
+    #   boot.kernelParams = [ "quiet" ];
+    #   users.users.you.extraGroups = [ "dialout" ];
+    #
+    # `nixarchy-search` writes here when you pick an option from it. Nothing
+    # else touches this file.
+    #
+    # If you find yourself writing the same thing here on every machine, that
+    # is worth an issue -- it probably belongs in the catalogue.
+    { ... }:
+    {
+    }
+  '';
+
   appsTemplate = pkgs.writeText "nixarchy-apps.nix" ''
     # Applications available through the Omarchy menu, as NixOS configuration.
     #
@@ -540,6 +632,8 @@ in
         # always diff their file against the current full list.
         environment.etc = {
           "nixarchy/apps-template.nix".source = appsTemplate;
+          "nixarchy/services-template.nix".source = servicesTemplate;
+          "nixarchy/advanced-template.nix".source = advancedTemplate;
           "nixarchy/omarchy-menu.jsonc".source = menuExtension;
         };
 
@@ -1212,12 +1306,72 @@ in
 
               # A flake cannot read a file outside its own tree, so the
               # selection is copied in rather than imported from $HOME.
-              if [ -f "$dest" ] && diff -q "$file" "$dest" >/dev/null; then
-                echo "$dest is already up to date."
+              #
+              # Three files now, into $flake/nixarchy/, with nixarchy-apps.nix
+              # left as a module that imports them. That last part is the whole
+              # reason for the indirection: the README has been telling people
+              # to add `imports = [ ./nixarchy-apps.nix ];` since the beginning,
+              # and on a machine nixarchy does not own, asking them to add two
+              # more lines is not a thing this project gets to do. The name they
+              # already wrote keeps working and gains two files behind it.
+              #
+              # Safe to overwrite because nixarchy-apps.nix has always been a
+              # copy this script regenerates, never something the user wrote --
+              # and the copy it used to hold is written to nixarchy/apps.nix in
+              # the same run, before the stub replaces it.
+              srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
+              mkdir -p "$flake/nixarchy"
+
+              imports=""
+              copied=""
+              for part in apps services advanced; do
+                src="$srcdir/$part.nix"
+                [ -f "$src" ] || continue
+                dst="$flake/nixarchy/$part.nix"
+                imports="$imports ./nixarchy/$part.nix"
+                if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                  continue
+                fi
+                cp "$src" "$dst"
+                copied="$copied $part"
+              done
+
+              # Only what exists is imported. A machine seeded before
+              # services.nix existed has two files, not three, and a stub
+              # importing a path that is not there fails to evaluate.
+              {
+                echo "# Generated by nixarchy-apply. Do not edit -- your files"
+                echo "# are ~/.config/nixarchy/{apps,services,advanced}.nix and"
+                echo "# this is regenerated from them on every apply."
+                echo "{"
+                echo "  imports = [$imports ];"
+                echo "}"
+              } >"$dest"
+
+              if [ -n "$copied" ]; then
+                echo "copied ->$copied"
               else
-                cp "$file" "$dest"
-                echo "copied selection -> $dest"
-                echo "(import it from your flake: imports = [ ./nixarchy-apps.nix ];)"
+                echo "$flake is already up to date."
+              fi
+
+              # Stage what was written, or a flake in a git worktree cannot see
+              # it. This is not a nicety: git makes untracked files invisible to
+              # the evaluator, so a fresh nixarchy/services.nix fails with "path
+              # does not exist" -- the trap installer/mkFlake.nix documents and
+              # the installer works around by staging at install time.
+              #
+              # Guarded: /etc/nixos is root-owned, and a failure to stage should
+              # print the fix rather than abort an apply that has already
+              # copied everything correctly.
+              if [ -e "$flake/.git" ]; then
+                git -C "$flake" add -A nixarchy nixarchy-apps.nix 2>/dev/null || {
+                  echo
+                  echo "NOTE: could not stage the copies in $flake."
+                  echo "  A flake in a git repository sees only tracked files,"
+                  echo "  so the rebuild may fail with \"path does not exist\"."
+                  echo "  Fix with: sudo git -C $flake add -A"
+                  echo
+                }
               fi
 
               # Whether anything in the flake actually imports it.

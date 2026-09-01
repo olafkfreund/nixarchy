@@ -43,7 +43,13 @@ let
   # Read by modules/home.nix, which writes the agents' provider files: only it
   # knows where a user's home is. Exposed rather than recomputed there so the
   # address the server binds and the address the agents dial cannot drift.
-  endpoint = "http://${aiCfg.host}:${toString aiCfg.port}/v1";
+  #
+  # Read back off services.ollama rather than off our own options, because ours
+  # are only a default now: a host that already set services.ollama.port keeps
+  # its port, and the agents have to follow the server to wherever it actually
+  # listens.
+  ollamaCfg = config.services.ollama;
+  endpoint = "http://${ollamaCfg.host}:${toString ollamaCfg.port}/v1";
 
 in
 {
@@ -250,10 +256,21 @@ in
       package = ollamaPackage;
     };
 
+    # Defaults, not decisions. Someone who adds nixarchy to a machine that
+    # already runs Ollama would otherwise get "conflicting definition values"
+    # for merely importing this module, and their only escape would be mkForce
+    # on their OWN configuration -- the burden backwards.
+    #
+    # The scalars take lib.mkDefault. loadModels and environmentVariables do
+    # NOT, deliberately: they are listOf str and attrsOf str, which merge, and
+    # mkDefault on a merging type is a silent bug -- the lower priority is
+    # dropped before the merge, so our contribution would vanish the moment the
+    # user names a model or an environment variable of their own.
     services.ollama = {
-      enable = true;
-      package = ollamaPackage;
-      inherit (aiCfg) host port;
+      enable = lib.mkDefault true;
+      package = lib.mkDefault ollamaPackage;
+      host = lib.mkDefault aiCfg.host;
+      port = lib.mkDefault aiCfg.port;
       loadModels = lib.optional aiCfg.pullModel aiCfg.model;
 
       environmentVariables = {

@@ -242,6 +242,23 @@ let
     services.syncthing.dataDir = "/srv/sync";
   };
 
+  # The same hazard for the module that bundles Ollama (#96). Worth its own
+  # case rather than trusting the syncthing one: local-ai sets four upstream
+  # scalars, and the two options it deliberately leaves at plain priority --
+  # loadModels and environmentVariables -- merge, so a well-meant mkDefault
+  # there would drop our contribution the moment the user names one of their
+  # own. Reading the port back proves the scalars yield; reading the resolved
+  # endpoint proves the agents follow the server to the port that won, rather
+  # than dialling the one we asked for and nobody is listening on.
+  ollamaBeside = configBeside {
+    programs.nixarchy.localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+    # What the user already had, at ordinary priority.
+    services.ollama.port = 21434;
+  };
+
   # And the group the desktop user gets, which is the other half of #92: docker
   # is enabled for every machine at nixos.nix:705 and was usable only on
   # machines the installer built.
@@ -318,6 +335,8 @@ pkgs.runCommand "nixarchy-options"
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
+    ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
+    ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
@@ -343,6 +362,19 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "a bundled service yields to configuration the user already had"
+
+          [ "$ollamaPort" = "21434" ] || {
+            echo "local-ai overrode a port the user had already set:" >&2
+            echo "  services.ollama.port is $ollamaPort, not 21434" >&2
+            echo "enable, package, host and port must all be lib.mkDefault." >&2
+            exit 1
+          }
+          [ "$ollamaEndpoint" = "http://127.0.0.1:21434/v1" ] || {
+            echo "the agents were pointed somewhere the server is not:" >&2
+            echo "  endpoint is $ollamaEndpoint, not http://127.0.0.1:21434/v1" >&2
+            exit 1
+          }
+          echo "local-ai yields the Ollama port and the agents follow it"
 
           case " $dockerGroups " in
             *" docker "*) echo "the desktop user can reach the docker socket" ;;

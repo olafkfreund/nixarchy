@@ -84,6 +84,51 @@ jobs:
       # data/apps.nix, and they silently went stale twice -- once when an app
       # was added, once when RetroArch moved to being built here -- so derive
       # them and fail rather than trust prose.
+      - name: The README's roadmap still matches the open epics
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # A roadmap nobody updates is worse than none: it is the section a
+          # newcomer reads to judge whether the project is alive, and a stale
+          # one says it is not. The README claims CI keeps this honest, so
+          # this is that claim being true.
+          #
+          # Both directions. An epic opened and not listed means the roadmap
+          # is incomplete; an epic listed and since closed means it is lying.
+          # Only the table rows. The section also links a finished epic under
+          # "Recently finished" and issues for context, and neither is a claim
+          # about what is planned -- reading every link in the section flagged
+          # the finished one as a lie the first time this ran.
+          #
+          # Sorted lexically on both sides, not numerically: comm compares by
+          # collation, and `sort -n` on one side gives it input it says is
+          # unsorted.
+          open=$(gh issue list --state open --label epic --json number --jq '.[].number' | sort)
+          roadmap=$(sed -n '/^## Roadmap/,/^## /p' README.md |
+            grep -E '^\| \[#[0-9]+\]' | grep -oE 'issues/[0-9]+' | cut -d/ -f2 | sort -u)
+
+          missing=$(comm -23 <(echo "$open") <(echo "$roadmap") || true)
+          if [ -n "$missing" ]; then
+            for n in $missing; do
+              echo "::error::epic #$n is open and not in the README's Roadmap"
+            done
+            exit 1
+          fi
+
+          # A number in the roadmap that is not an open epic is either a
+          # closed epic still advertised as planned, or a plain issue linked
+          # for context. The second is fine, so only complain about epics.
+          for n in $roadmap; do
+            state=$(gh issue view "$n" --json state,labels \
+              --jq 'select([.labels[].name] | index("epic")) | .state' 2>/dev/null || true)
+            if [ "$state" = "CLOSED" ]; then
+              echo "::error::epic #$n is closed but the Roadmap still lists it as planned"
+              exit 1
+            fi
+          done
+          echo "the roadmap names every open epic and no closed one"
+
       - name: Check the README's app counts still match data/apps.nix
         run: |
           eval "$(nix eval --raw --impure --expr '

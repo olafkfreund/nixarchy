@@ -1410,7 +1410,7 @@ the last run in CI on each push; the last is two machines that boot it.
 | | proven by |
 | --- | --- |
 | The session, bar, themes and wallpaper | `checks.session` logs in through SDDM's greeter and asserts the desktop *renders* -- it compares the screen against the wallpaper, because every other check passed once while it was black |
-| Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. By hand, not in CI -- `checks.install` is written and not yet green, which is why this line says "two machines" above and not "every push" |
+| Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. By hand, not in CI -- `checks.install` installs onto a blank disk in CI and boots the result, asserting that a rebuild immediately afterwards builds nothing |
 | Adding it to a machine you already run | `checks.integration` **builds** the module onto a config that overrides a package Omarchy also uses, pins its own Hyprland and already greets with greetd |
 | Sitting beside an existing Hyprland | `checks.coexist` boots the Omarchy session with a foreign `hyprland.lua` in place and asserts the bar comes up anyway |
 | The CLI | `omarchy commands --check`, plus a count the build refuses to let drift |
@@ -1420,7 +1420,7 @@ the last run in CI on each push; the last is two machines that boot it.
 | Themes installed from a git URL | `checks.session` runs `omarchy theme install` against a real published theme and asserts the desktop moved to it -- name, and a wallpaper that came out of the clone |
 | Nothing reaching into `/usr` | `checks.session` scans every shipped command for a `/usr` path in code, against a named list of the Arch-only ones that explain themselves |
 | Every Install row mapped | `checks.options` compares upstream's menu against `data/apps.nix` both ways -- a row added upstream that nobody maps fails, and so does one that no longer exists |
-| Every menu row's command existing | `checks.options` resolves all 129 `omarchy-*` commands the 323 rows name; a row whose command vanished draws normally and does nothing |
+| Every menu row's command existing | `checks.options` resolves all 129 `omarchy-*` commands the 332 rows name; a row whose command vanished draws normally and does nothing |
 | Migrations refusing to run | `checks.session` asserts `omarchy migrate` explains itself instead of running 86 Arch scripts that sudo into `/usr` |
 | The session under Hyprland's watchdog | `checks.coexist` greps the journal for the warning 0.56 logs when the compositor is exec'd directly instead of through `start-hyprland` |
 | The shell rc files locating themselves | `checks.session` sources each with `OMARCHY_PATH` unset and asserts it resolves to the store, not to a `/usr` path that cannot exist |
@@ -1526,6 +1526,43 @@ Known gaps in detail:
   from `/etc`, with no per-user equivalent, so this lets them set policy for
   every user of the machine -- fine alone, not fine shared. Light and dark
   follow the theme without it
+
+## Roadmap
+
+What is being worked on, and what is planned. The issues are the detail; this
+is the shape.
+
+| epic | what it is for | |
+| --- | --- | --- |
+| [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
+| [#105](https://github.com/olafkfreund/nixarchy/issues/105) | **Flatpaks, declared** — for the software nixpkgs does not carry | not started |
+| [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
+
+**Recently finished:** the app selection grew a
+[services catalogue](https://github.com/olafkfreund/nixarchy/issues/90) —
+Docker, SSH, printing and the rest, pickable from the menu the way apps are.
+
+### What is deliberately not planned
+
+**Snap.** `nix-snapd` exposes three options and none of them is a package
+list, so a snap cannot be declared at all — it would be an imperative
+side-channel in a project whose whole claim is that nothing imperative
+survives a rebuild. It also ships a patch its own authors named
+`bubblewrap-insecure.patch`, and
+[fails on Hyprland](https://discourse.nixos.org/t/snap-apps-fail-with-d-bus-x11-errors-on-nixos-hyprland-nix-snapd/75544),
+which is the desktop this is. Nothing worth having is snap-only. See
+[#105](https://github.com/olafkfreund/nixarchy/issues/105) for the reasoning
+in full.
+
+**Anything that edits a configuration nixarchy did not write.** Adding the
+module to a machine you already run means nixarchy is one import among yours,
+and the backup and reset work in
+[#112](https://github.com/olafkfreund/nixarchy/issues/112) refuses to run
+there rather than warning about it.
+
+[Every open issue](https://github.com/olafkfreund/nixarchy/issues) is the
+authoritative list; this table is the summary and CI keeps it honest — an epic
+opened or closed without touching this section fails the build.
 
 ## License
 

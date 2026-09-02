@@ -36,7 +36,15 @@ same thing.
 |---|---|
 | An app Nixarchy already knows about | **`nixarchy app enable <id>`**, then `nixarchy apply` |
 | Any other package, service, or system setting | **`nixarchy-pkg-add <attr>`** for a plain package; otherwise **edit the flake**, then `nixos-rebuild switch` |
+| A toolchain for **one project**, not the machine | **`devenv.nix` in that project** — NOT this skill. Use the `devenv` skill |
 | A one-off, throwaway try — not a change to the machine | **`nix shell nixpkgs#<pkg>`** |
+
+Route 0 is easy to miss and is the right answer more often than it looks. "Install
+Node", "add Go", "I need Python 3.12" asked from inside a repository is a request
+about that repository, and answering it machine-wide is how a machine accumulates
+six languages for four projects, at versions none of the projects pinned. Ask which
+one is meant before reaching for route 1 or 2; the `devenv` skill has the full
+decision table and the traps.
 
 Never reach past route 1 for an app it covers: it writes the same file the Install
 menu writes, so the menu and the flake stay in agreement.
@@ -277,6 +285,7 @@ evidence than a package log.
 - "Install ripgrep" -> `nixarchy-pkg-add ripgrep && nixarchy-apply` (route 2)
 - "Enable Tailscale" -> `services.tailscale.enable = true;` — the module, not the package
 - "Try out helix quickly" -> `nix shell nixpkgs#helix`, and say it is temporary
+- "Install Go for this project" -> not machine-wide. `nixarchy dev init go` — the `devenv` skill
 - "My package disappeared after reboot" -> it was installed imperatively; declare it properly
 - "Update my system" -> `omarchy update`
 - "That update broke my desktop" -> `sudo nixos-rebuild --rollback switch`, then diff the closures

@@ -190,3 +190,5 @@ Do not retry-until-green. A flaky pass is a bug report you deleted.
 
 When in doubt, the cost asymmetry decides: a question costs a minute; an
 unwanted force-push or a misrouted issue costs a human an evening.
+
+<!-- #183: proving the AGENTS.md exclusion end-to-end, not just in the harness. -->

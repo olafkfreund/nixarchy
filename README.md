@@ -141,7 +141,7 @@ So twelve skills ship here instead:
 | **`nixos-security`** | Firewall and nftables, SSH, sudo and the groups that are root in a costume, systemd sandboxing, kernel hardening |
 | **`nixos-doctor`** | The sweep to run *before* you have a theory: failed units, `-p err`, disk, memory, and what changed between generations |
 | **`nixos-config-repo`** | Getting the configuration into git and keeping it there, and the two things that bite: untracked files are invisible to the build, and `/etc/nixos` is root-owned |
-| **`nixarchy-bbs`** | The project's SSH bulletin board — posting a gotcha or a decision for the next agent, and reading `nixarchy.agents` before starting something big |
+| **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 
 Every one is written against the modules on this disk rather than from memory,

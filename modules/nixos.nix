@@ -77,6 +77,40 @@ in
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "Nixarchy, the Omarchy desktop vendored for NixOS";
 
+    # "Nixarchy wrote this machine", as a property of the configuration rather
+    # than of the install event.
+    #
+    # Set in exactly one place -- installer/host.nix, which is imported only by
+    # a hosts/<name>/default.nix the installer generated. That is what makes a
+    # machine nixarchy-shaped: snapper, nh, the registry pin, the seeded user.
+    # So the question "did nixarchy build this?" is answered by whether that
+    # module is in the evaluation, and re-answered at every rebuild.
+    #
+    # Not /etc/nixos/.nixarchy-url, which used to look like the same signal and
+    # is not one any more. `git add -A` tracks it, so it is committed, pushed,
+    # and cloned onto every machine enrolled with `nixarchy install --from` --
+    # including a machine the installer never touched. And an admin-authored
+    # repo of the shape `--from` accepts carries no such file while being a
+    # perfectly good nixarchy install. Presence stopped meaning "here", absence
+    # stopped meaning "hands off". It survives as provenance of the *repo*.
+    #
+    # Not a heuristic either. Sniffing flake.lock's root inputs or testing for
+    # hosts/$(hostname) reads state the user is invited to edit, and would one
+    # day refuse a machine to its own owner.
+    installerManaged = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      internal = true;
+      description = ''
+        Whether this configuration descends from the host module the Nixarchy
+        installer generates. Set by installer/host.nix and by nothing else.
+
+        Surfaced to shell tools as /etc/nixarchy/managed, which is the single
+        predicate every armed command gates on: nixarchy commits, pushes and
+        rewrites configuration only on a machine it wrote.
+      '';
+    };
+
     package = lib.mkOption {
       type = lib.types.package;
       # Built from *your* nixpkgs through this flake's overlay, not from
@@ -732,6 +766,33 @@ in
     # login and never rewritten, so it cannot name a store path: this one is
     # regenerated with the system and always points at the current package.
     environment.etc."omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
+
+    # The ownership marker, for the shell tools that cannot ask the module
+    # system anything.
+    #
+    # Declarative on purpose: it is in the closure, it is rewritten by every
+    # rebuild, and a machine that stops descending from installer/host.nix
+    # loses it in the same switch that made that true. A file the installer
+    # wrote once could not say that -- it would survive being wrong, and a
+    # `--from` rebuild that never created it would leave the machine looking
+    # unmanaged for the rest of its life.
+    #
+    # The contents are for the person who finds the file and wonders. Nothing
+    # reads them, and nothing should start: the predicate is the file's
+    # existence, which is the only part that is cheap to get right in every
+    # shell script that needs it.
+    environment.etc."nixarchy/managed" = lib.mkIf cfg.installerManaged {
+      text = ''
+        This machine's configuration descends from the host module the Nixarchy
+        installer generates (installer/host.nix), so nixarchy commands that
+        commit, push or rewrite configuration will act on it.
+
+        Written declaratively by programs.nixarchy.installerManaged and renewed
+        by every rebuild. Deleting it changes nothing until the next switch.
+
+        nixarchy ${cfg.package.version}
+      '';
+    };
 
     # glib looks for compiled schemas in $XDG_DATA_DIRS/glib-2.0/schemas, but
     # nixpkgs' glib setup hook relocates them to

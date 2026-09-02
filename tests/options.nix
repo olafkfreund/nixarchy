@@ -348,6 +348,24 @@ let
   dockerGroups =
     (configBeside { programs.nixarchy.user = "someone"; }).users.users.someone.extraGroups;
 
+  # ---- "nixarchy wrote this machine", both ways -------------------------
+  #
+  # The armed commands -- nixarchy-config-repo, and the post-boot hook that
+  # offers it -- commit a configuration, choose whether it is public and push
+  # it somewhere. On a machine nixarchy built that is the whole point. On a
+  # machine where somebody imported nixosModules.nixarchy into a configuration
+  # of their own, it is nixarchy publishing a repository it does not own.
+  #
+  # The predicate is /etc/nixarchy/managed, written only where
+  # programs.nixarchy.installerManaged is set, which is only in
+  # installer/host.nix. So the off case is a plain nixosSystem importing the
+  # module -- Mode A, exactly the machine that must not get it -- and the on
+  # case is the reference host, which imports that file.
+  #
+  # The off case is the one that breaks quietly: a marker that arrives for
+  # everybody makes every gate below it read as passing, and nothing says so.
+  managedModeA = (configWith { }).environment.etc ? "nixarchy/managed";
+
   # ---- enabling a custom remote must not remove Flathub ----
   #
   # nix-flatpak's `remotes` defaults to a list holding only Flathub, and it is
@@ -492,6 +510,7 @@ pkgs.runCommand "nixarchy-options"
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
+    managedModeA = pkgs.lib.boolToString managedModeA;
     devenvOffPackage = pkgs.lib.boolToString (hasDevenv devenvOff);
     devenvOffBash = pkgs.lib.boolToString (hookIn devenvOff.programs.bash.interactiveShellInit);
     devenvOffZsh = pkgs.lib.boolToString (hookIn devenvOff.programs.zsh.interactiveShellInit);
@@ -593,6 +612,81 @@ pkgs.runCommand "nixarchy-options"
                echo "groups: $dockerGroups" >&2
                exit 1 ;;
           esac
+
+          # ---- nixarchy only commits a configuration it wrote --------------
+          #
+          # Three assertions, and the first is the one that matters. A Mode A
+          # machine -- somebody's own configuration, with nixosModules.nixarchy
+          # imported into it -- must not carry the marker, because everything
+          # downstream reads its presence as permission to commit and push
+          # /etc/nixos to a remote of nixarchy's choosing.
+          [ "$managedModeA" = "false" ] || {
+            echo "importing nixosModules.nixarchy wrote /etc/nixarchy/managed." >&2
+            echo "  That file means 'nixarchy wrote this machine', and it is what" >&2
+            echo "  nixarchy-config-repo and the post-boot nudge gate on. On a" >&2
+            echo "  configuration somebody else wrote, it makes nixarchy offer to" >&2
+            echo "  commit and push a repository that is not its to publish." >&2
+            echo "  Only installer/host.nix may set programs.nixarchy.installerManaged." >&2
+            exit 1
+          }
+
+          # And the other way: the reference host imports installer/host.nix,
+          # so it must. A gate nothing ever passes is a command nobody can run.
+          test -e "$vm/etc/nixarchy/managed" || {
+            echo "the installed reference host has no /etc/nixarchy/managed" >&2
+            echo "  installer/host.nix sets programs.nixarchy.installerManaged;" >&2
+            echo "  without the file every armed command refuses the machines" >&2
+            echo "  nixarchy itself built." >&2
+            exit 1
+          }
+          echo "the ownership marker reaches the installed host and no one else"
+
+          # The coupling, which neither of the above can see: the marker could
+          # be perfect and the command could still never look at it. Both the
+          # refusal and the --check the post-boot hook calls are in this one
+          # script, so this is where a missing gate would show.
+          #
+          # Comments stripped first. The path is named in the prose above the
+          # gate as well as in the gate, and a check that a file mentions
+          # something in a comment is not a check.
+          grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-config-repo" \
+            | grep -q '/etc/nixarchy/managed' || {
+            echo "nixarchy-config-repo does not consult /etc/nixarchy/managed" >&2
+            echo "  Its only gate would then be consent, not ownership." >&2
+            exit 1
+          }
+
+          # Run it. The build sandbox has no /etc/nixarchy/managed, which makes
+          # it exactly the unowned machine, and the refusal has to be an exit
+          # code as well as a paragraph -- the post-boot hook reads --check's
+          # status and nothing else.
+          if "$vm/sw/bin/nixarchy-config-repo" >refusal 2>&1; then
+            echo "nixarchy-config-repo succeeded on a machine nixarchy did not write:" >&2
+            cat refusal >&2
+            exit 1
+          fi
+          grep -qi "not one Nixarchy wrote" refusal || {
+            echo "the refusal does not say why it refused:" >&2
+            cat refusal >&2
+            exit 1
+          }
+          grep -q "nixos-config-repo" refusal || {
+            echo "the refusal names no way for the user to do it themselves" >&2
+            cat refusal >&2
+            exit 1
+          }
+          if "$vm/sw/bin/nixarchy-config-repo" --check >check 2>&1; then
+            echo "--check asked for a nudge on a machine nixarchy did not write" >&2
+            cat check >&2
+            exit 1
+          fi
+          test ! -s check || {
+            echo "--check is documented as printing nothing; it printed:" >&2
+            cat check >&2
+            exit 1
+          }
+          echo "on an unowned machine it refuses, says why, and nudges nobody"
+
           # ---- devenv: nothing at all until it is asked for ---------------
           for pair in "package:$devenvOffPackage" "bash hook:$devenvOffBash" \
             "zsh hook:$devenvOffZsh" "fish hook:$devenvOffFish" \

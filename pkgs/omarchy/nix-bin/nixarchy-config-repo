@@ -16,6 +16,9 @@
 # Everything here is idempotent and re-runnable. Each step looks at what is
 # already true and skips itself, so a user who has done half of this by hand
 # gets the other half rather than an argument.
+#
+# And all of it is behind one question, asked first: did nixarchy write this
+# machine's configuration? See is_managed below.
 
 set -uo pipefail
 
@@ -61,6 +64,24 @@ wcommit() {
        -c "user.email=$(command git config --global user.email)" \
        commit -qm "$1"
 }
+
+# ---------------------------------------------------------------------------
+# Ownership
+# ---------------------------------------------------------------------------
+#
+# The one question that comes before every other one here: did nixarchy write
+# this machine's configuration?
+#
+# /etc/nixarchy/managed is written declaratively by
+# programs.nixarchy.installerManaged, which installer/host.nix sets and nothing
+# else does -- see modules/nixos.nix for why that module, and not the install
+# event or /etc/nixos/.nixarchy-url, is what the question means.
+#
+# Somebody who imported nixosModules.nixarchy into a configuration of their own
+# has a /etc/nixos that is theirs. Committing it, choosing its visibility and
+# pushing it to a host they have not picked is not a favour.
+MANAGED_MARKER=/etc/nixarchy/managed
+is_managed() { [[ -e $MANAGED_MARKER ]]; }
 
 # ---------------------------------------------------------------------------
 # State
@@ -113,6 +134,11 @@ agent_ready() {
 
 # --check: should the post-boot hook nudge? Silent; the exit code is the answer.
 if [[ $check_only == true ]]; then
+  # Not our machine, not our nudge. A Mode A user -- somebody who imported
+  # nixosModules.nixarchy into a configuration of their own -- must never see
+  # this at all, so it is the first question and not a late one.
+  is_managed || exit 1
+
   omarchy-done check "$DONE_MARKER" && exit 1
 
   # Nothing left to do -- mark it done so this never asks again. A machine that
@@ -124,6 +150,31 @@ if [[ $check_only == true ]]; then
 
   agent_ready || exit 1
   exit 0
+fi
+
+# The same question, asked of a person rather than of a hook -- and answered
+# out loud, because somebody who typed this deserves to know why it declined
+# and where to go instead.
+#
+# --force does not lift this. It exists to re-run a setup that was marked done;
+# it is not a way to tell nixarchy that a configuration it did not write is
+# nonetheless its to publish.
+if ! is_managed; then
+  echo -e "\n\033[1;31m✗\033[0m This machine's configuration is not one Nixarchy wrote." >&2
+  echo >&2
+  echo "  $FLAKE belongs to whoever built it." >&2
+  echo "  Nixarchy is here as a module somebody imported, not as the thing that" >&2
+  echo "  shaped this machine -- so committing that configuration, choosing" >&2
+  echo "  whether it is public, and pushing it to a host you have not picked" >&2
+  echo "  are not decisions it gets to make." >&2
+  echo >&2
+  echo "  Your agent has the same steps as a skill you can drive yourself:" >&2
+  echo -e "  ask it about \033[1mnixos-config-repo\033[0m -- git setup, .gitignore," >&2
+  echo "  a first commit, a remote, and CI for the flake." >&2
+  echo >&2
+  echo "  (A machine the Nixarchy installer built carries $MANAGED_MARKER," >&2
+  echo "  which this one does not.)" >&2
+  exit 1
 fi
 
 if [[ $force == false ]] && omarchy-done check "$DONE_MARKER"; then

@@ -28,6 +28,15 @@
     # their devices. The module cannot guess who logs in, so it is told.
     user = username;
 
+    # "Nixarchy wrote this machine." This file is imported only by a
+    # hosts/<name>/default.nix the installer generated, so a configuration that
+    # evaluates it is one nixarchy shaped -- which is what the armed commands
+    # (nixarchy-config-repo and the post-boot nudge that offers it) need to know
+    # before they commit, push or rewrite anything. Surfaced to them as
+    # /etc/nixarchy/managed; see modules/nixos.nix for why this and not
+    # .nixarchy-url, which `--from` copies onto machines nixarchy never touched.
+    installerManaged = true;
+
     # Where nixarchy-apply copies the app selection before rebuilding. Stated
     # even though modules/apps.nix defaults to the same path: on an installed
     # machine this is the installer's decision, not a default it could later

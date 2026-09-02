@@ -97,6 +97,13 @@ runCommand "nixarchy-flake-template"
     ' ${../flake.lock} > $out/flake.lock
 
     # So the installer does not have to recompute what this already knows.
+    #
+    # Provenance of the REPOSITORY, and nothing more. It is tracked by the
+    # `git add -A` install.sh does, so it is committed, pushed, and cloned onto
+    # every machine enrolled from this repo with `--from` -- machines this
+    # installer never touched. "Did nixarchy write this machine" is a different
+    # question and is answered elsewhere: programs.nixarchy.installerManaged,
+    # via installer/host.nix. Nothing should gate on this file.
     printf '%s\n' "$url" > $out/.nixarchy-url
 
     sed -i "s|@nixarchy_url@|$url|g" $out/flake.nix

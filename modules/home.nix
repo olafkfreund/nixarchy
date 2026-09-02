@@ -790,14 +790,20 @@ in
     # Same extension point, on the other hook Omarchy already runs:
     # default/hypr/autostart.lua ends its startup with `omarchy-hook post-boot`.
     #
-    # A notification rather than a window. The installer leaves /etc/nixos as a
-    # repository with one staged, never-committed tree -- so there is something
-    # real to say -- but a terminal that seizes the screen on a first-ever boot
-    # arrives before the user has signed in to anything, which makes the one
-    # answer they can give "dismiss". The nudge is a notification they can act
-    # on when they are ready, and the script's own --check decides whether
-    # there is any point showing it: already committed and pushed, no agent
-    # chosen yet, or already answered once, and it stays quiet.
+    # A notification rather than a window. On a machine the installer built,
+    # /etc/nixos is a repository with one staged, never-committed tree -- so
+    # there is something real to say -- but a terminal that seizes the screen on
+    # a first-ever boot arrives before the user has signed in to anything, which
+    # makes the one answer they can give "dismiss". The nudge is a notification
+    # they can act on when they are ready, and the script's own --check decides
+    # whether there is any point showing it: already committed and pushed, no
+    # agent chosen yet, or already answered once, and it stays quiet.
+    #
+    # It stays quiet for one more reason now, and it is the important one. This
+    # module reaches every machine that imports it, including one where somebody
+    # added nixarchy to a configuration of their own -- and on that machine
+    # /etc/nixos is theirs. --check asks /etc/nixarchy/managed before anything
+    # else and answers "no nudge", so the hook exits 0 having said nothing.
     xdg.configFile."omarchy/hooks/post-boot.d/config-repo" = {
       executable = true;
       text = ''

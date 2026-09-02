@@ -618,6 +618,29 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "every flatpak has a commented, marked row the existing tooling can enable"
+
+        # ---- the picker's flatpak rows are ONE line each ---------------------
+        #
+        # The index is tab-separated, five fields, one row per line. The preview
+        # field is prose and carries its newlines escaped for exactly that
+        # reason. Write a real newline into it and the row silently becomes
+        # several rows -- which the picker renders without complaint, as
+        # unselectable nonsense between the real entries. That shipped once
+        # during development and nothing but reading the file caught it.
+        rows=$(sed -n 's/.*flatpakrows=\(\/nix\/store[^ ]*\).*/\1/p' "$vm/sw/bin/nixarchy-search" | head -1)
+        test -n "$rows" || { echo "nixarchy-search names no flatpak rows file" >&2; exit 1; }
+        bad=$(awk -F'\t' 'NF != 5 {print NR": "NF" fields"}' "$rows")
+        if [ -n "$bad" ]; then
+          echo "the picker's flatpak rows are not all five tab-separated fields:" >&2
+          echo "$bad" >&2
+          echo "  a real newline in the preview field splits one row into several" >&2
+          exit 1
+        fi
+        awk -F'\t' '$1 != "flatpak" {print; exit 1}' "$rows" >/dev/null || {
+          echo "a flatpak row does not carry the flatpak kind, so routing will miss it" >&2
+          exit 1
+        }
+        echo "the picker's flatpak rows are $(wc -l < "$rows") well-formed lines"
           touch $out
       ''
     else

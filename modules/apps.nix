@@ -215,6 +215,33 @@ let
   # services.nix already holds things that are decisions about the machine
   # rather than packages, which is what enabling a flatpak is: it turns on a
   # daemon, adds a remote, and installs software the store does not hold.
+  # Curated flatpaks as picker rows, plus the one row that reaches the rest of
+  # Flathub. Written whole in Nix rather than transformed by awk at index time
+  # like the app rows: there are a handful of these and the preview text is
+  # prose, so a template is clearer than a transformation.
+  #
+  # Five tab-separated fields, matching every other source: kind, name,
+  # summary, option type (unused here), preview.
+  flatpakIndexRows = pkgs.writeText "nixarchy-flatpak-rows.tsv" (
+    lib.concatStrings (
+      lib.mapAttrsToList (name: fp: ''
+        flatpak	${name}	${fp.label} -- flatpak, from ${
+          if fp ? remote then fp.remote.name else "Flathub"
+        }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;
+      '') flatpakCatalogue
+    )
+    # The way out of the catalogue. A row rather than a flag, because a flag
+    # nobody knows about is not a search anyone finds -- and this is precisely
+    # the row someone needs when the other three sources have failed them.
+    # Escaped \n, not a real one: the preview field keeps its newlines escaped
+    # like every other source, because the whole row must stay on ONE line. A
+    # real newline splits this into five rows, four of them nonsense, and the
+    # picker renders them without complaint.
+    + "flatpak	flathub	Search all of Flathub for something not listed here (needs a network)		"
+    + "SEARCH FLATHUB\\n\\nAsks flathub.org for anything, not just what nixarchy curates.\\n\\n"
+    + "This is the only row here that needs a network, and the only one that can offer an app nobody has checked. A hit that is in nixarchy's catalogue is enabled the normal way; anything else prints a line for you to paste, because writing an unchecked app id into your configuration is not this tool's call to make.\n"
+  );
+
   flatpakRow =
     name: fp:
     let
@@ -1297,6 +1324,7 @@ in
               pkgs.gawk
               pkgs.jq
               pkgs.fzf
+              pkgs.curl
               config.nix.package
             ];
             text = ''
@@ -1306,6 +1334,7 @@ in
               stamp="$cache/stamp"
 
               appindex=${appIndexTable}
+              flatpakrows=${flatpakIndexRows}
               optionsjson=${optionsJsonPath}
               nixpkgs=${pkgs.path}
 
@@ -1375,6 +1404,11 @@ in
                         + "environment.systemPackages = with pkgs; [ " + $a + " ];"
                       )
                     ] | @tsv' >> "$tmp"
+
+                # Curated flatpaks and the Flathub entry point. A plain cat:
+                # these rows are already in the index's five-field shape, and
+                # they are local, so building the index still needs no network.
+                cat "$flatpakrows" >> "$tmp"
 
                 mv "$tmp" "$index"
                 readlink -f /run/current-system > "$stamp"
@@ -1465,12 +1499,81 @@ in
                 scaffolded=$((scaffolded + 1))
               }
 
+              # Ask flathub.org directly.
+              #
+              # NOT `flatpak search`, which is columnar with no JSON output and
+              # needs both a configured remote and a downloaded appstream cache
+              # -- so it answers nothing on a machine that has not set flatpak
+              # up yet, which is exactly the machine asking.
+              #
+              # This is the one thing in the picker that needs a network. The
+              # index itself is still built entirely from local sources, so the
+              # other three kinds keep working on a machine with none; only
+              # this row fails, and it says so.
+              flathub_search() {
+                local query hits picked id line
+                read -r -p "Search Flathub for: " query || return 0
+                [ -n "$query" ] || return 0
+
+                # --fail so an HTTP error is an error rather than an error page
+                # parsed as zero results, which is the failure that looks like
+                # "nothing matched" and sends someone hunting for a typo.
+                if ! hits=$(curl -sS --fail -m 20 \
+                      -X POST https://flathub.org/api/v2/search \
+                      -H 'Content-Type: application/json' \
+                      -d "$(jq -nc --arg q "$query" '{query: $q, filters: []}')" 2>&1); then
+                  echo "nixarchy: could not reach flathub.org." >&2
+                  echo "  Searching Flathub needs a network; the other rows in this picker do not." >&2
+                  return 1
+                fi
+
+                picked=$(printf '%s' "$hits" |
+                  jq -r '.hits[]? | [.app_id, (.name // ""), ((.summary // "") | gsub("[\n\t]"; " "))] | @tsv' |
+                  fzf --multi --with-nth=2.. --delimiter='\t' \
+                      --prompt="flathub > " --height=80% \
+                      --preview='echo {1}' --preview-window=down,3) || return 0
+                [ -n "$picked" ] || { echo "nothing on Flathub matched '$query'"; return 0; }
+
+                while IFS=$'\t' read -r id _ _; do
+                  [ -n "$id" ] || continue
+                  # In the catalogue? Then it has been checked, and the normal
+                  # writer handles it.
+                  if grep -qE "^flatpak\t[^\t]+\t" "$index" &&
+                     awk -F'\t' -v i="$id" '$1=="flatpak" && $2==i {found=1} END {exit !found}' "$index"; then
+                    nixarchy-service-enable "$id" && changed=1
+                    continue
+                  fi
+                  # Otherwise print it rather than write it. Nixarchy has not
+                  # checked this app, and generating configuration for an id
+                  # nobody has looked at is not a thing to do on someone's
+                  # behalf.
+                  line="  services.flatpak.packages = [ \"$id\" ];"
+                  echo
+                  echo "$id is not in nixarchy's catalogue, so nothing was written."
+                  echo "Add this to ~/.config/nixarchy/advanced.nix yourself:"
+                  echo
+                  echo "$line"
+                done <<< "$picked"
+                echo
+                echo "then run 'nixarchy-apply'"
+              }
+
               while IFS=$'\t' read -r kind name _ type _; do
                 [ -n "$kind" ] || continue
                 case "$kind" in
                   app) nixarchy-app-enable "$name" && changed=1 ;;
                   pkg) nixarchy-pkg-add "$name" && changed=1 ;;
                   opt) add_option "$name" "$type" ;;
+                  # nixarchy-service-enable, not a flatpak-specific command:
+                  # the rows live in services.nix and carry the same #@ markers,
+                  # so the writer that already exists is the right one.
+                  flatpak)
+                    if [ "$name" = "flathub" ]; then
+                      flathub_search
+                    else
+                      nixarchy-service-enable "$name" && changed=1
+                    fi
+                    ;;
                 esac
               done <<< "$selection"
 

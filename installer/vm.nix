@@ -66,12 +66,16 @@
   # The hash is "omarchy". This VM is a disposable test harness reachable only
   # from the host that started it.
   #
-  # /dev/vda, not /dev/vdb as in checks.install: this VM has an ephemeral tmpfs
-  # root and therefore no root drive at all, so the empty disk is the first
-  # virtio device rather than the second. The check's nodes have a real root
-  # disk, which shifts theirs along by one.
+  # /dev/vdb, the same as checks.install, and for the same reason: this VM has
+  # a real root disk, so the empty target is the SECOND virtio device.
+  #
+  # It was /dev/vda while the root was an ephemeral tmpfs and there was no root
+  # drive to come first. That changed when the writable store moved onto a real
+  # disk (see virtualisation below), and the two have to move together -- a
+  # root disk with device=/dev/vda still set points the installer at the
+  # machine it is running on.
   environment.etc."nixarchy/answers".text = ''
-    device=/dev/vda
+    device=/dev/vdb
     encrypt=no
     hostname=installed
     username=omarchy
@@ -97,7 +101,7 @@
       touch /tmp/nixarchy-install-done
       log=/tmp/nixarchy-install.log
       echo
-      echo "[nixarchy] installing onto /dev/vda"
+      echo "[nixarchy] installing onto /dev/vdb"
       echo
       # PIPESTATUS, not the pipeline's status. `cmd | tee` reports tee's exit
       # code, which is 0 whatever cmd did -- so a plain `if` here printed
@@ -131,14 +135,25 @@
     memorySize = 8192;
     cores = 4;
     useEFIBoot = true;
-    # The blank target. With no root drive it appears as /dev/vda.
-    emptyDiskImages = [ 20480 ];
-    # nixos-install copies a whole desktop closure into the target, and this
-    # VM's own store has to hold it first.
+    # The blank target: /dev/vdb, since the root disk below is /dev/vda.
+    emptyDiskImages = [ 40960 ];
+    # nixos-install builds the closure in THIS VM's store before copying it
+    # into the target, so this VM's store has to hold it first -- 13.7 GiB of
+    # it at the last count.
+    #
+    # diskSize does not provide that, and quietly has not for some time:
+    # diskImage = null means there is no disk for diskSize to size, so the
+    # writable store is the RAM-backed tmpfs below. The install then dies
+    # partway through with "No space left on device", three levels underneath
+    # a "1 dependency failed" that names none of it.
+    #
+    # So the store goes on a real disk (diskImage now defaults to a qcow2 in
+    # the working directory). That file persists between runs, which
+    # diskImage = null was avoiding -- but the property that mattered is the
+    # TARGET starting unpartitioned, and emptyDiskImages is recreated blank
+    # every run regardless. Delete the qcow2 to start the installer clean.
     diskSize = 32768;
-    # Ephemeral, so every run starts from an unpartitioned disk. That is the
-    # state a real install begins in and the only one worth testing from.
-    diskImage = null;
+    writableStoreUseTmpfs = false;
   };
 
   # Stop logind spawning a getty on tty1 at all. tty1 is the qemu window and

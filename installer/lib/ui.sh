@@ -62,6 +62,22 @@ ui_palette() {
 #   which is how a 92-column wordmark ended up at column zero.
 #
 # So: ask several sources, and believe none of them without a positive number.
+# Whether a size read from this source describes the terminal being drawn on.
+#
+# `-` is this process's own stdin and /dev/tty its controlling terminal: both
+# follow the process. /dev/tty1 and /dev/console are named devices that may
+# belong to nothing to do with us -- see the note in ui_dimension.
+#
+# A function rather than an inline case so a test can ask it directly: the
+# source is loop-local, and the alternative was asserting on the shape of the
+# code instead of its behaviour.
+ui_src_is_ours() {
+  case $1 in
+    - | /dev/tty) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 ui_dimension() {
   local field=$1 src size value
   for src in - /dev/tty /dev/tty1 /dev/console; do
@@ -83,6 +99,24 @@ ui_dimension() {
       '' | *[!0-9]*) continue ;;
     esac
     [ "$value" -gt 0 ] && {
+      # Whose terminal was that?
+      #
+      # `-` reads this process's own stdin and /dev/tty is its controlling
+      # terminal: both follow the process, so a size from either describes the
+      # terminal being drawn on. /dev/tty1 and /dev/console are named devices
+      # that may belong to nothing to do with us.
+      #
+      # That is not hypothetical. On a serial console `stty size` answers 0 0
+      # -- correctly rejected above -- and the loop then reaches /dev/tty1 and
+      # takes the framebuffer console's 160 columns. A real measurement, of a
+      # real terminal, that is not the 80-column line the installer is writing
+      # to. Padding centred on it is wider than the screen, and gum panics
+      # rather than degrading (#139, and #133 before it through another door).
+      #
+      # #133 marked only the framebuffer guess unconfirmed. The distinction
+      # that matters is not guessed-vs-measured, it is whether the number
+      # describes the terminal in front of the person.
+      ui_src_is_ours "$src" || UI_SIZE_UNCONFIRMED=1
       echo "$value"
       return
     }

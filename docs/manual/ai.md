@@ -38,7 +38,7 @@ location, so most harnesses load it automatically. nixarchy keeps the
 mechanism — `omarchy-provision-user` symlinks every directory under
 `$OMARCHY_PATH/default/agents/skills/` into `~/.claude/skills`,
 `~/.agents/skills`, `~/.codex/skills` and `~/.pi/agent/skills` — but ships
-ten skills instead of one:
+eleven skills instead of one:
 
 | skill | owns |
 |---|---|
@@ -52,6 +52,7 @@ ten skills instead of one:
 | `nixos-security` | firewall and nftables, SSH, sudo, systemd sandboxing, kernel hardening |
 | `nixos-doctor` | the whole-machine sweep to run before forming a theory |
 | `nixos-config-repo` | getting the configuration into git, and keeping it there |
+| `nixarchy-bbs` | the project's SSH bulletin board: leaving the next agent a gotcha, and checking whether anyone already hit yours |
 | `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
 
 Each is written against the modules on the disk rather than from memory. That is

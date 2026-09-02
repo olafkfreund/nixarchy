@@ -267,6 +267,43 @@ let
     onFailure = on.systemd.services.nixos-upgrade.unitConfig.OnFailure or "";
   };
 
+  # ---- devenv, both halves --------------------------------------------
+  #
+  # The half that breaks quietly is "off". devenv is a package plus a line in
+  # three shell rcs plus a substituter, and each of those three arrives through
+  # a different mechanism -- so "it did not turn on" is loud, and "it turned on
+  # for someone who never asked" is silent. Mode A is the case: importing
+  # nixosModules.nixarchy must add no devenv, no hook line in any shell, and
+  # above all no substituter, because a substituter is trust granted without a
+  # conflict to warn anyone.
+  #
+  # zsh and fish are enabled explicitly here because the module gates their
+  # hooks on the shell actually existing. Without that, the on case would read
+  # the same as the off case for two of the three shells and prove nothing.
+  devenvOff = configWith { };
+
+  devenvOn = configBeside {
+    programs = {
+      nixarchy.services.devenv.enable = true;
+      zsh.enable = true;
+      fish.enable = true;
+    };
+  };
+
+  # The cache is a separate decision from the package. Someone who set
+  # binaryCaches = false said something about whose builds they run, and
+  # enabling devenv must not walk that back.
+  devenvNoCache = configBeside {
+    programs.nixarchy = {
+      binaryCaches = false;
+      services.devenv.enable = true;
+    };
+  };
+
+  hasDevenv = cfg: builtins.any (p: (p.pname or "") == "devenv") cfg.environment.systemPackages;
+  hasCache = cfg: builtins.elem "https://devenv.cachix.org" cfg.nix.settings.substituters;
+  hookIn = text: pkgs.lib.hasInfix "devenv hook" text;
+
   # ---- a bundled service yields to a user who already configured it ----
   #
   # This is the Mode A hazard in one assertion. Someone adds nixarchy to a
@@ -455,6 +492,27 @@ pkgs.runCommand "nixarchy-options"
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
+    devenvOffPackage = pkgs.lib.boolToString (hasDevenv devenvOff);
+    devenvOffBash = pkgs.lib.boolToString (hookIn devenvOff.programs.bash.interactiveShellInit);
+    devenvOffZsh = pkgs.lib.boolToString (hookIn devenvOff.programs.zsh.interactiveShellInit);
+    devenvOffFish = pkgs.lib.boolToString (hookIn devenvOff.programs.fish.interactiveShellInit);
+    devenvOffCache = pkgs.lib.boolToString (hasCache devenvOff);
+    devenvOnPackage = pkgs.lib.boolToString (hasDevenv devenvOn);
+    devenvOnBash = pkgs.lib.boolToString (hookIn devenvOn.programs.bash.interactiveShellInit);
+    devenvOnZsh = pkgs.lib.boolToString (hookIn devenvOn.programs.zsh.interactiveShellInit);
+    devenvOnFish = pkgs.lib.boolToString (hookIn devenvOn.programs.fish.interactiveShellInit);
+    devenvOnCache = pkgs.lib.boolToString (hasCache devenvOn);
+    devenvOnKey = pkgs.lib.boolToString (
+      builtins.elem "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=" devenvOn.nix.settings.trusted-public-keys
+    );
+    # The Omarchy rc chain still has to be there beside ours -- programs.bash
+    # .interactiveShellInit is a merging type, and a mkDefault on it would drop
+    # one of the two silently.
+    devenvOnOmarchyChain = pkgs.lib.boolToString (
+      pkgs.lib.hasInfix "default/bash/rc" devenvOn.programs.bash.interactiveShellInit
+    );
+    devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
+    devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
     nativeBuildInputs = [ pkgs.python3 ];
@@ -535,6 +593,51 @@ pkgs.runCommand "nixarchy-options"
                echo "groups: $dockerGroups" >&2
                exit 1 ;;
           esac
+          # ---- devenv: nothing at all until it is asked for ---------------
+          for pair in "package:$devenvOffPackage" "bash hook:$devenvOffBash" \
+            "zsh hook:$devenvOffZsh" "fish hook:$devenvOffFish" \
+            "substituter:$devenvOffCache"; do
+            if [ "''${pair#*:}" != "false" ]; then
+              echo "devenv is off, but its ''${pair%%:*} is on the machine anyway." >&2
+              echo "A configuration that never selects devenv must gain nothing." >&2
+              exit 1
+            fi
+          done
+          echo "devenv adds no package, no hook and no substituter until selected"
+
+          # ---- and everything once it is ----------------------------------
+          for pair in "package:$devenvOnPackage" "bash hook:$devenvOnBash" \
+            "zsh hook:$devenvOnZsh" "fish hook:$devenvOnFish" \
+            "substituter:$devenvOnCache" "public key:$devenvOnKey"; do
+            if [ "''${pair#*:}" != "true" ]; then
+              echo "devenv is enabled but its ''${pair%%:*} is missing." >&2
+              exit 1
+            fi
+          done
+          echo "devenv installs, hooks bash, zsh and fish, and trusts its cache"
+
+          # A merging type, so ours composes rather than replaces. If this
+          # fails the machine lost Omarchy's aliases and functions the moment
+          # devenv was selected, and nothing else would have said so.
+          [ "$devenvOnOmarchyChain" = "true" ] || {
+            echo "selecting devenv displaced Omarchy's bash chain from /etc/bashrc" >&2
+            exit 1
+          }
+          echo "the devenv hook composes with the shell chain rather than replacing it"
+
+          # ---- declining caches is not undone by selecting devenv ---------
+          [ "$devenvNoCacheCache" = "false" ] || {
+            echo "binaryCaches = false, yet devenv added devenv.cachix.org." >&2
+            echo "A substituter is trust, and it merges into the list with no" >&2
+            echo "conflict and no warning -- which is why it must be asked for." >&2
+            exit 1
+          }
+          [ "$devenvNoCachePackage" = "true" ] || {
+            echo "declining the cache also removed devenv itself" >&2
+            exit 1
+          }
+          echo "devenv respects binaryCaches = false and still installs"
+
           echo "every option adds what it should and removes it again"
 
           python3 ${./coverage.py}

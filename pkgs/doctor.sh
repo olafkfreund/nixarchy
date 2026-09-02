@@ -316,6 +316,35 @@ case "${SHELL##*/}" in
     say "     and the desktop, and lose the aliases and functions."
     ;;
 esac
+
+# devenv, and specifically the rebuild-vs-session gap the README documents.
+# The hook line lands in /etc/bashrc (or /etc/zshrc, or fish's config) at
+# rebuild time; a shell that was already open when that happened has neither
+# read it nor picked up the package. The symptom is `cd` into a project doing
+# nothing at all, which reads as devenv being broken rather than as the
+# session being older than the configuration.
+#
+# This runs in its own process, so it cannot see whether the parent shell has
+# the hook function defined. What it CAN see is the pair that actually
+# disagrees: the rc the current system installed, against the PATH this
+# session inherited.
+devenv_rc=""
+case "${SHELL##*/}" in
+  bash) devenv_rc=/etc/bashrc ;;
+  zsh) devenv_rc=/etc/zshrc ;;
+  fish) devenv_rc=/etc/fish/config.fish ;;
+esac
+if [ -n "$devenv_rc" ] && [ -r "$devenv_rc" ] && grep -q 'devenv hook' "$devenv_rc"; then
+  if command -v devenv >/dev/null 2>&1; then
+    finding "devenv activates in ${SHELL##*/}" "$ok" "cd into a devenv allow'ed project"
+  else
+    finding "devenv is selected but not on this session's PATH" "$warn" ""
+    say "     ${devenv_rc} has the activation hook, so the rebuild landed."
+    say "     This shell started before it. Log out and back in; until then"
+    say "     cd into a project does nothing and says nothing."
+    notes+=("devenv is in your configuration but not in this session. The hook is guarded, so a stale shell stays silent rather than erroring at every prompt -- which also means nothing tells you to log out. This is that.")
+  fi
+fi
 say ""
 
 for unit in docker.service NetworkManager.service; do

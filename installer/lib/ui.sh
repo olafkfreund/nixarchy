@@ -151,6 +151,11 @@ UI_LOGO_COLS=92
 #
 # gum draws at column zero unless told otherwise, so its padding is set here
 # from the same number. Every widget the installer uses takes it.
+# The narrowest gum may be left with. "Alphanumeric, no spaces (like dhh)" is
+# the widest placeholder install.sh passes (34), "Username> " the widest prompt
+# (10), plus room for the cursor and a character of typing.
+UI_MIN_CONTENT_COLS=46
+
 ui_init() {
   local cols
   UI_SIZE_UNCONFIRMED=""
@@ -181,6 +186,19 @@ ui_init() {
     sleep 0.1
   done
 
+  # ui_cols is reached through $( ), and a variable assigned inside a command
+  # substitution never reaches the caller -- so UI_SIZE_UNCONFIRMED, which
+  # ui_dimension sets on the framebuffer path, was ALWAYS empty by the time
+  # anything read it. Both guards below have therefore never once fired: the
+  # wide wordmark was chosen on framebuffer-derived widths it was written to
+  # refuse, and the padding was centred on a guess, which is what panics gum
+  # (#133).
+  #
+  # Called again rather than restructured: this is a plain call in the current
+  # shell, so the flag lands here, and measuring twice costs nothing next to
+  # rewriting the fallback chain above.
+  ui_dimension cols >/dev/null
+
   # The wide mark only when there is room for it to look deliberate AND the
   # width came from the terminal itself. A framebuffer-derived width that is
   # too large draws a 92-column mark into a narrower console and truncates it
@@ -195,6 +213,32 @@ ui_init() {
   export UI_LOGO UI_LOGO_COLS
   UI_PAD=$(((cols - UI_LOGO_COLS) / 2))
   [ "$UI_PAD" -lt 0 ] && UI_PAD=0
+
+  # Clamped at the TOP as well, which is the half that was missing.
+  #
+  # This padding is handed to every gum widget as --padding "0 0 0 $UI_PAD".
+  # gum subtracts it from the width it measures itself, and if what is left
+  # cannot hold the prompt and its placeholder it does not degrade -- it
+  # panics, in Go, over a terminal the user is mid-install on:
+  #
+  #   runtime error: makeslice: len out of range
+  #     charm.land/bubbles/v2/textinput.Model.placeholderView
+  #
+  # So the padding is only ever as wide as it can be while leaving room for
+  # the widest thing drawn inside it: "Alphanumeric, no spaces (like dhh)" at
+  # 34 columns, plus "Username> " at 10, plus the cursor.
+  #
+  # Doubly so when the width is a guess. ui_dimension marks a framebuffer-
+  # derived size unconfirmed because the VT may not use the whole framebuffer;
+  # centring on a number that is too large is what produces a padding wider
+  # than the real terminal, so an unconfirmed width gets no padding at all.
+  # The wordmark already degrades on the same flag.
+  if [ -n "${UI_SIZE_UNCONFIRMED:-}" ]; then
+    UI_PAD=0
+  elif [ $((cols - UI_PAD)) -lt "$UI_MIN_CONTENT_COLS" ]; then
+    UI_PAD=$((cols - UI_MIN_CONTENT_COLS))
+    [ "$UI_PAD" -lt 0 ] && UI_PAD=0
+  fi
   export UI_PAD
 
   local pad="0 0 0 $UI_PAD"

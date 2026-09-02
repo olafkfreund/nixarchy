@@ -46,6 +46,18 @@ jobs:
       - name: Install onto a blank disk and boot the result
         run: nix build .#checks.x86_64-linux.install --print-build-logs
 
+      # installer-vm is a runnable script, not a check, so nothing has ever
+      # built it -- and it sat broken for weeks because of that: its writable
+      # store was a RAM-backed tmpfs and the closure outgrew it, which surfaced
+      # as ENOSPC three levels under a "1 dependency failed" (#134).
+      #
+      # Building it does not run an install, so it will not catch that class
+      # again on its own. What it does catch is the cheap half -- an evaluation
+      # or packaging error in a harness nobody exercises until the day they
+      # need it, which is the worst day to discover it is broken.
+      - name: The install VM harness still builds
+        run: nix build .#installer-vm --no-link --print-build-logs
+
       - name: Report the install duration
         if: always()
         run: |

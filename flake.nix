@@ -654,6 +654,14 @@
           pkgs = pkgsFor.${system};
         };
 
+        # The installer's interactive screens, at every width worth caring
+        # about. Nothing else draws them: every other harness passes
+        # --answers, which is exactly how #133 shipped.
+        installer-ui = import ./tests/installer-ui.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
         # Every option that adds something, checked with it turned off too --
         # see tests/options.nix for why that half is the one at risk.
         options = import ./tests/options.nix {

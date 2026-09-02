@@ -14,6 +14,7 @@ malformed key is named in one pass instead of one per attempt:
 
 ```ini
 device=/dev/vda
+disk_mode=whole             # or `free`; default `whole`
 encrypt=yes
 luks_passphrase=correct horse
 hostname=nixarchy
@@ -26,6 +27,12 @@ keymap=us
 
 It holds a password in clear. That is inherent to installing without being
 asked, and nothing copies it onto the installed machine.
+
+`disk_mode=free` installs into the largest free region on the disk and leaves
+every existing partition alone — see
+[dual boot install](dual-boot-install). If the disk cannot take one, the
+install **stops**. It does not quietly fall back to `whole`, which would erase
+the disk the file asked to preserve.
 
 `<file>` may also be an **`https://` URL**, which is what makes it unattended
 rather than merely unprompted — otherwise somebody had to put the file on the

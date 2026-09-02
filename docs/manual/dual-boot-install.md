@@ -4,36 +4,70 @@ title: Dual boot install
 
 # Dual boot install
 
-There is no nixarchy installer, so there is no dual-boot installer either.
+The nixarchy installer offers two disk modes, the way Omarchy's does:
 
-Omarchy ships an ISO whose installer offers a **Free space install** next to
-Windows, encrypts the partition with LUKS, and then runs `limine-scan` to add
-the other operating systems to its bootloader.
+- **Full disk install** — the disk is nixarchy's, and everything on it is gone.
+- **Free space install** — nixarchy goes into the largest unpartitioned region
+  on the disk, and every partition already there is left exactly as it was.
 
-**nixarchy has the ISO now, but not the free-space install.** Its installer
-formats a whole disk — that and nothing else. Installing alongside Windows is
-[issue #47](https://github.com/olafkfreund/nixarchy/issues/47), and it is the
-one piece of this work whose failure mode is destroying data that is not ours,
-so it is being done carefully rather than quickly. Until it lands, this page
-cannot honestly say more than the following.
+The second screen only appears when it can. On a disk with no partitions there
+is nothing to install beside, so the question is not asked at all.
 
-## What to do instead
+## Before you start
 
-1. **Make room on the Windows side** exactly as upstream describes — Disk
-   Management, *Shrink Volume*, and turn BitLocker off first, since it encrypts
-   the whole drive rather than a partition. That half of
-   [the upstream page](https://omarchy.org/manual/dual-boot-install/) is about
-   Windows, not Omarchy, and applies unchanged.
+**Shrink Windows from inside Windows.** Disk Management, *Shrink Volume*, and
+leave at least 32 GiB unallocated — that is the floor the installer enforces,
+and it is a floor rather than a recommendation: a desktop with a Nix store in
+it is not comfortable below it. That half of
+[the upstream page](https://omarchy.org/manual/dual-boot-install/) is about
+Windows, not Omarchy, and applies unchanged here.
 
-2. **Install NixOS into the free space** by whichever method you prefer. The
-   NixOS installer supports installing alongside an existing operating system;
-   partitioning and bootloader setup for that are covered by the NixOS manual,
-   and this manual does not repeat them.
+**Turn BitLocker off first.** The installer refuses a free-space install on a
+disk BitLocker is holding, and the reason is worth knowing rather than working
+around: nothing nixarchy does would touch the encrypted volume, but the install
+adds an EFI boot entry and changes the boot order, and BitLocker measures the
+boot chain. The next boot of Windows asks for a recovery key. If you have it,
+you lost an afternoon. If you do not — and most people do not — the data is
+gone as surely as if the disk had been formatted.
 
-3. **Add nixarchy as a flake input** to the resulting configuration and
-   rebuild. That is the whole of the nixarchy-specific work, and it is
-   described on [the getting-started page](getting-started).
+**Back up anyway.** This is a partitioning operation on a disk holding somebody
+else's operating system. It is tested — `nix build .#checks.x86_64-linux.free-space`
+installs onto a disk carrying a Windows-shaped ESP and data partition and
+asserts both come out byte-identical — but a tested operation and a safe one
+are different claims, and the second one is not available.
 
-Dual boot is therefore a NixOS question, and the NixOS manual and wiki are the
-right references for it. Once the machine boots into NixOS, nothing about
-adding nixarchy is different for having Windows on the next partition.
+## What it does
+
+1. Finds the largest unpartitioned region with `sgdisk`, and requires 32 GiB.
+2. Cuts two partitions out of it with `sgdisk --new=0:`, where `0` is sgdisk's
+   own *next free partition number* — so a new partition can never be given a
+   number that is already in use.
+3. Formats **only those two**, mounts them and installs, exactly as the
+   whole-disk mode does.
+
+nixarchy gets its own 2 GiB ESP. It does not adopt the ESP Windows is using,
+even when there is one and it would technically work, which is also what
+Omarchy does. An ESP nixarchy created is one it is allowed to write to; an ESP
+somebody else created is not.
+
+## What it does not do
+
+**It does not add Windows to the boot menu.** Omarchy runs `limine-scan` for
+this; nixarchy's bootloader is systemd-boot, which does not scan. Both
+operating systems are installed and bootable, and you choose between them from
+your firmware's boot menu (usually F12, F11 or Esc at power-on). Adding a
+systemd-boot entry for Windows by hand is a few lines in your configuration and
+is a NixOS question rather than a nixarchy one.
+
+**It does not shrink anything.** The free space has to be free before you
+start. The installer will not resize a partition, and that is deliberate: a
+resize is the operation in this whole area most likely to lose data, and it has
+a much better tool on the Windows side.
+
+**It does not describe your partition table.** The `disk-config.nix` in the
+flake it writes addresses two partitions by label — `nixarchy-esp` and
+`nixarchy-root` — and declares no partition table at all. That is what keeps
+disko from ever reaching a partition nixarchy did not create, and the cost is
+that the file cannot rebuild your disk. Running disko against it on a wiped
+disk produces nothing. The file says so at the top; read it before assuming
+otherwise.

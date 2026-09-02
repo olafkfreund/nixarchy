@@ -1476,12 +1476,13 @@ someone would miss it:
    own `.desktop` -- came up to a black desktop. That cause was not chased down,
    because the answer did not depend on it and guessing at one would be worse
    than saying so. The guards work; the branch is not somewhere to go.
-2. **The installer takes the whole disk, and there is no Secure Boot and no
-   graphical installer.** Each is a decision rather than a gap. Sharing a disk
-   means partitioning it yourself, which `installer/disk-config.nix` lets you
-   do and the installer will not: a partition picker is the part of an
-   installer most likely to destroy something, and the layout being one
-   readable file is a better answer than a wizard that hides it. Secure Boot
+2. **The installer will not resize a partition, and there is no Secure Boot and
+   no graphical installer.** Each is a decision rather than a gap. It does
+   install into free space beside another operating system -- see
+   [the dual boot page](docs/manual/dual-boot-install.md) -- but the free space
+   has to be free before it starts: a resize is the operation in this area most
+   likely to lose data and it has a much better tool on the Windows side.
+   Secure Boot
    needs signed shims and enrolled keys, which is a distribution-level
    commitment rather than an installer feature. And the installer is a TUI
    because it runs before there is a desktop to draw a GUI with -- Omarchy's

@@ -96,7 +96,12 @@ jobs:
     # here noting there was no `if:` guarding pull_request either. There was
     # nothing to guard: pull requests did not reach this file at all. They do
     # now, and the `on:` block above is the only place that decides which.)
-    timeout-minutes: 45
+    #
+    # 90, not 45: this job does two full installs now. The old number was sized
+    # for one, and a timeout is recorded as `cancelled` -- which reads like
+    # somebody pressed a button rather than like the job running out of road,
+    # the exact confusion the top of this file is about.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v5
@@ -106,6 +111,18 @@ jobs:
       # hour.
       - name: Install onto a blank disk and boot the result
         run: nix build .#checks.x86_64-linux.install --print-build-logs
+
+      # The same machine, and the one check in the repo whose failure means
+      # somebody's other operating system did not survive. Here rather than in
+      # build.yml for exactly the reason at the top of this file: it boots a
+      # VM, installs, and boots the result, and a push to main would cancel it
+      # there.
+      #
+      # After the blank-disk install, not before: if the installer is broken in
+      # some way that has nothing to do with partitioning, checks.install says
+      # so in a tenth of the log.
+      - name: Install into free space and prove the neighbour survived
+        run: nix build .#checks.x86_64-linux.free-space --print-build-logs
 
       - name: Report what it cost
         if: always()

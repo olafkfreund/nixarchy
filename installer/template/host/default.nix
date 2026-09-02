@@ -21,6 +21,11 @@
     # everywhere the installer writes one. A machine that partitions
     # differently gets its own file here instead.
     (import ../../disk-config.nix {
+      # "whole" or "free". "free" means this machine was installed beside
+      # another operating system: it describes two partitions by label and no
+      # partition table at all, so disko can never rebuild the table from it.
+      # Read the header of ../../disk-config.nix before assuming otherwise.
+      mode = "@diskmode@";
       device = "@device@";
       # Quoted deliberately: the bare token is not valid Nix -- the file would
       # not parse, let alone format -- so the installer substitutes the quotes

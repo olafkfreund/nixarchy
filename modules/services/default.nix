@@ -33,6 +33,7 @@
 # and the user having to mkForce their own configuration to escape it.
 {
   imports = [
+    ./devenv.nix
     ./syncthing.nix
     ./tailscale.nix
   ];

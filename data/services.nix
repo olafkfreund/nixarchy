@@ -93,6 +93,21 @@
     note = "Wanted by Steam, Wine and older games. One switch covers every driver.";
   };
 
+  # ── Development ───────────────────────────────────────────────
+
+  devenv = {
+    label = "devenv";
+    category = "Development";
+    kind = "bundled";
+    # No menuId, and that is the whole convention rather than an omission.
+    # menuId means "override the upstream row with this id", and the staleness
+    # half of tests/coverage.py rejects an id upstream does not ship -- an
+    # install.development.devenv was tried first and failed there, correctly:
+    # Omarchy has no such row to override. So this takes the generated
+    # install.service.devenv, the way openssh and syncthing do.
+    note = "Per-project development environments that activate when you cd in. Bundled because it is a package plus an activation hook in each of bash, zsh and fish, and a cache to keep the first use from being a compile.";
+  };
+
   # ── Desktop ─────────────────────────────────────────────────────────────
   flatpak = {
     label = "Flatpak";

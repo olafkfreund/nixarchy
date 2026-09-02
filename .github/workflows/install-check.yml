@@ -16,7 +16,7 @@ name: install check
 # (Pull requests are the one place where cancelling is right; see the
 # concurrency block below.)
 
-# It also runs on pull requests, and the filter below is a denylist on purpose.
+# It also runs on pull requests, and the filter is a denylist on purpose.
 #
 # For most of this repo's life it did not. It ran on main and nightly, so the
 # first real gate on "does an install still work" was main itself, and every PR
@@ -39,25 +39,30 @@ name: install check
 # filter because it still reads like coverage. That is the same failure this
 # whole file is about, one level down.
 #
-# So: `**` first, and then the handful of paths that provably cannot change
-# what an install produces. A new top-level directory is covered on the day it
-# appears, and dropping something out of coverage takes a deliberate line here.
-# .github/** is excluded because no workflow file can break an install -- with
-# this one re-included on the next line, since a change to how the gate runs
-# should be tested by the gate running.
+# So: everything is relevant, and then the handful of paths that provably
+# cannot change what an install produces are subtracted. A new top-level
+# directory is covered on the day it appears, and dropping something out of
+# coverage takes a deliberate line in the `gate` job below. .github/** is
+# excluded because no workflow file can break an install -- with this one
+# re-included, since a change to how the gate runs should be tested by the gate
+# running.
+#
+# That list used to live in `on: pull_request: paths:`, and #183 is why it does
+# not any more. A workflow filtered out at the `on:` level does not report a
+# skipped check; it reports NOTHING AT ALL. Measured, on #167 (docs-only): its
+# check-runs are `devenv-presets, lint, omarchy, system` and there is no
+# `install` entry of any kind. GitHub cannot express "required if it ran", so
+# requiring an absent context waits for a report that will never arrive, and a
+# docs-only PR is unmergeable forever.
+#
+# The denylist is therefore read one level in, by the `gate` job, and `install`
+# runs on every pull request and exits 0 when there is nothing to do. Then the
+# context always exists and can safely be a required check.
 
 on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - '**'
-      - '!docs/**'
-      - '!README.md'
-      - '!.envrc'
-      - '!.gitignore'
-      - '!.github/**'
-      - '.github/workflows/install-check.yml'
   workflow_dispatch:
 
 concurrency:
@@ -80,22 +85,97 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The denylist, moved inside the workflow. Cheap, hosted, and deliberately
+  # not the required context: it decides, `install` reports.
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+      runner: ${{ steps.filter.outputs.runner }}
+    steps:
+      - name: Decide whether this change can affect an install
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # Anything that is not a pull request is not filtered. main and
+          # workflow_dispatch always ran the real thing and still do.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            relevant=true
+          else
+            # The API, not `git diff`: actions/checkout gives this job a single
+            # commit by default, so a diff against the base needs a deepened
+            # fetch whose depth is a guess. The PR's file list is the same
+            # answer without one, and without a checkout at all.
+            files=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
+              --paginate --jq '.[].filename')
+
+            # Order matters and this loop is where it is expressed: the
+            # re-include is tested before the exclusions, so a change to this
+            # very file is relevant even though it lives under .github/.
+            # `case` globs are not path-aware -- `*` crosses `/` -- which is
+            # what makes `docs/*` and `.github/*` cover nested files.
+            relevant=false
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              case "$f" in
+                .github/workflows/install-check.yml) relevant=true; break ;;
+                # Provably cannot change what an install produces.
+                docs/*|README.md|AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
+                  continue ;;
+                *) relevant=true; break ;;
+              esac
+            done <<EOF
+          $files
+          EOF
+          fi
+
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
+
+          # And which machine `install` should ask for. A run with nothing to
+          # do must not queue for the one self-hosted box -- seven concurrent
+          # PRs queue there for about three hours, and a docs PR waiting in
+          # that line for a check it is not going to run is the old bug wearing
+          # a different hat.
+          if [ "$relevant" = true ]; then
+            echo 'runner=["self-hosted","nixos","kvm","big"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runner=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "relevant=$relevant" >> "$GITHUB_STEP_SUMMARY"
+
   install:
     name: install
+    needs: gate
+
+    # No `if:` on this job, and that is the whole fix -- measured, not assumed.
+    # A probe run with three jobs reported: a job skipped by a job-level `if:`
+    # appears as a check-run with conclusion `skipped`, and `skipped` is not
+    # `success`, so requiring it blocks the merge just as an absent context
+    # does. The same job with the `if:` moved onto its steps reported
+    # `success`. So the steps below carry the condition and the job always
+    # completes green.
+    #
     # p510: 40 cores, 94 GB, /dev/kvm, and a pool with room for the images.
     # This job boots a VM, installs a desktop onto a blank disk, boots the
     # result on its own bootloader and asserts a rebuild builds nothing. None
     # of that fits on a hosted runner -- fourteen gigabytes of disk and no KVM
     # worth the name -- and it is the only check that exercises the artefact a
-    # person actually receives.
-    runs-on: [self-hosted, nixos, kvm, big]
+    # person actually receives. When there is nothing to do it asks for a
+    # hosted runner instead, which is what the fromJSON is for: `runs-on`
+    # takes an expression, but a label LIST has to arrive as JSON.
+    runs-on: ${{ fromJSON(needs.gate.outputs.runner) }}
 
     # No job-level concurrency: the `concurrency:` at the top of this file
     # already says it, and saying it twice is how the first version came to
-    # look protected while being cancelled every time. (There used to be a line
-    # here noting there was no `if:` guarding pull_request either. There was
-    # nothing to guard: pull requests did not reach this file at all. They do
-    # now, and the `on:` block above is the only place that decides which.)
+    # look protected while being cancelled every time.
     #
     # 90, not 45: this job does two full installs now. The old number was sized
     # for one, and a timeout is recorded as `cancelled` -- which reads like
@@ -104,12 +184,20 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      - name: Nothing here can affect an install
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "Only paths the gate excludes changed; not building." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
 
       # No installer action, no cachix. The runner is a NixOS machine with a
       # warm store, which is most of why this is ten minutes rather than an
       # hour.
       - name: Install onto a blank disk and boot the result
+        if: needs.gate.outputs.relevant == 'true'
         run: nix build .#checks.x86_64-linux.install --print-build-logs
 
       # The same machine, and the one check in the repo whose failure means
@@ -122,10 +210,11 @@ jobs:
       # some way that has nothing to do with partitioning, checks.install says
       # so in a tenth of the log.
       - name: Install into free space and prove the neighbour survived
+        if: needs.gate.outputs.relevant == 'true'
         run: nix build .#checks.x86_64-linux.free-space --print-build-logs
 
       - name: Report what it cost
-        if: always()
+        if: always() && needs.gate.outputs.relevant == 'true'
         run: |
           # The installer's own figure, not the driver's, and the same one the
           # finish screen shows. checks.install already fails above a budget;

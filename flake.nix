@@ -650,14 +650,33 @@
             self.nixosModules.nixarchy
             home-manager.nixosModules.home-manager
             inputs.disko.nixosModules.disko
-            (import ./installer/host.nix {
-              hostname = "nixarchy";
-              username = "omarchy";
-            })
-            (import ./installer/disk-config.nix {
-              device = "/dev/vda";
-              inherit encrypt;
-            })
+
+            # One module that imports the machine's own two, rather than two
+            # entries in this list. It has to be shaped this way, because the
+            # generated flake's hosts/<name>/default.nix is shaped this way:
+            # `imports` inside a module and entries in `modules` are merged in
+            # different orders, so the flat form gives a different
+            # environment.systemPackages ORDER -- same packages, same closure,
+            # different list -- and system-path hashes that order into
+            # chosenOutputs. A different system-path is a different toplevel,
+            # and on an ISO with no network the installed machine can no longer
+            # copy the one baked here: it has to build it, which means stdenv,
+            # which means the source bootstrap from hex0-seed.
+            #
+            # Nothing about the packages differs. Only the order does, and only
+            # the order has to.
+            {
+              imports = [
+                (import ./installer/host.nix {
+                  hostname = "nixarchy";
+                  username = "omarchy";
+                })
+                (import ./installer/disk-config.nix {
+                  device = "/dev/vda";
+                  inherit encrypt;
+                })
+              ];
+            }
           ];
         };
 

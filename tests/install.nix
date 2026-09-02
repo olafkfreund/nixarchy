@@ -172,29 +172,45 @@ let
         inputs.self.nixosModules.nixarchy
         inputs.home-manager.nixosModules.home-manager
         inputs.disko.nixosModules.disko
-        (import ../installer/host.nix {
-          hostname = "installed";
-          username = "omarchy";
-        })
-        (import ../installer/disk-config.nix {
-          device = "/dev/vdb";
-          encrypt = false;
-        })
-        # Everything the generated configuration.nix adds. Without these the
-        # seeded system is not the system that gets installed: system-path
-        # differs, so nixos-install has to rebuild it, and with no network it
-        # cannot fetch the inputs to do so. Keep this in step with
-        # installer/template/configuration.nix -- a mismatch shows up as
-        # "cannot build", which is a clear enough signal.
+
+        # The machine, as ONE module whose imports are the three files
+        # installer/template/host/default.nix imports -- not as three entries
+        # in this list.
+        #
+        # The shape is load-bearing and was not, before the hosts/ layout. A
+        # module's `imports` and a nixosSystem's `modules` merge in different
+        # orders, so listing these flat gives the same packages in a different
+        # environment.systemPackages ORDER; system-path hashes that order into
+        # chosenOutputs, so it is a different derivation, so the toplevel is,
+        # and the install has to build what it can no longer copy -- offline,
+        # which means stdenv, which means 459 derivations from hex0-seed and a
+        # fetch of a Debian patch that never arrives.
+        #
+        # So this mirrors hosts/<name>/default.nix, and the block below mirrors
+        # the configuration.nix that sits beside it. Keep both in step with
+        # installer/template/host/ -- a mismatch shows up as "cannot build",
+        # which is a clear enough signal.
         {
-          time.timeZone = "UTC";
-          console.keyMap = "us";
-          nixpkgs.config.allowUnfree = true;
-          services.displayManager.autoLogin = {
-            enable = false;
-            user = "omarchy";
-          };
-          users.users.omarchy.hashedPassword = passwordHash;
+          imports = [
+            (import ../installer/host.nix {
+              hostname = "installed";
+              username = "omarchy";
+            })
+            (import ../installer/disk-config.nix {
+              device = "/dev/vdb";
+              encrypt = false;
+            })
+            {
+              time.timeZone = "UTC";
+              console.keyMap = "us";
+              nixpkgs.config.allowUnfree = true;
+              services.displayManager.autoLogin = {
+                enable = false;
+                user = "omarchy";
+              };
+              users.users.omarchy.hashedPassword = passwordHash;
+            }
+          ];
         }
         (hardwareConfig cpuModule)
         initrdPin

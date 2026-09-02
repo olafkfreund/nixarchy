@@ -440,6 +440,33 @@ let
           description = "Open an earlier version of your home directory and copy back what you want";
         };
 
+        # The off-disk half, beside the on-disk one.
+        #
+        # A snapshot and a backup read as the same thing to someone who has
+        # not lost a disk yet, so the two pairs sit together deliberately:
+        # snapshots are instant and local, these two survive the hardware.
+        # The descriptions are where that difference is actually said.
+        #
+        # `when` hides both rows on a machine nixarchy did not install --
+        # the same gate the script itself enforces, so an imported
+        # nixosModules.nixarchy is not offered a thing that will refuse.
+        # A row that exists to say no is worse than no row.
+        "trigger.home-backup" = {
+          icon = "󰁯";
+          label = "Back up desktop config";
+          when = "nixarchy-home-backup --check";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-home-backup";
+          description = "Push your bar, keybindings and themes to a private git repository. Survives the disk";
+        };
+
+        "trigger.home-backup.restore" = {
+          icon = "󰇚";
+          label = "Restore desktop config";
+          when = "nixarchy-home-backup --check";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-home-backup restore";
+          description = "Copy your bar, keybindings and themes back out of the backup. Works on a new machine";
+        };
+
         "install.aur" = {
           when = "false";
         };

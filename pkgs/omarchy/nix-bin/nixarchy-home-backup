@@ -1,0 +1,581 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Back up the desktop configuration in your home directory to a git repository, and restore it.
+# omarchy:args=[backup|restore] [--check] [--list] [--force]
+# omarchy:examples=nixarchy home backup
+
+# The half of "getting back" that nothing else on this machine covers.
+#
+# Generations restore the system closure. Snapshots restore /home, on the same
+# disk. The config repo restores /etc/nixos, which is where the *machine* is
+# described -- and nowhere in it is the evening somebody spent arranging their
+# bar. modules/home.nix seeds ~/.config with `cp -rn` ("Seed, don't manage",
+# which is the right trade), so those files are ordinary files: outside every
+# generation, outside Home Manager's rollback, and outside /etc/nixos.
+#
+# So this is a second, user-owned git repository holding an allowlisted slice
+# of $HOME.
+#
+# Why a second repository rather than a directory inside /etc/nixos: that tree
+# is root-owned on purpose (installer/install.sh, install_flake_dir). Putting
+# $HOME files there would mean sudo to back up your own dotfiles, root in the
+# history of user data, and a public/private decision made once, for the
+# system, that then silently governs personal files too.
+#
+# Everything here is idempotent. A second run backs up the difference; a
+# restore into a $HOME that already matches changes nothing and says so.
+
+set -uo pipefail
+
+FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
+REPO=${NIXARCHY_HOME_BACKUP_REPO:-$HOME/.local/share/nixarchy/home-backup}
+USER_LIST=$HOME/.config/omarchy/backup.list
+
+# ---------------------------------------------------------------------------
+# The allowlist, as data.
+#
+# Never `~/.config` wholesale, and this is the entire reason the command is
+# shaped this way: ~/.config/gh/hosts.yml is a working GitHub token,
+# ~/.config/opencode/auth.json and ~/.config/github-copilot are live agent
+# credentials (nixarchy-config-repo's agent_ready enumerates them by path),
+# and browser profiles under ~/.config are live sessions. An allowlist that
+# grows by a directory nobody re-read is how those get pushed.
+#
+# Format: one path per line, relative to $HOME. A trailing slash means "this
+# directory, recursively". A leading `!` excludes a path that an earlier line
+# would otherwise have pulled in. `#` comments. The user's own additions live
+# in ~/.config/omarchy/backup.list, which is itself on this list -- a list you
+# have to remember to back up separately is a list you lose with the disk.
+# ---------------------------------------------------------------------------
+
+shipped_list() {
+  cat <<'LIST'
+# The bar: which plugins are loaded, in what order, with what settings.
+# One file, and the whole reason this command exists.
+.config/omarchy/shell.json
+
+# Keybindings, monitors, window rules, input, look and feel. The issue names
+# ~/.config/hypr/*.lua; the whole directory is taken instead, because
+# hyprsunset.conf (night light) and xdph.conf (screen sharing) sit beside the
+# .lua files, are edited by hand in exactly the same way, and hold nothing
+# secret. Restoring the keybindings and losing the night-light schedule would
+# be an odd place to draw a line.
+.config/hypr/
+
+# Themes somebody made or hand-edited. Shipped themes come from the store on
+# every rebuild and are not worth a byte of git history; a custom one exists
+# nowhere else at all.
+.config/omarchy/themes/
+
+# The small text state that makes the desktop come up looking the way it was
+# left: which theme is current, which toggles are on, which editor is default.
+.local/state/omarchy/
+
+# Which is why the exclusions below exist. `.local/state/omarchy/` is a
+# directory Omarchy writes at runtime, and three things under it must not
+# travel:
+
+# Every string this user has copied. Password managers paste through the
+# clipboard. This is the single most dangerous file in the allowlist's reach
+# and it is inside a directory the epic asks for by name.
+!.local/state/omarchy/clipboard-history.json
+
+# A copy of the active theme, backgrounds and all -- megabytes of JPEG that
+# omarchy-theme-set regenerates from the store on every switch. theme.name and
+# background, the two pointers that say *which* theme, are kept: they are what
+# actually restores the look.
+!.local/state/omarchy/current/theme/
+
+# "Has this user been nudged about X yet." Restoring these onto a fresh
+# machine would mark first-run setup done on a machine that has not done it --
+# including the config-repo nudge, silencing the thing that backs up
+# /etc/nixos. The one file here whose whole meaning is "this machine", not
+# "this user".
+!.local/state/omarchy/done/
+
+# Agent token-usage telemetry. Not a credential, but it is per-machine
+# accounting nobody wants restored onto a different machine.
+!.local/state/omarchy/agents/
+
+# The list itself, so extending it is not a change you lose with the disk.
+.config/omarchy/backup.list
+LIST
+}
+
+# ---------------------------------------------------------------------------
+# Resolved list = shipped + the user's, comments and blanks stripped.
+# ---------------------------------------------------------------------------
+
+resolved_list() {
+  {
+    shipped_list
+    [[ -f $USER_LIST ]] && cat "$USER_LIST"
+  } | sed 's/#.*//' | sed 's/[[:space:]]*$//' | grep -v '^$'
+}
+
+includes() { resolved_list | grep -v '^!'; }
+excludes() { resolved_list | grep '^!' | sed 's/^!//'; }
+
+# ---------------------------------------------------------------------------
+# The ownership gate.
+#
+# installer/mkFlake.nix writes .nixarchy-url into the flake it generates, and
+# install.sh puts it on disk. Nothing else creates that file, so its presence
+# is "nixarchy built this machine" and its absence is "somebody imported
+# nixosModules.nixarchy into a configuration they own".
+#
+# programs.nixarchy.flake is NOT a usable signal: it defaults to /etc/nixos on
+# every machine with the module enabled, imports included.
+#
+# The danger this guards against is genuinely smaller here than for the config
+# repo -- this touches only $HOME, and never writes outside the repo directory
+# without being asked. It is gated anyway, because "nixarchy does not touch
+# what nixarchy did not write" is one doctrine, and two doctrines with a
+# boundary between them is how the boundary gets forgotten.
+# ---------------------------------------------------------------------------
+
+installed_by_nixarchy() { [[ -f $FLAKE/.nixarchy-url ]]; }
+
+refuse_unowned() {
+  echo "This machine was not installed by nixarchy." >&2
+  echo >&2
+  echo "  no $FLAKE/.nixarchy-url" >&2
+  echo >&2
+  echo "nixarchy backs up the desktop config it seeded, on machines it built." >&2
+  echo "Your configuration is yours: nixarchy will not decide what in your home" >&2
+  echo "directory is worth copying, or where to send it." >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Flags. --check and --list run before anything interactive, and deliberately
+# touch neither gum nor omarchy-done: they are what a menu `when:` and a test
+# can call on a machine with no terminal.
+# ---------------------------------------------------------------------------
+
+mode=backup
+check_only=false
+list_only=false
+force=false
+
+while (($#)); do
+  case "$1" in
+    backup) mode=backup; shift ;;
+    restore) mode=restore; shift ;;
+    --check) check_only=true; shift ;;
+    --list) list_only=true; shift ;;
+    --force) force=true; shift ;;
+    -h | --help)
+      echo "Usage: nixarchy-home-backup [backup|restore] [--check] [--list] [--force]"
+      echo "  backup   copy the allowlisted files into the repository and push (default)"
+      echo "  restore  copy them back out of the repository into your home directory"
+      echo "  --check  exit 0 if this machine is one nixarchy installed. Prints nothing."
+      echo "  --list   print the allowlist this machine would back up, and exit."
+      echo "  --force  on restore, overwrite without saving a copy of your version first."
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ $check_only == true ]]; then
+  installed_by_nixarchy || exit 1
+  exit 0
+fi
+
+if [[ $list_only == true ]]; then
+  resolved_list
+  exit 0
+fi
+
+installed_by_nixarchy || refuse_unowned
+
+# ---------------------------------------------------------------------------
+# UI. The floating-terminal wrapper draws the logo and exports the theme's gum
+# colours, so this only has to say things.
+# ---------------------------------------------------------------------------
+
+say()  { echo -e "$1"; }
+step() { echo -e "\n\033[1;32m▸\033[0m \033[1m$1\033[0m"; }
+warn() { echo -e "\n\033[1;33m!\033[0m $1"; }
+fail() { echo -e "\n\033[1;31m✗\033[0m $1" >&2; }
+ok()   { echo -e "  \033[32m✓\033[0m $1"; }
+
+# gum's interrupt is exit 130, which the presentation wrapper reads as "user
+# quit" and skips its done screen. Preserve it rather than treating a quit as
+# a no.
+abort_on_quit() { (($1 == 130)) && { echo; exit 130; }; }
+
+# gh and glab are not in the closure -- big dependencies for something most
+# people run once -- so they are fetched on demand, exactly as
+# nixarchy-config-repo does it. The first call takes a moment and then they
+# are in the store like anything else.
+#
+# These four functions, and the provider block in step 4, are deliberately the
+# same shape as nixarchy-config-repo's. They are NOT shared code yet: that
+# file is being rewritten under #168/#169 and editing it here would collide.
+# When it lands, both should call one helper.
+gh()   { nix --extra-experimental-features "nix-command flakes" shell nixpkgs#gh -c gh "$@"; }
+glab() { nix --extra-experimental-features "nix-command flakes" shell nixpkgs#glab -c glab "$@"; }
+
+# This repository is the user's. No sudo, no safe.directory, no identity
+# passed in per commit -- all three of which nixarchy-config-repo needs only
+# because /etc/nixos is root-owned. That difference is the argument for a
+# second repository rather than a subdirectory of the first.
+git() { command git -C "$REPO" "$@"; }
+
+has_commits() { git rev-parse HEAD &>/dev/null; }
+has_remote()  { [[ -n $(git remote 2>/dev/null) ]]; }
+
+# ---------------------------------------------------------------------------
+# Walking the allowlist.
+#
+# Emits paths relative to $HOME, one per line, files only. Excludes are
+# matched as path prefixes, so `!a/b/` drops everything under it and
+# `!a/b.json` drops exactly that file.
+# ---------------------------------------------------------------------------
+
+allowlisted_files() {
+  local entry ex rel keep
+  local -a exs=()
+  while IFS= read -r ex; do exs+=("${ex%/}"); done < <(excludes)
+
+  while IFS= read -r entry; do
+    entry=${entry#/}
+    [[ -e $HOME/$entry ]] || continue
+    # -xtype f rather than -type l: a symlink whose target is gone would break
+    # the copy, and ~/.config is full of them (btop's current.theme dangles
+    # until the first theme is set).
+    while IFS= read -r rel; do
+      rel=${rel#"$HOME/"}
+      keep=true
+      for ex in "${exs[@]}"; do
+        [[ $rel == "$ex" || $rel == "$ex"/* ]] && { keep=false; break; }
+      done
+      [[ $keep == true ]] && echo "$rel"
+    done < <(find "$HOME/$entry" \( -type f -o -xtype f \) 2>/dev/null)
+  done < <(includes) | sort -u
+}
+
+# ---------------------------------------------------------------------------
+# The credential scan.
+#
+# The epic's fourth done-criterion -- nothing pushes a credential anywhere --
+# is decided here or nowhere. The shipped allowlist is four paths chosen not
+# to contain secrets; this exists for the fifth path, the one the user added.
+#
+# Filenames first, because that is what the known agent credentials are: the
+# same file list nixarchy-config-repo's agent_ready walks, plus the shapes
+# that are secrets whatever they are called.
+# ---------------------------------------------------------------------------
+
+credential_hits() {
+  local rel
+  while IFS= read -r rel; do
+    case "${rel##*/}" in
+      # gh/glab, the agent credential files, ssh and TLS key material, dotenv.
+      hosts.yml | auth.json | credentials.json | .credentials.json | \
+      oauth_creds.json | .claude.json | id_rsa | id_ecdsa | id_ed25519 | \
+      *.pem | *.key | *.p12 | *.pfx | .env | .env.*)
+        echo "$rel  (a file of this name is normally a credential)"
+        continue
+        ;;
+    esac
+    # Then contents, for a file whose name gives nothing away: the same grep
+    # nixarchy-config-repo runs over the flake, plus the token shapes that are
+    # recognisable on sight. The quoted-value requirement is what keeps it
+    # usable -- without it `token:` in a comment and `secret = true` in a Lua
+    # table both hit, and a scan that cries wolf is one people click through.
+    if grep -qIE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{20,}|(password|passwd|secret|token|api_?key|access_?key)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}' \
+      "$HOME/$rel" 2>/dev/null; then
+      echo "$rel  (contains something shaped like a key or a password)"
+    fi
+  done < <(allowlisted_files)
+}
+
+# ---------------------------------------------------------------------------
+# restore
+# ---------------------------------------------------------------------------
+
+if [[ $mode == restore ]]; then
+  say "\033[1mRestoring your desktop configuration\033[0m"
+
+  if [[ ! -d $REPO/.git ]]; then
+    step "Where is the backup?"
+    say "  Paste the URL of the repository this machine (or an earlier one)"
+    say "  pushed to. On a fresh install this is the whole restore.\n"
+    url=$(gum input --prompt "URL > " --placeholder "git@github.com:you/nixarchy-home.git")
+    abort_on_quit $?
+    [[ -z $url ]] && { say "\nNo URL given."; exit 0; }
+    mkdir -p "$(dirname "$REPO")"
+    if ! command git clone -q "$url" "$REPO"; then
+      fail "Could not clone $url"
+      exit 1
+    fi
+    ok "cloned"
+  elif has_remote; then
+    step "Fetching the latest backup"
+    git pull -q --ff-only 2>&1 | sed 's/^/  /' || warn "could not pull; restoring what is already here"
+  fi
+
+  # Per file, with a timestamped backup of whatever it overwrites -- the same
+  # manner omarchy-refresh-config uses, and deliberately never a directory
+  # swap. A swap would delete files the user has since made that the backup
+  # has never heard of, which is a restore that loses data.
+  step "Copying files into place"
+  restored=0 kept=0 same=0
+  while IFS= read -r rel; do
+    src=$REPO/$rel
+    dest=$HOME/$rel
+    if [[ -e $dest ]] && cmp -s "$src" "$dest"; then
+      same=$((same + 1))
+      continue
+    fi
+    mkdir -p "$(dirname "$dest")"
+    if [[ -e $dest ]]; then
+      if [[ $force == false ]]; then
+        bak=$dest.bak.$(date +%s)
+        cp -f "$dest" "$bak"
+        say "  $rel  (yours saved as $(basename "$bak"))"
+        kept=$((kept + 1))
+      fi
+    fi
+    # Mode preserved here, unlike everywhere else nixarchy copies files. The
+    # source is a git checkout, not a store path: git records the executable
+    # bit and nothing else, so this restores a hook script as executable and
+    # leaves everything else at the umask default.
+    cp -f "$src" "$dest"
+    restored=$((restored + 1))
+  done < <(cd "$REPO" && find . -type f -not -path './.git/*' | sed 's|^\./||' | sort)
+
+  ok "$restored restored, $same already matched, $kept of yours saved alongside"
+  say "\n\033[1mDone.\033[0m Log out and back in, or run \033[1momarchy-restart-shell\033[0m,"
+  say "for the bar and the keybindings to pick the files up."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# backup
+# ---------------------------------------------------------------------------
+
+say "\033[1mYour desktop configuration\033[0m"
+say "\nThe bar layout, the keybindings, the monitors, the themes you made."
+say "None of it is in a NixOS generation, none of it is in /etc/nixos, and"
+say "the snapshots that do cover it are on this disk. Spend an evening on"
+say "your bar, break it, and there is nothing to go back to."
+
+step "What would be backed up"
+
+mapfile -t files < <(allowlisted_files)
+if ((${#files[@]} == 0)); then
+  warn "Nothing on the allowlist exists yet on this machine."
+  say  "  That usually means a very fresh install. Come back once you have"
+  say  "  changed something."
+  exit 0
+fi
+
+bytes=$(cd "$HOME" && du -cb -- "${files[@]}" 2>/dev/null | tail -1 | cut -f1)
+say "  ${#files[@]} files, $(numfmt --to=iec --suffix=B "${bytes:-0}")\n"
+includes | sed 's/^/    /'
+
+say "\n  \033[2mNot ~/.config wholesale: that is where gh's token, your agent's"
+say "  credentials and your browser sessions live. This is a list, and you"
+say "  extend it in ~/.config/omarchy/backup.list.\033[0m"
+
+# git repositories are a poor vehicle for large binaries, and custom theme
+# backgrounds are the way this list grows without anyone noticing.
+if ((${bytes:-0} > 52428800)); then
+  warn "That is over 50 MB. git keeps every version of every byte forever."
+  say  "  Look for image assets on the list -- a wallpaper in a custom theme is"
+  say  "  usually what did it -- and exclude them with a \033[1m!\033[0m line."
+fi
+
+gum confirm "Back this up?"
+rc=$?
+if ((rc != 0)); then
+  abort_on_quit $rc
+  say "\nLeaving it. Run \033[1mnixarchy home backup\033[0m whenever you want to."
+  exit 0
+fi
+
+# ---- 1. the repository ----------------------------------------------------
+
+if [[ ! -d $REPO/.git ]]; then
+  step "Creating the repository"
+  mkdir -p "$REPO"
+  command git init -q -b main "$REPO" || { fail "Could not create $REPO"; exit 1; }
+  ok "$REPO"
+fi
+
+if [[ -z $(command git config --global user.email 2>/dev/null) ]]; then
+  step "Who is making these commits?"
+  say "  git records a name and address on every commit. They are not verified"
+  say "  and are visible to anyone who can read the repository.\n"
+  name=$(gum input --prompt "Name  > " --placeholder "$(getent passwd "$USER" | cut -d: -f5 | cut -d, -f1)")
+  abort_on_quit $?
+  email=$(gum input --prompt "Email > " --placeholder "you@example.com")
+  abort_on_quit $?
+  [[ -z $name || -z $email ]] && { fail "Both are needed to commit."; exit 1; }
+  command git config --global user.name "$name"
+  command git config --global user.email "$email"
+  ok "identity set globally"
+fi
+
+# ---- 2. the credential scan, before the first commit ----------------------
+#
+# Before the first commit and before any choice about visibility. A tool that
+# helps you back up your dotfiles must not help you publish your token, and
+# git history does not forget a file a later commit deletes.
+
+step "Checking the allowlist for credentials"
+
+hits=$(credential_hits | head -20)
+if [[ -n $hits ]]; then
+  warn "These are on the allowlist and look like secrets:\n"
+  echo "$hits" | sed 's/^/    /'
+  say "\n  The four paths nixarchy ships were chosen not to contain any of this,"
+  say "  so one of these almost certainly came from a line you added to"
+  say "  \033[1m~/.config/omarchy/backup.list\033[0m. Remove the line, or exclude the"
+  say "  file with a \033[1m!\033[0m in front of its path.\n"
+  say "  Once a secret is committed, deleting it later does not remove it from"
+  say "  the history. Ask your agent about the \033[1mnixos-secrets\033[0m skill.\n"
+
+  gum confirm --default=false "Back it up anyway?" || { abort_on_quit $?
+    say "\nStopping. Nothing was committed."
+    exit 0; }
+else
+  ok "nothing that looks like a credential"
+fi
+
+# ---- 3. copy in, and commit -----------------------------------------------
+
+step "Copying files in"
+
+# Emptied first, so a path removed from the allowlist stops being backed up
+# rather than lingering in the repository forever. Guarded on .git existing:
+# this is an rm -rf built from a variable, and $REPO comes from the
+# environment.
+[[ -d $REPO/.git ]] || { fail "$REPO is not a git repository; refusing to empty it."; exit 1; }
+find "$REPO" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+
+# Modes are kept, then forced writable -- not dropped. git records exactly one
+# bit of a file's mode, the executable one, and dropping it here is what makes
+# a user's own hook script come back from a restore unable to run. The chmod is
+# for the other direction: -L dereferences a symlink into the Nix store, and
+# store files are r--r--r--, so without it the next run cannot overwrite them.
+(cd "$HOME" && cp --parents -Lf -t "$REPO" -- "${files[@]}") \
+  || { fail "Could not copy the files."; exit 1; }
+chmod -R u+w "$REPO"
+ok "${#files[@]} files"
+
+# --porcelain rather than `git diff HEAD`: the interesting change on a second
+# run is usually a file that did not exist before, and a diff against HEAD
+# does not see untracked files at all.
+if [[ -n $(git status --porcelain) ]] || ! has_commits; then
+  git add -A
+  if git commit -qm "Desktop configuration from $(uname -n) on $(date +%Y-%m-%d)"; then
+    ok "committed"
+  else
+    fail "Commit failed."
+    exit 1
+  fi
+else
+  ok "nothing has changed since the last backup"
+fi
+
+# ---- 4. the remote --------------------------------------------------------
+
+if ! has_remote; then
+  step "Where should the backup live?"
+  say "  A commit in $REPO is history, but it is still on this disk. A remote"
+  say "  is what survives the disk.\n"
+
+  provider=$(gum choose --header "" \
+    "GitHub" \
+    "GitLab" \
+    "Somewhere else (I have a URL)" \
+    "Nowhere for now")
+  abort_on_quit $?
+
+  case "$provider" in
+    "Nowhere for now")
+      say "\n  Committed locally. Re-run this any time to add a remote."
+      exit 0
+      ;;
+
+    "Somewhere else (I have a URL)")
+      say "\n  Create an empty repository on your host -- Codeberg, a self-hosted"
+      say "  Forgejo or Gitea, anything that speaks git -- and paste its URL.\n"
+      say "  \033[1mMake it private.\033[0m See below for why.\n"
+      url=$(gum input --prompt "URL > " --placeholder "git@codeberg.org:you/nixarchy-home.git")
+      abort_on_quit $?
+      [[ -z $url ]] && { say "\nNo URL given."; exit 0; }
+      git remote add origin "$url"
+      ok "remote added"
+      ;;
+
+    GitHub | GitLab)
+      say "\n  \033[1mPrivate or public?\033[0m"
+      say "  Unlike a NixOS configuration, which plenty of people publish on"
+      say "  purpose, this is the inside of your home directory. Nothing on the"
+      say "  shipped list is a secret -- but the list is yours to extend, and"
+      say "  the next thing you add is the thing nobody re-reads. A private"
+      say "  repository means a mistake there costs you nothing.\n"
+      say "  This is why yadm still advises a private repository even when it"
+      say "  encrypts. Encryption is not offered here at all: an encrypted blob"
+      say "  in git is undiffable and unreviewable, which defeats the scan"
+      say "  above.\n"
+
+      visibility=$(gum choose --header "" \
+        "Private  (recommended)" \
+        "Public   (share it deliberately)")
+      abort_on_quit $?
+      vis_flag=$([[ $visibility == Private* ]] && echo "--private" || echo "--public")
+
+      reponame=$(gum input --prompt "Repository name > " --value "nixarchy-home")
+      abort_on_quit $?
+      [[ -z $reponame ]] && { say "\nNo name given."; exit 0; }
+
+      say "\n  Fetching the CLI (first run only)..."
+      if [[ $provider == GitHub ]]; then
+        if ! gh auth status &>/dev/null; then
+          say "\n  Signing in to GitHub. This opens a browser."
+          gh auth login -p ssh -h github.com -w || { fail "Sign-in failed."; exit 1; }
+        fi
+        gh repo create "$reponame" "$vis_flag" --disable-wiki || { fail "Could not create the repository."; exit 1; }
+        owner=$(gh api user --jq .login)
+        url="git@github.com:$owner/$reponame.git"
+      else
+        if ! glab auth status &>/dev/null; then
+          say "\n  Signing in to GitLab. This opens a browser."
+          glab auth login || { fail "Sign-in failed."; exit 1; }
+        fi
+        glab repo create "$reponame" "$vis_flag" || { fail "Could not create the repository."; exit 1; }
+        owner=$(glab api user --method GET 2>/dev/null | sed -n 's/.*"username":"\([^"]*\)".*/\1/p')
+        url="git@gitlab.com:$owner/$reponame.git"
+      fi
+      git remote add origin "$url"
+      ok "remote added: $url"
+      ;;
+  esac
+fi
+
+# ---- 5. push --------------------------------------------------------------
+
+step "Pushing"
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
+if git push -u origin "$branch" 2>&1 | sed 's/^/  /'; then
+  ok "pushed to $(git remote get-url origin)"
+  say "\n\033[1mDone.\033[0m Your desktop configuration now exists somewhere that is"
+  say "not this disk."
+  say "\nOn a new machine, after installing nixarchy:"
+  say "\n    \033[1mnixarchy home backup restore\033[0m"
+  say "\nRe-run \033[1mnixarchy home backup\033[0m after you change something. It"
+  say "commits the difference; there is nothing to remember."
+else
+  fail "Push failed. The commit is safe locally; nothing was lost."
+  say  "  Fix the remote or your SSH key and re-run: \033[1mnixarchy home backup\033[0m"
+  exit 1
+fi

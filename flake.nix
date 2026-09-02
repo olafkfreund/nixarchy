@@ -401,6 +401,95 @@
               (builtins.readFile ./pkgs/doctor.sh);
         };
 
+        # `nix run .#devenv-presets` -- scaffolds every preset in
+        # data/devenv-presets.nix with the real `nixarchy dev init`, then asks a
+        # real devenv to evaluate what it wrote.
+        #
+        # This is the whole safety net under that catalogue. `lines` is a
+        # string, so a preset that names an option devenv renamed is a valid Nix
+        # file and a broken project, and nothing in `nix flake check` would ever
+        # say so. It runs the command rather than reproducing what it does,
+        # because a check that scaffolds its own devenv.nix tests a copy.
+        #
+        # NOT in `checks`, and that is not an oversight. #150 proposed it as one
+        # on the reasoning that a full `devenv shell` needs the network but
+        # evaluation does not. That is wrong, twice over: evaluating a devenv
+        # project fetches the inputs devenv.yaml names
+        # (github:cachix/devenv-nixpkgs/rolling), and devenv's own flake reaches
+        # them through import-from-derivation -- `nix flake show
+        # github:cachix/devenv` fails with `allow-import-from-derivation is
+        # disabled` before it prints anything. A sandboxed derivation has
+        # neither, so `checks.devenv-presets` could not run at all. A workflow
+        # job that has a network does, and build.yml has one.
+        devenv-presets =
+          let
+            pkgs = pkgsFor.${system};
+          in
+          pkgs.writeShellApplication {
+            name = "nixarchy-devenv-presets";
+            runtimeInputs = [
+              pkgs.coreutils
+              # The same devenv the catalogue entry installs: pkgs.devenv is
+              # what modules/services/devenv.nix defaults its `package` to, so
+              # what evaluates here is what a user's machine would run.
+              pkgs.devenv
+              pkgs.gnused
+              (pkgs.callPackage ./pkgs/dev-init.nix { })
+            ];
+            text = ''
+              presets=( ${nixpkgs.lib.concatStringsSep " " (builtins.attrNames (import ./data/devenv-presets.nix))} )
+
+              # Everything under one temp root, HOME included: `devenv allow`
+              # writes a trust database into XDG state, and a check has no
+              # business touching the trust decisions of whoever ran it.
+              root=$(mktemp -d)
+              trap 'rm -rf "$root"' EXIT
+              HOME="$root/home"
+              export HOME
+              mkdir -p "$HOME"
+
+              fail=0
+              for preset in "''${presets[@]}"; do
+                echo "== $preset"
+                dir="$root/$preset"
+                mkdir -p "$dir"
+                cd "$dir"
+
+                if ! nixarchy-dev-init "$preset" > init.log 2>&1; then
+                  echo "   scaffolding failed:"
+                  sed 's/^/   /' init.log
+                  fail=1
+                  continue
+                fi
+
+                # `devenv info` is the cheapest command that evaluates the whole
+                # module set -- it prints the packages the environment would
+                # have, which it cannot know without resolving every option the
+                # preset set. A renamed option dies here.
+                if devenv info > eval.log 2>&1; then
+                  echo "   ok"
+                else
+                  echo "   does not evaluate:"
+                  sed 's/^/   /' eval.log
+                  echo "   the devenv.nix it wrote:"
+                  sed 's/^/   /' devenv.nix
+                  fail=1
+                fi
+              done
+
+              if [ "$fail" -ne 0 ]; then
+                echo
+                echo "A preset in data/devenv-presets.nix no longer evaluates against"
+                echo "devenv. Either an option was renamed upstream -- fix the preset,"
+                echo "the new name is in devenv's src/modules -- or the scaffold this"
+                echo "edits changed shape and pkgs/dev-init.nix has to follow."
+                exit 1
+              fi
+              echo
+              echo "all ''${#presets[@]} presets evaluate"
+            '';
+          };
+
         # A screencast of a real session, plus the frames it was made from.
         # Not a check: it boots a desktop, drives a tour of it and encodes a
         # video, which is minutes of work nobody wants on every push. Build it

@@ -35,6 +35,33 @@ jobs:
       - name: deadnix
         run: nix run nixpkgs#deadnix -- --fail .
 
+  # Every preset in data/devenv-presets.nix, scaffolded with the real
+  # `nixarchy dev init` and handed to a real devenv to evaluate.
+  #
+  # A job rather than a flake check, which is not where #150 expected it to
+  # land. Evaluating a devenv project fetches the inputs devenv.yaml names and
+  # goes through import-from-derivation to get them; a sandboxed derivation has
+  # neither a network nor IFD, so this cannot be a `checks` entry at all. See
+  # the header on packages.devenv-presets in flake.nix.
+  #
+  # Its own job because it is the only thing here that wants devenv.cachix.org:
+  # without that substituter every preset compiles a toolchain from source and
+  # the run stops being a CI job and starts being an afternoon.
+  devenv-presets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: cachix/cachix-action@v15
+        with:
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+
+      - name: Every preset still evaluates
+        run: nix run .#devenv-presets
+
   omarchy:
     runs-on: ubuntu-latest
     timeout-minutes: 15

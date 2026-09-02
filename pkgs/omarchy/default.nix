@@ -1346,12 +1346,76 @@ stdenvNoCC.mkDerivation {
                 # option's own comment already documents.
                 substituteInPlace $out/share/plymouth/themes/omarchy/omarchy.plymouth                   --replace-fail 'Name=Omarchy' 'Name=nixarchy'                   --replace-fail 'Description=Omarchy splash screen.' 'Description=nixarchy splash screen.'
 
-                # The rest of the theme -- progress_bar, progress_box, entry, lock,
-                # bullet -- is deliberately left alone. Measured: they are one to eleven
-                # colours of Tokyo Night chrome (#A9B1D6 bar, #292E42 track, #C0CAF5
-                # bullet), a padlock and a password dot. None carries a name or a mark,
-                # and replacing them would produce byte-different, pixel-identical
-                # files. Artwork nobody can tell apart is not branding, it is churn.
+                # And the rest of the theme: the progress track and its bar, the
+                # passphrase field, the padlock beside it and the dot that stands for
+                # one typed character.
+                #
+                # None of the five carries a name or a mark, so unlike the wordmark
+                # there is nothing to derive from upstream -- they are drawn, in
+                # nixarchy-plymouth-chrome.py, in the Tokyo Night palette the
+                # background already uses. Drawing rather than copying is the point:
+                # "no Omarchy artwork is reachable from the boot splash" is not
+                # satisfied by files that merely look different, and it is not
+                # satisfied by upstream's files either.
+                #
+                # They are generated here rather than committed as PNGs. Five binary
+                # blobs in the tree are five things no diff can review and no one can
+                # re-derive; a script is 200 lines that say why every number is what it
+                # is. It costs one python3 and five magick calls in a build that
+                # already runs both for the wordmark.
+                #
+                # The sizes are not free. omarchy.script divides by 84 and 96 to scale
+                # the lock against the entry field, and centres the bar in the track by
+                # their size difference, so the lock keeps upstream's dimensions and
+                # the bar is deliberately smaller than the box. See the script.
+                python3 ${./nixarchy-plymouth-chrome.py} chrome
+                for asset in progress_bar progress_box entry lock bullet; do
+                  magick -background none chrome/$asset.svg \
+                    png32:$out/share/plymouth/themes/omarchy/$asset.png
+                done
+
+                # preview-unlock.png, the sixth file and the one that made this worth
+                # finishing. Plymouth does not draw it -- it is what a theme browser
+                # shows -- but upstream's copy is a 1920x1080 screenshot with OMARCHY
+                # across the middle, shipped inside a theme this build otherwise
+                # renamed to nixarchy. Left alone it is the largest piece of another
+                # project's branding on the disk.
+                #
+                # Composited rather than screenshotted, from the assets above and
+                # omarchy.script's own arithmetic: logo centred, entry 40px below it,
+                # lock 15px to its left at 0.8 of its height, bullets 20px in on a 12px
+                # pitch. A preview that is generated from the theme cannot drift out of
+                # date with it.
+                magick -size 1920x1080 xc:'#1a1b26' \
+                  $out/share/plymouth/themes/omarchy/logo.png -geometry +560+447 -composite \
+                  $out/share/plymouth/themes/omarchy/entry.png -geometry +817+672 -composite \
+                  \( $out/share/plymouth/themes/omarchy/lock.png -resize 34x38! \) \
+                    -geometry +768+677 -composite \
+                  preview.png
+                for i in 0 1 2 3 4; do
+                  magick preview.png \
+                    \( $out/share/plymouth/themes/omarchy/bullet.png -resize 7x7 \) \
+                    -geometry +$((817 + 20 + i * 12))+692 -composite preview.png
+                done
+                mv preview.png $out/share/plymouth/themes/omarchy/preview-unlock.png
+
+                # And the acceptance asserted rather than believed. Every branded file
+                # above is a copy that upstream also ships, so the way this regresses is
+                # not someone deleting a line -- it is an Omarchy bump adding an asset,
+                # or renaming one, and the cp above quietly restoring another project's
+                # artwork to the screen a passphrase is typed into. checks.omarchy is
+                # this package, so the bump fails here instead of at boot.
+                #
+                # logos/oma.png is the one exclusion, for the reason given above: it is
+                # in a subdirectory, nothing draws it, and $out/.../*.png does not reach
+                # it.
+                for asset in ${src}/default/plymouth/*.png; do
+                  ours=$out/share/plymouth/themes/omarchy/$(basename $asset)
+                  if cmp -s "$asset" "$ours"; then
+                    echo "plymouth: $(basename $asset) is still upstream's file" >&2
+                    exit 1
+                  fi
+                done
 
                 # The greeter's own compositor config, referenced by upstream's
                 # 10-wayland.conf. Nothing in the theme reaches outside its directory, so

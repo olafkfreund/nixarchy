@@ -1601,14 +1601,24 @@ in
             '';
           })
 
+          # `nixarchy dev init <preset>`. Its own file because flake.nix's
+          # devenv-presets check runs THIS command rather than a copy of it --
+          # see pkgs/dev-init.nix.
+          #
+          # Installed unconditionally, unlike devenv itself, which is an opt-in
+          # catalogue entry. The command's first act is to check for devenv and
+          # name the entry that installs it, and that answer is only useful on a
+          # machine that has not enabled it yet.
+          (pkgs.callPackage ../pkgs/dev-init.nix { })
+
           # One name for the commands this repo adds, and a way through to
           # the 431 it vendors.
           #
           # Not a rename of Omarchy. Upstream's commands keep upstream's name,
           # because they are upstream's -- `omarchy theme set` is the same
           # script here as on Arch, and a bug in it is a bug to report there.
-          # What this names is the other half: the six commands nixarchy wrote,
-          # which until now were six binaries on PATH with nothing tying them
+          # What this names is the other half: the commands nixarchy wrote,
+          # which until now were binaries on PATH with nothing tying them
           # together and no way to discover them.
           #
           # Anything this does not own falls through to omarchy unchanged, so
@@ -1626,7 +1636,8 @@ in
               # Routed by hand rather than by scanning a bin/ directory the way
               # upstream's dispatcher does: these commands are separate
               # derivations on PATH, not siblings in one tree, so there is no
-              # directory to scan. Six entries is not a table worth generating.
+              # directory to scan. A handful of entries is not a table worth
+              # generating.
               case "''${1:-}" in
                 search)   shift; exec nixarchy-search "$@" ;;
                 apply)    shift; exec nixarchy-apply "$@" ;;
@@ -1657,6 +1668,11 @@ in
                     remove)  shift 2; exec nixarchy-app-remove "$@" ;;
                   esac
                   ;;
+                dev)
+                  case "''${2:-}" in
+                    init) shift 2; exec nixarchy-dev-init "$@" ;;
+                  esac
+                  ;;
                 ""|--help|-h|help)
                   cat <<'USAGE'
               nixarchy -- the Omarchy desktop, vendored for NixOS.
@@ -1669,6 +1685,7 @@ in
                 nixarchy app disable <id>   Deselect one
                 nixarchy app remove         Pick what to deselect, interactively
                 nixarchy apply              Copy the selection into your flake and rebuild
+                nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
                 nixarchy doctor             What this machine needs to run nixarchy
 
               Everything else is Omarchy's own, and reaches it unchanged:

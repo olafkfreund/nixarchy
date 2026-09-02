@@ -202,6 +202,41 @@ let
   # add, and a nixarchy alias for a one-line toggle would only be a second
   # vocabulary to unlearn the moment they read anyone else's configuration.
   serviceCatalogue = import ../data/services.nix;
+  flatpakCatalogue = import ../data/flatpaks.nix;
+
+  # Flatpaks go in services.nix rather than a fourth file.
+  #
+  # They are applications, so apps.nix is the tempting home -- and the wrong
+  # one: that file's header promises "Applications available through the
+  # Omarchy menu, as NixOS configuration", meaning software from nixpkgs with
+  # everything that implies. A flatpak is a different tier with weaker
+  # promises, and mixing the two would make the file quietly dishonest.
+  #
+  # services.nix already holds things that are decisions about the machine
+  # rather than packages, which is what enabling a flatpak is: it turns on a
+  # daemon, adds a remote, and installs software the store does not hold.
+  flatpakRow =
+    name: fp:
+    let
+      remote = lib.optionalString (fp ? remote) " — from ${fp.remote.name}, not Flathub";
+    in
+    "    # programs.nixarchy.flatpaks.apps.${name}.enable = true;  #@ ${name}"
+    + "  # ${fp.note}${remote}\n";
+
+  flatpakBlock = lib.optionalString (flatpakCatalogue != { }) (
+    "    # ── Flatpak ──────────────────────────────────────\n"
+    + "    #\n"
+    + "    # Declared, not reproducible: the ids below travel to your next\n"
+    + "    # machine, the versions do not. A rollback restores this list, not\n"
+    + "    # the software that was installed from it, and the first switch\n"
+    + "    # after enabling one needs a network.\n"
+    + "    #\n"
+    + "    # Their data in ~/.var/app is yours and nixarchy never touches\n"
+    + "    # it: turning one off here removes the app, not what you did\n"
+    + "    # with it.\n"
+    + lib.concatStrings (lib.mapAttrsToList flatpakRow flatpakCatalogue)
+    + "\n"
+  );
 
   serviceRow =
     name: svc:
@@ -257,7 +292,7 @@ let
     # the current full list is always at /etc/nixarchy/services-template.nix.
     { ... }:
     {
-    ${lib.concatStrings (map serviceCategoryBlock serviceCategories)}}
+    ${lib.concatStrings (map serviceCategoryBlock serviceCategories)}${flatpakBlock}}
   '';
 
   # No catalogue, on purpose.
@@ -499,6 +534,18 @@ let
       # menuId and this overrides it in place -- tailscale is that case, and
       # carrying the id across is what keeps the generator from failing on a
       # row nothing maps.
+      // lib.listToAttrs (
+        lib.mapAttrsToList (
+          name: fp:
+          lib.nameValuePair "install.flatpak.${name}" {
+            icon = "󰏓";
+            inherit (fp) label;
+            action = "nixarchy-service-enable ${name}";
+            disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+            description = "Flatpak — declared in your configuration, but updated by Flathub rather than by a rebuild";
+          }
+        ) flatpakCatalogue
+      )
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: svc:

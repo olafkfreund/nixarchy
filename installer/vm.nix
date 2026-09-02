@@ -136,7 +136,13 @@
     cores = 4;
     useEFIBoot = true;
     # The blank target: /dev/vdb, since the root disk below is /dev/vda.
-    emptyDiskImages = [ 40960 ];
+    #
+    # 24G, not the 40G it was: the install writes a 2G ESP and about 14 GiB of
+    # closure into btrfs, so 24G is that plus room for a generation or two of
+    # rebuild on top. 40G was a number picked out of the air, and it was the
+    # reason this VM could not run with TMPDIR on a 32G /tmp at all -- the
+    # image is created under TMPDIR whatever the working directory is.
+    emptyDiskImages = [ 24576 ];
     # nixos-install builds the closure in THIS VM's store before copying it
     # into the target, so this VM's store has to hold it first -- 13.7 GiB of
     # it at the last count.

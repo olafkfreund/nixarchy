@@ -453,7 +453,34 @@
         # checks.install cannot have, because it is a sandboxed derivation and
         # its whole point is that a rebuild afterwards cannot fetch anything.
         # See installer/vm.nix.
-        installer-vm = self.nixosConfigurations.installer-vm.config.system.build.vm;
+        #
+        # Wrapped rather than exported raw: the generated run script creates
+        # two sparse qcow2 images and only discovers they do not fit hours
+        # later, from inside the guest. installer/vm-preflight.sh checks first
+        # and says so. The sizes come from the configuration itself so the
+        # check cannot drift away from what the VM actually asks for.
+        installer-vm =
+          let
+            cfg = self.nixosConfigurations.installer-vm.config;
+            vm = cfg.system.build.vm;
+          in
+          pkgsFor.${system}.writeShellApplication {
+            name = "run-installer-vm";
+            runtimeInputs = with pkgsFor.${system}; [ coreutils ]; # df, tail
+            text =
+              builtins.replaceStrings
+                [
+                  "@tmpneed@"
+                  "@pwdneed@"
+                  "@vmscript@"
+                ]
+                [
+                  (toString (builtins.head cfg.virtualisation.emptyDiskImages).size)
+                  (toString cfg.virtualisation.diskSize)
+                  "${vm}/bin/${vm.meta.mainProgram}"
+                ]
+                (builtins.readFile ./installer/vm-preflight.sh);
+          };
 
         # Every command the vendored scripts exec by name, in one prefix.
         # The bins are unwrapped on purpose, so an incomplete runtimeDeps list

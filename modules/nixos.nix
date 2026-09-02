@@ -72,6 +72,15 @@ in
     ./services
     ./flatpaks.nix
     inputs.nix-flatpak.nixosModules.nix-flatpak
+
+    # Declarative secrets, for the bundled services that need one. Imported
+    # unconditionally and INERT: upstream gates its whole config on
+    # `sops.secrets != {}` and `sops.templates != {}`, so a machine that
+    # declares neither -- every Mode A machine, and every machine today --
+    # gains no unit, no activation script and no package from this line.
+    # nixarchy sets no sops option of its own; the host-key identity is
+    # already upstream's default. tests/options.nix asserts both halves.
+    inputs.sops-nix.nixosModules.sops
   ];
 
   options.programs.nixarchy = {

@@ -161,6 +161,14 @@ let
         builtins.any (r: pkgs.lib.hasInfix "chromium/policies" r)
           (configWith { browserThemeUser = null; }).systemd.tmpfiles.rules;
     };
+
+    # sops-nix is imported by every nixarchy machine and must do nothing
+    # until a secret is declared. See sopsOff/sopsOn below for why this is
+    # asserted rather than assumed.
+    sops = {
+      on = hasSops sopsOn;
+      off = hasSops sopsOff;
+    };
   };
 
   # Every Install row upstream offers, checked against what the selection
@@ -303,6 +311,42 @@ let
   hasDevenv = cfg: builtins.any (p: (p.pname or "") == "devenv") cfg.environment.systemPackages;
   hasCache = cfg: builtins.elem "https://devenv.cachix.org" cfg.nix.settings.substituters;
   hookIn = text: pkgs.lib.hasInfix "devenv hook" text;
+
+  # ---- sops-nix, imported by everyone and doing nothing --------------
+  #
+  # #155 adopted a declarative secrets mechanism for one concrete reason:
+  # hypr-rdp reads its password only from an inline string in its TOML or
+  # from `-p`, so something has to render a config file at runtime. That
+  # decision put an upstream module into EVERY nixarchy machine, including
+  # every Mode A machine that will never declare a secret -- so what has to
+  # be asserted is that the module is inert, not that it works.
+  #
+  # Inertness here is upstream's promise, not ours: sops-nix gates both
+  # halves of its config on `sops.secrets != {}` and `sops.templates != {}`.
+  # A promise made by someone else's module is exactly the kind a version
+  # bump can withdraw quietly, and the failure would be silent -- an
+  # activation script and a systemd unit appearing on machines that never
+  # asked for secrets. Nothing else in this repo would notice.
+  sopsOff = configWith { };
+
+  # The other half, so that the case above measures inertness rather than an
+  # import that never worked. validateSopsFiles is off because there is no
+  # encrypted file here to validate, and a key source is named so this reads
+  # as a machine someone actually configured.
+  sopsOn = configBeside {
+    sops = {
+      validateSopsFiles = false;
+      age.keyFile = "/var/lib/sops-nix/key.txt";
+      defaultSopsFile = ./options.nix;
+      secrets.a-secret = { };
+    };
+  };
+
+  # Which of the two activation paths upstream picks depends on whether the
+  # machine uses systemd-sysusers or userborn, so asking for one of them by
+  # name would assert the wrong thing on the other kind of machine.
+  hasSops =
+    cfg: (cfg.systemd.services ? sops-install-secrets) || (cfg.system.activationScripts ? setupSecrets);
 
   # ---- a bundled service yields to a user who already configured it ----
   #
@@ -530,6 +574,11 @@ pkgs.runCommand "nixarchy-options"
     devenvOnOmarchyChain = pkgs.lib.boolToString (
       pkgs.lib.hasInfix "default/bash/rc" devenvOn.programs.bash.interactiveShellInit
     );
+    sopsOffUnit = pkgs.lib.boolToString (sopsOff.systemd.services ? sops-install-secrets);
+    sopsOffActivation = pkgs.lib.boolToString (sopsOff.system.activationScripts ? setupSecrets);
+    sopsOffSecrets = pkgs.lib.boolToString (sopsOff.sops.secrets == { });
+    sopsOffTemplates = pkgs.lib.boolToString (sopsOff.sops.templates == { });
+    sopsOnActive = pkgs.lib.boolToString (hasSops sopsOn);
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
     devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
@@ -731,6 +780,29 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "devenv respects binaryCaches = false and still installs"
+
+          # ---- sops-nix: imported by everyone, inert until asked --------
+          for pair in "systemd unit:$sopsOffUnit" "activation script:$sopsOffActivation"; do
+            if [ "''${pair#*:}" != "false" ]; then
+              echo "no secret is declared, yet sops-nix put a ''${pair%%:*} on the machine." >&2
+              echo "Importing the module must cost a Mode A machine nothing. If an" >&2
+              echo "upstream bump stopped gating on sops.secrets/sops.templates, this" >&2
+              echo "is where that shows up -- do not fix it by removing the check." >&2
+              exit 1
+            fi
+          done
+          [ "$sopsOffSecrets" = "true" ] && [ "$sopsOffTemplates" = "true" ] || {
+            echo "nixarchy declared a sops secret or template of its own." >&2
+            echo "It must declare neither: the mechanism exists for the modules" >&2
+            echo "that opt into it, not for every machine that imports nixarchy." >&2
+            exit 1
+          }
+          [ "$sopsOnActive" = "true" ] || {
+            echo "declaring a sops secret produced no activation path at all," >&2
+            echo "so the inertness checked above is an import that never worked." >&2
+            exit 1
+          }
+          echo "sops-nix is imported, declares nothing, and works when asked"
 
           echo "every option adds what it should and removes it again"
 

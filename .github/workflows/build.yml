@@ -316,7 +316,7 @@ jobs:
           skills=result/share/omarchy/default/agents/skills
 
           have=$(ls "$skills" | sort | tr '\n' ' ')
-          [ "$have" = "devenv diagnose-crash nixarchy nixarchy-bbs nixos nixos-ai nixos-config-repo nixos-doctor nixos-gpu nixos-performance nixos-secrets nixos-security nixos-services " ] || {
+          [ "$have" = "devenv diagnose-crash nixarchy nixos nixos-ai nixos-config-repo nixos-doctor nixos-gpu nixos-performance nixos-secrets nixos-security nixos-services " ] || {
             echo "::error::unexpected skill set: $have"
             exit 1
           }

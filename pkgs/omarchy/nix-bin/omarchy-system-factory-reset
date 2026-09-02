@@ -7,29 +7,178 @@
 
 # Upstream's version swaps the running root for a fresh clone of an @factory
 # snapshot, then scrubs the machine's identity and re-keys LUKS for whoever
-# gets it next. It is a good design and it depends on one thing this installer
-# does not do: @factory is taken by the Omarchy Quattro ISO at install time,
-# and upstream already turns away machines that were upgraded rather than
-# installed from it.
+# gets it next. It is a good design and it rests on one thing: @factory is
+# taken by the Omarchy Quattro ISO at install time.
 #
-# nixarchy's installer takes no such snapshot, so there is no baseline to
-# return to on any machine running today -- not one that could be created
-# retroactively either, since the point of the baseline is that it predates
-# everything the user did.
+# Since #172 the nixarchy installer takes one too -- read-only @factory and
+# @factory-home, at the end of every install, before anyone logs in. So this
+# command has two shapes, and which one you get is a property of when the
+# machine was installed:
 #
-# Rather than fail with a btrfs error about a subvolume that was never made,
-# this says so, and says what does work. #112 tracks giving the installer a
-# baseline; until then a reinstall is the honest answer and, on a machine
-# whose configuration is a committed flake, a surprisingly complete one.
+#   baseline present   /home and /var/lib go back to install state.
+#   baseline absent    every machine installed before #172, forever. A
+#                      baseline made today would contain everything you are
+#                      trying to undo, so this says so and stops.
+#
+# Three things upstream does that this deliberately does not:
+#
+#   LUKS re-keying and an identity scrub, upstream's resale path. Cryptsetup
+#   surgery from a running script is the highest blast radius in this feature
+#   for its least-asked-for use case, and the answer for a machine you are
+#   selling is below and is "wipe the disk".
+#
+#   A bootable @factory entry. Same finding as PR #114: `@` holds almost no
+#   operating system here -- kernels on the ESP, the system in `@nix` -- so
+#   booting a factory root boots the same system with an older /etc.
+#   Generations are the bootable rung, and this never touches the bootloader.
+#
+#   The reset itself, from this process. /home is mounted and in use by the
+#   session you typed this into. This writes a request and reboots; the work
+#   is done by nixarchy-factory-reset.service before /home is mounted on the
+#   next boot. See installer/host.nix for why that is the only honest order.
+#
+# Upstream reached the same conclusion and ships the same shape --
+# omarchy-system-factory-reset-finish, a first-boot worker ordered before
+# home.mount. It is still in the vendored tree and is inert here: it arms on
+# /var/lib/omarchy/provisioning/wipe-pending, which nothing on NixOS writes,
+# and its own service unit is an Arch one that NixOS never generates. It is
+# not reused because what it does after that point does not transfer -- it
+# expects the running root to ALREADY be a clone of @factory, deletes the
+# previous root, and drops and recreates @home and @log as empty subvolumes.
+# Here the root is not swapped at all (@nix holds the system, and /etc/nixos
+# holds the user's commits), and an empty @home is not the same thing as the
+# @home the installer made.
 set -euo pipefail
 
-cat >&2 <<'MSG'
+# The ownership marker, and the two paths the boot unit agrees with. Overridable
+# so the check in tests/options.nix can exercise every branch of this file
+# without a btrfs filesystem and without being root; nothing on a real machine
+# sets any of them.
+MANAGED_MARKER=${NIXARCHY_MANAGED_MARKER:-/etc/nixarchy/managed}
+REQUEST=${NIXARCHY_FACTORY_REQUEST:-/var/lib/nixarchy/factory-reset.request}
+FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
+BTRFS=${NIXARCHY_BTRFS:-btrfs}
+
+red() { printf '\033[0;31m%s\033[0m\n' "$1"; }
+dim() { printf '\033[0;90m%s\033[0m\n' "$1"; }
+bold() { printf '\033[1m%s\033[0m\n' "$1"; }
+
+# ---------------------------------------------------------------------------
+# Ownership.
+#
+# /etc/nixarchy/managed is written declaratively by
+# programs.nixarchy.installerManaged, which installer/host.nix sets and nothing
+# else does. Its absence means somebody imported nixosModules.nixarchy into a
+# configuration of their own: their disk layout is theirs, there is no @factory
+# on it, and a command that reformats half of somebody else's home directory is
+# not one to run on a guess.
+#
+# This is the same predicate nixarchy-config-repo gates on, and it is checked
+# before the baseline, because "nixarchy did not build this machine" is a
+# better answer than "I could not find a snapshot".
+# ---------------------------------------------------------------------------
+is_managed() { [ -e "$MANAGED_MARKER" ]; }
+
+# ---------------------------------------------------------------------------
+# The baseline.
+#
+# `btrfs subvolume list -r` lists only the READ-ONLY subvolumes, which answers
+# both halves of the question in one command: that @factory and @factory-home
+# exist, and that they are still read-only. A writable baseline is one that
+# could have drifted, and a baseline that has drifted is not a baseline -- it
+# is a second copy of the machine wearing the name of the first, and restoring
+# from it would return the user to some arbitrary Tuesday.
+#
+# No mount is needed to ask. The snapshots live at the top level, which nothing
+# mounts; `btrfs subvolume list` reads the filesystem's own tree through any
+# mount of it.
+# ---------------------------------------------------------------------------
+baseline_subvolumes() {
+  command -v "$BTRFS" >/dev/null 2>&1 || return 0
+  "$BTRFS" subvolume list -r / 2>/dev/null | awk '{ print $NF }' || true
+}
+
+has_baseline() {
+  local subvols
+  subvols=$(baseline_subvolumes)
+  printf '%s\n' "$subvols" | grep -qx '@factory' &&
+    printf '%s\n' "$subvols" | grep -qx '@factory-home'
+}
+
+# ---------------------------------------------------------------------------
+# Flags. --check runs before anything interactive and prints nothing, so a menu
+# `when:` or a test can call it on a machine with no terminal.
+# ---------------------------------------------------------------------------
+force=false
+check_only=false
+
+while (($#)); do
+  case "$1" in
+    --force) force=true; shift ;;
+    --check) check_only=true; shift ;;
+    -h | --help)
+      echo "Usage: omarchy-system-factory-reset [--check] [--force]"
+      echo "  --check  exit 0 if this machine has a factory baseline to return to."
+      echo "           Needs root, like everything else here: btrfs subvolume list"
+      echo "           reads the filesystem tree and the kernel wants CAP_SYS_ADMIN"
+      echo "           for it, so an unprivileged --check answers 'no' on a machine"
+      echo "           that has a baseline."
+      echo "  --force  skip both confirmations. For automation, and for the test"
+      echo "           that proves the restore actually restores."
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ "$check_only" = true ]; then
+  if is_managed && has_baseline; then
+    exit 0
+  fi
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Not our machine.
+# ---------------------------------------------------------------------------
+if ! is_managed; then
+  cat >&2 <<MSG
+This machine's configuration was not written by nixarchy.
+
+  no $MANAGED_MARKER
+
+  A factory reset returns /home and /var/lib to snapshots the nixarchy
+  installer took while it laid out this disk. Your disk was laid out by
+  something else, so there are no such snapshots and nixarchy has no business
+  guessing at a baseline for a machine it did not build.
+
+  What does work everywhere:
+
+    nixarchy-rollback    the system, to an earlier build. Every rebuild left
+                         a generation behind; this picks one.
+
+MSG
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Our machine, no baseline: every machine installed before #172, forever.
+#
+# Kept as it was written under #111, because the reasoning has not changed --
+# a baseline cannot be created retroactively, and the point of a baseline is
+# that it predates everything you are trying to undo.
+# ---------------------------------------------------------------------------
+if ! has_baseline; then
+  cat >&2 <<'MSG'
 There is no factory snapshot on this machine to return to.
 
-  Upstream resets by swapping the running root for a clone of @factory, a
-  snapshot its installer takes before you ever log in. The nixarchy installer
-  does not take one, and it cannot be created now: a baseline made today would
-  contain everything you are trying to undo.
+  The nixarchy installer takes one now -- read-only @factory and @factory-home,
+  before you ever log in -- but it did not when this machine was installed, and
+  it cannot be created now: a baseline made today would contain everything you
+  are trying to undo.
 
   What does work, in order of how much it resets:
 
@@ -57,4 +206,145 @@ There is no factory snapshot on this machine to return to.
     nixarchy-config-repo
 
 MSG
-exit 1
+  exit 1
+fi
+
+# Root, checked as "can I write the request" rather than as `id -u`. It is the
+# same question one step closer to the thing that actually has to work, and it
+# is asked HERE -- after both refusals -- so that a machine which was never
+# going to be reset gets its real answer rather than a nag about sudo.
+if ! mkdir -p "$(dirname "$REQUEST")" 2>/dev/null || [ ! -w "$(dirname "$REQUEST")" ]; then
+  red "This needs root: it stages a request systemd acts on before /home is mounted."
+  echo >&2
+  echo "  sudo omarchy-system-factory-reset" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Our machine, baseline present. This is the nuclear option and it is written
+# to read like one.
+# ---------------------------------------------------------------------------
+echo
+bold "Factory reset"
+echo
+echo "  This machine has a factory baseline: snapshots of / and /home taken by"
+echo "  the installer before anyone logged in. Resetting puts them back."
+echo
+bold "  What comes back"
+echo
+echo "    /home         as the installer created it. Empty."
+echo "    /var/lib      as the installer left it. Every service forgets"
+echo "                  everything: wifi passwords, bluetooth pairings,"
+echo "                  container images, databases, the lot."
+echo
+bold "  What does NOT come back"
+echo
+echo "    /etc/nixos    untouched, deliberately. It is your configuration and"
+echo "                  your commits, and it is what makes a reinstall"
+echo "                  recoverable. A reset that ate it would be worse than"
+echo "                  no reset at all."
+echo "    The system    a NixOS closure is not a subvolume and swapping one"
+echo "                  would not reset it. It resets by rebuilding from the"
+echo "                  first commit in $FLAKE -- see below."
+echo
+bold "  Where your data goes"
+echo
+echo "    Nowhere, yet. Your current /home is renamed to a subvolume called"
+echo "    @home-before-reset-<date> and your /var/lib to"
+echo "    /var/lib.before-reset-<date>. Neither is mounted, both still occupy"
+echo "    the disk, and the receipt left in /var/lib/nixarchy says how to read"
+echo "    them and how to delete them."
+echo
+echo "    Snapper's own snapshots of /home are separate subvolumes and are"
+echo "    not touched either, so your files are in there too."
+echo
+echo "    So this is not a wipe. For a machine you are selling, wipe the disk"
+echo "    from the ISO rather than trusting this."
+echo
+
+# ---------------------------------------------------------------------------
+# The system half, offered rather than pretended.
+#
+# install.sh runs `git init` and `git add -A` in the generated flake and
+# deliberately does NOT commit -- git needs an identity and choosing the user's
+# is not the installer's business. So on a machine whose owner never ran
+# nixarchy-config-repo there is no first commit, and "rebuild from the first
+# commit" is advice about a thing that does not exist. Say which case this
+# machine is in rather than printing a command that will fail.
+# ---------------------------------------------------------------------------
+first_commit=""
+if command -v git >/dev/null 2>&1; then
+  first_commit=$(git -C "$FLAKE" rev-list --max-parents=0 HEAD 2>/dev/null | tail -1 || true)
+fi
+
+bold "  The system half"
+echo
+if [ -n "$first_commit" ]; then
+  echo "    $FLAKE's first commit is the configuration this machine was"
+  echo "    installed with. Building it and making it the boot default is the"
+  echo "    system's equivalent of this reset, and it is reversible -- the"
+  echo "    generation you are on now stays in the boot menu."
+  echo
+  dim "      sudo nixos-rebuild boot --flake \"git+file://$FLAKE?rev=$first_commit#\$(hostname)\""
+else
+  echo "    $FLAKE has no commits, so there is no first commit to rebuild"
+  echo "    from. The installer stages the flake and does not commit it: git"
+  echo "    needs an identity and the installer will not choose yours."
+  echo
+  echo "    Arm it, and every future reset gets a system half too:"
+  echo
+  dim "      nixarchy-config-repo"
+fi
+echo
+
+if [ "$force" = false ]; then
+  command -v gum >/dev/null 2>&1 || {
+    red "gum is not available, so this cannot ask you twice."
+    echo "  Re-run with --force only if you have read the above and mean it." >&2
+    exit 1
+  }
+
+  gum confirm --default=false \
+    "Reset /home and /var/lib to their install-time state?" || {
+    echo
+    dim "Nothing has been changed."
+    exit 0
+  }
+
+  echo
+  echo "  Type RESET to confirm. Anything else stops."
+  typed=$(gum input --placeholder "RESET") || typed=""
+  if [ "$typed" != "RESET" ]; then
+    echo
+    dim "Nothing has been changed."
+    exit 0
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Stage it. This is the only thing this script writes, and it is one empty
+# file: everything destructive happens in nixarchy-factory-reset.service, on
+# the next boot, before /home is mounted.
+#
+# 0600 and root-owned by virtue of where it is. The service's
+# ConditionPathExists is the whole trigger, so this file IS the request, and
+# removing it before the next boot cancels the reset with nothing to undo.
+# ---------------------------------------------------------------------------
+( umask 077 && : >"$REQUEST" )
+
+echo
+bold "Staged. Nothing has been changed yet."
+echo
+echo "  The reset happens on the next boot, before /home is mounted."
+echo "  To cancel it, delete the request and do not reboot:"
+echo
+dim "    sudo rm $REQUEST"
+echo
+
+if [ "$force" = false ] && command -v gum >/dev/null 2>&1; then
+  gum confirm --default=false "Reboot now?" && exec systemctl reboot
+fi
+
+echo "  Reboot when you are ready:"
+dim "    systemctl reboot"
+echo

@@ -539,6 +539,21 @@ let
   # everybody makes every gate below it read as passing, and nothing says so.
   managedModeA = (configWith { }).environment.etc ? "nixarchy/managed";
 
+  # ---- and the factory-reset unit, the same question in its sharpest form ---
+  #
+  # nixarchy-factory-reset.service renames a person's entire home directory.
+  # It lives in installer/host.nix rather than in the module precisely so that
+  # a Mode A machine cannot have it -- there is no @factory on a disk nixarchy
+  # did not lay out, and a unit that goes looking for one on somebody else's
+  # filesystem is the worst thing in this repository to get wrong.
+  #
+  # Structural, not conditional: the off case here is not "the option is
+  # false", it is "the module does not define the unit at all". That is what
+  # this asserts, because a later refactor that moved the unit into
+  # modules/nixos.nix behind an `installerManaged` mkIf would still read as
+  # correct in review and would be one typo away from arming every machine.
+  factoryUnitModeA = (configWith { }).systemd.services ? nixarchy-factory-reset;
+
   # ---- enabling a custom remote must not remove Flathub ----
   #
   # nix-flatpak's `remotes` defaults to a list holding only Flathub, and it is
@@ -693,6 +708,11 @@ pkgs.runCommand "nixarchy-options"
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     managedModeA = pkgs.lib.boolToString managedModeA;
+    factoryUnitModeA = pkgs.lib.boolToString factoryUnitModeA;
+    # The factory-reset script, run rather than read. Every branch of it is
+    # reachable from here -- see the block that uses it for why that needed a
+    # fake `btrfs` and what it buys.
+    factoryReset = "${(pkgs.extend inputs.self.overlays.default).omarchy}/bin/omarchy-system-factory-reset";
     devenvOffPackage = pkgs.lib.boolToString (hasDevenv devenvOff);
     devenvOffBash = pkgs.lib.boolToString (hookIn devenvOff.programs.bash.interactiveShellInit);
     devenvOffZsh = pkgs.lib.boolToString (hookIn devenvOff.programs.zsh.interactiveShellInit);
@@ -1411,6 +1431,167 @@ pkgs.runCommand "nixarchy-options"
         #
         # A row whose `when` does not match the script's own gate is a row that
         # appears on a machine where clicking it prints a refusal.
+
+        # ---- the factory baseline, and the reset that returns to it --------
+        #
+        # #172. The destructive half is a systemd unit that renames @home
+        # before /home is mounted. Everything about it that can be established
+        # without a btrfs filesystem is established here; that the restore
+        # actually restores is proven in checks.install, on a real disk.
+
+        # The ownership question, in its sharpest form. A Mode A machine must
+        # not carry the unit AT ALL -- not disabled, not conditioned, absent.
+        [ "$factoryUnitModeA" = "false" ] || {
+          echo "importing nixosModules.nixarchy defined nixarchy-factory-reset.service." >&2
+          echo "  That unit renames the whole of @home. A machine nixarchy did not" >&2
+          echo "  install has no @factory to return to and no business carrying a" >&2
+          echo "  unit that goes looking for one on somebody else's filesystem." >&2
+          echo "  It belongs in installer/host.nix, which only generated flakes import." >&2
+          exit 1
+        }
+
+        # And the other way: the reference host imports installer/host.nix, so
+        # it must have it. Without the unit the reset stages a request file
+        # nothing ever reads and reboots into an unchanged machine -- which
+        # looks exactly like a reset that decided not to.
+        unit=$vm/etc/systemd/system/nixarchy-factory-reset.service
+        test -e "$unit" || {
+          echo "the installed reference host has no nixarchy-factory-reset.service" >&2
+          exit 1
+        }
+
+        # The two lines the whole design rests on.
+        #
+        # ConditionPathExists is the only thing between a booting machine and
+        # a home-directory rename: without it the unit runs on every boot.
+        grep -qx 'ConditionPathExists=/var/lib/nixarchy/factory-reset.request' "$unit" || {
+          echo "nixarchy-factory-reset.service is not gated on the request file:" >&2
+          grep -n 'Condition' "$unit" >&2 || echo "  (no Condition= at all)" >&2
+          exit 1
+        }
+
+        # Before=home.mount BY NAME. Ordering against local-fs.target is not
+        # enough and looks identical in review: home.mount is itself before
+        # that target, and systemd leaves the order between two units that are
+        # both Before= the same target unspecified. A restore that lands after
+        # the mount renames a subvolume the kernel already holds open -- the
+        # rename succeeds, the boot keeps showing the old /home, and the user
+        # sees a reset that did nothing.
+        sed -n 's/^Before=//p' "$unit" | tr ' ' '\n' | grep -qxF 'home.mount' || {
+          echo "nixarchy-factory-reset.service is not ordered before home.mount:" >&2
+          grep -n '^Before=' "$unit" >&2 || echo "  (no Before= at all)" >&2
+          echo "  Before=local-fs.target is NOT the same claim." >&2
+          exit 1
+        }
+
+        # The script asks `btrfs subvolume list -r` whether there is a
+        # baseline. With no btrfs on PATH that question answers "no" on every
+        # machine, including the ones that do have one -- a refusal that reads
+        # exactly like the honest pre-#172 refusal and is a lie.
+        test -e "$vm/sw/bin/btrfs" || {
+          echo "no btrfs on the system path: omarchy-system-factory-reset cannot" >&2
+          echo "  tell a machine with a baseline from one without, and answers" >&2
+          echo "  'there is no factory snapshot' to both." >&2
+          exit 1
+        }
+
+        # ---- every branch of the script, run --------------------------------
+        #
+        # The seam is NIXARCHY_BTRFS, which says which binary to ask. That is
+        # a seam and not a test-only code path: the parsing, the requirement
+        # that BOTH subvolumes are present, and the requirement that they are
+        # read-only (the real script passes -r, and the fake only ever prints
+        # what -r would) are the shipped ones. The alternative is a btrfs
+        # filesystem, which means a VM, which means this could only be asked
+        # in the 25-minute install check and only in the single state that
+        # machine happens to be in.
+        fr=$TMPDIR/factory
+        mkdir -p "$fr/bin" "$fr/var"
+        printf '#!/bin/sh\ncat "$FAKE_SUBVOLUMES"\n' >"$fr/bin/btrfs"
+        chmod +x "$fr/bin/btrfs"
+
+        marker=$fr/managed
+        request=$fr/var/factory-reset.request
+        subvols=$fr/subvols
+        : >"$subvols"
+
+        # 1. No ownership marker: refuse, whatever is on the disk.
+        printf 'ID 256 gen 9 top level 5 path @factory\nID 257 gen 9 top level 5 path @factory-home\n' >"$subvols"
+        if reset_out=$(env NIXARCHY_MANAGED_MARKER="$fr/absent" NIXARCHY_FACTORY_REQUEST="$request" \
+                     NIXARCHY_BTRFS="$fr/bin/btrfs" FAKE_SUBVOLUMES="$subvols" \
+                     "$factoryReset" --force 2>&1); then
+          echo "omarchy-system-factory-reset ran on a machine with no ownership marker" >&2
+          echo "  A full baseline was on the disk, which is exactly the case where" >&2
+          echo "  forgetting the gate does something rather than nothing." >&2
+          exit 1
+        fi
+        case "$reset_out" in
+          *"was not written by nixarchy"*) ;;
+          *) echo "the unowned refusal does not say why:" >&2; echo "$reset_out" >&2; exit 1 ;;
+        esac
+        test ! -e "$request" || { echo "a reset was staged on an unowned machine" >&2; exit 1; }
+
+        touch "$marker"
+
+        # 2. Ours, but no baseline: every machine installed before #172.
+        : >"$subvols"
+        if reset_out=$(env NIXARCHY_MANAGED_MARKER="$marker" NIXARCHY_FACTORY_REQUEST="$request" \
+                     NIXARCHY_BTRFS="$fr/bin/btrfs" FAKE_SUBVOLUMES="$subvols" \
+                     "$factoryReset" --force 2>&1); then
+          echo "a factory reset was staged on a machine with no factory baseline" >&2
+          exit 1
+        fi
+        case "$reset_out" in
+          *"no factory snapshot on this machine"*) ;;
+          *) echo "the no-baseline refusal lost its explanation:" >&2; echo "$reset_out" >&2; exit 1 ;;
+        esac
+        test ! -e "$request" || { echo "a reset was staged with no baseline to restore" >&2; exit 1; }
+
+        # 3. Half a baseline is not a baseline. This is the #171 shape and the
+        #    installer deletes the survivor rather than leave it -- but if it
+        #    ever did not, restoring /home from @factory-home while /var/lib
+        #    had nothing to come from would be worse than refusing.
+        printf 'ID 256 gen 9 top level 5 path @factory-home\n' >"$subvols"
+        if env NIXARCHY_MANAGED_MARKER="$marker" NIXARCHY_FACTORY_REQUEST="$request" \
+               NIXARCHY_BTRFS="$fr/bin/btrfs" FAKE_SUBVOLUMES="$subvols" \
+               "$factoryReset" --force >/dev/null 2>&1; then
+          echo "half a baseline (@factory-home alone) was accepted as a baseline" >&2
+          exit 1
+        fi
+        test ! -e "$request" || { echo "a reset was staged from half a baseline" >&2; exit 1; }
+
+        # 4. Both, read-only: staged, and staged is ALL it does. Nothing this
+        #    script runs may touch the disk -- the request file is the entire
+        #    output, and the unit above is what acts on it.
+        printf 'ID 256 gen 9 top level 5 path @factory\nID 257 gen 9 top level 5 path @factory-home\n' >"$subvols"
+        env NIXARCHY_MANAGED_MARKER="$marker" NIXARCHY_FACTORY_REQUEST="$request" \
+            NIXARCHY_BTRFS="$fr/bin/btrfs" FAKE_SUBVOLUMES="$subvols" \
+            "$factoryReset" --force >/dev/null 2>&1 || {
+          echo "the reset refused a machine that has a complete, read-only baseline" >&2
+          exit 1
+        }
+        test -e "$request" || {
+          echo "the reset reported success and staged nothing: the request file" >&2
+          echo "  is what nixarchy-factory-reset.service conditions on, so the" >&2
+          echo "  next boot would do nothing at all." >&2
+          exit 1
+        }
+
+        # 5. --check answers the same question, silently -- it is what a menu
+        #    row would gate on, and a row that disagrees with the command
+        #    behind it is a row that prints a refusal when clicked.
+        env NIXARCHY_MANAGED_MARKER="$marker" NIXARCHY_BTRFS="$fr/bin/btrfs" \
+            FAKE_SUBVOLUMES="$subvols" "$factoryReset" --check || {
+          echo "--check refuses a machine that has a baseline" >&2
+          exit 1
+        }
+        if env NIXARCHY_MANAGED_MARKER="$fr/absent" NIXARCHY_BTRFS="$fr/bin/btrfs" \
+               FAKE_SUBVOLUMES="$subvols" "$factoryReset" --check; then
+          echo "--check passes on a machine nixarchy did not install" >&2
+          exit 1
+        fi
+        echo "the factory reset refuses without ownership, without a baseline and on half of one"
+
         python3 ${./home-backup-menu.py} "$vm/etc/nixarchy/omarchy-menu.jsonc"
 
           touch $out

@@ -495,6 +495,24 @@ pkgs.testers.runNixOSTest {
         "somebody it should not be")
     print("the hash is outside the repo, 0600 root:root")
 
+    # ---- the factory baseline (#172) -----------------------------------
+    #
+    # Asserted from this side too, and first, because it localises a failure:
+    # take_factory_snapshot runs at the very end of the install, and "the
+    # snapshot was never taken" and "the snapshot did not survive the boot"
+    # are different bugs. The subvolumes are at the btrfs top level, which
+    # nothing mounts, so the top level is mounted to look -- exactly what
+    # installer/host.nix's unit does when it uses them.
+    installer.succeed("mkdir -p /run/toplevel")
+    installer.succeed(
+        "mount -o subvol=/ $(findmnt -no SOURCE /mnt | sed 's/\\[.*\\]//')"
+        " /run/toplevel")
+    print(installer.succeed("ls -a /run/toplevel"))
+    installer.succeed("test -d /run/toplevel/@factory")
+    installer.succeed("test -d /run/toplevel/@factory-home")
+    installer.succeed("umount /run/toplevel")
+    print("the install left @factory and @factory-home on the disk")
+
     # ---- make the result observable ------------------------------------
     # Everything above this line is the product. Everything below adds the
     # serial root shell the driver needs and nothing else; see the note on
@@ -648,6 +666,93 @@ pkgs.testers.runNixOSTest {
     target.succeed("cd /etc/nixos && nixos-rebuild switch --flake .#installed")
     assert target.succeed("readlink -f /run/current-system").strip() == before
     print("a rebuild straight after install builds nothing (Invariant 1)")
+
+    # ---- the factory reset actually resets (#172) -----------------------
+    #
+    # The one assertion in this feature that cannot be made anywhere cheaper.
+    # checks.options exercises every refusal and the staging, with a fake
+    # `btrfs` -- but "the unit renames the right subvolume, early enough in
+    # the boot that the running system sees the result" is a claim about a
+    # real filesystem and a real boot, and this is the only check that has
+    # either.
+    #
+    # Read-only is asserted through `subvolume list -r`, which lists only
+    # read-only subvolumes: a baseline that could be written to is one that
+    # can drift into being a copy of the machine rather than of the install.
+    subvols = target.succeed("btrfs subvolume list -r /")
+    print(subvols)
+    readonly = [line.split(" path ", 1)[1].strip()
+                for line in subvols.splitlines() if " path " in line]
+    for want in ["@factory", "@factory-home"]:
+        assert want in readonly, (
+            f"{want} is not a read-only subvolume on a freshly installed "
+            f"machine (read-only subvolumes: {readonly}). It cannot be created "
+            "retroactively -- a baseline made later contains everything the "
+            "reset exists to undo -- so every machine installed from this "
+            "commit would get the 'no factory snapshot' refusal forever.")
+    print("the baseline survived the boot, and is still read-only")
+
+    # Something to lose, in both halves of what the reset covers.
+    target.succeed("touch /home/omarchy/a-file-the-user-made")
+    target.succeed("mkdir -p /var/lib/some-service")
+    target.succeed("touch /var/lib/some-service/state")
+
+    target.succeed("omarchy-system-factory-reset --force")
+    target.succeed("test -e /var/lib/nixarchy/factory-reset.request")
+
+    # And staging is ALL it did. The script runs inside the session whose
+    # /home it is about to replace; if it ever starts doing the work itself,
+    # this is the assertion that says so.
+    target.succeed("test -e /home/omarchy/a-file-the-user-made")
+    target.succeed("test -e /var/lib/some-service/state")
+    print("the reset staged a request and changed nothing")
+
+    target.shutdown()
+    target.start()
+    target.wait_for_unit("multi-user.target")
+
+    # Result= alone is not enough: a unit skipped by ConditionPathExists also
+    # reports Result=success, so asserting only that would pass on a machine
+    # where the reset never ran. ConditionResult=yes says the condition was
+    # met and the unit really started; ExecMainStatus=0 says the script it
+    # runs got to the end.
+    unit_state = target.succeed(
+        "systemctl show nixarchy-factory-reset.service"
+        " -p Result -p ConditionResult -p ExecMainStatus").strip()
+    print(unit_state)
+    for want in ["Result=success", "ConditionResult=yes", "ExecMainStatus=0"]:
+        assert want in unit_state.split(), (
+            f"nixarchy-factory-reset.service: expected {want}, got "
+            f"{unit_state!r}\n"
+            + target.succeed(
+                "journalctl -b -u nixarchy-factory-reset --no-pager 2>&1 || true"))
+
+    # Both halves gone.
+    target.fail("test -e /home/omarchy/a-file-the-user-made")
+    target.fail("test -e /var/lib/some-service/state")
+
+    # And the machine is still a machine: the home directory exists, and the
+    # login hash came back with /var/lib rather than being lost with it.
+    target.succeed("test -d /home/omarchy")
+    target.succeed("test -f /var/lib/nixarchy/password.hash")
+
+    # Set aside, not shredded -- which is what the script promises twice
+    # before it asks, and what the receipt explains afterwards.
+    target.succeed("ls -d /var/lib.before-reset-*")
+    target.succeed("btrfs subvolume list / | grep -q @home-before-reset-")
+    target.succeed("test -e /var/lib/nixarchy/factory-reset.done")
+
+    # The request is gone, so the next boot is an ordinary one. A reset that
+    # repeated every boot would be indistinguishable from a machine that
+    # cannot keep anything.
+    target.fail("test -e /var/lib/nixarchy/factory-reset.request")
+
+    # The configuration repository is untouched. This is the line that makes
+    # the whole feature safe to offer: /etc/nixos is on the same subvolume as
+    # /var/lib, and it is the one thing that makes a reinstall recoverable.
+    target.succeed("test -s /etc/nixos/flake.nix")
+    target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")
+    print("a factory reset returned /home and /var/lib, and left /etc/nixos alone")
 
     # Shut the target down, or this check never finishes.
     #

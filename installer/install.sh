@@ -1404,6 +1404,85 @@ run_install() {
     "${SUBSTITUTE_FLAGS[@]}"
 }
 
+# The baseline a factory reset returns to (#172).
+#
+# Read-only snapshots of `@` and `@home` exactly as nixos-install left them,
+# before anyone has logged in. They cost close to nothing: a btrfs snapshot
+# shares every extent with the subvolume it came from, so this is a metadata
+# write now and no ongoing cost at all until the live subvolumes diverge from
+# it -- which is the whole reason a baseline is affordable here and a copy
+# would not be.
+#
+# Taken at the btrfs TOP LEVEL, which is mounted nowhere during an install:
+# /mnt is `@`, and a snapshot made under /mnt would be a subvolume nested
+# inside the thing it is a snapshot of, and would then appear inside itself
+# on every later snapshot. So the top level is mounted for the length of this
+# function and unmounted again. installer/disk-config.nix deliberately gains
+# no entry -- the baseline is never mounted by the running system, it is
+# reached by mounting the top level at the moment it is used, which is what
+# installer/host.nix's restore unit does.
+#
+# What is NOT here: any change to the bootloader. Upstream offers @factory as
+# a boot entry; PR #114 settled why that is meaningless on this layout --
+# `@` holds almost no operating system, the kernels are on the ESP and the
+# system is in `@nix`, so booting a factory root boots the same system with
+# an older /etc. Generations are the bootable rung.
+#
+# Deliberately NOT fatal. It runs after nixos-install has succeeded, and
+# failing a thirty-minute install over a snapshot the user may never reach
+# for is disproportionate. The degradation is honest rather than silent --
+# the inverse of the #171 shape: with no baseline on disk,
+# omarchy-system-factory-reset finds none and says so, which is exactly the
+# behaviour every machine had before this existed. What stops the absence
+# going unnoticed is checks.install, which asserts both subvolumes exist and
+# are read-only after a real install.
+take_factory_snapshot() {
+  local device top rc=0
+
+  # findmnt reports a btrfs source as DEVICE[/subvol]; the bracket is the
+  # subvolume, not part of the device path.
+  device=$(findmnt -no SOURCE /mnt 2>/dev/null | sed 's/\[.*\]//') || true
+  if [ -z "$device" ]; then
+    echo "nixarchy-install: nothing is mounted at /mnt; no factory baseline taken." >&2
+    return 0
+  fi
+
+  top=$(mktemp -d)
+  if ! mount -o subvol=/ "$device" "$top" 2>&1; then
+    echo "nixarchy-install: could not mount the btrfs top level of $device." >&2
+    echo "  No factory baseline was taken. The install is unaffected; a factory" >&2
+    echo "  reset on this machine will report that there is no baseline." >&2
+    rmdir "$top"
+    return 0
+  fi
+
+  # -r, read-only. A writable baseline is one that can drift, and a baseline
+  # that has drifted is not a baseline -- it is a second copy of the machine
+  # wearing the name of the first.
+  btrfs subvolume snapshot -r "$top/@" "$top/@factory" || rc=1
+  btrfs subvolume snapshot -r "$top/@home" "$top/@factory-home" || rc=1
+
+  # Half a baseline is the #171 shape: something that looks present in every
+  # check a person can think to make, and restores nothing when it is needed.
+  # If either snapshot failed, remove whichever one was made.
+  if [ "$rc" -ne 0 ]; then
+    btrfs subvolume delete "$top/@factory" >/dev/null 2>&1 || true
+    btrfs subvolume delete "$top/@factory-home" >/dev/null 2>&1 || true
+  fi
+
+  umount "$top"
+  rmdir "$top"
+
+  if [ "$rc" -ne 0 ]; then
+    echo "nixarchy-install: the factory baseline could not be taken." >&2
+    echo "  The install is complete and unaffected; a factory reset on this" >&2
+    echo "  machine will report that there is no baseline to return to." >&2
+  else
+    echo "nixarchy-install: factory baseline taken (@factory, @factory-home)."
+  fi
+  return 0
+}
+
 main() {
   while [ $# -gt 0 ]; do
     case $1 in
@@ -1564,6 +1643,7 @@ main() {
     install_flake_dir
     write_password_hash
     run_install
+    take_factory_snapshot
   } >>"$log" 2>&1 || rc=$?
   ui_dashboard_stop
   # A frame already in flight when the drawer was killed can land AFTER the

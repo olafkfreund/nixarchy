@@ -4,16 +4,13 @@ title: Unattended installs
 
 # Unattended installs
 
-There is no nixarchy installer, so there is no unattended installer either.
+An image that boots, installs and reboots with nobody at the keyboard.
 
-Omarchy's ISO watches for a second drive labelled `cidata`, reads the wizard's
-answers off it, and installs with nobody at the keyboard — which makes it a
-good base image for disposable VMs.
+## The answers file
 
-**nixarchy has the answers file but not yet the drive.** `nixarchy-install
---answers <file>` takes every answer the wizard asks for and installs with
-nobody at the keyboard — one `key=value` per line, parsed rather than sourced,
-and it names every missing key in one go instead of one per attempt:
+`nixarchy-install --answers <file>` takes every answer the wizard asks for.
+One `key=value` per line, **parsed rather than sourced**, and every missing or
+malformed key is named in one pass instead of one per attempt:
 
 ```ini
 device=/dev/vda
@@ -27,31 +24,62 @@ timezone=Europe/London
 keymap=us
 ```
 
-What is missing is the `cidata` half: the ISO does not yet look for a labelled
-drive and feed itself from it. That is
-[issue #14's follow-up](https://github.com/olafkfreund/nixarchy/issues/14) —
-the code path exists and only the detection is absent.
+It holds a password in clear. That is inherent to installing without being
+asked, and nothing copies it onto the installed machine.
 
-## What to do instead
+`<file>` may also be an **`https://` URL**, which is what makes it unattended
+rather than merely unprompted — otherwise somebody had to put the file on the
+machine first. Plain `http` is refused, because of that password. A URL that
+cannot be fetched stops the install rather than falling back to asking: an
+image that falls back to questions is an image waiting at a prompt nobody is
+going to answer.
 
-The honest answer is that unattended provisioning is a NixOS problem with
-mature NixOS solutions, and nixarchy sits on top of whichever you pick:
+## Telling the image, without building an image
+
+The ISO takes three parameters on the kernel command line:
+
+```
+nixarchy.answers=https://example.com/answers.txt
+nixarchy.from=github:you/config
+nixarchy.host=laptop
+```
+
+With none of them present it is an ordinary interactive install.
+
+That is how qemu (`-append`), PXE and cloud metadata all inject parameters, so
+a fleet of VMs is a netboot with three arguments and no bespoke image:
+
+```
+qemu-system-x86_64 -cdrom nixarchy-net.iso \
+  -append "nixarchy.answers=https://example.com/answers.txt"
+```
+
+Combine them and the whole thing is one line: `--from` says which
+configuration, `--answers` supplies the machine's secrets, and together they
+are an enrolment with nothing typed. See
+[many machines, one repo](many-machines).
+
+**Scanning a labelled drive is deliberately absent.** Omarchy's ISO watches
+for a second drive labelled `cidata`; nixarchy does not. The kernel command
+line covers PXE and VM fleets, which is where unattended installs actually
+happen, and the media path is worth adding when somebody with a physical fleet
+asks for it rather than before.
+
+## The other way, which is often the right one
+
+Unattended provisioning is a NixOS problem with mature NixOS answers, and
+nixarchy sits on top of whichever you pick:
 
 - **[disko](https://github.com/nix-community/disko)** describes the disk
-  layout declaratively, so partitioning and formatting are part of the
-  configuration rather than a wizard step.
+  layout declaratively. nixarchy's installer already uses it — the same
+  `disk-config.nix` your machine imports is what formatted the disk.
 - **[nixos-anywhere](https://github.com/nix-community/nixos-anywhere)**
-  installs a NixOS flake configuration onto a remote machine over SSH, using
-  disko for the disks. Point it at a VM or a bare host booted into any Linux
-  with SSH, and it comes back as the system your flake describes.
+  installs a flake configuration onto a remote machine over SSH, using disko
+  for the disks. Point it at anything booted into Linux with SSH and it comes
+  back as the system your flake describes — no ISO, no boot medium, nothing to
+  write to a stick.
 
-Add nixarchy as an input to that flake before the first install and the
-machine arrives with the desktop already declared — there is no second step
-to automate, because the flake is the whole description. How to add the input
-is on [the getting-started page](getting-started).
-
-This is also why the gap is smaller than it looks. Upstream's `cidata` drive
-exists to feed answers to an imperative wizard: a disk, a hostname, a user, a
-password hash, SSH keys. In a NixOS flake every one of those is already a line
-in a file, and the file is what nixos-anywhere ships. What nixarchy is missing
-is the boot medium, not the unattended part.
+Add nixarchy as an input to that flake and the machine arrives with the
+desktop already declared. There is no second step to automate, because the
+flake is the whole description. How to add the input is on
+[the getting-started page](getting-started).

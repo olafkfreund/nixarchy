@@ -89,6 +89,23 @@ input. `omarchy update` moves all of them;
 specific fix, the second is the
 better habit — see [Updating NixOS](updating-nixos.md#the-long-way-and-when-you-want-it).
 
+## Machines that update themselves
+
+A machine can pull its configuration from a git repository on a timer instead
+of waiting to be told:
+
+```nix
+programs.nixarchy.fleet = {
+  enable = true;
+  url = "github:you/config";
+};
+```
+
+Off unless you turn it on, and worth understanding before you do: the running
+system then comes from the **remote** flake, so local edits under `/etc/nixos`
+that were never pushed are reverted at the next pull. See
+[many machines, one repo](many-machines).
+
 ## Rolling back bad updates
 
 The snapshot upstream restores from the boot menu is a generation here, and

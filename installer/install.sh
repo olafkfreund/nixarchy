@@ -578,8 +578,14 @@ write_flake() {
   cp -r "$TEMPLATE"/. "$work"
   chmod -R u+w "$work"
 
+  # The template ships one machine-shaped directory called host/; the name is
+  # not known until now. Renaming it is what makes a machine, and it is why
+  # the template derivation has no hostname baked into it.
+  mkdir -p "$work/hosts"
+  mv "$work/host" "$work/hosts/$hostname"
+
   local f
-  for f in "$work/flake.nix" "$work/configuration.nix"; do
+  for f in "$work/flake.nix" "$work/hosts/$hostname/default.nix" "$work/hosts/$hostname/configuration.nix"; do
     subst "$f" '@hostname@' "$hostname"
     subst "$f" '@username@' "$username"
     subst "$f" '@device@' "$device"
@@ -597,7 +603,7 @@ write_flake() {
   # disk is evaluated *out of this flake* -- so the flake has to evaluate before
   # there is a mounted disk to generate a hardware config from. An empty module
   # is enough for that evaluation and is replaced by the real one at step 7.
-  printf '{ ... }:\n{ }\n' >"$work/hardware-configuration.nix"
+  printf '{ ... }:\n{ }\n' >"$work/hosts/$hostname/hardware-configuration.nix"
 }
 
 format_disk() {
@@ -625,7 +631,7 @@ generate_hardware_config() {
   # fails the build. --show-hardware-config prints to stdout, where the plain
   # --root form would also write a configuration.nix over the template's.
   nixos-generate-config --root /mnt --no-filesystems --show-hardware-config \
-    >"$work/hardware-configuration.nix"
+    >"$work/hosts/$hostname/hardware-configuration.nix"
 
   reuse_baked_initrd "$work/hardware-configuration.nix"
 }

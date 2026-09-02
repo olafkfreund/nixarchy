@@ -1,5 +1,10 @@
 # Builds the flake the installer writes to /etc/nixos.
 #
+# `host/` is a machine-shaped directory with the tokens still in it. The
+# installer renames it to hosts/<hostname>/ once it knows the name, which is
+# why this derivation can be built once and used for any machine -- it has no
+# hostname to bake in.
+#
 # The template files carry @tokens@; the installer substitutes the answers it
 # collected. What cannot be a template file is the lock, so it is derived here.
 {
@@ -27,9 +32,10 @@ runCommand "nixarchy-flake-template"
     passthru = { inherit url rev; };
   }
   ''
-    mkdir -p $out
-    cp ${./template}/flake.nix          $out/flake.nix
-    cp ${./template}/configuration.nix  $out/configuration.nix
+    mkdir -p $out/host
+    cp ${./template}/flake.nix           $out/flake.nix
+    cp ${./template}/host/default.nix    $out/host/default.nix
+    cp ${./template}/host/configuration.nix $out/host/configuration.nix
 
     # Verbatim, never hand-maintained: the user's flake carries its own disk
     # layout so their fileSystems stay declarative without depending on
@@ -43,7 +49,7 @@ runCommand "nixarchy-flake-template"
     # (modules/apps.nix, ensure_block). statix would have this as `_:`, which
     # parses the same and would silently break that rewrite -- so the file is
     # generated here, where the linter cannot ask for it.
-    printf '{ ... }:\n{ }\n' > $out/nixarchy-apps.nix
+    printf '{ ... }:\n{ }\n' > $out/host/nixarchy-apps.nix
 
     # The lock is transformed rather than regenerated. `nix flake lock` on the
     # target would re-resolve every input against whatever is current, so the

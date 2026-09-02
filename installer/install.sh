@@ -128,7 +128,8 @@ nixarchy-install -- install nixarchy onto a disk.
   nixarchy-install              ask, then install
   nixarchy-install --dry-run    ask, write the flake to a temp directory,
                                 touch no disk, print the directory and stop
-  nixarchy-install --answers F  take every answer from F and ask nothing
+  nixarchy-install --answers F  take every answer from F and ask nothing;
+                                F may be an https:// URL
   nixarchy-install --from URL --host NAME
                                 install from a configuration repository that
                                 already exists, rather than generating a flake
@@ -493,6 +494,42 @@ confirm_summary() {
 # It also holds a plaintext password and a LUKS passphrase, unavoidably. The
 # installer never copies it anywhere that persists.
 # ---------------------------------------------------------------------------
+# An answers file that is not on this machine yet.
+#
+# --answers takes a path, which means somebody had to put the file there --
+# which is not unattended. A URL closes that: an image boots, fetches its
+# answers and installs, with nothing typed.
+#
+# https only. The file carries a password in clear, which usage() already
+# admits is inherent to installing without being asked; fetching it over
+# plaintext http would make that worse for nothing. A URL that cannot be
+# fetched is fatal here rather than later -- an unattended install that
+# silently falls back to asking questions nobody is there to answer is an
+# image that hangs at a prompt forever.
+resolve_answers() {
+  case $answers_file in
+    https://*) ;;
+    http://*)
+      echo "nixarchy-install: --answers over plain http is refused." >&2
+      echo "  The file carries a password. Use https." >&2
+      exit 2
+      ;;
+    *) return 0 ;;
+  esac
+
+  local url=$answers_file tmp
+  # umask, not chmod after the fact: between creation and the chmod the file
+  # would be readable, and the whole point of it is that it is not.
+  tmp=$(umask 077 && mktemp)
+  echo "fetching answers from $url"
+  curl --fail --silent --show-error --location --max-time 60 -o "$tmp" "$url" || {
+    echo "nixarchy-install: could not fetch $url" >&2
+    rm -f "$tmp"
+    exit 1
+  }
+  answers_file=$tmp
+}
+
 read_answers() {
   local file=$1 line key value lineno=0 password=""
   [ -r "$file" ] || {
@@ -1086,6 +1123,7 @@ main() {
   fi
 
   if [ -n "$answers_file" ]; then
+    resolve_answers
     read_answers "$answers_file"
     # --host names the machine, and clone_repo has already chosen $hostdir from
     # it. A hostname in the answers file cannot also name it: leaving both to

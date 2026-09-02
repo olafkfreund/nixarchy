@@ -689,6 +689,15 @@
           pkgs = pkgsFor.${system};
         };
 
+        # The other half of the installer: the questions themselves, answered
+        # over a serial line. checks.installer-ui proves a widget can be drawn;
+        # this proves the wizard can be answered, which no harness passing
+        # --answers has ever done. See tests/installer-wizard.nix.
+        installer-wizard = import ./tests/installer-wizard.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
         # Every option that adds something, checked with it turned off too --
         # see tests/options.nix for why that half is the one at risk.
         options = import ./tests/options.nix {

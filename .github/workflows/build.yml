@@ -551,6 +551,14 @@ jobs:
         # README tells people with an existing Hyprland to use.
         run: nix build .#checks.x86_64-linux.coexist --print-build-logs
 
+      - name: Answer the installer's questions
+        # The interactive path, which every other harness skips by passing
+        # --answers: the greeter, the six questions, the two validators and the
+        # summary, typed at over a serial line. --dry-run, so it costs about
+        # half a minute of test script rather than the install checks.install
+        # already covers.
+        run: nix build .#checks.x86_64-linux.installer-wizard --print-build-logs
+
       - name: Add third-party plugins from real repos
         # `omarchy plugin add <url> --enable` for two published plugins, then
         # disable and remove. The plugin system is the one deliberately

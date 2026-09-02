@@ -12,16 +12,72 @@ name: install check
 # below is why I believed it had been protected.
 #
 # Splitting the file is the fix: this workflow has its own concurrency group,
-# nothing cancels it, and build.yml keeps its snappy PR behaviour.
+# nothing on main cancels it, and build.yml keeps its snappy PR behaviour.
+# (Pull requests are the one place where cancelling is right; see the
+# concurrency block below.)
+
+# It also runs on pull requests, and the filter below is a denylist on purpose.
+#
+# For most of this repo's life it did not. It ran on main and nightly, so the
+# first real gate on "does an install still work" was main itself, and every PR
+# touching the installer merged on faith. #123 is what that costs: the
+# hosts/<name>/ layout changed the module order, system-path hashed the new
+# order into a different derivation, and the installer node then tried to build
+# 517 derivations from hex0-seed in a sandbox with no network. PR CI was green
+# the whole way. It was caught by someone running it by hand, which is not a
+# process.
+#
+# The obvious fix is a `paths:` allowlist naming the installer -- and it is the
+# wrong shape. Work out what it would have to name and the answer is
+# everything: installer/ and tests/install.nix write and drive the install,
+# modules/ and pkgs/ and data/ and vm/ and flake.nix and flake.lock are the
+# closure it installs. #141, the PR that implemented #123, touched flake.nix,
+# installer/, modules/apps.nix and tests/install.nix -- four of those at once.
+# What is left over is documentation. An allowlist of everything-but-docs,
+# written as an allowlist, is a list that silently stops covering the next
+# directory somebody adds, and a filter that misses a path is worse than no
+# filter because it still reads like coverage. That is the same failure this
+# whole file is about, one level down.
+#
+# So: `**` first, and then the handful of paths that provably cannot change
+# what an install produces. A new top-level directory is covered on the day it
+# appears, and dropping something out of coverage takes a deliberate line here.
+# .github/** is excluded because no workflow file can break an install -- with
+# this one re-included on the next line, since a change to how the gate runs
+# should be tested by the gate running.
 
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!README.md'
+      - '!.envrc'
+      - '!.gitignore'
+      - '!.github/**'
+      - '.github/workflows/install-check.yml'
   workflow_dispatch:
 
 concurrency:
   group: install-check-${{ github.ref }}
-  cancel-in-progress: false
+  # Not a constant, and #144 assumed it was one: it read this file as already
+  # having `cancel-in-progress`, and it has it set to false. On main that is
+  # right and deliberate -- the whole reason this file was split out of
+  # build.yml was that build.yml's workflow-level cancel-in-progress reaped the
+  # hour-long install every time something else landed, so it had never once
+  # finished in CI.
+  #
+  # On a pull request the same setting is wrong in the other direction. This
+  # runs on one self-hosted machine for ~15 minutes; with cancelling off, three
+  # pushes to a branch queue three installs of a tree nobody is going to merge,
+  # and the run that matters waits behind two that are already superseded. A PR
+  # only ever needs an answer about its current head.
+  #
+  # github.ref is refs/pull/<n>/merge on a PR, so each branch still has its own
+  # group and cancelling one never touches another, or main.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   install:
@@ -34,10 +90,12 @@ jobs:
     # person actually receives.
     runs-on: [self-hosted, nixos, kvm, big]
 
-    # No `if:` guarding pull_request, and no job-level concurrency: the `on:`
-    # and `concurrency:` at the top of this file already say both things, and
-    # saying them twice is how the first version came to look protected while
-    # being cancelled every time.
+    # No job-level concurrency: the `concurrency:` at the top of this file
+    # already says it, and saying it twice is how the first version came to
+    # look protected while being cancelled every time. (There used to be a line
+    # here noting there was no `if:` guarding pull_request either. There was
+    # nothing to guard: pull requests did not reach this file at all. They do
+    # now, and the `on:` block above is the only place that decides which.)
     timeout-minutes: 45
 
     steps:

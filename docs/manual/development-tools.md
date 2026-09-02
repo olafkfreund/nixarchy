@@ -99,6 +99,20 @@ The global rows in the menu are for the tools you want everywhere — a
 language server for your editor, `go` for one-off scripts. Anything a
 project depends on belongs in that project's devShell.
 
+### Or without writing a flake: devenv
+
+The file above is the plain-Nix answer, and it is the right one when a
+project's environment is a list of packages and an environment variable. When
+it is not — a Postgres to run alongside, processes, git hooks — writing that
+in `mkShell` is a lot of Nix.
+
+`nixarchy dev init react` scaffolds a
+[devenv](https://devenv.sh) project instead: one command, options rather than
+derivations, and an environment that activates on `cd` in bash, zsh and fish
+without direnv. It is off by default and it costs a second lockfile;
+[Per-project environments](per-project-environments) is the whole story,
+including when not to.
+
 ## Docker
 
 Docker and Docker Compose are enabled by `virtualisation.docker.enable`,

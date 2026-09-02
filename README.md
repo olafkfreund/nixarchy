@@ -51,6 +51,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Plugins** | `omarchy plugin add <url>` works as upstream ships it, and `programs.nixarchy.plugins` pins one in your flake |
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
+| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
 | Branded boot splash | Omarchy's Plymouth theme, selected by `boot.plymouth.theme` |
 | **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |

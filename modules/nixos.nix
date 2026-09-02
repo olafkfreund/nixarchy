@@ -319,14 +319,22 @@ in
       ];
       default = "defer";
       description = ''
-        What to do about Omarchy's Plymouth boot splash.
+        What to do about nixarchy's Plymouth boot splash.
+
+        The theme DIRECTORY is called `omarchy`, and stays called that:
+        `boot.plymouth.theme` names a directory, so renaming it means moving
+        `themePackages` in the same breath. What is inside it is ours -- every
+        image `omarchy.script` draws is drawn by `pkgs/omarchy/nixarchy-logo.py`
+        and `nixarchy-plymouth-chrome.py`, and the theme's own `Name=` is
+        nixarchy. `checks.options` asserts that, for this splash and for the
+        live image's.
 
         `defer` sets it at `mkDefault`, so anything that names a theme of its
         own keeps it -- stylix does, which is why a stylix machine boots to the
         stylix splash with nixarchy installed. This is the default because a
         boot splash is a taste, and one already chosen should survive.
 
-        `force` takes Omarchy's instead. Both `boot.plymouth.theme` and
+        `force` takes nixarchy's instead. Both `boot.plymouth.theme` and
         `boot.plymouth.themePackages` are forced together, because forcing only
         the name leaves NixOS asserting a theme that is not in the package list
         and failing the build -- which is exactly what someone reaching for
@@ -1102,10 +1110,12 @@ in
     # installed, the daemon was not.
     hardware.bluetooth.enable = lib.mkDefault true;
 
-    # Omarchy's own splash, which upstream installs by copying into
-    # /usr/share/plymouth/themes from omarchy-refresh-plymouth. Nothing was
-    # doing that here, so plymouth came up with NixOS' default theme -- the one
-    # screen every boot shows, unbranded.
+    # Our own splash, in the theme directory upstream's occupies -- upstream
+    # installs it by copying into /usr/share/plymouth/themes from
+    # omarchy-refresh-plymouth. Nothing was doing that here, so plymouth came
+    # up with NixOS' default theme -- the one screen every boot shows,
+    # unbranded. The artwork in it is nixarchy's; see the option's description
+    # and pkgs/omarchy/default.nix.
     #
     # Theme and themePackages always move together, at whatever priority
     # bootSplash asks for. NixOS asserts the named theme exists in the package

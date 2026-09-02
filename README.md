@@ -934,8 +934,8 @@ nix run github:olafkfreund/nixarchy#doctor
 It reads the running system and prints the configuration that machine needs --
 before nixarchy is an input anywhere. It changes nothing.
 
-Two of the things it reports are worth knowing about in advance, because both
-fail *silently* rather than loudly:
+Three of the things it reports are worth knowing about in advance, because
+each fails *silently*, or misleadingly, rather than loudly:
 
 **Your session may be running an older build than the one installed.**
 `OMARCHY_PATH` and `PATH` are set at login and keep pointing at whichever store
@@ -953,6 +953,15 @@ Manager produces, and the right way to declare it -- `xdg-settings` fails on the
 read-only file and *still exits 0*. `omarchy-default-browser`'s `|| exit 1` never
 fires. Nothing is broken and nothing says so, which is the only reason it is
 worth a section: the fix lives in a file the menu cannot reach.
+
+**A tmpfs `/tmp` smaller than 64 GiB will fail a rebuild as a full disk.** Nix
+builds in `$TMPDIR`. When that is a tmpfs it is RAM, not the filesystem `df`
+reports on, and a desktop rebuild unpacking several large sources at once
+(`cef-binary` alone is ~1.9 GiB unpacked) can exhaust it. What you get is `No
+space left on device` and nix's own hint to check free disk space -- on a
+machine with hundreds of gigabytes free. Nothing in the error names tmpfs, RAM
+or `$TMPDIR`. The doctor names the size and both remedies, and sets neither:
+`boot.tmp.*` is your machine's memory policy.
 
 Then, in order:
 

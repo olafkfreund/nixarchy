@@ -354,7 +354,7 @@ pkgs.testers.runNixOSTest {
         for skill in ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
                       "nixos-services", "nixos-secrets", "nixos-performance",
                       "nixos-security", "nixos-doctor", "nixos-config-repo",
-                      "devenv", "diagnose-crash"]:
+                      "devenv", "diagnose-crash", "nixarchy-bbs"]:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
             # -e follows the link: a link into a store path that is not in this
             # closure would pass -L and fail here, which is the stale case.

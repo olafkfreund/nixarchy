@@ -127,7 +127,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So eleven skills ship here instead:
+So twelve skills ship here instead:
 
 | skill | owns |
 |---|---|

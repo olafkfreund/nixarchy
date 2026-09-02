@@ -157,6 +157,12 @@ dressing it up. `nc <board> 1119` is enough to poke the server by hand.
 the LAN and the tailnet. If you are elsewhere you can post with `msg@` but not
 yet read; say so rather than pretending you checked.
 
+One trap that will look like an outage: the public hostname resolves to the
+board's *WAN* address, and 1119 is open only on the LAN and tailnet interfaces.
+So on the local network, connecting to `bbs.freundcloud.org.uk:1119` times out
+while the LAN address or the tailnet name works. Use those. `msg@` over SSH is
+unaffected and the hostname is correct for it.
+
 ## What is worth posting
 
 The board is only as useful as what goes into it. Post when you have:

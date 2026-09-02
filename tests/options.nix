@@ -513,6 +513,11 @@ pkgs.runCommand "nixarchy-options"
     );
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
     devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
+    # The home-backup script, run rather than read. Its gate and its allowlist
+    # are the two things this issue actually promises, and both are answerable
+    # by executing it -- --check and --list exist partly for that reason and
+    # partly because the menu rows' `when:` calls the first of them.
+    homeBackup = "${(pkgs.extend inputs.self.overlays.default).omarchy}/bin/nixarchy-home-backup";
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
     nativeBuildInputs = [ pkgs.python3 ];
@@ -802,6 +807,108 @@ pkgs.runCommand "nixarchy-options"
             ;;
         esac
         echo "the fleet timer is off unless asked, and leaves a mark when it fails"
+
+        # ---- the home half is backed up by an allowlist, and only on our own
+        #      machines -------------------------------------------------------
+        #
+        # Everything a person customises about this desktop -- the bar layout,
+        # the keybindings, the themes they made -- is seeded with `cp -rn` and
+        # therefore lives outside every generation, outside Home Manager's
+        # rollback and outside /etc/nixos. nixarchy-home-backup is the only
+        # thing on the machine that gets it off the disk.
+
+        test -e "$vm/sw/bin/nixarchy-home-backup" || {
+          echo "nixarchy-home-backup is not on PATH; the menu rows call a command that is not there" >&2
+          exit 1
+        }
+
+        # `cmp` decides, on restore, whether a file differs from the backup and
+        # therefore whether the user's version is saved alongside. It comes
+        # from diffutils, which is NOT in the omarchy package's runtimeDeps --
+        # it is on PATH only because NixOS puts it in requiredPackages. Assert
+        # that rather than trust it: without cmp every restore reports every
+        # file as changed and litters $HOME with .bak copies of files that
+        # never differed.
+        test -e "$vm/sw/bin/cmp" || {
+          echo "no cmp on the system path: nixarchy-home-backup restore cannot tell a changed file from an identical one" >&2
+          exit 1
+        }
+
+        # ---- the ownership gate, both ways --------------------------------
+        #
+        # The epic's third done-criterion: every command refuses on a machine
+        # nixarchy did not install. .nixarchy-url is written by
+        # installer/mkFlake.nix and by nothing else, so its absence is
+        # "somebody imported nixosModules.nixarchy into a config they own".
+        gateHome=$TMPDIR/gate-home
+        gateFlake=$TMPDIR/gate-flake
+        mkdir -p "$gateHome" "$gateFlake"
+
+        if HOME=$gateHome NIXARCHY_FLAKE=$gateFlake "$homeBackup" --check; then
+          echo "nixarchy-home-backup --check passes with no .nixarchy-url in the flake" >&2
+          echo "  the menu rows would appear, and the command would run, on a machine" >&2
+          echo "  whose owner never asked nixarchy to manage their home directory" >&2
+          exit 1
+        fi
+        if HOME=$gateHome NIXARCHY_FLAKE=$gateFlake "$homeBackup" >/dev/null 2>&1; then
+          echo "nixarchy-home-backup ran on a machine with no ownership marker" >&2
+          exit 1
+        fi
+
+        touch "$gateFlake/.nixarchy-url"
+        HOME=$gateHome NIXARCHY_FLAKE=$gateFlake "$homeBackup" --check || {
+          echo "nixarchy-home-backup --check refuses on a machine nixarchy DID install" >&2
+          echo "  both menu rows would be permanently hidden" >&2
+          exit 1
+        }
+        echo "nixarchy-home-backup refuses without the ownership marker, and runs with it"
+
+        # ---- the allowlist is an allowlist ---------------------------------
+        #
+        # ~/.config holds gh's token, the agent credential files
+        # nixarchy-config-repo's own agent_ready enumerates, and live browser
+        # sessions. The entire design is "never ~/.config wholesale", and that
+        # is one line away from being untrue at any time.
+        allowlist=$(HOME=$gateHome NIXARCHY_FLAKE=$gateFlake "$homeBackup" --list)
+
+        for want in .config/omarchy/shell.json .config/hypr/ \
+          .config/omarchy/themes/ .local/state/omarchy/ \
+          .config/omarchy/backup.list; do
+          echo "$allowlist" | grep -qxF "$want" || {
+            echo "the shipped allowlist no longer covers $want" >&2
+            echo "$allowlist" >&2
+            exit 1
+          }
+        done
+
+        wholesale=$(echo "$allowlist" | grep -xE '\.|\.config/?|\.local/?|\.local/share/?|\.local/state/?' || true)
+        if [ -n "$wholesale" ]; then
+          echo "the allowlist has grown a wholesale home-directory entry:" >&2
+          echo "$wholesale" >&2
+          echo "  that is where the tokens are. The allowlist exists to not do this." >&2
+          exit 1
+        fi
+
+        # The three things inside an allowlisted directory that must not
+        # travel. clipboard-history.json is the sharpest: password managers
+        # paste through the clipboard, and it sits inside
+        # ~/.local/state/omarchy, which the epic asks for by name.
+        for never in .local/state/omarchy/clipboard-history.json \
+          .local/state/omarchy/current/theme/ \
+          .local/state/omarchy/done/; do
+          echo "$allowlist" | grep -qxF "!$never" || {
+            echo "the allowlist no longer excludes $never" >&2
+            exit 1
+          }
+        done
+        echo "the allowlist names $(echo "$allowlist" | grep -cv '^!') paths and excludes $(echo "$allowlist" | grep -c '^!')"
+
+        # ---- the menu rows exist, and are gated the same way ----------------
+        #
+        # A row whose `when` does not match the script's own gate is a row that
+        # appears on a machine where clicking it prints a refusal.
+        python3 ${./home-backup-menu.py} "$vm/etc/nixarchy/omarchy-menu.jsonc"
+
           touch $out
       ''
     else

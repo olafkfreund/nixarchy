@@ -159,6 +159,14 @@ let
 
   version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;
 
+  # See the plymouth-start override below. Upstream's own ExecStart, plus the
+  # one flag, written once because it has to be identical in the initrd and in
+  # the real root.
+  plymouthdExec = [
+    ""
+    "${config.boot.plymouth.package}/sbin/plymouthd --mode=boot --pid-file=/run/plymouth/pid --attach-to-session --ignore-serial-consoles"
+  ];
+
   # "" for the offline image: it is the default one, and the plain name is the
   # one people will be told to download.
   variant = lib.optionalString (!offline) "-net";
@@ -218,12 +226,38 @@ in
   # Straight into the installer, with no boot menu -- upstream shows none and
   # a menu nobody reads is a menu that only ever delays the install.
   #
-  # Plymouth is NOT enabled here yet. programs.nixarchy.bootSplash renders
-  # Omarchy's theme from their vendored artwork, and shipping another project's
-  # logo on our boot screen is the wrong default even where the licence allows
-  # it. #46 draws ours; this gains `splash` then.
+  # The splash, which #46 held up until the artwork was ours rather than
+  # upstream's. It is now: every image omarchy.script draws is drawn by
+  # pkgs/omarchy/nixarchy-logo.py and nixarchy-plymouth-chrome.py, and
+  # checks.options asserts that for this image and the installed one both.
+  #
+  # boot.plymouth is set HERE, directly, which nothing else in the tree does.
+  # programs.nixarchy.bootSplash is the option for this and it is out of
+  # scope: nixosModules.nixarchy is deliberately not imported (see the header),
+  # so there is no option to set. The two halves that option exists to keep
+  # together -- theme and themePackages -- are therefore kept together here.
+  #
+  # themePackages is nixarchy-plymouth and not the omarchy package. They carry
+  # the same share/plymouth/themes/omarchy; the difference is everything else.
+  # nixpkgs' plymouth module puts themePackages into environment.etc, so the
+  # named package joins the system closure whole -- 411.9 MiB of desktop on an
+  # image that carries none, which iso-net cannot afford against the 2.00 GiB
+  # GitHub refuses a release asset over. See the overlay entry in flake.nix.
+  #
+  # The theme is still called `omarchy`, because the DIRECTORY name is what
+  # boot.plymouth.theme names and renaming it moves two options at once -- the
+  # trap the bootSplash option's own comment documents. What it calls itself,
+  # Name= in omarchy.plymouth, is nixarchy.
   boot = {
     loader.timeout = lib.mkForce 0;
+
+    plymouth = {
+      enable = true;
+      theme = "omarchy";
+      themePackages = [
+        inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.nixarchy-plymouth
+      ];
+    };
 
     # `quiet` alone is not enough. It lowers the console log level but leaves
     # anything at KERN_ERR and above going straight to tty1, which is where the
@@ -243,6 +277,28 @@ in
     ];
     consoleLogLevel = 0;
   };
+
+  # And the flag without which the splash above is dead weight.
+  #
+  # `console=ttyS0,115200` is on the command line four lines up, deliberately.
+  # plymouthd sees a serial console there and falls back to text on every
+  # display it has, including the framebuffer -- so the image boots to the
+  # systemd status list it was already showing and nothing is drawn. That is
+  # not a theory: booting the image's own kernel, initrd and store twice with
+  # only that one parameter differing, the wordmark is on screen in one and
+  # absent in the other. Nothing in the log says so; the screen is simply
+  # wrong, which is how this would have shipped.
+  #
+  # --ignore-serial-consoles is plymouthd's own answer and costs the serial
+  # line nothing: kernel messages still go there, because that is the kernel's
+  # doing and not plymouth's.
+  #
+  # Both units, and the initrd one is the one that matters -- it is what draws
+  # the splash before the root filesystem exists. Upstream's unit is shipped by
+  # the package (systemd.packages), so this is an ExecStart override: the empty
+  # string clears the packaged line rather than appending a second one.
+  systemd.services.plymouth-start.serviceConfig.ExecStart = plymouthdExec;
+  boot.initrd.systemd.services.plymouth-start.serviceConfig.ExecStart = plymouthdExec;
 
   # Give the console the whole screen.
   #
@@ -275,6 +331,16 @@ in
     after = [
       "getty@tty1.service"
       "network-online.target"
+      # And after the splash has let go of the console.
+      #
+      # Plymouth owns the VT while it is drawing, and a terminal it owns
+      # answers stty with 80x25 however large the screen is. The installer
+      # measures once, at start, so starting beside plymouth rather than after
+      # it puts the whole TUI back in the 80-column corner this file's
+      # kernel-module list exists to get it out of -- measured on the built
+      # image, not reasoned about. plymouth-quit-wait is already wanted by
+      # multi-user.target, so this orders against a unit that runs anyway.
+      "plymouth-quit-wait.service"
     ];
     wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
@@ -293,6 +359,7 @@ in
       TTYPath = "/dev/tty1";
       TTYReset = true;
       TTYVHangup = true;
+      TTYVTDisallocate = true;
       ExecStart = nixarchyInstallerLauncher;
       # Finished, aborted or crashed, do not respawn a TUI in a loop.
       Restart = "no";

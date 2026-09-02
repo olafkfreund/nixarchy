@@ -111,7 +111,7 @@ jobs:
       # data/apps.nix, and they silently went stale twice -- once when an app
       # was added, once when RetroArch moved to being built here -- so derive
       # them and fail rather than trust prose.
-      - name: Every check is run by some workflow
+      - name: Every check is run by some workflow, on pull requests
         run: |
           # A check in `checks` that no workflow builds is worse than no check:
           # it reads like coverage, and the PR that adds it goes green without
@@ -124,22 +124,53 @@ jobs:
           #   reference-unencrypted-toplevel pulled in by checks.install
           exempt="omarchy reference-unencrypted-toplevel"
 
+          # And the same hole one level up, which is #164. "Some workflow names
+          # it" was never the whole question: a check named only by nightly.yml
+          # satisfies that grep and still gates nothing, because nothing it can
+          # catch arrives before the merge. That is #144 -- the install check
+          # sat in exactly this position for most of this repo's life, and #123
+          # shipped straight through it, green.
+          #
+          # These two stay there deliberately, and the cost is the reason:
+          #   install-iso  builds a 5.6 GB image and installs it -- ~3h
+          #   iso-budget   measures that same image, so pays the same build
+          # Per-push, an hour of wall clock each makes the queue the bottleneck.
+          # Written down here rather than arrived at by omission, which is the
+          # argument the guard above already rests on.
+          nightly_only="install-iso iso-budget"
+
           names=$(awk '/^      checks = eachSystem/,/^      };/' flake.nix |
             grep -oE '^        [a-z][a-z0-9-]* =' | tr -d ' =')
 
           missing=""
+          ungated=""
           for c in $names; do
             case " $exempt " in *" $c "*) continue ;; esac
-            grep -rq "checks\.x86_64-linux\.$c\b" .github/workflows/ || missing="$missing $c"
+
+            # Not \b, which counts `-` as a boundary: `install` would match a
+            # line naming `install-iso`, and a nightly-only check could borrow
+            # the pull-request coverage of a longer-named sibling.
+            named=$(grep -rlE "checks\.x86_64-linux\.$c([^a-z0-9-]|\$)" .github/workflows/ || true)
+            if [ -z "$named" ]; then missing="$missing $c"; continue; fi
+
+            case " $nightly_only " in *" $c "*) continue ;; esac
+            # Top-level `on:` key only. `pull_request` also appears in
+            # install-check.yml as `github.event_name == 'pull_request'`, and a
+            # loose grep would read that expression as a trigger.
+            echo "$named" | xargs grep -lE '^  pull_request:' >/dev/null 2>&1 ||
+              ungated="$ungated $c"
           done
 
-          if [ -n "$missing" ]; then
+          if [ -n "$missing$ungated" ]; then
             for c in $missing; do
               echo "::error::checks.$c is defined but no workflow runs it"
             done
+            for c in $ungated; do
+              echo "::error::checks.$c is run by no workflow that triggers on a pull request"
+            done
             exit 1
           fi
-          echo "every check in the flake is built by a workflow"
+          echo "every check in the flake is built by a workflow that runs on pull requests"
 
       - name: The README's roadmap still matches the open epics
         env:

@@ -1537,6 +1537,7 @@ is the shape.
 | [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
 | [#105](https://github.com/olafkfreund/nixarchy/issues/105) | **Flatpaks, declared** — for the software nixpkgs does not carry | not started |
 | [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
+| [#121](https://github.com/olafkfreund/nixarchy/issues/121) | **many machines, one repo** — fleets, unattended installs, shared configs | not started |
 
 **Recently finished:** the app selection grew a
 [services catalogue](https://github.com/olafkfreund/nixarchy/issues/90) —

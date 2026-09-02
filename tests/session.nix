@@ -143,6 +143,15 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     import os
+
+    # A note on order, because the config-repo block below cost a CI run to
+    # learn it: a gate asked EARLIER than an existing one can make that one
+    # unreachable without making it fail. Two assertions here went on passing
+    # after the ownership gate landed in front of them -- testing nothing, and
+    # reporting success -- and only a third one failing loudly said so. When you
+    # add a gate, work out what it now short-circuits; if the later gates still
+    # matter, give them a fixture that gets past yours rather than deleting them.
+
     machine.wait_for_unit("multi-user.target")
 
     # ---- app selection -------------------------------------------------
@@ -371,12 +380,25 @@ pkgs.testers.runNixOSTest {
     machine.succeed(
         "test -x /home/omarchy/.config/omarchy/hooks/post-boot.d/config-repo")
 
-    # It must call --check first and bail on a non-zero exit. A hook that
-    # notifies unconditionally is the failure mode this whole design exists to
-    # avoid, and it looks identical to a working one until it annoys someone.
-    machine.succeed(
-        "grep -q 'nixarchy-config-repo --check || exit 0' "
-        "/home/omarchy/.config/omarchy/hooks/post-boot.d/config-repo")
+    # Every notification it can send must stand behind a check that decided to
+    # send it. A hook that notifies unconditionally is the failure mode this
+    # whole design exists to avoid, and it looks identical to a working one
+    # until it annoys someone.
+    #
+    # Asserted by ordering rather than by matching the line, because there are
+    # two conditions now and each has its own message: the first push is a
+    # different thing to say than the fortnight of changes that piled up after
+    # it. A grep for one exact line would pass while the second notification
+    # fired unguarded.
+    hook = machine.succeed(
+        "cat /home/omarchy/.config/omarchy/hooks/post-boot.d/config-repo")
+    sends = [i for i in range(len(hook)) if hook.startswith("omarchy-notification-send", i)]
+    assert len(sends) == 2, f"expected two notifications in the hook, found {len(sends)}"
+    guards = ("nixarchy-config-repo --check;", "nixarchy-config-repo --check-drift;")
+    for guard, send in zip(guards, sends):
+        assert guard in hook and hook.index(guard) < send, (
+            f"a notification is sent before `{guard.strip()}` decided it should be")
+    print("both post-boot notifications stand behind a check")
 
     # Silence, gate zero: nixarchy did not write this machine.
     #

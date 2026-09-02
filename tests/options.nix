@@ -687,6 +687,37 @@ pkgs.runCommand "nixarchy-options"
           }
           echo "on an unowned machine it refuses, says why, and nudges nobody"
 
+          # ---- and a way to reach it that is not a notification ------------
+          #
+          # The command was reachable by nudge or by knowing its name, which
+          # makes "I changed things, is that backed up?" a question with no
+          # answer in the interface. The row is also the drift path's front
+          # door: running it on an armed repository is what commits and pushes
+          # what has piled up since.
+          row=$(sed -n '/"system.backup"/,/^  }/p' "$vm/etc/nixarchy/omarchy-menu.jsonc")
+          test -n "$row" || {
+            echo "the menu has no System > Back up configuration row" >&2
+            echo "  nixarchy-config-repo is then reachable only by acting on a" >&2
+            echo "  notification, or by knowing the command's name." >&2
+            exit 1
+          }
+          case "$row" in
+            *nixarchy-config-repo*) ;;
+            *) echo "the backup row does not call nixarchy-config-repo:" >&2
+               echo "$row" >&2; exit 1 ;;
+          esac
+          # Same predicate as the command's own, or the row draws on machines
+          # where choosing it can only produce the refusal above.
+          case "$row" in
+            */etc/nixarchy/managed*) ;;
+            *) echo "the backup row is not gated on ownership:" >&2
+               echo "$row" >&2
+               echo "  on a machine nixarchy did not write it would render, and" >&2
+               echo "  clicking it would only ever print a refusal." >&2
+               exit 1 ;;
+          esac
+          echo "the menu reaches it, on the machines where it can work"
+
           # ---- devenv: nothing at all until it is asked for ---------------
           for pair in "package:$devenvOffPackage" "bash hook:$devenvOffBash" \
             "zsh hook:$devenvOffZsh" "fish hook:$devenvOffFish" \

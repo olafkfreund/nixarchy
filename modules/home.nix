@@ -804,21 +804,33 @@ in
     # added nixarchy to a configuration of their own -- and on that machine
     # /etc/nixos is theirs. --check asks /etc/nixarchy/managed before anything
     # else and answers "no nudge", so the hook exits 0 having said nothing.
+    #
+    # Two conditions, two messages. The first push is a different thing to say
+    # than the fortnight of changes that piled up after it, and a notification
+    # whose text does not match what clicking it will do is worse than none.
     xdg.configFile."omarchy/hooks/post-boot.d/config-repo" = {
       executable = true;
       text = ''
         #!/usr/bin/env bash
-        ${cfg.package}/bin/nixarchy-config-repo --check || exit 0
 
-        # --exec makes it clickable, which is the whole reason a notification
+        # --exec makes these clickable, which is the whole reason a notification
         # works here at all: acting on it is one click when the user is ready,
         # and ignoring it costs them nothing.
-        ${cfg.package}/bin/omarchy-notification-send \
-          -u normal \
-          "Back up your NixOS configuration" \
-          "Everything this machine is lives in one uncommitted directory. Click to set up a backup." \
-          --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
-            ${cfg.package}/bin/nixarchy-config-repo
+        if ${cfg.package}/bin/nixarchy-config-repo --check; then
+          ${cfg.package}/bin/omarchy-notification-send \
+            -u normal \
+            "Back up your NixOS configuration" \
+            "Everything this machine is lives in one uncommitted directory. Click to set up a backup." \
+            --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
+              ${cfg.package}/bin/nixarchy-config-repo
+        elif ${cfg.package}/bin/nixarchy-config-repo --check-drift; then
+          ${cfg.package}/bin/omarchy-notification-send \
+            -u normal \
+            "Your configuration has drifted from its backup" \
+            "Changes made here have not been pushed for a while. Click to commit and push them." \
+            --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
+              ${cfg.package}/bin/nixarchy-config-repo --drift
+        fi
       '';
     };
 

@@ -31,9 +31,42 @@
 # The failure this prevents is documented rather than hypothetical: disko #441
 # and home-manager #5870 are both a module setting a scalar at plain priority
 # and the user having to mkForce their own configuration to escape it.
-{
+#
+# ## Why this file takes `inputs`, and why the obvious simplification is wrong
+#
+# Almost every module here configures options NixOS already has, so `pkgs` is
+# all it needs. hypr-rdp is the exception: nixpkgs does not carry the daemon,
+# so its package comes from `self.overlays.default` -- and reaching `self`
+# from a NixOS module means being handed it.
+#
+# The tempting cleanup is to delete this argument and write `pkgs.hypr-rdp`.
+# It does not work, and it does not work in EITHER mode, which is the part
+# worth writing down because it is invisible from inside this directory:
+# nixarchy sets `nixpkgs.overlays` nowhere at all. Not here, not in
+# installer/host.nix, not in the flake the installer generates. Checked, not
+# assumed -- the installer-built host evaluates to
+#
+#   { hasHyprRdp = false; host = "installer-vm"; overlaysSet = [ ]; }
+#
+# and a Mode A machine is the same by construction. `pkgs.hypr-rdp` therefore
+# fails at evaluation with "attribute 'hypr-rdp' missing. Did you mean
+# hyprprop?", which is how this was found.
+#
+# That absence is a decision rather than an oversight. `nixpkgs.overlays` is
+# global: setting it rewrites the package set for every module on the machine,
+# including all of somebody else's in Mode A, to deliver one package that one
+# option needs. So nixarchy reaches overlay packages one at a time instead --
+# `(pkgs.extend inputs.self.overlays.default).<name>` as the default of a
+# `package` option -- which is what modules/nixos.nix and modules/home.nix
+# already do for omarchy and omarchy-nvim-config. hypr-rdp follows them.
+#
+# Only that one module is applied to `inputs`. The others keep the ordinary
+# module signature, because giving them an argument they do not use would
+# suggest they use it.
+inputs: {
   imports = [
     ./devenv.nix
+    (import ./hypr-rdp.nix inputs)
     ./syncthing.nix
     ./tailscale.nix
   ];

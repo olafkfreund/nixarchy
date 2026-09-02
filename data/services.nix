@@ -68,6 +68,13 @@
     note = "A private network between your machines. Bundled because the firewall has to trust the interface or nothing reaches this host.";
   };
 
+  hypr-rdp = {
+    label = "Remote desktop (RDP)";
+    category = "Network";
+    kind = "bundled";
+    note = "Serve your running Hyprland session to any RDP client. Bundled because the password must come from an encrypted secret, the daemon needs your session, and the firewall stays closed unless you say otherwise. Reachable over your tailnet by default, not your LAN.";
+  };
+
   openssh = {
     label = "OpenSSH server";
     category = "Network";

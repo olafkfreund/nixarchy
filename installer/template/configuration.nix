@@ -28,5 +28,14 @@
     user = "@username@";
   };
 
-  users.users."@username@".hashedPassword = "@password_hash@";
+  # The hash is NOT in this file, and that is the point: this directory is a
+  # git repository, nixarchy-config-repo exists to push it to GitHub, and a
+  # crypt hash is offline-crackable at leisure by anyone who reads it. So it
+  # lives outside the repo and this file names where.
+  #
+  # /var/lib rather than /etc/nixarchy, which is a NixOS-managed directory --
+  # an unmanaged file dropped among generated symlinks survives today only
+  # because the /etc overlay is off, and the failure if that changes is that
+  # nobody can log in.
+  users.users."@username@".hashedPasswordFile = "/var/lib/nixarchy/password.hash";
 }

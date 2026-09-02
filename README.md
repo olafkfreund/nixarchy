@@ -1611,3 +1611,5 @@ been seen working.
 ## License
 
 Packaging is MIT. Vendored Omarchy is MIT, © Basecamp.
+
+<!-- #183: proving the install check reports on a docs-only PR. -->

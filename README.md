@@ -1562,7 +1562,7 @@ is the shape.
 | epic | what it is for | |
 | --- | --- | --- |
 | [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
-| [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | 4 of 5 done |
+| [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | not started |
 
 **Recently finished:**

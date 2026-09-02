@@ -11,7 +11,8 @@ replaces only what assumed Arch.
 **So this manual only covers what is different.** Of Omarchy's 51 manual pages,
 38 are word-for-word true here and are linked straight through to
 [omarchy.org/manual](https://omarchy.org/manual/). The 13 that are not are
-rewritten below, plus two that Omarchy has no reason to have.
+rewritten below, plus the ones Omarchy has no reason to have — marked
+**nixarchy only** in the table.
 
 That is the same decision the port itself makes. Forking a manual you do not
 change means maintaining a copy that goes stale at every upstream release, and
@@ -48,6 +49,7 @@ the documentation as much as the code.
 | Neovim | same as Omarchy — [read there](https://omarchy.org/manual/neovim/) |
 | **Ai** | **differs on NixOS** — [read here](ai) |
 | **Development tools** | **differs on NixOS** — [read here](development-tools) |
+| **Per-project environments** | **nixarchy only** — [read here](per-project-environments) |
 | Shell tools | same as Omarchy — [read there](https://omarchy.org/manual/shell-tools/) |
 | Shell functions | same as Omarchy — [read there](https://omarchy.org/manual/shell-functions/) |
 | Tuis | same as Omarchy — [read there](https://omarchy.org/manual/tuis/) |

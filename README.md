@@ -51,6 +51,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Plugins** | `omarchy plugin add <url>` works as upstream ships it, and `programs.nixarchy.plugins` pins one in your flake |
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
+| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
 | Branded boot splash | Omarchy's Plymouth theme, selected by `boot.plymouth.theme` |
 | **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
@@ -1551,7 +1552,7 @@ is the shape.
 | --- | --- | --- |
 | [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
 | [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
-| [#148](https://github.com/olafkfreund/nixarchy/issues/148) | **per-project developer environments** — devenv, and presets for it | 2 of 4 done |
+| [#148](https://github.com/olafkfreund/nixarchy/issues/148) | **per-project developer environments** — devenv, and presets for it | 3 of 4 done |
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | not started |
 
 **Recently finished:**

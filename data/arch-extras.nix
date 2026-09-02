@@ -108,10 +108,15 @@
   # GeForce NOW ships as a Flatpak. Flatpak on NixOS is a service, not just a
   # package: without the service there is no system-wide installation for it
   # to land in.
+  #
+  # The note used to end "then: flatpak install flathub com.nvidia.geforcenow"
+  # -- a shell command, run once, gone at the next reinstall and unknown to
+  # the machine's own configuration. data/flatpaks.nix carries it now, so it
+  # can be picked and declared like everything else.
   flatpak = {
     attr = "services.flatpak.enable = true";
     kind = "nixos-option";
-    note = "then: flatpak install flathub com.nvidia.geforcenow";
+    note = "GeForce NOW is in the flatpak selection; see nixarchy-apply";
   };
 
   # omarchy-setup-security-sshd opens with `omarchy-pkg-add openssh`, then

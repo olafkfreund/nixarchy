@@ -284,6 +284,49 @@ let
   dockerGroups =
     (configBeside { programs.nixarchy.user = "someone"; }).users.users.someone.extraGroups;
 
+  # ---- the flatpak catalogue, same discipline ----
+  flatpaks = import ../data/flatpaks.nix;
+
+  flatpakProblems = pkgs.lib.flatten (
+    pkgs.lib.mapAttrsToList (
+      id: fp:
+      let
+        need = field: cond: pkgs.lib.optional (!cond) "  ${id}: ${field}";
+      in
+      [
+        (need "no label" (fp ? label && fp.label != ""))
+        (need "no category" (fp ? category && fp.category != ""))
+        (need "no appId" (fp ? appId && fp.appId != ""))
+        # The predictable mistake is writing a package name where an
+        # application id belongs -- `bottles` instead of
+        # `com.usebottles.bottles`. It fails at install time on the user's
+        # machine, which is the wrong place to find out, and the shape is
+        # cheap to check: Flathub ids are reverse-DNS and always contain a dot.
+        (need "appId is not reverse-DNS (needs at least two dots)" (
+          (fp.appId or "") == "" || builtins.length (pkgs.lib.splitString "." (fp.appId or "")) >= 3
+        ))
+        # Every entry has to answer "why can nixpkgs not carry this", because
+        # that question is the whole reason the file exists. An entry without
+        # a note has not been asked it.
+        (need "no note saying why nixpkgs cannot carry it" (fp ? note && fp.note != ""))
+        # A remote is a name AND a location. Half of one silently means the
+        # app is looked for on Flathub, which for an entry that named a remote
+        # is exactly where it is not -- and the failure lands on the user's
+        # machine at install time rather than here.
+        (need "remote needs both name and location" (
+          !(fp ? remote) || ((fp.remote ? name) && (fp.remote ? location))
+        ))
+        (need "remote location must be a .flatpakrepo URL" (
+          !(fp ? remote)
+          || (
+            pkgs.lib.hasPrefix "https://" (fp.remote.location or "")
+            && pkgs.lib.hasSuffix ".flatpakrepo" (fp.remote.location or "")
+          )
+        ))
+      ]
+    ) flatpaks
+  );
+
   # ---- the services catalogue is shaped the way the generator expects ----
   #
   # data/apps.nix has no schema check at all: it is read with `app ? field`
@@ -353,6 +396,8 @@ pkgs.runCommand "nixarchy-options"
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
+    flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
+    flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
     flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
     flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
@@ -365,7 +410,13 @@ pkgs.runCommand "nixarchy-options"
     nativeBuildInputs = [ pkgs.python3 ];
   }
   (
-    if serviceProblems != [ ] then
+    if flatpakProblems != [ ] then
+      ''
+        echo "data/flatpaks.nix has entries the generator cannot use:" >&2
+        echo "$flatpakProblems" >&2
+        exit 1
+      ''
+    else if serviceProblems != [ ] then
       ''
         echo "data/services.nix has entries the generator cannot use:" >&2
         echo "$serviceProblems" >&2
@@ -375,6 +426,7 @@ pkgs.runCommand "nixarchy-options"
       ''
           echo "$report"
           echo "the services catalogue is well formed ($serviceCount entries)"
+          echo "the flatpak catalogue is well formed ($flatpakCount entries)"
 
           # ---- flatpaks are not removed unless asked ---------------------
           if [ "$flatpakOurs" != "false" ] || [ "$flatpakTheirs" != "false" ]; then

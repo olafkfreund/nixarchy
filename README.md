@@ -1552,7 +1552,7 @@ is the shape.
 | --- | --- | --- |
 | [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
 | [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
-| [#148](https://github.com/olafkfreund/nixarchy/issues/148) | **per-project developer environments** — devenv, and presets for it | 3 of 4 done |
+| [#148](https://github.com/olafkfreund/nixarchy/issues/148) | **per-project developer environments** — devenv, and presets for it | 2 of 4 done |
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | not started |
 
 **Recently finished:**

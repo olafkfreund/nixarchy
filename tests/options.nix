@@ -240,6 +240,33 @@ let
       (configWith { flatpaks.uninstallUnmanaged = true; }).services.flatpak.uninstallUnmanaged;
   };
 
+  # ---- the fleet option, both ways --------------------------------------
+  #
+  # Both ends again. What a person sets is programs.nixarchy.fleet; what
+  # decides is system.autoUpgrade, and a passthrough that quietly stopped
+  # passing would leave a fleet that reads as enabled and never pulls.
+  #
+  # The off case is the one that matters most here: this is the only option in
+  # nixarchy that can revert somebody's unpushed work, so a machine that did
+  # not ask for it must not acquire a timer.
+  fleet = rec {
+    offByDefault = (configWith { }).system.autoUpgrade.enable;
+    on = configWith {
+      fleet = {
+        enable = true;
+        url = "github:me/config";
+      };
+    };
+    onWhenAsked = on.system.autoUpgrade.enable;
+    url = on.system.autoUpgrade.flake;
+    # A laptop asleep at 03:00 never catches up without this.
+    persistent = on.system.autoUpgrade.persistent;
+    # The whole reason the option exists rather than raw autoUpgrade: an
+    # upgrade that starts failing must leave a mark, or the fleet stops
+    # converging and looks exactly like a fleet that is up to date.
+    onFailure = on.systemd.services.nixos-upgrade.unitConfig.OnFailure or "";
+  };
+
   # ---- a bundled service yields to a user who already configured it ----
   #
   # This is the Mode A hazard in one assertion. Someone adds nixarchy to a
@@ -416,6 +443,11 @@ pkgs.runCommand "nixarchy-options"
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
+    fleetOff = pkgs.lib.boolToString fleet.offByDefault;
+    fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
+    fleetUrl = fleet.url;
+    fleetPersistent = pkgs.lib.boolToString fleet.persistent;
+    fleetOnFailure = fleet.onFailure;
     flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
     flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
     flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
@@ -641,6 +673,32 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "the picker's flatpak rows are $(wc -l < "$rows") well-formed lines"
+
+        # ---- machines pull only when asked ---------------------------------
+        test "$fleetOff" = false || {
+          echo "system.autoUpgrade is on without programs.nixarchy.fleet.enable" >&2
+          echo "  a machine that did not ask for a fleet must not acquire a timer:" >&2
+          echo "  the next pull reverts anything under /etc/nixos that was not pushed" >&2
+          exit 1
+        }
+        test "$fleetOn" = true || {
+          echo "fleet.enable does not reach system.autoUpgrade; nothing would pull" >&2; exit 1; }
+        test "$fleetUrl" = "github:me/config" || {
+          echo "fleet.url did not reach system.autoUpgrade.flake: got '$fleetUrl'" >&2; exit 1; }
+        test "$fleetPersistent" = true || {
+          echo "the upgrade timer is not persistent; a laptop asleep at the hour never catches up" >&2
+          exit 1
+        }
+        case "$fleetOnFailure" in
+          *nixarchy-upgrade-failed*) ;;
+          *)
+            echo "nixos-upgrade has no OnFailure hook (got '$fleetOnFailure')" >&2
+            echo "  an upgrade that starts failing stops delivering configuration and" >&2
+            echo "  says nothing -- which is what this option exists to survive" >&2
+            exit 1
+            ;;
+        esac
+        echo "the fleet timer is off unless asked, and leaves a mark when it fails"
           touch $out
       ''
     else

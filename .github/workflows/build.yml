@@ -84,6 +84,36 @@ jobs:
       # data/apps.nix, and they silently went stale twice -- once when an app
       # was added, once when RetroArch moved to being built here -- so derive
       # them and fail rather than trust prose.
+      - name: Every check is run by some workflow
+        run: |
+          # A check in `checks` that no workflow builds is worse than no check:
+          # it reads like coverage, and the PR that adds it goes green without
+          # it ever executing. checks.installer-ui shipped that way -- written
+          # for #133, wired into the flake, run by nothing, green.
+          #
+          # Two are covered by a path this grep cannot see, and are listed here
+          # rather than left to look accidental:
+          #   omarchy                        built as `nix build .#omarchy`
+          #   reference-unencrypted-toplevel pulled in by checks.install
+          exempt="omarchy reference-unencrypted-toplevel"
+
+          names=$(awk '/^      checks = eachSystem/,/^      };/' flake.nix |
+            grep -oE '^        [a-z][a-z0-9-]* =' | tr -d ' =')
+
+          missing=""
+          for c in $names; do
+            case " $exempt " in *" $c "*) continue ;; esac
+            grep -rq "checks\.x86_64-linux\.$c\b" .github/workflows/ || missing="$missing $c"
+          done
+
+          if [ -n "$missing" ]; then
+            for c in $missing; do
+              echo "::error::checks.$c is defined but no workflow runs it"
+            done
+            exit 1
+          fi
+          echo "every check in the flake is built by a workflow"
+
       - name: The README's roadmap still matches the open epics
         env:
           GH_TOKEN: ${{ github.token }}
@@ -550,6 +580,13 @@ jobs:
         # .desktop, and the desktop asserted to render -- the arrangement the
         # README tells people with an existing Hyprland to use.
         run: nix build .#checks.x86_64-linux.coexist --print-build-logs
+
+      - name: The installer's screens draw at every width
+        # checks.installer-ui was added with #133 and then run by nothing: it
+        # went into `checks` and into no workflow, so the PR that introduced it
+        # went green without it ever executing. A check nobody runs is worse
+        # than no check, because it reads like coverage.
+        run: nix build .#checks.x86_64-linux.installer-ui --print-build-logs
 
       - name: Answer the installer's questions
         # The interactive path, which every other harness skips by passing

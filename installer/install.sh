@@ -106,6 +106,14 @@ from_host_exists=false
 # variable three functions later.
 device=""
 encrypt=""
+# "whole" (the disk is ours) or "free" (installed beside an existing OS, #47).
+# Set by ask_disk_mode or the answers file; the free-space region it applies to
+# lives in free_start/free_end, in sectors, and is measured twice -- once to
+# decide whether to offer the mode, once immediately before cutting.
+disk_mode="whole"
+free_start=""
+free_end=""
+free_why=""
 hostname=""
 username=""
 password_hash=""
@@ -149,6 +157,9 @@ configuration becomes a starting point for yours.
 The answers file is one key=value per line, # for comments, no quoting:
 
   device=/dev/vda           whole disk, not a partition
+  disk_mode=whole           whole or free; default whole. `free` installs into
+                            the largest free region on the disk and leaves
+                            every existing partition alone
   encrypt=yes               yes or no
   luks_passphrase=...       required when encrypt=yes
   hostname=nixarchy
@@ -161,8 +172,15 @@ The answers file is one key=value per line, # for comments, no quoting:
 It holds a password in clear, which is inherent to installing without being
 asked. Nothing copies it onto the installed machine.
 
-Run as root from a NixOS live medium, on a UEFI machine. It formats the disk
-you choose, completely. There is no dual-boot path yet.
+Run as root from a NixOS live medium, on a UEFI machine. By default it formats
+the disk you choose, completely.
+
+The other mode installs into free space beside whatever is already on the disk
+-- see disk_mode above. It is offered only on a GPT disk that already has
+partitions and at least 32 GiB of contiguous free space, and never on a disk
+BitLocker is holding: adding a boot entry to such a machine wakes BitLocker's
+recovery prompt, and a Windows that asks for a key nobody has is worse than an
+install that refused.
 USAGE
 }
 
@@ -448,12 +466,219 @@ ask_device() {
   [ -n "$device" ] || exit 1
 }
 
+# ---------------------------------------------------------------------------
+# Free space, beside an existing OS (#47)
+#
+# The dangerous mode. Everything below runs next to somebody's Windows, so the
+# rules it keeps are worth stating in one place:
+#
+#   Nothing here writes to a partition it did not create. The partitions are
+#   cut with `sgdisk --new=0:`, where 0 is sgdisk's own "next free partition
+#   number" -- a collision is impossible and there is no fallback that edits an
+#   existing entry instead. The layout that formats them addresses only those
+#   two partitions, by partlabel; see installer/disk-config.nix, mode = "free",
+#   for why it describes no partition table at all and what disko would have
+#   done if it did.
+#
+#   The disk is measured twice. Once to decide whether to offer the mode, and
+#   once immediately before cutting, and the two must agree.
+#
+#   Every refusal is a refusal. There is no "install anyway".
+# ---------------------------------------------------------------------------
+
+# Upstream's floor, and it is the whole region rather than what is left after
+# our ESP: 32 GiB is already tight for a desktop with a Nix store in it, and
+# subtracting 2 GiB from a number somebody chose as a minimum makes it not the
+# minimum any more.
+FREE_MIN_GIB=32
+# Same 2 GiB as the whole-disk ESP, for the same reason: a NixOS /boot holds
+# every generation's kernel and initrd.
+FREE_ESP_MIB=2048
+
+# The largest free region on $1, as "start end" in sectors.
+#
+# NOT `sfdisk -F -J`, which #47 proposed and which does not exist: util-linux
+# refuses the combination outright -- "options --list-free and --json cannot be
+# combined" -- so the only machine-readable form left is sfdisk's human table,
+# which is a parse waiting to rot. sgdisk answers the question directly and is
+# the tool that then does the cutting, which is one fewer thing that can
+# disagree: -F is the first ALIGNED sector of the largest free block, -E is its
+# last sector.
+free_region() {
+  local dev=$1 start end
+  start=$(sgdisk -F "$dev" 2>/dev/null) || return 1
+  end=$(sgdisk -E "$dev" 2>/dev/null) || return 1
+  case "$start$end" in
+    "" | *[!0-9]*) return 1 ;;
+  esac
+  # Aligned up to the next 2048-sector boundary. sgdisk -F is documented as
+  # the first ALIGNED sector of the largest free block, and usually is -- but
+  # on a disk with no free block big enough to hold an aligned sector it
+  # answers with the raw first free one (sector 34, on a full GPT disk). That
+  # case is rejected by the size floor rather than by this, and the alignment
+  # is done anyway so that the arithmetic in partition_free_space can state
+  # that its start sectors are aligned and be right about it.
+  start=$(((start + 2047) / 2048 * 2048))
+  [ "$end" -gt "$start" ] || return 1
+  printf '%s %s\n' "$start" "$end"
+}
+
+# Every partition on $1 that BitLocker owns.
+#
+# Two tests, and the second is not redundant. libblkid has recognised BitLocker
+# since 2.31 and reports TYPE="BitLocker", but it wants a well-formed BDE
+# header before it will say so -- a partition carrying the signature and
+# nothing else libblkid recognises comes back with no TYPE at all, which was
+# measured here rather than assumed. That is the right behaviour for
+# identifying a volume and the wrong one for deciding whether to go near it.
+#
+# So the eight bytes at offset 3 are read directly as well. They are what
+# BitLocker writes and what every other tool looks for, and a partition
+# carrying them is not somewhere to install beside whatever libblkid makes of
+# the rest of the header. A read of eight bytes; nothing here opens the device
+# for writing.
+bitlocker_partitions() {
+  local dev=$1 part
+  while read -r part; do
+    [ -n "$part" ] || continue
+    if [ "$(blkid -o value -s TYPE "/dev/$part" 2>/dev/null)" = "BitLocker" ] ||
+      [ "$(dd if="/dev/$part" bs=1 skip=3 count=8 status=none 2>/dev/null)" = "-FVE-FS-" ]; then
+      printf '%s\n' "/dev/$part"
+    fi
+  done < <(lsblk -lno NAME,TYPE "$dev" 2>/dev/null | awk '$2=="part"{print $1}')
+}
+
+# Can $1 take a free-space install? Sets free_start/free_end when it can and
+# free_why when it cannot. Read-only: it opens nothing for writing and changes
+# nothing, which is what makes it safe to call from the question screen.
+free_space_possible() {
+  local dev=$1 region sector_bytes region_bytes locked label
+
+  free_start=""
+  free_end=""
+  free_why=""
+
+  # An MBR disk is not refused because GPT is nicer. sgdisk CONVERTS an MBR
+  # table to GPT the moment it writes one, and a Windows that was booting from
+  # that MBR then does not boot. Nothing here is willing to do that on
+  # somebody's behalf, so a disk without a GPT gets the whole-disk mode or
+  # nothing.
+  # blkid rather than `lsblk -dno PTTYPE`: lsblk reads that column from udev's
+  # properties, which a loop device does not have, so the whole free-space path
+  # was unreachable on exactly the kind of device this is safe to test against.
+  # blkid probes the disk itself and answers the same question.
+  if [ "$(blkid -o value -s PTTYPE "$dev" 2>/dev/null)" != "gpt" ]; then
+    free_why="$dev has no GPT partition table"
+    return 1
+  fi
+
+  # Nothing to install beside. Upstream skips the mode screen entirely here and
+  # so does this: "alongside existing data" with no existing data is a question
+  # with one honest answer, and asking it invites the other one.
+  if [ "$(lsblk -rno TYPE "$dev" 2>/dev/null | grep -c '^part$')" -eq 0 ]; then
+    free_why="$dev has no partitions -- there is nothing to install beside"
+    return 1
+  fi
+
+  # BitLocker. Refused rather than worked around, which #47 asks for and which
+  # is not conservatism: nothing here would touch the encrypted volume, but a
+  # free-space install adds an EFI boot entry and changes the boot order, and
+  # BitLocker measures the boot chain. The next boot of Windows asks for a
+  # recovery key. If the person has it, they lost an afternoon; if they do not
+  # -- and most people do not -- the data is gone as surely as if this had
+  # formatted it.
+  locked=$(bitlocker_partitions "$dev")
+  if [ -n "$locked" ]; then
+    free_why="BitLocker is holding $(echo "$locked" | tr '\n' ' ')on $dev"
+    return 1
+  fi
+
+  # Our own labels, already taken. The layout addresses partitions by
+  # /dev/disk/by-partlabel/nixarchy-{esp,root}, and a second partition with the
+  # same label makes that symlink point at whichever one udev saw last -- which
+  # is to say, at a coin toss. A second nixarchy on one disk needs a way to
+  # name the two apart; until there is one, this refuses.
+  for label in nixarchy-esp nixarchy-root; do
+    if [ -e "/dev/disk/by-partlabel/$label" ]; then
+      free_why="a partition called $label already exists on this machine"
+      return 1
+    fi
+  done
+
+  region=$(free_region "$dev") || {
+    free_why="$dev has no free space outside its partitions"
+    return 1
+  }
+  read -r free_start free_end <<<"$region"
+
+  # Sectors are not always 512 bytes and a 4Kn disk is not exotic. Asking the
+  # kernel costs nothing and getting it wrong is a factor of eight.
+  sector_bytes=$(blockdev --getss "$dev" 2>/dev/null || echo 512)
+  region_bytes=$(((free_end - free_start + 1) * sector_bytes))
+  if [ "$region_bytes" -lt $((FREE_MIN_GIB * 1024 * 1024 * 1024)) ]; then
+    free_why="the largest free region on $dev is under ${FREE_MIN_GIB} GiB"
+    free_start=""
+    free_end=""
+    return 1
+  fi
+
+  return 0
+}
+
+# A region size a person can read, for the screens.
+free_region_human() {
+  local sector_bytes
+  sector_bytes=$(blockdev --getss "$device" 2>/dev/null || echo 512)
+  # iec-i, not iec: sectors are counted in powers of two and "60GB" for
+  # 60 GiB is the kind of small lie that turns into a support question.
+  numfmt --to=iec-i --suffix=B $(((free_end - free_start + 1) * sector_bytes))
+}
+
+# Full disk or free space. Skipped entirely -- not shown greyed out, not shown
+# with one option -- when the disk cannot take a free-space install, which is
+# upstream's shape and is also the only version of this screen that cannot be
+# answered wrongly.
+ask_disk_mode() {
+  if ! free_space_possible "$device"; then
+    disk_mode=whole
+    return 0
+  fi
+
+  ui_screen "There is already something on this disk..."
+  # Piped through ui_indent rather than handed to ui_left, which formats with
+  # %b: a partition LABEL is somebody else's string and %b would interpret a
+  # backslash escape in it.
+  lsblk -no NAME,SIZE,FSTYPE,LABEL "$device" 2>/dev/null | head -12 | ui_indent
+  echo
+
+  local choice
+  choice=$(printf '%s\n' \
+    "Free space install -- keep what is on $device, use the $(free_region_human) free" \
+    "Full disk install -- erase $device and everything on it" |
+    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "How should nixarchy use $device?")
+  case $choice in
+    "Free space install"*) disk_mode=free ;;
+    "Full disk install"*) disk_mode=whole ;;
+    # Escape, or a gum that could not draw. Neither is consent to format a
+    # disk with an operating system on it.
+    *) exit 1 ;;
+  esac
+}
+
 # Encryption is on unless the user opts out, matching upstream: the hint is dim
 # and Ctrl+C at the warning is the way out. That is upstream's shape, and it
 # means the safe answer is the one you get by doing nothing.
 ask_encrypt() {
   ui_screen "Ready to install"
-  ui_left "\e[33mEverything on $device will be overwritten. There is no recovery possible.\e[0m"
+  # The warning has to be true. "Everything on $device will be overwritten" is
+  # the correct sentence for a whole-disk install and a lie for a free-space
+  # one, and a person who reads a lie here learns to skip the next warning too.
+  if [ "$disk_mode" = free ]; then
+    ui_left "\e[33m$(free_region_human) of free space on $device will be overwritten.\e[0m"
+    ui_left "\e[33mThe partitions already on $device are not touched.\e[0m"
+  else
+    ui_left "\e[33mEverything on $device will be overwritten. There is no recovery possible.\e[0m"
+  fi
   ui_left "\e[90mPress Ctrl+C for an unencrypted install.\e[0m"
   echo
 
@@ -461,7 +686,9 @@ ask_encrypt() {
   # destructive question should never mean "do it anyway, differently"; and an
   # interrupt is upstream's hidden opt-out, which gum reports as 130.
   local rc=0
-  gum confirm --padding "$(ui_gum_pad)" "Encrypt and install to $device?" || rc=$?
+  local where=$device
+  [ "$disk_mode" = free ] && where="the free space on $device"
+  gum confirm --padding "$(ui_gum_pad)" "Encrypt and install to $where?" || rc=$?
   case $rc in
     0) encrypt=true ;;
     130) encrypt=false ;;
@@ -478,6 +705,11 @@ confirm_summary() {
     printf 'Timezone,%s\n' "$timezone"
     printf 'Keyboard,%s\n' "$keymap"
     printf 'Disk,%s\n' "$device"
+    if [ "$disk_mode" = free ]; then
+      printf 'Disk use,free space only (%s)\n' "$(free_region_human)"
+    else
+      printf 'Disk use,the whole disk -- erased\n'
+    fi
     printf 'Encrypted,%s\n' "$encrypt"
   } | gum table --separator ',' --print --columns "Setting,Value" | ui_indent
   echo
@@ -559,6 +791,7 @@ read_answers() {
     # machine called nixarchy that nobody asked for.
     case $key in
       device) device=$value ;;
+      disk_mode) disk_mode=$value ;;
       encrypt) encrypt=$value ;;
       luks_passphrase) luks_passphrase=$value ;;
       hostname) hostname=$value ;;
@@ -594,6 +827,13 @@ validate_answers() {
   if [ "$from_host_exists" = true ]; then
     local problems=()
     [ -n "$password_hash" ] || problems+=("password: one of password or password_hash is required")
+    # The repository's own disk-config.nix decides the layout, and format_disk
+    # runs that rather than anything chosen here. A disk_mode in the answers
+    # file would be read, ignored, and then acted on by partition_free_space --
+    # cutting partitions the layout about to run knows nothing about. Refused
+    # rather than silently dropped.
+    [ "$disk_mode" = whole ] ||
+      problems+=("disk_mode: --host names a machine the repository already describes; it decides the disk")
     if [ ${#problems[@]} -gt 0 ]; then
       printf 'nixarchy-install: answers: %s\n' "${problems[@]}" >&2
       exit 2
@@ -626,6 +866,19 @@ validate_answers() {
     "" | yes | no) ;;
     *) problems+=("encrypt: must be yes or no, got: $encrypt") ;;
   esac
+
+  # The mode, and then -- for free -- the same test the question screen runs.
+  # An answers file is the consent, not the judgement: `disk_mode=free` against
+  # a disk that cannot take one has to fail here, loudly, rather than fall back
+  # to the whole-disk mode. Falling back would silently erase the very disk the
+  # file asked to preserve, which is the worst failure this script has.
+  case $disk_mode in
+    whole | free) ;;
+    *) problems+=("disk_mode: must be whole or free, got: $disk_mode") ;;
+  esac
+  if [ "$disk_mode" = free ] && [ -n "$device" ] && [ -b "$device" ]; then
+    free_space_possible "$device" || problems+=("disk_mode: free is not possible here: $free_why")
+  fi
   if [ "$encrypt" = yes ] && [ -z "$luks_passphrase" ]; then
     problems+=("luks_passphrase: required when encrypt=yes")
   fi
@@ -655,8 +908,8 @@ validate_answers() {
 
   # The file is the consent; there is no confirmation prompt. The summary is
   # still printed so a test log shows what was about to happen.
-  printf 'hostname=%s username=%s device=%s encrypt=%s timezone=%s keymap=%s\n' \
-    "$hostname" "$username" "$device" "$encrypt" "$timezone" "$keymap"
+  printf 'hostname=%s username=%s device=%s disk_mode=%s encrypt=%s timezone=%s keymap=%s\n' \
+    "$hostname" "$username" "$device" "$disk_mode" "$encrypt" "$timezone" "$keymap"
 
   # The rest of the script speaks true/false; the file speaks yes/no because
   # that is what a person writing one expects.
@@ -680,6 +933,7 @@ substitute_host_files() {
     subst "$f" '@hostname@' "$hostname"
     subst "$f" '@username@' "$username"
     subst "$f" '@device@' "$device"
+    subst "$f" '@diskmode@' "$disk_mode"
     subst "$f" '@timezone@' "$timezone"
     subst "$f" '@keymap@' "$keymap"
     # Quoted in the template because a bare token is not parseable Nix; the
@@ -781,7 +1035,110 @@ write_flake() {
   printf '{ ... }:\n{ }\n' >"$hostdir/hardware-configuration.nix"
 }
 
+# Cut our two partitions out of the free region, and nothing else.
+#
+# Imperative, and deliberately not disko: installer/disk-config.nix explains
+# under mode = "free" what disko's gpt type does to a disk that already has a
+# partition 1, and why no amount of care with its internals makes that the
+# right foundation.
+#
+# The two properties that keep this from eating somebody's Windows:
+#
+#   --new=0:  0 is sgdisk's own "next free partition number". The number
+#             cannot collide, and unlike disko there is no fallback path that
+#             edits an existing entry when the one it wanted is taken.
+#
+#   explicit start and end sectors, from the region measured before anything
+#   was written. `--new=0:0:0` looks tidier and is wrong: sgdisk's 0 start
+#   means "the largest free block", and once the ESP has been cut the largest
+#   free block on the disk may be a completely different hole. That is how a
+#   root partition ends up somewhere nobody looked at.
+partition_free_space() {
+  local dev=$device sector_bytes esp_sectors esp_end root_start root_type
+  local before after esp_dev=/dev/disk/by-partlabel/nixarchy-esp
+  local root_dev=/dev/disk/by-partlabel/nixarchy-root waited
+
+  # Measured a second time, immediately before writing, and it has to agree
+  # with what the question screen saw. Between the two, a USB disk can be
+  # unplugged and another one plugged into the same node -- and then the
+  # sectors somebody consented to give up belong to a different machine.
+  before="$free_start $free_end"
+  free_space_possible "$dev" || {
+    echo "nixarchy-install: $dev can no longer take a free-space install: $free_why" >&2
+    exit 1
+  }
+  after="$free_start $free_end"
+  if [ "$before" != "$after" ]; then
+    echo "nixarchy-install: the free region on $dev moved between the question" >&2
+    echo "  and now ($before -> $after). Nothing was written. Start again." >&2
+    exit 1
+  fi
+
+  sector_bytes=$(blockdev --getss "$dev" 2>/dev/null || echo 512)
+  esp_sectors=$((FREE_ESP_MIB * 1024 * 1024 / sector_bytes))
+  esp_end=$((free_start + esp_sectors - 1))
+  root_start=$((esp_end + 1))
+  # free_start is already 2048-aligned (sgdisk -F says so) and esp_sectors is a
+  # multiple of 2048 at both 512 and 4096 byte sectors, so root_start is
+  # aligned too and sgdisk does not quietly move it somewhere else.
+  if [ "$root_start" -ge "$free_end" ]; then
+    echo "nixarchy-install: the free region is not big enough for an ESP and a root." >&2
+    exit 1
+  fi
+
+  # 8309 is Linux LUKS, 8300 is a Linux filesystem. Cosmetic to the kernel and
+  # not cosmetic to a person reading the disk later with somebody else's tool.
+  root_type=8300
+  [ "$encrypt" = true ] && root_type=8309
+
+  sgdisk --new=0:"$free_start":"$esp_end" \
+    --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev"
+  sgdisk --new=0:"$root_start":"$free_end" \
+    --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev"
+
+  # sgdisk asks the kernel to re-read the table itself; partx is the fallback
+  # for when it cannot, which is any disk that has a partition mounted.
+  partx -u "$dev" >/dev/null 2>&1 || partx -a "$dev" >/dev/null 2>&1 || true
+
+  # udevadm settle, because the layout addresses these two by
+  # /dev/disk/by-partlabel and those symlinks are udev's work, not the
+  # kernel's. Without the wait the disko script runs against paths that do not
+  # exist yet.
+  waited=0
+  until [ -b "$esp_dev" ] && [ -b "$root_dev" ]; do
+    udevadm settle
+    waited=$((waited + 1))
+    if [ "$waited" -gt 30 ]; then
+      echo "nixarchy-install: $esp_dev and $root_dev never appeared." >&2
+      echo "  The partitions were created; nothing was formatted. Reboot and look." >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+
+  # The region was free, not blank.
+  #
+  # Whatever used to live in those sectors is still sitting in them, and blkid
+  # will happily report its old filesystem. That matters because disko's
+  # luks._create and filesystem._create BOTH skip when blkid already recognises
+  # the device -- so a stale signature means the format silently does not
+  # happen, and the install proceeds to mount and write over whatever the
+  # previous owner of those sectors left behind.
+  #
+  # Only these two paths, and only after the wait above proved they are the
+  # partitions this function just created. wipefs takes a device, and the two
+  # arguments it gets here are the only two devices in this script that are
+  # ours by construction.
+  wipefs -a "$esp_dev" "$root_dev"
+}
+
 format_disk() {
+  # Before the passphrase file and before the disko script: in free-space mode
+  # the layout the script evaluates addresses partitions that do not exist yet.
+  if [ "$disk_mode" = free ]; then
+    partition_free_space
+  fi
+
   # The passphrase file disko's passwordFile points at. Written with umask 077,
   # removed as soon as the format is done; it never reaches the installed
   # system, whose initrd prompts instead.
@@ -1146,6 +1503,7 @@ main() {
     ask_keymap
     ask_identity
     ask_device
+    ask_disk_mode
     ask_encrypt
     confirm_summary || exit 1
   fi

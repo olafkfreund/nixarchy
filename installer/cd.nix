@@ -82,6 +82,20 @@ let
   # Found the hard way: an image carrying only the encrypted reference
   # installs an encrypted machine perfectly and dies partway through an
   # unencrypted one.
+  #
+  # NOT here, and known: the free-space mode (#47). Its layout addresses
+  # partitions by partlabel instead of by disko's generated names, so its
+  # fileSystems differ, so its etc, system-units and toplevel differ -- the
+  # same class of difference as encryption on and off, and the same size. It
+  # is not baked because doing so is two more full references on an image that
+  # already has a budget, and the argument for skipping it is that the ISO
+  # carries stdenv and the reference inputDerivations, so the difference is a
+  # local build of a few dozen text derivations rather than a fetch.
+  #
+  # That argument has NOT been tested. If a free-space install from the
+  # offline image ends in the source bootstrap, this list is the place it is
+  # wrong, and checks.free-space -- which seeds the free-mode toplevels the
+  # way this would -- is the shape of the fix.
   referenceConfigs = map (c: c.config) [
     inputs.self.nixosConfigurations.reference
     inputs.self.nixosConfigurations.reference-unencrypted

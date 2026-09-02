@@ -296,7 +296,11 @@
             gnugrep
             gawk
             findutils
-            util-linux # lsblk, findmnt
+            util-linux # lsblk, findmnt, blkid, blockdev, partx, wipefs
+            # sgdisk, and only sgdisk: the free-space mode's whole safety
+            # argument rests on `--new=0:` picking the next free partition
+            # number, which is gptfdisk's behaviour and nothing else's.
+            gptfdisk
             git
             mkpasswd
             nixos-install-tools # nixos-install, nixos-generate-config
@@ -884,6 +888,16 @@
         # nothing. See tests/install.nix for why the second machine is not a
         # normal test node.
         install = import ./tests/install.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
+        # The dangerous one. Installs into free space on a disk that already
+        # carries partitions and asserts those partitions are byte-identical
+        # afterwards -- entry and content. See tests/free-space.nix; #47 is
+        # the only item in the epic whose failure mode is destroying data
+        # that is not ours, and this is the gate it sits behind.
+        free-space = import ./tests/free-space.nix {
           inherit inputs;
           pkgs = pkgsFor.${system};
         };

@@ -1561,11 +1561,19 @@ is the shape.
 
 | epic | what it is for | |
 | --- | --- | --- |
-| [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
-| [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
-| [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | not started |
+| [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | 3 of 5 done |
 
 **Recently finished:**
+[bare metal to a desktop](https://github.com/olafkfreund/nixarchy/issues/6)
+— all 22 of it: disko layout, generated flake, interactive and unattended
+install, a bootable ISO that autostarts it, release automation, free-space
+install alongside an existing OS, and a boot splash that is ours on both the
+live image and the installed machine. Also
+[getting back](https://github.com/olafkfreund/nixarchy/issues/112)
+— an ownership marker that makes every destructive action refuse on a machine
+nixarchy did not write, config-repo drift surfaced rather than left to rot, an
+allowlisted `$HOME` backup, and a factory baseline taken at install time that a
+reset has something to return to. Also
 [per-project developer environments](https://github.com/olafkfreund/nixarchy/issues/148)
 — `nixarchy dev init react` scaffolds a devenv project that activates at the
 next prompt, in bash, zsh and fish. Off unless you select it. Also

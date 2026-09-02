@@ -60,6 +60,84 @@ if ! command -v snapper >/dev/null 2>&1; then
   exit 1
 fi
 
+# Configured is not the same as working. NixOS' snapper module does not create
+# the `.snapshots` directories snapper writes into -- nixpkgs#34595, with PR
+# #368449 still unmerged -- so on a machine whose disk layout predates them,
+# snapper is configured, the timers fire, and nothing is ever snapshotted.
+# `installer/disk-config.nix` declares @snapshots and @home-snapshots for
+# machines installed since; a machine installed before it has that file as a
+# verbatim copy in its own repo, and disko only ever ran at install time.
+#
+# The failure mode this exists for is not an error. It is the absence of one:
+# somebody sees `trigger.snapshot` in the menu, believes they have an undo,
+# and finds out they never did at the moment they reach for it. So every
+# subcommand refuses here rather than letting snapper succeed into a plain
+# directory that no `list` will ever show anything from.
+mounted_subvolume() { findmnt -t btrfs -no TARGET "$1" >/dev/null 2>&1; }
+
+require_snapshot_subvolumes() {
+  local missing=()
+  [ ! -e /etc/snapper/configs/root ] || mounted_subvolume /.snapshots ||
+    missing+=(/.snapshots)
+  [ ! -e /etc/snapper/configs/home ] || mounted_subvolume /home/.snapshots ||
+    missing+=(/home/.snapshots)
+  [ ${#missing[@]} -gt 0 ] || return 0
+
+  # The device as it is actually mounted, so the mount command below is this
+  # machine's rather than an example: findmnt reports the source of / as
+  # /dev/mapper/cryptroot[/@], and the bracket is the subvolume, not the
+  # device.
+  local device
+  device=$(findmnt -no SOURCE / 2>/dev/null | sed 's/\[.*\]//')
+
+  red "snapper is configured here and has nowhere to write."
+  echo
+  echo "  Missing, and snapshots cannot exist without them:"
+  printf '    %s\n' "${missing[@]}"
+  echo
+  echo "  These are btrfs subvolumes the disk layout declares. This machine was"
+  echo "  installed before it declared them, so snapper has been running against"
+  echo "  a layout that has nowhere to put a snapshot. Nothing you did caused"
+  echo "  this and nothing has been lost -- but nothing has been kept either."
+  echo
+  bold "  1. Create the subvolumes"
+  echo
+  echo "     They go at the top level of the filesystem, beside @ and @home --"
+  echo "     not inside the running root, which is a different thing with the"
+  echo "     same name. Mount the top level to reach it:"
+  echo
+  dim "       sudo mount -o subvol=/ ${device:-<your root device>} /mnt"
+  dim "       sudo btrfs subvolume create /mnt/@snapshots"
+  dim "       sudo btrfs subvolume create /mnt/@home-snapshots"
+  dim "       sudo umount /mnt"
+  echo
+  bold "  2. Declare them, in your own disk-config.nix"
+  echo
+  echo "     /etc/nixos/disk-config.nix, which is yours -- the installer copied"
+  echo "     it there once and nothing has maintained it since. Inside the"
+  echo "     \`subvolumes\` block, beside \"@home\":"
+  echo
+  dim '       "@snapshots" = {'
+  dim '         mountpoint = "/.snapshots";'
+  dim '         mountOptions = [ "noatime" ];'
+  dim '       };'
+  dim '       "@home-snapshots" = {'
+  dim '         mountpoint = "/home/.snapshots";'
+  dim '         mountOptions = [ "noatime" ];'
+  dim '       };'
+  echo
+  bold "  3. Rebuild, which is what mounts them"
+  echo
+  dim "       nh os switch"
+  echo
+  echo "     In that order: the rebuild writes mount units, and a mount unit"
+  echo "     for a subvolume that does not exist yet fails at boot."
+  echo
+  dim "  Nothing has been changed by running this. Step 1 is the only command"
+  dim "  here that touches the disk, and it creates two empty subvolumes."
+  exit 1
+}
+
 case "${1:-list}" in
   -h | --help)
     usage
@@ -67,6 +145,7 @@ case "${1:-list}" in
     ;;
 
   create)
+    require_snapshot_subvolumes
     desc="${2:-manual}"
     snapper --config home create --description "$desc" --cleanup-algorithm number
     bold "Snapshotted /home."
@@ -74,6 +153,7 @@ case "${1:-list}" in
     ;;
 
   list)
+    require_snapshot_subvolumes
     bold "/home"
     snapper --config home list 2>/dev/null || dim "  (none yet)"
     echo
@@ -82,6 +162,7 @@ case "${1:-list}" in
     ;;
 
   restore)
+    require_snapshot_subvolumes
     # Copying files out, not swapping the subvolume.
     #
     # Swapping is what upstream does and it is the wrong default here: it

@@ -192,6 +192,69 @@ if [ -n "${OMARCHY_PATH:-}" ] && [ -e "$sw/bin/omarchy" ]; then
   say ""
 fi
 
+# ---- snapper configured against a layout that cannot hold a snapshot -----
+# Only ever true on a machine the nixarchy installer built: services.snapper is
+# set in installer/host.nix, which nothing but a generated flake imports. Such
+# a machine pulls the current host.nix at its next rebuild -- but its
+# disk-config.nix is a verbatim copy in its own repo, made at install time, and
+# a copy made before @snapshots existed does not grow one. disko runs once.
+#
+# So snapper is configured, its timers fire, and nothing is snapshotted: the
+# NixOS module does not create the `.snapshots` directories itself
+# (nixpkgs#34595, PR #368449 unmerged). The owner has a safety net in the menu
+# and none on the disk, which is worse than having neither, and they find out
+# at the moment they reach for it.
+#
+# Read from /proc/self/mountinfo rather than findmnt: this script's runtime
+# inputs are systemd, sed, grep, awk and coreutils, and util-linux is not among
+# them.
+mounted_btrfs() {
+  awk -v target="$1" '
+    { for (i = 7; i <= NF; i++) if ($i == "-") { if ($5 == target && $(i + 1) == "btrfs") found = 1 } }
+    END { exit !found }
+  ' /proc/self/mountinfo
+}
+
+# Keyed on the snapper configs installer/host.nix declares, so this stays
+# silent on every machine that has no snapper -- which is every machine reading
+# this report to decide whether to adopt nixarchy.
+if [ -d /etc/snapper/configs ] && [ -n "$(ls -A /etc/snapper/configs 2>/dev/null)" ]; then
+  declare -a no_snapshots=()
+  [ ! -e /etc/snapper/configs/root ] || mounted_btrfs /.snapshots || no_snapshots+=(/.snapshots)
+  [ ! -e /etc/snapper/configs/home ] || mounted_btrfs /home/.snapshots || no_snapshots+=(/home/.snapshots)
+
+  say "${bold}Snapshots${off}"
+  if [ ${#no_snapshots[@]} -gt 0 ]; then
+    finding "snapper is configured and snapshotting nothing" "$warn" ""
+    say "     ${dim}not a mounted subvolume: ${no_snapshots[*]}${off}"
+    say "     Snapper writes into those and cannot create them. This machine was"
+    say "     installed before the disk layout declared them, so the timers have"
+    say "     been running against a layout with nowhere to put a snapshot."
+    say "     Nothing is lost -- but nothing was kept. The fix, in this order:"
+    say ""
+    root_source=$(awk '$5 == "/" { for (i = 7; i <= NF; i++) if ($i == "-") { print $(i + 2); exit } }' /proc/self/mountinfo)
+    say "       ${dim}sudo mount -o subvol=/ ${root_source:-<your root device>} /mnt${off}"
+    say "       ${dim}sudo btrfs subvolume create /mnt/@snapshots${off}"
+    say "       ${dim}sudo btrfs subvolume create /mnt/@home-snapshots${off}"
+    say "       ${dim}sudo umount /mnt${off}"
+    say ""
+    say "     Then declare them in ${bold}/etc/nixos/disk-config.nix${off} -- your copy, which"
+    say "     nothing but you maintains -- inside its ${dim}subvolumes${off} block:"
+    say ""
+    say "       ${dim}\"@snapshots\" = { mountpoint = \"/.snapshots\"; mountOptions = [ \"noatime\" ]; };${off}"
+    say "       ${dim}\"@home-snapshots\" = { mountpoint = \"/home/.snapshots\"; mountOptions = [ \"noatime\" ]; };${off}"
+    say ""
+    say "     and rebuild -- ${dim}nh os switch${off} -- which is what mounts them. That"
+    say "     order matters: a mount unit for a subvolume that does not exist"
+    say "     fails at boot. ${dim}omarchy snapshot${off} prints the same fix and refuses"
+    say "     to pretend until it is done."
+    notes+=("snapper is configured on this machine but ${no_snapshots[*]} is not a mounted btrfs subvolume, so every snapshot it has 'taken' went nowhere. The subvolumes are created by hand once -- disko ran at install time only -- and declared in your own disk-config.nix so the next reinstall keeps them.")
+  else
+    finding "snapper has its subvolumes" "$ok" "/home is being snapshotted"
+  fi
+  say ""
+fi
+
 # ---- the default browser, and whether the menu can change it -------------
 # Setup > Default browser runs omarchy-default-browser, which ends in
 #

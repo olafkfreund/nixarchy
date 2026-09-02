@@ -280,17 +280,31 @@ pkgs.testers.runNixOSTest {
     assert work, "the dry run wrote no flake"
     print(machine.succeed(f"ls -a {work}"))
 
+    # The machine is a directory named for the hostname answer (#123), so
+    # finding it at all is the first assertion: flake.nix stays at the root
+    # and enumerates ./hosts, and everything the wizard collected lands one
+    # level down.
+    host = f"{work}/hosts/wizardbox"
+    machine.succeed(f"test -d {host}")
+
     flake = machine.succeed(f"cat {work}/flake.nix")
-    configuration = machine.succeed(f"cat {work}/configuration.nix")
+    default = machine.succeed(f"cat {host}/default.nix")
+    configuration = machine.succeed(f"cat {host}/configuration.nix")
     for text, where, name in [
-        ('hostname = "wizardbox"', flake, "hostname"),
-        ('username = "wizard"', flake, "username"),
-        ('device = "/dev/vdc"', flake, "device"),
-        ("encrypt = true", flake, "encryption"),
+        ('hostname = "wizardbox"', default, "hostname"),
+        ('username = "wizard"', default, "username"),
+        ('device = "/dev/vdc"', default, "device"),
+        ("encrypt = true", default, "encryption"),
         ('time.timeZone = "Europe/London"', configuration, "timezone"),
         ('console.keyMap = "us"', configuration, "keymap"),
     ]:
         assert text in where, f"the {name} answer never reached the flake"
+
+    # And the root flake names no machine itself -- it reads ./hosts. A
+    # hostname hardcoded back into it would still pass every assertion above.
+    assert "wizardbox" not in flake, (
+        "flake.nix names the machine; it is supposed to find machines by "
+        "reading ./hosts, so that adding one is adding a directory")
 
     # A dry run must not have touched anything. The disk it was pointed at is
     # the one to look at: still unpartitioned, still empty.

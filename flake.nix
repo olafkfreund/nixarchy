@@ -116,6 +116,52 @@
       url = "github:MuNeNiCK/hypr-rdp/v0.1.5";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Declarative secrets, adopted for one concrete reason rather than as a
+    # general capability. #121 deliberately did not take a secrets mechanism
+    # ("a separate decision with a key-management story attached"), and #122
+    # got away without one because `hashedPasswordFile` is consumed by NixOS
+    # itself, so the cleartext could live outside git and be pointed at.
+    #
+    # hypr-rdp removes that dodge. It reads its password from exactly two
+    # places -- an inline string in config.toml, or `-p` on the command line,
+    # which is world-readable in /proc/*/cmdline. Verified against v0.1.5:
+    # src/config.rs resolves `args.password.or(config.password)` and nothing
+    # else, there is no `password_file`, and clap reads no environment
+    # variable for it. So the secret has to end up INSIDE a config file, and
+    # something has to put it there at runtime from material safe to commit.
+    #
+    # That requirement is what picks sops-nix over agenix. agenix delivers
+    # files of raw secrets and has no templating, so composing one into a TOML
+    # would mean a hand-rolled per-service ExecStartPre shim -- the exact hack
+    # this is meant to avoid. `sops.templates` is that shim, upstreamed, with
+    # the mode and owner declared. Everything else between the two is taste.
+    #
+    # Pinned to a COMMIT because sops-nix publishes no release tags at all --
+    # its only tag, `assets`, is from 2021 and is not a release. master is the
+    # release channel. This is the same call flake.nix already makes for
+    # hyprland above: a commit is exactly as reproducible as a tag. Bump it
+    # deliberately; never track a branch.
+    #
+    # What this costs a user's lock: ONE node. sops-nix declares exactly one
+    # input, nixpkgs, which follows ours, so nothing transitive arrives. (Its
+    # dev inputs live in a private flake under dev/ that consumers never see.)
+    # Its nixConfig asks for cache.thalheim.io, which does NOT apply to us --
+    # nixConfig is honoured only from the flake you invoke, not from inputs --
+    # so no substituter and no trust is granted by taking this.
+    #
+    # Inert on import, which is what makes it safe for Mode A: both halves of
+    # the upstream module are gated, `lib.mkIf (cfg.secrets != { })` and
+    # `lib.mkIf (config.sops.templates != { })`. A machine that defines
+    # neither gets no unit, no activation script and no package. nixarchy sets
+    # no sops scalar of its own -- `sops.age.sshKeyPaths` already defaults to
+    # the ed25519 keys from services.openssh.hostKeys upstream -- so the
+    # mkDefault rule in modules/services/default.nix never even arises here.
+    # tests/options.nix asserts the inertness rather than trusting this note.
+    sops-nix = {
+      url = "github:Mic92/sops-nix/a8627b21b9107c5711c96b84f32a9a4b3d45295f";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =

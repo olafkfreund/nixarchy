@@ -69,6 +69,7 @@ in
     (import ./apps.nix inputs)
     ./local-ai.nix
     ./services
+    ./flatpaks.nix
     inputs.nix-flatpak.nixosModules.nix-flatpak
   ];
 

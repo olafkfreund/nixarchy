@@ -284,6 +284,23 @@ let
   dockerGroups =
     (configBeside { programs.nixarchy.user = "someone"; }).users.users.someone.extraGroups;
 
+  # ---- enabling a custom remote must not remove Flathub ----
+  #
+  # nix-flatpak's `remotes` defaults to a list holding only Flathub, and it is
+  # a plain default: setting it REPLACES that list rather than adding to it.
+  # GeForce NOW comes from NVIDIA's own repository, so enabling it sets the
+  # option -- and a module that wrote `remotes = [ nvidia ]` would take
+  # Flathub off the machine.
+  #
+  # Nothing would say so. Flatpaks already installed from Flathub keep
+  # working, and the next one simply cannot be found. That is why this is a
+  # check and not a comment.
+  flatpakRemotes =
+    let
+      c = configWith { flatpaks.apps.geforce-now.enable = true; };
+    in
+    map (r: r.name) c.services.flatpak.remotes;
+
   # ---- the flatpak catalogue, same discipline ----
   flatpaks = import ../data/flatpaks.nix;
 
@@ -398,6 +415,7 @@ pkgs.runCommand "nixarchy-options"
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
+    flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
     flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
     flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
@@ -427,6 +445,21 @@ pkgs.runCommand "nixarchy-options"
           echo "$report"
           echo "the services catalogue is well formed ($serviceCount entries)"
           echo "the flatpak catalogue is well formed ($flatpakCount entries)"
+
+          # ---- Flathub survives a custom remote ---------------------------
+          case " $flatpakRemotes " in
+            *" flathub "*) ;;
+            *) echo "enabling a flatpak from another remote removed flathub:" >&2
+               echo "  remotes = $flatpakRemotes" >&2
+               echo "nix-flatpak's remotes option replaces rather than appends." >&2
+               exit 1 ;;
+          esac
+          case " $flatpakRemotes " in
+            *" GeForceNOW "*) ;;
+            *) echo "the entry's own remote was not declared: $flatpakRemotes" >&2
+               exit 1 ;;
+          esac
+          echo "a flatpak from another remote keeps flathub ($flatpakRemotes)"
 
           # ---- flatpaks are not removed unless asked ---------------------
           if [ "$flatpakOurs" != "false" ] || [ "$flatpakTheirs" != "false" ]; then
@@ -558,6 +591,33 @@ pkgs.runCommand "nixarchy-options"
           *) echo "the ISO filename does not carry the version: $isoName" >&2; exit 1 ;;
         esac
         echo "the two images are tellable apart by name and label ($isoLabel / $netLabel)"
+
+        # ---- a flatpak is pickable, by the tooling that already exists ------
+        #
+        # The whole reason flatpaks went into services.nix rather than a fourth
+        # file is that nixarchy-service-enable then handles them unchanged --
+        # same #@ markers, and its "is the marked line live?" test is the one
+        # that works for a line not beginning with the id.
+        #
+        # That makes two things silently coupled: the row has to be IN the
+        # services template, and the menu row has to call service-enable. Move
+        # flatpaks to their own file and the menu still renders, still looks
+        # right, and answers "no service 'geforce-now'" when clicked. So assert
+        # the coupling rather than trusting it.
+        for id in ${toString (builtins.attrNames (import ../data/flatpaks.nix))}; do
+          grep -qE "#@ $id([[:space:]]|$)" "$vm/etc/nixarchy/services-template.nix" || {
+            echo "flatpak '$id' has no marked row in the services template:" >&2
+            echo "  nixarchy-service-enable $id will fail, and the menu row calls exactly that" >&2
+            exit 1
+          }
+          # And commented out to begin with -- a catalogue that installs itself
+          # is not a catalogue.
+          grep -qE "^[[:space:]]*#.*#@ $id([[:space:]]|$)" "$vm/etc/nixarchy/services-template.nix" || {
+            echo "flatpak '$id' is live in the template: it would install unasked" >&2
+            exit 1
+          }
+        done
+        echo "every flatpak has a commented, marked row the existing tooling can enable"
           touch $out
       ''
     else

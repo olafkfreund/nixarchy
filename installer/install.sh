@@ -89,6 +89,18 @@ SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
 dry_run=false
 answers_file=""
 
+# --from <url> and --host <name>: install this machine from a configuration
+# repository that already exists, instead of generating a fresh flake.
+#
+# They are two mechanisms with --answers, not one. --from says WHICH
+# configuration; --answers supplies the per-machine secrets. Together they are
+# an unattended enrolment. Merging them would mean inventing answers-file
+# syntax for "everything in that repository", duplicating what the repository
+# already says in Nix.
+from_repo=""
+from_host=""
+from_host_exists=false
+
 # set -u: every answer the two paths share is initialised here, so a key the
 # answers file omits fails validation rather than aborting on an unbound
 # variable three functions later.
@@ -117,7 +129,21 @@ nixarchy-install -- install nixarchy onto a disk.
   nixarchy-install --dry-run    ask, write the flake to a temp directory,
                                 touch no disk, print the directory and stop
   nixarchy-install --answers F  take every answer from F and ask nothing
+  nixarchy-install --from URL --host NAME
+                                install from a configuration repository that
+                                already exists, rather than generating a flake
   nixarchy-install --help       this
+
+--from takes any git URL. --host is required with it and names the machine:
+a directory under hosts/ in that repository. If it is already there, the
+repository decides the disk, the username and the rest, and only the password
+is asked for. If it is not, the questions are asked as usual and the machine is
+written into the repository beside the others -- which is how somebody else's
+configuration becomes a starting point for yours.
+
+  IT RUNS THAT REPOSITORY'S NIX AS ROOT. Its disk-config.nix formats your
+  disk. This is the same trust as `nix run github:...`, and worth saying out
+  loud rather than leaving implied.
 
 The answers file is one key=value per line, # for comments, no quoting:
 
@@ -322,15 +348,13 @@ validate_hostname() {
   }
 }
 
-ask_identity() {
-  ui_screen "Let's set up your user account..."
-  local why
-  while :; do
-    username=$(gum input --padding "$(ui_gum_pad)" --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ")
-    why=$(validate_username "$username") && break
-    gum style --foreground 1 "$why"
-  done
-
+# The password, on its own.
+#
+# Split out of ask_identity because --from with a machine the repository
+# already describes asks for nothing else: the username, the disk and the rest
+# are decided there, and the only thing that cannot be written down in a
+# repository is the secret.
+ask_password() {
   while :; do
     local pw pw2
     pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
@@ -350,6 +374,18 @@ ask_identity() {
     unset pw pw2
     break
   done
+}
+
+ask_identity() {
+  ui_screen "Let's set up your user account..."
+  local why
+  while :; do
+    username=$(gum input --padding "$(ui_gum_pad)" --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ")
+    why=$(validate_username "$username") && break
+    gum style --foreground 1 "$why"
+  done
+
+  ask_password
 
   while :; do
     hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ")
@@ -515,6 +551,19 @@ read_answers() {
 }
 
 validate_answers() {
+  # A machine the repository already describes has answered everything except
+  # the secret. Requiring a device here would mean requiring one that is then
+  # ignored, since format_disk evaluates the repository's own disko script.
+  if [ "$from_host_exists" = true ]; then
+    local problems=()
+    [ -n "$password_hash" ] || problems+=("password: one of password or password_hash is required")
+    if [ ${#problems[@]} -gt 0 ]; then
+      printf 'nixarchy-install: answers: %s\n' "${problems[@]}" >&2
+      exit 2
+    fi
+    return 0
+  fi
+
   local problems=() why
 
   # Collected rather than reported one at a time: a test author should not have
@@ -581,6 +630,98 @@ validate_answers() {
 # Doing it
 # ---------------------------------------------------------------------------
 
+# The answers, into the machine's own files.
+#
+# Shared by write_flake and clone_flake: a machine added to somebody else's
+# repository is written exactly the same way as one in a fresh flake, because
+# it is the same template. flake.nix is in the list only for the fresh case --
+# a cloned repository already has one, and it carries no tokens.
+substitute_host_files() {
+  local f
+  for f in "$work/flake.nix" "$hostdir/default.nix" "$hostdir/configuration.nix"; do
+    [ -f "$f" ] || continue
+    subst "$f" '@hostname@' "$hostname"
+    subst "$f" '@username@' "$username"
+    subst "$f" '@device@' "$device"
+    subst "$f" '@timezone@' "$timezone"
+    subst "$f" '@keymap@' "$keymap"
+    # Quoted in the template because a bare token is not parseable Nix; the
+    # quotes go with the token. An encrypted disk has already authenticated the
+    # user by the time a greeter would ask, so autologin follows encryption.
+    subst "$f" '"@encrypt@"' "$encrypt"
+    subst "$f" '"@autologin@"' "$encrypt"
+  done
+}
+
+# Install from a configuration repository that already exists.
+#
+# Replaces write_flake. The repository supplies the flake; what this decides is
+# only whether the named machine is already in it.
+#
+# Nothing is pushed back. The installer has no git identity and no credentials,
+# and inventing either is how an installer ends up committing as somebody it is
+# not -- the same reasoning install_flake_dir already applies. The tree is left
+# staged, and nixarchy-config-repo takes it from there.
+clone_repo() {
+  work=$(mktemp -d)
+
+  echo "cloning $from_repo"
+  # --depth 1: the history is not wanted and a fleet repository can be large.
+  # The clone keeps its .git, which is not incidental -- a flake in a worktree
+  # sees only tracked files, so a bare checkout would evaluate to nothing.
+  git clone --depth 1 --quiet "$from_repo" "$work" || {
+    echo "nixarchy-install: could not clone $from_repo" >&2
+    exit 1
+  }
+
+  [ -d "$work/hosts" ] || {
+    echo "nixarchy-install: $from_repo has no hosts/ directory." >&2
+    echo "  This expects a repository the installer wrote, where each machine" >&2
+    echo "  is a directory under hosts/. A configuration from before that" >&2
+    echo "  layout has its files at the top level and is not usable here." >&2
+    exit 1
+  }
+
+  hostname=$from_host
+  hostdir="$work/hosts/$hostname"
+
+  if [ -d "$hostdir" ]; then
+    from_host_exists=true
+  else
+    from_host_exists=false
+  fi
+}
+
+# The second half: run once the answers are in, if any were needed.
+finish_clone() {
+  if [ "$from_host_exists" = true ]; then
+    # The repository already describes this machine: an administrator wrote it
+    # ahead of time, or it is being rebuilt. Everything except the secrets is
+    # already decided, and the device in particular comes from the repository
+    # -- whoever wrote that host knew the disk. If they were wrong, disko fails
+    # loudly, which is the correct failure.
+    echo "$from_repo describes $hostname; using it"
+  else
+    # A machine the repository has never seen. The questions are asked as
+    # usual and the answers are written into it beside the existing machines,
+    # so everything else in there -- themes, extra modules, whatever its owner
+    # wrote -- comes along untouched.
+    #
+    # This is the whole of "use somebody's configuration as a template". There
+    # is no template mechanism beyond it, and there does not need to be.
+    echo "$from_repo has no $hostname; adding it"
+    cp -r "$TEMPLATE/host" "$hostdir"
+    chmod -R u+w "$hostdir"
+    substitute_host_files
+  fi
+
+  # Always regenerated, never taken from the repository: hardware is the one
+  # thing a configuration written somewhere else cannot know.
+  printf '{ ... }:\n{ }\n' >"$hostdir/hardware-configuration.nix"
+
+  git -C "$work" add -A
+}
+
 write_flake() {
   work=$(mktemp -d)
   cp -r "$TEMPLATE"/. "$work"
@@ -593,19 +734,7 @@ write_flake() {
   hostdir="$work/hosts/$hostname"
   mv "$work/host" "$hostdir"
 
-  local f
-  for f in "$work/flake.nix" "$hostdir/default.nix" "$hostdir/configuration.nix"; do
-    subst "$f" '@hostname@' "$hostname"
-    subst "$f" '@username@' "$username"
-    subst "$f" '@device@' "$device"
-    subst "$f" '@timezone@' "$timezone"
-    subst "$f" '@keymap@' "$keymap"
-    # Quoted in the template because a bare token is not parseable Nix; the
-    # quotes go with the token. An encrypted disk has already authenticated the
-    # user by the time a greeter would ask, so autologin follows encryption.
-    subst "$f" '"@encrypt@"' "$encrypt"
-    subst "$f" '"@autologin@"' "$encrypt"
-  done
+  substitute_host_files
 
   # A placeholder, because of an ordering the flake creates: configuration.nix
   # imports ./hardware-configuration.nix, and the disko script that formats the
@@ -893,6 +1022,22 @@ main() {
         }
         answers_file=$1
         ;;
+      --from)
+        shift
+        [ $# -gt 0 ] || {
+          echo "nixarchy-install: --from needs a git URL" >&2
+          exit 2
+        }
+        from_repo=$1
+        ;;
+      --host)
+        shift
+        [ $# -gt 0 ] || {
+          echo "nixarchy-install: --host needs a machine name" >&2
+          exit 2
+        }
+        from_host=$1
+        ;;
       -h | --help)
         usage
         exit 0
@@ -906,14 +1051,57 @@ main() {
     shift
   done
 
+  # --host is required with --from and meaningless without it. Refusing to
+  # guess a machine name is cheaper than inventing a way to choose one, and a
+  # repository with four machines in it has no obvious default.
+  if [ -n "$from_repo" ] && [ -z "$from_host" ]; then
+    echo "nixarchy-install: --from needs --host to say which machine this is" >&2
+    exit 2
+  fi
+  if [ -n "$from_host" ] && [ -z "$from_repo" ]; then
+    echo "nixarchy-install: --host only means something with --from" >&2
+    exit 2
+  fi
+
   if [ "$dry_run" = false ]; then
     require_root_and_uefi
   fi
 
+  # Building somebody else's Nix as root is the cost of --from, and it is said
+  # out loud before anything is cloned. In answers-file mode the file is the
+  # consent, which is the doctrine --answers already runs on: a person who
+  # wrote a repository URL into a file meant it.
+  if [ -n "$from_repo" ] && ui_interactive; then
+    echo
+    echo "  $from_repo will be cloned, and its Nix will run as root on this"
+    echo "  machine -- its disk-config.nix is what formats your disk."
+    echo
+    gum confirm --padding "$(ui_gum_pad)" "Install from $from_repo?" || exit 1
+  fi
+
+  # Cloned before anything is asked, because whether the repository already
+  # describes this machine decides which questions there are.
+  if [ -n "$from_repo" ]; then
+    clone_repo
+  fi
+
   if [ -n "$answers_file" ]; then
     read_answers "$answers_file"
+    # --host names the machine, and clone_repo has already chosen $hostdir from
+    # it. A hostname in the answers file cannot also name it: leaving both to
+    # fight would give a machine whose directory and hostName disagree, which
+    # evaluates and boots and is wrong.
+    [ -n "$from_repo" ] && hostname=$from_host
     validate_answers
     ask_network
+  elif [ "$from_host_exists" = true ]; then
+    # The repository decided the username, the disk, the layout and the
+    # timezone. What it cannot carry is the secret, so that is all there is to
+    # ask -- and asking the rest again would invite an answer that the
+    # repository then overrules, which is worse than not asking.
+    ui_greeter
+    ask_network
+    ask_password
   else
     ui_greeter
     ask_network
@@ -924,7 +1112,11 @@ main() {
     confirm_summary || exit 1
   fi
 
-  write_flake
+  if [ -n "$from_repo" ]; then
+    finish_clone
+  else
+    write_flake
+  fi
 
   if [ "$dry_run" = true ]; then
     # The placeholder write_flake left is exactly what a dry run wants: it

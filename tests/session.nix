@@ -1044,6 +1044,14 @@ pkgs.testers.runNixOSTest {
     # And it has to end with something to paste, not just a diagnosis.
     assert "programs.nixarchy.enable = true;" in report, report
 
+    # And it says nothing about snapshots here. The #171 check keys on
+    # /etc/snapper/configs, which only a machine the installer built has -- so
+    # on every other machine, including this one and every machine reading the
+    # report to decide whether to adopt nixarchy, the section is absent rather
+    # than reporting a missing subvolume nobody was promised.
+    assert "Snapshots" not in report, (
+        "the doctor raised a snapshot finding on a machine with no snapper")
+
     # A machine already greeting with SDDM does not need displayManager=false;
     # advising it would be wrong.
     assert "displayManager = false" not in report, (

@@ -9,9 +9,12 @@ into one from the Limine menu to undo a bad update. **None of that machinery
 exists here, and none of it is missing.** NixOS keeps every previous system on
 disk as a *generation*, and generations do everything the snapshot did.
 
-`omarchy-snapshot` still exists in the tree, but it checks for snapper and
-exits 127 when it is not there, which is always. `omarchy update` treats that
-exit code as "no snapshot available" and carries on.
+What generations do *not* cover is `/home` and the mutable state under
+`/var/lib` — so on a machine the nixarchy installer built, snapper covers
+exactly that half. See [snapshots of your home directory](#snapshots-of-your-home-directory)
+below. On a machine that imported the nixarchy module into a configuration of
+its own, there is no snapper at all: nixarchy does not take snapshots of a disk
+it did not lay out, and `omarchy snapshot` says so.
 
 ## What a generation is
 
@@ -88,6 +91,74 @@ sudo nixos-rebuild test --flake <flake>   # activates now, boot default untouche
 `boot` is the one for anything that could cost you the screen; the previous
 generation stays one menu entry away. See
 [updating NixOS](updating-nixos.md).
+
+## Snapshots of your home directory
+
+The installer lays the disk out with two subvolumes that exist only to hold
+snapshots — `@snapshots` mounted at `/.snapshots`, and `@home-snapshots` at
+`/home/.snapshots` — and configures snapper against them: an hourly timeline of
+`/home`, and one snapshot of `/` at every boot.
+
+```sh
+omarchy snapshot          # what exists
+omarchy snapshot create "before I broke it"
+omarchy snapshot restore  # pick one, and copy files back out of it
+```
+
+`restore` copies rather than swapping the subvolume. Upstream swaps, which
+replaces the whole of `/home` in one step — including everything written since
+the snapshot — and cannot be done while the subvolume is mounted and in use.
+Somebody reaching for restore has usually broken one config file, so what this
+prints is the path the snapshot is readable at, plus `snapper status` to see
+what changed. Nothing is written on your behalf.
+
+Snapshots live on the same disk as the thing they snapshot. They are an undo
+button, not a backup: they do not survive the disk failing.
+
+### If your machine was installed before those subvolumes existed
+
+They were added in [#114](https://github.com/olafkfreund/nixarchy/pull/114).
+A machine installed before it has snapper — its next rebuild pulls the current
+`installer/host.nix` — and nowhere for snapper to write, because `disk-config.nix`
+is a copy made in *your* repo at install time and disko only ever ran once.
+NixOS' snapper module does not create `.snapshots` itself
+([nixpkgs#34595](https://github.com/NixOS/nixpkgs/issues/34595)), so the timers
+fire and nothing is ever snapshotted.
+
+`omarchy snapshot` refuses on such a machine rather than letting it look like it
+worked, and `nix run github:olafkfreund/nixarchy#doctor` names it too. Both print
+this fix. It is done once, by hand, because creating btrfs subvolumes on a
+running machine from an activation script is exactly the kind of thing a rebuild
+should never do.
+
+First create them, at the top level of the filesystem beside `@` and `@home` —
+not inside the running root, which is a different place with the same name:
+
+```sh
+sudo mount -o subvol=/ /dev/mapper/cryptroot /mnt   # your root device; `findmnt -no SOURCE /` names it
+sudo btrfs subvolume create /mnt/@snapshots
+sudo btrfs subvolume create /mnt/@home-snapshots
+sudo umount /mnt
+```
+
+Then declare them in your own `/etc/nixos/disk-config.nix`, inside the
+`subvolumes` block:
+
+```nix
+"@snapshots" = {
+  mountpoint = "/.snapshots";
+  mountOptions = [ "noatime" ];
+};
+"@home-snapshots" = {
+  mountpoint = "/home/.snapshots";
+  mountOptions = [ "noatime" ];
+};
+```
+
+and rebuild — `nh os switch` — which is what writes the mount units. That order
+matters: a mount unit for a subvolume that does not exist yet fails at boot.
+The declaration is what makes it survive a reinstall; the two commands alone
+would be undone by the next one.
 
 ## The one command that deletes the safety net
 

@@ -2,7 +2,7 @@
 
 # nixarchy:new
 # omarchy:summary=Put this machine's NixOS configuration in a git repository, with a remote and CI.
-# omarchy:args=[--check] [--force]
+# omarchy:args=[--check] [--check-drift] [--drift] [--force]
 # omarchy:examples=nixarchy config repo
 
 # The installer leaves /etc/nixos as a git repository with one staged tree and
@@ -25,16 +25,33 @@ set -uo pipefail
 FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
 DONE_MARKER=config-repo
 
+# How stale an armed repository has to get before the drift nudge is worth an
+# interruption. Age rather than size: one line changed a month ago and never
+# pushed is a month of this machine that a reinstall would not bring back,
+# while forty lines changed this morning is just somebody working.
+#
+# A constant rather than an option. Nobody has yet needed a different number,
+# and a knob nobody turns is a knob that has to be documented, tested and
+# carried forever.
+DRIFT_DAYS=7
+
 check_only=false
+check_drift=false
+drift_only=false
 force=false
 while (($#)); do
   case "$1" in
     --check) check_only=true; shift ;;
+    --check-drift) check_drift=true; shift ;;
+    --drift) drift_only=true; shift ;;
     --force) force=true; shift ;;
     -h | --help)
-      echo "Usage: nixarchy-config-repo [--check] [--force]"
-      echo "  --check  exit 0 if the nudge should be shown, 1 otherwise. Prints nothing."
-      echo "  --force  run even if already marked done."
+      echo "Usage: nixarchy-config-repo [--check] [--check-drift] [--drift] [--force]"
+      echo "  --check        exit 0 if the setup nudge should be shown, 1 otherwise. Prints nothing."
+      echo "  --check-drift  exit 0 if the drift nudge should be shown, 1 otherwise. Prints nothing."
+      echo "  --drift        commit and push what has accumulated since the last push."
+      echo "                 Silent and exit 0 on a repository with nothing outstanding."
+      echo "  --force        run even if already marked done."
       exit 0
       ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -98,6 +115,69 @@ has_identity() { [[ -n $(git config user.email 2>/dev/null) ]]; }
 # Nixarchy's notifications without reading them.
 fully_set_up() { has_repo && has_commits && has_remote; }
 
+# ---------------------------------------------------------------------------
+# Drift
+# ---------------------------------------------------------------------------
+#
+# Arming the repository happens once. After that every nixarchy-app-enable and
+# nixarchy-apply stages changes -- installer/host.nix puts git on PATH exactly
+# so nixarchy-apply can -- every hand edit accumulates, and nothing commits or
+# pushes again. "A reinstall can be brought back to the same desktop" quietly
+# becomes "back to the desktop as of the last time someone remembered git".
+#
+# Two separate states, and the second is the one people miss: a tree with
+# changes that were never committed, and commits that were never pushed. The
+# first is invisible to `git log`; the second is invisible to everything except
+# the remote nobody looks at.
+
+# Where the branch is compared against. `git push -u` sets an upstream, so an
+# armed repository normally has one -- and a branch that has never been pushed
+# has none, in which case every commit on it is unpushed and HEAD is the range.
+unpushed_range() {
+  local up
+  up=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)
+  if [[ -n $up ]]; then printf '%s..HEAD' "$up"; else printf 'HEAD'; fi
+}
+
+unpushed_count() { git rev-list --count "$(unpushed_range)" 2>/dev/null || echo 0; }
+
+# Tracked changes (staged or not) plus untracked files. `git diff HEAD` covers
+# both halves of the first in one call; `git status --porcelain` would too, but
+# its output has to be un-quoted and un-renamed before the paths are usable.
+changed_files() {
+  {
+    git diff --name-only -z HEAD 2>/dev/null
+    git ls-files -o --exclude-standard -z 2>/dev/null
+  }
+}
+
+has_drift() {
+  [[ -n $(git diff --name-only HEAD 2>/dev/null) ]] && return 0
+  [[ -n $(git ls-files -o --exclude-standard 2>/dev/null) ]] && return 0
+  (($(unpushed_count) > 0))
+}
+
+# How long the oldest outstanding thing has been outstanding, in whole days.
+#
+# The oldest, not the newest: what makes drift worth mentioning is that
+# something has been sitting there, and a file touched this morning beside one
+# last edited in March should be reported as March.
+drift_age_days() {
+  local oldest="" t f now
+  t=$(git log --format=%ct "$(unpushed_range)" 2>/dev/null | tail -1)
+  [[ -n $t ]] && oldest=$t
+
+  while IFS= read -r -d "" f; do
+    t=$(stat -c %Y "$FLAKE/$f" 2>/dev/null) || continue
+    [[ -n $t ]] || continue
+    if [[ -z $oldest ]] || ((t < oldest)); then oldest=$t; fi
+  done < <(changed_files)
+
+  [[ -n $oldest ]] || { echo 0; return; }
+  now=$(date +%s)
+  echo $(((now - oldest) / 86400))
+}
+
 # The agent gate.
 #
 # The point of waiting is ordering, not permission: the skills that explain a
@@ -131,6 +211,21 @@ agent_ready() {
   done
   return 1
 }
+
+# --check-drift: should the post-boot hook nudge about an armed repository that
+# has gone stale? Silent; the exit code is the answer.
+#
+# Deliberately not behind the done marker or the agent gate. The marker records
+# that the repository was set up, which is exactly the state this asks about;
+# and committing needs no agent, only the identity the setup run already
+# collected.
+if [[ $check_drift == true ]]; then
+  is_managed || exit 1
+  fully_set_up || exit 1
+  has_drift || exit 1
+  (($(drift_age_days) >= DRIFT_DAYS)) || exit 1
+  exit 0
+fi
 
 # --check: should the post-boot hook nudge? Silent; the exit code is the answer.
 if [[ $check_only == true ]]; then
@@ -177,8 +272,11 @@ if ! is_managed; then
   exit 1
 fi
 
-if [[ $force == false ]] && omarchy-done check "$DONE_MARKER"; then
+# Not for --drift: the marker records that the repository was set up, which is
+# the precondition of drift rather than a reason to skip it.
+if [[ $drift_only == false && $force == false ]] && omarchy-done check "$DONE_MARKER"; then
   echo "Already set up. Re-run with --force to go through it again."
+  echo "To commit and push what has changed since, use --drift."
   exit 0
 fi
 
@@ -205,6 +303,83 @@ gh() { nix --extra-experimental-features "nix-command flakes" shell nixpkgs#gh -
 glab() { nix --extra-experimental-features "nix-command flakes" shell nixpkgs#glab -c glab "$@"; }
 
 # ---------------------------------------------------------------------------
+# The steps that outlive the first run
+# ---------------------------------------------------------------------------
+#
+# Identity, the secret scan and the push happen once during setup and again
+# every time the repository has drifted. Written as functions so the drift path
+# runs the same code rather than a second, subtly kinder copy of it -- a secret
+# scan that the routine path skips is a secret scan that does not exist.
+
+# git records a name and address on every commit. Root has neither, which is
+# why wcommit passes the user's global config in on each call.
+ensure_identity() {
+  has_identity && return 0
+
+  step "Who is making these commits?"
+  say "  git records a name and address on every commit. They are not verified"
+  say "  and are visible to anyone who can read the repository.\n"
+
+  local name email
+  name=$(gum input --prompt "Name  > " --placeholder "$(getent passwd "$USER" | cut -d: -f5 | cut -d, -f1)")
+  abort_on_quit $?
+  email=$(gum input --prompt "Email > " --placeholder "you@example.com")
+  abort_on_quit $?
+
+  [[ -z $name || -z $email ]] && { fail "Both are needed to commit."; return 1; }
+
+  # --global, not on the repo: /etc/nixos is root-owned, so a repo-local
+  # identity would have to be written as root and would not follow the user to
+  # their own projects, which is where they will next want it.
+  command git config --global user.name "$name"
+  command git config --global user.email "$email"
+  ok "identity set globally"
+}
+
+# Before any commit, and before any choice about visibility -- a tool that
+# helps you publish your configuration must not help you publish your password.
+#
+# Returns 1 when the user decided to stop; the caller says what stopping means.
+secret_scan() {
+  step "Checking for secrets in the configuration"
+
+  local hits
+  hits=$(grep -rInE '(password|passwd|secret|token|apikey|api_key|accessKey)[[:space:]]*=[[:space:]]*"[^"]{6,}"' \
+    --include='*.nix' "$FLAKE" 2>/dev/null \
+    | grep -vE 'File[[:space:]]*=|hashedPasswordFile|\.path|placeholder|config\.(age|sops)' \
+    | head -20)
+
+  [[ -z $hits ]] && { ok "nothing obvious found"; return 0; }
+
+  warn "Found values that look like secrets written directly into Nix files:\n"
+  echo "$hits" | sed 's|'"$FLAKE"'/||' | sed 's/^/    /'
+  say "\n  /nix/store is world-readable and every build input ends up in it, so"
+  say "  these are already readable by any user on this machine. Committing"
+  say "  them adds a permanent copy in the history, which a later edit does not"
+  say "  remove. Ask your agent about the \033[1mnixos-secrets\033[0m skill --"
+  say "  agenix and sops-nix exist for exactly this.\n"
+
+  gum confirm --default=false "Commit anyway?" && return 0
+  abort_on_quit $?
+  return 1
+}
+
+push_branch() {
+  step "Pushing"
+
+  local branch
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
+  if wgit push -u origin "$branch" 2>&1 | sed 's/^/  /'; then
+    ok "pushed to $(git remote get-url origin)"
+    return 0
+  fi
+
+  fail "Push failed. The commit is safe locally; nothing was lost."
+  say  "  Fix the remote or your SSH key and re-run: \033[1mnixarchy config repo\033[0m"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # 0. Where are we, and what is already true
 # ---------------------------------------------------------------------------
 
@@ -214,23 +389,98 @@ if [[ ! -d $FLAKE ]]; then
   exit 1
 fi
 
-say "\033[1mYour NixOS configuration\033[0m"
-say "\n  $FLAKE"
-say "\nEverything this machine is -- packages, services, keyboard layout,"
-say "every choice you have made -- is described by the files in that one"
-say "directory. Rebuild from them on another disk and you get this machine"
-say "back. Lose them and no amount of remembering brings it back."
+# --drift is the routine half, and it says nothing when there is nothing to
+# say: it runs from a hook and from a menu row, and a command that prints a
+# paragraph to report that nothing happened is one people stop running.
+if [[ $drift_only == true ]]; then
+  if ! fully_set_up; then
+    fail "This configuration has no history and no remote yet."
+    say  "Run \033[1mnixarchy config repo\033[0m to set that up first."
+    exit 1
+  fi
+  has_drift || exit 0
+else
+  say "\033[1mYour NixOS configuration\033[0m"
+  say "\n  $FLAKE"
+  say "\nEverything this machine is -- packages, services, keyboard layout,"
+  say "every choice you have made -- is described by the files in that one"
+  say "directory. Rebuild from them on another disk and you get this machine"
+  say "back. Lose them and no amount of remembering brings it back."
+fi
 
 if ! has_repo; then
   step "Creating a git repository"
   wgit init -q && wgit add -A && ok "repository created"
 fi
 
+# ---------------------------------------------------------------------------
+# 0b. An armed repository: what has happened since the last push
+# ---------------------------------------------------------------------------
+#
+# Reached both ways -- by --drift, and by anyone who runs the command again on
+# a machine that is already set up. The old code said "nothing to do here" at
+# this point, which was true of the arming and false of the repository: the
+# first push is once, and everything after it accumulates.
 if fully_set_up; then
-  say "\n\033[32mAlready committed and pushed to a remote.\033[0m Nothing to do here."
-  git log --oneline -3 | sed 's/^/  /'
-  say "\n  remote: $(git remote get-url "$(git remote | head -1)" 2>/dev/null)"
-  omarchy-done mark "$DONE_MARKER"
+  changed=$(git diff --name-only HEAD 2>/dev/null | wc -l)
+  untracked=$(git ls-files -o --exclude-standard 2>/dev/null | wc -l)
+  ahead=$(unpushed_count)
+
+  if ! has_drift; then
+    say "\n\033[32mAlready committed and pushed to a remote.\033[0m Nothing to do here."
+    git log --oneline -3 | sed 's/^/  /'
+    say "\n  remote: $(git remote get-url "$(git remote | head -1)" 2>/dev/null)"
+    omarchy-done mark "$DONE_MARKER"
+    exit 0
+  fi
+
+  say "\n\033[1mThis configuration has drifted from its backup.\033[0m"
+  say "\n  $FLAKE"
+  ((changed > 0))   && warn "$changed changed file(s) not committed"
+  ((untracked > 0)) && warn "$untracked new file(s) not committed"
+  ((ahead > 0))     && warn "$ahead commit(s) not pushed"
+  say "\n  Oldest of them: $(drift_age_days) day(s) ago."
+  say "\n  A reinstall from the remote would bring this machine back as it was"
+  say "  before all of that."
+
+  if ((changed > 0 || untracked > 0)); then
+    say ""
+    git status --short | head -20 | sed 's/^/    /'
+  fi
+
+  say ""
+  gum confirm "Commit and push it now?"
+  rc=$?
+  if ((rc != 0)); then
+    abort_on_quit $rc
+    say "\nLeaving it as it is."
+    exit 0
+  fi
+
+  ensure_identity || exit 1
+
+  if ((changed > 0 || untracked > 0)); then
+    secret_scan || {
+      say "\nStopping here. Nothing was committed. Fix those, then re-run"
+      say "\033[1mnixarchy config repo\033[0m."
+      exit 0
+    }
+    step "Committing"
+    wgit add -A
+    # No prompt for a message. The one thing a person can say here that the
+    # tree cannot is why, and asking for it every time is how the answer
+    # becomes "wip" -- while `git commit --amend` remains right there for
+    # anyone who wants to say more.
+    if wcommit "Configuration changes on $(hostname)"; then
+      ok "committed"
+    else
+      fail "Commit failed. Nothing was pushed."
+      exit 1
+    fi
+  fi
+
+  push_branch || exit 1
+  say "\n\033[1mDone.\033[0m The remote matches this machine again."
   exit 0
 fi
 
@@ -265,25 +515,7 @@ fi
 # 1. Identity
 # ---------------------------------------------------------------------------
 
-if ! has_identity; then
-  step "Who is making these commits?"
-  say "  git records a name and address on every commit. They are not verified"
-  say "  and are visible to anyone who can read the repository.\n"
-
-  name=$(gum input --prompt "Name  > " --placeholder "$(getent passwd "$USER" | cut -d: -f5 | cut -d, -f1)")
-  abort_on_quit $?
-  email=$(gum input --prompt "Email > " --placeholder "you@example.com")
-  abort_on_quit $?
-
-  [[ -z $name || -z $email ]] && { fail "Both are needed to commit."; exit 1; }
-
-  # --global, not on the repo: /etc/nixos is root-owned, so a repo-local
-  # identity would have to be written as root and would not follow the user to
-  # their own projects, which is where they will next want it.
-  command git config --global user.name "$name"
-  command git config --global user.email "$email"
-  ok "identity set globally"
-fi
+ensure_identity || exit 1
 
 # ---------------------------------------------------------------------------
 # 2. .gitignore
@@ -321,34 +553,15 @@ GITIGNORE
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Secret scan. Before the first commit, and before any choice about
-#    visibility -- a tool that helps you publish your configuration must not
-#    help you publish your password.
+# 3. Secret scan, before the first commit and before any choice about
+#    visibility.
 # ---------------------------------------------------------------------------
 
-step "Checking for secrets in the configuration"
-
-hits=$(grep -rInE '(password|passwd|secret|token|apikey|api_key|accessKey)[[:space:]]*=[[:space:]]*"[^"]{6,}"' \
-  --include='*.nix' "$FLAKE" 2>/dev/null \
-  | grep -vE 'File[[:space:]]*=|hashedPasswordFile|\.path|placeholder|config\.(age|sops)' \
-  | head -20)
-
-if [[ -n $hits ]]; then
-  warn "Found values that look like secrets written directly into Nix files:\n"
-  echo "$hits" | sed 's|'"$FLAKE"'/||' | sed 's/^/    /'
-  say "\n  /nix/store is world-readable and every build input ends up in it, so"
-  say "  these are already readable by any user on this machine. Committing"
-  say "  them adds a permanent copy in the history, which a later edit does not"
-  say "  remove. Ask your agent about the \033[1mnixos-secrets\033[0m skill --"
-  say "  agenix and sops-nix exist for exactly this.\n"
-
-  gum confirm --default=false "Commit anyway?" || { abort_on_quit $?
-    say "\nStopping here. Nothing was committed. Fix those, then re-run"
-    say "\033[1mnixarchy config repo\033[0m."
-    exit 0; }
-else
-  ok "nothing obvious found"
-fi
+secret_scan || {
+  say "\nStopping here. Nothing was committed. Fix those, then re-run"
+  say "\033[1mnixarchy config repo\033[0m."
+  exit 0
+}
 
 # ---------------------------------------------------------------------------
 # 4. First commit
@@ -535,25 +748,19 @@ fi
 # 7. Push
 # ---------------------------------------------------------------------------
 
-step "Pushing"
+push_branch || exit 1
+omarchy-done mark "$DONE_MARKER"
 
-branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
-if wgit push -u origin "$branch" 2>&1 | sed 's/^/  /'; then
-  ok "pushed to $(git remote get-url origin)"
-  omarchy-done mark "$DONE_MARKER"
-
-  say "\n\033[1mDone.\033[0m Your configuration has a history and a copy that is not"
-  say "on this disk."
-  say "\nFrom here on, after you change something:"
-  say "\n    \033[1mcd $FLAKE\033[0m"
-  say "    \033[1msudo git add -A && sudo git commit -m 'what changed'\033[0m"
-  say "    \033[1msudo git push\033[0m"
-  say "\nCommit \033[1mbefore\033[0m you rebuild, not after -- a flake in a git"
-  say "repository cannot see untracked files, so a new .nix file that has not"
-  say "been added is invisible to the build. That is the single most common"
-  say "reason a change appears to do nothing."
-else
-  fail "Push failed. The commit is safe locally; nothing was lost."
-  say  "  Fix the remote or your SSH key and re-run: \033[1mnixarchy config repo\033[0m"
-  exit 1
-fi
+say "\n\033[1mDone.\033[0m Your configuration has a history and a copy that is not"
+say "on this disk."
+say "\nFrom here on, after you change something:"
+say "\n    \033[1mcd $FLAKE\033[0m"
+say "    \033[1msudo git add -A && sudo git commit -m 'what changed'\033[0m"
+say "    \033[1msudo git push\033[0m"
+say "\nOr run \033[1mSystem > Back up configuration\033[0m from the menu, which does"
+say "the same three and scans for secrets on the way past. Nixarchy will also"
+say "offer once the changes here have been sitting unpushed for a while."
+say "\nCommit \033[1mbefore\033[0m you rebuild, not after -- a flake in a git"
+say "repository cannot see untracked files, so a new .nix file that has not"
+say "been added is invisible to the build. That is the single most common"
+say "reason a change appears to do nothing."

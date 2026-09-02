@@ -421,6 +421,28 @@ let
           description = "Switch to an earlier system generation. Your home directory is not touched";
         };
 
+        # Beside Roll back, because they are the two halves of the same
+        # question: a generation brings this machine back on this disk, and a
+        # pushed configuration brings it back on any other one.
+        #
+        # Reachable deliberately rather than only by notification. The command
+        # existed for a while with no way to reach it except a nudge on a boot
+        # you happened to act on, or knowing its name -- which meant the answer
+        # to "I changed things, is that backed up?" was to remember a command.
+        #
+        # `when` rather than letting the row refuse when clicked: on a machine
+        # nixarchy did not write, nixarchy-config-repo declines and explains
+        # why, and a menu row whose only possible outcome is that explanation
+        # is not worth drawing. /etc/nixarchy/managed is the same predicate the
+        # command itself gates on -- see modules/nixos.nix.
+        "system.backup" = {
+          icon = "󰆔";
+          label = "Back up configuration";
+          when = "test -e /etc/nixarchy/managed";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-config-repo";
+          description = "Commit and push this machine's NixOS configuration, so a reinstall can bring it back";
+        };
+
         # Snapshots under Trigger, beside the other "do a thing now" rows.
         #
         # Upstream's are taken by its updater and restored from the boot menu,

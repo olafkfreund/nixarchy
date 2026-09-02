@@ -1079,6 +1079,48 @@ pkgs.testers.runNixOSTest {
     assert "displayManager = false" not in report, (
         "the doctor told an SDDM machine to turn SDDM off")
 
+    # ---- $TMPDIR on a tmpfs (#186) ---------------------------------------
+    # Asserted in both directions from inside the VM, because the value of
+    # this finding is entirely in when it stays quiet. A doctor that warns on
+    # every machine is one nobody reads, and a check only ever run against the
+    # quiet case is how the #133 check stayed green through the bug it existed
+    # to catch. TMPDIR is set explicitly rather than trusting whatever this
+    # VM's /tmp happens to be, so both cases are the same on every runner.
+    print(machine.succeed("cat /proc/self/mountinfo | grep ' /tmp '  || true"))
+
+    on_disk = machine.succeed(
+        user % "TMPDIR=/var/tmp ${doctor}/bin/nixarchy-doctor 2>&1 || true")
+    assert "Build space" not in on_disk, (
+        "the doctor raised the tmpfs finding for a $TMPDIR on the root disk")
+
+    # 8 GiB is under the 64 GiB threshold and over what this VM has, which is
+    # fine: tmpfs allocates lazily, so the ceiling is declarable on a machine
+    # that could never fill it -- the same property that makes raising it the
+    # cheap remedy.
+    machine.succeed("mkdir -p /smalltmp && mount -t tmpfs -o size=8G tmpfs /smalltmp")
+    on_tmpfs = machine.succeed(
+        user % "TMPDIR=/smalltmp ${doctor}/bin/nixarchy-doctor 2>&1 || true")
+    machine.succeed("umount /smalltmp")
+    print(on_tmpfs)
+
+    # The size, because "low disk space" is the message that sent someone to
+    # df and cost them the afternoon; and a remedy, because naming a problem
+    # without one is the same failure in a different font.
+    assert "8.0 GiB tmpfs" in on_tmpfs, on_tmpfs
+    assert "boot.tmp.useTmpfs = false" in on_tmpfs, on_tmpfs
+
+    # And it must not offer to set it for them: boot.tmp.* is the machine's
+    # memory policy, which nixarchy leaves alone for the same reason it leaves
+    # the bootloader alone. The paste block stays clean.
+    # Bounded at "Worth knowing", which is prose *about* boot.tmp and is
+    # supposed to mention it. Without that bound this assertion fired on the
+    # note rather than the snippet -- a check failing for the wrong reason,
+    # which is only marginally better than one passing for the wrong reason.
+    snippet_block = on_tmpfs.split(
+        "Add this to your configuration")[1].split("Worth knowing")[0]
+    assert "boot.tmp" not in snippet_block, (
+        "the doctor put boot.tmp into the snippet it tells people to paste")
+
     # ---- the Omarchy session entry ---------------------------------------
     # What lets nixarchy sit beside an existing Hyprland: a session of its own
     # that names Omarchy's hyprland.lua with --config, rather than needing to

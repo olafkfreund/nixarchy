@@ -261,9 +261,13 @@ else
   theme=$( (grep -h '^Theme=' /etc/plymouth/plymouthd.conf 2>/dev/null |
     head -1 | cut -d= -f2) || true)
   case "$theme" in
-    omarchy) ok "boot splash is Omarchy's" "" ;;
+    # The directory is called omarchy and the theme inside it is nixarchy's:
+    # boot.plymouth.theme names a directory, and renaming that one means moving
+    # boot.plymouth.themePackages with it. Name= in omarchy.plymouth is what
+    # the theme calls itself, and it says nixarchy. See #46.
+    omarchy) ok "boot splash is nixarchy's" "" ;;
     "") hmm "no Plymouth theme configured" "boot.plymouth.theme is unset" ;;
-    *) hmm "boot splash is '$theme'" "not Omarchy's, which is fine if you chose it" ;;
+    *) hmm "boot splash is '$theme'" "not nixarchy's, which is fine if you chose it" ;;
   esac
 fi
 

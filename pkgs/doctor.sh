@@ -145,19 +145,25 @@ say ""
 # ---- the boot splash -----------------------------------------------------
 # nixarchy sets boot.plymouth.theme to its own, with mkDefault. Anyone who
 # already chose one keeps it and needs no mkForce -- but they will not get
-# Omarchy's splash either, and finding that out at the next boot rather than
+# nixarchy's splash either, and finding that out at the next boot rather than
 # here is the sort of surprise this script exists to prevent.
+#
+# "nixarchy's", not "Omarchy's": the theme DIRECTORY is still called omarchy,
+# because boot.plymouth.theme names the directory and renaming it means moving
+# themePackages with it -- but every image it draws is drawn by
+# pkgs/omarchy/nixarchy-logo.py and nixarchy-plymouth-chrome.py, and
+# Name= in omarchy.plymouth is nixarchy. See #46.
 say "${bold}Boot splash${off}"
 plymouth_theme=$( (grep -h '^Theme=' /etc/plymouth/plymouthd.conf 2>/dev/null |
   head -1 | cut -d= -f2) || true)
 if [ -n "$plymouth_theme" ]; then
   finding "Plymouth is showing '$plymouth_theme'" "$warn" ""
   say "     nixarchy defaults boot.plymouth.theme to its own splash, so yours"
-  say "     wins and nothing collides. To take Omarchy's instead:"
+  say "     wins and nothing collides. To take nixarchy's instead:"
   say "       programs.nixarchy.bootSplash = \"force\";"
-  notes+=("Your Plymouth theme '${plymouth_theme}' is kept -- nixarchy only defaults its own. programs.nixarchy.bootSplash = \"force\" takes Omarchy's instead; mkForce on boot.plymouth.theme alone fails the build, because themePackages stays yours and the named theme is then missing from it.")
+  notes+=("Your Plymouth theme '${plymouth_theme}' is kept -- nixarchy only defaults its own. programs.nixarchy.bootSplash = \"force\" takes nixarchy's instead; mkForce on boot.plymouth.theme alone fails the build, because themePackages stays yours and the named theme is then missing from it.")
 else
-  finding "No Plymouth theme set" "$ok" "you get Omarchy's splash"
+  finding "No Plymouth theme set" "$ok" "you get nixarchy's splash"
 fi
 say ""
 
@@ -253,6 +259,115 @@ if [ -d /etc/snapper/configs ] && [ -n "$(ls -A /etc/snapper/configs 2>/dev/null
     finding "snapper has its subvolumes" "$ok" "/home is being snapshotted"
   fi
   say ""
+fi
+
+# ---- $TMPDIR on a tmpfs too small for what nix unpacks into it -----------
+# Nix builds in $TMPDIR. When that is a tmpfs it is RAM, and running out of it
+# surfaces as ENOSPC -- which sends you to `df /`, which reports the disk, which
+# is fine. Observed on a 251 GiB machine with a 32 GiB /tmp: cef-binary,
+# ctranslate2, aerion and gnome-initial-setup all died with "No space left on
+# device" while / had 289 GiB free, and nix's own hint ("build failure may have
+# been caused by lack of free disk space") closed off the only line of enquiry
+# it offered. Nothing in the output says tmpfs, RAM, /tmp or $TMPDIR.
+#
+# nixarchy sets nothing about /tmp and must not: boot.tmp.* is the machine's
+# memory policy, the same reasoning that keeps the bootloader untouched. An
+# installer-built machine has boot.tmp.useTmpfs = false -- the nixpkgs default
+# -- and never sees this. So this names it and stops.
+#
+# /proc/self/mountinfo rather than findmnt, for the same reason mounted_btrfs
+# reads it: util-linux is not in this script's runtimeInputs. It also answers
+# the question the option cannot -- boot.tmp.useTmpfs is not the only way /tmp
+# becomes a tmpfs, and what is mounted is what nix will write into.
+tmp_dir=${TMPDIR:-/tmp}
+
+# The mount a path is on is the longest mountpoint that prefixes it. mountinfo's
+# optional fields are variable in number and end at a lone "-", so fstype and
+# super options are only addressable relative to that separator.
+read -r tmp_fstype tmp_opts <<<"$(
+  awk -v target="$tmp_dir" '
+    {
+      sep = 0
+      for (i = 7; i <= NF; i++) if ($i == "-") { sep = i; break }
+      if (!sep) next
+      mp = $5
+      pfx = (mp == "/") ? "/" : mp "/"
+      if (index(target "/", pfx) == 1 && length(mp) >= length(best)) {
+        best = mp; fstype = $(sep + 1); opts = $(sep + 3)
+      }
+    }
+    END { print fstype, opts }
+  ' /proc/self/mountinfo
+)"
+
+if [ "$tmp_fstype" = tmpfs ]; then
+  mem_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+  # A tmpfs mounted with no size= is half of RAM and prints no size= at all,
+  # so an empty match here is a real answer rather than a parse failure.
+  tmp_kb=$(sed -n 's/.*size=\([0-9]*\)k.*/\1/p' <<<"$tmp_opts")
+  [ -n "$tmp_kb" ] || tmp_kb=$((mem_kb / 2))
+
+  # 64 GiB, and the gap it sits in is where the number comes from: 32 GiB is
+  # the size that demonstrably failed on a desktop rebuild with parallel
+  # unpacks, 128 GiB is the size that fixed the same rebuild, and 64 is the
+  # only power of two between them. Anything at or below the known-bad size has
+  # to fire; a machine already set generously has to stay quiet, or this
+  # becomes a warning people learn to scroll past.
+  #
+  # The threshold is deliberately not "any tmpfs /tmp". A tmpfs /tmp is a
+  # normal NixOS choice and on its own predicts nothing.
+  # Half of RAM, rounded up to the next power of two. `tmpfsSize = "125G"`
+  # reads like a measurement someone took, and it is not one: tmpfs allocates
+  # lazily, so this is a ceiling and overshooting half of RAM costs nothing
+  # until something fills it. Rounding up rather than down is also what
+  # reproduces the value that actually fixed the machine this came from --
+  # 251 GiB of RAM, and 128G.
+  want_gib=64
+  while [ $((want_gib * 1048576)) -lt $((mem_kb / 2)) ]; do
+    want_gib=$((want_gib * 2))
+  done
+
+  if [ "$tmp_kb" -lt 67108864 ]; then
+    say "${bold}Build space${off}"
+    finding "$tmp_dir is a $(awk -v k="$tmp_kb" 'BEGIN { printf (k < 10485760 ? "%.1f" : "%.0f"), k / 1048576 }') GiB tmpfs" "$warn" ""
+    say "     Nix builds in \$TMPDIR, and here that is ${bold}RAM${off} -- not the filesystem"
+    say "     ${dim}df${off} reports on. A desktop rebuild unpacks several large sources at"
+    say "     once (cef-binary alone is ~1.9 GiB unpacked) and ${dim}max-jobs = auto${off} runs"
+    say "     a dozen of them concurrently. This has failed as ${dim}No space left on"
+    say "     ${dim}device${off} on a machine with 289 GiB free on its root disk, with"
+    say "     nothing in the error naming tmpfs, RAM or \$TMPDIR."
+    say ""
+    if [ $((mem_kb / 2)) -ge 67108864 ]; then
+      say "     Now, without a reboot -- tmpfs allocates lazily, so a bigger size is"
+      say "     a ceiling and not a reservation:"
+      say ""
+      say "       ${dim}sudo mount -o remount,size=${want_gib}G $tmp_dir${off}"
+      say ""
+      say "     Then one of these, in your own configuration:"
+      say ""
+      say "       ${dim}boot.tmp.tmpfsSize = \"${want_gib}G\";${off}"
+      say "       ${dim}boot.tmp.useTmpfs = false;${off}   # /tmp on disk, the nixpkgs default"
+      say ""
+      say "     Either needs a ${bold}reboot${off}: a switch does not remount $tmp_dir."
+    else
+      say "     Half this machine's RAM is only $((mem_kb / 2097152)) GiB, so there is no ceiling"
+      say "     worth raising to. Put it on disk instead:"
+      say ""
+      say "       ${dim}boot.tmp.useTmpfs = false;${off}   # the nixpkgs default"
+      say ""
+      say "     That needs a ${bold}reboot${off}: a switch does not remount $tmp_dir."
+    fi
+    say ""
+    say "     Exporting TMPDIR before the rebuild does ${bold}not${off} move the build --"
+    say "     nixos-rebuild and nh hand the work to nix-daemon, which has its own"
+    say "     environment. The daemon-level version of that is:"
+    say ""
+    say "       ${dim}systemd.services.nix-daemon.environment.TMPDIR = \"/var/tmp\";${off}"
+    say ""
+    say "     ${dim}nixarchy sets none of this. It is your machine's memory policy.${off}"
+    notes+=("$tmp_dir is a tmpfs, so nix builds into RAM rather than the disk df reports on. It is sized below what a desktop closure needs when max-jobs runs large unpacks in parallel, and the failure mode is ENOSPC on a machine with hundreds of gigabytes free -- an error that names neither tmpfs nor \$TMPDIR. Raise boot.tmp.tmpfsSize, or set boot.tmp.useTmpfs = false; both need a reboot, and nixarchy will not choose for you.")
+    say ""
+  fi
 fi
 
 # ---- the default browser, and whether the menu can change it -------------

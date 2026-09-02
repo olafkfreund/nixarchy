@@ -259,6 +259,41 @@ let
   # rather than about an option.
   vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
 
+  # ---- the boot splash is ours ------------------------------------------
+  #
+  # #46's acceptance, in the one place that can hold it: "no Omarchy artwork
+  # is reachable from the ISO or the installed boot splash". That issue was
+  # closed once on the strength of a claim that it was not, while five
+  # upstream assets still were -- so this reads the built theme directory
+  # rather than the source that produces it.
+  #
+  # Two directories, because they are two code paths and the acceptance names
+  # both: modules/nixos.nix puts the omarchy package in
+  # boot.plymouth.themePackages, installer/cd.nix puts nixarchy-plymouth
+  # there. Each is resolved through the plymouth module's own themesEnv --
+  # environment.etc."plymouth/themes" is the same buildEnv the initrd theme
+  # directory is copied out of, so this is what boots, not what was asked for.
+  #
+  # pkgs/omarchy/default.nix already fails the BUILD if a branded asset comes
+  # out byte-identical to upstream's. This is the other half of the same
+  # promise and it cannot be answered there: a theme whose every file is ours
+  # proves nothing if the machine is pointed at a different theme, and the ISO
+  # spent this entire issue pointed at no theme at all.
+  #
+  # Guarded on `enable`, because environment.etc."plymouth/themes" does not
+  # exist when the plymouth module is off -- and a splash that is off is
+  # exactly the state this issue sat in for the live image, so it has to reach
+  # the message below rather than die in evaluation with a missing attribute.
+  splashPaths =
+    cfg:
+    if cfg.boot.plymouth.enable then
+      "${cfg.environment.etc."plymouth/themes".source}/${cfg.boot.plymouth.theme}"
+    else
+      "/plymouth-is-not-enabled";
+
+  installedSplash = configWith { };
+  isoSplash = inputs.self.nixosConfigurations.iso.config;
+
   # ---- nixarchy does not delete software somebody installed ----
   #
   # uninstallUnmanaged removes every Flatpak the configuration does not
@@ -689,6 +724,16 @@ pkgs.runCommand "nixarchy-options"
     # by executing it -- --check and --list exist partly for that reason and
     # partly because the menu rows' `when:` calls the first of them.
     homeBackup = "${(pkgs.extend inputs.self.overlays.default).omarchy}/bin/nixarchy-home-backup";
+    splashInstalledDir = splashPaths installedSplash;
+    splashInstalledOn = pkgs.lib.boolToString installedSplash.boot.plymouth.enable;
+    splashInstalledTheme = installedSplash.boot.plymouth.theme;
+    splashIsoDir = splashPaths isoSplash;
+    splashIsoOn = pkgs.lib.boolToString isoSplash.boot.plymouth.enable;
+    splashIsoTheme = isoSplash.boot.plymouth.theme;
+    # What the assets are measured against. The vendored tree, at the version
+    # this flake pins -- so a bump that changes an asset changes what "still
+    # upstream's" means, which is the point.
+    splashUpstream = "${(pkgs.extend inputs.self.overlays.default).omarchy.src}/default/plymouth";
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
     nativeBuildInputs = [ pkgs.python3 ];
@@ -863,6 +908,71 @@ pkgs.runCommand "nixarchy-options"
                echo "groups: $dockerGroups" >&2
                exit 1 ;;
           esac
+
+          # ---- no Omarchy artwork on either boot splash -------------------
+          #
+          # The list of images is read out of omarchy.script rather than
+          # written down here. What the acceptance is about is what is DRAWN,
+          # and a written list cannot notice an upstream bump that starts
+          # drawing a sixth file -- which is precisely how this regresses,
+          # since every branded asset is a copy of a file upstream also ships.
+          #
+          # logos/oma.png is the one file left as upstream's, because nothing
+          # draws it. That is not asserted separately: if a bump ever draws it,
+          # it joins this list and fails here.
+          splash_is_ours() {
+            where=$1
+            dir=$2
+            enabled=$3
+            theme=$4
+
+            [ "$enabled" = "true" ] || {
+              echo "$where: boot.plymouth.enable is $enabled" >&2
+              echo "  the splash this issue is about is not on." >&2
+              exit 1
+            }
+            [ "$theme" = "omarchy" ] || {
+              echo "$where: boot.plymouth.theme is '$theme', not omarchy" >&2
+              echo "  the machine boots a theme this repo does not draw." >&2
+              exit 1
+            }
+            grep -qx 'Name=nixarchy' "$dir/omarchy.plymouth" || {
+              echo "$where: the theme still calls itself:" >&2
+              grep -h '^Name=' "$dir/omarchy.plymouth" >&2
+              echo "  plymouth-set-default-theme --list and omarchy-plymouth-current" >&2
+              echo "  both report this name." >&2
+              exit 1
+            }
+
+            drawn=$(sed -n 's/.*Image("\([^"]*\)").*/\1/p' "$dir/omarchy.script" | sort -u)
+            [ -n "$drawn" ] || {
+              echo "$where: omarchy.script draws no images at all" >&2
+              echo "  either the script changed shape or this check stopped" >&2
+              echo "  being able to see what it draws -- which is worse." >&2
+              exit 1
+            }
+
+            n=0
+            for img in $drawn; do
+              n=$((n + 1))
+              test -e "$dir/$img" || {
+                echo "$where: the splash draws $img and the theme has no such file" >&2
+                exit 1
+              }
+              if cmp -s "$dir/$img" "$splashUpstream/$img"; then
+                echo "$where: $img is byte-for-byte upstream's file" >&2
+                echo "  #46's acceptance is that no Omarchy artwork is reachable" >&2
+                echo "  from the ISO or the installed boot splash. This is." >&2
+                echo "  It is drawn by $dir/omarchy.script." >&2
+                exit 1
+              fi
+            done
+            echo "$where: splash is nixarchy's, and all $n images it draws are ours"
+          }
+
+          splash_is_ours installed "$splashInstalledDir" \
+            "$splashInstalledOn" "$splashInstalledTheme"
+          splash_is_ours iso "$splashIsoDir" "$splashIsoOn" "$splashIsoTheme"
 
           # ---- nixarchy only commits a configuration it wrote --------------
           #

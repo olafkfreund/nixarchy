@@ -317,11 +317,35 @@
           # lives under nixarchy-apps, which callPackage does not search.
           inherit (final.nixarchy-apps) ttfx;
         };
+
+        # The boot splash, and nothing else on the disk with it.
+        #
+        # The omarchy package already carries share/plymouth/themes/omarchy,
+        # and on a desktop that is the right place for it: the machine has the
+        # package anyway. The live image does not. It deliberately does not
+        # import nixosModules.nixarchy (see installer/cd.nix), so naming the
+        # desktop package in boot.plymouth.themePackages would be the only
+        # reason it were there -- and nixpkgs' plymouth module puts
+        # themePackages into environment.etc, so the named package joins the
+        # system closure whole: 411.9 MiB on an image budgeted at 2.00 GiB,
+        # which is GitHub's limit on a release asset rather than a preference.
+        # These assets are 180 KiB.
+        #
+        # Copied out of the same package rather than assembled again, so the
+        # theme is built in exactly one place and the image's splash cannot
+        # differ from the installed one. Nothing is rewritten here:
+        # omarchy.plymouth already points at /etc/plymouth/themes/omarchy, so
+        # this output has no store references and costs only its own size.
+        nixarchy-plymouth = final.runCommand "nixarchy-plymouth-theme" { } ''
+          install -d $out/share/plymouth/themes
+          cp -r ${final.omarchy}/share/plymouth/themes/omarchy \
+            $out/share/plymouth/themes/omarchy
+        '';
       };
 
       packages = eachSystem (system: {
         default = self.packages.${system}.omarchy;
-        inherit (pkgsFor.${system}) omarchy;
+        inherit (pkgsFor.${system}) omarchy nixarchy-plymouth;
 
         # `nix run github:olafkfreund/nixarchy#verify`, from inside a running
         # Omarchy session. Everything in checks/ runs in a machine with no GPU,

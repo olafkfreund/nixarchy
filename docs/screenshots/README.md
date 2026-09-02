@@ -12,3 +12,11 @@ plugins are installed and enabled at once, which is what the bar strips show.
 for the same reason -- it drives the menu by route and captures through qemu's
 screendump, so it needs no display. 20-ask.jpg required setting a default agent
 first: the Ask group is hidden until one is chosen.
+
+22-boot-splash.jpg and 23-installer-welcome.jpg are the ISO rather than the
+desktop, from `nix build .#iso-net` booted under qemu with `-vga std -display
+none` and captured through the monitor's `screendump`. The splash is on screen
+for about five seconds, so the capture is a loop rather than one shot; the
+frame kept is the one where plymouth has drawn and nothing has scrolled over
+it. 23 is the frame the same run ends on, which is why the two agree about
+what the console looks like.

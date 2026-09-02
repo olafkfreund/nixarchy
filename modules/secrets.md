@@ -92,6 +92,40 @@ three commands (read the host pubkey → add it to `.sops.yaml` → `sops edit`)
 rather than let a rebuild succeed into that state. Never make the service
 start passwordless as a convenience for the first-boot case.
 
+There is a second, sharper edge to this, and it is the one a future reader is
+most likely to "simplify" away. The warning above and the actual enforcement
+disagree about their operator. `src/config.rs` warns when
+
+```rust
+if username.is_empty() || password.is_empty() {
+```
+
+but `src/server/mod.rs` decides whether to require credentials at all with
+
+```rust
+fn credentials_from_config(username: &str, password: &str) -> Option<Credentials> {
+    if username.is_empty() && password.is_empty() {
+        None
+```
+
+`||` for the warning, `&&` for the enforcement. So the three states are not
+two:
+
+| username | password | what happens |
+|---|---|---|
+| set | set | authentication required, as intended |
+| set | **empty** | warns, and still builds credentials -- with an empty password |
+| empty | empty | warns, and authentication is switched off entirely |
+
+Only the last of those is the fully open case, which is why it is tempting to
+guard on it alone. Do not: the middle row is a login whose password is the
+empty string, which is not meaningfully better, and it is exactly what a
+secret that exists and renders empty produces. `modules/services/hypr-rdp.nix`
+therefore requires BOTH fields to be non-empty, at runtime, in an
+`ExecStartPre` that exits non-zero -- an assertion cannot see a secret that
+rendered empty or a template sops-nix failed to write. If someone later
+relaxes that guard to match upstream's `&&`, this table is the reason not to.
+
 ## What a machine that never uses this pays
 
 Nothing, and `tests/options.nix` asserts it rather than trusting the claim.

@@ -99,6 +99,36 @@ let
           (configWith { preinstalls = false; }).environment.systemPackages;
     };
 
+    # The unit itself, both ways. "off" is the half that matters: a nixarchy
+    # machine that never asked for remote desktop must have no RDP daemon
+    # declared for any user.
+    hyprRdpUnit = {
+      on = rdpOn.systemd.user.services ? hypr-rdp;
+      off = rdpOff.systemd.user.services ? hypr-rdp;
+    };
+
+    # And the sops template. Off, nothing renders -- which also keeps the
+    # sops-nix inertness the block above asserts true for everyone else.
+    hyprRdpTemplate = {
+      on = rdpOn.sops.templates ? "hypr-rdp.toml";
+      off = rdpOff.sops.templates ? "hypr-rdp.toml";
+    };
+
+    # openFirewall is its own decision and defaults to false, so enabling the
+    # service must NOT open 3389. "off" here is the whole promise of the
+    # option: the promoted path is the tailnet, which needs no firewall change.
+    hyprRdpFirewall = {
+      on = builtins.elem 3389 rdpFirewall.networking.firewall.allowedTCPPorts;
+      off = builtins.elem 3389 rdpOn.networking.firewall.allowedTCPPorts;
+    };
+
+    # The evaluation-time refusal, both ways. Without the "off" half this
+    # would pass just as well against an assertion that always fires.
+    hyprRdpAssertion = {
+      on = mentions "passwordSecret" (failedAssertions rdpNoSecret);
+      off = mentions "passwordSecret" (failedAssertions rdpOn);
+    };
+
     # preinstallsExclude is the per-application half of preinstalls, and the
     # only removal path for an app the selection does not carry. Both ways:
     # Pinta is there by default and gone when named.
@@ -383,6 +413,70 @@ let
   hasSops =
     cfg: (cfg.systemd.services ? sops-install-secrets) || (cfg.system.activationScripts ? setupSecrets);
 
+  # ---- hypr-rdp, whose module is the only thing that refuses ----------
+  #
+  # hypr-rdp FAILS OPEN. v0.1.5, src/config.rs:187-197, resolves the password
+  # with `unwrap_or_default()` and then, finding it empty, logs two warnings
+  # and serves the session anyway -- and src/server/mod.rs:123 builds no
+  # credentials at all when username and password are both empty. There is no
+  # `bail!` and no exit anywhere on that path.
+  #
+  # So every case below is measuring a refusal rather than a feature, and the
+  # halves that break quietly are the "off" ones: a unit that appears on a
+  # machine nobody enabled it on is an RDP daemon somebody did not ask for.
+  rdpSops = {
+    validateSopsFiles = false;
+    age.keyFile = "/var/lib/sops-nix/key.txt";
+    defaultSopsFile = ./options.nix;
+    secrets.rdp-password = { };
+  };
+
+  rdpOff = configBeside {
+    programs.nixarchy.user = "someone";
+    sops = rdpSops;
+  };
+
+  rdpOn = configBeside {
+    programs.nixarchy = {
+      user = "someone";
+      services.hypr-rdp = {
+        enable = true;
+        passwordSecret = "rdp-password";
+      };
+    };
+    sops = rdpSops;
+  };
+
+  rdpFirewall = configBeside {
+    programs.nixarchy = {
+      user = "someone";
+      services.hypr-rdp = {
+        enable = true;
+        passwordSecret = "rdp-password";
+        openFirewall = true;
+      };
+    };
+    sops = rdpSops;
+  };
+
+  # Enabled with no secret named. Read as a list of failed assertions rather
+  # than by forcing system.build.toplevel: the point is that THIS assertion
+  # fires, and a config that fails to build for some unrelated reason would
+  # look identical from outside.
+  rdpNoSecret = configBeside {
+    programs.nixarchy = {
+      user = "someone";
+      services.hypr-rdp.enable = true;
+    };
+    sops = rdpSops;
+  };
+
+  failedAssertions = cfg: map (a: a.message) (builtins.filter (a: !a.assertion) cfg.assertions);
+
+  mentions = needle: msgs: builtins.any (m: pkgs.lib.hasInfix needle m) msgs;
+
+  rdpUnitOf = cfg: cfg.systemd.user.services.hypr-rdp.serviceConfig or { };
+
   # ---- a bundled service yields to a user who already configured it ----
   #
   # This is the Mode A hazard in one assertion. Someone adds nixarchy to a
@@ -585,6 +679,15 @@ pkgs.runCommand "nixarchy-options"
     flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
     flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
     flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
+    # The two strings the unit is made of. Both carry store-path context, so
+    # naming them here is what makes the guard derivation an input of this
+    # check and therefore something the script below can actually run.
+    rdpGuard = (rdpUnitOf rdpOn).ExecStartPre or "";
+    rdpExecStart = (rdpUnitOf rdpOn).ExecStart;
+    rdpConditionUser = rdpOn.systemd.user.services.hypr-rdp.unitConfig.ConditionUser;
+    # The template as it exists in the store -- the file a `grep -r password`
+    # over everything nixarchy generated would find.
+    rdpTemplateFile = rdpOn.sops.templates."hypr-rdp.toml".file;
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
@@ -682,6 +785,100 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "flatpaks are left alone unless the machine's owner asks"
+
+          # ---- hypr-rdp refuses, at both layers -------------------------
+          #
+          # Upstream does not refuse: given an empty password it logs a
+          # warning and serves the desktop. Everything here is checking that
+          # this repo does instead.
+
+          # 1. The password is never on a command line. /proc/*/cmdline is
+          #    world-readable, so `-p` would hand it to every process on the
+          #    machine -- which is exactly why the config file exists.
+          case "$rdpExecStart" in
+            *" -p "*|*"--password"*)
+              echo "the RDP password is passed on the command line:" >&2
+              echo "  $rdpExecStart" >&2
+              echo "/proc/*/cmdline is world-readable. Render it into the" >&2
+              echo "config file instead." >&2
+              exit 1 ;;
+          esac
+          case "$rdpExecStart" in
+            *"--config "*) ;;
+            *) echo "hypr-rdp is not pointed at the rendered config:" >&2
+               echo "  $rdpExecStart" >&2
+               echo "Without --config it reads ~/.config/hypr-rdp/config.toml," >&2
+               echo "tolerates its absence, and serves unauthenticated." >&2
+               exit 1 ;;
+          esac
+          echo "hypr-rdp is given a config file and never a password argument"
+
+          # 2. No cleartext in the store. The template is a store file; what
+          #    belongs in it is sops-nix's placeholder, which is replaced at
+          #    activation into /run.
+          grep -q '^password = "<SOPS:' "$rdpTemplateFile" || {
+            echo "the rendered template does not carry a sops placeholder:" >&2
+            sed 's/^password = .*/password = <REDACTED BY THIS CHECK>/' \
+              "$rdpTemplateFile" >&2
+            echo "Whatever is in the password field is in the world-readable" >&2
+            echo "Nix store." >&2
+            exit 1
+          }
+          echo "the config template holds a sops placeholder, not a password"
+
+          # 3. The unit belongs to one user. systemd.user.services is declared
+          #    for everybody; the rendered file is 0400 to one account.
+          [ "$rdpConditionUser" = "someone" ] || {
+            echo "the RDP unit is not conditioned on its user:" >&2
+            echo "  ConditionUser = $rdpConditionUser" >&2
+            exit 1
+          }
+
+          # 4. The runtime refusal, RUN rather than read. This is the layer an
+          #    assertion cannot reach: a secret that exists and renders empty,
+          #    or a template sops-nix failed to write, both evaluate fine and
+          #    would otherwise start a daemon that answers.
+          guard=''${rdpGuard%% *}
+          test -n "$guard" || {
+            echo "the RDP unit has no ExecStartPre." >&2
+            echo "Nothing checks the rendered config before hypr-rdp reads it," >&2
+            echo "and hypr-rdp itself does not check: an empty password gets a" >&2
+            echo "warning in the journal and a desktop on the network." >&2
+            exit 1
+          }
+          test -x "$guard" || { echo "no guard at $guard" >&2; exit 1; }
+
+          good=$PWD/good.toml
+          printf 'bind = "127.0.0.1:3389"\nusername = "nixarchy"\npassword = "s3cret"\n' > "$good"
+          "$guard" "$good" || {
+            echo "the guard rejected a config that has a password." >&2
+            echo "A guard that refuses everything is a service nobody can run." >&2
+            exit 1
+          }
+
+          empty=$PWD/empty-password.toml
+          printf 'bind = "127.0.0.1:3389"\nusername = "nixarchy"\npassword = ""\n' > "$empty"
+          if "$guard" "$empty" 2>/dev/null; then
+            echo "the guard accepted an EMPTY password." >&2
+            echo "That is the exact state upstream turns into an" >&2
+            echo "unauthenticated remote desktop: config.rs unwrap_or_default()" >&2
+            echo "warns and serves." >&2
+            exit 1
+          fi
+
+          nouser=$PWD/no-username.toml
+          printf 'bind = "127.0.0.1:3389"\npassword = "s3cret"\n' > "$nouser"
+          if "$guard" "$nouser" 2>/dev/null; then
+            echo "the guard accepted a config with no username." >&2
+            exit 1
+          fi
+
+          if "$guard" "$PWD/not-here.toml" 2>/dev/null; then
+            echo "the guard accepted a config file that does not exist." >&2
+            echo "An unrendered template must fail the unit, not start it." >&2
+            exit 1
+          fi
+          echo "the RDP unit refuses to start without a password in its config"
 
           # ---- composition: the user's definition wins -------------------
           [ "$syncthingDataDir" = "/srv/sync" ] || {

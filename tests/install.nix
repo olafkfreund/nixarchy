@@ -502,12 +502,19 @@ pkgs.testers.runNixOSTest {
     # nixos-install copies -- the instrumented system is seeded -- so if this
     # step ever starts building, the seeding has drifted and the offline
     # failure will say which derivation.
+    # Into the machine's own directory, beside the configuration.nix that
+    # imports it. Relative imports are why: hosts/installed/configuration.nix
+    # says ./test-instrumentation.nix, and a copy at the flake root is not
+    # that path.
     installer.succeed(
-        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/")
+        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/hosts/installed/")
     installer.succeed(
         "sed -i 's|./hardware-configuration.nix|./hardware-configuration.nix\\n"
-        "    ./test-instrumentation.nix|' /mnt/etc/nixos/configuration.nix")
-    installer.succeed("grep -q test-instrumentation /mnt/etc/nixos/configuration.nix")
+        "    ./test-instrumentation.nix|'"
+        " /mnt/etc/nixos/hosts/installed/configuration.nix")
+    installer.succeed(
+        "grep -q test-instrumentation"
+        " /mnt/etc/nixos/hosts/installed/configuration.nix")
     installer.succeed("git -C /mnt/etc/nixos add -A")
     print(installer.succeed(
         "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"

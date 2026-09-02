@@ -478,6 +478,34 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "fontconfig pins Omarchy's font choices"
+
+        # ---- the two images are tellable apart -----------------------------
+        #
+        # Interpolated rather than grepped, because reading these forces the
+        # ISO configurations to evaluate -- which is what makes the volumeID
+        # assertions in installer/cd.nix fire at PR time. Nothing else here
+        # evaluates them, and a release build finding it is a release too
+        # late.
+        #
+        # They were identical once: same filename, same label, for a 5.6 GB
+        # image and a 1.5 GB one.
+        isoName=${inputs.self.nixosConfigurations.iso.config.image.baseName}
+        netName=${inputs.self.nixosConfigurations.iso-net.config.image.baseName}
+        isoLabel=${inputs.self.nixosConfigurations.iso.config.isoImage.volumeID}
+        netLabel=${inputs.self.nixosConfigurations.iso-net.config.isoImage.volumeID}
+        test "$isoName" != "$netName" || {
+          echo "both ISOs build to the same filename ($isoName): copy them out and they collide" >&2
+          exit 1
+        }
+        test "$isoLabel" != "$netLabel" || {
+          echo "both ISOs carry the same volume label ($isoLabel): two sticks, one name" >&2
+          exit 1
+        }
+        case "$isoName" in
+          *${inputs.self.packages.${system}.omarchy.version}*) ;;
+          *) echo "the ISO filename does not carry the version: $isoName" >&2; exit 1 ;;
+        esac
+        echo "the two images are tellable apart by name and label ($isoLabel / $netLabel)"
           touch $out
       ''
     else

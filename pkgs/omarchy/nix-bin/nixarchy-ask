@@ -165,7 +165,7 @@ $extra
 
 Pick whichever of this machine's skills fits -- nixos, nixarchy, nixos-gpu,
 nixos-ai, nixos-services, nixos-secrets, nixos-performance, nixos-security,
-nixos-doctor, nixos-config-repo -- and read it before answering."
+nixos-doctor, nixos-config-repo, devenv -- and read it before answering."
     ;;
   *)
     echo "Unknown task: $task" >&2

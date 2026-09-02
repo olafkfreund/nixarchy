@@ -1,0 +1,4 @@
+# Review routing, and the precondition for required-review branch protection
+# if that is ever turned on. One maintainer today, so one line; the day a
+# second person owns a directory, that directory gets a line of its own.
+* @olafkfreund

@@ -1591,6 +1591,21 @@ there rather than warning about it.
 authoritative list; this table is the summary and CI keeps it honest — an epic
 opened or closed without touching this section fails the build.
 
+## Contributing
+
+Contributions are welcome, and the process is written down rather than
+assumed. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the way in for people;
+[`AGENTS.md`](AGENTS.md) is the way in for the AI agent most people bring
+with them — a priority-ordered list of the mistakes that have actually
+happened here, with the reasons attached. Bug reports are routed before they
+are filed, because two projects share this desktop:
+[the routing rules](pkgs/omarchy/skills/nixarchy/contributing.md) are the
+same ones the agents on an installed machine follow.
+
+The short version of the whole process: a fix that would also fix Arch
+belongs upstream, and a check that has never been seen failing has never
+been seen working.
+
 ## License
 
 Packaging is MIT. Vendored Omarchy is MIT, © Basecamp.

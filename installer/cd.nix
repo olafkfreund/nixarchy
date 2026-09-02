@@ -1,5 +1,6 @@
 {
   inputs,
+  config,
   lib,
   pkgs,
   modulesPath,
@@ -141,6 +142,13 @@ let
       # the same thing.
       pkgs.kmod.dev
     ];
+
+  version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;
+
+  # "" for the offline image: it is the default one, and the plain name is the
+  # one people will be told to download.
+  variant = lib.optionalString (!offline) "-net";
+  labelVariant = lib.replaceStrings [ "-" ] [ "_" ] (lib.toUpper variant);
 in
 {
   imports = [ "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix" ];
@@ -246,10 +254,40 @@ in
   # until the built file is called nixos-minimal-*.iso anyway. The filename is
   # derived from image.baseName.
   # mkForce because installation-cd-base sets this too, at the same priority.
-  image.baseName = lib.mkForce "nixarchy-${inputs.self.shortRev or "dirty"}-x86_64";
+  # Version, then variant, then the commit. All three earn their place:
+  # the version is what a person calls the release, the variant is the
+  # difference between a 5.6 GB image and a 1.5 GB one, and the commit is the
+  # only thing that says which source an image can actually install from (see
+  # the published-commit note at the top of this file). Without the variant
+  # the two images were byte-for-byte different files with identical names.
+  #
+  # The version comes from the omarchy package rather than a second binding,
+  # so it cannot drift from what is actually on the image.
+  image.baseName = lib.mkForce "nixarchy-${version}${variant}-${
+    inputs.self.shortRev or "dirty"
+  }-x86_64";
+
+  # A volume ID that overflows 32 characters or carries a character outside
+  # [A-Z0-9_] is silently truncated or mangled by the ISO tooling, and the
+  # failure shows up as a stick that will not boot -- long after the build
+  # that caused it. Fail here instead.
+  assertions = [
+    {
+      assertion = builtins.stringLength config.isoImage.volumeID <= 32;
+      message = "isoImage.volumeID is ${toString (builtins.stringLength config.isoImage.volumeID)} characters, over the 32 the ISO 9660 label allows: ${config.isoImage.volumeID}";
+    }
+    {
+      assertion = builtins.match "[A-Z0-9_]+" config.isoImage.volumeID != null;
+      message = "isoImage.volumeID must be [A-Z0-9_] for the bootloader to find the root by label: ${config.isoImage.volumeID}";
+    }
+  ];
 
   isoImage = {
-    volumeID = "NIXARCHY";
+    # The label the bootloader finds the root by, so it is [A-Z0-9_] and at
+    # most 32 characters -- asserted below rather than left to a truncation
+    # nobody notices until a stick fails to boot. Two nixarchy sticks of
+    # different versions or variants no longer collide.
+    volumeID = "NIXARCHY_${lib.replaceStrings [ "." ] [ "_" ] version}${labelVariant}";
     makeEfiBootable = true;
     makeUsbBootable = true;
 

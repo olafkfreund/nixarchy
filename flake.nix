@@ -80,6 +80,42 @@
       url = "github:0xc000022070/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # The RDP server behind the remote-desktop feature (#159). Not in nixpkgs
+    # -- nothing under that name as of 2026-09 -- and the two RDP servers that
+    # are there cannot serve Hyprland: krdp needs the
+    # org.freedesktop.portal.RemoteDesktop interface, which
+    # xdg-desktop-portal-hyprland 1.4.1 does not advertise, and xrdp only
+    # reaches Wayland through a wayvnc chain built from an unreleased commit.
+    # So nixarchy carries the package until nixpkgs does.
+    #
+    # The cost, stated rather than hidden: a flake input lands in EVERY user's
+    # lock, including the Mode A machine that will never enable RDP. It is one
+    # more ref `nix flake update` can move and one more repository that has to
+    # keep existing. That is paid because the thing it buys -- reaching this
+    # desktop from a Windows machine with nothing installed on it -- has no
+    # other implementation at all, at any price. See the alternatives survey
+    # on #159; every other route is closed, not merely worse.
+    #
+    # What this project is taking on: v0.1.5, six months old, one primary
+    # author. The protocol stack is not theirs -- it is IronRDP, Devolutions'
+    # maintained Rust implementation -- so what this author owns is the
+    # Hyprland glue: capture, input, audio, clipboard. That is a real
+    # dependency on a small project, and a bad rebuild here breaks the machine
+    # you are remote to, from where you cannot fix it. Hence a tag. Never a
+    # branch, and bump it deliberately.
+    #
+    # The input has a named exit: when hypr-rdp lands in nixpkgs, delete this
+    # and point the module at pkgs.hypr-rdp.
+    #
+    # `follows` is right here and wrong for hyprland above -- upstream's
+    # pkg/nix/package.nix is a plain rustPlatform.buildRustPackage whose
+    # cargoHash does not depend on which nixpkgs supplies ffmpeg, and they
+    # publish no binary cache to forfeit by overriding it.
+    hypr-rdp = {
+      url = "github:MuNeNiCK/hypr-rdp/v0.1.5";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -182,6 +218,19 @@
         omarchy-nvim-config = final.callPackage ./pkgs/omarchy-nvim {
           inherit omarchyVersion;
         };
+
+        # The RDP daemon, re-exported from its own flake so the module that
+        # will run it (#156) can say `pkgs.hypr-rdp` and never mention an
+        # input. Built by upstream's pkg/nix/package.nix against OUR nixpkgs,
+        # through the `follows` on the input.
+        #
+        # This indirection is what makes the input's exit cheap: when nixpkgs
+        # carries hypr-rdp, delete the input and this attribute, and every
+        # `pkgs.hypr-rdp` in the tree keeps resolving -- to nixpkgs' own.
+        #
+        # Lazy, so a machine that never enables RDP never builds it. Being in
+        # the overlay is not being on the system.
+        hypr-rdp = inputs.hypr-rdp.packages.${final.stdenv.hostPlatform.system}.hypr-rdp;
 
         omarchy = final.callPackage ./pkgs/omarchy {
           src = omarchy;

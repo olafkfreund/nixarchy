@@ -585,7 +585,6 @@ write_flake() {
     subst "$f" '@device@' "$device"
     subst "$f" '@timezone@' "$timezone"
     subst "$f" '@keymap@' "$keymap"
-    subst "$f" '@password_hash@' "$password_hash"
     # Quoted in the template because a bare token is not parseable Nix; the
     # quotes go with the token. An encrypted disk has already authenticated the
     # user by the time a greeter would ask, so autologin follows encryption.
@@ -762,6 +761,24 @@ PIN
   } >"$file.pinned" && mv "$file.pinned" "$file"
 }
 
+# The login hash, written outside the flake directory.
+#
+# It used to be substituted into configuration.nix, which put it in a git
+# repository the user is then encouraged to push. Same umask discipline as the
+# LUKS passphrase file above, but this one stays: the installed machine needs
+# it at every activation, because users.users.<name>.hashedPasswordFile is read
+# then and not baked into the store.
+#
+# Root-owned and 0600. It is not a password, but a crypt hash is worth exactly
+# as much as the time somebody is willing to spend on it offline.
+write_password_hash() {
+  ( umask 077
+    mkdir -p /mnt/var/lib/nixarchy
+    printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash )
+  chmod 0600 /mnt/var/lib/nixarchy/password.hash
+  chown 0:0 /mnt/var/lib/nixarchy/password.hash
+}
+
 install_flake_dir() {
   mkdir -p /mnt/etc
   mv "$work" /mnt/etc/nixos
@@ -927,6 +944,7 @@ main() {
     format_disk
     generate_hardware_config
     install_flake_dir
+    write_password_hash
     run_install
   } >>"$log" 2>&1 || rc=$?
   ui_dashboard_stop
@@ -965,8 +983,11 @@ main() {
 }
 
 # Guarded so the functions above can be sourced and exercised without running
-# an install: that is how write_flake's substitution is tested (a crypt hash
-# full of $ and & is exactly the input a naive implementation ruins).
+# an install. The substitution's original stress case -- a crypt hash full of
+# $ and & -- no longer passes through it, because the hash is written to a file
+# now rather than into the template. subst stays as it is anyway: it is proven,
+# and being literal on the replacement side is the correct behaviour for a
+# device path or a timezone too.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   main "$@"
 fi

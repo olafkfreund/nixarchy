@@ -463,6 +463,22 @@ pkgs.testers.runNixOSTest {
     installer.succeed("test -d /mnt/boot/EFI")
     print("install wrote a flake and an ESP")
 
+    # ---- the login hash is NOT in the repository -----------------------
+    #
+    # /etc/nixos is a git repository and nixarchy-config-repo exists to push
+    # it to GitHub, so a crypt hash written into configuration.nix is a hash
+    # published to whoever reads that repo. It used to be. Asserted from this
+    # side because the whole tree is visible here, including files a later
+    # step might add.
+    installer.fail("grep -rq '[$]6[$]' /mnt/etc/nixos")
+    installer.succeed("test -f /mnt/var/lib/nixarchy/password.hash")
+    mode = installer.succeed(
+        "stat -c '%a %U:%G' /mnt/var/lib/nixarchy/password.hash").strip()
+    assert mode == "600 root:root", (
+        f"the password hash is {mode}, not 600 root:root -- it is readable by "
+        "somebody it should not be")
+    print("the hash is outside the repo, 0600 root:root")
+
     # ---- make the result observable ------------------------------------
     # Everything above this line is the product. Everything below adds the
     # serial root shell the driver needs and nothing else; see the note on
@@ -530,6 +546,16 @@ pkgs.testers.runNixOSTest {
     target.wait_until_succeeds("systemctl is-active user@1000.service")
     target.wait_until_succeeds("pgrep -u 1000 -f Hyprland")
     print("the installed machine reaches a Hyprland session")
+
+    # That login is the proof the indirection works: hashedPasswordFile is read
+    # at activation rather than baked into the store, so a hash file that was
+    # missing, misplaced or unreadable would have failed authentication just
+    # now. Assert it survived the boot as well -- /var/lib is not managed by
+    # /etc activation, which is exactly why the file is there and not in
+    # /etc/nixarchy among the generated symlinks.
+    target.succeed("test -f /var/lib/nixarchy/password.hash")
+    target.fail("grep -rq '[$]6[$]' /etc/nixos")
+    print("the hash survived the boot, and the repo is still clean of it")
 
     # ---- the flake on disk is the user's -------------------------------
     target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")

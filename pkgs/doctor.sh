@@ -145,19 +145,25 @@ say ""
 # ---- the boot splash -----------------------------------------------------
 # nixarchy sets boot.plymouth.theme to its own, with mkDefault. Anyone who
 # already chose one keeps it and needs no mkForce -- but they will not get
-# Omarchy's splash either, and finding that out at the next boot rather than
+# nixarchy's splash either, and finding that out at the next boot rather than
 # here is the sort of surprise this script exists to prevent.
+#
+# "nixarchy's", not "Omarchy's": the theme DIRECTORY is still called omarchy,
+# because boot.plymouth.theme names the directory and renaming it means moving
+# themePackages with it -- but every image it draws is drawn by
+# pkgs/omarchy/nixarchy-logo.py and nixarchy-plymouth-chrome.py, and
+# Name= in omarchy.plymouth is nixarchy. See #46.
 say "${bold}Boot splash${off}"
 plymouth_theme=$( (grep -h '^Theme=' /etc/plymouth/plymouthd.conf 2>/dev/null |
   head -1 | cut -d= -f2) || true)
 if [ -n "$plymouth_theme" ]; then
   finding "Plymouth is showing '$plymouth_theme'" "$warn" ""
   say "     nixarchy defaults boot.plymouth.theme to its own splash, so yours"
-  say "     wins and nothing collides. To take Omarchy's instead:"
+  say "     wins and nothing collides. To take nixarchy's instead:"
   say "       programs.nixarchy.bootSplash = \"force\";"
-  notes+=("Your Plymouth theme '${plymouth_theme}' is kept -- nixarchy only defaults its own. programs.nixarchy.bootSplash = \"force\" takes Omarchy's instead; mkForce on boot.plymouth.theme alone fails the build, because themePackages stays yours and the named theme is then missing from it.")
+  notes+=("Your Plymouth theme '${plymouth_theme}' is kept -- nixarchy only defaults its own. programs.nixarchy.bootSplash = \"force\" takes nixarchy's instead; mkForce on boot.plymouth.theme alone fails the build, because themePackages stays yours and the named theme is then missing from it.")
 else
-  finding "No Plymouth theme set" "$ok" "you get Omarchy's splash"
+  finding "No Plymouth theme set" "$ok" "you get nixarchy's splash"
 fi
 say ""
 

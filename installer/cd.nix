@@ -149,6 +149,42 @@ let
   # one people will be told to download.
   variant = lib.optionalString (!offline) "-net";
   labelVariant = lib.replaceStrings [ "-" ] [ "_" ] (lib.toUpper variant);
+  # The installer, plus whatever the kernel command line asked for.
+  #
+  # The unit used to exec the installer with no arguments, so there was no way
+  # to tell this image anything: the boot menu is suppressed (timeout 0, and
+  # deliberately), and nothing read /proc/cmdline or scanned attached media. An
+  # unattended install therefore meant building a bespoke image.
+  #
+  # The kernel command line is how qemu (-append), PXE and cloud metadata all
+  # inject parameters, so an admin's fleet story becomes "netboot iso-net with
+  # three arguments" and needs no new infrastructure. That is also where
+  # unattended installs actually happen, which is why scanning attached media
+  # for a labelled answers file is NOT here -- it can be added when somebody
+  # with a physical fleet asks.
+  #
+  # With none of them present the behaviour is exactly what it was: an
+  # interactive install.
+  nixarchyInstallerLauncher = pkgs.writeShellScript "nixarchy-installer-launcher" ''
+    set -u
+    args=()
+
+    # Word-split the command line and match whole parameters. A substring
+    # match would find nixarchy.host= inside nixarchy.hostname= and hand the
+    # installer half of somebody else's argument.
+    for p in $(cat /proc/cmdline); do
+      case "$p" in
+        nixarchy.answers=*) args+=(--answers "''${p#nixarchy.answers=}") ;;
+        nixarchy.from=*) args+=(--from "''${p#nixarchy.from=}") ;;
+        nixarchy.host=*) args+=(--host "''${p#nixarchy.host=}") ;;
+      esac
+    done
+
+    exec ${
+      lib.getExe inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
+    } "''${args[@]+"''${args[@]}"}"
+  '';
+
 in
 {
   imports = [ "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix" ];
@@ -243,7 +279,7 @@ in
       TTYPath = "/dev/tty1";
       TTYReset = true;
       TTYVHangup = true;
-      ExecStart = lib.getExe inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install;
+      ExecStart = nixarchyInstallerLauncher;
       # Finished, aborted or crashed, do not respawn a TUI in a loop.
       Restart = "no";
     };

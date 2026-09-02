@@ -362,7 +362,7 @@ pkgs.testers.runNixOSTest {
         machine.fail(f"test -e /home/omarchy/{home}/omarchy")
     print("agent skills linked into all four agent homes, under the new names")
 
-    # The config-repo nudge, and the two ways it is supposed to stay silent.
+    # The config-repo nudge, and the three ways it is supposed to stay silent.
     #
     # The hook is the whole delivery mechanism: default/hypr/autostart.lua ends
     # startup with `omarchy-hook post-boot`, which runs everything in this
@@ -377,6 +377,32 @@ pkgs.testers.runNixOSTest {
     machine.succeed(
         "grep -q 'nixarchy-config-repo --check || exit 0' "
         "/home/omarchy/.config/omarchy/hooks/post-boot.d/config-repo")
+
+    # Silence, gate zero: nixarchy did not write this machine.
+    #
+    # This VM imports nixosModules.nixarchy into a configuration of its own and
+    # never touches installer/host.nix -- it IS a Mode A machine, which makes it
+    # the right place to assert this and the reason the two gates below had to
+    # be rearranged. The ownership question is asked before either of them, so
+    # without the fixture further down they would both have gone on passing
+    # while testing nothing at all.
+    machine.fail("test -e /etc/nixarchy/managed")
+    machine.fail("su - omarchy -c 'nixarchy-config-repo --check'")
+    refusal = machine.fail("su - omarchy -c 'nixarchy-config-repo' 2>&1")
+    assert "not one Nixarchy wrote" in refusal, (
+        "the command did not refuse a configuration nixarchy does not own; "
+        f"it said: {refusal}")
+    assert "nixos-config-repo" in refusal, (
+        "the refusal names no way for the user to do it themselves")
+    print("config-repo refuses, and nudges nobody, on a machine nixarchy did not write")
+
+    # And now the fixture that makes the rest of this block reachable: the
+    # marker as a real machine would carry it. Written by hand rather than by
+    # setting programs.nixarchy.installerManaged, because this VM has to stay a
+    # Mode A machine for the assertions above -- and because installer/host.nix
+    # is the only configuration allowed to set that option, which is itself
+    # asserted in tests/options.nix.
+    machine.succeed("mkdir -p /etc/nixarchy && touch /etc/nixarchy/managed")
 
     # Silence, gate one: no default agent. Omarchy deliberately ships without
     # one, so this is the state of every machine whose owner has not finished

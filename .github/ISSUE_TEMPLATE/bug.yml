@@ -1,0 +1,42 @@
+name: Bug report
+description: Something specific to NixOS is broken — the Nix store, a rebuild, nixarchy-apply, a replaced command, a path that assumes /usr.
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: >
+        First: **would this happen on Arch?** If yes, it is Omarchy's bug and
+        belongs at basecamp/omarchy — the links on the previous page route it.
+        A quick test that settles most cases: `head -20 "$(which
+        omarchy-<command>)"` — nixarchy's replacements carry a header saying
+        what they replace and why. When genuinely unsure, file here; routing
+        it onward with the NixOS detail attached is cheaper than the reverse.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Steps to reproduce beat description. A screenshot or short recording often beats both.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: >
+        These identify exactly what was built, and they are the first thing
+        anyone will ask for.
+      placeholder: |
+        omarchy version
+        nixos-version
+        nix flake metadata "${NIXARCHY_FLAKE:-/etc/nixos}"   # the locked nixarchy and nixpkgs revisions
+    validations:
+      required: true
+  - type: textarea
+    id: search
+    attributes:
+      label: Existing issues checked
+      description: >
+        Search both trackers, including closed issues — a closed-as-fixed
+        match that still reproduces is a regression, which is worth far more
+        than a duplicate.
+      placeholder: "gh search issues --repo olafkfreund/nixarchy \"…\""

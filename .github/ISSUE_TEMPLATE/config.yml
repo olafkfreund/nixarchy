@@ -1,0 +1,17 @@
+# Routing before filing: two projects share this desktop, and a report in the
+# wrong tracker asks people to debug a distribution they do not run. The full
+# rules are in pkgs/omarchy/skills/nixarchy/contributing.md.
+blank_issues_enabled: true
+contact_links:
+  - name: A bug that would also happen on Arch
+    url: https://github.com/basecamp/omarchy/issues
+    about: >
+      The shell, themes, Hyprland config, menus, and every omarchy-* command
+      nixarchy does not replace are upstream's. If it would break on stock
+      Omarchy too, report it there — ideally reproduced there first.
+  - name: An Omarchy feature idea
+    url: https://github.com/basecamp/omarchy/discussions/categories/suggestions
+    about: Feature suggestions for the desktop itself go to upstream's discussions.
+  - name: Omarchy support / "is this a bug?"
+    url: https://omarchy.org/discord
+    about: Questions about the desktop are answered fastest on the Omarchy Discord.

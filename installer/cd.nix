@@ -142,13 +142,13 @@ let
       # the same thing.
       pkgs.kmod.dev
     ];
-in
-let
+
   version = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.omarchy.version;
+
   # "" for the offline image: it is the default one, and the plain name is the
   # one people will be told to download.
   variant = lib.optionalString (!offline) "-net";
-  variant2 = lib.replaceStrings [ "-" ] [ "_" ] variant;
+  labelVariant = lib.replaceStrings [ "-" ] [ "_" ] (lib.toUpper variant);
 in
 {
   imports = [ "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix" ];
@@ -287,7 +287,7 @@ in
     # most 32 characters -- asserted below rather than left to a truncation
     # nobody notices until a stick fails to boot. Two nixarchy sticks of
     # different versions or variants no longer collide.
-    volumeID = "NIXARCHY_${lib.replaceStrings [ "." ] [ "_" ] version}${lib.toUpper variant2}";
+    volumeID = "NIXARCHY_${lib.replaceStrings [ "." ] [ "_" ] version}${labelVariant}";
     makeEfiBootable = true;
     makeUsbBootable = true;
 

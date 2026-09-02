@@ -101,6 +101,14 @@ luks_passphrase=""
 timezone=""
 keymap=""
 
+# The generated flake, and this machine's directory inside it. Both are set by
+# write_flake and read by every step after it; hostdir exists so the
+# hosts/<name>/ path is spelled once. It was spelled three times when the
+# layout changed, and the one occurrence that was missed silently disabled
+# reuse_baked_initrd -- see the guard there.
+work=""
+hostdir=""
+
 usage() {
   cat <<'USAGE'
 nixarchy-install -- install nixarchy onto a disk.
@@ -578,8 +586,15 @@ write_flake() {
   cp -r "$TEMPLATE"/. "$work"
   chmod -R u+w "$work"
 
+  # The template ships one machine-shaped directory called host/; the name is
+  # not known until now. Renaming it is what makes a machine, and it is why
+  # the template derivation has no hostname baked into it.
+  mkdir -p "$work/hosts"
+  hostdir="$work/hosts/$hostname"
+  mv "$work/host" "$hostdir"
+
   local f
-  for f in "$work/flake.nix" "$work/configuration.nix"; do
+  for f in "$work/flake.nix" "$hostdir/default.nix" "$hostdir/configuration.nix"; do
     subst "$f" '@hostname@' "$hostname"
     subst "$f" '@username@' "$username"
     subst "$f" '@device@' "$device"
@@ -597,7 +612,7 @@ write_flake() {
   # disk is evaluated *out of this flake* -- so the flake has to evaluate before
   # there is a mounted disk to generate a hardware config from. An empty module
   # is enough for that evaluation and is replaced by the real one at step 7.
-  printf '{ ... }:\n{ }\n' >"$work/hardware-configuration.nix"
+  printf '{ ... }:\n{ }\n' >"$hostdir/hardware-configuration.nix"
 }
 
 format_disk() {
@@ -625,9 +640,9 @@ generate_hardware_config() {
   # fails the build. --show-hardware-config prints to stdout, where the plain
   # --root form would also write a configuration.nix over the template's.
   nixos-generate-config --root /mnt --no-filesystems --show-hardware-config \
-    >"$work/hardware-configuration.nix"
+    >"$hostdir/hardware-configuration.nix"
 
-  reuse_baked_initrd "$work/hardware-configuration.nix"
+  reuse_baked_initrd "$hostdir/hardware-configuration.nix"
 }
 
 # Use the initrd we already have, when it fits.
@@ -654,6 +669,21 @@ generate_hardware_config() {
 reuse_baked_initrd() {
   local file=$1 detected m
   local baked avail_src forced_src
+
+  # Loudly, because the silent version of this cost a day. When the hosts/
+  # layout moved hardware-configuration.nix, this function kept being handed
+  # the old flat path: sed printed nothing for a file that was not there, the
+  # pipe below swallowed its exit status, `detected` came out empty, and the
+  # early return read exactly like "nothing was detected, nothing to pin".
+  # The install then went on with the modules nixos-generate-config found,
+  # which is a different initrd, which is a build, which on an image with no
+  # network is the source bootstrap -- 517 derivations from hex0-seed, and a
+  # checks.install that failed a long way from the line that broke it.
+  if [ ! -f "$file" ]; then
+    echo "hardware: no $file to pin -- refusing to install a machine whose" >&2
+    echo "hardware: initrd would have to be built. This is a bug in the installer." >&2
+    exit 1
+  fi
 
   # The list depends on the answer to the encryption question: LUKS pulls a
   # dozen crypto modules into the initrd, so the two baked initrds have

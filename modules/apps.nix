@@ -1712,7 +1712,30 @@ in
             text = ''
               file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
               flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
-              dest="$flake/nixarchy-apps.nix"
+
+              # Where the selection lands: this machine's directory when the
+              # flake has one, the flake root when it does not.
+              #
+              # That second case is every machine installed before the hosts/
+              # layout existed. Their flake is their own -- the README calls it
+              # "a flake you own" -- so nothing migrates it, and this one
+              # conditional is the entire cost of leaving them alone.
+              #
+              # Keyed on the directory existing rather than on the hostname
+              # matching anything: a repo that has hosts/ but not one for THIS
+              # machine is a repo being edited from somewhere else, and writing
+              # a stray directory into it would be worse than writing the file
+              # where it has always gone.
+              base="$flake"
+              # uname -n, not hostname(1): writeShellApplication builds a
+              # strict PATH from runtimeInputs, and hostname lives in a package
+              # this script does not depend on. uname is coreutils, already
+              # here, and reports the same name.
+              host=$(uname -n)
+              if [ -d "$flake/hosts/$host" ]; then
+                base="$flake/hosts/$host"
+              fi
+              dest="$base/nixarchy-apps.nix"
 
               [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
               [ -d "$flake" ] || {
@@ -1741,14 +1764,14 @@ in
               # and the copy it used to hold is written to nixarchy/apps.nix in
               # the same run, before the stub replaces it.
               srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
-              mkdir -p "$flake/nixarchy"
+              mkdir -p "$base/nixarchy"
 
               imports=""
               copied=""
               for part in apps services advanced; do
                 src="$srcdir/$part.nix"
                 [ -f "$src" ] || continue
-                dst="$flake/nixarchy/$part.nix"
+                dst="$base/nixarchy/$part.nix"
                 imports="$imports ./nixarchy/$part.nix"
                 if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
                   continue
@@ -1772,7 +1795,7 @@ in
               if [ -n "$copied" ]; then
                 echo "copied ->$copied"
               else
-                echo "$flake is already up to date."
+                echo "$base is already up to date."
               fi
 
               # Stage what was written, or a flake in a git worktree cannot see

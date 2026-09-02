@@ -172,29 +172,45 @@ let
         inputs.self.nixosModules.nixarchy
         inputs.home-manager.nixosModules.home-manager
         inputs.disko.nixosModules.disko
-        (import ../installer/host.nix {
-          hostname = "installed";
-          username = "omarchy";
-        })
-        (import ../installer/disk-config.nix {
-          device = "/dev/vdb";
-          encrypt = false;
-        })
-        # Everything the generated configuration.nix adds. Without these the
-        # seeded system is not the system that gets installed: system-path
-        # differs, so nixos-install has to rebuild it, and with no network it
-        # cannot fetch the inputs to do so. Keep this in step with
-        # installer/template/configuration.nix -- a mismatch shows up as
-        # "cannot build", which is a clear enough signal.
+
+        # The machine, as ONE module whose imports are the three files
+        # installer/template/host/default.nix imports -- not as three entries
+        # in this list.
+        #
+        # The shape is load-bearing and was not, before the hosts/ layout. A
+        # module's `imports` and a nixosSystem's `modules` merge in different
+        # orders, so listing these flat gives the same packages in a different
+        # environment.systemPackages ORDER; system-path hashes that order into
+        # chosenOutputs, so it is a different derivation, so the toplevel is,
+        # and the install has to build what it can no longer copy -- offline,
+        # which means stdenv, which means 459 derivations from hex0-seed and a
+        # fetch of a Debian patch that never arrives.
+        #
+        # So this mirrors hosts/<name>/default.nix, and the block below mirrors
+        # the configuration.nix that sits beside it. Keep both in step with
+        # installer/template/host/ -- a mismatch shows up as "cannot build",
+        # which is a clear enough signal.
         {
-          time.timeZone = "UTC";
-          console.keyMap = "us";
-          nixpkgs.config.allowUnfree = true;
-          services.displayManager.autoLogin = {
-            enable = false;
-            user = "omarchy";
-          };
-          users.users.omarchy.hashedPassword = passwordHash;
+          imports = [
+            (import ../installer/host.nix {
+              hostname = "installed";
+              username = "omarchy";
+            })
+            (import ../installer/disk-config.nix {
+              device = "/dev/vdb";
+              encrypt = false;
+            })
+            {
+              time.timeZone = "UTC";
+              console.keyMap = "us";
+              nixpkgs.config.allowUnfree = true;
+              services.displayManager.autoLogin = {
+                enable = false;
+                user = "omarchy";
+              };
+              users.users.omarchy.hashedPassword = passwordHash;
+            }
+          ];
         }
         (hardwareConfig cpuModule)
         initrdPin
@@ -486,12 +502,19 @@ pkgs.testers.runNixOSTest {
     # nixos-install copies -- the instrumented system is seeded -- so if this
     # step ever starts building, the seeding has drifted and the offline
     # failure will say which derivation.
+    # Into the machine's own directory, beside the configuration.nix that
+    # imports it. Relative imports are why: hosts/installed/configuration.nix
+    # says ./test-instrumentation.nix, and a copy at the flake root is not
+    # that path.
     installer.succeed(
-        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/")
+        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/hosts/installed/")
     installer.succeed(
         "sed -i 's|./hardware-configuration.nix|./hardware-configuration.nix\\n"
-        "    ./test-instrumentation.nix|' /mnt/etc/nixos/configuration.nix")
-    installer.succeed("grep -q test-instrumentation /mnt/etc/nixos/configuration.nix")
+        "    ./test-instrumentation.nix|'"
+        " /mnt/etc/nixos/hosts/installed/configuration.nix")
+    installer.succeed(
+        "grep -q test-instrumentation"
+        " /mnt/etc/nixos/hosts/installed/configuration.nix")
     installer.succeed("git -C /mnt/etc/nixos add -A")
     print(installer.succeed(
         "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"
@@ -559,11 +582,45 @@ pkgs.testers.runNixOSTest {
 
     # ---- the flake on disk is the user's -------------------------------
     target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")
-    for f in ["flake.nix", "flake.lock", "configuration.nix",
-              "disk-config.nix", "nixarchy-apps.nix"]:
+    for f in ["flake.nix", "flake.lock", "disk-config.nix"]:
         target.succeed(f"test -s /etc/nixos/{f}")
-    target.succeed("grep -q 'nixarchy-apps.nix' /etc/nixos/configuration.nix")
-    print("/etc/nixos is a git repository holding the five generated files")
+    for f in ["default.nix", "configuration.nix", "hardware-configuration.nix",
+              "nixarchy-apps.nix"]:
+        target.succeed(f"test -s /etc/nixos/hosts/installed/{f}")
+    target.succeed(
+        "grep -q 'nixarchy-apps.nix' /etc/nixos/hosts/installed/configuration.nix")
+    print("/etc/nixos is a git repository, and the machine is a directory in it")
+
+    # ---- a second machine is a second directory ------------------------
+    #
+    # The whole point of the layout, so it is asserted rather than assumed.
+    # Done here because this machine can evaluate its own flake offline -- its
+    # inputs are all in its store -- which nothing outside a booted install
+    # can do.
+    #
+    # git add is not tidiness: a flake in a worktree sees only tracked or
+    # staged files, so an unstaged hosts/spare does not exist to the evaluator
+    # and the error names a missing path rather than an untracked one.
+    target.succeed("cp -r /etc/nixos/hosts/installed /etc/nixos/hosts/spare")
+    target.succeed(
+        "sed -i 's/installed/spare/g' /etc/nixos/hosts/spare/default.nix")
+    target.succeed("git -C /etc/nixos add -A")
+    names = target.succeed(
+        "cd /etc/nixos && nix --extra-experimental-features 'nix-command flakes'"
+        " eval --raw .#nixosConfigurations --apply"
+        " 'x: builtins.concatStringsSep \" \" (builtins.attrNames x)'").strip()
+    assert names == "installed spare", (
+        f"adding a host directory gave {names!r}, not 'installed spare' -- "
+        "flake.nix is not finding machines by reading ./hosts")
+
+    # And it is a different machine, not the same one twice.
+    spare = target.succeed(
+        "cd /etc/nixos && nix --extra-experimental-features 'nix-command flakes'"
+        " eval --raw .#nixosConfigurations.spare.config.networking.hostName").strip()
+    assert spare == "spare", f"the second host is called {spare!r}"
+    target.succeed("git -C /etc/nixos rm -r --cached -q hosts/spare")
+    target.succeed("rm -rf /etc/nixos/hosts/spare")
+    print("a second machine is a second directory")
 
     # ---- Invariant 1 ---------------------------------------------------
     # If the flake evaluates to the same store path that is running, then every

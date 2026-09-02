@@ -120,7 +120,34 @@ pkgs.runCommand "nixarchy-installer-ui"
           echo "  unconfirmed $stub -> UI_PAD=$pad on an 80-column terminal, drew clean"
         done
 
-        [ "$fail" = 0 ] || { echo "the interactive screens do not survive every width" >&2; exit 1; }
+        # ---- a width from somebody else's terminal ---------------------------
+    #
+    # #133 marked the framebuffer GUESS unconfirmed, and stopped there. On a
+    # serial console stty answers 0 0, the source loop moves on, and /dev/tty1
+    # answers 160 -- a real measurement of a real terminal that is not the one
+    # being written to. Nothing marked it, so the padding was centred on it and
+    # gum panicked exactly as before (#139).
+    #
+    # Asserted through ui_src_is_ours rather than by faking device nodes: a
+    # sandbox has no /dev/tty1 to read, and the classification is the decision
+    # that was wrong.
+    for src in - /dev/tty; do
+      script -qec "stty cols 80 rows 24; . $UI_SH; ui_src_is_ours '$src'" /dev/null >/dev/null 2>&1 || {
+        echo "ui_src_is_ours says $src is not this process's terminal; it is" >&2
+        fail=1
+      }
+    done
+    for src in /dev/tty1 /dev/console /dev/ttyS0; do
+      if script -qec "stty cols 80 rows 24; . $UI_SH; ui_src_is_ours '$src'" /dev/null >/dev/null 2>&1; then
+        echo "ui_src_is_ours trusts $src as this process's terminal" >&2
+        echo "  it is a named device, and a size read from it describes whatever" >&2
+        echo "  is attached to THAT -- not necessarily what is being drawn on" >&2
+        fail=1
+      fi
+    done
+    echo "  a size is only trusted from the terminal being drawn on"
+
+    [ "$fail" = 0 ] || { echo "the interactive screens do not survive every width" >&2; exit 1; }
         echo "gum renders at ${toString (builtins.length widths)} widths and ignores ${toString (builtins.length guesses)} bad guesses"
         touch $out
   ''

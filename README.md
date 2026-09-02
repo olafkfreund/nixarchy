@@ -876,16 +876,30 @@ keymap=us
 `tests/install.nix` is the working reference for it.
 
 **What you get is a flake you own.** `/etc/nixos` is a git repository holding a
-`flake.nix`, a `configuration.nix`, the `disk-config.nix` that formatted the
-disk, a `nixarchy-apps.nix` for your app selection, and the `flake.lock` the
-image was built with — not a fresh one, because regenerating it would make your
-first boot differ from what was actually installed. `imports = [
-./nixarchy-apps.nix ];` is already written for you: forgetting that line is the
-silent failure the section below warns about for machines you configure by
-hand, and the installer does not let you make it. Edit it and run
-`nh os switch`. Nothing the installer did is
+`flake.nix`, the `disk-config.nix` that formatted the disk, the `flake.lock`
+the image was built with — not a fresh one, because regenerating it would make
+your first boot differ from what was actually installed — and your machine as
+a directory under `hosts/`:
+
+```
+/etc/nixos
+├── flake.nix              finds machines by reading ./hosts
+├── flake.lock
+├── disk-config.nix
+└── hosts/nixarchy/        default.nix, configuration.nix,
+                           hardware-configuration.nix, nixarchy-apps.nix
+```
+
+A second machine is a second directory; `flake.nix` reads `./hosts` and there
+is nothing in it to edit. `imports = [ ./nixarchy-apps.nix ];` is already
+written for you: forgetting that line is the silent failure the section below
+warns about for machines you configure by hand, and the installer does not let
+you make it. Edit it and run `nh os switch`. Nothing the installer did is
 hidden from that directory, which is the point: a rebuild immediately after
 install builds nothing, because everything it did is described there.
+
+Installing a second machine from that same repository, and letting them keep
+themselves current, is [many machines, one repo](docs/manual/many-machines.md).
 
 **Four caveats worth knowing before you write the stick.**
 
@@ -1536,9 +1550,13 @@ is the shape.
 | --- | --- | --- |
 | [#6](https://github.com/olafkfreund/nixarchy/issues/6) | **bare metal to a desktop** — the installer, the ISO, the release | 18 of 22 done |
 | [#112](https://github.com/olafkfreund/nixarchy/issues/112) | **getting back** — snapshots, backup, restore | not started |
-| [#121](https://github.com/olafkfreund/nixarchy/issues/121) | **many machines, one repo** — fleets, unattended installs, shared configs | not started |
 
-**Recently finished:** [Flatpaks, declared](https://github.com/olafkfreund/nixarchy/issues/105)
+**Recently finished:**
+[many machines, one repo](https://github.com/olafkfreund/nixarchy/issues/121)
+— a machine is a directory, a second one is installed from the same
+repository with `nixarchy-install --from`, and they keep themselves current
+if you ask them to. Also
+[Flatpaks, declared](https://github.com/olafkfreund/nixarchy/issues/105)
 — for the handful of things nixpkgs cannot carry. Pickable from the menu,
 searchable against Flathub, and declared in the same file as everything else.
 Also the app selection grew a

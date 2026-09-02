@@ -559,11 +559,45 @@ pkgs.testers.runNixOSTest {
 
     # ---- the flake on disk is the user's -------------------------------
     target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")
-    for f in ["flake.nix", "flake.lock", "configuration.nix",
-              "disk-config.nix", "nixarchy-apps.nix"]:
+    for f in ["flake.nix", "flake.lock", "disk-config.nix"]:
         target.succeed(f"test -s /etc/nixos/{f}")
-    target.succeed("grep -q 'nixarchy-apps.nix' /etc/nixos/configuration.nix")
-    print("/etc/nixos is a git repository holding the five generated files")
+    for f in ["default.nix", "configuration.nix", "hardware-configuration.nix",
+              "nixarchy-apps.nix"]:
+        target.succeed(f"test -s /etc/nixos/hosts/installed/{f}")
+    target.succeed(
+        "grep -q 'nixarchy-apps.nix' /etc/nixos/hosts/installed/configuration.nix")
+    print("/etc/nixos is a git repository, and the machine is a directory in it")
+
+    # ---- a second machine is a second directory ------------------------
+    #
+    # The whole point of the layout, so it is asserted rather than assumed.
+    # Done here because this machine can evaluate its own flake offline -- its
+    # inputs are all in its store -- which nothing outside a booted install
+    # can do.
+    #
+    # git add is not tidiness: a flake in a worktree sees only tracked or
+    # staged files, so an unstaged hosts/spare does not exist to the evaluator
+    # and the error names a missing path rather than an untracked one.
+    target.succeed("cp -r /etc/nixos/hosts/installed /etc/nixos/hosts/spare")
+    target.succeed(
+        "sed -i 's/installed/spare/g' /etc/nixos/hosts/spare/default.nix")
+    target.succeed("git -C /etc/nixos add -A")
+    names = target.succeed(
+        "cd /etc/nixos && nix --extra-experimental-features 'nix-command flakes'"
+        " eval --raw .#nixosConfigurations --apply"
+        " 'x: builtins.concatStringsSep \" \" (builtins.attrNames x)'").strip()
+    assert names == "installed spare", (
+        f"adding a host directory gave {names!r}, not 'installed spare' -- "
+        "flake.nix is not finding machines by reading ./hosts")
+
+    # And it is a different machine, not the same one twice.
+    spare = target.succeed(
+        "cd /etc/nixos && nix --extra-experimental-features 'nix-command flakes'"
+        " eval --raw .#nixosConfigurations.spare.config.networking.hostName").strip()
+    assert spare == "spare", f"the second host is called {spare!r}"
+    target.succeed("git -C /etc/nixos rm -r --cached -q hosts/spare")
+    target.succeed("rm -rf /etc/nixos/hosts/spare")
+    print("a second machine is a second directory")
 
     # ---- Invariant 1 ---------------------------------------------------
     # If the flake evaluates to the same store path that is running, then every

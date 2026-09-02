@@ -68,6 +68,7 @@ in
     inputs.hyprland.nixosModules.default
     (import ./apps.nix inputs)
     ./local-ai.nix
+    ./fleet.nix
     ./services
     ./flatpaks.nix
     inputs.nix-flatpak.nixosModules.nix-flatpak

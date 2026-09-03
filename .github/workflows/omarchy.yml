@@ -99,21 +99,165 @@ jobs:
         # only worth reading while someone is deciding about this bump.
         run: |
           for tag in "${{ steps.rel.outputs.current }}" "${{ steps.rel.outputs.latest }}"; do
-            : > "pkgs-$tag.txt"
+            : > "$RUNNER_TEMP/pkgs-$tag.txt"
             for list in omarchy-base omarchy-other; do
               curl -fsSL \
                 "https://raw.githubusercontent.com/basecamp/omarchy/$tag/install/$list.packages" \
-                >> "pkgs-$tag.txt" || true
+                >> "$RUNNER_TEMP/pkgs-$tag.txt" || true
             done
           done
 
           {
             echo "delta<<DELTA_EOF"
             bash .github/scripts/omarchy-package-delta.sh \
-              "pkgs-${{ steps.rel.outputs.current }}.txt" \
-              "pkgs-${{ steps.rel.outputs.latest }}.txt" \
+              "$RUNNER_TEMP/pkgs-${{ steps.rel.outputs.current }}.txt" \
+              "$RUNNER_TEMP/pkgs-${{ steps.rel.outputs.latest }}.txt" \
               "${{ steps.rel.outputs.current }}" "${{ steps.rel.outputs.latest }}"
             echo "DELTA_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # The next three steps are the rest of the briefing. Everything above
+      # answers "does it still build here"; none of it answers "what did
+      # upstream decide, and does any of it land on something we changed".
+      # That was left to a human with 167 changed files and a git client.
+      #
+      # Everything below writes into $RUNNER_TEMP rather than the checkout.
+      # create-pull-request stages the whole working tree, so a scratch file
+      # left in the repo is a scratch file committed to the bump branch.
+      #
+      # All three are continue-on-error, and each writes a fallback line
+      # rather than nothing when it cannot do its job. A briefing is worth
+      # having and is worth nobody's bump: a GitHub API hiccup must not be the
+      # reason a security release sits unadopted, which has already happened
+      # here twice for other reasons. An empty section reads as "upstream
+      # changed nothing", so a failed section has to say it failed.
+      - name: What upstream says this release changed
+        if: steps.rel.outputs.changed == 'true'
+        continue-on-error: true
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Upstream's own words. A diff says what moved; only the release note
+        # says why, and 4.0.2 is the case that proved the difference: the
+        # package delta reported `cups-browsed` as "removed" and nothing more,
+        # while the note called it "Harden CUPS printer discovery and
+        # administration" -- which is what led to finding that nixarchy had
+        # been running that daemon as root.
+        #
+        # Blockquoted, not pasted flat: upstream's headings would otherwise
+        # outrank the PR body's own and the reader loses track of who is
+        # speaking. The words are untouched.
+        run: |
+          tag="${{ steps.rel.outputs.latest }}"
+          # A tag can exist with no release attached, and a release can exist
+          # with an empty body. Both are silence, and silence in a PR body has
+          # to say which kind it is -- an absent section reads as "upstream
+          # said nothing", which is also what a broken API call reads as.
+          body=$(gh api "repos/basecamp/omarchy/releases/tags/$tag" --jq '.body // ""' 2>/dev/null || true)
+          {
+            echo "notes<<NOTES_EOF"
+            echo "### What upstream says about $tag"
+            echo
+            if [ -n "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
+              printf '%s\n' "$body" | sed 's/^/> /'
+            else
+              echo "_No release notes: \`$tag\` has no GitHub release, or its release"
+              echo "body is empty. Read the compare view instead._"
+            fi
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: What this release changes in the tree seeded into ~/.config
+        if: steps.rel.outputs.changed == 'true'
+        continue-on-error: true
+        id: config
+        # modules/home.nix copies upstream's config/ into ~/.config verbatim,
+        # so those 41 files reach a machine without passing through the
+        # package or any check that reads it. #202 lived exactly there:
+        # config/hypr/xdph.conf named `hyprland-preview-share-picker`, upstream
+        # satisfies that from an Arch package list nothing on NixOS reads, and
+        # screen sharing failed in every application with no dialog at all.
+        run: |
+          cur="${{ steps.rel.outputs.current }}"
+          new="${{ steps.rel.outputs.latest }}"
+          for tag in "$cur" "$new"; do
+            mkdir -p "$RUNNER_TEMP/cfg-$tag"
+            curl -fsSL "https://codeload.github.com/basecamp/omarchy/tar.gz/refs/tags/$tag" |
+              tar xz -C "$RUNNER_TEMP/cfg-$tag" --strip-components=1 || true
+          done
+
+          {
+            echo "config<<CONFIG_EOF"
+            bash .github/scripts/omarchy-config-delta.sh \
+              "$RUNNER_TEMP/cfg-$cur/config" "$RUNNER_TEMP/cfg-$new/config" \
+              "$cur" "$new" ||
+              echo "_The config delta could not run -- see the job log. This is" \
+                "not a report that nothing changed._"
+            echo "CONFIG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Which files this port patches upstream touched
+        if: steps.rel.outputs.changed == 'true'
+        continue-on-error: true
+        id: patched
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The strongest of the three. 167 files changed in 4.0.2 and five of
+        # them were files this port replaces with a stub -- including
+        # omarchy-plymouth-set, where the upstream change was
+        # "security/plymouth-publication-race (#8934)". A security fix landing
+        # in a file we do not ship is fine, and is also a decision somebody
+        # should make deliberately rather than never hear about.
+        #
+        # Two passes over the script because attribution needs a network and
+        # the intersection does not: --list names the files, the loop asks
+        # which commits IN THE RANGE touched each, and the second call renders
+        # them. Restricted to the range on purpose -- the newest commit
+        # touching a file is often years older than this release, and an
+        # attribution that quietly cites it is worse than none.
+        run: |
+          cur="${{ steps.rel.outputs.current }}"
+          new="${{ steps.rel.outputs.latest }}"
+          cmp="repos/basecamp/omarchy/compare/$cur...$new"
+
+          gh api "$cmp" --jq '.files[].filename' > "$RUNNER_TEMP/changed.txt" || true
+          gh api "$cmp" --jq '.commits[].sha' | sort > "$RUNNER_TEMP/range.txt" || true
+
+          # An empty compare is not "upstream changed nothing" -- upstream
+          # changed something, that is why this job is running. It is a failed
+          # fetch, and the script downstream would faithfully report "0 files
+          # changed, none of them ours", which is the calm this whole briefing
+          # exists to stop.
+          if [ ! -s "$RUNNER_TEMP/changed.txt" ]; then
+            {
+              echo "patched<<PATCHED_EOF"
+              echo "### Files this port patches that $new changed"
+              echo
+              echo "_The upstream compare could not be fetched -- see the job"
+              echo "log. Nothing was checked; this is not a clean result._"
+              echo "PATCHED_EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          : > "$RUNNER_TEMP/attrib.txt"
+          while IFS= read -r f; do
+            gh api "repos/basecamp/omarchy/commits?sha=$new&path=$f&per_page=20" \
+              --jq '.[] | .sha + "\t" + (.commit.message | split("\n")[0])' |
+              while IFS="$(printf '\t')" read -r sha subject; do
+                grep -qx "$sha" "$RUNNER_TEMP/range.txt" || continue
+                printf '%s\t%s\n' "$f" "$subject"
+              done >> "$RUNNER_TEMP/attrib.txt"
+          done < <(bash .github/scripts/omarchy-patched-files.sh \
+            --list "$RUNNER_TEMP/changed.txt" .)
+
+          {
+            echo "patched<<PATCHED_EOF"
+            bash .github/scripts/omarchy-patched-files.sh \
+              "$RUNNER_TEMP/changed.txt" . "$RUNNER_TEMP/attrib.txt" "$cur" "$new" ||
+              echo "_The patched-file intersection could not run -- see the job" \
+                "log. This is not a report that nothing this port touches moved._"
+            echo "PATCHED_EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check nothing became unmapped or unwired
@@ -187,7 +331,13 @@ jobs:
             - all Install rows are still mapped in `data/apps.nix`
             - **a booted session renders its wallpaper**
 
+            ${{ steps.notes.outputs.notes }}
+
             ${{ steps.delta.outputs.delta }}
+
+            ${{ steps.config.outputs.config }}
+
+            ${{ steps.patched.outputs.patched }}
 
             If something is wrong anyway, roll back with
             `nixos-rebuild --rollback` or the boot menu, and open an issue.

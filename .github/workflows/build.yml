@@ -46,6 +46,17 @@ jobs:
       - name: The Omarchy package delta still sees a change
         run: nix build .#checks.x86_64-linux.package-delta --print-build-logs
 
+      # The rest of the bump PR body. The config delta scans the seeded tree
+      # for the executables it names -- the class of bug #202 was -- and the
+      # patched-files intersection derives what this port has its hands on by
+      # grepping four statements the repo makes about itself. Both fail by
+      # falling quiet, so both are fed a known answer here.
+      - name: The seeded-config delta still sees a change
+        run: nix build .#checks.x86_64-linux.config-delta --print-build-logs
+
+      - name: The patched-file intersection still finds what this port patches
+        run: nix build .#checks.x86_64-linux.patched-files --print-build-logs
+
   # Every preset in data/devenv-presets.nix, scaffolded with the real
   # `nixarchy dev init` and handed to a real devenv to evaluate.
   #

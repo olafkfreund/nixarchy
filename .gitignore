@@ -9,3 +9,7 @@ nixarchy-vm.qcow2
 # repository content -- it got committed once already.
 nixos-efi-vars.fd
 *.fd
+
+# Subagent worktrees. `git worktree` puts a gitfile here; git sees it as an
+# embedded repository and `git add -A` will commit a bare gitlink.
+.claude/worktrees/

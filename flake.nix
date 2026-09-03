@@ -963,6 +963,19 @@
           pkgs = pkgsFor.${system};
         };
 
+        # The other two halves of that PR body. Same shape, same reason: both
+        # report on a release by grepping upstream's file layout, and a grep
+        # that has stopped matching prints what a quiet release prints. See
+        # tests/config-delta.nix and tests/patched-files.nix.
+        config-delta = import ./tests/config-delta.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+        patched-files = import ./tests/patched-files.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
         # `nix run .#review` watches the pinned packages; this watches that
         # it can still see them. See tests/review-pins.nix.
         review-pins = import ./tests/review-pins.nix {

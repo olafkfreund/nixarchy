@@ -178,6 +178,209 @@ else
   hmm "no GPU listed" "hyprctl systeminfo named no display controller"
 fi
 
+# ---- screen sharing ------------------------------------------------------
+# #202: screen sharing failed in every application on this desktop, silently.
+# No dialog, no error. `config/hypr/xdph.conf` is seeded into ~/.config/hypr
+# with `custom_picker_binary = hyprland-preview-share-picker`, a binary
+# upstream declares in its Arch package list -- which nothing on NixOS reads.
+# The portal execed a command that did not exist, got "SHAREDATA returned
+# selection -1", and tore the session down. It was found by a maintainer
+# trying to share a screen; no check saw it, and none could have, because the
+# failure produces nothing to see.
+#
+# The portal answering on D-Bus was never the question -- it answered on the
+# broken machine too. What was false there is the picker and pipewire, so
+# those are asked by name.
+head_ "Screen sharing"
+
+screencast=$(
+  timeout 5 busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop \
+    org.freedesktop.DBus.Properties Get ss org.freedesktop.portal.ScreenCast version 2>/dev/null
+)
+case "$screencast" in
+  # "v u 6". The version, not just the presence: a backend that drops the
+  # interface across a bump is the same silent failure with another cause.
+  *"u "[0-9]*) ok "portal offers ScreenCast" "version ${screencast##* }" ;;
+  *) bad "portal offers no ScreenCast" "${screencast:-nothing on the bus}" ;;
+esac
+
+# Which backend answers is decided by XDG_CURRENT_DESKTOP matching a portal's
+# UseIn=; on anything but Hyprland here the request lands on the GTK backend,
+# which cannot serve it. Both halves are printed because either can be the one
+# that is wrong.
+#
+# pgrep -f is safe here in a way it was not in the Session section above: this
+# runs as a script, so the pattern lives in the file rather than in the
+# invoking shell's own command line.
+if pgrep -f xdg-desktop-portal-hyprland >/dev/null 2>&1; then
+  ok "portal backend running" "xdg-desktop-portal-hyprland, XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-unset}"
+else
+  maybe_bad "xdg-desktop-portal-hyprland not running" "the GTK backend cannot serve ScreenCast on Hyprland"
+fi
+
+# The #202 failure itself: the config names a binary, and until now nothing
+# asked whether that binary exists.
+xdph="$HOME/.config/hypr/xdph.conf"
+picker=$( { sed -n 's/^[[:space:]]*custom_picker_binary[[:space:]]*=[[:space:]]*//p' "$xdph" 2>/dev/null |
+  head -1 | sed 's/[[:space:]]*$//'; } || true)
+if [ ! -e "$xdph" ]; then
+  hmm "no $xdph" "the portal will use its built-in picker"
+elif [ -z "$picker" ]; then
+  ok "no custom share picker" "the portal's built-in picker"
+elif command -v "${picker%% *}" >/dev/null 2>&1; then
+  ok "share picker on PATH" "$picker"
+else
+  bad "share picker is not installed" "$picker"
+  say_dim "the portal execs this, fails, and ends the session with no dialog: #202"
+fi
+
+# The stream itself is carried by pipewire. Without it a picker selection ends
+# in an absent or black window, which reads to a user as the same bug.
+if pgrep -x pipewire >/dev/null 2>&1; then
+  ok "pipewire running" "pid $(pgrep -x pipewire | head -1)"
+else
+  bad "pipewire not running" "there is nothing to carry the stream"
+fi
+
+# ---- the rest of the silent ones -----------------------------------------
+# Everything here fails the way #202 failed: the subsystem is absent, and says
+# so to nobody. You find out when you press the key, close the lid, or click
+# the link. Ordered with the lock first, because that one is a security
+# failure and the others are annoyances.
+head_ "Fails in silence"
+
+# Not `command -v hypridle` and not `command -v hyprlock`. Omarchy 4 dropped
+# both -- they are in omarchy-upgrade-to-quattro's removal list -- and moved
+# the lock and the idle timer into the shell, so a probe for those binaries
+# would report a missing lock on a machine whose lock works. The shell's IPC
+# is the source of truth. `lock status` only, never `lock lock`: this script
+# must not lock the screen of the person running it.
+lock=$(timeout 10 omarchy-shell lock status 2>/dev/null)
+case "$lock" in
+  *'"passwordPam":true'*) ok "the lock can authenticate" "PAM answers for it" ;;
+  '') maybe_bad "the shell did not answer about the lock" "omarchy-shell lock status said nothing" ;;
+  *) bad "the lock cannot authenticate" "it would lock this machine and not unlock it" ;;
+esac
+
+if systemctl --user is-active omarchy-sleep-lock.service >/dev/null 2>&1; then
+  ok "locks before suspend" "omarchy-sleep-lock.service"
+else
+  maybe_bad "nothing locks before suspend" "the lid closes and the session stays open"
+fi
+
+# A value, not a verdict: idle off is a legitimate choice (stay-awake is a
+# menu item), and it is also the reason a machine never locks itself.
+idle=$(timeout 10 omarchy-shell idle status 2>/dev/null)
+case "$idle" in
+  *'"enabled":true'*)
+    ok "idle timer on" "locks after $( (grep -o '"lock":[0-9]*' <<<"$idle" | head -1 | cut -d: -f2) || true)s"
+    ;;
+  *'"enabled":false'*) hmm "idle timer off" "nothing will lock this machine on its own" ;;
+  *) maybe_bad "the shell did not answer about idle" "${idle:-nothing}" ;;
+esac
+
+# The polkit agent is not something pgrep can find, which is how this probe
+# was wrong on its first draft: Omarchy 4 removed polkit-gnome and
+# hyprpolkitagent and ships the agent as a shell plugin
+# (shell/plugins/polkit/PolkitAgent.qml), so it lives inside quickshell and no
+# process is named for it. polkitd logs the registration, but below the
+# --log-level=notice the unit runs at, so the journal has nothing either.
+# Whether the plugin is enabled is the question that can actually be asked.
+plugins=$(timeout 10 omarchy-shell shell listPlugins 2>/dev/null)
+polkit=$( (grep -o '{"id":"omarchy.polkit"[^}]*}' <<<"$plugins") || true)
+case "$polkit" in
+  *'"enabled":true'*) ok "polkit agent enabled" "the shell's own" ;;
+  '')
+    if pgrep -f 'polkit.*agent' >/dev/null 2>&1; then
+      ok "a polkit agent is running" "not the shell's"
+    else
+      maybe_bad "no polkit agent" "every privileged prompt fails with no window"
+    fi
+    ;;
+  *) bad "the shell's polkit agent is disabled" "every privileged prompt fails with no window" ;;
+esac
+
+# GetServerInformation rather than Notify: asking who is listening must not
+# put a popup on the user's screen. The name of the server is the value --
+# "quickshell" and "mako" are both PASS and mean different things here.
+notifier=$(
+  timeout 5 busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+    org.freedesktop.Notifications GetServerInformation 2>/dev/null
+)
+if [ -n "$notifier" ]; then
+  # busctl prints the signature and quotes every field, and the vendor field
+  # is empty on quickshell, which leaves a double space if it is not squeezed.
+  ok "notifications answered" "$(sed -e 's/^ssss //' -e 's/"//g' -e 's/  */ /g' <<<"$notifier")"
+else
+  bad "nothing answers org.freedesktop.Notifications" "half the desktop's feedback goes nowhere"
+fi
+
+# Not the same question as "is pipewire running", which the screen sharing
+# section already asked: pipewire up with no sink is an ordinary state on real
+# hardware, and it is silent -- the volume keys still move an OSD.
+sink=$( (timeout 5 wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null |
+  sed -n 's/.*node\.description = "\(.*\)"/\1/p' | head -1) || true)
+if [ -n "$sink" ]; then
+  ok "default audio sink" "$sink"
+elif pgrep -x pipewire >/dev/null 2>&1; then
+  bad "pipewire is running with no default sink" "sound goes nowhere"
+else
+  bad "no audio at all" "pipewire is not running"
+fi
+
+# gio rather than xdg-settings: glib is already a runtime input here, and the
+# question is the same one. What breaks is mimeapps.list naming a desktop file
+# that no installed package provides -- invisible until someone clicks a link.
+handler=$( (timeout 5 gio mime x-scheme-handler/https 2>/dev/null |
+  head -1 | sed 's/.*: //') || true)
+IFS=: read -r -a datadirs <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/share}"
+desktop=""
+for d in "${datadirs[@]}"; do
+  if [ -f "$d/applications/$handler" ]; then
+    desktop="$d/applications/$handler"
+    break
+  fi
+done
+if [ -z "$handler" ]; then
+  hmm "no default handler for https" "clicking a link does nothing"
+elif [ -z "$desktop" ]; then
+  bad "the default browser is not installed" "$handler is named and not there"
+else
+  exe=$( (sed -n 's/^Exec=//p' "$desktop" | head -1 | cut -d' ' -f1) || true)
+  if command -v "$exe" >/dev/null 2>&1; then
+    ok "links open in" "$handler"
+  else
+    bad "the default browser names a missing binary" "$handler runs $exe"
+  fi
+fi
+
+# #204's territory: report the state, do not fix it here.
+# omarchy-capture-screenshot shells out to grim, slurp and wl-copy, and hands
+# the finished PNG to $OMARCHY_SCREENSHOT_EDITOR, which upstream defaults to
+# tensaku-edit. Both halves are asked separately because they fail
+# differently: no grim and the key does nothing; no editor and the capture
+# still lands on disk, but the "Edit" on the notification is dead.
+capture_missing=""
+for c in grim slurp wl-copy; do
+  command -v "$c" >/dev/null 2>&1 || capture_missing="$capture_missing $c"
+done
+if [ -n "$capture_missing" ]; then
+  bad "screenshot tools missing" "$capture_missing"
+else
+  ok "screenshot tools" "grim, slurp, wl-copy"
+fi
+
+editor=${OMARCHY_SCREENSHOT_EDITOR:-tensaku-edit}
+if command -v "$editor" >/dev/null 2>&1; then
+  ok "screenshot editor" "$editor"
+else
+  bad "screenshot editor is not installed" "$editor"
+  say_dim "the screenshot saves; the Edit on its notification does nothing: #204"
+  if command -v satty >/dev/null 2>&1; then
+    say_dim "satty is installed here and no config names it"
+  fi
+fi
+
 # ---- bluetooth -----------------------------------------------------------
 # The checks assert the service is enabled and that the VM has no radio. This
 # is the other half.

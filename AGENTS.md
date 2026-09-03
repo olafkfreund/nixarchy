@@ -42,7 +42,43 @@ Two mechanical traps that produced fake green results here, live:
   this repo is developed on are zsh. Put `#!/usr/bin/env bash` on the script
   and run it as a script, not by pasting into your shell.
 
-## 2. A check that nothing runs is worse than no check
+## 2. A bug found by hand is not fixed until something can see it
+
+§1 governs checks you write. This is the same argument one step earlier, about
+a bug nobody had written a check for.
+
+#202: screen sharing failed in **every** application on the Omarchy session,
+silently — no dialog, no error. `config/hypr/xdph.conf`, seeded into
+`~/.config/hypr`, sets `custom_picker_binary = hyprland-preview-share-picker`;
+upstream declares that binary in its **Arch** package list, which nothing on
+NixOS reads. The portal execed a command that did not exist, got `SHAREDATA
+returned selection -1`, and tore the session down. It was found by the
+maintainer trying to share a screen. Under the rules as they stood it would
+have been "fixed" by adding one package, and the next silent portal failure
+would have been just as invisible.
+
+So: a user-visible bug found by using the thing is not fixed until the
+subsystem it broke has gained a probe, at the highest layer that can see it.
+The layers, highest first:
+
+- **static checks**, on every pull request — cheapest, and where "the config
+  names something that does not exist" belongs;
+- **`checks.session`**, which boots a real desktop — screen sharing is
+  answerable here;
+- **`pkgs/verify.sh`**, for what only real hardware can answer — Bluetooth
+  pairing is answerable nowhere else.
+
+And the rule the same incident produced: **anything we ship that names
+something else needs a list, or a check, saying that something exists.**
+`pkgs/omarchy/default.nix` carries an explicit runtime list for precisely this
+— *"Everything the 438 scripts in bin/ invoke. Kept explicit rather than
+pulled from a generated file: a missing entry should be a readable diff"* — and
+`build.yml` asserts that a set of those resolve. The script side had a list and
+an assertion; the config side had neither. #202 lived exactly in that gap, and
+#204 is the same defect in mirror image: `satty` ships as a runtime dependency
+and no config names it.
+
+## 3. A check that nothing runs is worse than no check
 
 `checks.installer-ui` was written, wired into `checks` in `flake.nix`, and
 named by **no workflow**. The PR adding it went green without the check ever
@@ -53,9 +89,9 @@ workflow, on pull requests", from #164/#166) that fails if any entry in
 So: adding a `checks.<name>` entry means also naming
 `nix build .#checks.x86_64-linux.<name>` in a workflow that runs on
 `pull_request` — and that workflow edit is a CI-gate change, which needs a
-human (see §9). Raise it in the PR rather than wiring it yourself.
+human (see §10). Raise it in the PR rather than wiring it yourself.
 
-## 3. Git and flake mechanics that bite
+## 4. Git and flake mechanics that bite
 
 - **A flake in a worktree sees only tracked or staged files.** A new file you
   have not `git add`ed fails evaluation with `path '…' does not exist` — not
@@ -65,13 +101,13 @@ human (see §9). Raise it in the PR rather than wiring it yourself.
 - **`installer/mkFlake.nix` requires a committed tree.** `git add` is not
   enough — it reads `self.rev`, which a dirty tree does not have, and throws:
   `flake-template: build from a committed tree; the generated flake pins
-  nixarchy by commit`. Commit (the subject can be temporary; see §6) before
+  nixarchy by commit`. Commit (the subject can be temporary; see §7) before
   building anything that pulls it in, which includes the installer checks.
 - **Work in a worktree under `/mnt/data/vmtest/`, never `/tmp`.** `/tmp` is a
   32 GB tmpfs. A VM disk image or an ISO build there is competing with the
   machine's RAM, and loses quietly.
 
-## 4. How to run the checks, and what each one costs
+## 5. How to run the checks, and what each one costs
 
 Checks are built one at a time by name — `nix flake check` is not how this
 repo works:
@@ -101,7 +137,7 @@ to your branch cancels and restarts your own run (that is deliberate — a PR
 only needs an answer about its current head), but the queue is shared:
 batching your pushes is a courtesy to everyone else's merge latency.
 
-## 5. Code rules the repo has already written down
+## 6. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the
 files carry the full reasoning and the failure history.
@@ -126,7 +162,7 @@ files carry the full reasoning and the failure history.
   command your script calls and does not declare is a runtime failure that no
   build catches.
 
-## 6. Commits and pull requests
+## 7. Commits and pull requests
 
 - The final commit subject is a full sentence describing the change — read
   `git log --oneline -10` for the register. No `conventional-commits`
@@ -139,7 +175,7 @@ files carry the full reasoning and the failure history.
 - Fill in the PR template, including the section that asks for your check's
   failing output. That section is §1 in form-field shape.
 
-## 7. Territory, and the failure no single PR can see
+## 8. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it
 touches, and stay inside them. But the sharper lesson is this: two PRs, each
@@ -152,7 +188,7 @@ So: after anything merges to `main`, rebase before merging your own work, and
 let the checks run again on the rebased head. "It was green an hour ago" is
 not the same claim as "it is green against what `main` is now".
 
-## 8. When a check fails for reasons unrelated to your change
+## 9. When a check fails for reasons unrelated to your change
 
 First establish that it *is* unrelated: is `main` red too? One standing trap —
 opening an issue with the `epic` label without adding a row to README's
@@ -169,7 +205,7 @@ editing README from a PR about something else.
 
 Do not retry-until-green. A flaky pass is a bug report you deleted.
 
-## 9. What not to do without asking a human
+## 10. What not to do without asking a human
 
 - **Destructive git**: `push --force` to any shared branch, deleting branches
   you did not create, rewriting published history, `git reset --hard` on work
@@ -185,7 +221,7 @@ Do not retry-until-green. A flaky pass is a bug report you deleted.
   human: never file anywhere unprompted, and a fix to how Omarchy itself
   behaves belongs upstream, not patched here — a patch carried here is
   re-applied at every source bump; a fix landed upstream arrives for free.
-- **The `epic` label** — applying or removing it has CI consequences (§8)
+- **The `epic` label** — applying or removing it has CI consequences (§9)
   that outlive your session.
 
 When in doubt, the cost asymmetry decides: a question costs a minute; an

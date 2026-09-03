@@ -465,6 +465,17 @@
             findutils
             glib
             bluez
+            # pgrep and ps. The Session and Screen sharing probes both look for
+            # a running process by name, and writeShellApplication's PATH does
+            # not carry the caller's -- an undeclared pgrep here is a probe that
+            # reports "not running" for everything.
+            procps
+            # awk, in the Session section's quickshell match. Undeclared until
+            # the Fails-in-silence probes went in and the list was read again.
+            gawk
+            # wpctl. "pipewire is running" and "there is a sink" are different
+            # questions and only wireplumber answers the second.
+            wireplumber
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

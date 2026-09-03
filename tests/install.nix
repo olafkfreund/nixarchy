@@ -261,6 +261,24 @@ in
 pkgs.testers.runNixOSTest {
   name = "nixarchy-install";
 
+  # The driver has to lose the race to the job, or a hang is invisible.
+  #
+  # runNixOSTest's globalTimeout defaults to one hour, and this check has been
+  # finishing in 37 to 59 minutes -- a budget sized to the median of something
+  # that legitimately takes most of an hour. On 2026-09-03 three install jobs
+  # overlapped on the one self-hosted machine, this one took 63 minutes against
+  # a tree that had passed the same check at 57 minutes an hour earlier, and
+  # the driver killed it: `timeout reached; test terminating`, exit 143. No
+  # regression, no headroom.
+  #
+  # 85 minutes, deliberately UNDER install-check.yml's `timeout-minutes: 90`.
+  # Which of the two fires first decides what a hang looks like: the driver
+  # ending it is a failure, with a log and a reported check, while GitHub
+  # ending it is recorded as `cancelled` -- which #200 established is the state
+  # nothing reports on and nobody sees. If that job timeout ever moves, this
+  # number moves with it and stays below.
+  globalTimeout = 85 * 60;
+
   nodes.installer =
     { ... }:
     {

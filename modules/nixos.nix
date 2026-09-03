@@ -576,12 +576,23 @@ in
     environment = {
       # The single indirection point. bin/, shell/, themes/ and the Hyprland
       # Lua defaults are all resolved relative to this.
-      sessionVariables.OMARCHY_PATH = "${cfg.package}/share/omarchy";
+      sessionVariables = {
+        OMARCHY_PATH = "${cfg.package}/share/omarchy";
 
-      # The replacement omarchy-update reads this. It is a plain script inside
-      # the package with no way to see module options, and it is reached from
-      # the shell's bar widget and notifications as well as the menu.
-      sessionVariables.NIXARCHY_FLAKE = cfg.flake;
+        # omarchy-capture-screenshot defaults this to tensaku-edit, which is an
+        # Arch package and is not in nixpkgs, so the Edit on every screenshot
+        # notification did nothing (#204). satty-edit is the wrapper the
+        # omarchy package puts around satty -- already installed on every
+        # machine here, and named by nothing until now. mkDefault so a machine
+        # that does package tensaku, or wants gimp, just says so.
+        OMARCHY_SCREENSHOT_EDITOR = lib.mkDefault "satty-edit";
+
+        # The replacement omarchy-update reads this. It is a plain script
+        # inside the package with no way to see module options, and it is
+        # reached from the shell's bar widget and notifications as well as the
+        # menu.
+        NIXARCHY_FLAKE = cfg.flake;
+      };
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's
       # metadata scan), so their dependencies have to be on the session PATH.

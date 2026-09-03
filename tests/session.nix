@@ -875,11 +875,11 @@ pkgs.testers.runNixOSTest {
         "the seeded config no longer names the share picker -- either upstream "
         f"dropped it, or these patterns stopped matching (found {named})")
 
-    # tensaku is Omarchy's own image editor and is not in nixpkgs, so imv's
-    # Ctrl+E has nothing to open on any NixOS machine. Named rather than
-    # tolerated, the same way omawrite is above; modules/home.nix already
-    # seeds its state directory against the day it is packaged.
-    expected_absent = {"tensaku-edit"}
+    # Empty since #204: tensaku-edit was the one entry, and imv's Ctrl+E now
+    # names satty-edit, which the omarchy package ships. Kept as the escape
+    # hatch the assertion below points at -- a name goes in here with its
+    # reason, the way omawrite is named in the sibling keybinding probe.
+    expected_absent = set()
     missing = [
         n for n in named
         if n not in expected_absent

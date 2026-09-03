@@ -57,6 +57,13 @@ jobs:
       - name: The patched-file intersection still finds what this port patches
         run: nix build .#checks.x86_64-linux.patched-files --print-build-logs
 
+      # And the release notes those deltas go into, which have four scans to
+      # rot rather than one -- the Omarchy pin, the pinned versions, the
+      # mkDefault lines, and the option set -- and where reporting nothing
+      # reaches every person deciding whether to upgrade.
+      - name: The release notes still see what changed
+        run: nix build .#checks.x86_64-linux.release-notes --print-build-logs
+
   # Every preset in data/devenv-presets.nix, scaffolded with the real
   # `nixarchy dev init` and handed to a real devenv to evaluate.
   #

@@ -52,7 +52,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
 | **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
-| Branded boot splash | Omarchy's Plymouth theme, selected by `boot.plymouth.theme` |
+| Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
 | **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
@@ -486,9 +486,15 @@ user should not silently hand them the browsers' policy directories.
 
 Two different screens, with two very different answers.
 
-**The boot splash** is Omarchy's by default, and yields to anything that names
-a theme of its own — stylix does, so a stylix machine keeps the stylix splash.
-To take Omarchy's instead:
+**The boot splash** is nixarchy's own: the NIXARCHY wordmark draws itself in
+with a ttfx text effect -- the same engine the screensaver runs, over the same
+ASCII banner -- and a progress bar fills underneath it. The animation is
+rendered to stills when the package is built, because Plymouth has no terminal
+for ttfx to draw in. The bar is a change from upstream, which shows it only
+after a passphrase prompt, so a machine with no encrypted disk never saw it.
+
+It yields to anything that names a theme of its own — stylix does, so a
+stylix machine keeps the stylix splash. To take nixarchy's instead:
 
 ```nix
 programs.nixarchy.bootSplash = "force";

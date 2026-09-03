@@ -80,6 +80,7 @@ the documentation as much as the code.
 | Faq | same as Omarchy — [read there](https://omarchy.org/manual/faq/) |
 | **System snapshots** | **differs on NixOS** — [read here](system-snapshots) |
 | **Security** | **differs on NixOS** — [read here](security) |
+| **Remote desktop** | **nixarchy only** — [read here](remote-desktop) |
 | Omarchy on | same as Omarchy — [read there](https://omarchy.org/manual/omarchy-on/) |
 | **Dual boot install** | **differs on NixOS** — [read here](dual-boot-install) |
 | **Many machines, one repo** | **nixarchy only** — [read here](many-machines) |

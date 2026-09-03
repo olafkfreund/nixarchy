@@ -66,6 +66,12 @@ Upstream rate-limits port 22 with `ufw limit`; nothing equivalent is set here,
 so keep password authentication off (`settings.PasswordAuthentication =
 false`) rather than relying on rate limiting.
 
+## Remote desktop
+
+Serving the Hyprland session over RDP is off, and turning it on is a security
+decision with more than one part — what listens, on which interface, and where
+the password comes from. [Remote desktop](remote-desktop) is that page.
+
 ## Fingerprint and FIDO2
 
 *Setup > Security > Fingerprint* and *FIDO2* do the enrolment they always did:

@@ -25,7 +25,7 @@ let
   # The VM never complained because a warning is not a failure -- it took
   # somebody reading the journal on a machine that had actually logged in.
   omarchySessionLauncher = pkgs.writeShellScript "omarchy-session" ''
-    export OMARCHY_PATH=${cfg.package}/share/omarchy
+    export OMARCHY_PATH=${cfg.tree}
     exec ${pkgs.uwsm}/bin/uwsm start -N Omarchy -D Hyprland -- \
       ${config.programs.hyprland.package}/bin/start-hyprland -- \
       --config ${cfg.package}/share/omarchy/config/hypr/hyprland.lua
@@ -117,6 +117,22 @@ in
         Surfaced to shell tools as /etc/nixarchy/managed, which is the single
         predicate every armed command gates on: nixarchy commits, pushes and
         rewrites configuration only on a machine it wrote.
+      '';
+    };
+
+    tree = lib.mkOption {
+      type = lib.types.path;
+      default = "${cfg.package}/share/omarchy";
+      internal = true;
+      description = ''
+        What OMARCHY_PATH points at: Omarchy's tree, with the files nixarchy
+        generates for THIS machine in it. modules/apps.nix sets it to a mirror
+        of the package whose default/omarchy/omarchy-menu.jsonc carries the
+        Install-row rewrites, which is what keeps that menu off pacman without
+        taking the extension file upstream documents as the user's -- #210.
+
+        Not readOnly, and defaulted to the package's own tree: a configuration
+        with the apps module inert still has to resolve to something.
       '';
     };
 
@@ -574,9 +590,11 @@ in
     };
 
     environment = {
-      # The single indirection point. bin/, shell/, themes/ and the Hyprland
-      # Lua defaults are all resolved relative to this.
-      sessionVariables.OMARCHY_PATH = "${cfg.package}/share/omarchy";
+      # The single indirection point. bin/, shell/, themes/, the Hyprland Lua
+      # defaults and the menu's defaults file are all resolved relative to
+      # this. It is the package's own tree unless the apps module has
+      # generated one for this machine -- see programs.nixarchy.tree.
+      sessionVariables.OMARCHY_PATH = cfg.tree;
 
       # The replacement omarchy-update reads this. It is a plain script inside
       # the package with no way to see module options, and it is reached from
@@ -1036,7 +1054,7 @@ in
           unitConfig.ConditionEnvironment = "WAYLAND_DISPLAY";
           # omarchy-system-sleep-monitor resolves its companion
           # omarchy-system-sleep-lock through $OMARCHY_PATH, not through PATH.
-          environment.OMARCHY_PATH = "${cfg.package}/share/omarchy";
+          environment.OMARCHY_PATH = cfg.tree;
           serviceConfig = {
             Type = "simple";
             ExecStart = "${cfg.package}/bin/omarchy-system-sleep-monitor";

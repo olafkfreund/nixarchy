@@ -170,10 +170,11 @@ That a rebuild does **not** update a running session, so a fix that looks like i
 failed may simply not have been loaded yet -- and specifically not to verify one
 by running the script at its absolute installed path, because that path works
 while the keybinding still does not, which is the most misleading result
-available. And that `~/.config/omarchy/extensions/omarchy-menu.jsonc` is the one
-file under `~/.config/omarchy/` that cannot be edited: it is generated, carries
-the rewrite pointing every `install.*` row at the Nix selection, and replacing
-the symlink with a real file silently stops the menu tracking the package.
+available. And that the rewrite pointing every `install.*` row at the Nix
+selection lives in the menu *defaults* -- `$OMARCHY_PATH` is a per-machine tree
+carrying them -- so `~/.config/omarchy/extensions/omarchy-menu.jsonc` is left
+entirely to the user and to plugins, which is the file upstream documents as
+theirs.
 
 Only `SKILL.md` and `contributing.md` are replaced outright — their guidance is
 wrong here, not merely misspelt. Everything else is patched with `--replace-fail`,

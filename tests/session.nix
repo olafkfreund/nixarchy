@@ -185,6 +185,96 @@ pkgs.testers.runNixOSTest {
     machine.succeed("grep -q './nixarchy/apps.nix' /etc/nixos/nixarchy-apps.nix")
     print("selection reached /etc/nixos/nixarchy/apps.nix, and the stub imports it")
 
+    # ---- the menu extension belongs to the user (#210) ------------------
+    # Omarchy reads two menu files and merges the second over the first: the
+    # defaults in $OMARCHY_PATH, and ~/.config/omarchy/extensions. Nixarchy's
+    # Install-row rewrites are in the DEFAULTS, so the extension is free --
+    # upstream's shell/plugins/README.md points third-party plugins at it, and
+    # people write rows in it by hand.
+    #
+    # That is true by construction now, which is exactly why it is asserted:
+    # "nixarchy never writes that file" is what somebody says right before a
+    # symlink reappears there. A row written into it must come back
+    # byte-for-byte after activation has run again.
+    menu = "/home/omarchy/.config/omarchy/extensions/omarchy-menu.jsonc"
+
+    machine.wait_for_file(menu)
+    machine.succeed("test -f " + menu + " -a ! -L " + menu)
+
+    # And the machines that already carry the symlink an older nixarchy planted:
+    # nothing writes this path any more, so without an explicit undo they would
+    # keep an unwritable file forever -- the exact machines this is for.
+    machine.succeed("ln -sfn /etc/nixarchy/omarchy-menu.jsonc " + menu)
+    machine.succeed("systemctl restart home-manager-omarchy.service")
+    machine.succeed("test -f " + menu + " -a ! -L " + menu)
+    machine.succeed("grep -q 'Extend the Quickshell Omarchy menu' " + menu)
+    print("an older nixarchy's symlink is handed back as a writable file")
+    machine.succeed("su omarchy -c 'test -w " + menu + "'")
+
+    machine.succeed(
+        "su omarchy -c \"printf '%s\\n' '// mine' >> " + menu + "\"")
+    before = machine.succeed("sha256sum < " + menu).split()[0]
+    machine.succeed("systemctl restart home-manager-omarchy.service")
+    after = machine.succeed("sha256sum < " + menu).split()[0]
+    assert before == after, (
+        "activation rewrote the user's menu extension; that file is theirs and "
+        "their plugins', and nixarchy's rows belong in the defaults")
+    print("the menu extension survived activation byte-for-byte")
+
+    # The other half: the rewrites are in the defaults this session resolves,
+    # and they are the generated ones rather than Omarchy's own. Read through
+    # $OMARCHY_PATH, which is what the shell reads -- asserting against
+    # /etc/nixarchy would prove the system built a file, not that anything
+    # reads it.
+    tree = machine.succeed(
+        "su - omarchy -c 'echo $OMARCHY_PATH'").strip()
+    defaults = tree + "/default/omarchy/omarchy-menu.jsonc"
+    machine.succeed("grep -q nixarchy-app-enable " + defaults)
+    machine.succeed("test ! -L " + tree + "/default/omarchy")
+    # ...and the rest of the tree is still Omarchy's, reached through it.
+    machine.succeed("test -d " + tree + "/config/hypr")
+    machine.succeed("test -x " + tree + "/bin/omarchy-menu")
+    print("OMARCHY_PATH resolves the generated defaults: " + tree)
+
+    # A row in the extension overrides one in the defaults, which is the whole
+    # reason this arrangement works -- upstream's merge, in the direction it
+    # was designed for. Checked the way MenuModel.js does it, on both files.
+    probe = "\n".join([
+        "import json, os, re",
+        "def load(p):",
+        "    raw = open(p).read()",
+        "    raw = re.sub(r'^\\s*//[^\\n]*(\\n|$)', str(), raw, flags=re.M)",
+        "    return json.loads(re.sub(r',(\\s*[}\\]])', r'\\1', raw))",
+        "rows = load(os.environ['OMARCHY_PATH']",
+        "            + '/default/omarchy/omarchy-menu.jsonc')",
+        "user = load(os.path.expanduser(",
+        "    '~/.config/omarchy/extensions/omarchy-menu.jsonc'))",
+        "rows.update(user)",
+        "wired = [k for k, v in rows.items()",
+        "         if str(v.get('action', str())).startswith('nixarchy-app-enable')]",
+        "print('WIRED', len(wired))",
+        "print('MERGED', rows['install.package']['action'])",
+    ])
+    machine.succeed("cat > /tmp/menumerge.py <<'PYEOF'\n" + probe + "\nPYEOF")
+
+    machine.succeed(
+        "su omarchy -c \"printf '%s\\n' "
+        "'{\\\"install.package\\\": {\\\"label\\\": \\\"Mine\\\", "
+        "\\\"action\\\": \\\"my-thing\\\"}}' > " + menu + "\"")
+    out = machine.succeed("su - omarchy -c 'python3 /tmp/menumerge.py'")
+    print(out.strip())
+    assert "MERGED my-thing" in out, (
+        "a row in the user's extension did not override the generated default; "
+        "if that stops working, nothing the user writes reaches the menu")
+    assert int(out.split("WIRED", 1)[1].split()[0]) > 20, (
+        "the merged menu has almost no rows wired to nixarchy-app-enable, so "
+        "the generated defaults are not being read: " + out)
+
+    # Put it back the way login left it, since the rest of this test drives a
+    # real menu.
+    machine.succeed("rm -f " + menu)
+    machine.succeed("systemctl restart home-manager-omarchy.service")
+
     # That the user's own configuration still imports nixarchy-apps.nix is
     # asserted in tests/install.nix, on an installed machine that has a
     # configuration.nix. This VM does not; its module comes from the flake.

@@ -277,27 +277,36 @@ once. Here the path itself changes.
 
 `nixarchy-doctor` reports this under **Session**.
 
-### The menu is generated, not yours to edit
+### The menu extension is yours, and the defaults are nixarchy's
 
-`~/.config/omarchy/extensions/omarchy-menu.jsonc` is the one file under
-`~/.config/omarchy/` that is **not** editable. It is a symlink to a read-only
-`/nix/store` path:
+Omarchy's menu is two files, and the shell merges the second over the first by
+id:
 
 ```
-~/.config/omarchy/extensions/omarchy-menu.jsonc -> /etc/nixarchy/omarchy-menu.jsonc -> /nix/store/...
+defaults   $OMARCHY_PATH/default/omarchy/omarchy-menu.jsonc   generated
+user       ~/.config/omarchy/extensions/omarchy-menu.jsonc    yours
 ```
 
-That is deliberate. This file carries the rewrite that points every `install.*`
-row at the Nix app selection instead of pacman, so it has to track the package.
-A copy would go stale the moment the package moved and leave the Install menu
-driving commands that no longer match.
+Nixarchy's rewrite -- the one pointing every `install.*` row at the Nix app
+selection instead of pacman -- is in the **defaults**. `$OMARCHY_PATH` is a
+per-machine tree built from the Omarchy package with that one file replaced, so
+the rewrite tracks the package and the app selection without anything having to
+touch your file.
 
-Upstream's documentation says this file hot-reloads on save. It does — but you
-cannot save it, and trying is worse than failing: replacing the symlink with a
-real file silently stops the menu tracking the package, and the next rebuild
-overwrites it anyway.
+**`~/.config/omarchy/extensions/omarchy-menu.jsonc` is therefore entirely
+yours.** Nothing regenerates it, a rebuild never touches it, and it
+hot-reloads on save exactly as upstream documents. Plugins write it too; that
+is the path `shell/plugins/README.md` names. Reuse an id from the defaults
+there and your row wins:
 
-Add rows declaratively instead:
+```jsonc
+{
+  "install.package": {"icon": "󰉉", "label": "My own installer", "action": "my-thing"}
+}
+```
+
+To keep a row in the configuration rather than in the file -- so a fresh
+machine gets it too -- declare it instead:
 
 ```nix
 programs.nixarchy.menu.extraEntries = {
@@ -309,8 +318,10 @@ programs.nixarchy.menu.extraEntries = {
 };
 ```
 
-Nothing else in `~/.config/omarchy/` works this way — `shell.json`, the themes
-and the plugins directory are all real, writable, and yours.
+Those are generated into the defaults, not written into your file.
+
+`shell.json`, the themes and the plugins directory are real, writable and
+yours too, and nothing regenerates them at all.
 
 If a file under `~/.config/` turns out to be a symlink into `/nix/store`, it is
 managed by Home Manager and editing it is not possible. Change it in your Home

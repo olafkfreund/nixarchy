@@ -499,6 +499,36 @@
           text = builtins.readFile ./pkgs/review.sh;
         };
 
+        # `nix run .#release-notes <from-tag> <to-ref>` -- what changed for
+        # someone running nixarchy, between two releases. release.yml puts its
+        # output above the download instructions on the release page.
+        #
+        # An app for the same reason `review` is one: it evaluates the option
+        # set at two revisions and asks GitHub what upstream shipped, and a
+        # check has neither a network nor a second checkout. The half that
+        # needs neither is checks.release-notes, which drives this whole script
+        # against a fixture repository.
+        #
+        # It carries omarchy-package-delta.sh rather than reimplementing it:
+        # the question "what did this Omarchy release add and drop" already has
+        # an answer here, and two of them would disagree eventually.
+        release-notes = pkgsFor.${system}.writeShellApplication {
+          name = "nixarchy-release-notes";
+          runtimeInputs = with pkgsFor.${system}; [
+            git
+            curl
+            jq
+            nix
+            gawk
+            gnugrep
+            gnused
+            coreutils
+          ];
+          text = builtins.replaceStrings [ "@delta@" ] [ "${./.github/scripts/omarchy-package-delta.sh}" ] (
+            builtins.readFile ./.github/scripts/release-notes.sh
+          );
+        };
+
         # `nix run github:olafkfreund/nixarchy#doctor` -- reads the running
         # system and prints the configuration it would need. Runnable before
         # nixarchy is an input anywhere, which is the only entry point someone
@@ -983,6 +1013,15 @@
           pkgs = pkgsFor.${system};
         };
         patched-files = import ./tests/patched-files.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
+        # The release notes, against a fixture repository whose diff is known.
+        # Same dangerous failure as the delta above, over more scans: a release
+        # note that reads calm because a grep stopped matching. See
+        # tests/release-notes.nix.
+        release-notes = import ./tests/release-notes.nix {
           inherit inputs;
           pkgs = pkgsFor.${system};
         };

@@ -39,6 +39,7 @@ nav:
   - { path: /manual/gaming,                   title: Gaming }
   - { path: /manual/security,                 title: Security }
   - { path: /manual/system-snapshots,         title: System Snapshots }
+  - { path: /manual/many-machines,            title: "Many machines, one repo" }
   - { path: /manual/dual-boot-install,        title: Dual Boot Install }
   - { path: /manual/unattended-installs,      title: Unattended Installs }
   - { path: /manual/troubleshooting,          title: Troubleshooting }

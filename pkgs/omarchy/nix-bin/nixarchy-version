@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Print the Omarchy version and the nixarchy revision this machine was built from
+# omarchy:examples=nixarchy-version
+
+# `omarchy --version` answers "which Omarchy", never "which nixarchy".
+#
+# Two machines can both say 4.0.2 and differ by every commit in this port --
+# tags are v4.0.2-1, where the -1 counts packaging revisions against an
+# unchanged upstream. Before this, "does this machine have the screen sharing
+# fix?" could only be answered by reading flake.lock.
+#
+# What is printed is the revision and its date, not a version or a tag, and
+# that is deliberate: a flake cannot know its own tag (`self` exposes rev,
+# shortRev and lastModified, and nothing else), and most machines are not on a
+# tag at all -- the ordinary flake.nix says `github:olafkfreund/nixarchy` with
+# no ref and tracks main. A tag printed there would be a lie. A rev is true on
+# every machine, maps to the tag when there is one, and cannot go stale the way
+# a hand-kept `nixarchyRelease = "1"` literal beside omarchyVersion would --
+# which is the literal #201 had to fix with a sed.
+#
+# Both values are spliced in by pkgs/omarchy/default.nix from what the flake
+# actually built. The Omarchy half is the same `version` omarchy-version is
+# spliced with, rather than a call out to it, so this script has no runtime
+# dependency at all and the build can run it to check the splice worked.
+
+set -euo pipefail
+
+printf 'Omarchy   %s\n' '@omarchyversion@'
+printf 'nixarchy  %s  %s\n' '@nixarchyrev@' '@nixarchydate@'

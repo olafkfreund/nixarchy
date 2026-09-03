@@ -187,6 +187,32 @@
       );
 
       omarchyVersion = "4.0.2";
+
+      # Which nixarchy built this machine (#208), for nixarchy-version.
+      #
+      # `self` is the only place the answer exists, and it is only reachable
+      # here -- pkgs/omarchy/default.nix cannot see the flake it belongs to --
+      # so the two values are computed once and threaded into the package.
+      #
+      # Not a tag: a flake cannot know its own, and the ordinary consumer
+      # flake.nix tracks main and has none. Not a hand-kept literal beside
+      # omarchyVersion either; that is the class of stale string #201 had to
+      # fix. A rev cannot go stale.
+      #
+      # `dirtyShortRev` is what a working copy with uncommitted changes gets
+      # instead of `shortRev` -- it reads "800af40-dirty", which is the honest
+      # thing for a machine built from someone's checkout to say. Neither
+      # exists when the source is not a git tree at all, hence the last
+      # fallback.
+      nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
+      nixarchyDate =
+        let
+          d = self.lastModifiedDate or "";
+        in
+        if d == "" then
+          "unknown"
+        else
+          "${lib.substring 0 4 d}-${lib.substring 4 2 d}-${lib.substring 6 2 d}";
     in
     {
       overlays.default = final: _prev: {
@@ -281,6 +307,7 @@
         omarchy = final.callPackage ./pkgs/omarchy {
           src = omarchy;
           version = omarchyVersion;
+          inherit nixarchyRev nixarchyDate;
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
 

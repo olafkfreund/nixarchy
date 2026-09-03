@@ -46,6 +46,27 @@ say_dim() { printf '    %s%s%s\n' "$dim" "$1" "$off"; }
 printf '\n%snixarchy: what the VM could not check%s\n' "$bold" "$off"
 say_dim "Run this inside a running Omarchy session."
 
+# ---- what this machine is ------------------------------------------------
+# First, because "what are you actually running" is the first question when
+# something is wrong, and every answer below is only meaningful against it.
+# A value, not a verdict: 4.0.2 is neither good nor bad, it is the fact the
+# rest of this output has to be read against.
+head_ "Version"
+if command -v nixarchy-version >/dev/null 2>&1; then
+  # Two lines, "Omarchy   4.0.2" and "nixarchy  800af40  2026-09-03", printed
+  # as two values. Here-string rather than a pipe: a `while read` on the right
+  # of a pipe runs in a subshell, and the pass/fail counters it increments
+  # would be discarded at the end of it.
+  while read -r label value; do
+    ok "$label" "$value"
+  done <<<"$(nixarchy-version)"
+else
+  # Not a failure. This script is run on machines that do not have nixarchy at
+  # all -- that is what the Omarchy-is-absent handling below exists for -- and
+  # on an older one that predates the command.
+  hmm "nixarchy-version not on PATH" "nothing here can say which nixarchy this is"
+fi
+
 # ---- the session ---------------------------------------------------------
 head_ "Session"
 if [ -z "${WAYLAND_DISPLAY:-}" ]; then

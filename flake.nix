@@ -465,6 +465,11 @@
             findutils
             glib
             bluez
+            # pgrep and ps. The Session and Screen sharing probes both look for
+            # a running process by name, and writeShellApplication's PATH does
+            # not carry the caller's -- an undeclared pgrep here is a probe that
+            # reports "not running" for everything.
+            procps
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

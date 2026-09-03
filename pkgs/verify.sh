@@ -488,6 +488,42 @@ else
   hmm "no Vulkan ICDs on this machine" "hardware.graphics may be off"
 fi
 
+# The menu, which since #210 is two files with one owner each: the Install-row
+# rewrites are in the defaults this session reads, and the extension beside it
+# is the user's and their plugins'.
+#
+# Both halves are worth checking here and neither is checkable in a VM the way
+# this is. What matters is the DEFAULTS the running session resolves -- reading
+# /etc/nixarchy/omarchy-menu.jsonc instead would test what the system built,
+# not what a session started before that rebuild is actually reading.
+menu_defaults="${OMARCHY_PATH:-}/default/omarchy/omarchy-menu.jsonc"
+if [ -z "${OMARCHY_PATH:-}" ]; then
+  maybe_bad "OMARCHY_PATH is unset" "nothing resolves the menu, the bar or the themes"
+elif [ ! -r "$menu_defaults" ]; then
+  maybe_bad "no menu defaults in \$OMARCHY_PATH" "$menu_defaults"
+elif grep -q nixarchy-app-enable "$menu_defaults"; then
+  ok "menu defaults" "Install rows reach nixarchy-app-enable"
+else
+  maybe_bad "menu defaults still run pacman" "no nixarchy-app-enable rows in \$OMARCHY_PATH"
+  say_dim "this session predates #210, or its tree is not the generated one"
+fi
+
+# And the file that is NOT ours. A symlink here is what nixarchy used to plant,
+# and it is the whole bug: upstream's shell/plugins/README.md points plugins at
+# this path, and a plugin cannot write a read-only store symlink.
+menu_user="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+if [ -L "$menu_user" ]; then
+  bad "$menu_user is a symlink" "plugins and your own rows cannot be written"
+  say_dim "an older nixarchy owned this file; a rebuild no longer does"
+  say_dim "rm it and log back in to get Omarchy's writable example"
+elif [ -w "$menu_user" ]; then
+  ok "your menu extension is yours" "$menu_user"
+elif [ -e "$menu_user" ]; then
+  bad "$menu_user is not writable" "plugins and your own rows cannot be written"
+else
+  hmm "no menu extension yet" "seeded on first login; add rows there"
+fi
+
 # The two runtime-installable things, both of which clone into ~/.config and
 # both of which fail on their first mkdir if that tree is a store symlink.
 for d in plugins themes; do

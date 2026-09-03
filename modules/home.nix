@@ -11,7 +11,26 @@ inputs:
 }:
 let
   cfg = config.programs.nixarchy;
-  omarchyPath = "${cfg.package}/share/omarchy";
+
+  # What OMARCHY_PATH points at, and the source of every file seeded below.
+  #
+  # Read across from the NixOS module when there is one, the same way localAi
+  # is: it is the package's own tree with the files nixarchy generates for THIS
+  # machine in it, and the app selection those are built from is only visible
+  # over there. The menu's defaults file is the one that matters -- it carries
+  # the Install-row rewrites, which is how the Install menu stays off pacman
+  # without nixarchy taking ~/.config/omarchy/extensions/omarchy-menu.jsonc,
+  # the file upstream documents as the user's and points plugins at (#210).
+  #
+  # A standalone home-manager configuration has no NixOS module and therefore
+  # no selection, so it falls back to the package's tree -- the same menu
+  # Omarchy ships, which is the honest answer when there is no selection for
+  # the Install rows to reach.
+  omarchyPath = osConfig.programs.nixarchy.tree or "${cfg.package}/share/omarchy";
+
+  # Upstream's user menu file, which nixarchy does not write -- named here
+  # because the activation below has to undo an older nixarchy having done so.
+  menuExtensionPath = "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc";
 
   # The local model is configured on the SYSTEM side -- it is a service and a
   # package set -- but its provider files live in a home. Read across rather
@@ -463,14 +482,30 @@ in
                 seed_file "${omarchyPath}/logo.txt" \
                   "${config.xdg.configHome}/omarchy/branding/screensaver.txt"
 
-                # The menu extension is generated, not seeded: it carries the
-                # install-row rewrites, so it has to keep tracking the package. Add
-                # your own rows with programs.nixarchy.menu.extraEntries.
+                # The extensions directory, and one thing to undo in it.
+                #
+                # This file is the user's: upstream documents it as theirs, and
+                # shell/plugins/README.md tells third-party plugins to write it.
+                # Nixarchy's rows are in the DEFAULTS this session reads (see
+                # omarchyPath), so nothing here writes it and nothing arbitrates.
+                #
+                # Except on a machine an older nixarchy already took it on, where
+                # it is a symlink into /etc and therefore into a read-only store
+                # path. Leaving that behind would keep the file unwritable forever
+                # on exactly the machines this is meant to fix, and nothing would
+                # ever say so -- which is the bug, not the symlink. So it is
+                # removed, once, and Omarchy's own commented example seeded in its
+                # place. Only a link into /etc/nixarchy is touched: a file, or a
+                # link somebody else made, is theirs. #210.
                 run mkdir -p "${config.xdg.configHome}/omarchy/extensions"
-                if [ -e /etc/nixarchy/omarchy-menu.jsonc ]; then
-                  run ln -sfn /etc/nixarchy/omarchy-menu.jsonc \
-                    "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc"
-                fi
+                case "$(readlink "${menuExtensionPath}" 2>/dev/null)" in
+                  /etc/nixarchy/*)
+                    run rm -f "${menuExtensionPath}"
+                    echo "nixarchy: ${menuExtensionPath} is yours now, not a link into /etc"
+                    ;;
+                esac
+                seed_file "${omarchyPath}/config/omarchy/extensions/omarchy-menu.jsonc" \
+                  "${menuExtensionPath}"
 
                 # Agent skills, relinked on every activation.
                 #

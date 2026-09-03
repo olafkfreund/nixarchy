@@ -184,7 +184,15 @@ say ""
 if [ -n "${OMARCHY_PATH:-}" ] && [ -e "$sw/bin/omarchy" ]; then
   say "${bold}Session${off}"
   installed=$(readlink -f "$sw/bin/omarchy" | sed 's|/bin/omarchy$||')
-  if [ "$OMARCHY_PATH" != "$installed" ]; then
+  # Resolved through the session's own tree rather than compared to it. Since
+  # #210 OMARCHY_PATH is a per-configuration mirror of the package -- the same
+  # tree with the generated menu defaults in it -- so its path is legitimately
+  # not the package's, while bin/ inside it still symlinks straight back. Left
+  # as a literal comparison, this told every machine it was running an older
+  # build.
+  session=$(readlink -f "$OMARCHY_PATH/bin/omarchy" 2>/dev/null |
+    sed 's|/bin/omarchy$||')
+  if [ "${session:-$OMARCHY_PATH}" != "$installed" ]; then
     finding "This session is running an older build" "$warn" ""
     say "     ${dim}session:   $OMARCHY_PATH${off}"
     say "     ${dim}installed: $installed${off}"

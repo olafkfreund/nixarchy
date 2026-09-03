@@ -1216,7 +1216,26 @@ the image `Ready`. So the session test boots a machine, screenshots it through
 qemu, and compares the screen's average colour to the wallpaper's own.
 
 If they all pass, the bump merges itself. When one fails, the run summary
-names which of them broke and which file to edit. **A new app in Omarchy's Install menu is usually one line** in
+names which of them broke and which file to edit.
+
+**And something watches the watchers.** `review.yml` runs at 06:00, after the
+others have finished, and asks two questions in one place: is anything this
+repo pins behind what upstream ships, and did the jobs that are supposed to
+answer that actually run and pass? Findings go into a single issue, edited in
+place each night and closed automatically when everything is green.
+
+It exists because the daily check above once failed for three nights running
+and nobody heard: twice it was killed by its own timeout -- which GitHub
+records as *cancelled*, and `if: failure()` does not catch -- and once it
+failed on a false positive in a copy of a check that had drifted from the
+original. A security release sat unadopted the whole time. The same script
+runs at a prompt:
+
+```
+nix run .#review
+```
+
+**A new app in Omarchy's Install menu is usually one line** in
 `data/apps.nix` — `attr` for a plain nixpkgs package, `option` for something
 that needs a NixOS module. The menu rewiring and its Remove row are generated
 from that entry.

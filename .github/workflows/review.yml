@@ -1,0 +1,51 @@
+name: review
+
+# What needs updating, and what is quietly broken.
+#
+# Everything else here watches one thing and reports on its own run. Nothing
+# watched the watchers, and it showed: on 2026-08-31 and 09-01 the Omarchy bump
+# was killed by its own 20-minute timeout, which GitHub records as *cancelled*
+# and `if: failure()` does not catch; on 09-02 it failed on a false positive in
+# its own mapping check. Three nights, no issue, no notification, and Omarchy
+# 4.0.2 -- a security release -- left unadopted the whole time.
+#
+# The answer is not another per-workflow reporter. It is one job that asks, out
+# loud and in one place: is anything we pin behind upstream, and did the jobs
+# that are supposed to tell us that actually run and pass?
+#
+# The logic is in pkgs/review.sh, not here, for the reason doctor.sh and
+# verify.sh are scripts: `nix run .#review` gives the same answer at a prompt
+# as it does at 06:00, so it can be tested by the person changing it.
+
+on:
+  schedule:
+    # 06:00 UTC. After nightly's 03:00, omarchy's 04:00 and Monday's update at
+    # 05:00 have finished, so it reviews the night that just happened rather
+    # than the one before.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Review, and say so
+        # always(), because a review that only reports when it feels like it is
+        # the thing this workflow exists to replace.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gh has no git remote to infer the repository from in a job that
+          # may not have checked out -- the exact bug that broke nightly.yml's
+          # reporter, fixed there in 9da7465 and set here from the start.
+          GH_REPO: ${{ github.repository }}
+        run: nix run .#review -- --report

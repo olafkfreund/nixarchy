@@ -35,6 +35,17 @@ jobs:
       - name: deadnix
         run: nix run nixpkgs#deadnix -- --fail .
 
+      # Cheap, and it belongs with the other things that are checked before
+      # anything is built: it reads files rather than making them. `nix run
+      # .#review` watches every hand-pinned package; this watches that it can
+      # still see them, which is how that script rots.
+      - name: The nightly review can still read every pin
+        run: nix build .#checks.x86_64-linux.review-pins --print-build-logs
+
+      # Same shape, same reason: its dangerous failure is reporting nothing.
+      - name: The Omarchy package delta still sees a change
+        run: nix build .#checks.x86_64-linux.package-delta --print-build-logs
+
   # Every preset in data/devenv-presets.nix, scaffolded with the real
   # `nixarchy dev init` and handed to a real devenv to evaluate.
   #
@@ -403,37 +414,13 @@ jobs:
 
       - name: Verify every Install row is mapped
         run: |
-          # data/apps.nix claims CI keeps it from rotting. This is that check.
-          # Upstream's Install rows name their package as
-          # `omarchy-pkg-present <arch-package>`; every one of those has to
-          # appear in data/apps.nix or a new Omarchy app silently reaches the
-          # menu as a row that still tries to run pacman.
-          menu=result/share/omarchy/default/omarchy/omarchy-menu.jsonc
-          # Both catalogues. A row is mapped if data/apps.nix claims its
-          # package or data/services.nix does -- tailscale moved from one to
-          # the other when it became a service, and its `arch` moved with it.
-          # A check that read only apps would have called that row unmapped,
-          # and been wrong: it is answered, just not by the file it used to be.
-          python3 - "$menu" data/apps.nix data/services.nix <<'PY'
-          import re, sys
-          menu, appsfile, svcfile = sys.argv[1], sys.argv[2], sys.argv[3]
-          raw = open(menu).read()
-          rows = re.sub(r'^\s*//[^\n]*(\n|$)', '', raw, flags=re.M)
-          known = set(re.findall(r'arch = "([^"]+)"', open(appsfile).read()))
-          known |= set(re.findall(r'arch = "([^"]+)"', open(svcfile).read()))
-          # Only the install tree: remove.* rows are derived from these.
-          wanted = set()
-          for rid, body in re.findall(r'"(install\.[a-z0-9.\-]+)":\s*(\{[^}]*\})', rows):
-              m = re.search(r'omarchy-pkg-present\s+([a-z0-9._@+\-]+)', body)
-              if m:
-                  wanted.add((rid, m.group(1)))
-          missing = sorted((r, a) for r, a in wanted if a not in known)
-          if missing:
-              for r, a in missing:
-                  print(f"::error::{r} installs '{a}', which data/apps.nix does not map")
-              sys.exit(f"{len(missing)} unmapped Install rows")
-          print(f"all {len(wanted)} Install rows are mapped")
-          PY
+          # data/apps.nix claims CI keeps it from rotting. This is that check,
+          # and omarchy.yml runs the same script against the newest Omarchy --
+          # it used to run its own copy, which drifted and failed on a row
+          # that was mapped. See the script's header.
+          python3 .github/scripts/check-menu-mapping.py \
+            result/share/omarchy/default/omarchy/omarchy-menu.jsonc \
+            data/apps.nix data/services.nix
 
       - name: Verify every mapped app still evaluates
         env:

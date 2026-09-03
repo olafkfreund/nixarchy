@@ -72,10 +72,14 @@ Two exceptions worth knowing:
 
 - **A file under `~/.config/` that is a symlink into `/nix/store` is not
   editable.** Home Manager owns it. Change it where it is declared.
-- **`~/.config/omarchy/extensions/omarchy-menu.jsonc`** is generated, and is the
-  one file under `~/.config/omarchy/` you cannot edit. It carries the rewrite
-  that points every `install.*` row at the Nix selection, so it has to track the
-  package. Add rows with `programs.nixarchy.menu.extraEntries` instead.
+- **The menu *defaults* are generated**, and they are not under `~/.config/` at
+  all. They live in the Omarchy tree nixarchy builds, because they carry the
+  rewrite that points every `install.*` row at the Nix selection and so must
+  track the package. Your own
+  `~/.config/omarchy/extensions/omarchy-menu.jsonc` is untouched by any of that
+  -- upstream merges it over the defaults, which is what makes both true at
+  once. `programs.nixarchy.menu.extraEntries` puts a row in the defaults, for
+  rows you want on every machine.
 
 ## Rollback replaces the snapshot
 

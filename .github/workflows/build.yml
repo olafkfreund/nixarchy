@@ -512,7 +512,7 @@ jobs:
           fi
           echo "every desktop entry's command resolves"
 
-      - name: Verify the generated menu extension and app template
+      - name: Verify the generated menu defaults and app template
         run: |
           nix build .#nixosConfigurations.vm.config.system.build.toplevel \
             --print-build-logs -o result-sys

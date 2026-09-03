@@ -46,6 +46,11 @@ on:
 
 permissions:
   contents: write
+  # --discussion-category on the publish step below opens an Announcements
+  # discussion for the release. Without this the whole `gh release create`
+  # call fails, taking the release with it -- the discussion is the smaller
+  # half and must not be able to cost the larger one.
+  discussions: write
 
 # Never cancel a release mid-upload. A half-attached release is worse than a
 # late one, and two tags pushed together should queue rather than race.
@@ -263,10 +268,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
+          # --discussion-category, rather than posting the notes somewhere a
+          # second time. GitHub opens an Announcements discussion carrying this
+          # release's body and links the two, so there is one text and no copy
+          # to drift: an edited release edits the discussion with it.
+          #
+          # It also gives the notes a place that takes replies. A release page
+          # cannot be asked a question; the thing someone wants to say after
+          # reading "cups-browsed was running as root and is now off" belongs
+          # under it rather than in a new issue.
           gh release create "$TAG" out/* \
             --title "$TAG" \
             --notes-file notes.md \
             --generate-notes \
+            --discussion-category announcements \
             --prerelease
 
       # 5.6 GB of parts on the runner's root filesystem, which is the small

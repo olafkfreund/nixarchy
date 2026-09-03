@@ -167,14 +167,16 @@ let
         mcopy -i $out drive ::drive
       '';
 
-  # Both pflash drives. Without unit=1 the firmware has nowhere to keep EFI
-  # variables, and a machine that cannot write them is a different machine
-  # from the one a person installs onto.
+  # Only unit=0, the firmware, which is genuinely read-only. The EFI VARIABLE
+  # store is unit=1 and is deliberately not here: it has to be one writable
+  # file shared by both machines, and a store path is neither writable nor
+  # known at evaluation time. The test script copies it into the working
+  # directory and hands the flag to both create_machine calls; see there for
+  # what a read-only variable store cost us.
   commonFlags = [
     (qemuCommon.qemuBinary pkgs.qemu_test)
     "-m 8192 -smp 4"
     "-drive if=pflash,format=raw,unit=0,readonly=on,file=${pkgs.OVMF.firmware}"
-    "-drive if=pflash,format=raw,unit=1,readonly=on,file=${pkgs.OVMF.variables}"
     # No NIC at all. Bringing an interface down inside the guest leaves
     # something a retry could bring back up; this leaves nothing.
     "-nic none"
@@ -208,8 +210,39 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     import os
+    import shutil
     import subprocess
     import time
+
+    # The EFI variable store: writable, and the SAME FILE for both machines.
+    #
+    # installer/host.nix sets boot.loader.efi.canTouchEfiVariables, so
+    # `bootctl install` writes a boot entry to NVRAM during the install. This
+    # drive was readonly=on, which threw that write away, and the target then
+    # started from the pristine OVMF template as if the install had never
+    # touched it. The console says which machine you are looking at:
+    #
+    #   readonly=on   BdsDxe: starting Boot0002 "UEFI Misc Device"
+    #                   from PciRoot(0x0)/Pci(0x5,0x0)
+    #   readonly=off  BdsDxe: starting Boot0004 "Linux Boot Manager"
+    #                   from HD(1,GPT,...)/\EFI\systemd\systemd-bootx64.efi
+    #
+    # DO NOT read this as the reason the target used to sit silent for 900s.
+    # It is not, and an hour of runtime was spent proving that: both lines
+    # above are a successful LoadImage, because `bootctl install` ALWAYS
+    # writes the removable fallback at \EFI\BOOT\BOOTX64.EFI (bootctl(1)),
+    # so the firmware's own "UEFI Misc Device" entry boots the disk with no
+    # NVRAM entry at all. checks.install passes today on exactly that path.
+    # What the readonly store cost was fidelity, not a boot: the machine
+    # under test was one whose firmware forgets, which is not the machine a
+    # person installs onto.
+    #
+    # Copied out of the store because ${pkgs.OVMF.variables} is a read-only
+    # path -- the same thing nixpkgs' own qemu-vm.nix does for NIX_EFI_VARS.
+    efi_vars = os.path.abspath("efi-vars.fd")
+    shutil.copyfile("${pkgs.OVMF.variables}", efi_vars)
+    os.chmod(efi_vars, 0o644)
+    efi = f" -drive if=pflash,format=raw,unit=1,readonly=off,file={efi_vars}"
 
     # A blank disk for the install to land on, made here rather than by
     # virtualisation.emptyDiskImages: there is no node to hang that off.
@@ -221,7 +254,7 @@ pkgs.testers.runNixOSTest {
         f" -drive file={disk},if=virtio,format=qcow2,werror=report"
         " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
 
-    installer = create_machine("${installerCommand}" + drives, name="installer")
+    installer = create_machine("${installerCommand}" + efi + drives, name="installer")
     installer.start()
 
     # The image's own bootloader, its own kernel, its own store.
@@ -286,6 +319,7 @@ pkgs.testers.runNixOSTest {
     # ---- boot what was installed ---------------------------------------
     target = create_machine(
         "${targetCommand}"
+        + efi
         + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
         name="target")
     target.start()

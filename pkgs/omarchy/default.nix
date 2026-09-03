@@ -3,6 +3,11 @@
   stdenvNoCC,
   src,
   version,
+  # Which nixarchy this is (#208). Computed in flake.nix, because `self` is
+  # reachable there and nowhere else, and spliced into nix-bin/nixarchy-version
+  # below.
+  nixarchyRev,
+  nixarchyDate,
   # Runtime dependencies, derived by grepping every script in upstream `bin/`
   # for the commands it shells out to. Regenerate with:
   #   nix run .#deps-report
@@ -945,6 +950,34 @@ stdenvNoCC.mkDerivation {
                   # yet unreachable to the scripts that call it.
                   [ -e "$out/bin/$name" ] || ln -s "$target" "$out/bin/$name"
                 done
+
+                # nixarchy-version, told which nixarchy it is (#208).
+                #
+                # The values come from `self` in flake.nix -- see the note on the
+                # nixarchyRev argument. Spliced at build time the way omarchy-version's
+                # version is, and for the same reason: nothing at runtime can work out
+                # which revision built this store path.
+                substituteInPlace $out/share/omarchy/bin/nixarchy-version \
+                  --replace-fail '@omarchyversion@' '${version}' \
+                  --replace-fail '@nixarchyrev@' '${nixarchyRev}' \
+                  --replace-fail '@nixarchydate@' '${nixarchyDate}'
+
+                # And that the command actually prints what this build put in it.
+                #
+                # --replace-fail above catches a placeholder that stops existing; it
+                # cannot catch the substituteInPlace itself being dropped, which would
+                # ship a script printing "@nixarchyrev@" with a perfectly green build.
+                # AGENTS.md section 1: the check has to be able to fail. The script is
+                # deliberately free of runtime dependencies so it can simply be run here.
+                printed=$(bash $out/share/omarchy/bin/nixarchy-version)
+                case $printed in
+                  *'${version}'*'${nixarchyRev}'*'${nixarchyDate}'*) ;;
+                  *)
+                    echo "nixarchy-version does not print what this build set:" >&2
+                    echo "$printed" >&2
+                    exit 1
+                    ;;
+                esac
 
                 # Agent skills. omarchy-provision-user symlinks every directory under
                 # default/agents/skills/ into ~/.claude/skills, ~/.agents/skills,

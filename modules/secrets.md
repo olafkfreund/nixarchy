@@ -87,10 +87,12 @@ No credentials set (-u/-p). Use -u <user> -p <pass> to require authentication.
 
 and then serves the session **unauthenticated**. It fails open. So the module
 in `modules/services/` is the only thing standing between a missing secret and
-an RDP daemon with no password, and it must assert with a message naming the
-three commands (read the host pubkey → add it to `.sops.yaml` → `sops edit`)
-rather than let a rebuild succeed into that state. Never make the service
-start passwordless as a convenience for the first-boot case.
+an RDP daemon with no password, and it must assert rather than let a rebuild
+succeed into that state. The message says why the rebuild stopped and the
+one-line shape of the fix, and points at `docs/manual/remote-desktop.md` for
+the commands; it used to name them itself, and #215 is what that cost — two
+copies of a workflow, of which the one in the module was the wrong one. Never
+make the service start passwordless as a convenience for the first-boot case.
 
 There is a second, sharper edge to this, and it is the one a future reader is
 most likely to "simplify" away. The warning above and the actual enforcement

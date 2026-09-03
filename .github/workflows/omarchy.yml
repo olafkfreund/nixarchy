@@ -11,10 +11,26 @@ permissions:
   contents: write
   pull-requests: write
 
+# One bump at a time. There was no concurrency block here at all, so a
+# workflow_dispatch during the 04:00 run raced the schedule for the same branch
+# ref. cancel-in-progress is false because the loser would be a half-finished
+# bump, and a bump that stops in the middle is worse than one that waits.
+concurrency:
+  group: omarchy-bump
+  cancel-in-progress: false
+
 jobs:
   bump:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 45, not the 20 this had. The session check below builds Hyprland, and
+    # build.yml gives the same closure 30 minutes WITH the hyprland cache
+    # configured; this job also builds .#omarchy from a source that just
+    # changed, so it is guaranteed a cache miss on the way in. At 20 it was
+    # killed twice, on 2026-08-31 and 09-01, at 20m21s and 20m24s -- and a
+    # timeout is recorded as cancelled, not failed, so the report step below
+    # never ran either. Two silent nights and a security release left on the
+    # shelf.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
@@ -30,6 +46,8 @@ jobs:
             jq -r .tag_name)
           current=$(grep -oE 'github:basecamp/omarchy/[^"]+' flake.nix | cut -d/ -f3)
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          # The version being left behind, for the package delta below.
+          echo "current=$current" >> "$GITHUB_OUTPUT"
           echo "$current -> $latest"
           [ "$current" = "$latest" ] && echo "changed=false" >> "$GITHUB_OUTPUT" ||
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -39,6 +57,18 @@ jobs:
         run: |
           sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/${{ steps.rel.outputs.latest }}|" flake.nix
           nix flake update omarchy
+
+          # The tag is written in three places, and this used to move one of
+          # them. omarchyVersion is what the package calls itself and what
+          # omarchy-nvim defaults to, so an auto-merged bump left both naming
+          # the version before it -- the store path said 4.0.1 while the tree
+          # was 4.0.2. Rewritten here rather than reported later, because the
+          # place to fix a stale copy is the thing that made it stale.
+          ver="${{ steps.rel.outputs.latest }}"
+          ver="${ver#v}"
+          sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$ver\"|" flake.nix
+          sed -i "s|omarchyVersion ? \"[^\"]*\"|omarchyVersion ? \"$ver\"|" \
+            pkgs/omarchy-nvim/default.nix
 
       # Everything below is the same set of assertions build.yml makes, run
       # against the new Omarchy rather than the pinned one. Each answers a
@@ -54,26 +84,50 @@ jobs:
         if: steps.rel.outputs.changed == 'true'
         run: nix build .#omarchy --print-build-logs
 
+      - name: What packages this release adds and drops
+        if: steps.rel.outputs.changed == 'true'
+        id: delta
+        # Omarchy pins no versions -- its install lists are bare Arch names --
+        # so the only thing to compare between releases is the set itself.
+        # 4.0.2 is why this exists: it dropped cups-browsed and added
+        # cups-pk-helper ("Harden CUPS printer discovery and administration"),
+        # while modules/nixos.nix still justified its printing defaults with a
+        # comment naming cups-browsed as being in base.packages. Three lines of
+        # diff, pointing at a comment that had stopped being true.
+        #
+        # It goes in the PR body rather than the nightly review because it is
+        # only worth reading while someone is deciding about this bump.
+        run: |
+          for tag in "${{ steps.rel.outputs.current }}" "${{ steps.rel.outputs.latest }}"; do
+            : > "pkgs-$tag.txt"
+            for list in omarchy-base omarchy-other; do
+              curl -fsSL \
+                "https://raw.githubusercontent.com/basecamp/omarchy/$tag/install/$list.packages" \
+                >> "pkgs-$tag.txt" || true
+            done
+          done
+
+          {
+            echo "delta<<DELTA_EOF"
+            bash .github/scripts/omarchy-package-delta.sh \
+              "pkgs-${{ steps.rel.outputs.current }}.txt" \
+              "pkgs-${{ steps.rel.outputs.latest }}.txt" \
+              "${{ steps.rel.outputs.current }}" "${{ steps.rel.outputs.latest }}"
+            echo "DELTA_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check nothing became unmapped or unwired
         if: steps.rel.outputs.changed == 'true'
         run: |
-          python3 - result/share/omarchy/default/omarchy/omarchy-menu.jsonc data/apps.nix <<'PY'
-          import re, sys
-          raw = open(sys.argv[1]).read()
-          rows = re.sub(r'^\s*//[^\n]*(\n|$)', '', raw, flags=re.M)
-          known = set(re.findall(r'arch = "([^"]+)"', open(sys.argv[2]).read()))
-          wanted = {}
-          for rid, body in re.findall(r'"(install\.[a-z0-9.\-]+)":\s*(\{[^}]*\})', rows):
-              m = re.search(r'omarchy-pkg-present\s+([a-z0-9._@+\-]+)', body)
-              if m:
-                  wanted[rid] = m.group(1)
-          missing = {r: a for r, a in wanted.items() if a not in known}
-          for r, a in missing.items():
-              print(f"::error::new Install row {r} wants '{a}', unmapped in data/apps.nix")
-          if missing:
-              sys.exit(f"{len(missing)} new apps need mapping")
-          print(f"all {len(wanted)} Install rows still mapped")
-          PY
+          # The same script build.yml runs on every pull request, against the
+          # newest Omarchy instead of the pinned one. It was an inline copy
+          # here until that copy fell behind build.yml's -- it never learned
+          # to look in data/services.nix, so it failed the v4.0.2 bump on
+          # install.service.tailscale, which services.nix had mapped all
+          # along. A security release sat unadopted for three days behind it.
+          python3 .github/scripts/check-menu-mapping.py \
+            result/share/omarchy/default/omarchy/omarchy-menu.jsonc \
+            data/apps.nix data/services.nix
 
       # Booting the session builds the closure on the way, so there is no
       # separate closure step: it would double an hour-long Hyprland compile
@@ -88,6 +142,19 @@ jobs:
       # pure black while every other check here passed, because a wallpaper
       # wider than GL_MAX_TEXTURE_SIZE draws nothing at all and Qt still
       # reports the image Ready.
+      - name: Add hyprland binary cache
+        if: steps.rel.outputs.changed == 'true'
+        # Nixarchy pins Hyprland ahead of nixpkgs, so without this the runner
+        # compiles a compositor from source. build.yml has had this since it
+        # started building the same closure; this job never did, which is the
+        # other half of why it kept running out of its budget.
+        run: |
+          sudo tee -a /etc/nix/nix.conf >/dev/null <<'EOF'
+          extra-substituters = https://hyprland.cachix.org
+          extra-trusted-public-keys = hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
+          EOF
+          sudo systemctl restart nix-daemon || true
+
       - name: Boot a session and check the desktop renders
         if: steps.rel.outputs.changed == 'true'
         run: |
@@ -99,7 +166,13 @@ jobs:
         id: pr
         uses: peter-evans/create-pull-request@v7
         with:
-          branch: update/omarchy
+          # The version is in the branch name, not just the title. With a
+          # constant name, a bump that stops for a human -- a new app to map,
+          # a moved anchor -- is overwritten by the next night's run, and the
+          # state you were about to read is gone. Per version, the stuck one
+          # waits where you left it while the next release still gets a clean
+          # attempt of its own. delete-branch below keeps them from piling up.
+          branch: update/omarchy-${{ steps.rel.outputs.latest }}
           title: "Omarchy ${{ steps.rel.outputs.latest }}"
           commit-message: "Omarchy ${{ steps.rel.outputs.latest }}"
           body: |
@@ -113,6 +186,8 @@ jobs:
             - every menu row it overrides still exists
             - all Install rows are still mapped in `data/apps.nix`
             - **a booted session renders its wallpaper**
+
+            ${{ steps.delta.outputs.delta }}
 
             If something is wrong anyway, roll back with
             `nixos-rebuild --rollback` or the boot menu, and open an issue.
@@ -132,7 +207,15 @@ jobs:
           echo "merged Omarchy ${{ steps.rel.outputs.latest }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report what needs a human
-        if: failure() && steps.rel.outputs.changed == 'true'
+        # cancelled() as well as failure(): the timeout that killed this job
+        # twice reports as cancelled, and a report step that only fires on
+        # failure() is silent for exactly the case nobody is watching.
+        #
+        # And no `changed` guard. It was there to keep quiet on the nights
+        # with nothing to do, but a failure in the release probe itself leaves
+        # `changed` unset, so the guard turned the one unexplained failure
+        # into no report at all.
+        if: failure() || cancelled()
         run: |
           echo "Omarchy ${{ steps.rel.outputs.latest }} needs manual work." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"

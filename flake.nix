@@ -469,6 +469,25 @@
           text = builtins.readFile ./pkgs/verify.sh;
         };
 
+        # `nix run .#review` -- what needs updating, and what is quietly
+        # broken. An app rather than a check because it asks GitHub what
+        # upstream ships and what CI did last night, and a check has no
+        # network. The half that needs neither is checks.review-pins.
+        review = pkgsFor.${system}.writeShellApplication {
+          name = "nixarchy-review";
+          runtimeInputs = with pkgsFor.${system}; [
+            gh
+            curl
+            git
+            gnugrep
+            gnused
+            coreutils
+            python3
+            nix
+          ];
+          text = builtins.readFile ./pkgs/review.sh;
+        };
+
         # `nix run github:olafkfreund/nixarchy#doctor` -- reads the running
         # system and prints the configuration it would need. Runnable before
         # nixarchy is an input anywhere, which is the only entry point someone
@@ -932,6 +951,21 @@
         # this proves the wizard can be answered, which no harness passing
         # --answers has ever done. See tests/installer-wizard.nix.
         installer-wizard = import ./tests/installer-wizard.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
+        # The package delta that goes in every Omarchy bump PR. Its dangerous
+        # failure is silence, so this feeds it a known answer. See
+        # tests/package-delta.nix.
+        package-delta = import ./tests/package-delta.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
+        # `nix run .#review` watches the pinned packages; this watches that
+        # it can still see them. See tests/review-pins.nix.
+        review-pins = import ./tests/review-pins.nix {
           inherit inputs;
           pkgs = pkgsFor.${system};
         };

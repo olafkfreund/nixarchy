@@ -188,6 +188,30 @@ let
   ) cfg.plugins;
 in
 {
+  # Nixi: the guide that should come with nixarchy -- a live hands-on tour,
+  # an offline-first manual search, and an AI tutor grounded in this machine.
+  #
+  # Imported unconditionally, and TURNED ON for every nixarchy desktop below.
+  # Upstream's whole config is `lib.mkIf cfg.enable`, so `false` really does
+  # leave nothing behind -- no unit, no timer, no plugin folder, no package,
+  # and therefore nothing listening on 8642. That is the half tests/options.nix
+  # spends most of its nixi cases on, because with a default of `true` it is
+  # the half nobody exercises on purpose.
+  #
+  # No option of nixarchy's own wrapping it, which is data/services.nix's
+  # "plain" rule applied one directory over: `services.nixi.enable = false`
+  # is one line, it is the line nixi's own documentation shows, and a
+  # `programs.nixarchy.services.nixi` alias would be a second name for one
+  # switch plus RFC 42's staleness problem. What a default-on bundle owes the
+  # user is not a second option but a findable answer, so the README feature
+  # table and docs/manual/getting-started.md both say it is on and both show
+  # the line that turns it off.
+  #
+  # It is also why no row was added to data/services.nix. That catalogue
+  # generates ~/.config/nixarchy/services.nix, which is a NixOS file; nixi is
+  # a home-manager module and there is no NixOS option for a row to write.
+  imports = [ inputs.nixi.homeModules.default ];
+
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "the Omarchy user session";
 
@@ -285,6 +309,56 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # THE ONE LINE. The guide ships on, and this is where that is decided:
+    # `false` here takes it off every nixarchy desktop, and mkDefault means a
+    # user's own `services.nixi.enable = false` outranks us without needing
+    # mkForce -- which is the whole reason a default-on bundle is allowed to
+    # be a default at all.
+    #
+    # On rather than off is a change to machines that already exist: a desktop
+    # that rebuilds after this gains a guide it did not ask for. That is the
+    # maintainer's call, taken deliberately -- a guide nobody has to discover
+    # is the difference between a beginner's desktop and a desktop for people
+    # who already know. What it owes in return is that the answer be findable
+    # without reading this file, so the README feature table and
+    # docs/manual/getting-started.md both name it and both show the one line
+    # above.
+    services.nixi.enable = lib.mkDefault true;
+
+    # And the two defaults nixarchy deliberately does NOT change.
+    #
+    # `barWidget.enable` is true upstream, and stays true here -- which with
+    # the default above means every desktop gets the snowflake. It reads like
+    # "nixarchy silently puts a button on your bar", and on Arch it would be
+    # -- but not on this desktop. All it does is drop a plugin folder into
+    # ~/.config/omarchy/plugins/, and an installed plugin is not an enabled
+    # one: enablement lives in shell.json, which the running shell owns and
+    # nothing here writes. That is the same guarantee programs.nixarchy.plugins
+    # above makes, and tests/plugin.nix asserts it against a real session --
+    # a declaratively installed plugin comes up listed and NOT enabled, to be
+    # turned on once from Setup > Plugins. So the honest description of the
+    # default is "the guide is installed and offered", not "a button appeared".
+    # Re-defaulting it to false would not save anyone a button; it would hide
+    # the widget from the plugin picker and leave a server on 8642 with no way
+    # to reach it.
+    #
+    # `menuEntry.enable` is false upstream and stays false, and #220 does not
+    # change that. Nixi declines the Omarchy menu extension because owning it
+    # means owning the whole file -- and #220 is nixarchy getting OUT of that
+    # file for exactly the same reason, so that upstream's merge and
+    # third-party plugins can have it (shell/plugins/README.md tells plugins to
+    # write it). Handing it straight to a different Nix-managed writer would
+    # spend the freedom the moment it arrived. Today it is worse than
+    # unnecessary: nixarchy's own activation still relinks that path, so
+    # turning nixi's menu entry on before #220 lands does nothing at all, in
+    # silence. Nixi does not need the row either way -- the bar widget is its
+    # front door.
+    #
+    # The default above sharpens this rather than softening it: nixi is now on
+    # everywhere, so a future nixi that starts managing menu rows would be
+    # managing them on every nixarchy machine. Whoever bumps the pin should
+    # re-read this comment, and tests/options.nix fails if that default moves.
+
     # Why: modules/AGENTS.md#omarchys-desktop-is-its-hyprland-config
     warnings =
       let

@@ -489,6 +489,27 @@
         "type": "github"
       }
     },
+    "nixi": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788522028,
+        "narHash": "sha256-GPa6Rm/xZIOdCc4sTHM2t8NYgEGtitoTC2K+pBM7IUQ=",
+        "owner": "olafkfreund",
+        "repo": "nixi-nixarchy",
+        "rev": "a141b1689fb69f9f7462ba5cbbe1945abfa0901a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixi-nixarchy",
+        "rev": "a141b1689fb69f9f7462ba5cbbe1945abfa0901a",
+        "type": "github"
+      }
+    },
     "nixos-hardware": {
       "inputs": {
         "nixpkgs": [
@@ -588,6 +609,7 @@
         "hyprland": "hyprland",
         "microvm": "microvm",
         "nix-flatpak": "nix-flatpak",
+        "nixi": "nixi",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_2",
         "omarchy": "omarchy",

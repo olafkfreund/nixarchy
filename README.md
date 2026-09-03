@@ -78,6 +78,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](docs/manual/remote-desktop.md). Off by default |
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
 | Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
+| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a hands-on tour, an offline manual search and a tutor grounded in your machine, offered in the bar — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
 | **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |

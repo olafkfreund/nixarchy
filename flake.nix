@@ -84,6 +84,30 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The guide that should come with nixarchy: a live hands-on tour, an
+    # offline-first manual search, and an AI tutor grounded in the machine it
+    # runs on. An input rather than a vendored copy, even though both
+    # repositories have the same maintainer: nixi has its own release cadence,
+    # its own two checks and its own Home Manager module, and copying the tree
+    # in would mean maintaining that module twice and re-deriving the package
+    # on every bump. zen-browser and hypr-rdp are already here on that argument.
+    #
+    # `follows` is right here and wrong for hyprland above. Nixi is stdlib
+    # Python plus one QML file: `dontBuild = true`, and the derivation only
+    # places files and pins two interpreters. So overriding its nixpkgs
+    # rebuilds nothing and forfeits no binary cache -- it publishes none -- and
+    # what following buys is one node in every user's lock instead of two, and
+    # one python3 in the closure rather than a second.
+    #
+    # Pinned to a COMMIT because nixi publishes no tags at all. Checked, not
+    # assumed: `git ls-remote --tags` comes back empty and main is the release
+    # channel, which is the same situation sops-nix above is in. Bump it
+    # deliberately; never track a branch.
+    nixi = {
+      url = "github:olafkfreund/nixi-nixarchy/a141b1689fb69f9f7462ba5cbbe1945abfa0901a";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#221-222
     microvm = {
       url = "github:microvm-nix/microvm.nix/fdfc1821a0eb76e44a13d206b72e6ca6961fbb7c";
@@ -520,6 +544,26 @@
           # modules/apps.nix's callPackage, so checks.microvm-template can
           # build and read the exact command `nixarchy vm` execs -- same
           # reasoning as `verify` and `doctor` just below.
+          # Re-exported so `nix build .#nixi` works from this flake and CI has
+          # something to name, built against OUR nixpkgs through the `follows`
+          # on the input.
+          #
+          # Deliberately NOT in the overlay, which is where hypr-rdp and
+          # zen-browser went. The overlay exists to let a module say
+          # `pkgs.<name>` and never mention an input, and nothing here needs
+          # that: nixi's own Home Manager module already defaults
+          # `services.nixi.package` to its flake's package, and because that
+          # flake follows this nixpkgs it is the same derivation this line
+          # names. An overlay attribute would be a second way to spell one
+          # package and a second thing to keep in step.
+          #
+          # Not in data/apps.nix either. That catalogue is for things that are
+          # a package: install it and it is there. Nixi is a package plus a user
+          # unit plus config files plus a bar plugin, and installing the package
+          # alone gives a server nothing starts. It reaches users through
+          # modules/home.nix instead.
+          nixi = inputs.nixi.packages.${system}.nixi;
+
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
 
           # Exposed at top level for the same reason as nixarchy-vm just
@@ -1088,6 +1132,20 @@
 
           # Drives a real session and reports what it logged. See tests/session.nix
           # for why neither a serial console nor the smoke-test VM can do this.
+
+          # Nixi's own package build, which runs its installCheckPhase --
+          # py_compile on every program, `bash -n` on the launcher, and the
+          # assertions that its assets are present.
+          #
+          # Here rather than left to nixi's CI because modules/home.nix now
+          # names it: AGENTS.md's rule is that anything this repo ships which
+          # names something else needs something saying that something exists.
+          # The input is pinned to a commit, so this only runs when the pin
+          # moves -- and a pin that moves to a broken nixi would otherwise be
+          # discovered by whoever rebuilt first with services.nixi.enable on.
+          # Cheap: nothing compiles, the derivation places files.
+          nixi = self.packages.${system}.nixi;
+
           session = import ./tests/session.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

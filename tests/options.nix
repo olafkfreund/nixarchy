@@ -57,6 +57,55 @@ let
       ];
     }).config;
 
+  # The home side, which nothing here had needed before. Every case above this
+  # point is a NixOS option, and modules/home.nix is a separate module tree
+  # that the NixOS one does not evaluate -- so nixi, whose module is a Home
+  # Manager module, is answerable only here.
+  #
+  # A standalone home-manager configuration rather than one nested in a NixOS
+  # machine, because it is the cheaper of the two and it is also the harsher:
+  # `osConfig` is null, which is the shape a nixarchy home module has to keep
+  # working in anyway.
+  homeWith =
+    settings:
+    (inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      modules = [
+        inputs.self.homeManagerModules.nixarchy
+        {
+          home = {
+            username = "someone";
+            homeDirectory = "/home/someone";
+            stateVersion = "25.05";
+          };
+          programs.nixarchy.enable = true;
+        }
+        settings
+      ];
+    }).config;
+
+  # nixi's bar plugin, by the id in its own manifest.json. Named once: the
+  # "on" and "off" halves have to ask about the same path or the pair proves
+  # nothing.
+  nixiPluginFile = "omarchy/plugins/io.github.olafkfreund.nixi/manifest.json";
+
+  # The machine that said no. A plain definition, so it beats the mkDefault in
+  # modules/home.nix without mkForce -- which is itself part of what is being
+  # asserted: an ordinary user writing an ordinary `false` must win.
+  nixiOff = homeWith { services.nixi.enable = false; };
+
+  # Everything the guide leaves in a home. The unit that binds the port, the
+  # weekly manual timer, the read-only assets, the bar plugin, and the package
+  # itself -- five different mechanisms, so a gate that came loose on any one
+  # of them shows up rather than hiding behind the other four.
+  nixiTracesIn = cfg: [
+    (cfg.systemd.user.services ? nixi)
+    (cfg.systemd.user.timers ? nixi-manual)
+    (cfg.xdg.configFile ? "nixi/ui.html")
+    (cfg.xdg.configFile ? ${nixiPluginFile})
+    (builtins.any (p: (p.pname or "") == "nixi") cfg.home.packages)
+  ];
+
   sessionNames =
     cfg: map (p: p.passthru.providedSessions or [ ]) cfg.services.displayManager.sessionPackages;
 
@@ -64,6 +113,67 @@ let
 
   # Each case is (what it should look like on, what it should look like off).
   cases = {
+    # ---- nixi, on for everyone, and provably gone when told ----
+    #
+    # These are the reverse of every other case in this file, and the header's
+    # argument still picks the same half. Elsewhere the default is on and the
+    # untested half is "off"; here the default is on TOO -- modules/home.nix
+    # sets `services.nixi.enable = lib.mkDefault true` -- so `off` is a state
+    # a user has to ask for by hand, and therefore the state nothing else
+    # exercises. It is also the state that has to be complete: a machine that
+    # says no to the guide must have no unit, no timer, no plugin folder, no
+    # assets and no package, and hence nothing listening on 8642.
+    #
+    # `homeWith { }` is the default machine and `nixiOff` is the refusal, so
+    # every pair below reads "the default has it / saying no removes it".
+    nixiUnit = {
+      on = (homeWith { }).systemd.user.services ? nixi;
+      off = nixiOff.systemd.user.services ? nixi;
+    };
+
+    # Everything the guide leaves in a home, in one case, because "off" has to
+    # be all of them and a per-trace case would let one survivor hide behind
+    # four passes. The port is not probed directly: it exists only as
+    # NIXI_PORT in the unit's Environment and as the server the unit starts,
+    # so no unit is no listener.
+    nixiTraces = {
+      on = builtins.all (t: t) (nixiTracesIn (homeWith { }));
+      off = builtins.any (t: t) (nixiTracesIn nixiOff);
+    };
+
+    # The bar plugin on its own, which nixarchy deliberately leaves at nixi's
+    # own default of on -- so on a default machine the snowflake is offered in
+    # Setup > Plugins. Separate from the traces above so that a nixarchy that
+    # re-defaults barWidget fails HERE, with the name of the decision on it,
+    # rather than inside a five-way conjunction.
+    nixiBarWidget = {
+      on = (homeWith { }).xdg.configFile ? ${nixiPluginFile};
+      off = nixiOff.xdg.configFile ? ${nixiPluginFile};
+    };
+
+    # And the menu extension, which nixarchy deliberately leaves at nixi's
+    # own default of OFF. Inverted on purpose: "on" is the default machine
+    # with that file untouched, "off" is what it takes to make Nix own
+    # ~/.config/omarchy/extensions/omarchy-menu.jsonc -- the file #210 and
+    # #220 are about handing back to the user and to third-party plugins.
+    #
+    # This is the most load-bearing case of the four now that the guide ships
+    # enabled: a nixi that started managing menu rows would be managing them
+    # on every nixarchy machine, and it would arrive through a pin bump with
+    # nothing else to notice it.
+    nixiLeavesMenuAlone = {
+      on = !((homeWith { }).xdg.configFile ? "omarchy/extensions/omarchy-menu.jsonc");
+      off =
+        !(
+          (homeWith {
+            services.nixi = {
+              enable = true;
+              menuEntry.enable = true;
+            };
+          }).xdg.configFile ? "omarchy/extensions/omarchy-menu.jsonc"
+        );
+    };
+
     session = {
       on = hasOmarchySession (configWith {
         session = true;

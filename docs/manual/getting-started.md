@@ -182,6 +182,34 @@ shows what selecting it *writes*. `tailscale.enable = true;` is a line you could
 have typed yourself, and the menu is only saving you the trip to
 search.nixos.org.
 
+## The guide
+
+Every nixarchy desktop ships with **[nixi](https://github.com/olafkfreund/nixi-nixarchy)**:
+a live hands-on tour, a manual search that works with the network off, and a
+tutor that answers about *your* machine rather than about Linux in general. It
+is what a first hour on an unfamiliar desktop should have.
+
+It is **on by default**, which for a bar widget means one specific thing:
+nixarchy installs it into `~/.config/omarchy/plugins/`, so the snowflake is
+*offered* under **Setup ▸ Plugins**. Installing a plugin is not enabling one —
+that choice lives in `shell.json` and is yours, exactly as it is for any plugin
+you add yourself. Turn it on once and it stays on.
+
+The server it talks to listens on `127.0.0.1:8642` and nothing else. The one
+part that touches the network is a weekly refresh of its copy of the nixarchy
+and Omarchy manuals, from those two repositories.
+
+If you would rather not have it, one line in your Home Manager configuration
+takes all of it away — the widget, the server, the timer and the package:
+
+```nix
+services.nixi.enable = false;
+```
+
+That is nixi's own option, not a nixarchy alias, so everything else it
+documents (`services.nixi.watcher.enable`, `services.nixi.port`, and the rest)
+works the same way here.
+
 ## Or: add it to NixOS you already run
 
 If the machine already runs NixOS, you do not want the ISO. The rest of this

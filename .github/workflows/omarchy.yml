@@ -99,19 +99,19 @@ jobs:
         # only worth reading while someone is deciding about this bump.
         run: |
           for tag in "${{ steps.rel.outputs.current }}" "${{ steps.rel.outputs.latest }}"; do
-            : > "pkgs-$tag.txt"
+            : > "$RUNNER_TEMP/pkgs-$tag.txt"
             for list in omarchy-base omarchy-other; do
               curl -fsSL \
                 "https://raw.githubusercontent.com/basecamp/omarchy/$tag/install/$list.packages" \
-                >> "pkgs-$tag.txt" || true
+                >> "$RUNNER_TEMP/pkgs-$tag.txt" || true
             done
           done
 
           {
             echo "delta<<DELTA_EOF"
             bash .github/scripts/omarchy-package-delta.sh \
-              "pkgs-${{ steps.rel.outputs.current }}.txt" \
-              "pkgs-${{ steps.rel.outputs.latest }}.txt" \
+              "$RUNNER_TEMP/pkgs-${{ steps.rel.outputs.current }}.txt" \
+              "$RUNNER_TEMP/pkgs-${{ steps.rel.outputs.latest }}.txt" \
               "${{ steps.rel.outputs.current }}" "${{ steps.rel.outputs.latest }}"
             echo "DELTA_EOF"
           } >> "$GITHUB_OUTPUT"

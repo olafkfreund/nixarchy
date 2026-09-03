@@ -56,7 +56,7 @@ how this repo runs its suite:
 nix build .#checks.x86_64-linux.<name> --print-build-logs
 ```
 
-`AGENTS.md` §4 has the full table of checks and what each costs. The one
+`AGENTS.md` §5 has the full table of checks and what each costs. The one
 number to know: **`checks.install` gates every PR, takes ~25 minutes, and
 runs on a single self-hosted machine.** Concurrent PRs queue behind each
 other, so batch your pushes — every push restarts your own run and lengthens

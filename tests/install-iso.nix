@@ -244,105 +244,128 @@ pkgs.testers.runNixOSTest {
     os.chmod(efi_vars, 0o644)
     efi = f" -drive if=pflash,format=raw,unit=1,readonly=off,file={efi_vars}"
 
-    # A blank disk for the install to land on, made here rather than by
-    # virtualisation.emptyDiskImages: there is no node to hang that off.
-    disk = os.path.abspath("target.qcow2")
-    subprocess.check_call(
-        ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "24G"])
-
-    drives = (
-        f" -drive file={disk},if=virtio,format=qcow2,werror=report"
-        " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
-
-    installer = create_machine("${installerCommand}" + efi + drives, name="installer")
-    installer.start()
-
-    # The image's own bootloader, its own kernel, its own store.
-    #
-    # Matched on the login line, not the shell prompt: a prompt is written
-    # without a trailing newline, and wait_for_console_text works in lines, so
-    # waiting for "nixos@nixos" waits for whatever happens to print next --
-    # which, on an idle installer, is nothing at all.
-    installer.wait_for_console_text(r"login: nixos \(automatic login\)", timeout=900)
-    print("the ISO booted, with no network device present")
-
-    # tty1 belongs to the installer TUI; tty2 has the autologin shell.
-    #
-    # time.sleep, not machine.sleep: the latter sleeps in GUEST time by running
-    # `sleep` through the backdoor shell, which this image does not have, so it
-    # blocks forever on "waiting for the VM to finish booting" while the
-    # machine sits there perfectly booted.
-    installer.send_key("alt-f2")
-    time.sleep(8)
-    installer.send_chars("\n")
-    time.sleep(2)
-
-    installer.send_chars("sudo mkdir -p /a\n")
-    time.sleep(2)
-    installer.send_chars("sudo mount -L NIXANSWERS /a\n")
-    time.sleep(4)
-    installer.send_chars("sudo sh /a/drive\n")
-
-    def step(tag, timeout, note=None):
-        installer.wait_for_console_text(rf"{tag}-0-X", timeout=timeout)
-        if note:
-            print(note)
-
-    step("STOPPED", 300, "the answers disk is mounted and the wizard is out of the way")
-    step("MARKER", 120, "the image identifies itself to install.sh")
-    step("GENERATED", 900, "the flake was generated")
-    step("EVALUATED", 1800)
-    step("RESOLVED", 120,
-         "the generated flake evaluates offline, from sources on the image")
-    step("INSTALLED", 3600, "the install completed")
-    step("FLAKE", 120)
-    step("ESP", 120, "it wrote a flake and an ESP")
-    step("OFFLINE", 120, "and downloaded nothing")
-
-    # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
-    # backdoor shell, which this image does not have, so it waits for a reply
-    # that cannot come -- the install passes, every assertion passes, and the
-    # test still fails when nix's build timeout kills it half an hour later.
-    installer.send_chars("sudo poweroff\n")
-    installer.wait_for_console_text(r"[Pp]ower(ing)? off|System is powering down|reboot: Power down",
-                                    timeout=300)
-    time.sleep(5)
-    # A backstop for a machine that did not power off, and nothing more. When
-    # poweroff DID work the monitor socket is already gone and this raises
-    # BrokenPipeError -- failing the test on the cleanest possible outcome.
-    try:
-        installer.send_monitor_command("quit")
-    except Exception:
-        pass
-    time.sleep(3)
-
-    # ---- boot what was installed ---------------------------------------
-    target = create_machine(
-        "${targetCommand}"
-        + efi
-        + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
-        name="target")
-    target.start()
-    target.wait_for_console_text(r"isotest login:", timeout=900)
-    print("the installed disk booted on its own bootloader")
-
-    # Kill it at the monitor, or this check never finishes.
+    # Every machine this script makes, and the single place they are killed.
     #
     # A machine made by create_machine is not reaped for us the way a declared
-    # node is: the script reaches its end with every assertion passing and the
-    # derivation then sits there forever with a qemu still running. That is
-    # not a hypothesis -- checks.install did exactly this for nine hours, and
-    # it presents as `cancelled` in CI because a timeout is recorded as a
-    # cancellation, which reads like a person stopped it rather than like a
-    # hang.
+    # node is -- and the happy path is not the one that matters. When an
+    # assertion fails the driver stops running this script where it stands,
+    # the qemu processes stay up, and the derivation hangs until the JOB's
+    # wall clock kills it. GitHub records that as `cancelled`, not `failed`,
+    # and nightly.yml's reporter is `if: failure()` -- so the nights of
+    # 2026-09-02 and 2026-09-03 both broke here, hung for three hours, and
+    # told nobody. A hang is not just slow; it is SILENT, and that is the part
+    # worth remembering. checks.install did the same thing for nine hours
+    # before anyone noticed.
     #
-    # `quit`, not shutdown(): this machine has no backdoor, which is why the
-    # line above waits on console text rather than asking it anything. Same
-    # treatment the installer machine gets above, and the same try/except --
-    # if qemu is already gone the monitor socket is gone with it.
+    # Hence a finally, rather than a `quit` after the last assertion, which is
+    # what this file did before and which only ever ran when nothing was
+    # wrong.
+    #
+    # `quit`, not shutdown(): these machines have no backdoor, which is why
+    # every wait below is on console text rather than a question put to the
+    # guest. If qemu is already gone -- the usual outcome, poweroff having got
+    # there first -- the monitor socket went with it and this raises
+    # BrokenPipeError, which would otherwise fail the test on the cleanest
+    # possible outcome.
+    # `vms`, not `machines`: the driver already has a global of that name, and
+    # shadowing it fails the test's own type check ("Object of type
+    # `BaseMachine` has no attribute `send_monitor_command`") rather than
+    # anything you would recognise as a name clash.
+    vms = []
+
+    def reap():
+        for m in vms:
+            try:
+                m.send_monitor_command("quit")
+            except Exception:
+                pass
+
     try:
-        target.send_monitor_command("quit")
-    except Exception:
-        pass
+        # A blank disk for the install to land on, made here rather than by
+        # virtualisation.emptyDiskImages: there is no node to hang that off.
+        disk = os.path.abspath("target.qcow2")
+        subprocess.check_call(
+            ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "24G"])
+
+        drives = (
+            f" -drive file={disk},if=virtio,format=qcow2,werror=report"
+            " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
+
+        installer = create_machine("${installerCommand}" + efi + drives, name="installer")
+        vms.append(installer)
+        installer.start()
+
+        # The image's own bootloader, its own kernel, its own store.
+        #
+        # Matched on the login line, not the shell prompt: a prompt is written
+        # without a trailing newline, and wait_for_console_text works in lines, so
+        # waiting for "nixos@nixos" waits for whatever happens to print next --
+        # which, on an idle installer, is nothing at all.
+        installer.wait_for_console_text(r"login: nixos \(automatic login\)", timeout=900)
+        print("the ISO booted, with no network device present")
+
+        # tty1 belongs to the installer TUI; tty2 has the autologin shell.
+        #
+        # time.sleep, not machine.sleep: the latter sleeps in GUEST time by running
+        # `sleep` through the backdoor shell, which this image does not have, so it
+        # blocks forever on "waiting for the VM to finish booting" while the
+        # machine sits there perfectly booted.
+        installer.send_key("alt-f2")
+        time.sleep(8)
+        installer.send_chars("\n")
+        time.sleep(2)
+
+        installer.send_chars("sudo mkdir -p /a\n")
+        time.sleep(2)
+        installer.send_chars("sudo mount -L NIXANSWERS /a\n")
+        time.sleep(4)
+        installer.send_chars("sudo sh /a/drive\n")
+
+        def step(tag, timeout, note=None):
+            installer.wait_for_console_text(rf"{tag}-0-X", timeout=timeout)
+            if note:
+                print(note)
+
+        step("STOPPED", 300, "the answers disk is mounted and the wizard is out of the way")
+        step("MARKER", 120, "the image identifies itself to install.sh")
+        step("GENERATED", 900, "the flake was generated")
+        step("EVALUATED", 1800)
+        step("RESOLVED", 120,
+             "the generated flake evaluates offline, from sources on the image")
+        step("INSTALLED", 3600, "the install completed")
+        step("FLAKE", 120)
+        step("ESP", 120, "it wrote a flake and an ESP")
+        step("OFFLINE", 120, "and downloaded nothing")
+
+        # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
+        # backdoor shell, which this image does not have, so it waits for a reply
+        # that cannot come -- the install passes, every assertion passes, and the
+        # test still fails when nix's build timeout kills it half an hour later.
+        installer.send_chars("sudo poweroff\n")
+        installer.wait_for_console_text(r"[Pp]ower(ing)? off|System is powering down|reboot: Power down",
+                                        timeout=300)
+        time.sleep(5)
+        # A backstop for a machine that did not power off, here and not left to
+        # reap(): the target is about to open the same qcow2, and qemu takes a
+        # write lock on it. An installer still running would make that a
+        # "Failed to get write lock" at the very step this test exists for.
+        try:
+            installer.send_monitor_command("quit")
+        except Exception:
+            pass
+        time.sleep(3)
+
+        # ---- boot what was installed ---------------------------------------
+        target = create_machine(
+            "${targetCommand}"
+            + efi
+            + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
+            name="target")
+        vms.append(target)
+        target.start()
+        target.wait_for_console_text(r"isotest login:", timeout=900)
+        print("the installed disk booted on its own bootloader")
+    finally:
+        reap()
   '';
 }

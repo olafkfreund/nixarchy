@@ -557,12 +557,22 @@ jobs:
           # Same trap as the label: an override that omits `action` does not
           # inherit upstream's, it blanks it, and the row silently does
           # nothing when clicked.
+          #
+          # A submenu parent is the exception, and it is implicit: nothing in
+          # the row says "I have children", the children just carry ids
+          # prefixed with the parent's. So `install` legitimately has no
+          # action, because `install.editor` exists. This file is the whole
+          # merged menu rather than only our overrides, so those parents are
+          # now in it -- and checking for children is what tells them apart
+          # from a row that really does nothing.
+          ids = set(rows)
           dead = [k for k, v in rows.items()
                   if not v.get("action") and not v.get("when")
-                  and not v.get("target") and not v.get("provider")]
+                  and not v.get("target") and not v.get("provider")
+                  and not any(o.startswith(k + ".") for o in ids)]
           if dead:
               sys.exit(f"::error::menu rows with no action and no submenu: {dead}")
-          print(f"menu extension OK: {len(rows)} rows, {len(wired)} wired, all labelled and actionable")
+          print(f"menu OK: {len(rows)} rows, {len(wired)} wired, all labelled and actionable")
           PY
 
           # The template is Nix that gets imported into the user's flake; if it

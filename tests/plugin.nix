@@ -127,6 +127,7 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     import json
+    import re
 
     PLUGINS = json.loads(r"""${pluginJSON}""")
 
@@ -330,11 +331,10 @@ pkgs.testers.runNixOSTest {
     # Upstream already ships the whole plugin menu -- Setup > Plugins, with
     # add, enable, disable, clone and remove -- so nothing here adds a row.
     # What is worth proving is that nixarchy does not take one away: the menu
-    # the user sees is upstream's default with our extension merged over it by
-    # id, and that extension rewrites every install.* and remove.* row. An
-    # override that reused one of these ids, or a `when: false` landing on the
-    # wrong key, would delete the plugin menu silently -- the row simply would
-    # not render, with no error anywhere.
+    # the user sees is upstream's default with our Install and Remove rewrites
+    # merged into it, and a rewrite that reused one of these ids, or a
+    # `when: false` landing on the wrong key, would delete the plugin menu
+    # silently -- the row simply would not render, with no error anywhere.
     #
     # The menu is read through $OMARCHY_PATH, not from a fixed system path --
     # that is the single indirection point the whole package is built around,
@@ -349,20 +349,36 @@ pkgs.testers.runNixOSTest {
         '  grep -q "\\"$row\\"" "$menu" || echo "MISSING $row"\n'
         'done\n')
     missing = user(probe).strip()
-    assert not missing, f"upstream's plugin menu rows are not all there: {missing}"
-    print(f"upstream's menu still defines all {len(rows)} plugin rows")
+    assert not missing, f"the plugin menu rows are not all there: {missing}"
+    print(f"the menu on $OMARCHY_PATH still defines all {len(rows)} plugin rows")
 
-    # And our extension must not shadow any of them. Checked as "no key starts
-    # with setup.plugin" rather than by merging the two files, because that is
-    # the property that actually has to hold: if we never name these ids, we
-    # cannot break them.
-    ext = machine.succeed("cat /etc/nixarchy/omarchy-menu.jsonc")
-    shadowed = [r for r in rows if f'"{r}"' in ext]
-    assert not shadowed, (
-        f"the nixarchy menu extension overrides {shadowed}. Those rows are "
-        "upstream's plugin menu, and an override merged over them by id can "
-        "hide them with no error.")
-    print("the nixarchy menu extension leaves them alone")
+    # And the merge must leave them usable, not merely present. This used to
+    # be checked as "no key in our file starts with setup.plugin", which held
+    # while that file was a fragment of overrides. It is now the whole merged
+    # menu, so upstream's plugin rows are necessarily in it and their absence
+    # is no longer the thing to look for -- what matters is that the merge
+    # carried their label and action through rather than blanking either.
+    raw = machine.succeed("cat /etc/nixarchy/omarchy-menu.jsonc")
+    # Parsed the way MenuModel.js does: whole-line comments out, then trailing
+    # commas, then plain JSON.
+    stripped = re.sub(r"^\s*//[^\n]*(\n|$)", "", raw, flags=re.M)
+    ext = json.loads(re.sub(r",(\s*[}\]])", r"\1", stripped))
+    broken = []
+    for r in rows:
+        row = ext.get(r)
+        if row is None:
+            broken.append(f"{r}: gone from the merged menu")
+        elif not row.get("label"):
+            broken.append(f"{r}: no label, would render as its id")
+        elif str(row.get("when", "")).strip() == "false":
+            broken.append(f"{r}: hidden by when:false")
+        # setup.plugin is the submenu parent; the other five are leaves and a
+        # leaf with no action renders and then does nothing when chosen.
+        elif r != "setup.plugin" and not row.get("action"):
+            broken.append(f"{r}: no action")
+    assert not broken, (
+        "the merged menu breaks upstream's plugin rows: " + "; ".join(broken))
+    print("the merge leaves all 6 plugin rows labelled and actionable")
 
     # The commands those rows invoke, which is the other way the menu breaks:
     # a row that renders and then does nothing when chosen.

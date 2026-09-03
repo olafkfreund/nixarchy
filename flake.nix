@@ -1040,6 +1040,14 @@
           pkgs = pkgsFor.${system};
         };
 
+        # The other half of that: every option path the README and the manual
+        # quote, checked against the option set they claim to describe. See
+        # tests/doc-options.nix and #214.
+        doc-options = import ./tests/doc-options.nix {
+          inherit inputs;
+          pkgs = pkgsFor.${system};
+        };
+
         # Built, not evaluated, and onto a config that already exists. See
         # tests/integration.nix for the three bugs that shipped because every
         # other check here starts from a clean machine.

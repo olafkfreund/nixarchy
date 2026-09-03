@@ -64,6 +64,12 @@ jobs:
       - name: The release notes still see what changed
         run: nix build .#checks.x86_64-linux.release-notes --print-build-logs
 
+      # Prose, checked the way the app and subcommand counts already are: an
+      # option path in the README or the manual is a claim about the option
+      # set, and #214 shipped one that had been false for a release.
+      - name: The documentation only quotes options that exist
+        run: nix build .#checks.x86_64-linux.doc-options --print-build-logs
+
   # Every preset in data/devenv-presets.nix, scaffolded with the real
   # `nixarchy dev init` and handed to a real devenv to evaluate.
   #

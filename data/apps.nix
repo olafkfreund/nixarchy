@@ -12,7 +12,7 @@
 #   attr       nixpkgs attribute, for apps that are only a package.
 #   option     NixOS option path for apps that are a module rather than a
 #              package. `settings` is merged HERE, which is what makes
-#              `apps.tailscale.settings.useRoutingFeatures` land in the right
+#              `apps._1password.settings.polkitPolicyOwners` land in the right
 #              place. An app with an `option` must NOT also set `attr`: the
 #              module owns installing its own package.
 #   unfree     Marks a package nixpkgs licenses as unfree. nixarchy defaults

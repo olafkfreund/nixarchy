@@ -69,14 +69,52 @@ files on disk, and for those the row enables a NixOS option instead:
 |---|---|---|
 | Steam | `programs.steam` | Needs an FHS wrapper to run at all |
 | 1Password | `programs._1password-gui` | Unlocking needs a setuid helper |
-| Tailscale | `services.tailscale` | It is a daemon |
 | Firefox | `programs.firefox` | Policies and extensions become declarative |
 | Xbox controllers | `hardware.xpadneo` | A kernel driver |
 
-Rows like these accept settings. `nixarchy-apps.nix` is an ordinary NixOS
-module, so you can write, for example,
-`programs.nixarchy.apps.tailscale.settings.useRoutingFeatures = "client";`
-directly beside the selection and it lands in `services.tailscale`.
+Rows like these — and only these, the ones with an option to merge into —
+accept settings. `apps.nix` is an ordinary NixOS module, so you can write
+
+```nix
+programs.nixarchy.apps._1password.settings.polkitPolicyOwners = [ "you" ];
+```
+
+beside the selection, and it is merged into `programs._1password-gui`.
+
+## Services are the other file
+
+Tailscale is not on that list, and neither is anything else that is a decision
+about the machine rather than a package. Those live in `services.nix`, beside
+`apps.nix` in `~/.config/nixarchy/`, with a catalogue of their own. It holds
+two kinds of line, and the difference is what you need to know before tuning
+one:
+
+```nix
+services.openssh.enable = true;                        # upstream's own option
+programs.nixarchy.services.tailscale.enable = true;    # a nixarchy option
+```
+
+The first kind is there because nixarchy had nothing to add: you get the real
+NixOS option, the same line every wiki page and forum answer will show you.
+Configure it exactly as its own documentation says.
+
+The second kind is there because turning the thing on usefully takes more than
+one option — Tailscale needs the firewall to trust the interface, or this host
+can reach your tailnet and nothing on your tailnet can reach it.
+
+Bundled services have no `settings` passthrough and do not need one. Upstream's
+options are not re-declared and not taken away, so you write them directly, in
+the same file:
+
+```nix
+programs.nixarchy.services.tailscale.enable = true;
+services.tailscale.useRoutingFeatures = "client";   # upstream's option, untouched
+```
+
+That is the design rather than an omission. An option copied from upstream goes
+stale and cannot be removed once people depend on it, so nixarchy declares only
+what it genuinely integrates and leaves the rest of `services.tailscale` where
+you already know how to look it up.
 
 ## Unfree software
 

@@ -159,6 +159,76 @@ let
         # assertion above is measuring something other than what it claims.
         grep -q "unable to download" /var/log/nixarchy-install.log
         step OFFLINE test $? -ne 0
+
+        # The removable fallback, asserted rather than taken on trust.
+        #
+        # bootctl(1) says `install` always stores a copy of the loader at
+        # ESP/EFI/BOOT/BOOT*.EFI, and the note beside the pflash drives leans
+        # on that to explain why a target with an empty NVRAM still boots. A
+        # promise in a man page about a program we do not build is exactly the
+        # kind of thing that is true until it is not, and the failure mode if
+        # it changes is a machine that boots on this test's shared variable
+        # store and not on a stranger's laptop.
+        step FALLBACK test -f /mnt/boot/EFI/BOOT/BOOTX64.EFI
+
+        # ---- make the result observable ---------------------------------
+        # Everything above is the product, installed and untouched. What
+        # follows adds a serial console to it and nothing else.
+        #
+        # It has to be added, because the installed machine has none:
+        # installer/cd.nix puts console=ttyS0 on the ISO's command line, which
+        # is why every step above could be read off the serial line, and
+        # installer/host.nix deliberately does not -- an installed desktop
+        # logs to its screen. So `isotest login:` was being waited for on a
+        # line nothing would ever write it to, and this check timed out at
+        # 900s for three nightly runs while the machine under it booted
+        # perfectly.
+        #
+        # NOT OCR (enableOCR + wait_for_text), which was the other candidate:
+        # it answers the same question less reliably, and #197 is putting an
+        # animated plymouth splash on that screen -- frames drawn by ttfx --
+        # which is precisely what an OCR pass would have to see past.
+        #
+        # The last line of the generated configuration.nix is its closing
+        # brace; this puts one option in front of it.
+        sed -i '$s|^}|  boot.kernelParams = [ "console=ttyS0,115200" ];\n}|' \
+          /mnt/etc/nixos/hosts/isotest/configuration.nix
+        grep -q 'console=ttyS0' /mnt/etc/nixos/hosts/isotest/configuration.nix
+        step SERIAL test $? -eq 0
+
+        # A flake in a git worktree sees only tracked or staged files.
+        git -C /mnt/etc/nixos add -A
+
+        # Built HERE and installed by path, which is what run_install() in
+        # installer/install.sh does and for the reason its comment gives:
+        # `nixos-install --flake` sets the EVALUATION store to /mnt, resolves
+        # the flake's locked inputs against a store that has just been created,
+        # and goes to the network for sources sitting in the store one
+        # directory up. checks.install can use --flake because its store was
+        # seeded by the test driver; an ISO is in the other position.
+        #
+        # --offline so that if this ever does reach for the network it says so
+        # instead of hanging: no network is the whole point of this check.
+        #
+        # This is the case installer/cd.nix bakes the reference
+        # inputDerivations for -- a toplevel that differs from the one on the
+        # image has to be BUILT here, from parts, with no stdenv to fetch. If
+        # this step ever ends in the source bootstrap, that list is where the
+        # answer is.
+        step REBUILT nix --extra-experimental-features "nix-command flakes" \
+          build --offline --no-link --print-out-paths \
+          --option always-allow-substitutes true \
+          /mnt/etc/nixos#nixosConfigurations.isotest.config.system.build.toplevel
+        system=$(tail -1 /tmp/out)
+
+        # Because `tail -1` is a guess about what nix printed last, and a bad
+        # guess would otherwise surface as nixos-install reporting something
+        # unrelated about a flake it cannot find.
+        step SYSTEM test -x "$system/init"
+
+        step REINSTALLED nixos-install --root /mnt --system "$system" \
+          --no-root-password \
+          --option extra-experimental-features "nix-command flakes"
         EOF
 
         truncate -s 1M $out
@@ -336,6 +406,13 @@ pkgs.testers.runNixOSTest {
         step("FLAKE", 120)
         step("ESP", 120, "it wrote a flake and an ESP")
         step("OFFLINE", 120, "and downloaded nothing")
+        step("FALLBACK", 120,
+             "the ESP carries the removable fallback loader bootctl promises")
+        step("SERIAL", 120)
+        step("REBUILT", 1800)
+        step("SYSTEM", 120)
+        step("REINSTALLED", 1800,
+             "the installed flake now carries a serial console, built offline")
 
         # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
         # backdoor shell, which this image does not have, so it waits for a reply
@@ -363,8 +440,34 @@ pkgs.testers.runNixOSTest {
             name="target")
         vms.append(target)
         target.start()
-        target.wait_for_console_text(r"isotest login:", timeout=900)
-        print("the installed disk booted on its own bootloader")
+
+        # Two waits, at two layers, because they fail differently and a run
+        # that only ever asserted the second one left you to bisect which half
+        # broke.
+        #
+        # The menu, not an entry title: with one generation sd-boot titles the
+        # entry "NixOS" and with two it spells out the generation, so the
+        # titles are a moving target while the menu's own line is not.
+        target.wait_for_console_text(r"Reboot Into Firmware Interface", timeout=300)
+        print("the bootloader the installer wrote is running, from the ESP it wrote")
+
+        # The getty's BANNER, not "isotest login:", and this one was paid for
+        # twice. wait_for_console_text splits the serial stream on newlines
+        # (`for _line in self.process.stdout` in the driver's Machine), and a
+        # login prompt is written without a trailing one -- so it sits in the
+        # reader's buffer forever and the wait times out beside a machine that
+        # is sitting at a login prompt. The note on the installer's wait above
+        # says exactly this and it still cost a run here: the give-away in that
+        # log is `target # isotest login:` appearing AFTER cleanup killed qemu,
+        # which flushed the partial line.
+        #
+        # agetty writes the issue before the prompt, and \l expands to the tty
+        # it is running on, so this line is not merely "userspace printed
+        # something": it is a getty offering a login ON THE SERIAL LINE, which
+        # takes the kernel, systemd's multi-user target and the serial console
+        # the step above installed.
+        target.wait_for_console_text(r"<<< Welcome to NixOS .* - ttyS0 >>>", timeout=900)
+        print("and the system it installed reached multi-user, offering a login")
     finally:
         reap()
   '';

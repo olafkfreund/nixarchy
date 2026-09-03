@@ -334,6 +334,12 @@ in
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 
+      # Same reason as the NixOS module's copy: upstream's default screenshot
+      # editor, tensaku-edit, is not in nixpkgs, so the Edit on the screenshot
+      # notification was dead (#204). Set here too because this module is also
+      # usable standalone, without programs.nixarchy.
+      sessionVariables.OMARCHY_SCREENSHOT_EDITOR = lib.mkDefault "satty-edit";
+
       # Seed, don't manage: these files are copied, never symlinked. Omarchy
       # expects the user to edit ~/.config/hypr/*.lua by hand and rewrites
       # ~/.local/state/omarchy at runtime, both of which Home Manager's

@@ -95,6 +95,7 @@
   retroarch-joypad-autoconfig,
   localsend,
   runCommand,
+  writeShellScriptBin,
   writeText,
   fontconfig,
   tldr,
@@ -280,6 +281,29 @@ let
     libxkbcommon # xkbcli, for the keyboard-layout widget
     xdg-user-dirs # xdg-user-dirs-update
     satty # screenshot annotation
+
+    # #204: three user-facing paths -- the screenshot notification's Edit,
+    # imv's Ctrl+E, and opening an image from clipboard history -- reached for
+    # `tensaku-edit`, Omarchy's own editor, which is an Arch package and is not
+    # in nixpkgs. All three silently did nothing while satty, right above, was
+    # installed on every machine and named by nothing.
+    #
+    # A wrapper rather than pointing the three call sites straight at satty,
+    # because satty takes the image as `--filename FILE`, not as a positional:
+    # `satty /tmp/shot.png` exits with "the following required arguments were
+    # not provided", which is the same silence again. And the screenshot path
+    # cannot carry the flag itself -- upstream passes the editor to
+    # omarchy-notification-send as `--exec "$SCREENSHOT_EDITOR" "$FILEPATH"`,
+    # and that script rejects a multi-word command ("--exec takes the command
+    # as separate words, not one quoted string"), so OMARCHY_SCREENSHOT_EDITOR
+    # has to be a single program that takes a bare path.
+    #
+    # Named satty-edit rather than tensaku-edit: shadowing upstream's name
+    # would need no patches at all, but it would also make packaging the real
+    # tensaku later a collision instead of a choice.
+    (writeShellScriptBin "satty-edit" ''
+      exec ${satty}/bin/satty --filename "$@"
+    '')
     wl-screenrec # screen recording
 
     # The screensaver is ASCII art driven through text effects, and ttfx is
@@ -698,6 +722,20 @@ stdenvNoCC.mkDerivation {
             substituteInPlace $out/share/omarchy/default/systemd/user/omarchy-speaker-tuning.service \
               --replace-fail 'ExecStart=/usr/bin/pipewire' \
               'ExecStart=/run/current-system/sw/bin/pipewire'
+
+            # The two image-editor call sites that hardcode tensaku-edit, which
+            # is not packaged anywhere here -- see the satty-edit wrapper in the
+            # runtime dependencies above for why a wrapper and not satty itself.
+            #
+            # The third, omarchy-capture-screenshot, is deliberately NOT patched:
+            # it reads OMARCHY_SCREENSHOT_EDITOR, and the modules set that. Using
+            # upstream's own knob leaves one less patch to re-anchor on a bump.
+            substituteInPlace $out/share/omarchy/bin/omarchy-clipboard-open \
+              --replace-fail 'exec tensaku-edit "$path"' \
+              'exec satty-edit "$path"'
+            substituteInPlace $out/share/omarchy/config/imv/config \
+              --replace-fail 'exec tensaku-edit "$imv_current_file"' \
+              'exec satty-edit "$imv_current_file"'
 
             # 1Password'"'"'s Chromium extension, installed the way NixOS installs one.
             #

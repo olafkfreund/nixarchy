@@ -819,6 +819,78 @@ pkgs.testers.runNixOSTest {
         "Install it, or name it here with the reason.")
     print("every keybinding launches something that exists (bar omawrite)")
 
+    # ---- every binary the seeded config names exists ----------------------
+    # The probe above asks this of default/hypr/bindings. Nothing asked it of
+    # config/, which is the tree seeded into ~/.config -- and #202 lived
+    # there: config/hypr/xdph.conf names
+    # `custom_picker_binary = hyprland-preview-share-picker`, Arch installs
+    # that binary from install/omarchy-base.packages alongside the file, and
+    # nothing on NixOS reads that list. So xdg-desktop-portal-hyprland execed
+    # a command that did not exist, read `SHAREDATA returned selection -1` and
+    # destroyed the session: screen sharing failed in every application, with
+    # no dialog, no error, and the one line saying why in the portal's journal.
+    #
+    # The class rather than the line. A config file arrives from the package
+    # and the binary it names arrives from a module, by different routes, and
+    # the two can disagree in silence. So scan the whole seeded tree for the
+    # forms it actually uses -- hyprland's `key = binary`, imv's `= exec
+    # binary`, yaml `command:`, .desktop Exec=, and lua launch_on_start() --
+    # and resolve every name on the real session PATH, which is the same
+    # reason the keybinding probe runs in the VM rather than at build time.
+    #
+    # Comment lines go first: autostart.lua and hyprsunset.conf both ship a
+    # commented sample (`o.launch_on_start("my-service")`), which names
+    # nothing.
+    machine.succeed(
+        "cat > /tmp/cfgprobe.sh <<'CPEOF'\n"
+        "root=$(dirname $(dirname $(readlink -f /run/current-system/sw/bin/omarchy)))\n"
+        "cd $root/config || exit 1\n"
+        "grep -rhIvE '^[[:space:]]*(#|--|//)' . 2>/dev/null |\n"
+        "  sed -nE"
+        " -e 's/^[[:space:]]*custom_picker_binary[[:space:]]*=[[:space:]]*//p'"
+        " -e 's/^[[:space:]]*(exec|exec-once)[[:space:]]*=[[:space:]]*//p'"
+        " -e 's/^[[:space:]]*command:[[:space:]]*//p'"
+        " -e 's/.*=[[:space:]]*exec[[:space:]]+//p'"
+        " -e 's/^(Try)?Exec=//p'"
+        " -e 's/.*launch_on_start\\((.*)\\).*/\\1/p' |\n"
+        # Strip the quoting off both ends rather than naming a quote
+        # character: this is a bash heredoc inside a python string inside a
+        # Nix indented string, and every layer wants its own escape.
+        "  sed -E 's|^[^A-Za-z0-9_./-]+||' |\n"
+        "  awk '{print $1}' |\n"
+        "  sed -E 's|[^A-Za-z0-9_./-]+$||' |\n"
+        "  sort -u\n"
+        "CPEOF")
+    machine.succeed("chmod 0755 /tmp/cfgprobe.sh")
+    named = machine.succeed("bash /tmp/cfgprobe.sh").split()
+    print(f"binaries named by the seeded config: {named}")
+
+    # The guard that makes this a check rather than a green light. Every
+    # pattern above is a grep against upstream's file layout, and a grep that
+    # matches nothing passes silently -- which is #133's failure mode, and the
+    # reason AGENTS.md opens the way it does. If an Omarchy bump moves
+    # xdph.conf or renames the setting, this line goes red and somebody looks,
+    # instead of the whole probe quietly measuring nothing.
+    assert "hyprland-preview-share-picker" in named, (
+        "the seeded config no longer names the share picker -- either upstream "
+        f"dropped it, or these patterns stopped matching (found {named})")
+
+    # tensaku is Omarchy's own image editor and is not in nixpkgs, so imv's
+    # Ctrl+E has nothing to open on any NixOS machine. Named rather than
+    # tolerated, the same way omawrite is above; modules/home.nix already
+    # seeds its state directory against the day it is packaged.
+    expected_absent = {"tensaku-edit"}
+    missing = [
+        n for n in named
+        if n not in expected_absent
+        and machine.execute(user % f"command -v {n} >/dev/null 2>&1")[0] != 0
+    ]
+    assert not missing, (
+        f"the seeded config names binaries nothing provides: {missing}. "
+        "Add them where the session's packages are (modules/nixos.nix), or "
+        "name them here with the reason.")
+    print("every binary the seeded config names is on the session PATH")
+
     # ---- the shell rc files know where they live --------------------------
     # All three opened with a fallback to /usr/share/omarchy for when
     # OMARCHY_PATH is unset, which on NixOS can never exist. Anything sourcing

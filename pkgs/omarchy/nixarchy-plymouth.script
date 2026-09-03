@@ -1,0 +1,319 @@
+# nixarchy Plymouth Theme Script
+#
+# Upstream's omarchy.script with two changes, both of which are why this file
+# exists here rather than being patched in place: the wordmark animates in, and
+# the progress bar is on for every boot instead of only after a passphrase.
+#
+# The animation is a ttfx effect -- the same tool the screensaver uses -- run
+# over branding/logo.txt at build time and rendered to frame-N.png, because
+# Plymouth has no terminal to run ttfx in. See nixarchy-plymouth-frames.py.
+#
+# frame_count is not a preference: it is what the generator wrote, and the
+# build fails if the two disagree.
+
+Window.SetBackgroundTopColor(0.101, 0.105, 0.149);
+Window.SetBackgroundBottomColor(0.101, 0.105, 0.149);
+
+global.frame_count = 33;
+global.anim_index = 0;
+global.anim_tick = 0;
+global.anim_done = 0;
+
+# Every frame is loaded up front. Loading one per tick instead would read from
+# the initrd 33 times during the two seconds the CPU is busiest, and the images
+# are small enough that holding them all is the cheaper trade.
+frames.images = [];
+for (i = 0; i < global.frame_count; i++)
+  frames.images[i] = Image("frame-" + i + ".png");
+
+frames.sprite = Sprite(frames.images[0]);
+frames.sprite.SetX(Window.GetWidth() / 2 - frames.images[0].GetWidth() / 2);
+frames.sprite.SetY(Window.GetHeight() / 2 - frames.images[0].GetHeight() / 2);
+frames.sprite.SetOpacity(1);
+
+# The wordmark the animation resolves into: same shape, drawn from the vector
+# source rather than out of block characters. It is placed exactly where
+# upstream placed it, and still at full size, because the passphrase field
+# below is positioned from this sprite's height -- only its opacity changes.
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
+logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2);
+logo.sprite.SetOpacity(0);
+
+# The handoff, in one place because three different things ask for it: the
+# animation running out, a passphrase prompt arriving early, and the splash
+# being asked to show its normal state again.
+fun finish_animation() {
+  if (global.anim_done == 0) {
+    global.anim_done = 1;
+    frames.sprite.SetOpacity(0);
+    logo.sprite.SetOpacity(1);
+  }
+}
+
+# Use these to adjust the progress bar timing
+global.fake_progress_limit = 0.7;  # Target percentage for fake progress (0.0 to 1.0)
+global.fake_progress_duration = 15.0;  # Duration in seconds to reach limit
+
+# Progress bar animation variables
+global.animation_frame = 0;
+global.fake_progress = 0.0;
+global.real_progress = 0.0;
+global.fake_progress_active = 0;
+global.fake_progress_start_time = 0.0;  # Track when fake progress started
+global.password_shown = 0;  # Track if password dialog has been shown
+global.max_progress = 0.0;  # Track the maximum progress reached to prevent backwards movement
+
+fun refresh_callback() {
+  global.animation_frame++;
+
+  # The wordmark, one frame every second tick. The refresh runs at 50 FPS, so
+  # 33 frames at half that is a little over a second and a quarter -- short
+  # enough that a fast machine still finishes it before the disk is ready, and
+  # slow enough to read as motion rather than a flicker.
+  #
+  # anim_tick is its own counter because animation_frame belongs to the
+  # progress bar, which resets it whenever fake progress restarts.
+  if (global.anim_done == 0) {
+    global.anim_tick++;
+    if (global.anim_tick >= 2) {
+      global.anim_tick = 0;
+      global.anim_index++;
+      if (global.anim_index >= global.frame_count)
+        finish_animation();
+      else
+        frames.sprite.SetImage(frames.images[global.anim_index]);
+    }
+  }
+
+  # Animate fake progress to limit over time with easing
+  if (global.fake_progress_active == 1) {
+    # Calculate elapsed time since start
+    elapsed_time = global.animation_frame / 50.0;  # Convert frames to seconds (50 FPS)
+
+    # Calculate linear progress ratio (0 to 1) based on time
+    time_ratio = elapsed_time / global.fake_progress_duration;
+    if (time_ratio > 1.0) time_ratio = 1.0;
+
+    # Apply easing curve: ease-out quadratic
+    # Formula: 1 - (1 - x)^2
+    eased_ratio = 1 - ((1 - time_ratio) * (1 - time_ratio));
+
+    # Calculate fake progress based on eased ratio
+    global.fake_progress = eased_ratio * global.fake_progress_limit;
+
+    # Update progress bar with fake progress
+    update_progress_bar(global.fake_progress);
+  }
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+#----------------------------------------- Helper Functions --------------------------------
+
+fun update_progress_bar(progress) {
+  # Only update if progress is moving forward
+  if (progress > global.max_progress) {
+    global.max_progress = progress;
+
+    width = Math.Int(progress_bar.original_image.GetWidth() * progress);
+    if (width < 1) width = 1;  # Ensure minimum width of 1 pixel
+
+    progress_bar.image = progress_bar.original_image.Scale(width, progress_bar.original_image.GetHeight());
+    progress_bar.sprite.SetImage(progress_bar.image);
+  }
+}
+
+fun show_progress_bar() {
+  progress_box.sprite.SetOpacity(1);
+  progress_bar.sprite.SetOpacity(1);
+}
+
+fun hide_progress_bar() {
+  progress_box.sprite.SetOpacity(0);
+  progress_bar.sprite.SetOpacity(0);
+}
+
+fun show_password_dialog() {
+  lock.sprite.SetOpacity(1);
+  entry.sprite.SetOpacity(1);
+}
+
+fun hide_password_dialog() {
+  lock.sprite.SetOpacity(0);
+  entry.sprite.SetOpacity(0);
+
+  for (index = 0; bullet.sprites[index]; index++) {
+    bullet.sprites[index].SetOpacity(0);
+  }
+}
+
+fun start_fake_progress() {
+  global.fake_progress_active = 1;
+
+  # Reset fake progress
+  global.animation_frame = 0;
+  global.max_progress = 0.0;
+  global.fake_progress = 0.0;
+  global.fake_progress_start_time = 0.0;
+}
+
+fun stop_fake_progress() {
+  global.fake_progress_active = 0;
+}
+
+#----------------------------------------- Dialogue --------------------------------
+
+lock.image = Image("lock.png");
+entry.image = Image("entry.png");
+bullet.image = Image("bullet.png");
+
+entry.sprite = Sprite(entry.image);
+entry.x = Window.GetWidth() / 2 - entry.image.GetWidth() / 2;
+entry.y = logo.sprite.GetY() + logo.image.GetHeight() + 40;
+entry.sprite.SetPosition(entry.x, entry.y, 10001);
+entry.sprite.SetOpacity(0);
+
+# Scale lock to be slightly shorter than entry field height
+# Original lock is 84x96, entry height determines scale
+lock_height = entry.image.GetHeight() * 0.8;
+lock_scale = lock_height / 96;
+lock_width = 84 * lock_scale;
+
+scaled_lock = lock.image.Scale(lock_width, lock_height);
+lock.sprite = Sprite(scaled_lock);
+lock.x = entry.x - lock_width - 15;
+lock.y = entry.y + entry.image.GetHeight() / 2 - lock_height / 2;
+lock.sprite.SetPosition(lock.x, lock.y, 10001);
+lock.sprite.SetOpacity(0);
+
+# Bullet array
+bullet.sprites = [];
+
+fun display_normal_callback() {
+  hide_password_dialog();
+
+  # Get current mode
+  mode = Plymouth.GetMode();
+
+  # Only show progress bar for boot and resume modes.
+  #
+  # Upstream also required global.password_shown == 1, which meant the bar --
+  # and the whole eased-progress engine below it -- was dead code on any
+  # machine without an encrypted disk. The one screen every boot shows had
+  # nothing on it but the wordmark.
+  if (mode == "boot" || mode == "resume") {
+    show_progress_bar();
+    start_fake_progress();
+  }
+}
+
+fun display_password_callback(prompt, bullets) {
+  global.password_shown = 1;  # Mark that password dialog has been shown
+
+  # An encrypted machine asks for the passphrase before the animation has had
+  # time to finish, so snap it to its resolved state rather than typing over a
+  # half-drawn wordmark.
+  finish_animation();
+
+  # Stop fake progress when password dialog appears
+  stop_fake_progress();
+  hide_progress_bar();
+  show_password_dialog();
+
+  # Clear all bullets first
+  for (index = 0; bullet.sprites[index]; index++) {
+    bullet.sprites[index].SetOpacity(0);
+  }
+
+  # Create and show bullets for current password (max 21)
+  max_bullets = 21;
+  bullets_to_show = bullets;
+  if (bullets_to_show > max_bullets) {
+    bullets_to_show = max_bullets;
+  }
+
+  for (index = 0; index < bullets_to_show; index++) {
+    if (!bullet.sprites[index]) {
+      # Scale bullet image to 7x7 pixels
+      scaled_bullet = bullet.image.Scale(7, 7);
+      bullet.sprites[index] = Sprite(scaled_bullet);
+      bullet.x = entry.x + 20 + index * (7 + 5);
+      bullet.y = entry.y + entry.image.GetHeight() / 2 - 3.5;
+      bullet.sprites[index].SetPosition(bullet.x, bullet.y, 10002);
+    }
+
+    bullet.sprites[index].SetOpacity(1);
+  }
+}
+
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+#----------------------------------------- Progress Bar --------------------------------
+
+progress_box.image = Image("progress_box.png");
+progress_box.sprite = Sprite(progress_box.image);
+
+progress_box.x = Window.GetWidth() / 2 - progress_box.image.GetWidth() / 2;
+progress_box.y = entry.y + entry.image.GetHeight() / 2 - progress_box.image.GetHeight() / 2;
+progress_box.sprite.SetPosition(progress_box.x, progress_box.y, 0);
+progress_box.sprite.SetOpacity(0);
+
+progress_bar.original_image = Image("progress_bar.png");
+progress_bar.sprite = Sprite();
+progress_bar.image = progress_bar.original_image.Scale(1, progress_bar.original_image.GetHeight());
+
+progress_bar.x = Window.GetWidth() / 2 - progress_bar.original_image.GetWidth() / 2;
+progress_bar.y = progress_box.y + (progress_box.image.GetHeight() - progress_bar.original_image.GetHeight()) / 2;
+progress_bar.sprite.SetPosition(progress_bar.x, progress_bar.y, 1);
+progress_bar.sprite.SetOpacity(0);
+
+fun progress_callback(duration, progress) {
+  # Track when fake progress starts
+  # Needed because duration and progress freeze during drive decryption
+  if (global.fake_progress_start_time == 0.0) {
+    global.fake_progress_start_time = duration;
+  }
+
+  global.real_progress = progress;
+
+  # Use real progress once its unfrozen and exceeds fake progress
+  if (duration > global.fake_progress_start_time && progress > global.fake_progress) {
+    stop_fake_progress();
+    update_progress_bar(progress);
+  }
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+#----------------------------------------- Message --------------------------------
+
+message_sprite = Sprite();
+message_sprite.SetPosition(10, 10, 10000);
+
+fun display_message_callback(text) {
+  message = Image.Text(text, 1, 1, 1);
+  message_sprite.SetImage(message);
+  message_sprite.SetOpacity(1);
+}
+
+fun hide_message_callback(text) {
+  message_sprite.SetOpacity(0);
+}
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);
+
+#----------------------------------------- Start as we mean to go on -----------
+
+# display_normal_callback only runs when plymouth changes display state. On a
+# machine with no passphrase to ask for there may never be such a change, so
+# the bar is started here too -- otherwise it would still be invisible in
+# exactly the case dropping the password_shown condition above was for.
+boot_mode = Plymouth.GetMode();
+if (boot_mode == "boot" || boot_mode == "resume") {
+  show_progress_bar();
+  start_fake_progress();
+}

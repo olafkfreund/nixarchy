@@ -987,7 +987,32 @@ pkgs.runCommand "nixarchy-options"
                 exit 1
               fi
             done
-            echo "$where: splash is nixarchy's, and all $n images it draws are ours"
+            # The animation is invisible to the scrape above: the script names
+            # its frames by building the string, Image("frame-" + i + ".png"),
+            # so sed sees nothing to pull out and 33 files could go missing
+            # without a word. What the script declares and what the theme ships
+            # are checked against each other instead.
+            frames=$(sed -n 's/^global\.frame_count = \([0-9]*\);.*/\1/p' \
+              "$dir/omarchy.script")
+            case "$frames" in
+              "" | 0)
+                echo "$where: the splash script declares no animation frames" >&2
+                echo "  global.frame_count is what it plays; without it the" >&2
+                echo "  wordmark is a still again." >&2
+                exit 1
+                ;;
+            esac
+            # ls rather than find: $dir is a symlink into the theme package, and
+            # find does not descend one unless told to.
+            shipped=$(ls "$dir"/frame-*.png 2>/dev/null | wc -l)
+            [ "$shipped" = "$frames" ] || {
+              echo "$where: the script plays $frames frames, the theme ships $shipped" >&2
+              echo "  a missing frame is a blank sprite mid-animation." >&2
+              exit 1
+            }
+
+            echo "$where: splash is nixarchy's, all $n images it draws are ours,"
+            echo "$where: and its $frames animation frames are all present"
           }
 
           splash_is_ours installed "$splashInstalledDir" \

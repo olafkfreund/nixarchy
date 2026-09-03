@@ -107,6 +107,8 @@
   satty,
   wl-screenrec,
   ttfx,
+  # Build-time only: the font the boot splash's animation frames are set in.
+  dejavu_fonts,
   # Branding: this is a NixOS port, so the menu button wears the snowflake.
   nixos-icons,
   # omarchy-update drives the rebuild through nh. Unlike `nix` and
@@ -335,6 +337,15 @@ stdenvNoCC.mkDerivation {
   nativeBuildInputs = [
     python3
     imagemagick
+    # The boot splash animation is rendered here, not at boot: Plymouth has no
+    # terminal for ttfx to draw in. ttfx is already a runtime dependency below
+    # -- this is the same package, asked for at build time as well.
+    ttfx
+    # And the font those frames are set in. It is the one font already
+    # guaranteed to be in the initrd (boot.plymouth.font defaults to it), but
+    # that is a runtime fact about NixOS, not a build input, so it has to be
+    # named here too. Nothing else in this build renders text.
+    dejavu_fonts
   ];
 
   dontConfigure = true;
@@ -1373,6 +1384,92 @@ stdenvNoCC.mkDerivation {
                   magick -background none chrome/$asset.svg \
                     png32:$out/share/plymouth/themes/omarchy/$asset.png
                 done
+
+                # And the animation. The wordmark arrives by way of ttfx, the same
+                # text-effects engine the screensaver runs, over the same ASCII banner
+                # -- so what a machine shows while it boots and what it shows while it
+                # idles are the same mark drawn by the same tool.
+                #
+                # ttfx cannot run at boot: it writes to a terminal and Plymouth is not
+                # one. So the effect is played here and kept as stills.
+                # --parity-dump is ttfx's own parity-harness output -- whole frames on
+                # a virtual clock rather than cursor moves paced against the wall --
+                # which is what makes this reproducible rather than a recording of how
+                # busy the builder was. It is an undocumented flag, hence the frame
+                # count asserted below: a ttfx bump that changes the effect, or drops
+                # the flag, fails the build instead of quietly shipping something else.
+                ttfx --parity-dump --seed 1 \
+                  --canvas-width 90 --canvas-height 12 --ignore-terminal-dimensions \
+                  --no-color expand \
+                  < ${./branding/logo.txt} > frames.dump 2> frames.log
+                if ! grep -qx 'frames=128' frames.log; then
+                  echo "plymouth: ttfx produced $(cat frames.log), expected frames=128" >&2
+                  echo "plymouth: the effect changed -- re-check the animation before" >&2
+                  echo "plymouth: moving the number, the theme script plays what is here" >&2
+                  exit 1
+                fi
+
+                # One in four of those, plus the last, which is the finished wordmark.
+                kept=$(python3 ${./nixarchy-plymouth-frames.py} frames.dump frames)
+
+                # Set in DejaVu Sans Mono because it has the box-drawing glyphs the
+                # banner is built from and it is already the font NixOS puts in the
+                # initrd. -pointsize 15 lands the 90-column canvas within a few pixels
+                # of logo.png's width, so the handoff at the end of the animation does
+                # not jump.
+                for f in frames/frame-*.txt; do
+                  magick -background none -fill '#a8cd76' \
+                    -font ${dejavu_fonts}/share/fonts/truetype/DejaVuSansMono.ttf \
+                    -pointsize 15 label:@"$f" \
+                    png32:$out/share/plymouth/themes/omarchy/"$(basename "$f" .txt)".png
+                done
+
+                # Every frame has to be the same size. The script positions one sprite
+                # once and swaps the image under it, so a frame of a different size
+                # would slide the wordmark sideways mid-animation -- which is the kind
+                # of thing that looks like a Plymouth bug for a year.
+                sizes=$(identify -format '%wx%h\n' \
+                  $out/share/plymouth/themes/omarchy/frame-*.png | sort -u | wc -l)
+                if [ "$sizes" -ne 1 ]; then
+                  echo "plymouth: animation frames are not all the same size" >&2
+                  exit 1
+                fi
+
+                # The script that plays them. This is the one file in the theme that
+                # is ours rather than upstream's with the branding swapped: it carries
+                # the frame player and it shows the progress bar on every boot, where
+                # upstream shows it only after a passphrase prompt -- so on a machine
+                # with no encrypted disk, never.
+                #
+                # A copy rather than a substituteInPlace of upstream's, because the
+                # change touches four separate places in a 235-line script and
+                # multi-line replacements in code with no anchors are unreviewable and
+                # fail silently. The cost of a copy is drift, so drift is what the
+                # hash below catches.
+                install -Dm444 ${./nixarchy-plymouth.script} \
+                  $out/share/plymouth/themes/omarchy/omarchy.script
+
+                # If upstream's script changes, ours needs reading again beside it --
+                # it may have gained a callback, or fixed something we are now
+                # carrying a copy of. There is no way to notice that automatically, so
+                # the build stops and asks.
+                echo "7f4c1e615759eb72b0787e15b20d06a6b90aa460063227394390f4832322a0fe  ${src}/default/plymouth/omarchy.script" \
+                  | sha256sum -c - > /dev/null || {
+                  echo "plymouth: upstream's omarchy.script changed." >&2
+                  echo "plymouth: read it against nixarchy-plymouth.script, take what" >&2
+                  echo "plymouth: is worth taking, then update the hash here." >&2
+                  exit 1
+                }
+
+                # And what the script says it plays has to be what was written. The
+                # two numbers are set in different files by different tools; this is
+                # the only place they meet.
+                declared=$(sed -n 's/^global\.frame_count = \([0-9]*\);.*/\1/p' \
+                  $out/share/plymouth/themes/omarchy/omarchy.script)
+                if [ "$declared" != "$kept" ]; then
+                  echo "plymouth: the script plays $declared frames, the build wrote $kept" >&2
+                  exit 1
+                fi
 
                 # preview-unlock.png, the sixth file and the one that made this worth
                 # finishing. Plymouth does not draw it -- it is what a theme browser

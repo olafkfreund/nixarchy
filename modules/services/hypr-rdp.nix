@@ -131,7 +131,10 @@ in
       expects is your tailnet, which needs no firewall change at all.
 
       Requires a sops secret for the password. Enabling this without one fails
-      the rebuild rather than starting a desktop anyone can connect to
+      the rebuild rather than starting a desktop anyone can connect to.
+
+      The four decisions this asks of you, and how to reach it once it runs,
+      are `docs/manual/remote-desktop.md`
     '';
 
     package = lib.mkOption {
@@ -276,6 +279,13 @@ in
               programs.nixarchy.services.hypr-rdp.user directly.
             '';
           }
+          # The steps live on the manual page and are not repeated here. They
+          # drifted once already: this message said `sops edit` bare, with
+          # nothing in the closure providing sops, and put the declaration
+          # where a relative sopsFile resolves one directory too deep once
+          # nixarchy-apply copies the menu's services.nix into the flake. What
+          # stays is the reason the rebuild stopped, which a reader needs at
+          # the moment it stops them.
           {
             assertion = svc.passwordSecret != null;
             message = ''
@@ -284,28 +294,24 @@ in
               start -- it logs a warning and serves your desktop to anyone who
               connects. So this stops the rebuild instead.
 
-              Encrypt a password for this host:
-
-                # 1. this host's public key, as an age recipient
-                nix-shell -p ssh-to-age --run \
-                  'ssh-keyscan localhost 2>/dev/null | ssh-to-age'
-
-                # 2. add it under `keys:` in .sops.yaml, and name it in the
-                #    creation rule for hosts/<name>/secrets.yaml
-
-                # 3. write the password into the encrypted file
-                sops edit hosts/<name>/secrets.yaml
-
-              Then declare it and point this option at it:
+              The shape of the fix, once the password exists as a sops secret:
 
                 sops.secrets.hypr-rdp-password.sopsFile = ./secrets.yaml;
                 programs.nixarchy.services.hypr-rdp.passwordSecret =
                   "hypr-rdp-password";
 
-              Step 1 needs an SSH host key, which exists only where
-              services.openssh.enable is true -- sops-nix has no other key
-              source on a nixarchy machine and will say so itself. That is the
-              same fail-closed shape as this assertion, one layer down.
+              Encrypting it is four steps -- read this host's SSH host key as
+              an age recipient, name it in a .sops.yaml creation rule, `sops
+              edit` the password in, `git add` the encrypted file. They are
+              written out, with the wrappers that provide sops and ssh-to-age,
+              under "The password, and why the rebuild fails without one":
+
+                docs/manual/remote-desktop.md
+                https://olafkfreund.github.io/nixarchy/manual/remote-desktop
+
+              The first of them needs services.openssh.enable = true and a
+              rebuild after it: the host key it reads does not exist until
+              sshd has generated one.
             '';
           }
           {

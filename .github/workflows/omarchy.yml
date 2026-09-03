@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -164,7 +164,7 @@ jobs:
       - name: Open a pull request
         if: steps.rel.outputs.changed == 'true'
         id: pr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           # The version is in the branch name, not just the title. With a
           # constant name, a bump that stops for a human -- a new app to map,

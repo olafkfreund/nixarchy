@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -566,7 +566,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}

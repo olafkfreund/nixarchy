@@ -159,6 +159,76 @@ let
         # assertion above is measuring something other than what it claims.
         grep -q "unable to download" /var/log/nixarchy-install.log
         step OFFLINE test $? -ne 0
+
+        # The removable fallback, asserted rather than taken on trust.
+        #
+        # bootctl(1) says `install` always stores a copy of the loader at
+        # ESP/EFI/BOOT/BOOT*.EFI, and the note beside the pflash drives leans
+        # on that to explain why a target with an empty NVRAM still boots. A
+        # promise in a man page about a program we do not build is exactly the
+        # kind of thing that is true until it is not, and the failure mode if
+        # it changes is a machine that boots on this test's shared variable
+        # store and not on a stranger's laptop.
+        step FALLBACK test -f /mnt/boot/EFI/BOOT/BOOTX64.EFI
+
+        # ---- make the result observable ---------------------------------
+        # Everything above is the product, installed and untouched. What
+        # follows adds a serial console to it and nothing else.
+        #
+        # It has to be added, because the installed machine has none:
+        # installer/cd.nix puts console=ttyS0 on the ISO's command line, which
+        # is why every step above could be read off the serial line, and
+        # installer/host.nix deliberately does not -- an installed desktop
+        # logs to its screen. So `isotest login:` was being waited for on a
+        # line nothing would ever write it to, and this check timed out at
+        # 900s for three nightly runs while the machine under it booted
+        # perfectly.
+        #
+        # NOT OCR (enableOCR + wait_for_text), which was the other candidate:
+        # it answers the same question less reliably, and #197 is putting an
+        # animated plymouth splash on that screen -- frames drawn by ttfx --
+        # which is precisely what an OCR pass would have to see past.
+        #
+        # The last line of the generated configuration.nix is its closing
+        # brace; this puts one option in front of it.
+        sed -i '$s|^}|  boot.kernelParams = [ "console=ttyS0,115200" ];\n}|' \
+          /mnt/etc/nixos/hosts/isotest/configuration.nix
+        grep -q 'console=ttyS0' /mnt/etc/nixos/hosts/isotest/configuration.nix
+        step SERIAL test $? -eq 0
+
+        # A flake in a git worktree sees only tracked or staged files.
+        git -C /mnt/etc/nixos add -A
+
+        # Built HERE and installed by path, which is what run_install() in
+        # installer/install.sh does and for the reason its comment gives:
+        # `nixos-install --flake` sets the EVALUATION store to /mnt, resolves
+        # the flake's locked inputs against a store that has just been created,
+        # and goes to the network for sources sitting in the store one
+        # directory up. checks.install can use --flake because its store was
+        # seeded by the test driver; an ISO is in the other position.
+        #
+        # --offline so that if this ever does reach for the network it says so
+        # instead of hanging: no network is the whole point of this check.
+        #
+        # This is the case installer/cd.nix bakes the reference
+        # inputDerivations for -- a toplevel that differs from the one on the
+        # image has to be BUILT here, from parts, with no stdenv to fetch. If
+        # this step ever ends in the source bootstrap, that list is where the
+        # answer is.
+        step REBUILT nix --extra-experimental-features "nix-command flakes" \
+          build --offline --no-link --print-out-paths \
+          --option always-allow-substitutes true \
+          /mnt/etc/nixos#nixosConfigurations.isotest.config.system.build.toplevel
+        system=$(tail -1 /tmp/out)
+
+        # Because `tail -1` is a guess about what nix printed last, and a bad
+        # guess would otherwise surface as nixos-install reporting something
+        # unrelated about a flake it cannot find.
+        step SYSTEM test -x "$system/init"
+
+        step REINSTALLED nixos-install --root /mnt --system "$system" \
+          --no-root-password \
+          --option extra-experimental-features "nix-command flakes"
         EOF
 
         truncate -s 1M $out
@@ -167,14 +237,16 @@ let
         mcopy -i $out drive ::drive
       '';
 
-  # Both pflash drives. Without unit=1 the firmware has nowhere to keep EFI
-  # variables, and a machine that cannot write them is a different machine
-  # from the one a person installs onto.
+  # Only unit=0, the firmware, which is genuinely read-only. The EFI VARIABLE
+  # store is unit=1 and is deliberately not here: it has to be one writable
+  # file shared by both machines, and a store path is neither writable nor
+  # known at evaluation time. The test script copies it into the working
+  # directory and hands the flag to both create_machine calls; see there for
+  # what a read-only variable store cost us.
   commonFlags = [
     (qemuCommon.qemuBinary pkgs.qemu_test)
     "-m 8192 -smp 4"
     "-drive if=pflash,format=raw,unit=0,readonly=on,file=${pkgs.OVMF.firmware}"
-    "-drive if=pflash,format=raw,unit=1,readonly=on,file=${pkgs.OVMF.variables}"
     # No NIC at all. Bringing an interface down inside the guest leaves
     # something a retry could bring back up; this leaves nothing.
     "-nic none"
@@ -208,107 +280,195 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     import os
+    import shutil
     import subprocess
     import time
 
-    # A blank disk for the install to land on, made here rather than by
-    # virtualisation.emptyDiskImages: there is no node to hang that off.
-    disk = os.path.abspath("target.qcow2")
-    subprocess.check_call(
-        ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "24G"])
-
-    drives = (
-        f" -drive file={disk},if=virtio,format=qcow2,werror=report"
-        " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
-
-    installer = create_machine("${installerCommand}" + drives, name="installer")
-    installer.start()
-
-    # The image's own bootloader, its own kernel, its own store.
+    # The EFI variable store: writable, and the SAME FILE for both machines.
     #
-    # Matched on the login line, not the shell prompt: a prompt is written
-    # without a trailing newline, and wait_for_console_text works in lines, so
-    # waiting for "nixos@nixos" waits for whatever happens to print next --
-    # which, on an idle installer, is nothing at all.
-    installer.wait_for_console_text(r"login: nixos \(automatic login\)", timeout=900)
-    print("the ISO booted, with no network device present")
-
-    # tty1 belongs to the installer TUI; tty2 has the autologin shell.
+    # installer/host.nix sets boot.loader.efi.canTouchEfiVariables, so
+    # `bootctl install` writes a boot entry to NVRAM during the install. This
+    # drive was readonly=on, which threw that write away, and the target then
+    # started from the pristine OVMF template as if the install had never
+    # touched it. The console says which machine you are looking at:
     #
-    # time.sleep, not machine.sleep: the latter sleeps in GUEST time by running
-    # `sleep` through the backdoor shell, which this image does not have, so it
-    # blocks forever on "waiting for the VM to finish booting" while the
-    # machine sits there perfectly booted.
-    installer.send_key("alt-f2")
-    time.sleep(8)
-    installer.send_chars("\n")
-    time.sleep(2)
+    #   readonly=on   BdsDxe: starting Boot0002 "UEFI Misc Device"
+    #                   from PciRoot(0x0)/Pci(0x5,0x0)
+    #   readonly=off  BdsDxe: starting Boot0004 "Linux Boot Manager"
+    #                   from HD(1,GPT,...)/\EFI\systemd\systemd-bootx64.efi
+    #
+    # DO NOT read this as the reason the target used to sit silent for 900s.
+    # It is not, and an hour of runtime was spent proving that: both lines
+    # above are a successful LoadImage, because `bootctl install` ALWAYS
+    # writes the removable fallback at \EFI\BOOT\BOOTX64.EFI (bootctl(1)),
+    # so the firmware's own "UEFI Misc Device" entry boots the disk with no
+    # NVRAM entry at all. checks.install passes today on exactly that path.
+    # What the readonly store cost was fidelity, not a boot: the machine
+    # under test was one whose firmware forgets, which is not the machine a
+    # person installs onto.
+    #
+    # Copied out of the store because ${pkgs.OVMF.variables} is a read-only
+    # path -- the same thing nixpkgs' own qemu-vm.nix does for NIX_EFI_VARS.
+    efi_vars = os.path.abspath("efi-vars.fd")
+    shutil.copyfile("${pkgs.OVMF.variables}", efi_vars)
+    os.chmod(efi_vars, 0o644)
+    efi = f" -drive if=pflash,format=raw,unit=1,readonly=off,file={efi_vars}"
 
-    installer.send_chars("sudo mkdir -p /a\n")
-    time.sleep(2)
-    installer.send_chars("sudo mount -L NIXANSWERS /a\n")
-    time.sleep(4)
-    installer.send_chars("sudo sh /a/drive\n")
-
-    def step(tag, timeout, note=None):
-        installer.wait_for_console_text(rf"{tag}-0-X", timeout=timeout)
-        if note:
-            print(note)
-
-    step("STOPPED", 300, "the answers disk is mounted and the wizard is out of the way")
-    step("MARKER", 120, "the image identifies itself to install.sh")
-    step("GENERATED", 900, "the flake was generated")
-    step("EVALUATED", 1800)
-    step("RESOLVED", 120,
-         "the generated flake evaluates offline, from sources on the image")
-    step("INSTALLED", 3600, "the install completed")
-    step("FLAKE", 120)
-    step("ESP", 120, "it wrote a flake and an ESP")
-    step("OFFLINE", 120, "and downloaded nothing")
-
-    # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
-    # backdoor shell, which this image does not have, so it waits for a reply
-    # that cannot come -- the install passes, every assertion passes, and the
-    # test still fails when nix's build timeout kills it half an hour later.
-    installer.send_chars("sudo poweroff\n")
-    installer.wait_for_console_text(r"[Pp]ower(ing)? off|System is powering down|reboot: Power down",
-                                    timeout=300)
-    time.sleep(5)
-    # A backstop for a machine that did not power off, and nothing more. When
-    # poweroff DID work the monitor socket is already gone and this raises
-    # BrokenPipeError -- failing the test on the cleanest possible outcome.
-    try:
-        installer.send_monitor_command("quit")
-    except Exception:
-        pass
-    time.sleep(3)
-
-    # ---- boot what was installed ---------------------------------------
-    target = create_machine(
-        "${targetCommand}"
-        + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
-        name="target")
-    target.start()
-    target.wait_for_console_text(r"isotest login:", timeout=900)
-    print("the installed disk booted on its own bootloader")
-
-    # Kill it at the monitor, or this check never finishes.
+    # Every machine this script makes, and the single place they are killed.
     #
     # A machine made by create_machine is not reaped for us the way a declared
-    # node is: the script reaches its end with every assertion passing and the
-    # derivation then sits there forever with a qemu still running. That is
-    # not a hypothesis -- checks.install did exactly this for nine hours, and
-    # it presents as `cancelled` in CI because a timeout is recorded as a
-    # cancellation, which reads like a person stopped it rather than like a
-    # hang.
+    # node is -- and the happy path is not the one that matters. When an
+    # assertion fails the driver stops running this script where it stands,
+    # the qemu processes stay up, and the derivation hangs until the JOB's
+    # wall clock kills it. GitHub records that as `cancelled`, not `failed`,
+    # and nightly.yml's reporter is `if: failure()` -- so the nights of
+    # 2026-09-02 and 2026-09-03 both broke here, hung for three hours, and
+    # told nobody. A hang is not just slow; it is SILENT, and that is the part
+    # worth remembering. checks.install did the same thing for nine hours
+    # before anyone noticed.
     #
-    # `quit`, not shutdown(): this machine has no backdoor, which is why the
-    # line above waits on console text rather than asking it anything. Same
-    # treatment the installer machine gets above, and the same try/except --
-    # if qemu is already gone the monitor socket is gone with it.
+    # Hence a finally, rather than a `quit` after the last assertion, which is
+    # what this file did before and which only ever ran when nothing was
+    # wrong.
+    #
+    # `quit`, not shutdown(): these machines have no backdoor, which is why
+    # every wait below is on console text rather than a question put to the
+    # guest. If qemu is already gone -- the usual outcome, poweroff having got
+    # there first -- the monitor socket went with it and this raises
+    # BrokenPipeError, which would otherwise fail the test on the cleanest
+    # possible outcome.
+    # `vms`, not `machines`: the driver already has a global of that name, and
+    # shadowing it fails the test's own type check ("Object of type
+    # `BaseMachine` has no attribute `send_monitor_command`") rather than
+    # anything you would recognise as a name clash.
+    vms = []
+
+    def reap():
+        for m in vms:
+            try:
+                m.send_monitor_command("quit")
+            except Exception:
+                pass
+
     try:
-        target.send_monitor_command("quit")
-    except Exception:
-        pass
+        # A blank disk for the install to land on, made here rather than by
+        # virtualisation.emptyDiskImages: there is no node to hang that off.
+        disk = os.path.abspath("target.qcow2")
+        subprocess.check_call(
+            ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "24G"])
+
+        drives = (
+            f" -drive file={disk},if=virtio,format=qcow2,werror=report"
+            " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
+
+        installer = create_machine("${installerCommand}" + efi + drives, name="installer")
+        vms.append(installer)
+        installer.start()
+
+        # The image's own bootloader, its own kernel, its own store.
+        #
+        # Matched on the login line, not the shell prompt: a prompt is written
+        # without a trailing newline, and wait_for_console_text works in lines, so
+        # waiting for "nixos@nixos" waits for whatever happens to print next --
+        # which, on an idle installer, is nothing at all.
+        installer.wait_for_console_text(r"login: nixos \(automatic login\)", timeout=900)
+        print("the ISO booted, with no network device present")
+
+        # tty1 belongs to the installer TUI; tty2 has the autologin shell.
+        #
+        # time.sleep, not machine.sleep: the latter sleeps in GUEST time by running
+        # `sleep` through the backdoor shell, which this image does not have, so it
+        # blocks forever on "waiting for the VM to finish booting" while the
+        # machine sits there perfectly booted.
+        installer.send_key("alt-f2")
+        time.sleep(8)
+        installer.send_chars("\n")
+        time.sleep(2)
+
+        installer.send_chars("sudo mkdir -p /a\n")
+        time.sleep(2)
+        installer.send_chars("sudo mount -L NIXANSWERS /a\n")
+        time.sleep(4)
+        installer.send_chars("sudo sh /a/drive\n")
+
+        def step(tag, timeout, note=None):
+            installer.wait_for_console_text(rf"{tag}-0-X", timeout=timeout)
+            if note:
+                print(note)
+
+        step("STOPPED", 300, "the answers disk is mounted and the wizard is out of the way")
+        step("MARKER", 120, "the image identifies itself to install.sh")
+        step("GENERATED", 900, "the flake was generated")
+        step("EVALUATED", 1800)
+        step("RESOLVED", 120,
+             "the generated flake evaluates offline, from sources on the image")
+        step("INSTALLED", 3600, "the install completed")
+        step("FLAKE", 120)
+        step("ESP", 120, "it wrote a flake and an ESP")
+        step("OFFLINE", 120, "and downloaded nothing")
+        step("FALLBACK", 120,
+             "the ESP carries the removable fallback loader bootctl promises")
+        step("SERIAL", 120)
+        step("REBUILT", 1800)
+        step("SYSTEM", 120)
+        step("REINSTALLED", 1800,
+             "the installed flake now carries a serial console, built offline")
+
+        # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
+        # backdoor shell, which this image does not have, so it waits for a reply
+        # that cannot come -- the install passes, every assertion passes, and the
+        # test still fails when nix's build timeout kills it half an hour later.
+        installer.send_chars("sudo poweroff\n")
+        installer.wait_for_console_text(r"[Pp]ower(ing)? off|System is powering down|reboot: Power down",
+                                        timeout=300)
+        time.sleep(5)
+        # A backstop for a machine that did not power off, here and not left to
+        # reap(): the target is about to open the same qcow2, and qemu takes a
+        # write lock on it. An installer still running would make that a
+        # "Failed to get write lock" at the very step this test exists for.
+        try:
+            installer.send_monitor_command("quit")
+        except Exception:
+            pass
+        time.sleep(3)
+
+        # ---- boot what was installed ---------------------------------------
+        target = create_machine(
+            "${targetCommand}"
+            + efi
+            + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
+            name="target")
+        vms.append(target)
+        target.start()
+
+        # Two waits, at two layers, because they fail differently and a run
+        # that only ever asserted the second one left you to bisect which half
+        # broke.
+        #
+        # The menu, not an entry title: with one generation sd-boot titles the
+        # entry "NixOS" and with two it spells out the generation, so the
+        # titles are a moving target while the menu's own line is not.
+        target.wait_for_console_text(r"Reboot Into Firmware Interface", timeout=300)
+        print("the bootloader the installer wrote is running, from the ESP it wrote")
+
+        # The getty's BANNER, not "isotest login:", and this one was paid for
+        # twice. wait_for_console_text splits the serial stream on newlines
+        # (`for _line in self.process.stdout` in the driver's Machine), and a
+        # login prompt is written without a trailing one -- so it sits in the
+        # reader's buffer forever and the wait times out beside a machine that
+        # is sitting at a login prompt. The note on the installer's wait above
+        # says exactly this and it still cost a run here: the give-away in that
+        # log is `target # isotest login:` appearing AFTER cleanup killed qemu,
+        # which flushed the partial line.
+        #
+        # agetty writes the issue before the prompt, and \l expands to the tty
+        # it is running on, so this line is not merely "userspace printed
+        # something": it is a getty offering a login ON THE SERIAL LINE, which
+        # takes the kernel, systemd's multi-user target and the serial console
+        # the step above installed.
+        target.wait_for_console_text(r"<<< Welcome to NixOS .* - ttyS0 >>>", timeout=900)
+        print("and the system it installed reached multi-user, offering a login")
+    finally:
+        reap()
   '';
 }

@@ -42,6 +42,23 @@ Two mechanical traps that produced fake green results here, live:
   this repo is developed on are zsh. Put `#!/usr/bin/env bash` on the script
   and run it as a script, not by pasting into your shell.
 
+And the same rule read backwards, for the day a check goes red on you: **ask
+whether it was testing the property or the arrangement.** #220 moved the menu
+from an override fragment to the full merged defaults, and two checks failed
+that had been correct for months — one asserted every row has an action, which
+is only true of a fragment (a submenu parent legitimately has none), and one
+asserted "no key of ours starts with `setup.plugin`", which was a fair proxy
+for "we cannot shadow upstream's plugin menu" only while our file held our rows
+alone. Nothing had regressed. Both checks had encoded the shape of a file
+rather than the property they existed to protect, and both read as a regression
+the moment the shape legitimately changed.
+
+So when a deliberate design change turns a check red, the first question is not
+how to satisfy the check. It is whether the check still describes the thing you
+care about. If it does not, retarget it — and say so in the PR, because
+"I changed a check that was failing" and "that check was measuring the wrong
+thing" are very different sentences to a reviewer.
+
 ## 2. A bug found by hand is not fixed until something can see it
 
 §1 governs checks you write. This is the same argument one step earlier, about
@@ -126,13 +143,21 @@ your question:
 | check | what it proves | cost |
 |---|---|---|
 | `options` | every option asserted in both states | cheap — evaluation only |
+| `package-delta`, `config-delta`, `patched-files`, `release-notes`, `review-pins` | scripts against fixtures | seconds |
+| `vm-toplevel`, `reference-toplevel` | the closures build | eval plus a fetch |
 | `omarchy` (package) | the vendored tree assembles | minutes |
 | `installer-ui`, `installer-wizard` | the installer's screens and questions | minutes |
 | `session`, `coexist`, `integration`, `plugin` | booted VMs | ~10–20 min each |
-| `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | **~25 min, one self-hosted runner** |
+| `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | ~29 min, one self-hosted runner |
+| `free-space` | install beside an existing OS, which survives | ~27 min, same runner, same job |
+| `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
 
-`checks.install` gates every pull request and there is exactly one machine
-that can run it. Seven concurrent PRs queue for about three hours. Every push
+`install` and `free-space` are one job. `install-check.yml` runs them
+back to back on the single self-hosted machine, so the number that
+governs your merge latency is **their sum: 55 minutes of a 58-minute job,
+against a 90-minute timeout** (run 33798891329; every other step in that job
+totalled four seconds). It gates every pull request, and with
+runs that long a handful of concurrent PRs queue for hours. Every push
 to your branch cancels and restarts your own run (that is deliberate — a PR
 only needs an answer about its current head), but the queue is shared:
 batching your pushes is a courtesy to everyone else's merge latency.
@@ -222,7 +247,13 @@ Do not retry-until-green. A flaky pass is a bug report you deleted.
   behaves belongs upstream, not patched here — a patch carried here is
   re-applied at every source bump; a fix landed upstream arrives for free.
 - **The `epic` label** — applying or removing it has CI consequences (§9)
-  that outlive your session.
+  that outlive your session. When a human does ask for an epic, the README
+  Roadmap row is part of that change, not a follow-up: an epic opened with the
+  label and no row turns `main` red and fails **every** subsequent PR until
+  somebody notices. That has now happened five times (#105, #148, #159, #174,
+  and #221/#230 in one evening), every time to an agent who had read §9 — which
+  is filed under a check failing, and so is read by whoever finds the wreckage
+  rather than by whoever causes it.
 
 When in doubt, the cost asymmetry decides: a question costs a minute; an
 unwanted force-push or a misrouted issue costs a human an evening.

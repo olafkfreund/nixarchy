@@ -632,6 +632,29 @@ in
         # Yaru inherits from Adwaita for anything it does not draw itself.
         adwaita-icon-theme
 
+        # config/hypr/xdph.conf, which the package seeds into
+        # ~/.config/hypr, sets
+        # `custom_picker_binary = hyprland-preview-share-picker`.
+        # xdg-desktop-portal-hyprland execs that name for every ScreenCast
+        # request, so with nothing providing it the exec fails, the backend
+        # reads selection -1 and destroys the session -- screen sharing dies
+        # in every application, with no dialog and no error anywhere a user
+        # looks. Upstream declares it in install/omarchy-base.packages, which
+        # pacman honours and nothing on NixOS reads. (#202)
+        #
+        # From nixpkgs rather than the hyprland input that supplies the portal
+        # at programs.hyprland.portalPackage: that flake publishes only
+        # hyprland and xdg-desktop-portal-hyprland, so there is no picker
+        # there to match. Nothing is mismatched by taking it from nixpkgs
+        # either -- the picker links no Hyprland library (gtk4,
+        # gtk4-layer-shell, cairo, pango and nothing else), and the portal
+        # reaches it by exec plus a selection line on stdout, not an ABI.
+        #
+        # Editing the seeded xdph.conf was the other option and is the wrong
+        # one: the file is upstream's, so the edit is undone by the next
+        # Omarchy bump.
+        hyprland-preview-share-picker
+
         # Omarchy sets a cursor size but never a cursor theme -- on Arch one
         # comes with the desktop packages. NixOS ships none, so Hyprland used
         # its own built-in pointer. Bibata is here rather than Yaru or Adwaita

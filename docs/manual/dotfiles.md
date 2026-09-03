@@ -38,13 +38,21 @@ Note that a rebuild swaps the symlink rather than rewriting the file, and
 Hyprland's auto-reload does not notice a swap. Run `hyprctl reload`.
 
 **`~/.config/omarchy/extensions/omarchy-menu.jsonc`.** Upstream says to edit
-this to add menu rows. Here it is generated on every rebuild and your edit is
-overwritten by the next one. It has to be generated: it carries the rewrite
-that points every `install.*` and `remove.*` row at the Nix app selection, and
-upstream's merge copies every key of an override rather than filling in the
-ones you omit, so a hand-written row that leaves out `label` renders its raw
-id and one that leaves out `action` does nothing. Add rows in your flake
-instead:
+this to add menu rows, and here you can: it is yours, a plain file, and a
+rebuild does not touch it. It used to be generated and replaced on every
+rebuild, which also meant a plugin could not add a row -- upstream points
+third-party plugins at this same file. The rewrite that sends every `install.*`
+and `remove.*` row to the Nix app selection now lives in the menu *defaults*
+instead, which nixarchy builds along with the rest of the Omarchy tree, so
+nothing needs to own your copy.
+
+One thing to know before writing a row by hand: upstream's merge copies every
+key of an override rather than filling in the ones you omit, so a row that
+leaves out `label` renders its raw id, and one that leaves out `action` does
+nothing.
+
+For a row you want on every machine, declare it instead -- those are generated
+into the defaults, so they cannot collide with what you write here:
 
 ```nix
 programs.nixarchy.menu.extraEntries = {

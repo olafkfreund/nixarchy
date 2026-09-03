@@ -778,6 +778,69 @@ stdenvNoCC.mkDerivation {
     fi
 
     exec setsid uwsm-app -- "$browser_bin" --app="$1" "''${@:2}"'
+
+        # The theme accent stopped reaching the browser in 4.0.2. The session
+        # check caught it: /etc/chromium/policies/managed/color.json was never
+        # written, and wait_until_succeeds sat on it for the full 900 seconds.
+        #
+        # 4.0.1 wrote the policy inline from omarchy-theme-set-browser, as the
+        # user, into whichever policy directories existed -- and the NixOS
+        # module creates those four owned by browserThemeUser (the tmpfiles
+        # rules in modules/nixos.nix) precisely so that unprivileged write
+        # lands. 4.0.2 moved it into a new privileged helper, which sudo- or
+        # pkexec-escalates to root, pins PATH to FHS directories that hold none
+        # of install/mktemp/rm here, and installs color.json as root:root under
+        # an /etc/sudoers.d rule naming a /usr/bin path. None of those three
+        # exist on NixOS, so every path through it fails.
+        #
+        # So the escalation goes and the write is the user's again, which is the
+        # arrangement the tmpfiles rules already provide and the one that has
+        # been shipping. Upstream is hardening against a `chmod a+rw` policy
+        # directory writable by every account on the machine; ours is 0755 owned
+        # by one named desktop user who is in wheel already, so routing the same
+        # write through a NOPASSWD sudo rule would move it rather than restrict
+        # it. Keeping upstream's shape -- root-owned directories plus
+        # security.sudo.extraRules on the store path -- was considered and
+        # rejected for that: it makes the module, the package and every VM user
+        # agree on one path, and buys nothing this configuration does not have.
+        #
+        # The PATH pin is kept rather than deleted, retargeted at the store, so
+        # a hand-run `sudo omarchy-theme-set-browser-policy` still resolves its
+        # coreutils. The color validation, the symlink refusal and the atomic
+        # install are upstream's and untouched -- they are the half of 4.0.2
+        # that does work here.
+        substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-browser-policy \
+          --replace-fail 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin' \
+          'export PATH=${lib.makeBinPath [ coreutils ]}' \
+          --replace-fail 'install -m 0644 -o root -g root -T' \
+          'install -m 0644 -T'
+
+        # The escalation itself, and the /usr/bin path it re-execs. sed ranges
+        # rather than more --replace-fail: the blocks they delete quote both '
+        # and ", which would have to be spelled through two layers of shell for
+        # no gain. The greps are what make this loud if upstream reshapes them,
+        # which is the only thing --replace-fail was buying.
+        policy=$out/share/omarchy/bin/omarchy-theme-set-browser-policy
+        for anchor in '^PACKAGED_PATH=/usr/bin/omarchy-theme-set-browser-policy$' '^require_root "$color"$'; do
+          grep -q "$anchor" "$policy" || {
+            echo "omarchy-theme-set-browser-policy no longer escalates where this patch expects: $anchor" >&2
+            exit 1
+          }
+        done
+        sed -i \
+          -e '/^# The path etc\/sudoers.d\/omarchy-theme-browser names/,/^PACKAGED_PATH=/d' \
+          -e '/^# True when sudo would run this exact command/,/^require_root "$color"$/d' \
+          "$policy"
+
+        # Belt and braces, because a sed range that stops matching deletes
+        # nothing and says nothing: the session check greps every shipped bin
+        # for /usr in code, and this is the file that would trip it.
+        ! grep -v '^[[:space:]]*#' "$policy" | grep -q '/usr/' || {
+          echo "omarchy-theme-set-browser-policy still names a /usr path in code:" >&2
+          grep -vn '^[[:space:]]*#' "$policy" | grep '/usr/' >&2
+          exit 1
+        }
+
         # Clicking Spotify offered to install Spotify.
             #
             # Both launchers focus an existing window if there is one, and otherwise

@@ -3,7 +3,7 @@
 [Omarchy](https://omarchy.org) vendored for NixOS — the whole desktop, with its
 menus rewired to Nix instead of pacman.
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **429 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **430 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -38,7 +38,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 429 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 430 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 431 |
@@ -1497,10 +1497,10 @@ Nothing on the list below is waiting on a decision -- each is either
 impossible, or a tradeoff taken deliberately. In rough order of how much
 someone would miss it:
 
-1. **Upstream is pinned to v4.0.1, which is the latest release.** There is no
+1. **Upstream is pinned to v4.0.2, which is the latest release.** There is no
    bump to take: the tag is current, and Omarchy's default branch (`quattro`)
-   has *diverged* from it -- 98 commits ahead, 35 behind, with its own `version`
-   file still reading `4.0.0.alpha`. Moving to it would drop 35 commits of
+   has *diverged* from it -- 270 commits ahead, 63 behind, with its own `version`
+   file still reading `4.0.0.alpha`. Moving to it would drop 63 commits of
    release work, so the pin stays on the tag until a newer one exists.
 
    The bump machinery has been exercised against that branch rather than left

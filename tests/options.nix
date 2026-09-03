@@ -1215,6 +1215,27 @@ pkgs.runCommand "nixarchy-options"
         fi
         echo "the lock screen has a PAM stack"
 
+        # ---- printing is on, cups-browsed is not --------------------------
+        # 4.0.2 dropped cups-browsed from base.packages and from the services
+        # it enables -- "Harden CUPS printer discovery and administration".
+        # NixOS defaults services.printing.browsed.enable to
+        # services.avahi.enable, which this module sets, so the daemon
+        # upstream removed kept running here by inheritance: as root, with no
+        # hardening, creating queues from mDNS announcements. Asserted rather
+        # than trusted, because the coupling lives in nixpkgs and a bump can
+        # bring it back without touching a line of this repo.
+        if [ -e "$vm/etc/systemd/system/cups-browsed.service" ]; then
+          echo "cups-browsed is on the machine again -- upstream removed it in 4.0.2." >&2
+          echo "It comes back through services.printing.browsed.enable, which" >&2
+          echo "nixpkgs defaults to services.avahi.enable." >&2
+          exit 1
+        fi
+        test -e "$vm/etc/systemd/system/cups.service" || {
+          echo "printing is off entirely: browsed was meant to go, not CUPS" >&2
+          exit 1
+        }
+        echo "printing is on and cups-browsed is not"
+
         # ---- the user units exist and name store paths --------------------
         # Upstream ships these under default/systemd/user, which is not a
         # systemd search path, so nothing ever loaded them: no lock before

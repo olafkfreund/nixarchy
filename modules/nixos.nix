@@ -724,8 +724,25 @@ in
       # install/config/locate.sh
       locate.enable = lib.mkDefault true;
 
-      # cups, cups-browsed, avahi and nss-mdns are all in base.packages
+      # cups, avahi and nss-mdns are all in base.packages. cups-browsed was
+      # too until 4.0.2 dropped it -- "Harden CUPS printer discovery and
+      # administration" -- along with the unit that started it, leaving only a
+      # hardened drop-in for machines that already had it. cups-pk-helper
+      # replaced it for the administration half, and NixOS' own cupsd module
+      # adds that wherever polkit is on, so nothing here has to name it.
+      #
+      # Turning it off is not just comment maintenance: NixOS defaults
+      # services.printing.browsed.enable to services.avahi.enable, which the
+      # lines below set, so `printing.enable` alone did leave cups-browsed
+      # running -- as root, with none of the User=/ProtectSystem= hardening
+      # upstream's drop-in adds, listening for mDNS printer announcements and
+      # creating queues from them. That is the daemon upstream deliberately
+      # removed, so it does not stay on here by inheritance.
+      #
+      # Only browsed goes: avahi stays on for driverless IPP discovery, which
+      # is how modern printers are found and is what cupsd does by itself.
       printing.enable = lib.mkDefault true;
+      printing.browsed.enable = lib.mkDefault false;
       avahi = {
         enable = lib.mkDefault true;
         nssmdns4 = lib.mkDefault true;

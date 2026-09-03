@@ -27,7 +27,7 @@
 {
   lib,
   stdenvNoCC,
-  omarchyVersion ? "4.0.1",
+  omarchyVersion ? "4.0.2",
 }:
 stdenvNoCC.mkDerivation {
   pname = "omarchy-nvim-config";

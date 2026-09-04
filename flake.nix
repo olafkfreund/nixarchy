@@ -369,6 +369,10 @@
             # spelling of it in sed would be a parser that disagrees with the
             # shell, reporting on a menu nobody has.
             python3
+            # rfkill, for the Radios section (#277). An undeclared rfkill
+            # reads as "no radios on this machine" rather than "rfkill is
+            # missing" -- the same trap the doctor's vainfo hit.
+            util-linux
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

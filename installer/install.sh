@@ -1133,6 +1133,30 @@ partition_free_space() {
 }
 
 format_disk() {
+  # Leave /mnt clean, because disko will not.
+  #
+  # disko's mount phase asks `findmnt` whether each mountpoint is already
+  # mounted and SKIPS the ones that are. After a first install that failed
+  # partway -- the bootloader step is the one that has actually happened --
+  # /mnt, /mnt/nix, /mnt/home and /mnt/var/log are all still mounted. The
+  # second run then destroys and reformats the disk underneath them, and
+  # every child mount is skipped as "already mounted" while `@` is the only
+  # subvolume anything is written through.
+  #
+  # The result installs and boots as far as the LUKS prompt. Then fstab
+  # mounts the real (empty) @nix over /nix, the store disappears, stage 2
+  # cannot find its init, and the machine drops to emergency mode -- where
+  # the initrd's root account is locked by design and there is nothing the
+  # user can do. Reported from a real install; @nix, @home and @log were
+  # empty and 21G sat in @/nix, @/home and @/var/log.
+  if findmnt -rno TARGET /mnt >/dev/null 2>&1; then
+    umount -R /mnt || {
+      echo "nixarchy-install: something is mounted at /mnt and will not unmount." >&2
+      echo "  Formatting now would install into the wrong subvolumes. Reboot and retry." >&2
+      exit 1
+    }
+  fi
+
   # Before the passphrase file and before the disko script: in free-space mode
   # the layout the script evaluates addresses partitions that do not exist yet.
   if [ "$disk_mode" = free ]; then
@@ -1156,6 +1180,31 @@ format_disk() {
   "$script"
 
   rm -f /tmp/nixarchy-luks.key
+}
+
+# Prove disko mounted what the layout asked for.
+#
+# The layout gives /nix, /home and /var/log their own subvolumes, and the
+# installed system's fstab mounts them. If they are not mounted HERE, the
+# install still succeeds -- it just writes all of it into `@`, and the
+# machine bricks on first boot when the empty subvolumes mount over the
+# top. Nothing downstream notices, which is why this is checked rather
+# than assumed.
+#
+# `findmnt --mountpoint` matches only a real mountpoint, so a plain
+# directory inside `@` does not satisfy it.
+verify_subvolume_mounts() {
+  local mp missing=""
+  for mp in /mnt /mnt/nix /mnt/home /mnt/var/log; do
+    findmnt -rno TARGET --mountpoint "$mp" >/dev/null 2>&1 || missing="$missing $mp"
+  done
+  if [ -n "$missing" ]; then
+    echo "nixarchy-install: disko did not mount:$missing" >&2
+    echo "  Installing now would put the store and home inside the root" >&2
+    echo "  subvolume, and the machine would not boot. Nothing was installed." >&2
+    findmnt -R /mnt >&2 || true
+    return 1
+  fi
 }
 
 generate_hardware_config() {
@@ -1657,6 +1706,7 @@ main() {
   # `|| rc=$?` was always meant to receive.
   {
     format_disk &&
+      verify_subvolume_mounts &&
       generate_hardware_config &&
       install_flake_dir &&
       write_password_hash &&

@@ -342,6 +342,14 @@ pkgs.testers.runNixOSTest {
           device=/dev/vdb
           disk_mode=free
           encrypt=no
+          # Build into the target store, so that path is walked by a real
+          # install rather than only by the unit test of the decision.
+          #
+          # Here rather than in checks.install because the two checks should
+          # not take the same path: this one installs beside an existing OS,
+          # which is the harder disk case, and it is the cheaper of the two to
+          # lose if the target-store build turns out slower.
+          build_store=target
           hostname=installed
           username=omarchy
           password_hash=${passwordHash}

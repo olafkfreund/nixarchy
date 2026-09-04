@@ -205,6 +205,15 @@
       # exists when the source is not a git tree at all, hence the last
       # fallback.
       nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
+      #
+      # `lastModifiedDate` is absent, not empty, when a lock node has no
+      # `lastModified` -- which is what installer/mkFlake.nix used to write,
+      # and is why the offline install broke the first time this landed: the
+      # generated flake evaluated a DIFFERENT omarchy than the installer had
+      # seeded, for want of one field. mkFlake now writes it. The fallback
+      # stays for the machines whose flake.lock was generated before it did:
+      # they get "unknown" and a rebuild that has a network, rather than an
+      # evaluation error on a system they cannot rebuild to fix.
       nixarchyDate =
         let
           d = self.lastModifiedDate or "";
@@ -1009,6 +1018,11 @@
         # The installer's interactive screens, at every width worth caring
         # about. Nothing else draws them: every other harness passes
         # --answers, which is exactly how #133 shipped.
+        installer-lock = import ./tests/installer-lock.nix {
+          pkgs = pkgsFor.${system};
+          flakeTemplate = self.packages.${system}.flake-template;
+        };
+
         installer-ui = import ./tests/installer-ui.nix {
           inherit inputs;
           pkgs = pkgsFor.${system};

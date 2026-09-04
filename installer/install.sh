@@ -1569,10 +1569,20 @@ check_store_space() {
   echo "  slower -- every path is written to the disk as it is produced rather" >&2
   echo "  than copied there at the end -- and it is not a failure." >&2
   echo >&2
-  echo "  This normally fetches nothing at all: the image carries the closure" >&2
-  echo "  already. Having anything to fetch means what the image baked is not" >&2
-  echo "  what this flake asks for, which is a bug worth reporting with the" >&2
-  echo "  two numbers above." >&2
+  # ...on the OFFLINE image only. The network image fetches everything by
+  # design -- that is what it is for -- so telling its user they have found
+  # a bug is telling them the opposite of the truth, on the one screen they
+  # are most likely to act on. Seen on a real iso-net install: 14G to
+  # fetch, entirely expected, reported as "a bug worth reporting".
+  if [ ! -f /etc/nixarchy-iso-net ]; then
+    echo "  This normally fetches nothing at all: the image carries the closure" >&2
+    echo "  already. Having anything to fetch means what the image baked is not" >&2
+    echo "  what this flake asks for, which is a bug worth reporting with the" >&2
+    echo "  two numbers above." >&2
+  else
+    echo "  This image downloads the desktop as it installs, so a fetch this" >&2
+    echo "  size is expected and is not a fault." >&2
+  fi
   return 1
 }
 
@@ -1587,7 +1597,15 @@ run_install() {
   local plan
   plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
     "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1) || true
-  printf '%s\n' "$plan" | head -40
+  # A herestring, not a pipe. `printf ... | head -40` closes the read end after
+  # forty lines and printf then dies on EPIPE, which put
+  #
+  #   line 1584: printf: Broken pipe
+  #   line 1584: printf: write error: Broken pipe
+  #
+  # immediately above the diagnosis this function exists to print -- on the one
+  # screen where noise costs the most. Seen on a real iso-net install.
+  head -40 <<<"$plan"
 
   # Where to build. The live store by default, because that is the path every
   # install has taken and the one the comment below argues for; the target

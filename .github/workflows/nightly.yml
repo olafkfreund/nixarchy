@@ -134,10 +134,70 @@ jobs:
 
   # A failure at 03:00 that nobody sees until someone opens the Actions tab is
   # a failure that costs a day. This turns one into an issue.
+  # Is the binary cache actually being filled?
+  #
+  # Nothing else asks. cachix-action's push is a POST step, and its failures do
+  # not reach the job's result the way an ordinary step's do:
+  #
+  #   - a REJECTED TOKEN is silent. cachix logs the 403, prints "Failed to
+  #     push", and exits 0. The job is green and nothing was cached. Measured,
+  #     not assumed: run 33883428617 pushed with a deliberately bad token and
+  #     passed.
+  #   - a BUSY DAEMON exited 3 and reddened three of four concurrent pull
+  #     requests (#235), which is why #264 made every cachix step
+  #     continue-on-error. That was right -- a red check meaning "the cache was
+  #     busy" trains people to re-run without reading -- but it also means the
+  #     one loud failure mode is now quiet too.
+  #
+  # So both directions are silent, and the only honest question left is not
+  # "did the command succeed" but "is the artefact there". That is answerable
+  # without credentials: cachix serves .narinfo over plain HTTP, 200 when the
+  # path is in the cache and 404 when it is not.
+  #
+  # Nightly rather than per-PR, deliberately. An expired token is a slow
+  # failure -- it will still be expired tomorrow -- while a busy cache is a
+  # fast one, and asserting this on every pull request would re-create exactly
+  # the flapping red check #264 removed.
+  #
+  # Evaluated, never built. `nix eval .#omarchy.outPath` gives the path CI
+  # pushed without producing it, which matters: since #212 the omarchy
+  # derivation depends on the flake's own rev and lastModified, so a path built
+  # from any other tree -- a branch, a dirty checkout -- is a DIFFERENT path
+  # that would 404 for reasons having nothing to do with the cache.
+  cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: The cache holds what main last built
+        run: |
+          path=$(nix eval --raw ".#omarchy.outPath")
+          hash=$(basename "$path" | cut -d- -f1)
+          echo "main's omarchy: $path"
+
+          # Three tries. A push that landed seconds ago may not be served yet,
+          # and one 404 is not evidence of a broken token.
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              "https://nixarchy.cachix.org/$hash.narinfo")
+            echo "attempt $attempt: HTTP $code"
+            [ "$code" = 200 ] && exit 0
+            sleep 20
+          done
+
+          echo "::error::nixarchy.cachix.org does not have main's omarchy ($hash)."
+          echo "Every build is green and nothing is being cached. The most"
+          echo "likely cause is CACHIX_AUTH_TOKEN: cachix exits 0 when a token"
+          echo "is rejected, so no job has failed and none will. Check the"
+          echo "token before looking anywhere else."
+          exit 1
+
   report:
     name: report a failure
     runs-on: ubuntu-latest
-    needs: [install, install-iso]
+    needs: [install, install-iso, cache]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -157,7 +217,17 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          title="nightly: the install checks are failing"
+          # WHICH nightly broke. The title is the issue's identity -- it is what
+          # the dedupe below searches on -- so a cache failure filed under "the
+          # install checks are failing" would both hide itself and reopen the
+          # install issue. #236 was exactly that shape: a watchdog issue whose
+          # title sent the reader at the wrong thing, and the duplicate hunt cost
+          # more than the bug did.
+          if [ "${{ needs.cache.result }}" = "failure" ]; then
+            title="nightly: nothing is reaching the binary cache"
+          else
+            title="nightly: the install checks are failing"
+          fi
           # Which of the two it was. A timeout and a failed assertion want
           # different first moves, and the issue is the only place anyone
           # sees either.
@@ -167,7 +237,7 @@ jobs:
           # One issue, reopened and commented, rather than a new one each
           # night: a check broken for a week should read as one problem, not
           # seven.
-          body="The nightly install checks $what: $RUN"
+          body="The nightly $what: $RUN"
           body="$body
 
           Both jobs run on the self-hosted runner on p510. If the failure is

@@ -118,6 +118,8 @@ hostname=""
 username=""
 password_hash=""
 recovery_hash=""
+# auto (decide on the plan), live, or target. See run_install.
+build_store_choice="auto"
 luks_passphrase=""
 timezone=""
 keymap=""
@@ -167,6 +169,10 @@ The answers file is one key=value per line, # for comments, no quoting:
   username=alice
   password_hash=$6$...      from `mkpasswd -m sha-512`; or
   password=hunter2          plaintext, hashed here -- for tests
+  build_store=auto          auto, live or target: where the system is built.
+                            auto builds here unless the live store is too
+                            small, which is what a live ISO's RAM-backed
+                            store usually is
   recovery_hash=$6$...      optional; unlocks stage-1 emergency mode, or
   recovery_passphrase=...   plaintext, hashed here. Omit for no emergency
                             access -- see ask_recovery for the trade
@@ -864,6 +870,7 @@ read_answers() {
       username) username=$value ;;
       password) password=$value ;;
       password_hash) password_hash=$value ;;
+      build_store) build_store_choice=$value ;;
       recovery_hash) recovery_hash=$value ;;
       recovery_passphrase) recovery_hash=$(mkpasswd -m sha-512 "$value") ;;
       timezone) timezone=$value ;;
@@ -962,6 +969,11 @@ validate_answers() {
   case $password_hash in
     "" | '$'*) ;;
     *) problems+=("password_hash: not a crypt(3) hash (should start with \$)") ;;
+  esac
+
+  case $build_store_choice in
+    auto | live | target) ;;
+    *) problems+=("build_store: must be auto, live or target, got: $build_store_choice") ;;
   esac
 
   case $recovery_hash in
@@ -1553,8 +1565,9 @@ check_store_space() {
   echo "  machine's memory. It is not the disk you are installing to, which" >&2
   echo "  has room -- so more RAM, or a machine with more, is what changes it." >&2
   echo >&2
-  echo "  Nothing has been written to the target. The disk was formatted;" >&2
-  echo "  the system was not installed." >&2
+  echo "  Building into the target store instead, which has the room. This is" >&2
+  echo "  slower -- every path is written to the disk as it is produced rather" >&2
+  echo "  than copied there at the end -- and it is not a failure." >&2
   echo >&2
   echo "  This normally fetches nothing at all: the image carries the closure" >&2
   echo "  already. Having anything to fetch means what the image baked is not" >&2
@@ -1576,7 +1589,31 @@ run_install() {
     "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1) || true
   printf '%s\n' "$plan" | head -40
 
-  check_store_space "$plan" || return 1
+  # Where to build. The live store by default, because that is the path every
+  # install has taken and the one the comment below argues for; the target
+  # store when the live one cannot hold the job, which is the only case where
+  # the argument stops applying -- a path that will not fit is not faster to
+  # produce locally, it is impossible.
+  #
+  # --eval-store auto is what makes this safe, and it is the thing that was not
+  # available when the comment below was written. `--store /mnt` alone sets the
+  # EVALUATION store too, which is the failure that comment describes: locked
+  # inputs resolved against an empty store, and nix going to the network for
+  # sources sitting one directory up. Splitting them keeps evaluation here,
+  # where the sources are, and sends only build outputs to the disk.
+  #
+  # --extra-substituters auto?trusted=1 offers this machine's store to the
+  # target one, which is exactly what nixos-install does for the same reason
+  # (its own `sub="auto?trusted=1"`). Combined with always-allow-substitutes in
+  # SUBSTITUTE_FLAGS -- see the comment on it, which is about precisely this
+  # arrangement -- the closure is copied rather than rebuilt.
+  local build_store=()
+  case ${build_store_choice:-auto} in
+    target) build_store=(--store /mnt --eval-store auto --extra-substituters "auto?trusted=1") ;;
+    live) ;;
+    *) check_store_space "$plan" ||
+      build_store=(--store /mnt --eval-store auto --extra-substituters "auto?trusted=1") ;;
+  esac
 
   # Build here, then install what was built. NOT `nixos-install --flake`.
   #
@@ -1599,6 +1636,7 @@ run_install() {
   # before it can be used.
   local system
   system=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
+    "${build_store[@]}" \
     "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
 
   # Checked, because set -e will not check it here. The whole install runs as

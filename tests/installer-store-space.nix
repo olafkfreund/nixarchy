@@ -1,6 +1,9 @@
 { pkgs, installScript }:
 # check_store_space, driven with plans nix really prints and a df that lies.
 #
+# Its answer selects a build store rather than refusing an install: non-zero
+# means "the live store cannot hold this, build into the target instead".
+#
 # A live ISO's store is a RAM-backed overlay over the squashfs -- half the
 # machine's memory. Everything nix fetches or builds lands there before any of
 # it reaches the disk, and when it fills the install does not stop: it dies
@@ -51,9 +54,9 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
     FETCH21='these 489 paths will be fetched (8.1 GiB download, 21.0 GiB unpacked):'
 
     # The reported case: 21 GiB of paths, 7.8G of RAM-backed store.
-    t refuse  "21 GiB needed, 7.8G free"      8371830784        "$FETCH21"
+    t refuse  "21 GiB needed, 7.8G free -> target"      8371830784        "$FETCH21"
     # The same install on a machine with room.
-    t proceed "21 GiB needed, 900G free"      $((900 * GB))     "$FETCH21"
+    t proceed "21 GiB needed, 900G free -> live"      $((900 * GB))     "$FETCH21"
     # Units below GiB are parsed too, or a small overflow reads as no overflow.
     t refuse  "120 MiB needed, 100 MiB free"  $((100 * 1048576)) \
       'these 12 paths will be fetched (40.2 MiB download, 120.5 MiB unpacked):'

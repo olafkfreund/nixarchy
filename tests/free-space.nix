@@ -488,6 +488,7 @@ pkgs.testers.runNixOSTest {
 
     # ---- install into what is left ----------------------------------------
     import os
+    import re
     import time
     import subprocess
     started = time.time()
@@ -500,8 +501,51 @@ pkgs.testers.runNixOSTest {
     print(f"driver_seconds={int(time.time() - started)}")
     print(out)
     print("=============== /var/log/nixarchy-install.log ===============")
-    print(installer.execute("cat /var/log/nixarchy-install.log 2>&1")[1])
+    installer_log = installer.execute("cat /var/log/nixarchy-install.log 2>&1")[1]
+    print(installer_log)
     print("============================================================")
+
+    # Name the cause before the ESP assertion gets to misreport it.
+    #
+    # This machine has no network, on purpose. So when a path the install needs
+    # is neither in this store nor substitutable, nix falls back to building
+    # it, a build fetches its source, the fetch fails, and the failure climbs:
+    # a source tarball -> its package -> system-path -> the toplevel -> nothing
+    # installed -> no ESP. The assertion that fires is `test -d /mnt/boot/EFI`,
+    # which is five frames above the only line that says what happened and
+    # sends the reader to disko.
+    #
+    # It cost two people an evening. The cause was a nixpkgs mass-rebuild that
+    # had not reached cache.nixos.org yet: the same commit failed at 23:06 and
+    # passed at 23:43 on the same runner, because the window closed. Nothing
+    # about the machine, the disk or the change under test mattered, and every
+    # theory that blamed one of those was wrong.
+    #
+    # So: if the log says a download failed, say that, and say it here.
+    if rc != 0:
+        wanted = sorted(set(re.findall(r"unable to download '([^']+)'", installer_log)))
+        # Substituter metadata is not evidence of this: a nix-cache-info that
+        # cannot be reached is what a no-network VM is supposed to look like,
+        # and install.sh only configures those caches when the ISO marker is
+        # absent. Source fetches are the ones that mean a path was missing.
+        sources = [u for u in wanted if not u.endswith("/nix-cache-info")]
+        if sources:
+            listed = "\n  ".join(sources[:5])
+            more = f"\n  ... and {len(sources) - 5} more" if len(sources) > 5 else ""
+            raise AssertionError(
+                "the install had to BUILD something, and this machine has no "
+                "network to fetch its source with. That is a closure that was "
+                "not substitutable when the runner realised it -- usually a "
+                "nixpkgs rebuild that has not reached cache.nixos.org yet, "
+                "which clears on its own in under an hour.\n\n"
+                f"  {listed}{more}\n\n"
+                "It is very probably not the change under test. Check whether "
+                "these are substitutable now:\n"
+                "  nix path-info --store https://cache.nixos.org <path>\n"
+                "and if they are, re-run. If they are not, wait rather than "
+                "widening system.extraDependencies -- see the note there about "
+                "seeded systems drifting from installed ones.")
+
     assert rc == 0, f"nixarchy-install exited {rc}; the log above says why"
 
     print("the disk afterwards:")

@@ -162,6 +162,45 @@
       url = "github:Mic92/sops-nix/a8627b21b9107c5711c96b84f32a9a4b3d45295f";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # #221/#222: the foundation of the sandboxes epic. A guest whose
+    # `/nix/store` is a 9p share of the HOST's store -- `microvm.storeOnDisk
+    # = false`, computed by upstream itself the moment
+    # `microvm.shares` contains a `source = "/nix/store"` entry -- so no
+    # image is ever built for a template and the closure a user runs is
+    # store paths the host already had.
+    #
+    # `follows = "nixpkgs"`, and deliberately not the reflex hyprland.url
+    # above declines: microvm.cachix.org (this flake's own `nixConfig`,
+    # inert unless a consumer opts in -- which nothing here does) carries the
+    # non-qemu hypervisors, and every guest this repo builds is qemu. What a
+    # user actually downloads on first launch is the template CLOSURE, built
+    # from THIS lock and served by nixarchy.cachix.org -- following buys
+    # nothing to forfeit there. What it buys instead is disko's argument, not
+    # hyprland's: a guest and host that share glibc, systemd and openssh
+    # store paths rather than each carrying a second copy, because the same
+    # nixpkgs built both.
+    #
+    # Pinned to a COMMIT. The newest tag, v0.5.0, is from April 2024 and
+    # predates options modules/microvm/guest.nix depends on (`microvm.shares`
+    # gained fields since); upstream publishes no newer tags and treats
+    # `main` as its release channel -- the same position sops-nix already
+    # takes in this file, for the same reason. Bump it deliberately; never
+    # track a branch.
+    #
+    # Lock cost, stated rather than hidden: TWO nodes for this one input, not
+    # one. microvm.nix declares `nixpkgs` (which follows ours, so nothing
+    # transitive) and `spectrum`, a `flake = false` tree it reads only to
+    # patch cloud-hypervisor's graphics support -- a hypervisor nothing in
+    # this repo will ever build, on a patch nothing here will ever apply.
+    # `spectrum` still lands in every user's flake.lock, including the Mode A
+    # machine that never asked for a VM at all. Paid because the alternative
+    # -- vendoring a runner ourselves -- is the copy-upstream-and-keep-it-green
+    # trade #221 already surveyed and rejected.
+    microvm = {
+      url = "github:microvm-nix/microvm.nix/fdfc1821a0eb76e44a13d206b72e6ca6961fbb7c";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -379,441 +418,478 @@
         '';
       };
 
-      packages = eachSystem (system: {
-        default = self.packages.${system}.omarchy;
-        inherit (pkgsFor.${system}) omarchy nixarchy-plymouth;
+      packages = eachSystem (
+        system:
+        {
+          default = self.packages.${system}.omarchy;
+          inherit (pkgsFor.${system}) omarchy nixarchy-plymouth;
 
-        # `nix run github:olafkfreund/nixarchy#verify`, from inside a running
-        # Omarchy session. Everything in checks/ runs in a machine with no GPU,
-        # no Bluetooth radio, no network and no sound; this asks the questions
-        # that leaves unanswered.
-        # `nix run github:olafkfreund/nixarchy#install`, as root, from a NixOS
-        # live ISO. Formats ONE disk with installer/disk-config.nix, writes the
-        # generated flake to /mnt/etc/nixos and runs nixos-install against it.
-        #
-        # Every answer ends up as text in that flake: the machine it produces
-        # belongs to the flake, not to this script.
-        install = pkgsFor.${system}.writeShellApplication {
-          name = "nixarchy-install";
-          runtimeInputs = with pkgsFor.${system}; [
-            gum
-            coreutils
-            gnused
-            gnugrep
-            gawk
-            findutils
-            util-linux # lsblk, findmnt, blkid, blockdev, partx, wipefs
-            # `btrfs subvolume snapshot -r`, for the @factory baseline taken
-            # at the end of the install. writeShellApplication builds a strict
-            # PATH from this list, so a command that is not named here is a
-            # runtime failure no build catches -- and this one would fail on
-            # the last step of a completed install, which is the worst place
-            # to discover it.
-            btrfs-progs
-            # sgdisk, and only sgdisk: the free-space mode's whole safety
-            # argument rests on `--new=0:` picking the next free partition
-            # number, which is gptfdisk's behaviour and nothing else's.
-            gptfdisk
-            git
-            mkpasswd
-            nixos-install-tools # nixos-install, nixos-generate-config
-            nix
-            ncurses # clear and tput, which the screens are drawn with
-            kbd # loadkeys, and the keymap list
-            tzdata # the timezone list
-            # Both only used by ask_network, which the offline image returns
-            # from before it reaches either. Carried anyway rather than
-            # conditionally: this is one script, `nix run .#install` on a stock
-            # ISO needs them, and a runtime input that is missing on one image
-            # is a class of bug that only shows up on that image.
-            curl # the connectivity test -- can we reach the binary cache
-            networkmanager # nmcli, for joining a wireless network
-            # The failure and finish screens offer a way out of both. Present
-            # on the live medium anyway; named here so `nix run .#install` on
-            # some other host does not discover them missing at the one moment
-            # a person needs them.
-            systemd # systemctl reboot / poweroff
-            bashInteractive # the shell the failure screen drops into
-          ];
-          # Spliced at build time the way doctor splices @apps@, so the script
-          # never has to find these itself and `nix run` works from anywhere.
-          text =
-            builtins.replaceStrings
-              [
-                "@template@"
-                "@gumenv@"
-                "@ui@"
-                "@logo@"
-                "@logocompact@"
-                "@tips@"
-                "@keymaps@"
-                "@dashboard@"
-                "@tzdata@"
-                "@kbd@"
-                "@initrdmodules@"
-                "@initrdforced@"
-                "@initrdmodulesplain@"
-                "@initrdforcedplain@"
-              ]
-              [
-                "${self.packages.${system}.flake-template}"
-                "${./installer/gum-env.sh}"
-                "${./installer/lib/ui.sh}"
-                "${./installer/brand/logo.txt}"
-                "${./installer/brand/logo-compact.txt}"
-                "${./installer/brand/tips.txt}"
-                "${./installer/brand/keymaps.txt}"
-                "${./installer/lib/dashboard.sh}"
-                "${pkgsFor.${system}.tzdata}"
-                "${pkgsFor.${system}.kbd}"
-                # The initrd modules the reference host carries, and therefore
-                # the ones already baked into any image built from this commit.
-                # install.sh compares what it detected against this list to
-                # decide whether the installed machine can reuse that initrd.
-                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules)
-                # And the ones it loads unconditionally, which the same pin has
-                # to cover: an imported profile sets this list too.
-                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.kernelModules)
-                # And the same two for an unencrypted install. They are not the
-                # same lists: LUKS adds a dozen crypto modules to the initrd, so
-                # a machine installed without encryption that pinned the
-                # encrypted set would match neither baked initrd and build a
-                # third.
-                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.availableKernelModules)
-                (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.kernelModules)
-              ]
-              (builtins.readFile ./installer/install.sh);
-        };
-
-        # The flake the installer writes to /etc/nixos: the template files with
-        # their @tokens@ still in place, plus a lock derived from this repo's
-        # own so the installed machine resolves to exactly what was built.
-        # Requires a committed tree -- it pins nixarchy by commit.
-        flake-template = pkgsFor.${system}.callPackage ./installer/mkFlake.nix { inherit self; };
-
-        verify = pkgsFor.${system}.writeShellApplication {
-          name = "nixarchy-verify";
-          runtimeInputs = with pkgsFor.${system}; [
-            systemd
-            gnugrep
-            gnused
-            coreutils
-            findutils
-            glib
-            bluez
-            # pgrep and ps. The Session and Screen sharing probes both look for
-            # a running process by name, and writeShellApplication's PATH does
-            # not carry the caller's -- an undeclared pgrep here is a probe that
-            # reports "not running" for everything.
-            procps
-            # awk, in the Session section's quickshell match. Undeclared until
-            # the Fails-in-silence probes went in and the list was read again.
-            gawk
-            # wpctl. "pipewire is running" and "there is a sink" are different
-            # questions and only wireplumber answers the second.
-            wireplumber
-            # The menu-row probe. The menu is JSONC -- comments and trailing
-            # commas -- and the shell's own parser is three lines of Python
-            # that build.yml and both VM tests already share. A fourth
-            # spelling of it in sed would be a parser that disagrees with the
-            # shell, reporting on a menu nobody has.
-            python3
-          ];
-          text = builtins.readFile ./pkgs/verify.sh;
-        };
-
-        # `nix run .#review` -- what needs updating, and what is quietly
-        # broken. An app rather than a check because it asks GitHub what
-        # upstream ships and what CI did last night, and a check has no
-        # network. The half that needs neither is checks.review-pins.
-        review = pkgsFor.${system}.writeShellApplication {
-          name = "nixarchy-review";
-          runtimeInputs = with pkgsFor.${system}; [
-            gh
-            curl
-            git
-            gnugrep
-            gnused
-            coreutils
-            python3
-            nix
-          ];
-          text = builtins.readFile ./pkgs/review.sh;
-        };
-
-        # `nix run .#release-notes <from-tag> <to-ref>` -- what changed for
-        # someone running nixarchy, between two releases. release.yml puts its
-        # output above the download instructions on the release page.
-        #
-        # An app for the same reason `review` is one: it evaluates the option
-        # set at two revisions and asks GitHub what upstream shipped, and a
-        # check has neither a network nor a second checkout. The half that
-        # needs neither is checks.release-notes, which drives this whole script
-        # against a fixture repository.
-        #
-        # It carries omarchy-package-delta.sh rather than reimplementing it:
-        # the question "what did this Omarchy release add and drop" already has
-        # an answer here, and two of them would disagree eventually.
-        release-notes = pkgsFor.${system}.writeShellApplication {
-          name = "nixarchy-release-notes";
-          runtimeInputs = with pkgsFor.${system}; [
-            git
-            curl
-            jq
-            nix
-            gawk
-            gnugrep
-            gnused
-            coreutils
-          ];
-          text = builtins.replaceStrings [ "@delta@" ] [ "${./.github/scripts/omarchy-package-delta.sh}" ] (
-            builtins.readFile ./.github/scripts/release-notes.sh
-          );
-        };
-
-        # `nix run github:olafkfreund/nixarchy#doctor` -- reads the running
-        # system and prints the configuration it would need. Runnable before
-        # nixarchy is an input anywhere, which is the only entry point someone
-        # deciding whether to adopt it actually has.
-        doctor = pkgsFor.${system}.writeShellApplication {
-          name = "nixarchy-doctor";
-          runtimeInputs = with pkgsFor.${system}; [
-            systemd
-            gnused
-            gnugrep
-            gawk
-            coreutils
-          ];
-          # @apps@ is the app-to-command table, generated here for the same
-          # reason the menu's is: the doctor has to answer "which of these do
-          # you already have" on a machine that has never had nixarchy, so it
-          # cannot ask the running system and cannot be handed a list by it.
+          # `nix run github:olafkfreund/nixarchy#verify`, from inside a running
+          # Omarchy session. Everything in checks/ runs in a machine with no GPU,
+          # no Bluetooth radio, no network and no sound; this asks the questions
+          # that leaves unanswered.
+          # `nix run github:olafkfreund/nixarchy#install`, as root, from a NixOS
+          # live ISO. Formats ONE disk with installer/disk-config.nix, writes the
+          # generated flake to /mnt/etc/nixos and runs nixos-install against it.
           #
-          # meta.mainProgram where nixpkgs states one -- it is right where the
-          # attribute name is wrong, and vscode putting `code` on PATH is not a
-          # guess anyone would make. tryEval because unfree packages throw at
-          # evaluation when allowUnfree is off.
-          text =
-            builtins.replaceStrings
-              [ "@apps@" ]
-              [
-                (
-                  let
-                    pkgs = pkgsFor.${system};
-                    apps = import ./data/apps.nix;
-                    usable = nixpkgs.lib.filterAttrs (_: a: !(a ? unavailable)) apps;
-                    binaryOf =
-                      name: app:
-                      let
-                        probe = builtins.tryEval (
-                          let
-                            # nixarchy-apps first, then the top level. Apps
-                            # this repo packages live under nixarchy-apps, so
-                            # probing only the top level returned null for every
-                            # one of them and the fallback answered with the
-                            # attribute name. That is right by luck when the
-                            # attribute matches the binary -- once, omacut,
-                            # ttfx -- and wrong when it does not: `zen` for a
-                            # package installing bin/zen-beta, `hey-cli` for one
-                            # installing bin/hey. Both were reported as absent
-                            # on machines that had them.
-                            path = nixpkgs.lib.splitString "." (app.attr or name);
-                            p = nixpkgs.lib.attrByPath path (nixpkgs.lib.attrByPath path null pkgs) pkgs.nixarchy-apps;
-                          in
-                          if p == null then null else (p.meta.mainProgram or null)
-                        );
-                      in
-                      if probe.success && probe.value != null then probe.value else name;
-                  in
-                  nixpkgs.lib.concatStringsSep "\n" (
-                    nixpkgs.lib.mapAttrsToList (n: a: "${binaryOf n a}\t${a.label or n}") usable
-                  )
-                )
-              ]
-              (builtins.readFile ./pkgs/doctor.sh);
-        };
-
-        # `nix run .#devenv-presets` -- scaffolds every preset in
-        # data/devenv-presets.nix with the real `nixarchy dev init`, then asks a
-        # real devenv to evaluate what it wrote.
-        #
-        # This is the whole safety net under that catalogue. `lines` is a
-        # string, so a preset that names an option devenv renamed is a valid Nix
-        # file and a broken project, and nothing in `nix flake check` would ever
-        # say so. It runs the command rather than reproducing what it does,
-        # because a check that scaffolds its own devenv.nix tests a copy.
-        #
-        # NOT in `checks`, and that is not an oversight. #150 proposed it as one
-        # on the reasoning that a full `devenv shell` needs the network but
-        # evaluation does not. That is wrong, twice over: evaluating a devenv
-        # project fetches the inputs devenv.yaml names
-        # (github:cachix/devenv-nixpkgs/rolling), and devenv's own flake reaches
-        # them through import-from-derivation -- `nix flake show
-        # github:cachix/devenv` fails with `allow-import-from-derivation is
-        # disabled` before it prints anything. A sandboxed derivation has
-        # neither, so `checks.devenv-presets` could not run at all. A workflow
-        # job that has a network does, and build.yml has one.
-        devenv-presets =
-          let
-            pkgs = pkgsFor.${system};
-          in
-          pkgs.writeShellApplication {
-            name = "nixarchy-devenv-presets";
-            runtimeInputs = [
-              pkgs.coreutils
-              # The same devenv the catalogue entry installs: pkgs.devenv is
-              # what modules/services/devenv.nix defaults its `package` to, so
-              # what evaluates here is what a user's machine would run.
-              pkgs.devenv
-              pkgs.gnused
-              (pkgs.callPackage ./pkgs/dev-init.nix { })
+          # Every answer ends up as text in that flake: the machine it produces
+          # belongs to the flake, not to this script.
+          install = pkgsFor.${system}.writeShellApplication {
+            name = "nixarchy-install";
+            runtimeInputs = with pkgsFor.${system}; [
+              gum
+              coreutils
+              gnused
+              gnugrep
+              gawk
+              findutils
+              util-linux # lsblk, findmnt, blkid, blockdev, partx, wipefs
+              # `btrfs subvolume snapshot -r`, for the @factory baseline taken
+              # at the end of the install. writeShellApplication builds a strict
+              # PATH from this list, so a command that is not named here is a
+              # runtime failure no build catches -- and this one would fail on
+              # the last step of a completed install, which is the worst place
+              # to discover it.
+              btrfs-progs
+              # sgdisk, and only sgdisk: the free-space mode's whole safety
+              # argument rests on `--new=0:` picking the next free partition
+              # number, which is gptfdisk's behaviour and nothing else's.
+              gptfdisk
+              git
+              mkpasswd
+              nixos-install-tools # nixos-install, nixos-generate-config
+              nix
+              ncurses # clear and tput, which the screens are drawn with
+              kbd # loadkeys, and the keymap list
+              tzdata # the timezone list
+              # Both only used by ask_network, which the offline image returns
+              # from before it reaches either. Carried anyway rather than
+              # conditionally: this is one script, `nix run .#install` on a stock
+              # ISO needs them, and a runtime input that is missing on one image
+              # is a class of bug that only shows up on that image.
+              curl # the connectivity test -- can we reach the binary cache
+              networkmanager # nmcli, for joining a wireless network
+              # The failure and finish screens offer a way out of both. Present
+              # on the live medium anyway; named here so `nix run .#install` on
+              # some other host does not discover them missing at the one moment
+              # a person needs them.
+              systemd # systemctl reboot / poweroff
+              bashInteractive # the shell the failure screen drops into
             ];
-            text = ''
-              presets=( ${nixpkgs.lib.concatStringsSep " " (builtins.attrNames (import ./data/devenv-presets.nix))} )
-
-              # Everything under one temp root, HOME included: `devenv allow`
-              # writes a trust database into XDG state, and a check has no
-              # business touching the trust decisions of whoever ran it.
-              root=$(mktemp -d)
-              trap 'rm -rf "$root"' EXIT
-              HOME="$root/home"
-              export HOME
-              mkdir -p "$HOME"
-
-              fail=0
-              for preset in "''${presets[@]}"; do
-                echo "== $preset"
-                dir="$root/$preset"
-                mkdir -p "$dir"
-                cd "$dir"
-
-                if ! nixarchy-dev-init "$preset" > init.log 2>&1; then
-                  echo "   scaffolding failed:"
-                  sed 's/^/   /' init.log
-                  fail=1
-                  continue
-                fi
-
-                # `devenv info` is the cheapest command that evaluates the whole
-                # module set -- it prints the packages the environment would
-                # have, which it cannot know without resolving every option the
-                # preset set. A renamed option dies here.
-                if devenv info > eval.log 2>&1; then
-                  echo "   ok"
-                else
-                  echo "   does not evaluate:"
-                  sed 's/^/   /' eval.log
-                  echo "   the devenv.nix it wrote:"
-                  sed 's/^/   /' devenv.nix
-                  fail=1
-                fi
-              done
-
-              if [ "$fail" -ne 0 ]; then
-                echo
-                echo "A preset in data/devenv-presets.nix no longer evaluates against"
-                echo "devenv. Either an option was renamed upstream -- fix the preset,"
-                echo "the new name is in devenv's src/modules -- or the scaffold this"
-                echo "edits changed shape and pkgs/dev-init.nix has to follow."
-                exit 1
-              fi
-              echo
-              echo "all ''${#presets[@]} presets evaluate"
-            '';
-          };
-
-        # A screencast of a real session, plus the frames it was made from.
-        # Not a check: it boots a desktop, drives a tour of it and encodes a
-        # video, which is minutes of work nobody wants on every push. Build it
-        # with `nix build .#demo` when the screencast needs refreshing.
-        demo = import ./tests/demo.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        inherit (pkgsFor.${system}.nixarchy-apps)
-          once
-          grok-bot
-          retroarch
-          hey-cli
-          omawrite
-          omacalc
-          omacut
-          ttfx
-          ;
-
-        # Re-exported so programs.nixarchy.apps.zen resolves like any other
-        # `ours` app, without every consumer needing the extra flake input.
-        zen-browser = zen-browser.packages.${system}.default;
-
-        # `nix run .#update` -- rewrites the pinned version and hashes in
-        # place. CI runs it weekly and opens a PR. Only `once` is pinned by
-        # hand now; everything else follows nixpkgs or upstream's own flake.
-        update = pkgsFor.${system}.nixarchy-apps.once.updateScript;
-
-        # Boot the smoke test: `nix run .#vm`
-        vm = self.nixosConfigurations.vm.config.system.build.vm;
-
-        # The same machine with room for a model: `nix run .#vm-big`.
-        # 32GB, 8 cores, and a real disk rather than a tmpfs root.
-        vm-big = self.nixosConfigurations.vm-big.config.system.build.vm;
-
-        # The bootable image: boot it and answer the questions. Still online
-        # at this stage -- #15 bakes the closure onto it, #16 takes the
-        # network away.
-        iso = self.nixosConfigurations.iso.config.system.build.isoImage;
-
-        # The same installer, without the desktop on it. Small enough to
-        # download over a hotel connection, and it fetches the closure from
-        # the binary caches instead of carrying it. Needs a working network
-        # before it can do anything, which is what the wizard's first screen
-        # is for.
-        iso-net = self.nixosConfigurations.iso-net.config.system.build.isoImage;
-
-        # A VM that installs onto a blank disk, WITH a network -- which
-        # checks.install cannot have, because it is a sandboxed derivation and
-        # its whole point is that a rebuild afterwards cannot fetch anything.
-        # See installer/vm.nix.
-        #
-        # Wrapped rather than exported raw: the generated run script creates
-        # two sparse qcow2 images and only discovers they do not fit hours
-        # later, from inside the guest. installer/vm-preflight.sh checks first
-        # and says so. The sizes come from the configuration itself so the
-        # check cannot drift away from what the VM actually asks for.
-        installer-vm =
-          let
-            cfg = self.nixosConfigurations.installer-vm.config;
-            vm = cfg.system.build.vm;
-          in
-          pkgsFor.${system}.writeShellApplication {
-            name = "run-installer-vm";
-            runtimeInputs = with pkgsFor.${system}; [ coreutils ]; # df, tail
+            # Spliced at build time the way doctor splices @apps@, so the script
+            # never has to find these itself and `nix run` works from anywhere.
             text =
               builtins.replaceStrings
                 [
-                  "@tmpneed@"
-                  "@pwdneed@"
-                  "@vmscript@"
+                  "@template@"
+                  "@gumenv@"
+                  "@ui@"
+                  "@logo@"
+                  "@logocompact@"
+                  "@tips@"
+                  "@keymaps@"
+                  "@dashboard@"
+                  "@tzdata@"
+                  "@kbd@"
+                  "@initrdmodules@"
+                  "@initrdforced@"
+                  "@initrdmodulesplain@"
+                  "@initrdforcedplain@"
                 ]
                 [
-                  (toString (builtins.head cfg.virtualisation.emptyDiskImages).size)
-                  (toString cfg.virtualisation.diskSize)
-                  "${vm}/bin/${vm.meta.mainProgram}"
+                  "${self.packages.${system}.flake-template}"
+                  "${./installer/gum-env.sh}"
+                  "${./installer/lib/ui.sh}"
+                  "${./installer/brand/logo.txt}"
+                  "${./installer/brand/logo-compact.txt}"
+                  "${./installer/brand/tips.txt}"
+                  "${./installer/brand/keymaps.txt}"
+                  "${./installer/lib/dashboard.sh}"
+                  "${pkgsFor.${system}.tzdata}"
+                  "${pkgsFor.${system}.kbd}"
+                  # The initrd modules the reference host carries, and therefore
+                  # the ones already baked into any image built from this commit.
+                  # install.sh compares what it detected against this list to
+                  # decide whether the installed machine can reuse that initrd.
+                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.availableKernelModules)
+                  # And the ones it loads unconditionally, which the same pin has
+                  # to cover: an imported profile sets this list too.
+                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference.config.boot.initrd.kernelModules)
+                  # And the same two for an unencrypted install. They are not the
+                  # same lists: LUKS adds a dozen crypto modules to the initrd, so
+                  # a machine installed without encryption that pinned the
+                  # encrypted set would match neither baked initrd and build a
+                  # third.
+                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.availableKernelModules)
+                  (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.kernelModules)
                 ]
-                (builtins.readFile ./installer/vm-preflight.sh);
+                (builtins.readFile ./installer/install.sh);
           };
 
-        # Every command the vendored scripts exec by name, in one prefix.
-        # The bins are unwrapped on purpose, so an incomplete runtimeDeps list
-        # produces a package that builds cleanly and then fails at the click
-        # -- which is how `Command not found: xdg-terminal-exec` shipped.
-        # CI builds this and asserts the binaries are actually in it.
-        omarchy-runtime = pkgsFor.${system}.buildEnv {
-          name = "omarchy-runtime";
-          paths = pkgsFor.${system}.omarchy.passthru.runtimeDeps;
-          ignoreCollisions = true;
-        };
-      });
+          # The flake the installer writes to /etc/nixos: the template files with
+          # their @tokens@ still in place, plus a lock derived from this repo's
+          # own so the installed machine resolves to exactly what was built.
+          # Requires a committed tree -- it pins nixarchy by commit.
+          flake-template = pkgsFor.${system}.callPackage ./installer/mkFlake.nix { inherit self; };
+
+          verify = pkgsFor.${system}.writeShellApplication {
+            name = "nixarchy-verify";
+            runtimeInputs = with pkgsFor.${system}; [
+              systemd
+              gnugrep
+              gnused
+              coreutils
+              findutils
+              glib
+              bluez
+              # pgrep and ps. The Session and Screen sharing probes both look for
+              # a running process by name, and writeShellApplication's PATH does
+              # not carry the caller's -- an undeclared pgrep here is a probe that
+              # reports "not running" for everything.
+              procps
+              # awk, in the Session section's quickshell match. Undeclared until
+              # the Fails-in-silence probes went in and the list was read again.
+              gawk
+              # wpctl. "pipewire is running" and "there is a sink" are different
+              # questions and only wireplumber answers the second.
+              wireplumber
+              # The menu-row probe. The menu is JSONC -- comments and trailing
+              # commas -- and the shell's own parser is three lines of Python
+              # that build.yml and both VM tests already share. A fourth
+              # spelling of it in sed would be a parser that disagrees with the
+              # shell, reporting on a menu nobody has.
+              python3
+            ];
+            text = builtins.readFile ./pkgs/verify.sh;
+          };
+
+          # `nix run .#review` -- what needs updating, and what is quietly
+          # broken. An app rather than a check because it asks GitHub what
+          # upstream ships and what CI did last night, and a check has no
+          # network. The half that needs neither is checks.review-pins.
+          review = pkgsFor.${system}.writeShellApplication {
+            name = "nixarchy-review";
+            runtimeInputs = with pkgsFor.${system}; [
+              gh
+              curl
+              git
+              gnugrep
+              gnused
+              coreutils
+              python3
+              nix
+            ];
+            text = builtins.readFile ./pkgs/review.sh;
+          };
+
+          # `nix run .#release-notes <from-tag> <to-ref>` -- what changed for
+          # someone running nixarchy, between two releases. release.yml puts its
+          # output above the download instructions on the release page.
+          #
+          # An app for the same reason `review` is one: it evaluates the option
+          # set at two revisions and asks GitHub what upstream shipped, and a
+          # check has neither a network nor a second checkout. The half that
+          # needs neither is checks.release-notes, which drives this whole script
+          # against a fixture repository.
+          #
+          # It carries omarchy-package-delta.sh rather than reimplementing it:
+          # the question "what did this Omarchy release add and drop" already has
+          # an answer here, and two of them would disagree eventually.
+          release-notes = pkgsFor.${system}.writeShellApplication {
+            name = "nixarchy-release-notes";
+            runtimeInputs = with pkgsFor.${system}; [
+              git
+              curl
+              jq
+              nix
+              gawk
+              gnugrep
+              gnused
+              coreutils
+            ];
+            text = builtins.replaceStrings [ "@delta@" ] [ "${./.github/scripts/omarchy-package-delta.sh}" ] (
+              builtins.readFile ./.github/scripts/release-notes.sh
+            );
+          };
+
+          # `nix run github:olafkfreund/nixarchy#doctor` -- reads the running
+          # system and prints the configuration it would need. Runnable before
+          # nixarchy is an input anywhere, which is the only entry point someone
+          # deciding whether to adopt it actually has.
+          doctor = pkgsFor.${system}.writeShellApplication {
+            name = "nixarchy-doctor";
+            runtimeInputs = with pkgsFor.${system}; [
+              systemd
+              gnused
+              gnugrep
+              gawk
+              coreutils
+            ];
+            # @apps@ is the app-to-command table, generated here for the same
+            # reason the menu's is: the doctor has to answer "which of these do
+            # you already have" on a machine that has never had nixarchy, so it
+            # cannot ask the running system and cannot be handed a list by it.
+            #
+            # meta.mainProgram where nixpkgs states one -- it is right where the
+            # attribute name is wrong, and vscode putting `code` on PATH is not a
+            # guess anyone would make. tryEval because unfree packages throw at
+            # evaluation when allowUnfree is off.
+            text =
+              builtins.replaceStrings
+                [ "@apps@" ]
+                [
+                  (
+                    let
+                      pkgs = pkgsFor.${system};
+                      apps = import ./data/apps.nix;
+                      usable = nixpkgs.lib.filterAttrs (_: a: !(a ? unavailable)) apps;
+                      binaryOf =
+                        name: app:
+                        let
+                          probe = builtins.tryEval (
+                            let
+                              # nixarchy-apps first, then the top level. Apps
+                              # this repo packages live under nixarchy-apps, so
+                              # probing only the top level returned null for every
+                              # one of them and the fallback answered with the
+                              # attribute name. That is right by luck when the
+                              # attribute matches the binary -- once, omacut,
+                              # ttfx -- and wrong when it does not: `zen` for a
+                              # package installing bin/zen-beta, `hey-cli` for one
+                              # installing bin/hey. Both were reported as absent
+                              # on machines that had them.
+                              path = nixpkgs.lib.splitString "." (app.attr or name);
+                              p = nixpkgs.lib.attrByPath path (nixpkgs.lib.attrByPath path null pkgs) pkgs.nixarchy-apps;
+                            in
+                            if p == null then null else (p.meta.mainProgram or null)
+                          );
+                        in
+                        if probe.success && probe.value != null then probe.value else name;
+                    in
+                    nixpkgs.lib.concatStringsSep "\n" (
+                      nixpkgs.lib.mapAttrsToList (n: a: "${binaryOf n a}\t${a.label or n}") usable
+                    )
+                  )
+                ]
+                (builtins.readFile ./pkgs/doctor.sh);
+          };
+
+          # `nix run .#devenv-presets` -- scaffolds every preset in
+          # data/devenv-presets.nix with the real `nixarchy dev init`, then asks a
+          # real devenv to evaluate what it wrote.
+          #
+          # This is the whole safety net under that catalogue. `lines` is a
+          # string, so a preset that names an option devenv renamed is a valid Nix
+          # file and a broken project, and nothing in `nix flake check` would ever
+          # say so. It runs the command rather than reproducing what it does,
+          # because a check that scaffolds its own devenv.nix tests a copy.
+          #
+          # NOT in `checks`, and that is not an oversight. #150 proposed it as one
+          # on the reasoning that a full `devenv shell` needs the network but
+          # evaluation does not. That is wrong, twice over: evaluating a devenv
+          # project fetches the inputs devenv.yaml names
+          # (github:cachix/devenv-nixpkgs/rolling), and devenv's own flake reaches
+          # them through import-from-derivation -- `nix flake show
+          # github:cachix/devenv` fails with `allow-import-from-derivation is
+          # disabled` before it prints anything. A sandboxed derivation has
+          # neither, so `checks.devenv-presets` could not run at all. A workflow
+          # job that has a network does, and build.yml has one.
+          devenv-presets =
+            let
+              pkgs = pkgsFor.${system};
+            in
+            pkgs.writeShellApplication {
+              name = "nixarchy-devenv-presets";
+              runtimeInputs = [
+                pkgs.coreutils
+                # The same devenv the catalogue entry installs: pkgs.devenv is
+                # what modules/services/devenv.nix defaults its `package` to, so
+                # what evaluates here is what a user's machine would run.
+                pkgs.devenv
+                pkgs.gnused
+                (pkgs.callPackage ./pkgs/dev-init.nix { })
+              ];
+              text = ''
+                presets=( ${nixpkgs.lib.concatStringsSep " " (builtins.attrNames (import ./data/devenv-presets.nix))} )
+
+                # Everything under one temp root, HOME included: `devenv allow`
+                # writes a trust database into XDG state, and a check has no
+                # business touching the trust decisions of whoever ran it.
+                root=$(mktemp -d)
+                trap 'rm -rf "$root"' EXIT
+                HOME="$root/home"
+                export HOME
+                mkdir -p "$HOME"
+
+                fail=0
+                for preset in "''${presets[@]}"; do
+                  echo "== $preset"
+                  dir="$root/$preset"
+                  mkdir -p "$dir"
+                  cd "$dir"
+
+                  if ! nixarchy-dev-init "$preset" > init.log 2>&1; then
+                    echo "   scaffolding failed:"
+                    sed 's/^/   /' init.log
+                    fail=1
+                    continue
+                  fi
+
+                  # `devenv info` is the cheapest command that evaluates the whole
+                  # module set -- it prints the packages the environment would
+                  # have, which it cannot know without resolving every option the
+                  # preset set. A renamed option dies here.
+                  if devenv info > eval.log 2>&1; then
+                    echo "   ok"
+                  else
+                    echo "   does not evaluate:"
+                    sed 's/^/   /' eval.log
+                    echo "   the devenv.nix it wrote:"
+                    sed 's/^/   /' devenv.nix
+                    fail=1
+                  fi
+                done
+
+                if [ "$fail" -ne 0 ]; then
+                  echo
+                  echo "A preset in data/devenv-presets.nix no longer evaluates against"
+                  echo "devenv. Either an option was renamed upstream -- fix the preset,"
+                  echo "the new name is in devenv's src/modules -- or the scaffold this"
+                  echo "edits changed shape and pkgs/dev-init.nix has to follow."
+                  exit 1
+                fi
+                echo
+                echo "all ''${#presets[@]} presets evaluate"
+              '';
+            };
+
+          # A screencast of a real session, plus the frames it was made from.
+          # Not a check: it boots a desktop, drives a tour of it and encodes a
+          # video, which is minutes of work nobody wants on every push. Build it
+          # with `nix build .#demo` when the screencast needs refreshing.
+          demo = import ./tests/demo.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          inherit (pkgsFor.${system}.nixarchy-apps)
+            once
+            grok-bot
+            retroarch
+            hey-cli
+            omawrite
+            omacalc
+            omacut
+            ttfx
+            ;
+
+          # Re-exported so programs.nixarchy.apps.zen resolves like any other
+          # `ours` app, without every consumer needing the extra flake input.
+          zen-browser = zen-browser.packages.${system}.default;
+
+          # `nix run .#update` -- rewrites the pinned version and hashes in
+          # place. CI runs it weekly and opens a PR. Only `once` is pinned by
+          # hand now; everything else follows nixpkgs or upstream's own flake.
+          update = pkgsFor.${system}.nixarchy-apps.once.updateScript;
+
+          # Boot the smoke test: `nix run .#vm`
+          vm = self.nixosConfigurations.vm.config.system.build.vm;
+
+          # The same machine with room for a model: `nix run .#vm-big`.
+          # 32GB, 8 cores, and a real disk rather than a tmpfs root.
+          vm-big = self.nixosConfigurations.vm-big.config.system.build.vm;
+
+          # The bootable image: boot it and answer the questions. Still online
+          # at this stage -- #15 bakes the closure onto it, #16 takes the
+          # network away.
+          iso = self.nixosConfigurations.iso.config.system.build.isoImage;
+
+          # The same installer, without the desktop on it. Small enough to
+          # download over a hotel connection, and it fetches the closure from
+          # the binary caches instead of carrying it. Needs a working network
+          # before it can do anything, which is what the wizard's first screen
+          # is for.
+          iso-net = self.nixosConfigurations.iso-net.config.system.build.isoImage;
+
+          # A VM that installs onto a blank disk, WITH a network -- which
+          # checks.install cannot have, because it is a sandboxed derivation and
+          # its whole point is that a rebuild afterwards cannot fetch anything.
+          # See installer/vm.nix.
+          #
+          # Wrapped rather than exported raw: the generated run script creates
+          # two sparse qcow2 images and only discovers they do not fit hours
+          # later, from inside the guest. installer/vm-preflight.sh checks first
+          # and says so. The sizes come from the configuration itself so the
+          # check cannot drift away from what the VM actually asks for.
+          installer-vm =
+            let
+              cfg = self.nixosConfigurations.installer-vm.config;
+              vm = cfg.system.build.vm;
+            in
+            pkgsFor.${system}.writeShellApplication {
+              name = "run-installer-vm";
+              runtimeInputs = with pkgsFor.${system}; [ coreutils ]; # df, tail
+              text =
+                builtins.replaceStrings
+                  [
+                    "@tmpneed@"
+                    "@pwdneed@"
+                    "@vmscript@"
+                  ]
+                  [
+                    (toString (builtins.head cfg.virtualisation.emptyDiskImages).size)
+                    (toString cfg.virtualisation.diskSize)
+                    "${vm}/bin/${vm.meta.mainProgram}"
+                  ]
+                  (builtins.readFile ./installer/vm-preflight.sh);
+            };
+
+          # Every command the vendored scripts exec by name, in one prefix.
+          # The bins are unwrapped on purpose, so an incomplete runtimeDeps list
+          # produces a package that builds cleanly and then fails at the click
+          # -- which is how `Command not found: xdg-terminal-exec` shipped.
+          # CI builds this and asserts the binaries are actually in it.
+          omarchy-runtime = pkgsFor.${system}.buildEnv {
+            name = "omarchy-runtime";
+            paths = pkgsFor.${system}.omarchy.passthru.runtimeDeps;
+            ignoreCollisions = true;
+          };
+        }
+        # Two runners per data/microvm-templates.nix entry, both built by
+        # `lib.mkMicrovm` above from the same template and the same
+        # modules/microvm/guest.nix -- only `microvm.cpu` differs between
+        # them.
+        #
+        # `microvm-<t>` passes nothing extra: `cpu = null` is upstream's own
+        # default, which on x86_64-linux means `-enable-kvm -cpu
+        # host,+x2apic,-sgx` (lib/runners/qemu.nix in the pinned commit --
+        # `-enable-kvm` is added exactly when `cpu == null`). That is what
+        # nearly every user runs, and #221 says outright it is not provable
+        # in CI without nested virtualisation.
+        #
+        # `microvm-<t>-tcg` sets `microvm.cpu = "max"`. The same `cpu !=
+        # null` branch that changes the `-cpu` argument ALSO removes
+        # `-enable-kvm` from the same conditional -- one option, both
+        # effects -- which is what makes this the runner a host with no
+        # `/dev/kvm` (including nixarchy running inside a VM) can boot, and
+        # the one CI builds. No separate "disable kvm" option exists to set;
+        # there is only this one.
+        // lib.concatMapAttrs (
+          name: template:
+          let
+            mkMicrovm =
+              modules:
+              self.lib.mkMicrovm {
+                inherit system modules;
+                template = template.module;
+              };
+          in
+          {
+            "microvm-${name}" = mkMicrovm [ ];
+            "microvm-${name}-tcg" = mkMicrovm [ { microvm.cpu = "max"; } ];
+          }
+        ) (import ./data/microvm-templates.nix)
+      );
 
       nixosModules = {
         default = self.nixosModules.nixarchy;
@@ -1000,6 +1076,37 @@
             }
           ];
         };
+
+      # One closure per template, shared by every VM a user ever names from
+      # it. #221's "the name is never a Nix argument" is exactly what makes
+      # this possible: `template` and `modules` are the only things this
+      # function is allowed to vary on, and neither is a per-VM value.
+      #
+      # `template` is a path from data/microvm-templates.nix -- plain NixOS
+      # plus microvm.nix's own options, per that catalogue's bar.
+      # modules/microvm/guest.nix is what every template gets underneath it,
+      # imported here rather than by each template file so a template cannot
+      # forget it. `modules` exists for exactly one caller below: the `-tcg`
+      # packages, which add `microvm.cpu = "max"` without a second template.
+      #
+      # Returns `declaredRunner`, upstream's own name for
+      # `config.microvm.runner.${config.microvm.hypervisor}` -- a package,
+      # which is what `packages.<system>.microvm-<template>` has to be.
+      lib.mkMicrovm =
+        {
+          template,
+          system,
+          modules ? [ ],
+        }:
+        (nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            inputs.microvm.nixosModules.microvm
+            ./modules/microvm/guest.nix
+            template
+          ]
+          ++ modules;
+        }).config.microvm.declaredRunner;
 
       formatter = eachSystem (system: pkgsFor.${system}.nixfmt-tree);
 

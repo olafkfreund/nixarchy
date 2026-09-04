@@ -1137,11 +1137,29 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'Most application crashes are upstream bugs in those applications, not Omarchy'"'"'s' 'Most application crashes are upstream bugs in those applications, not the distribution'"'"'s' \
                   --replace-fail 'doing. In the minority of cases where the cause really does sit within Omarchy'"'"'s' 'doing. In the minority of cases where the cause really does sit within Nixarchy'"'"'s or Omarchy'"'"'s'
 
+                # The prompt sets the destination before the skill is read. Left alone it
+                # says "reporting upstream to Omarchy", so the agent arrives at reporting.md
+                # already pointed at Basecamp and the two-project rule reads as an exception.
+                substituteInPlace $out/share/omarchy/bin/omarchy-agent-crash \
+                  --replace-fail 'A process crashed on this Omarchy machine and I want to know why.' 'A process crashed on this Nixarchy machine and I want to know why.' \
+                  --replace-fail 'when a crash is worth reporting upstream to Omarchy. If your harness has no skill' 'when a crash is worth reporting to Nixarchy or Omarchy. If your harness has no skill'
+
                 substituteInPlace $skills/diagnose-crash/reporting.md \
                   --replace-fail '# Reporting a Crash Upstream to Omarchy' '# Reporting a Crash to Nixarchy or Omarchy' \
                   --replace-fail 'Read this only after concluding that a crash is genuinely Omarchy'"'"'s to fix.' 'Read this only after concluding that a crash is genuinely the distribution'"'"'s to fix. Two projects can own it: Nixarchy (<https://github.com/olafkfreund/nixarchy>) for anything specific to NixOS — the store, a rebuild, `nixarchy-apply`, a hardcoded `/usr` path, a replaced `omarchy-*` command — and Omarchy (<https://github.com/basecamp/omarchy>) for anything that would happen identically on Arch. When unsure, file against Nixarchy; the `nixarchy` skill'"'"'s `contributing.md` has the full rule.' \
                   --replace-fail 'Omarchy is a configuration layer over Arch Linux, so a crash' 'Omarchy is a configuration layer and Nixarchy packages it for NixOS, so a crash' \
-                  --replace-fail 'Include what happened, what was expected, steps to reproduce, system details from' 'Include what happened, what was expected, steps to reproduce, `nixos-version` and the locked inputs from `nix flake metadata`, system details from'
+                  --replace-fail 'Include what happened, what was expected, steps to reproduce, system details from' 'Include what happened, what was expected, steps to reproduce, `nixos-version` and the locked inputs from `nix flake metadata`, system details from' \
+                  --replace-fail '## Is it even Omarchy'"'"'s bug?' '## Is it even the distribution'"'"'s bug?' \
+                  --replace-fail 'Omarchy'"'"'s sphere of control is roughly:' 'The distribution'"'"'s sphere of control is roughly the list below. Nixarchy owns the NixOS half of each line -- how the thing is packaged, seeded and exposed on NixOS -- and Omarchy owns the behaviour itself:' \
+                  --replace-fail 'A crash in a program Omarchy merely installs is **not** an Omarchy bug unless' 'A crash in a program the distribution merely installs is **not** its bug unless' \
+                  --replace-fail 'Omarchy'"'"'s own packaging or configuration is implicated.' 'Nixarchy'"'"'s or Omarchy'"'"'s own packaging or configuration is implicated.' \
+                  --replace-fail 'If it is not Omarchy'"'"'s, say so and stop. Suggesting the right upstream project is' 'If it belongs to neither, say so and stop. Suggesting the right upstream project is' \
+                  --replace-fail '1. **It is a verified bug in Omarchy'"'"'s sphere**, established on evidence. Issues' '1. **It is a verified bug in Nixarchy'"'"'s or Omarchy'"'"'s sphere**, established on evidence. Issues' \
+                  --replace-fail 'gh search issues --repo basecamp/omarchy "<program> crash"' 'gh search issues --repo olafkfreund/nixarchy "<program> crash"' \
+                  --replace-fail 'gh issue list --repo basecamp/omarchy --state all --search "<signal> <program>"' 'gh issue list --repo olafkfreund/nixarchy --state all --search "<signal> <program>"' \
+                  --replace-fail 'gh issue view <number> --repo basecamp/omarchy --comments' 'gh issue view <number> --repo olafkfreund/nixarchy --comments' \
+                  --replace-fail 'gh issue comment <number> --repo basecamp/omarchy --body "..."' 'gh issue comment <number> --repo olafkfreund/nixarchy --body "..."' \
+                  --replace-fail 'gh issue create --repo basecamp/omarchy --title "..." --body "..."' 'gh issue create --repo olafkfreund/nixarchy --title "..." --body "..."'
 
                 # The Arch-name lookup omarchy-pkg-add answers with. Generated rather than
                 # hand-written into the script: data/apps.nix already maps every Install

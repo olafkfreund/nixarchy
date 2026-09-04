@@ -369,9 +369,11 @@
             # spelling of it in sed would be a parser that disagrees with the
             # shell, reporting on a menu nobody has.
             python3
-            # rfkill, for the Radios section (#277). An undeclared rfkill
-            # reads as "no radios on this machine" rather than "rfkill is
-            # missing" -- the same trap the doctor's vainfo hit.
+            # rfkill, and flock for the MicroVM guests section below (#229):
+            # the same running/stopped test `nixarchy-vm list` uses on
+            # $dir/.lock. An undeclared rfkill reads as "no radios on this
+            # machine" rather than "rfkill is missing" -- the same trap the
+            # doctor's vainfo hit.
             util-linux
             # podman info / podman inspect, for the Boxes section. Safe to
             # pin here -- unlike distrobox, podman does not resolve anything
@@ -380,6 +382,17 @@
             # here: it is looked up by bare name (`command -v distrobox`),
             # the same wrapper-only rule that command's own header explains.
             podman
+            # nix-store, for the MicroVM guests section's GC-root check
+            # (#229): `--print-roots` reads the store, never `--gc`. Pinning
+            # a second nix here is fine in a way it is not in pkgs/microvm.nix
+            # -- that one execs `nix build` against live system state and a
+            # version drift there is a real hazard; this only lists roots.
+            nix
+            # ssh, for the same section's clocksource read over a forwarded
+            # port on a declarative machine. Undeclared here reads as "could
+            # not read clocksource" for a reason that has nothing to do with
+            # whether the guest has a key configured.
+            openssh
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

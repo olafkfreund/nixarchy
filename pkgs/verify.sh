@@ -453,6 +453,182 @@ else
   fi
 fi
 
+# ---- microvm readiness -----------------------------------------------------
+# #221's whole epic rests on one runner CI cannot boot: `-enable-kvm -cpu
+# host` needs nested virtualisation to test under nested virtualisation, and
+# GitHub's runners do not have it. `checks.microvm-boot` (#228) is the -tcg
+# variant on purpose -- it proves the runner is qemu, shares the store and
+# uses SLiRP, none of which needs a real /dev/kvm. Whether the KVM runner
+# nearly every user actually runs *boots*, and boots fast, is a fact about
+# this machine's firmware, kernel and groups, and #221 says outright: "The
+# KVM path is pkgs/verify.sh's job, on real hardware."
+#
+# Values, not verdicts, same as Graphics above: a laptop running under
+# VMware with nested off is not broken, it is a real and common shape, and
+# the fix there is a host-side setting this section names rather than a red
+# X with no next step.
+head_ "MicroVM readiness"
+
+if [ -e /dev/kvm ]; then
+  # stat's own answer, not just a boolean -- "not writable right after
+  # enabling the feature" (#229) means the kvm group has not applied to this
+  # login yet, and the fix is to log out, not to debug anything. Printing
+  # the mode is what tells the two cases apart instead of one note doing it.
+  kvm_perm=$( (stat -c '%A %U:%G' /dev/kvm) || true)
+  if [ -w /dev/kvm ]; then
+    ok "/dev/kvm" "present and writable ($kvm_perm)"
+  else
+    bad "/dev/kvm exists but is not writable" "$kvm_perm"
+    say_dim "if you were just added to the kvm group: log out, don't debug"
+  fi
+else
+  bad "/dev/kvm does not exist" "virtualisation is off in firmware, or this machine has none"
+fi
+
+# Membership is one input to whether /dev/kvm is writable, not the whole
+# answer -- a udev rule can hand the device out by mode alone (0666), which
+# makes group membership true or false independently of the check above.
+# Both are printed so that gap is visible rather than assumed.
+if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx kvm; then
+  ok "in the kvm group" ""
+else
+  hmm "not in the kvm group" "not fatal by itself -- see /dev/kvm's own permissions above"
+fi
+
+# nixarchy running inside Proxmox/VMware/VirtualBox, or a cloud instance, is
+# a realistic case (#221), and there the KVM runner is not the one that
+# boots: this machine's own /dev/kvm, if present at all, is nested
+# virtualisation gated by a setting on ITS host, not this one.
+if grep -qw hypervisor /proc/cpuinfo 2>/dev/null; then
+  hmm "this machine is itself a VM" "/dev/kvm above, if present, is nested virtualisation"
+  vendor=$( (grep -m1 '^vendor_id' /proc/cpuinfo | cut -d: -f2 | tr -d ' ') || true)
+  case "$vendor" in
+    GenuineIntel) nested_param=/sys/module/kvm_intel/parameters/nested ;;
+    AuthenticAMD) nested_param=/sys/module/kvm_amd/parameters/nested ;;
+    *) nested_param="" ;;
+  esac
+  if [ -n "$nested_param" ] && [ -r "$nested_param" ]; then
+    nested=$( (cat "$nested_param") || true)
+    case "$nested" in
+      1 | Y | y) ok "nested virtualisation" "$nested_param says $nested" ;;
+      *)
+        bad "nested virtualisation is off" "$nested_param says ${nested:-nothing}"
+        say_dim "the setting to change is on THIS machine's host, not here"
+        ;;
+    esac
+  else
+    hmm "could not read nested virtualisation state" "${nested_param:-no kvm_intel or kvm_amd module}"
+  fi
+else
+  ok "not itself a VM" "/dev/kvm above, if present, is the real thing"
+fi
+
+# ---- microvm guests ---------------------------------------------------------
+# Two directory layouts, one check: `nixarchy-vm` (pkgs/microvm.nix) writes
+# ~/.local/state/nixarchy/microvm/<name>/current for disposable sandboxes,
+# and programs.nixarchy.services.microvm (modules/services/microvm.nix)
+# writes /var/lib/microvms/<name>/current for permanent ones. Both are a
+# `nix build --out-link` result and nothing else, on purpose (#221): a
+# `nix-collect-garbage` while a guest is running must not be able to take the
+# store it is 9p-mounted on out from under it. Whether that promise holds is
+# not a thing the code that writes the link can assert about itself -- it is
+# a fact about the store, read here the same way nix-collect-garbage would.
+head_ "MicroVM guests"
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/microvm"
+vm_seen=0
+running_seen=0
+# Deliberately unquoted: a glob over two directory shapes, not a word to
+# split. A directory that does not exist expands to its own literal pattern
+# with nullglob off, which the `[ -d "$dir" ]` guard below then skips.
+for dir in "$state_dir"/*/ /var/lib/microvms/*/; do
+  [ -d "$dir" ] || continue
+  vm_seen=1
+  name=$(basename "$dir")
+  cur="$dir/current"
+
+  if [ ! -e "$cur" ] && [ ! -L "$cur" ]; then
+    hmm "$name: no current link yet" "created on the first 'nixarchy vm run' or rebuild"
+  else
+    target=$( (readlink -f "$cur") || true)
+    if [ -z "$target" ] || [ ! -e "$target" ]; then
+      bad "$name: current is a dangling link" "$cur -> $( (readlink "$cur") || echo '?')"
+      say_dim "nothing here is a GC root -- nix-collect-garbage can already have taken it"
+    else
+      # `--print-roots`, never `--gc`: this must read the store, not collect
+      # it. `|| true` because a store query is one more thing that can fail
+      # without killing the rest of this report -- the same reasoning as the
+      # Graphics grep above, which already did this once for real.
+      if timeout 15 nix-store --gc --print-roots 2>/dev/null | grep -qF "$target"; then
+        ok "$name: current is a live GC root" "$target"
+      else
+        bad "$name: current is not a GC root" "$target"
+        say_dim "nix-collect-garbage can take this store out from under a running guest"
+      fi
+    fi
+  fi
+
+  # A running guest holds nixarchy-vm's own flock on $dir/.lock for the life
+  # of the qemu process (pkgs/microvm.nix) -- the same test 'nixarchy vm
+  # list' uses to tell running from stopped, read here rather than
+  # reinvented.
+  [ -e "$dir/.lock" ] || continue
+  locked=0
+  exec 8>"$dir/.lock"
+  flock -n 8 || locked=1
+  exec 8>&-
+  [ "$locked" = 1 ] || continue
+  running_seen=1
+
+  # kvm-clock means the guest's own kernel is using paravirtualised time
+  # under real acceleration; tsc or acpi_pm means it is on -tcg and the user
+  # is waiting for software emulation for no reason (#229). Both look
+  # identical from outside a shell inside the guest, which is exactly why
+  # it is worth reading rather than assumed from which variant was launched.
+  #
+  # But #221 also made the console the ONLY door for a disposable sandbox on
+  # purpose -- no port allocation, no QMP -- and this script must not steal
+  # that console from whatever terminal is already attached to it. So the
+  # one channel usable without interfering is a forwarded SSH port, findable
+  # on the qemu command line itself for machines that have one (only the
+  # declarative half, programs.nixarchy.services.microvm, ever sets
+  # sshPort).
+  qpid=""
+  target_cwd=$( (readlink -f "$dir") || true)
+  for p in /proc/[0-9]*; do
+    [ -n "$target_cwd" ] || break
+    [ "$( (readlink -f "$p/cwd" 2>/dev/null) || true)" = "$target_cwd" ] || continue
+    qpid=${p#/proc/}
+    break
+  done
+  ssh_port=""
+  if [ -n "$qpid" ]; then
+    ssh_port=$( ({ tr '\0' ' ' <"/proc/$qpid/cmdline" 2>/dev/null || true; } |
+      grep -oE 'hostfwd=tcp::[0-9]+-:22' | head -1 | grep -oE '[0-9]+') || true)
+  fi
+
+  if [ -z "$ssh_port" ]; then
+    hmm "$name: running, clocksource not checkable from here" "console-only by design (#221) -- attach and run: cat /sys/devices/system/clocksource/clocksource0/current_clocksource"
+    continue
+  fi
+
+  clocksource=$(timeout 5 ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p "$ssh_port" dev@127.0.0.1 \
+    cat /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null || true)
+  case "$clocksource" in
+    kvm-clock) ok "$name: clocksource" "kvm-clock -- hardware acceleration" ;;
+    tsc | acpi_pm) bad "$name: clocksource" "$clocksource -- running under software emulation" ;;
+    "") hmm "$name: could not read clocksource" "ssh to 127.0.0.1:$ssh_port failed -- dev@ has no key by default in guest.nix" ;;
+    *) hmm "$name: clocksource" "$clocksource" ;;
+  esac
+done
+
+if [ "$vm_seen" = 0 ]; then
+  hmm "no MicroVM guests on this machine" "'nixarchy vm create <name>' to make one"
+elif [ "$running_seen" = 0 ]; then
+  hmm "no MicroVM guests running right now" "'nixarchy vm run <name>' to start one"
+fi
+
 # ---- theming -------------------------------------------------------------
 head_ "Theme"
 scheme=$(

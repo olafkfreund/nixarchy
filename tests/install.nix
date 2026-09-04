@@ -323,6 +323,7 @@ pkgs.testers.runNixOSTest {
         "nixarchy/answers".text = ''
           device=/dev/vdb
           encrypt=no
+          recovery_passphrase=rescue-me
           hostname=installed
           username=omarchy
           password_hash=${passwordHash}
@@ -771,6 +772,33 @@ pkgs.testers.runNixOSTest {
             f"through the root subvolume and the data under {mp} is "
             f"unreachable once {subvol} mounts over it."
         )
+
+    # The recovery passphrase reached the initrd, and is NOT the login hash.
+    #
+    # Both halves matter. The hash is a crypt(3) string full of `$`, and it
+    # travels through substitute_host_files into a Nix string -- the exact
+    # shape the subst() comment says a naive sed mangles into something the
+    # user cannot type. And the reason it is asked separately at all is that
+    # it ends up in the initrd on the unencrypted ESP, so a build that quietly
+    # reused the login hash would spend the credential this feature exists to
+    # protect.
+    cfg = target.succeed("cat /etc/nixos/hosts/*/configuration.nix")
+    recovery = re.search(r'emergencyAccess = "([^"]*)"', cfg)
+    assert recovery, (
+        "the installed configuration.nix has no emergencyAccess string; "
+        "an unrecoverable machine is what this answers file asked not to get:\n"
+        + cfg
+    )
+    login = target.succeed("cat /var/lib/nixarchy/password.hash").strip()
+    assert recovery.group(1).startswith("$6$"), (
+        f"emergencyAccess is {recovery.group(1)!r}, not a sha-512 crypt hash. "
+        "If it looks like a mangled version of one, substitution ate the `$`."
+    )
+    assert recovery.group(1) != login, (
+        "the recovery hash is the login hash. It is written to the initrd on "
+        "the unencrypted ESP, so this hands anyone with the disk the "
+        "credential for the account."
+    )
 
     subvols = target.succeed("btrfs subvolume list -r /")
     print(subvols)

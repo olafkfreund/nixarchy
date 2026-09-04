@@ -117,6 +117,7 @@ free_why=""
 hostname=""
 username=""
 password_hash=""
+recovery_hash=""
 luks_passphrase=""
 timezone=""
 keymap=""
@@ -166,6 +167,9 @@ The answers file is one key=value per line, # for comments, no quoting:
   username=alice
   password_hash=$6$...      from `mkpasswd -m sha-512`; or
   password=hunter2          plaintext, hashed here -- for tests
+  recovery_hash=$6$...      optional; unlocks stage-1 emergency mode, or
+  recovery_passphrase=...   plaintext, hashed here. Omit for no emergency
+                            access -- see ask_recovery for the trade
   timezone=Europe/London
   keymap=us
 
@@ -395,6 +399,57 @@ ask_password() {
   done
 }
 
+# A way back in, if the machine ever fails to mount its root.
+#
+# When stage 1 cannot assemble /sysroot it drops to an emergency shell, and
+# `boot.initrd.systemd.emergencyAccess` decides whether that shell is usable.
+# Left unset the initrd's shadow is `root:*` and sulogin refuses -- which is
+# how a machine whose subvolumes did not mount became a reinstall rather than
+# a five-minute fix.
+#
+# Deliberately NOT the login password, and this is the whole reason the
+# question is asked separately. The option takes a literal hash, which
+# nixpkgs splices into the initrd's /etc/shadow (initrd.nix, `root:${passwd}`)
+# -- and the initrd sits on the ESP, unformatted and unencrypted. Any password
+# that can unlock a shell BEFORE the disk is unlocked has to be verifiable
+# before the disk is unlocked, so there is no arrangement where this hash is
+# protected by the encryption. Spending the login hash to buy recoverability
+# would hand an attacker with the disk the credential that also opens the
+# account and, upstream's way, the disk itself.
+#
+# A throwaway passphrase costs nothing if it leaks: it opens a rescue shell on
+# one physical machine and nothing else.
+#
+# Empty is a real answer and the default. Someone who would rather reinstall
+# than carry another passphrase presses enter, and the machine behaves exactly
+# as it did before this existed.
+ask_recovery() {
+  ui_screen "A recovery passphrase, if you want one..."
+  ui_left "If this machine ever fails to boot, this unlocks the emergency"
+  ui_left "shell. It is stored unencrypted on the boot partition, so make it"
+  ui_left "different from your password. Press enter to skip."
+  while :; do
+    local pw pw2
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Recovery> ")
+    if [ -z "$pw" ]; then
+      recovery_hash=""
+      break
+    fi
+    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ")
+    if [ "$pw" != "$pw2" ]; then
+      ui_left "\e[31mThose do not match.\e[0m"
+      continue
+    fi
+    if [ "$pw" = "$luks_passphrase" ]; then
+      ui_left "\e[31mThat is your login password. Use a different one.\e[0m"
+      continue
+    fi
+    recovery_hash=$(mkpasswd -m sha-512 "$pw")
+    unset pw pw2
+    break
+  done
+}
+
 ask_identity() {
   ui_screen "Let's set up your user account..."
   local why
@@ -405,6 +460,7 @@ ask_identity() {
   done
 
   ask_password
+  ask_recovery
 
   while :; do
     hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ")
@@ -798,6 +854,8 @@ read_answers() {
       username) username=$value ;;
       password) password=$value ;;
       password_hash) password_hash=$value ;;
+      recovery_hash) recovery_hash=$value ;;
+      recovery_passphrase) recovery_hash=$(mkpasswd -m sha-512 "$value") ;;
       timezone) timezone=$value ;;
       keymap) keymap=$value ;;
       *)
@@ -896,6 +954,18 @@ validate_answers() {
     *) problems+=("password_hash: not a crypt(3) hash (should start with \$)") ;;
   esac
 
+  case $recovery_hash in
+    "" | '$'*) ;;
+    *) problems+=("recovery_hash: not a crypt(3) hash (should start with \$)") ;;
+  esac
+
+  # The recovery passphrase exists to be spendable. Reusing the login hash
+  # puts it in the initrd on the unencrypted ESP, which is the one thing
+  # asking for it separately was meant to avoid.
+  if [ -n "$recovery_hash" ] && [ "$recovery_hash" = "$password_hash" ]; then
+    problems+=("recovery_hash: must differ from password_hash -- it is stored unencrypted on the ESP")
+  fi
+
   [ -z "$timezone" ] || [ -e "$TZDIR/$timezone" ] || problems+=("timezone: no such zone: $timezone")
   if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then
     problems+=("keymap: no such keymap: $keymap")
@@ -939,6 +1009,13 @@ substitute_host_files() {
     # Quoted in the template because a bare token is not parseable Nix; the
     # quotes go with the token. An encrypted disk has already authenticated the
     # user by the time a greeter would ask, so autologin follows encryption.
+    # null, or the hash WITH its quotes. Same idiom as @encrypt@: the token
+    # is quoted in the template so the file parses as Nix before substitution.
+    if [ -n "$recovery_hash" ]; then
+      subst "$f" '"@recovery@"' "\"$recovery_hash\""
+    else
+      subst "$f" '"@recovery@"' null
+    fi
     subst "$f" '"@encrypt@"' "$encrypt"
     subst "$f" '"@autologin@"' "$encrypt"
   done
@@ -1625,6 +1702,7 @@ main() {
     ui_greeter
     ask_network
     ask_password
+    ask_recovery
   else
     ui_greeter
     ask_network

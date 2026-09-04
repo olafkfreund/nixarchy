@@ -140,6 +140,41 @@ pkgs.runCommand "nixarchy-microvm-template"
         echo "${name}: -tcg runner still passes -enable-kvm" >&2
         fail=1
       fi
+
+      # The -tcg runner's machine line, and each of these is a bug that
+      # already shipped or the door it came through.
+      #
+      # accel=tcg, PINNED. Upstream's default is the `kvm:tcg` fallback
+      # chain, under which qemu silently takes KVM wherever /dev/kvm exists
+      # -- so every local run of the "-tcg" artifact measured a KVM boot,
+      # and the artifact that cannot boot under real TCG went out measured
+      # as working. The flake.nix comment on machineOpts says the rest; this
+      # grep is what stops the fallback being "optimised" back in.
+      if ! grep -q -- 'accel=tcg[^:]' "$tcg/bin/microvm-run"; then
+        echo "${name}: -tcg runner does not pin accel=tcg -- the kvm:tcg fallback is back, and with it the unmeasured artifact" >&2
+        fail=1
+      fi
+      # pit=on and pic=on. The microvm machine's pit=off/pic=off default is
+      # correct under KVM (kvmclock) and fatal under TCG (no kvmclock, no
+      # HPET, nothing to calibrate early timers from): the guest kernel
+      # triple-faults or wedges right after "Poking KASLR". Proved by A/B:
+      # five minutes of silence with them off, a 2m13s boot to login with
+      # them on, `-cpu qemu64` ruling the CPU model out.
+      for knob in pit=on pic=on; do
+        if ! grep -q -- "$knob" "$tcg/bin/microvm-run"; then
+          echo "${name}: -tcg runner's machine line lacks $knob -- under TCG this guest wedges after 'Poking KASLR'" >&2
+          fail=1
+        fi
+      done
+      # And the KVM runner keeps upstream's defaults untouched: kvmclock
+      # makes pit=off/pic=off correct there, and this fix must not widen
+      # into the path every real user runs.
+      for knob in pit=off pic=off; do
+        if ! grep -q -- "$knob" "$kvm/bin/microvm-run"; then
+          echo "${name}: KVM runner's machine line lost $knob -- the -tcg fix leaked into the KVM path" >&2
+          fail=1
+        fi
+      done
     '') names}
 
     echo "== nixarchy vm: launch and locking =="

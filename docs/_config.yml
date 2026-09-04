@@ -35,6 +35,7 @@ nav:
   - { path: /manual/making-your-own-theme,    title: Making Your Own Theme }
   - { path: /manual/development-tools,        title: Development Tools }
   - { path: /manual/per-project-environments, title: Per-Project Environments }
+  - { path: /manual/boxes,                    title: Boxes }
   - { path: /manual/sandboxes,                title: Sandboxes }
   - { path: /manual/ai,                       title: AI }
   - { path: /manual/gaming,                   title: Gaming }

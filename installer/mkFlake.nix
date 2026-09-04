@@ -29,6 +29,20 @@ runCommand "nixarchy-flake-template"
     nativeBuildInputs = [ jq ];
     inherit rev url;
     inherit (self) narHash;
+
+    # And the timestamp, which nix writes into every lock node it produces and
+    # this one was leaving out (#208).
+    #
+    # An input node without it evaluates: `self.lastModified` is simply absent
+    # on the other side, so anything reading it takes its fallback. That made
+    # the omission invisible until something in the closure DEPENDED on it --
+    # nixarchy-version, which prints the build's date. This flake evaluates to
+    # a different omarchy than the one the installer seeded, the offline
+    # install cannot copy what it now has to build, and it walks back to the
+    # source bootstrap and dies fetching a Debian patch for libssh2. The rev
+    # was never the problem: shortRev is identical on both sides.
+    lastModified = toString self.lastModified;
+
     passthru = { inherit url rev; };
   }
   ''
@@ -55,7 +69,7 @@ runCommand "nixarchy-flake-template"
     # target would re-resolve every input against whatever is current, so the
     # first `nixos-rebuild switch` would build a different system from the one
     # just installed -- and it needs a network the offline ISO does not have.
-    jq --arg rev "$rev" --arg narHash "$narHash" '
+    jq --arg rev "$rev" --arg narHash "$narHash" --argjson lastModified "$lastModified" '
       # nixarchy inherits our root inputs verbatim. NOT a name-to-name map:
       # once nix has disambiguated names, root.nixpkgs points at a node called
       # "nixpkgs_2", and inventing the mapping rather than copying it points
@@ -84,7 +98,8 @@ runCommand "nixarchy-flake-template"
             owner: "olafkfreund",
             repo: "nixarchy",
             rev: $rev,
-            narHash: $narHash
+            narHash: $narHash,
+            lastModified: $lastModified
           },
           original: {
             type: "github",

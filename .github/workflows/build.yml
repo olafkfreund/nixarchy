@@ -42,6 +42,16 @@ jobs:
       - name: The nightly review can still read every pin
         run: nix build .#checks.x86_64-linux.review-pins --print-build-logs
 
+      # The lock the installer writes, checked for the fields nix would have
+      # written itself. installer/mkFlake.nix assembles that node by hand, and a
+      # hand-assembled node can be missing a field without failing: the flake
+      # evaluates and whatever reads it takes a fallback. `lastModified` went
+      # missing exactly that way, which changed the omarchy derivation on the
+      # installed machine, which made an offline install build what it meant to
+      # copy -- surfacing 25 minutes later as a missing ESP.
+      - name: The installer's generated lock has the fields nix would write
+        run: nix build .#checks.x86_64-linux.installer-lock --print-build-logs
+
       # Same shape, same reason: its dangerous failure is reporting nothing.
       - name: The Omarchy package delta still sees a change
         run: nix build .#checks.x86_64-linux.package-delta --print-build-logs

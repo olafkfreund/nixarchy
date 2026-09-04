@@ -65,6 +65,7 @@
 # suggest they use it.
 inputs: {
   imports = [
+    ./boxes.nix
     ./devenv.nix
     (import ./hypr-rdp.nix inputs)
     ./syncthing.nix

@@ -280,6 +280,18 @@
             gnugrep
             gawk
             coreutils
+            # vainfo, for the Graphics section. Declared because
+            # writeShellApplication builds a strict PATH, and an undeclared
+            # vainfo does not read as "vainfo is missing" -- it reads as "no
+            # VAAPI driver answered", which is a different and much worse
+            # answer to hand someone. It ran anyway while this was being
+            # written, from the developer's own PATH, which is exactly how
+            # that goes unnoticed.
+            #
+            # No pciutils: the GPUs come from /sys/bus/pci, the same way the
+            # Bluetooth check reads /sys/class/bluetooth, and sysfs hands over
+            # the PCI address already in the form the bus IDs need.
+            libva-utils
           ];
           # @apps@ is the app-to-command table, generated here for the same
           # reason the menu's is: the doctor has to answer "which of these do
@@ -1149,6 +1161,11 @@
         # The installer's interactive screens, at every width worth caring
         # about. Nothing else draws them: every other harness passes
         # --answers, which is exactly how #133 shipped.
+        doctor-graphics = import ./tests/doctor-graphics.nix {
+          pkgs = pkgsFor.${system};
+          inherit (self.packages.${system}) doctor;
+        };
+
         installer-store-space = import ./tests/installer-store-space.nix {
           pkgs = pkgsFor.${system};
           installScript = ./installer/install.sh;

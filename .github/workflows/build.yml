@@ -82,6 +82,11 @@ jobs:
       # checks.install cannot see this: it installs onto a machine whose store
       # fits, which is the only shape that does not fail. So the decision is
       # unit-tested here instead, in seconds.
+      # The doctor's GPU rules, against fixture machines. checks.install's VM
+      # has no PCI display controller, so nothing else can reach these branches.
+      - name: The doctor reads a GPU correctly
+        run: nix build .#checks.x86_64-linux.doctor-graphics --print-build-logs
+
       - name: The installer refuses a build the live store cannot hold
         run: nix build .#checks.x86_64-linux.installer-store-space --print-build-logs
 

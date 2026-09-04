@@ -1442,6 +1442,41 @@ stdenvNoCC.mkDerivation {
                 # Omarchy's shell for zsh. Upstream has a bash rc chain and nothing else,
                 # so a zsh user got none of the aliases or functions the manual documents.
                 # See the file for what is sourced as-is and what had to be rewritten.
+
+                # install/user/first-run/enable-user-units.sh enables six user units in ONE
+                # `systemctl --user enable --now` under `set -euo pipefail`, so one absent
+                # unit fails the whole command:
+                #
+                #   Failed to enable unit: Unit omarchy-migrate-notify.service does not exist
+                #
+                # Two of them are deliberately absent -- modules/nixos.nix explains that
+                # omarchy-migrate-notify and omarchy-tailscale-receive can never satisfy their
+                # ConditionPath* on NixOS. What was missed is that upstream's first-run still
+                # NAMES them.
+                #
+                # omarchy-provision-first-run marks itself done only when EVERY step
+                # succeeded, so that one failure meant the marker was never written and
+                # first-run ran again at every login -- re-showing the welcome notification
+                # for the life of the machine. Reported as "this appears after each reboot";
+                # the log had been saying so all along:
+                #
+                #   Failed: enable user systemd units (exit code: 1)
+                #   One or more first-run steps failed; first-run will retry next login
+                #
+                # Replaced wholesale rather than patched: the unit list is a
+                # continuation-line command, and a whitespace-exact multi-line
+                # --replace-fail is the kind of patch an upstream reindent breaks. The grep
+                # is the drift detector --replace-fail would otherwise have given for free.
+                for u in bt-agent omarchy-recover-internal-monitor omarchy-sleep-lock \
+                  omarchy-migrate-notify omarchy-fcitx5 omarchy-crash-watch; do
+                  grep -q "$u.service" install/user/first-run/enable-user-units.sh || {
+                    echo "enable-user-units.sh no longer names $u.service -- upstream changed" >&2
+                    echo "the set; read it against pkgs/omarchy/enable-user-units.sh." >&2
+                    exit 1
+                  }
+                done
+                install -Dm755 ${./enable-user-units.sh} \
+                  $out/share/omarchy/install/user/first-run/enable-user-units.sh
                 install -Dm644 ${./zsh-rc} $out/share/omarchy/default/zsh/rc
 
                 # And fish, which cannot source any of it -- see the file for why nothing

@@ -28,6 +28,7 @@
   runCommandLocal,
   coreutils,
   gnugrep,
+  gum,
 }:
 let
   templates = import ../data/box-templates.nix;
@@ -60,6 +61,8 @@ writeShellApplication {
   runtimeInputs = [
     coreutils
     gnugrep
+    gum # interactive prompts, for the menu rows #260 adds -- not distrobox,
+    # so pinning it here carries none of the header's risk.
   ];
   text = ''
     templates=${templateDir}
@@ -96,9 +99,8 @@ writeShellApplication {
     }
 
     create_box() {
-      name="''${1:?usage: nixarchy box create <name> [--template t]}"
-      shift
       template=archlinux
+      name=""
       while [ $# -gt 0 ]; do
         case "$1" in
           --template)
@@ -106,11 +108,23 @@ writeShellApplication {
             shift 2
             ;;
           *)
-            echo "nixarchy-box: unknown argument '$1'" >&2
-            exit 1
+            if [ -n "$name" ]; then
+              echo "nixarchy-box: unknown argument '$1'" >&2
+              exit 1
+            fi
+            name="$1"
+            shift
             ;;
         esac
       done
+
+      # No name given: the menu row for this template (#260) calls create
+      # with only --template set, so this is what makes that row usable
+      # rather than a guaranteed error.
+      if [ -z "$name" ]; then
+        name=$(gum input --placeholder "box name" --prompt "New $template box > ")
+        [ -n "$name" ] || { echo "nixarchy-box: no name given." >&2; exit 1; }
+      fi
 
       if ! template_exists "$template"; then
         echo "nixarchy-box: no template '$template'." >&2
@@ -138,15 +152,28 @@ writeShellApplication {
       echo "  nixarchy box enter $name"
     }
 
-    enter_box() {
-      name="''${1:?usage: nixarchy box enter <name>}"
+    # Both the menu's "Enter a box" and "Remove a box" rows (#260) call these
+    # with no name -- distrobox itself has no "the one box" concept, so a
+    # picker over `distrobox list` is what a bare invocation prompts with.
+    pick_box() {
       require_distrobox
+      distrobox list --no-color 2>/dev/null | tail -n +2 | cut -d'|' -f2 | tr -d ' ' \
+        | gum choose --header "$1"
+    }
+
+    enter_box() {
+      name="''${1:-}"
+      require_distrobox
+      [ -n "$name" ] || name=$(pick_box "Enter which box?")
+      [ -n "$name" ] || { echo "nixarchy-box: no box to enter." >&2; exit 1; }
       exec distrobox enter "$name"
     }
 
     rm_box() {
-      name="''${1:?usage: nixarchy box rm <name>}"
+      name="''${1:-}"
       require_distrobox
+      [ -n "$name" ] || name=$(pick_box "Remove which box?")
+      [ -n "$name" ] || { echo "nixarchy-box: no box to remove." >&2; exit 1; }
       distrobox rm --yes "$name"
     }
 

@@ -1610,6 +1610,9 @@ main() {
   # log instead. A wall of store paths tells nobody anything they can act on,
   # and it makes an ordinary install look like something going wrong.
   local log=/var/log/nixarchy-install.log
+  # Set once the log has been copied somewhere that outlives this session, so
+  # the failure screen can name a path that will still exist after a reboot.
+  local target_log=""
   local started rc=0 elapsed
   started=$(date +%s)
 
@@ -1690,8 +1693,38 @@ main() {
     } >/dev/ttyS0 2>&1 || true
   fi
 
+  # And onto the disk, where it survives the reboot the next screen offers.
+  #
+  # The log lives on the live ISO. That is fine while somebody is looking at
+  # it and useless the moment they do the thing the installer just told them
+  # to do: a user whose install failed rebooted, found no bootloader entry,
+  # went looking for a log and found two empty directories -- the target's
+  # /var/log, which is a freshly created btrfs subvolume with nothing in it,
+  # and nothing at all where the real log had been (#239). The serial dump
+  # above is how checks.install reads this, and a laptop has no serial port.
+  #
+  # /mnt is still mounted here; nothing unmounts it before the finish screen.
+  #
+  # Mode 0600 and root-owned, and NOT copied to the ESP. The ESP was the
+  # tempting place -- FAT32, readable from a live USB or another OS, exactly
+  # where you want a diagnostic when the root filesystem will not mount. But
+  # FAT32 has no permissions, so anything written there is readable by anyone
+  # who picks up the disk, and this installer handles a crypt hash that
+  # installer/template/host/configuration.nix already describes as
+  # "offline-crackable at leisure by anyone who reads it". Nothing is known to
+  # put a secret in this log -- write_password_hash writes to a file under
+  # umask 077 and disko takes the passphrase from a key file, so its trace
+  # shows a path rather than the secret -- but "nothing is known to" is not
+  # the standard for putting a file somewhere unreadable permissions cannot
+  # protect it.
+  if [ -d /mnt/var/log ]; then
+    ( umask 077 && cat "$log" >/mnt/var/log/nixarchy-install.log ) 2>/dev/null \
+      && chown 0:0 /mnt/var/log/nixarchy-install.log 2>/dev/null \
+      && target_log=/var/log/nixarchy-install.log
+  fi
+
   if [ "$rc" -ne 0 ]; then
-    ui_failed "$log" "$rc"
+    ui_failed "$log" "$rc" "${target_log:-}"
     exit "$rc"
   fi
 

@@ -546,6 +546,25 @@ pkgs.testers.runNixOSTest {
     # different bugs to chase.
     installer.succeed("test -d /mnt/etc/nixos/.git")
     installer.succeed("test -d /mnt/boot/EFI")
+
+    # The install log reached the disk (#239).
+    #
+    # Asserted under /mnt rather than on the installer, because on the
+    # installer it is always there and always will be -- that is the copy that
+    # dies with the live session. A user whose install failed rebooted, found
+    # no bootloader entry, went looking for the log and found nothing: the
+    # target's /var/log is a freshly made subvolume and the real log was on an
+    # ISO that no longer existed. The serial dump this test reads everything
+    # through is exactly why CI could not see that; a laptop has no serial
+    # port.
+    installer.succeed("test -s /mnt/var/log/nixarchy-install.log")
+
+    # Root-only, because it is deliberately NOT on the ESP. FAT32 has no
+    # permissions, and an installer that handles a crypt hash should not put
+    # its transcript somewhere permissions cannot protect it.
+    mode = installer.succeed(
+        "stat -c '%a %U' /mnt/var/log/nixarchy-install.log").strip()
+    assert mode == "600 root", f"the install log is {mode}, not 600 root"
     print("install wrote a flake and an ESP")
 
     # ---- the login hash is NOT in the repository -----------------------

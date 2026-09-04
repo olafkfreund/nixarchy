@@ -236,8 +236,83 @@ pkgs.testers.runNixOSTest {
     # CONSUMES what it reads, and "Hostname" and "wizardbox" are on one row, so
     # matching the first swallowed the second and the wait never returned. The
     # rows are asserted from the full console log further down instead.
-    screen("Does this look right")
+    # Say NO first, and prove it goes back to the questions (#240).
+    #
+    # A user reported "the installer crashes if I say no". It did not crash: it
+    # exited 1 in silence, and on the ISO `Restart = "no"` means nothing
+    # respawns while `conflicts = getty@tty1` means the login prompt does not
+    # come back -- so the screen simply stopped, escapable only by a power
+    # cycle. Exiting is the one answer that makes a summary screen useless,
+    # because the screen exists so somebody can say "no, the hostname is wrong".
+    #
+    # Every automated path here has always answered yes: the unattended
+    # installs, the VM tests, the ISO check. "No" is a branch only a human
+    # takes, which is why this went unnoticed until somebody took it.
+    summary = gum("confirm")
+    # `n`, not the arrow key. gum's own hint line offers both -- it draws
+    # "enter submit • y Yes • n No" -- and the arrow is what a person presses,
+    # so that is what I reached for first. It failed in CI while passing here.
+    #
+    # An arrow is the three bytes ESC [ C, and this test types one byte at a
+    # time on purpose: the comment on answer() explains that qemu's 16550 has a
+    # sixteen-byte FIFO and drops what overflows it. bubbletea only reads those
+    # three as a key if they arrive inside its escape timeout; arriving slowly
+    # they are ESC, then a bracket, then a letter, none of which move the
+    # selection. So the widget stayed on Yes, the dry run ran to completion,
+    # and this test sat waiting for questions that had already been answered --
+    # with `wizard.service: Deactivated successfully` in the log, an exit 0
+    # that looks nothing like the failure it was.
+    #
+    # `n` is one byte with no timing to lose.
+    answer("n")
+
+    # Back at the top of the loop. Anchoring on the keyboard heading is what
+    # makes this a real assertion: wait_for_console_text CONSUMES what it
+    # matches, so the first `screen(...)` for this line was used up hundreds of
+    # lines ago. Seeing it a second time can only mean the questions ran again.
+    screen(r"Let's set up your keyboard")
+    gum("choose")
+    answer("\n")
+
+    # And the rest of them, briefly -- the answers are re-entered because the
+    # loop re-asks, which is the behaviour under test. Same values, so the
+    # summary assertions below still describe what was typed.
+    screen(r"Let's set up your user account")
+    pid = gum("input")
+    answer("wizard\n")
+    pid = gum("input", previous=pid)
+    answer("hunter2\n")
+    pid = gum("input", previous=pid)
+    answer("hunter2\n")
+
+    # The recovery passphrase is asked again, because the loop re-asks
+    # everything -- and it is SKIPPED here with an empty answer.
+    #
+    # Two reasons. It is the default path and the first pass does not take it,
+    # so between them both branches of ask_recovery are walked. And omitting it
+    # is what broke this test when #247 landed: the second pass typed the
+    # hostname into the recovery prompt, its confirmation appeared where the
+    # hostname screen was expected, and the run sat for the full 900 seconds.
+    # A re-asked question has to be re-answered, every one of them.
+    pid = gum("input", previous=pid)
+    answer("\n")
+
+    pid = gum("input", previous=pid)
+    answer("wizardbox\n")
+    gum("filter")
+    answer("\x7f\x7f\x7f")
+    answer("Europe/London")
+    answer("\n")
+    screen(r"Let's choose where to install nixarchy")
+    gum("choose")
+    answer("\n")
+    screen("Everything on /dev/vdc will be overwritten")
     gum("confirm")
+    answer("\n")
+
+    # Now yes, on a confirm that is not the one we said no to.
+    screen("Does this look right")
+    gum("confirm", previous=summary)
     answer("\n")
 
     screen("dry run: no disk touched")

@@ -748,7 +748,17 @@ ask_encrypt() {
   case $rc in
     0) encrypt=true ;;
     130) encrypt=false ;;
-    *) exit 1 ;;
+    *)
+      # Refusing here is right -- "no" to a destructive question must not mean
+      # "do it anyway, differently" -- but it used to refuse in silence, and on
+      # the ISO a silent exit leaves a terminal with nothing on it. Say what
+      # happened, and say the thing the person most needs to hear.
+      ui_left ""
+      ui_left "\e[1mStopped before anything was written.\e[0m"
+      ui_left "\e[90mNo disk has been changed. Power off, or reboot to try again.\e[0m"
+      ui_left ""
+      exit 1
+      ;;
   esac
 }
 
@@ -1792,12 +1802,27 @@ main() {
   else
     ui_greeter
     ask_network
-    ask_keymap
-    ask_identity
-    ask_device
-    ask_disk_mode
-    ask_encrypt
-    confirm_summary || exit 1
+
+    # "No" at the summary goes back to the questions, and that is the whole
+    # reason the summary exists: somebody reads it, sees the hostname is wrong,
+    # and says no. Exiting was the one response that made the screen useless --
+    # and worse than useless on the ISO, where `Restart = "no"` means nothing
+    # respawns and `conflicts = getty@tty1` means the login prompt does not come
+    # back either. The installer left the user looking at a terminal with
+    # nothing running on it, which reads exactly like a crash and can only be
+    # escaped by a power cycle (#240).
+    #
+    # The network question stays outside the loop: it is the one step that
+    # changes something outside this script, and asking somebody to reconnect
+    # to wifi because they mistyped a hostname would be its own small insult.
+    while :; do
+      ask_keymap
+      ask_identity
+      ask_device
+      ask_disk_mode
+      ask_encrypt
+      confirm_summary && break
+    done
   fi
 
   if [ -n "$from_repo" ]; then

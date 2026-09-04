@@ -284,6 +284,19 @@ pkgs.testers.runNixOSTest {
     answer("hunter2\n")
     pid = gum("input", previous=pid)
     answer("hunter2\n")
+
+    # The recovery passphrase is asked again, because the loop re-asks
+    # everything -- and it is SKIPPED here with an empty answer.
+    #
+    # Two reasons. It is the default path and the first pass does not take it,
+    # so between them both branches of ask_recovery are walked. And omitting it
+    # is what broke this test when #247 landed: the second pass typed the
+    # hostname into the recovery prompt, its confirmation appeared where the
+    # hostname screen was expected, and the run sat for the full 900 seconds.
+    # A re-asked question has to be re-answered, every one of them.
+    pid = gum("input", previous=pid)
+    answer("\n")
+
     pid = gum("input", previous=pid)
     answer("wizardbox\n")
     gum("filter")

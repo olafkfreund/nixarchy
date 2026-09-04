@@ -532,6 +532,12 @@
           # Requires a committed tree -- it pins nixarchy by commit.
           flake-template = pkgsFor.${system}.callPackage ./installer/mkFlake.nix { inherit self; };
 
+          # Exposed at top level, rather than only reachable through
+          # modules/apps.nix's callPackage, so checks.microvm-template can
+          # build and read the exact command `nixarchy vm` execs -- same
+          # reasoning as `verify` and `doctor` just below.
+          nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
+
           verify = pkgsFor.${system}.writeShellApplication {
             name = "nixarchy-verify";
             runtimeInputs = with pkgsFor.${system}; [
@@ -1265,6 +1271,21 @@
         # bootloader, disko-provided filesystems, nothing faked. If this builds
         # and vm-toplevel builds, the extraction has not let the two drift.
         reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
+
+        # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
+        # for what that can and cannot prove. Costs about what reference-toplevel
+        # above does: a runCommand plus a ~1-1.5 GB guest closure from
+        # cache.nixos.org. This step is also how the templates reach
+        # nixarchy.cachix.org: cachix-action pushes what this job builds.
+        microvm-template = import ./tests/microvm-template.nix {
+          pkgs = pkgsFor.${system};
+          inherit lib;
+          templates = lib.mapAttrs (name: _: {
+            kvm = self.packages.${system}."microvm-${name}";
+            tcg = self.packages.${system}."microvm-${name}-tcg";
+          }) (import ./data/microvm-templates.nix);
+          nixarchyVm = self.packages.${system}.nixarchy-vm;
+        };
 
         # The other disk mode, built so the cache has it: installer/cd.nix
         # bakes both onto the ISO, and an image built on a runner that has

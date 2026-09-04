@@ -1637,13 +1637,31 @@ main() {
   trap 'ui_dashboard_stop; ui_failed "$log" 130; exit 130' INT TERM
 
   ui_dashboard_start
+  # `&&` between the phases, not newlines, and it is load-bearing.
+  #
+  # This group's status is tested by `|| rc=$?`, and the comment on run_install
+  # already says what that means: inside a compound command whose status is
+  # tested, errexit does not fire. So with plain newlines a phase that returns
+  # non-zero does not stop the ones after it, and the group reports the status
+  # of the LAST command. run_install could fail, take_factory_snapshot could
+  # succeed, and rc stayed 0.
+  #
+  # What that looked like: "the system did not build; nothing was installed",
+  # then a factory baseline snapshotted off a disk with nothing on it, then the
+  # finish screen, then exit 0. An install that did nothing reported success --
+  # to the person watching, and to every check that trusts the exit status.
+  # checks.install only caught it because it goes on to look for an ESP, and
+  # the assertion it fails on is five frames from the cause.
+  #
+  # Chaining stops at the first failure and hands its status out, which is what
+  # `|| rc=$?` was always meant to receive.
   {
-    format_disk
-    generate_hardware_config
-    install_flake_dir
-    write_password_hash
-    run_install
-    take_factory_snapshot
+    format_disk &&
+      generate_hardware_config &&
+      install_flake_dir &&
+      write_password_hash &&
+      run_install &&
+      take_factory_snapshot
   } >>"$log" 2>&1 || rc=$?
   ui_dashboard_stop
   # A frame already in flight when the drawer was killed can land AFTER the

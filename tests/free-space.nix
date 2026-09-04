@@ -522,7 +522,14 @@ pkgs.testers.runNixOSTest {
     # theory that blamed one of those was wrong.
     #
     # So: if the log says a download failed, say that, and say it here.
-    if rc != 0:
+    #
+    # Deliberately NOT gated on rc. The first version of this was, and it never
+    # fired: the installer exited 0 after building nothing, because a phase
+    # that returned non-zero did not stop the group whose status was tested.
+    # That is fixed in install.sh now, but the whole point of this block is to
+    # be the thing that speaks when the status is not to be trusted, so it does
+    # not ask the status first.
+    if True:
         wanted = sorted(set(re.findall(r"unable to download '([^']+)'", installer_log)))
         # Substituter metadata is not evidence of this: a nix-cache-info that
         # cannot be reached is what a no-network VM is supposed to look like,

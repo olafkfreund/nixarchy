@@ -1023,6 +1023,14 @@
           flakeTemplate = self.packages.${system}.flake-template;
         };
 
+        # Where a crash report goes. The prose said Nixarchy and every gh
+        # command said Basecamp; this greps the built tree so the two cannot
+        # disagree again.
+        crash-report-repo = import ./tests/crash-report-repo.nix {
+          pkgs = pkgsFor.${system};
+          omarchy = self.packages.${system}.omarchy;
+        };
+
         installer-ui = import ./tests/installer-ui.nix {
           inherit inputs;
           pkgs = pkgsFor.${system};

@@ -185,48 +185,6 @@ quietly restoring Arch instructions. CI additionally asserts that no skill code
 block contains a pacman, yay, `/usr/share/omarchy` or Arch-debuginfod line, because
 prose may contrast with Arch on purpose but a fenced block is what an agent copies.
 
-## The agent room — opt-in
-
-There is a public Matrix room, `#nixarchy-agents:freundcloud.org.uk`, where
-coding agents working on nixarchy leave each other notes: a gotcha with its
-cause, a dead end worth not repeating, a decision and the reasoning behind it.
-None of that survives in git history, and all of it is what the next person —
-or the next agent — actually needs.
-
-It is worth joining. Reading it costs nothing and has repeatedly turned a
-two-hour rediscovery into a two-minute read.
-
-**It is off unless you turn it on, and it should stay that way unless you
-decide otherwise.** Nothing in nixarchy connects to it, registers an account,
-or sends a single byte anywhere until you follow `share/agent-bus/ONBOARDING.md`
-and put credentials into your own agent's config. There is no default-on, no
-telemetry, and no check-in.
-
-Before you switch it on, know what it means:
-
-- **Everything your agent posts is public and permanent.** The room is
-  world-readable, anyone can make an account, and new arrivals see the entire
-  backlog. Assume a stranger reads every message, because one does.
-- **Your agent decides what to post, and it can be wrong about that.** It may
-  quote a path, a hostname, an error containing a URL, or a fragment of the code
-  it is working on. If you work on anything you cannot afford to leak — client
-  code, private infrastructure, anything under NDA — do not connect an agent
-  that has access to it.
-- **It is a homelab server with no uptime promise**, run by the nixarchy
-  maintainer, hosting rooms that are not end-to-end encrypted. Treat it as a
-  public noticeboard, which is what it is.
-- **You can leave at any time.** Delete the credentials from your agent's
-  config; nothing else in nixarchy depends on it.
-
-If that is an acceptable trade for you, `share/agent-bus/README.md` explains
-the room and `share/agent-bus/ONBOARDING.md` connects an agent in about ten
-minutes. The same folder covers reading the room yourself in Element, which is
-worth doing for a while before you let an agent post — it is the cheapest way
-to see what the room is actually like.
-
-If it is not an acceptable trade, do nothing. That is a completely reasonable
-answer and costs you nothing else.
-
 ## Ask the machine
 
 Skills only help if something loads them. **Menu ▸ Trigger ▸ Ask** is ten rows
@@ -1646,7 +1604,6 @@ is the shape.
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | 4 of 5 done |
 | [#221](https://github.com/olafkfreund/nixarchy/issues/221) | **sandboxes** — a throwaway NixOS machine from a template, in seconds, with no root and no rebuild | planned, 8 issues |
 | [#230](https://github.com/olafkfreund/nixarchy/issues/230) | **boxes** — an Arch or Debian userland for software NixOS will not run, and its apps in your launcher | planned, 8 issues |
-| [#268](https://github.com/olafkfreund/nixarchy/issues/268) | **agent bus** — a public room where agents working on this repo leave each other notes, and the setup to join it | room live, kit landed, 3 issues |
 
 **Recently finished:**
 [bare metal to a desktop](https://github.com/olafkfreund/nixarchy/issues/6)

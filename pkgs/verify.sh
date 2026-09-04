@@ -420,6 +420,39 @@ else
   fi
 fi
 
+# ---- radios ---------------------------------------------------------------
+# #277: rfkill and nmcli are both on a stock machine, but nothing looks at
+# rfkill state, so a soft-blocked radio -- a hardware key, a stray `nmcli
+# radio wifi off`, a driver quirk during a bad boot -- is a dead end nobody
+# notices. systemd-rfkill saves that state at shutdown and restores it at
+# boot, so it comes back on every reboot after until something clears it.
+#
+# Soft and hard blocked are reported separately on purpose: soft is undone by
+# `rfkill unblock`, hard is a physical switch or BIOS setting that no command
+# here touches, and telling them apart is the point (see the issue).
+head_ "Radios"
+if ! command -v rfkill >/dev/null 2>&1; then
+  hmm "rfkill not on PATH" "nothing to check"
+else
+  radios=$(rfkill list -n -o TYPE,SOFT,HARD 2>/dev/null)
+  if [ -z "$radios" ]; then
+    hmm "no radios on this machine" "nothing to test"
+  else
+    while read -r type soft hard; do
+      [ -n "$type" ] || continue
+      if [ "$hard" = "blocked" ]; then
+        bad "$type is hard blocked" "a physical switch or BIOS setting -- software cannot clear this"
+      elif [ "$soft" = "blocked" ]; then
+        bad "$type is soft blocked" "will stay blocked across reboots until cleared"
+        say_dim "rfkill unblock all"
+        say_dim "sudo rm -f /var/lib/systemd/rfkill/*   # or it returns at the next boot"
+      else
+        ok "$type unblocked" ""
+      fi
+    done <<<"$radios"
+  fi
+fi
+
 # ---- theming -------------------------------------------------------------
 head_ "Theme"
 scheme=$(

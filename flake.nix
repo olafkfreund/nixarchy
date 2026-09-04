@@ -369,6 +369,10 @@
             # spelling of it in sed would be a parser that disagrees with the
             # shell, reporting on a menu nobody has.
             python3
+            # rfkill, for the Radios section (#277). An undeclared rfkill
+            # reads as "no radios on this machine" rather than "rfkill is
+            # missing" -- the same trap the doctor's vainfo hit.
+            util-linux
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };
@@ -646,6 +650,11 @@
           # build and read the exact command `nixarchy vm` execs -- same
           # reasoning as `verify` and `doctor` just below.
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
+
+          # Exposed at top level for the same reason as nixarchy-vm just
+          # above: checks.box-template builds and reads the exact command
+          # `nixarchy box` execs.
+          nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
 
           verify = pkgsFor.${system}.nixarchy-verify;
 
@@ -1314,6 +1323,28 @@
             tcg = self.packages.${system}."microvm-${name}-tcg";
           }) (import ./data/microvm-templates.nix);
           nixarchyVm = self.packages.${system}.nixarchy-vm;
+        };
+
+        # Reads the box catalogue and `nixarchy box` structurally -- see
+        # tests/box-template.nix for what that can and cannot prove, and why
+        # (the network-needing half is `checks.box-boot`, a later, CI-gate
+        # issue). `imagePins` is taken by hand against registry-1.docker.io,
+        # once per template, the same way a `fetchurl` sha256 is -- #259
+        # adding `debian` adds an entry here too, or this check fails loudly
+        # with "no imagePins entry for".
+        box-template = import ./tests/box-template.nix {
+          pkgs = pkgsFor.${system};
+          inherit lib;
+          templates = import ./data/box-templates.nix;
+          nixarchyBox = self.packages.${system}.nixarchy-box;
+          imagePins = {
+            archlinux = {
+              imageName = "archlinux";
+              imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
+              tag = "latest";
+              sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
+            };
+          };
         };
 
         # The other disk mode, built so the cache has it: installer/cd.nix

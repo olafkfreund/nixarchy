@@ -41,4 +41,27 @@
       start_now=false
     '';
   };
+
+  # The other half of the README's "an Arch or Debian userland is one command
+  # away" -- .deb/apt software, an AUR package's opposite number. `trixie`
+  # rather than `stable`/`latest`: a moving alias would make the pinned
+  # `checks.box-template` image drift out from under this file with no diff
+  # to review, the same reason data/microvm-templates.nix names a release
+  # rather than tracking a channel.
+  #
+  # Verified against this template's own base image (#259's "verify before
+  # writing much"): entering a freshly created box with apt-get unable to
+  # reach the network still reaches a shell -- distrobox-init's first-start
+  # package-manager update warns rather than aborting on Debian too, the
+  # same answer #256 got for archlinux's pacman -Syy.
+  debian = {
+    label = "Debian";
+    note = "A .deb/apt userland -- AUR's opposite number. Software packaged for Debian and nothing else.";
+    ini = ''
+      image=docker.io/library/debian:trixie
+      pull=false
+      replace=false
+      start_now=false
+    '';
+  };
 }

@@ -48,16 +48,28 @@
 #   note     What the template gives you and what it costs, same job as the
 #            `note` field in every other catalogue here.
 #
-# ## What is not here
-#
-# Only `shell` exists yet -- #222 is the issue that proves the shape works at
-# all, and one template is enough to prove it. `python`, `podman` and
-# `persistent` are #225, once #223 and #224 have given them something to be
-# checked and launched by.
 {
   shell = {
     label = "Shell";
     module = ../modules/microvm/templates/shell.nix;
     note = "A bare NixOS shell with nothing added beyond modules/microvm/guest.nix -- the fastest way to a throwaway prompt, and the template every other one starts from.";
+  };
+
+  python = {
+    label = "Python";
+    module = ../modules/microvm/templates/python.nix;
+    note = "python3 and uv, 3 GiB of RAM. Ephemeral like Shell -- run 'uv venv /mnt/host/.venv' if the venv should outlive the VM.";
+  };
+
+  podman = {
+    label = "Podman";
+    module = ../modules/microvm/templates/podman.nix;
+    note = "Rootless-capable podman with Docker compatibility. /var/lib/containers is a 20 GiB volume that survives a restart; the rest of the root filesystem does not.";
+  };
+
+  persistent = {
+    label = "Persistent";
+    module = ../modules/microvm/templates/persistent.nix;
+    note = "Shell, plus /home on a 10 GiB volume. The volume goes when the VM does ('nixarchy vm rm'); the root filesystem is still thrown away every boot.";
   };
 }

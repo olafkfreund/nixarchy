@@ -377,6 +377,68 @@ let
   hasCache = cfg: builtins.elem "https://devenv.cachix.org" cfg.nix.settings.substituters;
   hookIn = text: pkgs.lib.hasInfix "devenv hook" text;
 
+  # ---- boxes, both halves (#257) --------------------------------------
+  #
+  # More reaches across than devenv does: turning services.boxes.enable on
+  # crosses into Home Manager, which nothing else in this file evaluates.
+  # Every effect the option has, measured both ways -- the shape #221 set
+  # for microvm.host.enable:
+  #
+  #   | | enable = false | enable = true, one machine |
+  #   |---|---|---|
+  #   | virtualisation.podman.enable | false | true |
+  #   | programs.distrobox.containers | { } | populated |
+  #   | distrobox-home-manager systemd unit | absent | absent (forced off) |
+  #   | distrobox in environment.systemPackages | absent | present |
+  #   | distrobox in home.packages | absent | absent (package = null) |
+  #
+  # The systemd-unit row is the one that matters most: Home Manager's own
+  # default for enableSystemdUnit is `containers != { } && package != null`,
+  # which is true the moment a machine is declared -- so "on" has to prove
+  # the unit is STILL absent, not just that "off" is quiet.
+  boxesUser = "tester";
+
+  boxesConfig =
+    enable:
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
+        {
+          programs.nixarchy = {
+            enable = true;
+            services.boxes = {
+              inherit enable;
+            }
+            // pkgs.lib.optionalAttrs enable {
+              machines.dev.image = "archlinux:latest";
+            };
+          };
+          users.users.${boxesUser}.isNormalUser = true;
+          home-manager.users.${boxesUser} = {
+            imports = [ inputs.self.homeManagerModules.nixarchy ];
+            home.stateVersion = "25.05";
+            programs.nixarchy.enable = true;
+          };
+        }
+        {
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
+  boxesOff = boxesConfig false;
+  boxesOn = boxesConfig true;
+
+  homeOfBoxes = cfg: cfg.home-manager.users.${boxesUser};
+  hasDistrobox = list: builtins.any (p: (p.pname or "") == "distrobox") list;
+
   # ---- sops-nix, imported by everyone and doing nothing --------------
   #
   # #155 adopted a declarative secrets mechanism for one concrete reason:
@@ -746,6 +808,25 @@ pkgs.runCommand "nixarchy-options"
     sopsOnActive = pkgs.lib.boolToString (hasSops sopsOn);
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
     devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
+    boxesOffPodman = pkgs.lib.boolToString boxesOff.virtualisation.podman.enable;
+    boxesOffContainers = pkgs.lib.boolToString (
+      (homeOfBoxes boxesOff).programs.distrobox.containers == { }
+    );
+    boxesOffUnit = pkgs.lib.boolToString (
+      (homeOfBoxes boxesOff).systemd.user.services ? distrobox-home-manager
+    );
+    boxesOffSystemPkg = pkgs.lib.boolToString (hasDistrobox boxesOff.environment.systemPackages);
+    boxesOffHomePkg = pkgs.lib.boolToString (hasDistrobox (homeOfBoxes boxesOff).home.packages);
+    boxesOnPodman = pkgs.lib.boolToString boxesOn.virtualisation.podman.enable;
+    boxesOnContainers = pkgs.lib.boolToString (
+      (homeOfBoxes boxesOn).programs.distrobox.containers ? dev
+    );
+    boxesOnImage = (homeOfBoxes boxesOn).programs.distrobox.containers.dev.image or "";
+    boxesOnUnit = pkgs.lib.boolToString (
+      (homeOfBoxes boxesOn).systemd.user.services ? distrobox-home-manager
+    );
+    boxesOnSystemPkg = pkgs.lib.boolToString (hasDistrobox boxesOn.environment.systemPackages);
+    boxesOnHomePkg = pkgs.lib.boolToString (hasDistrobox (homeOfBoxes boxesOn).home.packages);
     # The home-backup script, run rather than read. Its gate and its allowlist
     # are the two things this issue actually promises, and both are answerable
     # by executing it -- --check and --list exist partly for that reason and
@@ -1175,6 +1256,59 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "devenv respects binaryCaches = false and still installs"
+
+          # ---- boxes: off adds nothing, anywhere ---------------------------
+          for pair in "podman:$boxesOffPodman" "distrobox containers:$boxesOffContainers" \
+            "distrobox unit:$boxesOffUnit" "distrobox in systemPackages:$boxesOffSystemPkg" \
+            "distrobox in home.packages:$boxesOffHomePkg"; do
+            case "''${pair%%:*}" in
+              "distrobox containers") want=true ;;
+              *) want=false ;;
+            esac
+            if [ "''${pair#*:}" != "$want" ]; then
+              echo "services.boxes is off, but its ''${pair%%:*} says otherwise on the machine anyway." >&2
+              echo "A configuration that never selects boxes must gain nothing -- neither on the" >&2
+              echo "NixOS side (podman, distrobox in systemPackages) nor across into Home Manager" >&2
+              echo "(distrobox.containers, its systemd unit, or a second copy in home.packages)." >&2
+              exit 1
+            fi
+          done
+          echo "boxes adds no podman, no distrobox and nothing in Home Manager until selected"
+
+          # ---- boxes: on reaches Home Manager, and still refuses the unit --
+          for pair in "podman:$boxesOnPodman" "distrobox containers:$boxesOnContainers" \
+            "distrobox in systemPackages:$boxesOnSystemPkg"; do
+            if [ "''${pair#*:}" != "true" ]; then
+              echo "services.boxes is enabled with a machine declared, but its ''${pair%%:*} is missing." >&2
+              exit 1
+            fi
+          done
+          [ "$boxesOnImage" = "archlinux:latest" ] || {
+            echo "the declared machine's image did not reach programs.distrobox.containers.dev:" >&2
+            echo "got '$boxesOnImage'" >&2
+            exit 1
+          }
+          echo "boxes on with one machine: podman, the package, and the container all land"
+
+          # This is the row that matters most. Home Manager's OWN default for
+          # enableSystemdUnit is `containers != { } && package != null` -- true
+          # the instant a machine is declared -- so this has to prove the unit
+          # is STILL absent, not merely that "off" produced nothing. Its
+          # ExecStart bakes a literal /nix/store/... path
+          # (the distrobox package's own /bin/distrobox-assemble) straight
+          # into the unit file, the same
+          # GC-survival hazard nixpkgs#478154 describes and modules/services/
+          # boxes.nix already refuses for distrobox itself.
+          for pair in "distrobox unit:$boxesOnUnit" "distrobox in home.packages:$boxesOnHomePkg"; do
+            if [ "''${pair#*:}" != "false" ]; then
+              echo "services.boxes is enabled, but its ''${pair%%:*} is present anyway." >&2
+              echo "enableSystemdUnit must stay refused: its ExecStart bakes a literal" >&2
+              echo "/nix/store/... path into the unit, the same hazard distrobox itself is" >&2
+              echo "never allowed to be reached through (nixpkgs#478154)." >&2
+              exit 1
+            fi
+          done
+          echo "boxes on still refuses Home Manager's own systemd unit, and installs distrobox once"
 
           # ---- sops-nix: imported by everyone, inert until asked --------
           for pair in "systemd unit:$sopsOffUnit" "activation script:$sopsOffActivation"; do

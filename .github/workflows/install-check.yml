@@ -196,22 +196,38 @@ jobs:
       # No installer action, no cachix. The runner is a NixOS machine with a
       # warm store, which is most of why this is ten minutes rather than an
       # hour.
-      - name: Install onto a blank disk and boot the result
-        if: needs.gate.outputs.relevant == 'true'
-        run: nix build .#checks.x86_64-linux.install --print-build-logs
-
-      # The same machine, and the one check in the repo whose failure means
-      # somebody's other operating system did not survive. Here rather than in
-      # build.yml for exactly the reason at the top of this file: it boots a
-      # VM, installs, and boots the result, and a push to main would cancel it
-      # there.
       #
-      # After the blank-disk install, not before: if the installer is broken in
-      # some way that has nothing to do with partitioning, checks.install says
-      # so in a tenth of the log.
-      - name: Install into free space and prove the neighbour survived
+      # Both installs in ONE nix invocation, so nix runs them at the same time
+      # rather than one after the other. Measured on run 33798891329, which is
+      # what #231 is about: install took 1722s, free-space 1594s, and every
+      # other step in the job totalled four. Two independent derivations, run
+      # serially, on a machine with forty cores.
+      #
+      # The envelope fits with room: each is memorySize 6144, cores 4,
+      # diskSize 32768, so two at once asks 12 GB and 8 cores of a 40-core,
+      # 94 GB box. Each also carries its own globalTimeout of 85 minutes, so
+      # the driver still loses the race against this job's 90 and fails with a
+      # log instead of being recorded as cancelled.
+      #
+      # What this gives up, stated because it was deliberate: free-space used
+      # to run second, so that an installer broken in a way that has nothing to
+      # do with partitioning was reported by checks.install "in a tenth of the
+      # log". Now both fail together and the reader filters. That is affordable
+      # because nix prefixes every line with the derivation it came from --
+      # `vm-test-run-nixarchy-install>` and `vm-test-run-nixarchy-free-space>`
+      # -- so the two logs interleave without becoming one.
+      #
+      # free-space is the one check in the repo whose failure means somebody's
+      # other operating system did not survive. It is here rather than in
+      # build.yml for the reason at the top of this file: it boots a VM,
+      # installs, and boots the result, and a push to main would cancel it
+      # there.
+      - name: Install onto a blank disk, and into free space beside a neighbour
         if: needs.gate.outputs.relevant == 'true'
-        run: nix build .#checks.x86_64-linux.free-space --print-build-logs
+        run: |
+          nix build --print-build-logs --max-jobs 2 \
+            .#checks.x86_64-linux.install \
+            .#checks.x86_64-linux.free-space
 
       - name: Report what it cost
         if: always() && needs.gate.outputs.relevant == 'true'

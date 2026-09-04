@@ -1625,12 +1625,34 @@ run_install() {
   # (its own `sub="auto?trusted=1"`). Combined with always-allow-substitutes in
   # SUBSTITUTE_FLAGS -- see the comment on it, which is about precisely this
   # arrangement -- the closure is copied rather than rebuilt.
+  #
+  # require-sigs=false on the TARGET, and this is the half #251 shipped without.
+  # A path built on this machine carries no signature, and a fresh store refuses
+  # unsigned paths:
+  #
+  #   error: cannot add path '/nix/store/...-update-users-groups.pl' because it
+  #   lacks a signature by a trusted key
+  #
+  # `auto?trusted=1` does not cover it -- that marks the SOURCE trusted to fetch
+  # from; the destination still validates on add. Those two paths are NixOS'
+  # own assembly derivations, the allowSubstitutes = false ones SUBSTITUTE_FLAGS
+  # is about, so they are always built rather than fetched and always unsigned.
+  #
+  # tests/install.nix already knew. It sets require-sigs = false inside the test
+  # VM and says why -- "with require-sigs on, /mnt refuses all of them ... the
+  # whole source bootstrap from stage0-posix appears and the install dies
+  # fetching bash's tarball". Which means the checks CANNOT see this, and every
+  # real install walks into it. The ISO does not set it; only the test VMs do.
+  #
+  # Safe because the target store is one this script just created, on a disk
+  # this script just formatted, populated from this machine's own store, as
+  # root. There is nothing here for a signature to protect against.
   local build_store=()
   case ${build_store_choice:-auto} in
-    target) build_store=(--store /mnt --eval-store auto --extra-substituters "auto?trusted=1") ;;
+    target) build_store=(--store "/mnt?require-sigs=false" --eval-store auto --extra-substituters "auto?trusted=1") ;;
     live) ;;
     *) check_store_space "$plan" ||
-      build_store=(--store /mnt --eval-store auto --extra-substituters "auto?trusted=1") ;;
+      build_store=(--store "/mnt?require-sigs=false" --eval-store auto --extra-substituters "auto?trusted=1") ;;
   esac
 
   # Build here, then install what was built. NOT `nixos-install --flake`.

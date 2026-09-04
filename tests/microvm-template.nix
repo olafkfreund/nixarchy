@@ -24,6 +24,18 @@ let
   # carries only `shell` until #225. Every template gets asserted, so a new
   # one is covered for free.
   names = builtins.attrNames templates;
+
+  # #225: "checks.microvm-template should cover at least one template with a
+  # volume, since autoCreate and the relative path are exactly what a rename
+  # would break silently." The image basename each volume-carrying template
+  # writes into `microvm.volumes` -- lib/runners/qemu.nix (the pinned commit,
+  # read above) puts this string into `-drive ...,file=${image},...`
+  # VERBATIM, with no path resolution of its own, so a template that grew an
+  # absolute path here would only fail at boot, on real hardware, never here.
+  volumeImages = {
+    podman = "var-lib-containers.img";
+    persistent = "home.img";
+  };
 in
 pkgs.runCommand "nixarchy-microvm-template"
   {
@@ -86,6 +98,25 @@ pkgs.runCommand "nixarchy-microvm-template"
         echo "${name}: share/microvm/tap-interfaces is non-empty -- this needs root to run" >&2
         fail=1
       fi
+
+      ${lib.optionalString (volumeImages ? ${name}) ''
+        # A volume's `file=` is the RELATIVE image path this template
+        # declared, not an absolute one. Breaking this looks like a template
+        # writing `microvm.volumes[].image` as
+        # "/var/lib/nixarchy/${volumeImages.${name}}" instead of a bare
+        # filename -- the whole promise of one closure serving every VM of
+        # this template, each with its own disk in its own directory
+        # (data/microvm-templates.nix's rule), depends on this staying
+        # relative.
+        if ! grep -qE -- "file=${volumeImages.${name}}(,|')" "$run"; then
+          echo "${name}: bin/microvm-run has no -drive for ${volumeImages.${name}}" >&2
+          fail=1
+        fi
+        if grep -qE -- "file=/[^,']*${volumeImages.${name}}" "$run"; then
+          echo "${name}: ${volumeImages.${name}} is on the drive line with an absolute path" >&2
+          fail=1
+        fi
+      ''}
 
       # The KVM and -tcg runners share one share/microvm/system: the guest
       # closure the -cpu flag differs, not the guest itself. Breaking this

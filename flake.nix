@@ -375,6 +375,13 @@
             # machine" rather than "rfkill is missing" -- the same trap the
             # doctor's vainfo hit.
             util-linux
+            # podman info / podman inspect, for the Boxes section. Safe to
+            # pin here -- unlike distrobox, podman does not resolve anything
+            # relative to argv[0], so a /nix/store path to it carries none of
+            # pkgs/box.nix's hazard. distrobox itself is deliberately NOT
+            # here: it is looked up by bare name (`command -v distrobox`),
+            # the same wrapper-only rule that command's own header explains.
+            podman
             # nix-store, for the MicroVM guests section's GC-root check
             # (#229): `--print-roots` reads the store, never `--gc`. Pinning
             # a second nix here is fine in a way it is not in pkgs/microvm.nix

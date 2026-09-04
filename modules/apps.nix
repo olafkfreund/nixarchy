@@ -627,6 +627,71 @@ let
           }
         ) boxTemplates
       )
+      // lib.optionalAttrs cfg.enable {
+        # The Sandboxes group (#226). A nested `trigger.vm`, not a new root
+        # section -- `trigger.ask` above is the same shape, a new parent
+        # under an upstream root, and there is no precedent here for a root
+        # of our own. `full = dict(upstream); full.update(out)` in
+        # menuDefaults above means a totally new id like this one is
+        # APPENDED, so it lands after System and About at the end of the
+        # list -- the ordering #226 documents, not something coded here.
+        #
+        # Two gates, both needed. This `lib.optionalAttrs cfg.enable` is the
+        # Nix-level one: belt-and-braces, since every row in this file
+        # already lives inside `config = lib.mkIf cfg.enable (...)` above --
+        # stated explicitly so a reader does not have to trace that back.
+        # The runtime one is the parent's own `when` below: whether *this
+        # login* can open /dev/kvm is only knowable now, not at rebuild
+        # time -- `nixarchy-vm --check` (pkgs/microvm.nix) always exits 0,
+        # so nothing here is actually gated on hardware; the fallback to a
+        # software CPU is what makes that true on every nixarchy machine.
+        #
+        # `nixarchy-vm` itself is installed unconditionally (this file,
+        # below -- same as `nixarchy dev init`), so there is no
+        # `programs.nixarchy.services.microvm.enable` to gate this on:
+        # #221 designed the disposable half to need no root and no rebuild,
+        # so nothing about it is opt-in.
+        "trigger.vm" = {
+          icon = "󰦛";
+          label = "Sandbox";
+          aliases = [
+            "vm"
+            "sandbox"
+            "microvm"
+          ];
+          when = "nixarchy-vm --check";
+        };
+        "trigger.vm.new" = {
+          icon = "󰕍";
+          label = "New sandbox";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm new";
+          description = "Name one, pick a template, and open it";
+        };
+        "trigger.vm.open" = {
+          icon = "󰁯";
+          label = "Open a sandbox";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm run";
+          description = "Attach to one you already created";
+        };
+        "trigger.vm.stop" = {
+          icon = "󰉉";
+          label = "Stop a sandbox";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm stop";
+          description = "Ask a running sandbox to shut down";
+        };
+        "trigger.vm.destroy" = {
+          icon = "󱄅";
+          label = "Destroy a sandbox";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm rm";
+          description = "Delete it and its state -- cannot be undone";
+        };
+        "trigger.vm.list" = {
+          icon = "󰆓";
+          label = "List sandboxes";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm list";
+          description = "What you have created, and which are running";
+        };
+      }
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: app:

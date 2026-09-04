@@ -1749,6 +1749,13 @@ in
           # the real command. See pkgs/microvm.nix for what it does and why.
           (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
 
+          # `nixarchy box <subcommand>`. Its own file for the same reason as
+          # dev-init.nix and microvm.nix above: `checks.box-template` (#258)
+          # has to run the real command. See pkgs/box.nix for what it does
+          # and why -- in particular why it never resolves distrobox through
+          # a /nix/store path.
+          (pkgs.callPackage ../pkgs/box.nix { })
+
           # One name for the commands this repo adds, and a way through to
           # the 431 it vendors.
           #
@@ -1813,6 +1820,7 @@ in
                   esac
                   ;;
                 vm) shift; exec nixarchy-vm "$@" ;;
+                box) shift; exec nixarchy-box "$@" ;;
                 ""|--help|-h|help)
                   cat <<'USAGE'
               nixarchy -- the Omarchy desktop, vendored for NixOS.
@@ -1827,6 +1835,7 @@ in
                 nixarchy apply              Copy the selection into your flake and rebuild
                 nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
                 nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
+                nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                 nixarchy doctor             What this machine needs to run nixarchy
 
               Everything else is Omarchy's own, and reaches it unchanged:

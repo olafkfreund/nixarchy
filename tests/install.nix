@@ -323,6 +323,7 @@ pkgs.testers.runNixOSTest {
         "nixarchy/answers".text = ''
           device=/dev/vdb
           encrypt=no
+          recovery_passphrase=rescue-me
           hostname=installed
           username=omarchy
           password_hash=${passwordHash}
@@ -546,6 +547,25 @@ pkgs.testers.runNixOSTest {
     # different bugs to chase.
     installer.succeed("test -d /mnt/etc/nixos/.git")
     installer.succeed("test -d /mnt/boot/EFI")
+
+    # The install log reached the disk (#239).
+    #
+    # Asserted under /mnt rather than on the installer, because on the
+    # installer it is always there and always will be -- that is the copy that
+    # dies with the live session. A user whose install failed rebooted, found
+    # no bootloader entry, went looking for the log and found nothing: the
+    # target's /var/log is a freshly made subvolume and the real log was on an
+    # ISO that no longer existed. The serial dump this test reads everything
+    # through is exactly why CI could not see that; a laptop has no serial
+    # port.
+    installer.succeed("test -s /mnt/var/log/nixarchy-install.log")
+
+    # Root-only, because it is deliberately NOT on the ESP. FAT32 has no
+    # permissions, and an installer that handles a crypt hash should not put
+    # its transcript somewhere permissions cannot protect it.
+    mode = installer.succeed(
+        "stat -c '%a %U' /mnt/var/log/nixarchy-install.log").strip()
+    assert mode == "600 root", f"the install log is {mode}, not 600 root"
     print("install wrote a flake and an ESP")
 
     # ---- the login hash is NOT in the repository -----------------------
@@ -748,6 +768,64 @@ pkgs.testers.runNixOSTest {
     # Read-only is asserted through `subvolume list -r`, which lists only
     # read-only subvolumes: a baseline that could be written to is one that
     # can drift into being a copy of the machine rather than of the install.
+    # The store, home and the journal are on the subvolumes the layout
+    # promised -- not sitting inside `@` with empty subvolumes mounted over
+    # the top of them.
+    #
+    # That shape installs cleanly and boots as far as the LUKS prompt, then
+    # fstab mounts the empty @nix over /nix, stage 2 loses its init, and the
+    # machine drops to an emergency mode whose root account is locked. It was
+    # reported from a real install and nothing in this suite could see it:
+    # every check installs once onto a fresh disk, and the fault needs a
+    # second run over mounts a failed first run left behind.
+    #
+    # Asserted on the BOOTED machine rather than on /mnt during the install,
+    # because that is where it bites -- the installer is checked separately by
+    # verify_subvolume_mounts, which refuses to install into this state at all.
+    for mp, subvol in [("/nix", "@nix"), ("/home", "@home"), ("/var/log", "@log")]:
+        got = target.succeed(
+            f"findmnt -no SOURCE --mountpoint {mp}").strip()
+        assert f"[/{subvol}]" in got, (
+            f"{mp} is not mounted from the {subvol} subvolume (findmnt says "
+            f"{got!r}). If it is not a mountpoint at all, the install wrote "
+            f"through the root subvolume and the data under {mp} is "
+            f"unreachable once {subvol} mounts over it."
+        )
+
+    # The recovery passphrase is on the machine and NOT in the repository.
+    #
+    # `must fail: grep -rq '[$]6[$]' /mnt/etc/nixos` above is the other half of
+    # this and it is the one that matters: /etc/nixos is a git repository that
+    # nixarchy-config-repo pushes to GitHub, so a crypt hash written into it is
+    # published. boot.initrd.systemd.emergencyAccess takes a literal string and
+    # would do exactly that, which is why this goes through
+    # boot.initrd.secrets instead -- a path read at bootloader-install time.
+    #
+    # Asserted here rather than trusted because the failure is silent: the
+    # machine boots either way, and the difference only shows up in a
+    # repository somebody made public.
+    shadow = target.succeed("cat /var/lib/nixarchy/initrd-shadow")
+    assert shadow.startswith("root:$6$"), (
+        f"/var/lib/nixarchy/initrd-shadow is {shadow!r}, not a root shadow "
+        "line with a sha-512 hash. If the hash looks mangled, substitution ate "
+        "the `$`; if the line is missing its fields, sulogin will not parse it."
+    )
+    login = target.succeed("cat /var/lib/nixarchy/password.hash").strip()
+    assert login not in shadow, (
+        "the recovery hash is the login hash. It goes into the initrd on the "
+        "unencrypted ESP, so this hands anyone holding the disk the credential "
+        "for the account."
+    )
+    perms = target.succeed(
+        "stat -c '%a %U' /var/lib/nixarchy/initrd-shadow").strip()
+    assert perms == "600 root", (
+        f"/var/lib/nixarchy/initrd-shadow is {perms}, want '600 root'"
+    )
+
+    # The config points at that file rather than carrying its contents.
+    target.succeed(
+        "grep -q '/var/lib/nixarchy/initrd-shadow' /etc/nixos/hosts/*/configuration.nix")
+
     subvols = target.succeed("btrfs subvolume list -r /")
     print(subvols)
     readonly = [line.split(" path ", 1)[1].strip()

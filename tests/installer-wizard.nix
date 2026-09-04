@@ -189,6 +189,22 @@ pkgs.testers.runNixOSTest {
     pid = gum("input", previous=pid)
     answer("hunter2\n")
 
+    # The recovery passphrase, refused first for being the login password.
+    #
+    # That refusal is the whole reason this is a separate question rather than
+    # a reuse of the hash already collected: it goes into the initrd, and the
+    # initrd is on the unencrypted ESP. A wizard that accepted the login
+    # password here would quietly undo the point of asking.
+    pid = gum("input", previous=pid)
+    answer("hunter2\n")
+    pid = gum("input", previous=pid)
+    answer("hunter2\n")
+    screen("That is your login password")
+    pid = gum("input", previous=pid)
+    answer("rescue-me\n")
+    pid = gum("input", previous=pid)
+    answer("rescue-me\n")
+
     # Hostname, rejected once for a leading hyphen.
     pid = gum("input", previous=pid)
     answer("-nope\n")

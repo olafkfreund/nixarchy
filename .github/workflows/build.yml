@@ -52,6 +52,14 @@ jobs:
       - name: The installer's generated lock has the fields nix would write
         run: nix build .#checks.x86_64-linux.installer-lock --print-build-logs
 
+      # Where a crash report goes. The prose said Nixarchy and every `gh`
+      # command said Basecamp, so an agent read the rule, concluded correctly,
+      # and then copied a command that filed into somebody else's tracker --
+      # people who cannot act on a NixOS store or rebuild problem. Cheap enough
+      # to sit here: a runCommand over the already-built package, no VM.
+      - name: Crash reports route to the repository the rule names
+        run: nix build .#checks.x86_64-linux.crash-report-repo --print-build-logs
+
       # Same shape, same reason: its dangerous failure is reporting nothing.
       - name: The Omarchy package delta still sees a change
         run: nix build .#checks.x86_64-linux.package-delta --print-build-logs

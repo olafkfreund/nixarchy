@@ -38,4 +38,25 @@
   # because the /etc overlay is off, and the failure if that changes is that
   # nobody can log in.
   users.users."@username@".hashedPasswordFile = "/var/lib/nixarchy/password.hash";
+
+  # A usable emergency shell, when the installer was given a recovery
+  # passphrase. `{ }` when it was not, which leaves the NixOS default: the
+  # initrd's /etc/shadow is `root:*` and sulogin refuses to open a console.
+  #
+  # The hash is NOT in this file. boot.initrd.systemd.emergencyAccess would
+  # have put it here -- it takes a literal string, spliced into the initrd's
+  # /etc/shadow -- and this directory is a git repository that
+  # nixarchy-config-repo pushes to GitHub. boot.initrd.secrets instead names a
+  # path on the live filesystem, appended to the initrd by systemd-boot at
+  # bootloader-install time. systemd-boot sets supportsInitrdSecrets, so the
+  # file is not copied into the store either.
+  #
+  # The initrd still ends up holding the hash, and the initrd is on the ESP,
+  # unencrypted -- unavoidably, since it runs before anything is unlocked.
+  # That is why the installer asks for a passphrase of its own and refuses one
+  # that matches the login password: this credential is meant to be spendable.
+  #
+  # If the append ever fails, the generated `root:*` stands and the machine is
+  # locked out of emergency mode rather than open to it.
+  boot.initrd.secrets = "@recoverysecret@";
 }

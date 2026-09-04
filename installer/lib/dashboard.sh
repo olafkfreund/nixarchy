@@ -133,7 +133,7 @@ ui_finished() {
 # thing the dashboard has been hiding. Put the tail of it on screen rather than
 # leaving a person with a cleared terminal and a failure they cannot describe.
 ui_failed() {
-  local log=$1 rc=$2
+  local log=$1 rc=$2 target_log=${3:-}
   ui_init
   ui_clear
   echo
@@ -145,6 +145,14 @@ ui_failed() {
   tail -25 "$log" 2>/dev/null | sed "s/^/$(printf '%*s' "${UI_PAD:-0}" '')/"
   echo
   ui_left "\e[90mThe whole log is at $log. Nothing was rebooted.\e[0m"
+  # The path above is on the live system and goes away with it. If a copy
+  # reached the disk, say so -- that is the one a person can still read after
+  # the reboot this screen is about to offer them, and not saying it is how
+  # somebody ends up with an unbootable machine and no diagnostic (#239).
+  if [ -n "$target_log" ]; then
+    ui_left "\e[90mA copy is on the new system at $target_log, readable from a"
+    ui_left "\e[90mlive USB if this machine will not boot.\e[0m"
+  fi
   echo
 
   # Twenty-five lines is enough to recognise a failure and rarely enough to

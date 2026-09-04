@@ -117,6 +117,7 @@ free_why=""
 hostname=""
 username=""
 password_hash=""
+recovery_hash=""
 luks_passphrase=""
 timezone=""
 keymap=""
@@ -166,6 +167,9 @@ The answers file is one key=value per line, # for comments, no quoting:
   username=alice
   password_hash=$6$...      from `mkpasswd -m sha-512`; or
   password=hunter2          plaintext, hashed here -- for tests
+  recovery_hash=$6$...      optional; unlocks stage-1 emergency mode, or
+  recovery_passphrase=...   plaintext, hashed here. Omit for no emergency
+                            access -- see ask_recovery for the trade
   timezone=Europe/London
   keymap=us
 
@@ -395,6 +399,57 @@ ask_password() {
   done
 }
 
+# A way back in, if the machine ever fails to mount its root.
+#
+# When stage 1 cannot assemble /sysroot it drops to an emergency shell, and
+# `boot.initrd.systemd.emergencyAccess` decides whether that shell is usable.
+# Left unset the initrd's shadow is `root:*` and sulogin refuses -- which is
+# how a machine whose subvolumes did not mount became a reinstall rather than
+# a five-minute fix.
+#
+# Deliberately NOT the login password, and this is the whole reason the
+# question is asked separately. The option takes a literal hash, which
+# nixpkgs splices into the initrd's /etc/shadow (initrd.nix, `root:${passwd}`)
+# -- and the initrd sits on the ESP, unformatted and unencrypted. Any password
+# that can unlock a shell BEFORE the disk is unlocked has to be verifiable
+# before the disk is unlocked, so there is no arrangement where this hash is
+# protected by the encryption. Spending the login hash to buy recoverability
+# would hand an attacker with the disk the credential that also opens the
+# account and, upstream's way, the disk itself.
+#
+# A throwaway passphrase costs nothing if it leaks: it opens a rescue shell on
+# one physical machine and nothing else.
+#
+# Empty is a real answer and the default. Someone who would rather reinstall
+# than carry another passphrase presses enter, and the machine behaves exactly
+# as it did before this existed.
+ask_recovery() {
+  ui_screen "A recovery passphrase, if you want one..."
+  ui_left "If this machine ever fails to boot, this unlocks the emergency"
+  ui_left "shell. It is stored unencrypted on the boot partition, so make it"
+  ui_left "different from your password. Press enter to skip."
+  while :; do
+    local pw pw2
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Recovery> ")
+    if [ -z "$pw" ]; then
+      recovery_hash=""
+      break
+    fi
+    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ")
+    if [ "$pw" != "$pw2" ]; then
+      ui_left "\e[31mThose do not match.\e[0m"
+      continue
+    fi
+    if [ "$pw" = "$luks_passphrase" ]; then
+      ui_left "\e[31mThat is your login password. Use a different one.\e[0m"
+      continue
+    fi
+    recovery_hash=$(mkpasswd -m sha-512 "$pw")
+    unset pw pw2
+    break
+  done
+}
+
 ask_identity() {
   ui_screen "Let's set up your user account..."
   local why
@@ -405,6 +460,7 @@ ask_identity() {
   done
 
   ask_password
+  ask_recovery
 
   while :; do
     hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ")
@@ -808,6 +864,8 @@ read_answers() {
       username) username=$value ;;
       password) password=$value ;;
       password_hash) password_hash=$value ;;
+      recovery_hash) recovery_hash=$value ;;
+      recovery_passphrase) recovery_hash=$(mkpasswd -m sha-512 "$value") ;;
       timezone) timezone=$value ;;
       keymap) keymap=$value ;;
       *)
@@ -906,6 +964,18 @@ validate_answers() {
     *) problems+=("password_hash: not a crypt(3) hash (should start with \$)") ;;
   esac
 
+  case $recovery_hash in
+    "" | '$'*) ;;
+    *) problems+=("recovery_hash: not a crypt(3) hash (should start with \$)") ;;
+  esac
+
+  # The recovery passphrase exists to be spendable. Reusing the login hash
+  # puts it in the initrd on the unencrypted ESP, which is the one thing
+  # asking for it separately was meant to avoid.
+  if [ -n "$recovery_hash" ] && [ "$recovery_hash" = "$password_hash" ]; then
+    problems+=("recovery_hash: must differ from password_hash -- it is stored unencrypted on the ESP")
+  fi
+
   [ -z "$timezone" ] || [ -e "$TZDIR/$timezone" ] || problems+=("timezone: no such zone: $timezone")
   if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then
     problems+=("keymap: no such keymap: $keymap")
@@ -949,6 +1019,14 @@ substitute_host_files() {
     # Quoted in the template because a bare token is not parseable Nix; the
     # quotes go with the token. An encrypted disk has already authenticated the
     # user by the time a greeter would ask, so autologin follows encryption.
+    # null, or the hash WITH its quotes. Same idiom as @encrypt@: the token
+    # is quoted in the template so the file parses as Nix before substitution.
+    if [ -n "$recovery_hash" ]; then
+      subst "$f" '"@recoverysecret@"' \
+        '{ "/etc/shadow" = "/var/lib/nixarchy/initrd-shadow"; }'
+    else
+      subst "$f" '"@recoverysecret@"' '{ }'
+    fi
     subst "$f" '"@encrypt@"' "$encrypt"
     subst "$f" '"@autologin@"' "$encrypt"
   done
@@ -1143,6 +1221,30 @@ partition_free_space() {
 }
 
 format_disk() {
+  # Leave /mnt clean, because disko will not.
+  #
+  # disko's mount phase asks `findmnt` whether each mountpoint is already
+  # mounted and SKIPS the ones that are. After a first install that failed
+  # partway -- the bootloader step is the one that has actually happened --
+  # /mnt, /mnt/nix, /mnt/home and /mnt/var/log are all still mounted. The
+  # second run then destroys and reformats the disk underneath them, and
+  # every child mount is skipped as "already mounted" while `@` is the only
+  # subvolume anything is written through.
+  #
+  # The result installs and boots as far as the LUKS prompt. Then fstab
+  # mounts the real (empty) @nix over /nix, the store disappears, stage 2
+  # cannot find its init, and the machine drops to emergency mode -- where
+  # the initrd's root account is locked by design and there is nothing the
+  # user can do. Reported from a real install; @nix, @home and @log were
+  # empty and 21G sat in @/nix, @/home and @/var/log.
+  if findmnt -rno TARGET /mnt >/dev/null 2>&1; then
+    umount -R /mnt || {
+      echo "nixarchy-install: something is mounted at /mnt and will not unmount." >&2
+      echo "  Formatting now would install into the wrong subvolumes. Reboot and retry." >&2
+      exit 1
+    }
+  fi
+
   # Before the passphrase file and before the disko script: in free-space mode
   # the layout the script evaluates addresses partitions that do not exist yet.
   if [ "$disk_mode" = free ]; then
@@ -1166,6 +1268,31 @@ format_disk() {
   "$script"
 
   rm -f /tmp/nixarchy-luks.key
+}
+
+# Prove disko mounted what the layout asked for.
+#
+# The layout gives /nix, /home and /var/log their own subvolumes, and the
+# installed system's fstab mounts them. If they are not mounted HERE, the
+# install still succeeds -- it just writes all of it into `@`, and the
+# machine bricks on first boot when the empty subvolumes mount over the
+# top. Nothing downstream notices, which is why this is checked rather
+# than assumed.
+#
+# `findmnt --mountpoint` matches only a real mountpoint, so a plain
+# directory inside `@` does not satisfy it.
+verify_subvolume_mounts() {
+  local mp missing=""
+  for mp in /mnt /mnt/nix /mnt/home /mnt/var/log; do
+    findmnt -rno TARGET --mountpoint "$mp" >/dev/null 2>&1 || missing="$missing $mp"
+  done
+  if [ -n "$missing" ]; then
+    echo "nixarchy-install: disko did not mount:$missing" >&2
+    echo "  Installing now would put the store and home inside the root" >&2
+    echo "  subvolume, and the machine would not boot. Nothing was installed." >&2
+    findmnt -R /mnt >&2 || true
+    return 1
+  fi
 }
 
 generate_hardware_config() {
@@ -1340,6 +1467,22 @@ write_password_hash() {
     printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash )
   chmod 0600 /mnt/var/lib/nixarchy/password.hash
   chown 0:0 /mnt/var/lib/nixarchy/password.hash
+
+  # The recovery passphrase, as a whole shadow line, because that is what
+  # boot.initrd.secrets appends over the initrd's /etc/shadow.
+  #
+  # Here rather than in the flake, and this is the point of the whole
+  # arrangement: /etc/nixos is a git repository that nixarchy-config-repo
+  # pushes to GitHub, and checks.install asserts no crypt hash ever appears
+  # inside it. boot.initrd.secrets names a path on the live filesystem, read
+  # at bootloader-install time by systemd-boot -- which sets
+  # supportsInitrdSecrets, so the value is never copied into the store either.
+  if [ -n "$recovery_hash" ]; then
+    ( umask 077
+      printf 'root:%s:::::::\n' "$recovery_hash" >/mnt/var/lib/nixarchy/initrd-shadow )
+    chmod 0600 /mnt/var/lib/nixarchy/initrd-shadow
+    chown 0:0 /mnt/var/lib/nixarchy/initrd-shadow
+  fi
 }
 
 install_flake_dir() {
@@ -1586,6 +1729,7 @@ main() {
     ui_greeter
     ask_network
     ask_password
+    ask_recovery
   else
     ui_greeter
     ask_network
@@ -1635,6 +1779,9 @@ main() {
   # log instead. A wall of store paths tells nobody anything they can act on,
   # and it makes an ordinary install look like something going wrong.
   local log=/var/log/nixarchy-install.log
+  # Set once the log has been copied somewhere that outlives this session, so
+  # the failure screen can name a path that will still exist after a reboot.
+  local target_log=""
   local started rc=0 elapsed
   started=$(date +%s)
 
@@ -1682,6 +1829,7 @@ main() {
   # `|| rc=$?` was always meant to receive.
   {
     format_disk &&
+      verify_subvolume_mounts &&
       generate_hardware_config &&
       install_flake_dir &&
       write_password_hash &&
@@ -1715,8 +1863,38 @@ main() {
     } >/dev/ttyS0 2>&1 || true
   fi
 
+  # And onto the disk, where it survives the reboot the next screen offers.
+  #
+  # The log lives on the live ISO. That is fine while somebody is looking at
+  # it and useless the moment they do the thing the installer just told them
+  # to do: a user whose install failed rebooted, found no bootloader entry,
+  # went looking for a log and found two empty directories -- the target's
+  # /var/log, which is a freshly created btrfs subvolume with nothing in it,
+  # and nothing at all where the real log had been (#239). The serial dump
+  # above is how checks.install reads this, and a laptop has no serial port.
+  #
+  # /mnt is still mounted here; nothing unmounts it before the finish screen.
+  #
+  # Mode 0600 and root-owned, and NOT copied to the ESP. The ESP was the
+  # tempting place -- FAT32, readable from a live USB or another OS, exactly
+  # where you want a diagnostic when the root filesystem will not mount. But
+  # FAT32 has no permissions, so anything written there is readable by anyone
+  # who picks up the disk, and this installer handles a crypt hash that
+  # installer/template/host/configuration.nix already describes as
+  # "offline-crackable at leisure by anyone who reads it". Nothing is known to
+  # put a secret in this log -- write_password_hash writes to a file under
+  # umask 077 and disko takes the passphrase from a key file, so its trace
+  # shows a path rather than the secret -- but "nothing is known to" is not
+  # the standard for putting a file somewhere unreadable permissions cannot
+  # protect it.
+  if [ -d /mnt/var/log ]; then
+    ( umask 077 && cat "$log" >/mnt/var/log/nixarchy-install.log ) 2>/dev/null \
+      && chown 0:0 /mnt/var/log/nixarchy-install.log 2>/dev/null \
+      && target_log=/var/log/nixarchy-install.log
+  fi
+
   if [ "$rc" -ne 0 ]; then
-    ui_failed "$log" "$rc"
+    ui_failed "$log" "$rc" "${target_log:-}"
     exit "$rc"
   fi
 

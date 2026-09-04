@@ -1018,6 +1018,11 @@
         # The installer's interactive screens, at every width worth caring
         # about. Nothing else draws them: every other harness passes
         # --answers, which is exactly how #133 shipped.
+        installer-store-space = import ./tests/installer-store-space.nix {
+          pkgs = pkgsFor.${system};
+          installScript = ./installer/install.sh;
+        };
+
         installer-lock = import ./tests/installer-lock.nix {
           pkgs = pkgsFor.${system};
           flakeTemplate = self.packages.${system}.flake-template;

@@ -1490,14 +1490,83 @@ install_flake_dir() {
   git -C /mnt/etc/nixos add -A
 }
 
+# Refuse a build the live store has no room for, and say which number is the
+# problem.
+#
+# The store on a live ISO is a RAM-backed overlay -- half the machine's memory,
+# so 7.8G on a 16 GiB laptop -- over the read-only squashfs. `du` reports the
+# squashfs too, which is why it can say 18G while there is nothing left to
+# write. Every path nix has to fetch or build lands in that overlay before
+# anything reaches the disk.
+#
+# When it fills, the install does not stop: it dies partway with "No space left
+# on device", several levels under a "1 dependency failed" that names none of
+# it. installer/vm.nix says exactly this about the test VM, which escapes with
+# writableStoreUseTmpfs = false and a real disk. The ISO has no such escape, so
+# a user meets it as a machine that installed and has no bootloader. One did.
+#
+# A fixed threshold would not catch it. The machine that failed had 7.8G free
+# when it started, which passes any figure worth setting; it filled during the
+# build. The only number that decides it is the one the dry-run already prints
+# -- "(8.1 GiB download, 21.0 GiB unpacked)" -- against what df says is left.
+#
+# Tolerant on purpose: an unparseable plan proceeds. This exists to name a
+# failure that already happens, not to invent a new way to refuse.
+check_store_space() {
+  local plan=$1 size unit want free store
+  store=$(df -P /nix/store 2>/dev/null | awk 'NR==2 {print $1}')
+
+  read -r size unit <<<"$(printf '%s\n' "$plan" |
+    sed -n 's/.*[(,] *\([0-9.]*\) \([KMG]iB\) unpacked.*/\1 \2/p' | head -1)"
+  [ -n "$size" ] && [ -n "$unit" ] || return 0
+
+  case $unit in
+    KiB) want=$(awk "BEGIN{printf \"%.0f\", $size*1024}") ;;
+    MiB) want=$(awk "BEGIN{printf \"%.0f\", $size*1048576}") ;;
+    GiB) want=$(awk "BEGIN{printf \"%.0f\", $size*1073741824}") ;;
+    *) return 0 ;;
+  esac
+
+  free=$(df -B1 -P /nix/store 2>/dev/null | awk 'NR==2 {print $4}')
+  case $free in ''|*[!0-9]*) return 0 ;; esac
+
+  # A margin, because the figure is what the paths occupy and not what nix
+  # needs in flight to put them there.
+  [ "$want" -lt "$((free - free / 10))" ] && return 0
+
+  echo "nixarchy-install: the live store cannot hold what this install must fetch." >&2
+  echo >&2
+  echo "  needs : $(numfmt --to=iec "$want" 2>/dev/null || echo "$want bytes") unpacked" >&2
+  echo "  free  : $(numfmt --to=iec "$free" 2>/dev/null || echo "$free bytes") on ${store:-/nix/store}" >&2
+  echo >&2
+  echo "  On a live ISO this is a RAM-backed overlay, sized at half the" >&2
+  echo "  machine's memory. It is not the disk you are installing to, which" >&2
+  echo "  has room -- so more RAM, or a machine with more, is what changes it." >&2
+  echo >&2
+  echo "  Nothing has been written to the target. The disk was formatted;" >&2
+  echo "  the system was not installed." >&2
+  echo >&2
+  echo "  This normally fetches nothing at all: the image carries the closure" >&2
+  echo "  already. Having anything to fetch means what the image baked is not" >&2
+  echo "  what this flake asks for, which is a bug worth reporting with the" >&2
+  echo "  two numbers above." >&2
+  return 1
+}
+
 run_install() {
   # What would have to be built, printed before doing it. On a machine with no
   # network an unseeded build input is the difference between an install and a
   # confusing cascade of source downloads, and this names it once rather than
   # leaving it to be inferred from whatever failed first.
-  nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
-    "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1 |
-    head -40 || true
+  #
+  # Captured rather than piped straight to the log, because check_store_space
+  # reads the same plan: the sizes it decides on are the ones printed here.
+  local plan
+  plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
+    "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1) || true
+  printf '%s\n' "$plan" | head -40
+
+  check_store_space "$plan" || return 1
 
   # Build here, then install what was built. NOT `nixos-install --flake`.
   #

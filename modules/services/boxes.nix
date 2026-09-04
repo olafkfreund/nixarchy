@@ -21,6 +21,17 @@
 let
   cfg = config.programs.nixarchy;
   svc = cfg.services.boxes;
+
+  # The exact type Home Manager's own `programs.distrobox.containers` uses --
+  # not a redeclaration, a reuse. distrobox-assemble's INI accepts a bool, a
+  # string or a list of strings per key (a list repeats the key), which is
+  # what `pkgs.formats.ini { listsAsDuplicateKeys = true; }` already encodes.
+  # Building it here rather than importing Home Manager's module for its type
+  # alone is the shape modules/local-ai.nix already uses for a value it hands
+  # to home-manager rather than applies itself: declare data, let the module
+  # that consumes it (modules/home.nix, via Home Manager's own module) own
+  # what "valid" means.
+  containerIniAtom = (pkgs.formats.ini { listsAsDuplicateKeys = true; }).lib.types.atom;
 in
 {
   options.programs.nixarchy.services.boxes = {
@@ -35,6 +46,36 @@ in
       in the menu next to Flatpak, which *is* a sandbox -- do not expect the
       same isolation
     '';
+
+    machines = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf containerIniAtom);
+      default = { };
+      example = lib.literalExpression ''
+        {
+          dev = {
+            image = "archlinux:latest";
+            additional_packages = "git base-devel";
+          };
+        }
+      '';
+      description = ''
+        Boxes that come up the same way after every rebuild, instead of
+        living only in whatever was typed at a shell. Each attribute name is
+        a container; its value is passed straight through to Home Manager's
+        `programs.distrobox.containers`, which writes exactly the INI
+        `distrobox-assemble` reads -- see that option's own documentation and
+        upstream's distrobox-assemble manual for the available fields.
+
+        Read out to Home Manager, not applied here: this is a NixOS option,
+        and Home Manager's `containers` are per-user. `modules/home.nix`
+        reads this attrset back out of `osConfig` and hands it to
+        `programs.distrobox.containers` for the user
+        `programs.nixarchy.homeManagerModules.nixarchy` is imported for. An
+        empty attrset (the default) writes nothing -- Home Manager's own
+        module already gates its INI file and its systemd unit on
+        `containers != { }`.
+      '';
+    };
   };
 
   config = lib.mkIf (cfg.enable && svc.enable) {

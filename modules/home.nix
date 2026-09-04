@@ -49,6 +49,19 @@ let
   }
   // (osConfig.programs.nixarchy.localAi or { });
 
+  # Same shape as localAi just above: declared on the NixOS side
+  # (modules/services/boxes.nix), because `machines` names containers that
+  # should exist regardless of which user's home-manager config is reading
+  # this file, and applied here because Home Manager's `programs.distrobox`
+  # is a per-user option with nowhere else to be set. `enable = false` when
+  # there is no osConfig, for the same reason localAi's does: a standalone
+  # home-manager user has no NixOS module to have turned this on.
+  boxes = {
+    enable = false;
+    machines = { };
+  }
+  // (osConfig.programs.nixarchy.services.boxes or { });
+
   # Through the overlay on *your* nixpkgs, for the same reason cfg.package's
   # default takes that route: inputs.self.packages is built from nixarchy's own
   # nixpkgs, and a second copy of anything in home.packages is a buildEnv
@@ -884,5 +897,48 @@ in
     # omarchy-launch-shell responds to that by exiting 0 -- see its
     # compositor_alive() guard. The unit therefore "succeeded" while starting
     # nothing, and duplicated a launch Hyprland was already doing correctly.
+
+    # The declared half of boxes (#257; the imperative half is `distrobox`
+    # itself, installed by modules/services/boxes.nix). `machines` came over
+    # from the NixOS side above; everything else here is what turns it into
+    # containers Home Manager's own module actually writes.
+    programs.distrobox = lib.mkIf boxes.enable {
+      # Scalars, so mkDefault throughout -- see the header of
+      # modules/services/default.nix. This is Home Manager's option, not
+      # ours, but the same Mode A reasoning holds: someone who already set
+      # programs.distrobox by hand in their own home-manager config keeps
+      # their definition, and this yields to it. `containers` is the one
+      # attrset here and stays plain assignment for the same reason -- see
+      # that file's header for why mkDefault on a merging type is a bug
+      # rather than a courtesy.
+      enable = lib.mkDefault true;
+      containers = boxes.machines;
+
+      # Never `pkgs.distrobox` -- that would go through the overlay/plain
+      # nixpkgs pkgs this file already has and add a SECOND profile entry for
+      # the same package modules/services/boxes.nix already put in
+      # environment.systemPackages. `null` here means Home Manager's module
+      # installs nothing: one copy of distrobox, reached the way its own
+      # comment requires -- by bare name, through
+      # /run/current-system/sw/bin, never a store path.
+      package = lib.mkDefault null;
+
+      # Left at Home Manager's own default everywhere else, which is
+      # `cfg.containers != { } && cfg.package != null` -- true the instant
+      # `machines` is non-empty, so leaving this unset would turn it on.
+      # Refused outright: its ExecStart is
+      # `${cfg.package}/bin/distrobox-assemble create --file ...`, a literal
+      # /nix/store/... path baked straight into the unit file -- the exact
+      # GC-survival hazard (nixpkgs#478154) modules/services/boxes.nix's own
+      # comment documents distrobox itself must never be reached through.
+      # `nix-collect-garbage` can delete that path out from under this unit
+      # the same way it can out from under a running box. It also hardcodes
+      # uid 1000 in the cleanup it runs first
+      # (`rm -rf /tmp/storage-run-1000/...`), a second, independent reason to
+      # leave it off. `nixarchy box` (a later issue) is how a machine picks
+      # up a declared container -- by calling `distrobox-assemble` itself,
+      # by bare name, the way the module comment already requires.
+      enableSystemdUnit = lib.mkDefault false;
+    };
   };
 }

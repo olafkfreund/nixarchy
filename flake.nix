@@ -933,6 +933,36 @@
         # `/dev/kvm` (including nixarchy running inside a VM) can boot, and
         # the one CI builds. No separate "disable kvm" option exists to set;
         # there is only this one.
+        #
+        # machineOpts on the -tcg variant, and every entry is load-bearing:
+        #
+        #   - `pit = "on"`, `pic = "on"`. Upstream's default microvm machine
+        #     sets both off, which is correct under KVM -- kvmclock is the
+        #     guest's clock -- and fatal under TCG, which has no kvmclock:
+        #     with no PIT, no PIC and no HPET on this machine type, early
+        #     timer init has nothing to calibrate from, and the kernel
+        #     triple-faults or wedges right after "Poking KASLR", outcome
+        #     depending on where KASLR happened to land. Measured on a real
+        #     A/B: the shipped runner under forced TCG produced zero output
+        #     for five minutes; the same runner with pit/pic on booted to a
+        #     login prompt in 2m13s. `-cpu qemu64` wedged identically, so
+        #     the CPU model was ruled out.
+        #
+        #   - `accel = "tcg"`, PINNED -- not upstream's `kvm:tcg` fallback
+        #     chain. The fallback is how the wedge above shipped unnoticed:
+        #     qemu silently takes KVM wherever /dev/kvm exists (including
+        #     inside a test VM on a host with nested virtualisation), so
+        #     every local run of the "-tcg" artifact was measuring a KVM
+        #     boot, and the one environment that exercised real TCG was CI
+        #     -- at the moment something first tried to boot it. This
+        #     variant's entire reason to exist is hosts with no /dev/kvm; a
+        #     KVM host should run the normal runner. Do not "optimise" the
+        #     fallback back in: an artifact that never runs as what its
+        #     name promises is how this bug lived long enough to gate a PR.
+        #
+        #   - the rest reproduce upstream's x86 defaults (machineOpts
+        #     REPLACES the whole set, so omitting one is turning it off).
+        #     `pcie = "on"` because the 9p shares sit on virtio-pci.
         // lib.concatMapAttrs (
           name: template:
           let
@@ -945,7 +975,21 @@
           in
           {
             "microvm-${name}" = mkMicrovm [ ];
-            "microvm-${name}-tcg" = mkMicrovm [ { microvm.cpu = "max"; } ];
+            "microvm-${name}-tcg" = mkMicrovm [
+              {
+                microvm.cpu = "max";
+                microvm.qemu.machineOpts = {
+                  accel = "tcg";
+                  acpi = "on";
+                  "mem-merge" = "on";
+                  pcie = "on";
+                  pit = "on";
+                  pic = "on";
+                  rtc = "on";
+                  usb = "off";
+                };
+              }
+            ];
           }
         ) (import ./data/microvm-templates.nix)
       );

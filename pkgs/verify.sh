@@ -770,6 +770,117 @@ for app in nautilus pinta gnome-disks xournalpp; do
   fi
 done
 
+# ---- boxes ----------------------------------------------------------------
+# What only real hardware and a live network can answer for distrobox (#230).
+# CI's checks.box-template (#258) proves the catalogue and nixarchy box's own
+# script are well-formed with no network at all; checks.box-boot, once it
+# lands, proves creation and entry inside an isolated VM with a preloaded
+# image and no real network path out. Neither can answer "does this actually
+# work for THIS user, on THIS machine, on the real internet" -- AGENTS.md #2's
+# point, the same reason Bluetooth pairing above is answerable nowhere else.
+#
+# distrobox is deliberately never in this script's runtimeInputs and never
+# called any way but by bare name below -- the same wrapper-only rule
+# pkgs/box.nix's header explains: distrobox resolves its own support scripts
+# relative to the directory it was invoked from, so a /nix/store path here
+# would be exactly the mistake this section exists to catch elsewhere.
+head_ "Boxes"
+if ! command -v distrobox >/dev/null 2>&1; then
+  hmm "distrobox not on PATH" "enable services.boxes to test this"
+else
+  # Rootless podman, actually usable by this user -- not merely installed.
+  # NixOS allocates the subuid/subgid ranges automatically; this confirms
+  # they landed rather than assuming the allocator ran.
+  me=$(id -un)
+  if grep -q "^$me:" /etc/subuid 2>/dev/null && grep -q "^$me:" /etc/subgid 2>/dev/null; then
+    ok "subuid/subgid ranges" "$(grep "^$me:" /etc/subuid)"
+  else
+    bad "no subuid/subgid range for $me" "rootless podman cannot start containers"
+  fi
+
+  if podman info >/dev/null 2>&1; then
+    ok "podman info" "runs with no sudo"
+  else
+    bad "podman info failed" "rootless podman is not usable by this user right now"
+  fi
+
+  # Every box podman actually knows about -- declared or ad hoc, this script
+  # cannot and does not try to tell them apart, the same way `nixarchy box
+  # list` does not either.
+  boxes=$(podman ps -a --format '{{.Names}}' 2>/dev/null || true)
+  if [ -z "$boxes" ]; then
+    hmm "no boxes exist yet" "nixarchy box create <name> --template <t>"
+  else
+    while IFS= read -r box; do
+      [ -n "$box" ] || continue
+
+      # First-start package-manager update: the one thing #256/#259 could
+      # only try once, briefly, offline, on a branch. Read here instead of
+      # assumed -- a box whose pacman -Syy / apt-get update never finished
+      # is a box that will misbehave the first time a package is needed,
+      # quietly.
+      #
+      # `distrobox enter -- true` rather than `systemctl is-system-running`:
+      # distrobox containers do not run systemd as PID 1 by default (no
+      # `--init`), so `systemctl is-system-running` inside one answers
+      # "offline" on a perfectly healthy box -- verified against a fresh
+      # `archlinux` box on this machine, which reported exactly that.
+      # `enter -- true` runs the same first-start setup (the "Installing
+      # basic packages..." sequence distrobox-init performs) and its own
+      # exit status is a direct answer to "did that finish" -- confirmed
+      # against both a healthy box (exit 0) and a genuinely corrupted
+      # pre-existing one on this machine (exit 1, real error text below).
+      #
+      # `</dev/null`: a box with storage corruption prompts interactively
+      # ("recreate the missing symlinks?") instead of failing outright, and
+      # this script has to fail fast rather than hang on that prompt.
+      #
+      # `|| true`: writeShellApplication forces `set -e`, and an unguarded
+      # `var=$(...)` here killed the whole script silently the first time
+      # this was run for real against that same corrupted box (it stopped
+      # dead right after "podman info" with nothing printed at all) --
+      # `podman inspect` on a box that never started and `find` racing a
+      # missing ~/.local/share/applications carry the same risk below.
+      if out=$(timeout 30 distrobox enter "$box" -- true </dev/null 2>&1); then
+        ok "$box: first start" "reached a shell"
+      else
+        bad "$box: first start" "$(printf '%s' "$out" | tail -1)"
+      fi
+
+      # Exported GUI apps actually landing in the launcher --
+      # distrobox-export writes .desktop files under
+      # ~/.local/share/applications named <box>-<app>.desktop.
+      exported=$(find "$HOME/.local/share/applications" -maxdepth 1 -name "${box}-*.desktop" 2>/dev/null | wc -l) || true
+      if [ "$exported" -gt 0 ]; then
+        ok "$box: exported apps" "$exported .desktop file(s) in the launcher"
+      else
+        hmm "$box: no exported apps" "fine if this template exports none"
+      fi
+
+      # The wrapper-only rule, checked continuously instead of assumed --
+      # the live version of the foundation issue's first verify-before-
+      # building question. podman records whatever path the container was
+      # actually created with; a versioned /nix/store path here is exactly
+      # what nixpkgs#478154 says a nix-collect-garbage can delete out from
+      # under this box.
+      mount_src=$(podman inspect --type container "$box" \
+        --format '{{range .Mounts}}{{if eq .Destination "/usr/bin/entrypoint"}}{{.Source}}{{end}}{{end}}' 2>/dev/null) || true
+      case "$mount_src" in
+        "")
+          hmm "$box: entrypoint mount" "not found -- distrobox's own layout may have changed"
+          ;;
+        /nix/store/*)
+          bad "$box: entrypoint mount is a /nix/store path" "$mount_src"
+          say_dim "nix-collect-garbage can delete this out from under a running box (nixpkgs#478154)"
+          ;;
+        *)
+          ok "$box: entrypoint mount" "$mount_src"
+          ;;
+      esac
+    done <<<"$boxes"
+  fi
+fi
+
 # ---- summary -------------------------------------------------------------
 printf '\n%s%s passed, %s failed, %s worth a look%s\n' \
   "$bold" "$pass" "$fail" "$note" "$off"

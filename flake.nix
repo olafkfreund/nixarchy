@@ -369,6 +369,13 @@
             # spelling of it in sed would be a parser that disagrees with the
             # shell, reporting on a menu nobody has.
             python3
+            # podman info / podman inspect, for the Boxes section. Safe to
+            # pin here -- unlike distrobox, podman does not resolve anything
+            # relative to argv[0], so a /nix/store path to it carries none of
+            # pkgs/box.nix's hazard. distrobox itself is deliberately NOT
+            # here: it is looked up by bare name (`command -v distrobox`),
+            # the same wrapper-only rule that command's own header explains.
+            podman
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

@@ -558,6 +558,159 @@ for d in plugins themes; do
   fi
 done
 
+# ---- the menu, row by row ------------------------------------------------
+# A menu row names a command to run, and until now nothing asked whether that
+# command exists. The row renders, somebody picks it, the shell hands the
+# string to execDetached, and nothing happens -- no dialog, no error, no
+# journal line. That is #202's failure exactly, in another subsystem: the
+# config names something, and the something is not there.
+#
+# It belongs here rather than in CI because of WHICH menu is being read. The
+# menu a session shows is the generated defaults with
+# ~/.config/omarchy/extensions/omarchy-menu.jsonc merged over the top -- the
+# user's file and their plugins', which by design nixarchy never writes and CI
+# has therefore never seen. A plugin that adds a row calling a binary it did
+# not bring lands only there. build.yml can assert this about the defaults; the
+# merged menu exists on one machine and this is the script that runs on it.
+head_ "Menu rows"
+
+if [ -z "${OMARCHY_PATH:-}" ] || [ ! -r "$menu_defaults" ]; then
+  : # the section above already said why
+elif ! command -v python3 >/dev/null 2>&1; then
+  hmm "python3 not on PATH" "nothing here can parse the menu"
+else
+  # Parsed the way MenuModel.js does -- whole-line comments out, then trailing
+  # commas, then plain JSON -- because a parser that disagrees with the shell's
+  # is reporting on a menu nobody has. The same three lines are in build.yml,
+  # tests/session.nix and tests/plugin.nix for that reason.
+  menu_rows=$(python3 - "$menu_defaults" "$menu_user" <<'PY'
+import json, re, subprocess, sys
+
+def load(path):
+    try:
+        raw = open(path).read()
+    except OSError:
+        return {}
+    raw = re.sub(r"^\s*//[^\n]*(\n|$)", "", raw, flags=re.M)
+    try:
+        return json.loads(re.sub(r",(\s*[}\]])", r"\1", raw))
+    except ValueError as e:
+        print("PARSE", path, e)
+        return {}
+
+rows = load(sys.argv[1])
+rows.update(load(sys.argv[2]))   # the extension overrides the defaults by id
+
+# A submenu parent has no action and is not broken. Nothing in a row says
+# "I have children" -- the children just carry ids prefixed with the parent's,
+# so `install` is legitimately actionless because `install.editor` exists.
+# Same test as build.yml's dead-row rule, and for the same reason: without it
+# every parent in the merged menu reads as a row that does nothing.
+ids = set(rows)
+def parent(k):
+    return any(o.startswith(k + ".") for o in ids)
+
+# `when:` is evaluated before the row is drawn, so a false one is not a row
+# this machine has. Skipping it is not politeness, it is the difference
+# between a check and a noise generator: the first run of this section on real
+# hardware reported three Touchpad Haptics rows calling
+# dell-xps-touchpad-haptics on a laptop that is not a Dell -- and upstream had
+# already guarded them with
+# `when: omarchy-hw-dell-xps-haptic-touchpad && omarchy-cmd-present ...`.
+# Nothing was broken; the check was asking about rows nobody can see.
+#
+# Run rather than parsed, because they are bash and only bash knows what they
+# mean; the same call tests/session.nix makes of the `disabled` expressions.
+# Timed out because a hung predicate would hang this whole report, and treated
+# as hidden on timeout -- a row the shell cannot decide about in five seconds
+# is not one this section should have an opinion on.
+def shown(row):
+    expr = str(row.get("when", "")).strip()
+    if not expr:
+        return True
+    try:
+        return subprocess.run(["bash", "-c", expr], timeout=5,
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+# The action is a bash string, not a bare command name: `omarchy-theme-set`
+# after a `$(...)` and a `&&`, or a whole if/then. So look at the head of every
+# command position -- the start, and whatever follows a separator or opens a
+# substitution -- and keep only the ones that are a plain word. A fragment
+# starting with `[[` or `"$theme"` is a test or an argument, not a command, and
+# is dropped rather than guessed at; bash resolves its own builtins and
+# keywords when the shell below asks.
+KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until"}
+
+def commands(action):
+    for frag in re.split(r"\$\(|&&|\|\||[;&|()]", action):
+        words = frag.split()
+        while words and words[0] in KEYWORDS:
+            words.pop(0)
+        if words and re.fullmatch(r"[A-Za-z0-9_.+/-]+", words[0]):
+            yield words[0]
+
+seen = set()
+shown_rows = 0
+for key, row in rows.items():
+    if not shown(row):
+        continue
+    shown_rows += 1
+    action = str(row.get("action", "")).strip()
+    if not action:
+        # A row with no action, no children and no provider renders and then
+        # does nothing when chosen. Upstream's own rows are covered by CI; a
+        # hand-written one in the extension is covered by nothing else.
+        if not parent(key) and not row.get("provider"):
+            print("DEAD", key)
+        continue
+    for cmd in commands(action):
+        if (key, cmd) not in seen:
+            seen.add((key, cmd))
+            print("CMD", key, cmd)
+print("ROWS", shown_rows)
+PY
+  )
+
+  # `command -v` in this script and not shutil.which in the probe above: the
+  # PATH that matters is the one a session has, writeShellApplication's prefix
+  # included, and this is the process holding it. Here-string rather than a
+  # pipe -- a `while read` on the right of a pipe runs in a subshell and the
+  # counters below would be discarded with it.
+  menu_checked=0
+  menu_total=0
+  menu_broken=""
+  while read -r kind key cmd; do
+    case "$kind" in
+      CMD)
+        menu_checked=$((menu_checked + 1))
+        command -v "$cmd" >/dev/null 2>&1 ||
+          menu_broken="$menu_broken $key runs $cmd, which is not installed"$'\n'
+        ;;
+      DEAD) menu_broken="$menu_broken $key has no action and no submenu"$'\n' ;;
+      PARSE) menu_broken="$menu_broken $key is not valid JSONC: $cmd"$'\n' ;;
+      ROWS) menu_total=$key ;;
+    esac
+  done <<<"$menu_rows"
+
+  if [ -n "$menu_broken" ]; then
+    bad "menu rows that would do nothing" "$(grep -c . <<<"$menu_broken") of $menu_total visible rows"
+    while IFS= read -r line; do
+      [ -n "$line" ] && say_dim "$line"
+    done <<<"$menu_broken"
+    say_dim "each of these renders, and then does nothing when chosen"
+  elif [ "$menu_checked" -lt 20 ]; then
+    # The count is half the verdict. A parse that returned almost nothing
+    # passes this section for the wrong reason, and looks identical to a menu
+    # in which everything resolves.
+    hmm "only $menu_checked commands checked" "in $menu_total visible rows; the menu did not parse as expected"
+  else
+    ok "every menu row resolves" "$menu_checked commands in $menu_total visible rows"
+  fi
+fi
+
 # ---- the shell -----------------------------------------------------------
 head_ "Shell"
 # Checked by looking at what the system rc sources, not by calling one of the

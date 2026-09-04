@@ -681,6 +681,13 @@ pkgs.runCommand "nixarchy-options"
     inherit report;
     inherit menuFile vm;
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
+    # The menu the shell actually renders on this machine, which is NOT the
+    # package's own: modules/apps.nix rewrites the rows that would run pacman
+    # and points OMARCHY_PATH at a mirrored tree carrying the result (#210).
+    # Every row nixarchy adds -- Search, Roll back, Back up configuration, the
+    # two home-backup rows, App removal -- exists only in this file, so a
+    # command check pointed at the package's menu could never see one of them.
+    treeMenu = "${inputs.self.nixosConfigurations.vm.config.programs.nixarchy.tree}/default/omarchy/omarchy-menu.jsonc";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;

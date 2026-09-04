@@ -40,15 +40,23 @@
   users.users."@username@".hashedPasswordFile = "/var/lib/nixarchy/password.hash";
 
   # A usable emergency shell, when the installer was given a recovery
-  # passphrase. null when it was not, which is the NixOS default: the initrd's
-  # shadow becomes `root:*` and sulogin refuses to open a console.
+  # passphrase. `{ }` when it was not, which leaves the NixOS default: the
+  # initrd's /etc/shadow is `root:*` and sulogin refuses to open a console.
   #
-  # This hash IS in this file, unlike the login hash above, and that is not an
-  # oversight. The option takes a literal string which nixpkgs splices into the
-  # initrd's /etc/shadow, and the initrd lives on the ESP -- unencrypted, by
-  # necessity, since it runs before anything is unlocked. There is no version
-  # of this that keeps the hash secret, so the installer asks for a passphrase
-  # that is worth nothing if it leaks rather than pretending otherwise, and
-  # refuses one that matches the login password.
-  boot.initrd.systemd.emergencyAccess = "@recovery@";
+  # The hash is NOT in this file. boot.initrd.systemd.emergencyAccess would
+  # have put it here -- it takes a literal string, spliced into the initrd's
+  # /etc/shadow -- and this directory is a git repository that
+  # nixarchy-config-repo pushes to GitHub. boot.initrd.secrets instead names a
+  # path on the live filesystem, appended to the initrd by systemd-boot at
+  # bootloader-install time. systemd-boot sets supportsInitrdSecrets, so the
+  # file is not copied into the store either.
+  #
+  # The initrd still ends up holding the hash, and the initrd is on the ESP,
+  # unencrypted -- unavoidably, since it runs before anything is unlocked.
+  # That is why the installer asks for a passphrase of its own and refuses one
+  # that matches the login password: this credential is meant to be spendable.
+  #
+  # If the append ever fails, the generated `root:*` stands and the machine is
+  # locked out of emergency mode rather than open to it.
+  boot.initrd.secrets = "@recoverysecret@";
 }

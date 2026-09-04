@@ -773,32 +773,39 @@ pkgs.testers.runNixOSTest {
             f"unreachable once {subvol} mounts over it."
         )
 
-    # The recovery passphrase reached the initrd, and is NOT the login hash.
+    # The recovery passphrase is on the machine and NOT in the repository.
     #
-    # Both halves matter. The hash is a crypt(3) string full of `$`, and it
-    # travels through substitute_host_files into a Nix string -- the exact
-    # shape the subst() comment says a naive sed mangles into something the
-    # user cannot type. And the reason it is asked separately at all is that
-    # it ends up in the initrd on the unencrypted ESP, so a build that quietly
-    # reused the login hash would spend the credential this feature exists to
-    # protect.
-    cfg = target.succeed("cat /etc/nixos/hosts/*/configuration.nix")
-    recovery = re.search(r'emergencyAccess = "([^"]*)"', cfg)
-    assert recovery, (
-        "the installed configuration.nix has no emergencyAccess string; "
-        "an unrecoverable machine is what this answers file asked not to get:\n"
-        + cfg
+    # `must fail: grep -rq '[$]6[$]' /mnt/etc/nixos` above is the other half of
+    # this and it is the one that matters: /etc/nixos is a git repository that
+    # nixarchy-config-repo pushes to GitHub, so a crypt hash written into it is
+    # published. boot.initrd.systemd.emergencyAccess takes a literal string and
+    # would do exactly that, which is why this goes through
+    # boot.initrd.secrets instead -- a path read at bootloader-install time.
+    #
+    # Asserted here rather than trusted because the failure is silent: the
+    # machine boots either way, and the difference only shows up in a
+    # repository somebody made public.
+    shadow = target.succeed("cat /var/lib/nixarchy/initrd-shadow")
+    assert shadow.startswith("root:$6$"), (
+        f"/var/lib/nixarchy/initrd-shadow is {shadow!r}, not a root shadow "
+        "line with a sha-512 hash. If the hash looks mangled, substitution ate "
+        "the `$`; if the line is missing its fields, sulogin will not parse it."
     )
     login = target.succeed("cat /var/lib/nixarchy/password.hash").strip()
-    assert recovery.group(1).startswith("$6$"), (
-        f"emergencyAccess is {recovery.group(1)!r}, not a sha-512 crypt hash. "
-        "If it looks like a mangled version of one, substitution ate the `$`."
+    assert login not in shadow, (
+        "the recovery hash is the login hash. It goes into the initrd on the "
+        "unencrypted ESP, so this hands anyone holding the disk the credential "
+        "for the account."
     )
-    assert recovery.group(1) != login, (
-        "the recovery hash is the login hash. It is written to the initrd on "
-        "the unencrypted ESP, so this hands anyone with the disk the "
-        "credential for the account."
+    perms = target.succeed(
+        "stat -c '%a %U' /var/lib/nixarchy/initrd-shadow").strip()
+    assert perms == "600 root", (
+        f"/var/lib/nixarchy/initrd-shadow is {perms}, want '600 root'"
     )
+
+    # The config points at that file rather than carrying its contents.
+    target.succeed(
+        "grep -q '/var/lib/nixarchy/initrd-shadow' /etc/nixos/hosts/*/configuration.nix")
 
     subvols = target.succeed("btrfs subvolume list -r /")
     print(subvols)

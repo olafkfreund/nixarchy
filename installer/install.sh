@@ -1012,9 +1012,10 @@ substitute_host_files() {
     # null, or the hash WITH its quotes. Same idiom as @encrypt@: the token
     # is quoted in the template so the file parses as Nix before substitution.
     if [ -n "$recovery_hash" ]; then
-      subst "$f" '"@recovery@"' "\"$recovery_hash\""
+      subst "$f" '"@recoverysecret@"' \
+        '{ "/etc/shadow" = "/var/lib/nixarchy/initrd-shadow"; }'
     else
-      subst "$f" '"@recovery@"' null
+      subst "$f" '"@recoverysecret@"' '{ }'
     fi
     subst "$f" '"@encrypt@"' "$encrypt"
     subst "$f" '"@autologin@"' "$encrypt"
@@ -1456,6 +1457,22 @@ write_password_hash() {
     printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash )
   chmod 0600 /mnt/var/lib/nixarchy/password.hash
   chown 0:0 /mnt/var/lib/nixarchy/password.hash
+
+  # The recovery passphrase, as a whole shadow line, because that is what
+  # boot.initrd.secrets appends over the initrd's /etc/shadow.
+  #
+  # Here rather than in the flake, and this is the point of the whole
+  # arrangement: /etc/nixos is a git repository that nixarchy-config-repo
+  # pushes to GitHub, and checks.install asserts no crypt hash ever appears
+  # inside it. boot.initrd.secrets names a path on the live filesystem, read
+  # at bootloader-install time by systemd-boot -- which sets
+  # supportsInitrdSecrets, so the value is never copied into the store either.
+  if [ -n "$recovery_hash" ]; then
+    ( umask 077
+      printf 'root:%s:::::::\n' "$recovery_hash" >/mnt/var/lib/nixarchy/initrd-shadow )
+    chmod 0600 /mnt/var/lib/nixarchy/initrd-shadow
+    chown 0:0 /mnt/var/lib/nixarchy/initrd-shadow
+  fi
 }
 
 install_flake_dir() {

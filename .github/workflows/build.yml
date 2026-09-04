@@ -648,7 +648,15 @@ jobs:
 
   system:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30. The job's own work is ~20 minutes (see below), so 30 looked
+    # like ample headroom until 2026-09-04, when a cache.nixos.org stall of
+    # 21-24 minutes hit four independent runners inside the same wall-clock
+    # window -- three of them blocked on the identical obs-studio store path.
+    # Every one of those runs died at the cap with its builds already green,
+    # and four PRs sat unmergeable behind an outage in somebody else's CDN.
+    # This cap exists to fail a hung job in half an hour rather than six
+    # (411c6a4); 45 still does that, while surviving a substituter blip.
+    timeout-minutes: 45
     # Its own concurrency group, and NOT cancel-in-progress. This job builds
     # Hyprland from source and takes ~20 minutes, so under the workflow-level
     # cancel-in-progress it is killed by any push landing within that window

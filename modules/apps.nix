@@ -887,6 +887,24 @@ in
         };
 
         environment.systemPackages = [
+          # The doctor and verify, which until now were flake apps only.
+          #
+          # `nixarchy doctor` has always been an advertised subcommand, and on
+          # every machine where you can type `nixarchy` it answered "The doctor
+          # is not installed". The dispatcher below already has
+          # `if command -v nixarchy-doctor` and routes to it -- a branch nothing
+          # could take, because nothing installed it.
+          #
+          # Running from the flake is unchanged: that entry point exists so the
+          # doctor can be run BEFORE nixarchy is an input anywhere, and
+          # installing it does not take that away.
+          #
+          # Through the overlay on the user's own pkgs, never
+          # inputs.self.packages -- see the note on programs.nixarchy.package in
+          # modules/nixos.nix for what mixing nixpkgs instances does to buildEnv.
+          (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
+          (pkgs.extend inputs.self.overlays.default).nixarchy-verify
+
           # Uncomments one app in ~/.config/nixarchy/apps.nix. Matching is on
           # the `#@ <id>` marker, not a line number or a label, so the file
           # survives being reformatted, reordered or annotated by hand.
@@ -1766,6 +1784,7 @@ in
                 # the only entry point someone deciding whether to adopt it
                 # actually has. Route to the command that works rather than to
                 # a binary that is not there.
+                verify)   shift; exec nixarchy-verify "$@" ;;
                 doctor)
                   if command -v nixarchy-doctor >/dev/null 2>&1; then
                     shift; exec nixarchy-doctor "$@"

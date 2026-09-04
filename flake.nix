@@ -264,6 +264,103 @@
     in
     {
       overlays.default = final: _prev: {
+
+        # nixarchy-doctor and nixarchy-verify live here rather than only under
+        # `packages` so the module can install them. A module cannot take them
+        # from inputs.self.packages -- see the note on programs.nixarchy.package
+        # in modules/nixos.nix: those are built from NIXARCHY's nixpkgs, and
+        # mixing instances makes buildEnv refuse the profile with two builds of
+        # the same version. The overlay is how this repo hands a package to a
+        # configuration, and `packages.doctor` now just names the overlay's.
+        nixarchy-doctor = final.writeShellApplication {
+          name = "nixarchy-doctor";
+          runtimeInputs = with final; [
+            systemd
+            gnused
+            gnugrep
+            gawk
+            coreutils
+          ];
+          # @apps@ is the app-to-command table, generated here for the same
+          # reason the menu's is: the doctor has to answer "which of these do
+          # you already have" on a machine that has never had nixarchy, so it
+          # cannot ask the running system and cannot be handed a list by it.
+          #
+          # meta.mainProgram where nixpkgs states one -- it is right where the
+          # attribute name is wrong, and vscode putting `code` on PATH is not a
+          # guess anyone would make. tryEval because unfree packages throw at
+          # evaluation when allowUnfree is off.
+          text =
+            builtins.replaceStrings
+              [ "@apps@" ]
+              [
+                (
+                  let
+                    pkgs = final;
+                    apps = import ./data/apps.nix;
+                    usable = final.lib.filterAttrs (_: a: !(a ? unavailable)) apps;
+                    binaryOf =
+                      name: app:
+                      let
+                        probe = builtins.tryEval (
+                          let
+                            # nixarchy-apps first, then the top level. Apps
+                            # this repo packages live under nixarchy-apps, so
+                            # probing only the top level returned null for every
+                            # one of them and the fallback answered with the
+                            # attribute name. That is right by luck when the
+                            # attribute matches the binary -- once, omacut,
+                            # ttfx -- and wrong when it does not: `zen` for a
+                            # package installing bin/zen-beta, `hey-cli` for one
+                            # installing bin/hey. Both were reported as absent
+                            # on machines that had them.
+                            path = final.lib.splitString "." (app.attr or name);
+                            p = final.lib.attrByPath path (final.lib.attrByPath path null pkgs) pkgs.nixarchy-apps;
+                          in
+                          if p == null then null else (p.meta.mainProgram or null)
+                        );
+                      in
+                      if probe.success && probe.value != null then probe.value else name;
+                  in
+                  final.lib.concatStringsSep "\n" (
+                    final.lib.mapAttrsToList (n: a: "${binaryOf n a}\t${a.label or n}") usable
+                  )
+                )
+              ]
+              (builtins.readFile ./pkgs/doctor.sh);
+        };
+
+        nixarchy-verify = final.writeShellApplication {
+          name = "nixarchy-verify";
+          runtimeInputs = with final; [
+            systemd
+            gnugrep
+            gnused
+            coreutils
+            findutils
+            glib
+            bluez
+            # pgrep and ps. The Session and Screen sharing probes both look for
+            # a running process by name, and writeShellApplication's PATH does
+            # not carry the caller's -- an undeclared pgrep here is a probe that
+            # reports "not running" for everything.
+            procps
+            # awk, in the Session section's quickshell match. Undeclared until
+            # the Fails-in-silence probes went in and the list was read again.
+            gawk
+            # wpctl. "pipewire is running" and "there is a sink" are different
+            # questions and only wireplumber answers the second.
+            wireplumber
+            # The menu-row probe. The menu is JSONC -- comments and trailing
+            # commas -- and the shell's own parser is three lines of Python
+            # that build.yml and both VM tests already share. A fourth
+            # spelling of it in sed would be a parser that disagrees with the
+            # shell, reporting on a menu nobody has.
+            python3
+          ];
+          text = builtins.readFile ./pkgs/verify.sh;
+        };
+
         # Apps Omarchy offers that nixpkgs does not carry. Packaged here so a
         # NixOS user gets the same menu Arch users do, rather than a menu with
         # holes in it.
@@ -538,36 +635,7 @@
           # reasoning as `verify` and `doctor` just below.
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
 
-          verify = pkgsFor.${system}.writeShellApplication {
-            name = "nixarchy-verify";
-            runtimeInputs = with pkgsFor.${system}; [
-              systemd
-              gnugrep
-              gnused
-              coreutils
-              findutils
-              glib
-              bluez
-              # pgrep and ps. The Session and Screen sharing probes both look for
-              # a running process by name, and writeShellApplication's PATH does
-              # not carry the caller's -- an undeclared pgrep here is a probe that
-              # reports "not running" for everything.
-              procps
-              # awk, in the Session section's quickshell match. Undeclared until
-              # the Fails-in-silence probes went in and the list was read again.
-              gawk
-              # wpctl. "pipewire is running" and "there is a sink" are different
-              # questions and only wireplumber answers the second.
-              wireplumber
-              # The menu-row probe. The menu is JSONC -- comments and trailing
-              # commas -- and the shell's own parser is three lines of Python
-              # that build.yml and both VM tests already share. A fourth
-              # spelling of it in sed would be a parser that disagrees with the
-              # shell, reporting on a menu nobody has.
-              python3
-            ];
-            text = builtins.readFile ./pkgs/verify.sh;
-          };
+          verify = pkgsFor.${system}.nixarchy-verify;
 
           # `nix run .#review` -- what needs updating, and what is quietly
           # broken. An app rather than a check because it asks GitHub what
@@ -622,63 +690,7 @@
           # system and prints the configuration it would need. Runnable before
           # nixarchy is an input anywhere, which is the only entry point someone
           # deciding whether to adopt it actually has.
-          doctor = pkgsFor.${system}.writeShellApplication {
-            name = "nixarchy-doctor";
-            runtimeInputs = with pkgsFor.${system}; [
-              systemd
-              gnused
-              gnugrep
-              gawk
-              coreutils
-            ];
-            # @apps@ is the app-to-command table, generated here for the same
-            # reason the menu's is: the doctor has to answer "which of these do
-            # you already have" on a machine that has never had nixarchy, so it
-            # cannot ask the running system and cannot be handed a list by it.
-            #
-            # meta.mainProgram where nixpkgs states one -- it is right where the
-            # attribute name is wrong, and vscode putting `code` on PATH is not a
-            # guess anyone would make. tryEval because unfree packages throw at
-            # evaluation when allowUnfree is off.
-            text =
-              builtins.replaceStrings
-                [ "@apps@" ]
-                [
-                  (
-                    let
-                      pkgs = pkgsFor.${system};
-                      apps = import ./data/apps.nix;
-                      usable = nixpkgs.lib.filterAttrs (_: a: !(a ? unavailable)) apps;
-                      binaryOf =
-                        name: app:
-                        let
-                          probe = builtins.tryEval (
-                            let
-                              # nixarchy-apps first, then the top level. Apps
-                              # this repo packages live under nixarchy-apps, so
-                              # probing only the top level returned null for every
-                              # one of them and the fallback answered with the
-                              # attribute name. That is right by luck when the
-                              # attribute matches the binary -- once, omacut,
-                              # ttfx -- and wrong when it does not: `zen` for a
-                              # package installing bin/zen-beta, `hey-cli` for one
-                              # installing bin/hey. Both were reported as absent
-                              # on machines that had them.
-                              path = nixpkgs.lib.splitString "." (app.attr or name);
-                              p = nixpkgs.lib.attrByPath path (nixpkgs.lib.attrByPath path null pkgs) pkgs.nixarchy-apps;
-                            in
-                            if p == null then null else (p.meta.mainProgram or null)
-                          );
-                        in
-                        if probe.success && probe.value != null then probe.value else name;
-                    in
-                    nixpkgs.lib.concatStringsSep "\n" (
-                      nixpkgs.lib.mapAttrsToList (n: a: "${binaryOf n a}\t${a.label or n}") usable
-                    )
-                  )
-                ]
-                (builtins.readFile ./pkgs/doctor.sh);
-          };
+          doctor = pkgsFor.${system}.nixarchy-doctor;
 
           # `nix run .#devenv-presets` -- scaffolds every preset in
           # data/devenv-presets.nix with the real `nixarchy dev init`, then asks a

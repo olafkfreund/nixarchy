@@ -129,6 +129,87 @@ let
       off = mentions "passwordSecret" (failedAssertions rdpOn);
     };
 
+    # ---- microvm: #221's inertness table, each row with a real off state --
+    #
+    # This is the check the PR body's "break it, watch it fail" argument is
+    # built on. Deleting the `microvm.host.enable` line in
+    # modules/services/microvm.nix (leaving the import) makes every case in
+    # this group fail at once, because every one of them is a consequence of
+    # that single gate rather than of anything they individually configure.
+    microvmHostUser = {
+      on = mvOn.users.users ? microvm;
+      off = mvOff.users.users ? microvm;
+    };
+
+    microvmStateDir = {
+      on = mvOn.systemd.tmpfiles.settings ? "10-microvm";
+      off = mvOff.systemd.tmpfiles.settings ? "10-microvm";
+    };
+
+    microvmUnits =
+      let
+        has =
+          cfg:
+          cfg.systemd.services ? "microvm-tap-interfaces@"
+          && cfg.systemd.services ? "microvm-virtiofsd@"
+          && cfg.systemd.targets ? microvms;
+      in
+      {
+        on = has mvOn;
+        off = has mvOff;
+      };
+
+    microvmCommand =
+      let
+        has = cfg: builtins.any (p: pkgs.lib.getName p == "microvm") cfg.environment.systemPackages;
+      in
+      {
+        on = has mvOn;
+        off = has mvOff;
+      };
+
+    # kvm is not in extraGroups today (modules/nixos.nix grants input and,
+    # conditionally, docker -- never kvm), so this is a real pair: the group
+    # is a capability nobody asked for on a machine that never declared a
+    # sandbox, the same argument modules/nixos.nix already makes for docker.
+    microvmKvmGroup = {
+      on = builtins.elem "kvm" (mvOn.users.users.someone.extraGroups or [ ]);
+      off = builtins.elem "kvm" (mvOff.users.users.someone.extraGroups or [ ]);
+    };
+
+    # Every field below compares the "sandbox" machine, which set the field
+    # explicitly, against "plain", which left it at its default -- both from
+    # the SAME evaluation of mvOn, so what is measured is that the value
+    # actually follows what was declared rather than a hardcoded default
+    # that happens to read true once.
+    microvmAutostart = {
+      on = mvOn.microvm.vms.sandbox.autostart == false;
+      off = mvOn.microvm.vms.plain.autostart == false;
+    };
+
+    microvmMemory = {
+      on = (mvVm mvOn "sandbox").microvm.mem == 4096;
+      off = (mvVm mvOn "plain").microvm.mem == 4096;
+    };
+
+    microvmCores = {
+      on = (mvVm mvOn "sandbox").microvm.vcpu == 3;
+      off = (mvVm mvOn "plain").microvm.vcpu == 3;
+    };
+
+    microvmShare = {
+      on = builtins.elem "extra" (map (s: s.tag) (mvVm mvOn "sandbox").microvm.shares);
+      off = builtins.elem "extra" (map (s: s.tag) (mvVm mvOn "plain").microvm.shares);
+    };
+
+    # A typo in `template` has to fail the rebuild, not produce a machine
+    # that never boots -- data/microvm-templates.nix's own catalogue is
+    # exactly the enum modules/services/microvm.nix draws from.
+    microvmTemplate = {
+      on = mvTemplateOk.success;
+      off = mvTemplateBad.success;
+    };
+
     # preinstallsExclude is the per-application half of preinstalls, and the
     # only removal path for an app the selection does not carry. Both ways:
     # Pinta is there by default and gone when named.
@@ -477,6 +558,130 @@ let
 
   rdpUnitOf = cfg: cfg.systemd.user.services.hypr-rdp.serviceConfig or { };
 
+  # ---- microvm, whose whole promise is that "off" leaves nothing --------
+  #
+  # #221 measured `inputs.microvm.nixosModules.host` against `main` before
+  # designing anything: `microvm.host.enable = true` the instant it is
+  # imported, and with it a system user, memlock limits, the tap/vhost_net
+  # kernel modules, a setuid qemu-bridge-helper, KSM and a `microvm` CLI that
+  # drags Nix into the closure. modules/services/default.nix imports it
+  # unconditionally (the same way sops-nix is always present and inert), so
+  # every one of those has to come from `machines != {}` alone.
+  #
+  # mvOff never enables the service at all -- the state most nixarchy
+  # machines are actually in, and where every row of #221's table must read
+  # "false".
+  mvOff = configWith { user = "someone"; };
+
+  # mvOn declares two machines rather than one, so the per-machine cases
+  # below can prove a passthrough varies with its input instead of merely
+  # being present: "sandbox" sets every field explicitly, "plain" leaves
+  # them at their defaults, and "off" for those cases is the plain machine
+  # reading back the default rather than a second full evaluation.
+  mvOn = configWith {
+    user = "someone";
+    services.microvm = {
+      enable = true;
+      machines = {
+        sandbox = {
+          template = "shell";
+          autostart = false;
+          memory = 4096;
+          cores = 3;
+          sshPort = 2222;
+          shares = [
+            {
+              source = "/tmp/nixarchy-options-test-share";
+              mountPoint = "/mnt/extra";
+              tag = "extra";
+            }
+          ];
+        };
+        plain = {
+          template = "shell";
+        };
+      };
+    };
+  };
+
+  mvVm = cfg: name: cfg.microvm.vms.${name}.config.config;
+
+  # The enum in modules/services/microvm.nix's `template` option is the
+  # whole claim that a typo fails at evaluation rather than at boot. Forcing
+  # the guest's own toplevel is what actually walks through
+  # `templates.${m.template}.module`, so a name the catalogue does not have
+  # throws here rather than merely constructing a lazy, never-forced value.
+  mvTemplateOk =
+    builtins.tryEval
+      (mvVm (configWith {
+        services.microvm.enable = true;
+        services.microvm.machines.x.template = "shell";
+      }) "x").system.build.toplevel.outPath;
+  mvTemplateBad =
+    builtins.tryEval
+      (mvVm (configWith {
+        services.microvm.enable = true;
+        services.microvm.machines.x.template = "not-a-real-template";
+      }) "x").system.build.toplevel.outPath;
+
+  # The cache promise, stated where it can be measured (#221): the guest
+  # closure served to `microvm -c <name>` has to be the same closure CI
+  # already pushed, or "the first launch is a download" is hopeful rather
+  # than true. Same NAME and template in both evaluations -- upstream's own
+  # eval-config sets `networking.hostName = lib.mkDefault name;`
+  # (nixos-modules/host/options.nix in the pinned commit), and that name
+  # becomes part of `system.build.toplevel`'s own derivation name, so two
+  # DIFFERENTLY-named machines would never share an outPath regardless of
+  # this invariant -- that would be measuring the name, not the promise.
+  # What varies here is deliberately only memory, cores and share SOURCE --
+  # same share tag and mount point, since varying those would be a genuine
+  # guest config change (nixos-modules/microvm/mounts.nix keys the generated
+  # mount unit on `tag`, never on `source`).
+  mvInvariantOf =
+    memCfg:
+    mvVm (configWith {
+      services.microvm.enable = true;
+      services.microvm.machines.vm = {
+        template = "shell";
+      }
+      // memCfg;
+    }) "vm";
+
+  mvInvariantSmall = mvInvariantOf {
+    memory = 512;
+    cores = 1;
+    shares = [
+      {
+        source = "/tmp/nixarchy-options-invariant-a";
+        mountPoint = "/mnt/extra";
+        tag = "extra";
+      }
+    ];
+  };
+
+  mvInvariantBig = mvInvariantOf {
+    memory = 8192;
+    cores = 8;
+    shares = [
+      {
+        source = "/tmp/nixarchy-options-invariant-b-a-very-different-path";
+        mountPoint = "/mnt/extra";
+        tag = "extra";
+      }
+    ];
+  };
+
+  microvmProblems =
+    pkgs.lib.optional
+      (mvInvariantSmall.system.build.toplevel.outPath != mvInvariantBig.system.build.toplevel.outPath)
+      ''
+        the guest toplevel changed with memory, cores or share source:
+          small (512MiB, 1 core): ${mvInvariantSmall.system.build.toplevel.outPath}
+          big (8192MiB, 8 cores): ${mvInvariantBig.system.build.toplevel.outPath}
+        the cache promise ("the first launch is a download") does not hold.''
+    ++ pkgs.lib.optional mvInvariantSmall.microvm.storeOnDisk "microvm.vms.vm.config.microvm.storeOnDisk is true at 512MiB; the host's /nix/store share should make an image build unnecessary."
+    ++ pkgs.lib.optional mvInvariantBig.microvm.storeOnDisk "microvm.vms.vm.config.microvm.storeOnDisk is true at 8192MiB; the host's /nix/store share should make an image build unnecessary.";
+
   # ---- a bundled service yields to a user who already configured it ----
   #
   # This is the Mode A hazard in one assertion. Someone adds nixarchy to a
@@ -691,6 +896,7 @@ pkgs.runCommand "nixarchy-options"
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
+    microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
@@ -776,6 +982,12 @@ pkgs.runCommand "nixarchy-options"
       ''
         echo "data/services.nix has entries the generator cannot use:" >&2
         echo "$serviceProblems" >&2
+        exit 1
+      ''
+    else if microvmProblems != [ ] then
+      ''
+        echo "the microvm closure invariant does not hold:" >&2
+        echo "$microvmProblems" >&2
         exit 1
       ''
     else if broken == { } then

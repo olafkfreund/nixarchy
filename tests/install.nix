@@ -748,6 +748,30 @@ pkgs.testers.runNixOSTest {
     # Read-only is asserted through `subvolume list -r`, which lists only
     # read-only subvolumes: a baseline that could be written to is one that
     # can drift into being a copy of the machine rather than of the install.
+    # The store, home and the journal are on the subvolumes the layout
+    # promised -- not sitting inside `@` with empty subvolumes mounted over
+    # the top of them.
+    #
+    # That shape installs cleanly and boots as far as the LUKS prompt, then
+    # fstab mounts the empty @nix over /nix, stage 2 loses its init, and the
+    # machine drops to an emergency mode whose root account is locked. It was
+    # reported from a real install and nothing in this suite could see it:
+    # every check installs once onto a fresh disk, and the fault needs a
+    # second run over mounts a failed first run left behind.
+    #
+    # Asserted on the BOOTED machine rather than on /mnt during the install,
+    # because that is where it bites -- the installer is checked separately by
+    # verify_subvolume_mounts, which refuses to install into this state at all.
+    for mp, subvol in [("/nix", "@nix"), ("/home", "@home"), ("/var/log", "@log")]:
+        got = target.succeed(
+            f"findmnt -no SOURCE --mountpoint {mp}").strip()
+        assert f"[/{subvol}]" in got, (
+            f"{mp} is not mounted from the {subvol} subvolume (findmnt says "
+            f"{got!r}). If it is not a mountpoint at all, the install wrote "
+            f"through the root subvolume and the data under {mp} is "
+            f"unreachable once {subvol} mounts over it."
+        )
+
     subvols = target.succeed("btrfs subvolume list -r /")
     print(subvols)
     readonly = [line.split(" path ", 1)[1].strip()

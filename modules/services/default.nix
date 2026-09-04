@@ -60,13 +60,18 @@
 # `package` option -- which is what modules/nixos.nix and modules/home.nix
 # already do for omarchy and omarchy-nvim-config. hypr-rdp follows them.
 #
-# Only that one module is applied to `inputs`. The others keep the ordinary
-# module signature, because giving them an argument they do not use would
-# suggest they use it.
+# hypr-rdp and microvm are the two that take `inputs`, for two different
+# reasons: hypr-rdp reaches `inputs.self.overlays.default` for a package
+# nixpkgs does not carry; microvm.nix imports
+# `inputs.microvm.nixosModules.host`, the module whose own default is the
+# whole reason it needs the inertness gate documented at its top. The others
+# keep the ordinary module signature, because giving them an argument they
+# do not use would suggest they use it.
 inputs: {
   imports = [
     ./devenv.nix
     (import ./hypr-rdp.nix inputs)
+    (import ./microvm.nix inputs)
     ./syncthing.nix
     ./tailscale.nix
   ];

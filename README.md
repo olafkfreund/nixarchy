@@ -1601,7 +1601,7 @@ is the shape.
 | --- | --- | --- |
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | 4 of 5 done |
 | [#221](https://github.com/olafkfreund/nixarchy/issues/221) | **sandboxes** — a throwaway NixOS machine from a template, in seconds, with no root and no rebuild | planned, 8 issues |
-| [#230](https://github.com/olafkfreund/nixarchy/issues/230) | **boxes** — an Arch or Debian userland for software NixOS will not run, and its apps in your launcher | planned |
+| [#230](https://github.com/olafkfreund/nixarchy/issues/230) | **boxes** — an Arch or Debian userland for software NixOS will not run, and its apps in your launcher | planned, 8 issues |
 
 **Recently finished:**
 [bare metal to a desktop](https://github.com/olafkfreund/nixarchy/issues/6)

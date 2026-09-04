@@ -69,6 +69,7 @@
 # do not use would suggest they use it.
 inputs: {
   imports = [
+    ./boxes.nix
     ./devenv.nix
     (import ./hypr-rdp.nix inputs)
     (import ./microvm.nix inputs)

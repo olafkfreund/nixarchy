@@ -280,6 +280,18 @@
             gnugrep
             gawk
             coreutils
+            # vainfo, for the Graphics section. Declared because
+            # writeShellApplication builds a strict PATH, and an undeclared
+            # vainfo does not read as "vainfo is missing" -- it reads as "no
+            # VAAPI driver answered", which is a different and much worse
+            # answer to hand someone. It ran anyway while this was being
+            # written, from the developer's own PATH, which is exactly how
+            # that goes unnoticed.
+            #
+            # No pciutils: the GPUs come from /sys/bus/pci, the same way the
+            # Bluetooth check reads /sys/class/bluetooth, and sysfs hands over
+            # the PCI address already in the form the bus IDs need.
+            libva-utils
           ];
           # @apps@ is the app-to-command table, generated here for the same
           # reason the menu's is: the doctor has to answer "which of these do
@@ -357,6 +369,10 @@
             # spelling of it in sed would be a parser that disagrees with the
             # shell, reporting on a menu nobody has.
             python3
+            # rfkill, for the Radios section (#277). An undeclared rfkill
+            # reads as "no radios on this machine" rather than "rfkill is
+            # missing" -- the same trap the doctor's vainfo hit.
+            util-linux
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };
@@ -634,6 +650,11 @@
           # build and read the exact command `nixarchy vm` execs -- same
           # reasoning as `verify` and `doctor` just below.
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
+
+          # Exposed at top level for the same reason as nixarchy-vm just
+          # above: checks.box-template builds and reads the exact command
+          # `nixarchy box` execs.
+          nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
 
           verify = pkgsFor.${system}.nixarchy-verify;
 
@@ -1149,6 +1170,11 @@
         # The installer's interactive screens, at every width worth caring
         # about. Nothing else draws them: every other harness passes
         # --answers, which is exactly how #133 shipped.
+        doctor-graphics = import ./tests/doctor-graphics.nix {
+          pkgs = pkgsFor.${system};
+          inherit (self.packages.${system}) doctor;
+        };
+
         installer-store-space = import ./tests/installer-store-space.nix {
           pkgs = pkgsFor.${system};
           installScript = ./installer/install.sh;
@@ -1297,6 +1323,34 @@
             tcg = self.packages.${system}."microvm-${name}-tcg";
           }) (import ./data/microvm-templates.nix);
           nixarchyVm = self.packages.${system}.nixarchy-vm;
+        };
+
+        # Reads the box catalogue and `nixarchy box` structurally -- see
+        # tests/box-template.nix for what that can and cannot prove, and why
+        # (the network-needing half is `checks.box-boot`, a later, CI-gate
+        # issue). `imagePins` is taken by hand against registry-1.docker.io,
+        # once per template, the same way a `fetchurl` sha256 is -- #259
+        # adding `debian` adds an entry here too, or this check fails loudly
+        # with "no imagePins entry for".
+        box-template = import ./tests/box-template.nix {
+          pkgs = pkgsFor.${system};
+          inherit lib;
+          templates = import ./data/box-templates.nix;
+          nixarchyBox = self.packages.${system}.nixarchy-box;
+          imagePins = {
+            archlinux = {
+              imageName = "archlinux";
+              imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
+              tag = "latest";
+              sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
+            };
+            debian = {
+              imageName = "debian";
+              imageDigest = "sha256:f324c7ff54321e8d9c588493a20244965938ce0aa50bbd1022d38010e9ffc4b1";
+              tag = "trixie";
+              sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
+            };
+          };
         };
 
         # The other disk mode, built so the cache has it: installer/cd.nix

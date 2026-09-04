@@ -82,6 +82,11 @@ jobs:
       # checks.install cannot see this: it installs onto a machine whose store
       # fits, which is the only shape that does not fail. So the decision is
       # unit-tested here instead, in seconds.
+      # The doctor's GPU rules, against fixture machines. checks.install's VM
+      # has no PCI display controller, so nothing else can reach these branches.
+      - name: The doctor reads a GPU correctly
+        run: nix build .#checks.x86_64-linux.doctor-graphics --print-build-logs
+
       - name: The installer refuses a build the live store cannot hold
         run: nix build .#checks.x86_64-linux.installer-store-space --print-build-logs
 
@@ -697,6 +702,13 @@ jobs:
         # reach nixarchy.cachix.org: cachix-action above pushes what this
         # job builds.
         run: nix build .#checks.x86_64-linux.microvm-template --print-build-logs
+
+      - name: Read a box template without pulling it online
+        # checks.box-template: the catalogue INI names a real, pinned image
+        # (pulled as a fixed-output derivation, network allowed because the
+        # hash -- not the sandbox -- makes it reproducible), and nixarchy
+        # box never resolves distrobox through a /nix/store path.
+        run: nix build .#checks.x86_64-linux.box-template --print-build-logs
 
       - name: Drive a session and the app-selection loop
         # Boots a machine, picks two apps through nixarchy-app-enable, checks

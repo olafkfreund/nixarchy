@@ -466,6 +466,110 @@ fi
 # Unit names as systemd spells them, not lowercased: NetworkManager.service is
 # capitalised, and lowercasing it returned not-found -- which this reported as
 # "NetworkManager is off here" on a machine where it was enabled.
+# ---- graphics ------------------------------------------------------------
+# Three faults on one laptop in one day, all from nothing here looking at the
+# GPU: a recorder that cannot encode, an environment variable pinning libva to
+# a decode-only driver, and an unconfigured hybrid.
+#
+# sysfs rather than lspci, for the same reason the Bluetooth check below reads
+# /sys/class/bluetooth: it is already there, needs no package, and works on a
+# machine that has adopted nothing. It also hands over the PCI address in the
+# form the conversion needs -- lspci would have to be parsed back out of.
+say "${bold}Graphics${off}"
+
+igpu="" igpu_addr="" dgpu="" dgpu_addr=""
+# The path is a variable so the check can point it at fixtures. sysfs is the
+# one input here that cannot be faked any other way, and a GPU rule nobody can
+# test is a GPU rule nobody should trust -- checks.install's VM has no GPU at
+# all, so this is the only way these branches are ever exercised.
+: "${NIXARCHY_SYSFS_PCI:=/sys/bus/pci/devices}"
+for d in "$NIXARCHY_SYSFS_PCI"/*/; do
+  [ -r "$d/class" ] && [ -r "$d/vendor" ] || continue
+  # 0x03xxxx is a display controller. Anything else is not a GPU.
+  case "$(cat "$d/class")" in 0x03*) ;; *) continue ;; esac
+  case "$(cat "$d/vendor")" in
+    0x10de) dgpu="NVIDIA" dgpu_addr=$(basename "$d") ;;
+    0x8086) igpu="Intel"  igpu_addr=$(basename "$d") ;;
+    0x1002) [ -n "$igpu" ] || { igpu="AMD" igpu_addr=$(basename "$d"); } ;;
+  esac
+done
+
+# 0000:01:00.0 -> PCI:1:0:0. Hexadecimal in sysfs and in lspci, DECIMAL in Nix,
+# which nixos-gpu/SKILL.md flags as a trap because it is one -- and is the whole
+# argument for a tool doing this instead of a person reading it off a screen.
+# printf %d on an 0x-prefixed string is bash's own hex conversion.
+pci_nix() {
+  local rest=${1#*:} bus dev fn
+  bus=${rest%%:*} rest=${rest#*:} dev=${rest%%.*} fn=${rest#*.}
+  printf 'PCI:%d:%d:%d' "0x$bus" "0x$dev" "0x$fn"
+}
+
+# Can it ENCODE, which is a different question from whether VAAPI works.
+#
+# A driver that opens and returns 0 still cannot record if every profile it
+# reports is VAEntrypointVLD -- VLD is decode. nvidia-vaapi-driver is an NVDEC
+# wrapper and is decode-only by design, so `va_openDriver() returns 0` was the
+# reassuring half of a report from a machine that could not record at all.
+# Overridable for the same reason NIXARCHY_SYSFS_PCI is: writeShellApplication
+# PREPENDS its runtimeInputs to PATH, so a stub earlier in PATH never wins and
+# the check silently measured libva-utils' own vainfo finding no driver. Every
+# fixture then looked "decode only", including the one that can encode.
+: "${NIXARCHY_VAINFO:=vainfo}"
+va=$("$NIXARCHY_VAINFO" 2>/dev/null) || true
+va_driver=$(printf '%s' "$va" | sed -n 's/.*Driver version: //p') || true
+enc=$(printf '%s' "$va" | grep -c 'VAEntrypointEncSlice' 2>/dev/null) || enc=0
+
+if [ -z "$igpu$dgpu" ]; then
+  say "  ${dim}No PCI display controller here -- a VM, or a framebuffer.${off}"
+elif [ -z "$va" ]; then
+  finding "No VAAPI driver answered" "$warn" "video will decode and encode on the CPU"
+  snippet+=("  hardware.graphics.extraPackages = with pkgs; [ intel-media-driver ];")
+  notes+=("Nothing answered vainfo. On Intel that is usually intel-media-driver, which mesa does not ship; AMD gets one from mesa already.")
+elif [ "$enc" -gt 0 ]; then
+  finding "Video encoding available" "$ok" "${va_driver:-a VAAPI driver}"
+else
+  finding "This driver cannot encode" "$warn" "${va_driver:-VAAPI}, decode only"
+  notes+=("vainfo reports no VAEntrypointEncSlice, so screen recording and any encoder that wants the GPU will fail. nvidia-vaapi-driver is decode-only by design; Intel's iHD, from intel-media-driver, does encode.")
+  snippet+=("  hardware.graphics.extraPackages = with pkgs; [ intel-media-driver ];")
+fi
+
+# And the variable that hides all of the above. Set to a decode-only driver, it
+# stops libva ever trying the one that could encode -- which is exactly what
+# happened on the machine this section was written for.
+if [ -n "${LIBVA_DRIVER_NAME:-}" ]; then
+  if [ "$enc" -eq 0 ] && [ -n "$va" ]; then
+    finding "LIBVA_DRIVER_NAME is pinning libva" "$warn" "to '$LIBVA_DRIVER_NAME', which cannot encode"
+    notes+=("LIBVA_DRIVER_NAME='$LIBVA_DRIVER_NAME' stops libva trying any other driver. Unset it and run vainfo again before adding packages -- the encoder may already be installed and simply never reached.")
+  else
+    finding "LIBVA_DRIVER_NAME is set" "$ok" "'$LIBVA_DRIVER_NAME'"
+  fi
+fi
+
+# Hybrid. Both GPUs present and no prime configuration is the browser-crashing,
+# battery-eating default, and the bus IDs are the part nobody gets right by hand.
+if [ -n "$igpu" ] && [ -n "$dgpu" ]; then
+  finding "Hybrid graphics" "$warn" "$igpu + $dgpu, no PRIME configuration read"
+  ibus=$(pci_nix "$igpu_addr") nbus=$(pci_nix "$dgpu_addr")
+  snippet+=("")
+  snippet+=("  # $igpu + $dgpu. Bus IDs read from sysfs and converted to decimal.")
+  snippet+=("  hardware.nvidia.prime = {")
+  snippet+=("    offload.enable = true;")
+  snippet+=("    offload.enableOffloadCmd = true;   # gives you \`nvidia-offload <cmd>\`")
+  if [ "$igpu" = Intel ]; then
+    snippet+=("    intelBusId = \"$ibus\";")
+  else
+    snippet+=("    amdgpuBusId = \"$ibus\";")
+  fi
+  snippet+=("    nvidiaBusId = \"$nbus\";")
+  snippet+=("  };")
+  snippet+=("  # Or sync mode instead -- dGPU drives everything: best performance,")
+  snippet+=("  # worst battery. The two are mutually exclusive; pick one.")
+  snippet+=("  #   hardware.nvidia.prime.sync.enable = true;")
+  notes+=("offload is written above because it is the better default on a laptop, but it IS a choice: offload for battery, sync for performance. Read both before rebuilding.")
+elif [ -n "$dgpu" ]; then
+  finding "Discrete $dgpu only" "$ok" "no hybrid setup needed"
+fi
+
 # ---- what a laptop or a shared machine will want to know ----------------
 say "${bold}Worth turning on${off}"
 if [ -d /sys/class/bluetooth ] && [ -n "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]; then
@@ -483,21 +587,21 @@ else
   finding "You are not in the input group" "$warn" ""
   say "     Omarchy's dictation tools and controllers need it. nixarchy adds"
   say "     it for the user you name:"
-  say "       programs.nixarchy.user = \"$USER\";"
+  say "       programs.nixarchy.user = \"${USER:-$(id -un)}\";"
 fi
 say ""
 
-say "  ${dim}programs.nixarchy.browserThemeUser = \"$USER\" tints Chromium with"
+say "  ${dim}programs.nixarchy.browserThemeUser = \"${USER:-$(id -un)}\" tints Chromium with"
 say "  the current theme. Off by default: it hands that user the browsers'"
 say "  policy directories, which on a shared machine is policy for everyone."
 say "  Light and dark already follow the theme without it.${off}"
 
-case "${SHELL##*/}" in
+case "$(basename "${SHELL:-unknown}")" in
   bash | zsh | fish)
-    finding "Omarchy's shell chain covers ${SHELL##*/}" "$ok" ""
+    finding "Omarchy's shell chain covers $(basename "${SHELL:-unknown}")" "$ok" ""
     ;;
   *)
-    finding "Your shell is ${SHELL##*/}" "$warn" ""
+    finding "Your shell is $(basename "${SHELL:-unknown}")" "$warn" ""
     say "     The chain reaches bash, zsh and fish. You would keep the menus"
     say "     and the desktop, and lose the aliases and functions."
     ;;
@@ -515,14 +619,14 @@ esac
 # disagrees: the rc the current system installed, against the PATH this
 # session inherited.
 devenv_rc=""
-case "${SHELL##*/}" in
+case "$(basename "${SHELL:-unknown}")" in
   bash) devenv_rc=/etc/bashrc ;;
   zsh) devenv_rc=/etc/zshrc ;;
   fish) devenv_rc=/etc/fish/config.fish ;;
 esac
 if [ -n "$devenv_rc" ] && [ -r "$devenv_rc" ] && grep -q 'devenv hook' "$devenv_rc"; then
   if command -v devenv >/dev/null 2>&1; then
-    finding "devenv activates in ${SHELL##*/}" "$ok" "cd into a devenv allow'ed project"
+    finding "devenv activates in ${SHELL:-unknown}" "$ok" "cd into a devenv allow'ed project"
   else
     finding "devenv is selected but not on this session's PATH" "$warn" ""
     say "     ${devenv_rc} has the activation hook, so the rebuild landed."

@@ -477,6 +477,21 @@ pkgs.testers.runNixOSTest {
     # unmount -- and then never touch it again, so that the hash taken in a
     # moment is the hash of a filesystem nobody has opened since.
     installer.succeed("mkfs.vfat -n SYSTEM /dev/vdb1")
+    # Between the mkfs and the mount, because the two are not as ordered as
+    # they read. mkfs.vfat returning does not mean the kernel and udev have
+    # seen the new signature, and the mount then fails with
+    #
+    #   mount: /win: wrong fs type, bad option, bad superblock on /dev/vdb1
+    #
+    # 58 seconds into a run, before the installer has done anything at all.
+    #
+    # Latent until #232, which puts checks.install and checks.free-space in one
+    # nix invocation so the two VMs run at the same time. The extra I/O on the
+    # runner is what widened a window that had always been there -- the same
+    # `udevadm settle` already guards the partition table twelve lines up and
+    # the raw write eight lines down, so this was the one step in the sequence
+    # trusting a return code to mean the device was ready.
+    installer.succeed("sync && udevadm settle")
     installer.succeed("mkdir -p /win && mount /dev/vdb1 /win")
     installer.succeed("mkdir -p /win/EFI/Microsoft/Boot")
     installer.succeed("head -c 65536 /dev/urandom > /win/EFI/Microsoft/Boot/bootmgfw.efi")

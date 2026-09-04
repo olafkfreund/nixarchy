@@ -102,6 +102,18 @@
 
   # ── Development ───────────────────────────────────────────────
 
+  microvm = {
+    label = "Sandboxes (MicroVMs)";
+    category = "Development";
+    kind = "bundled";
+    # There is no upstream line at all -- the module is not in nixpkgs, and
+    # data/services.nix's own bar ("if the answer is one line, it is
+    # plain") does not apply when there is no line. Turning it on usefully
+    # is an import, a group, a catalogue and a command; see
+    # modules/services/microvm.nix for the inertness argument.
+    note = "Permanent NixOS sandboxes from a template, booted with no image build and no bootloader -- the host's own /nix/store, shared read-only. Bundled because declaring a machine is what turns on the system user, the kvm group grant, the kernel modules and the microvm CLI; a machine you never declare gets none of them.";
+  };
+
   devenv = {
     label = "devenv";
     category = "Development";

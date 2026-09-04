@@ -52,6 +52,16 @@ jobs:
       - name: The installer's generated lock has the fields nix would write
         run: nix build .#checks.x86_64-linux.installer-lock --print-build-logs
 
+      # Whether the live store can hold what the install must fetch. A live
+      # ISO's store is a RAM-backed overlay at half the machine's memory, and
+      # when it fills the install dies several levels under an error naming
+      # none of it -- reaching one user as a machine with no bootloader.
+      # checks.install cannot see this: it installs onto a machine whose store
+      # fits, which is the only shape that does not fail. So the decision is
+      # unit-tested here instead, in seconds.
+      - name: The installer refuses a build the live store cannot hold
+        run: nix build .#checks.x86_64-linux.installer-store-space --print-build-logs
+
       # Where a crash report goes. The prose said Nixarchy and every `gh`
       # command said Basecamp, so an agent read the rule, concluded correctly,
       # and then copied a command that filed into somebody else's tracker --

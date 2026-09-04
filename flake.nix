@@ -1344,6 +1344,12 @@
               tag = "latest";
               sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
             };
+            debian = {
+              imageName = "debian";
+              imageDigest = "sha256:f324c7ff54321e8d9c588493a20244965938ce0aa50bbd1022d38010e9ffc4b1";
+              tag = "trixie";
+              sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
+            };
           };
         };
 

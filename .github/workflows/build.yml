@@ -760,3 +760,49 @@ jobs:
         # -- so what this proves is that the seed leaves that directory
         # writable and the shell's IPC is reachable.
         run: nix build .#checks.x86_64-linux.plugin --print-build-logs
+
+  # PROPOSED CI-GATE CHANGE (AGENTS.md 3 and 10): this job is new gate wiring,
+  # merged by a human, not an agent.
+  #
+  # Creates and enters a real box inside a NixOS test VM -- see
+  # tests/box-boot.nix. Its own job rather than a step in `system`: that
+  # job's 30-minute budget is already mostly spent, and this needs /dev/kvm
+  # arranged first, which no step there does.
+  box:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: cachix/cachix-action@v17
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
+        with:
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: /dev/kvm is real and writable, or fail here
+        # ubuntu-latest runners have /dev/kvm, but root:kvm 0660 and the nix
+        # build users are not in `kvm`; the udev rule is GitHub's own
+        # documented fix. Loud rather than falling back: without a usable
+        # /dev/kvm the test driver would run the node under TCG and this job
+        # would quietly get slower until it started flapping against its
+        # timeout -- fail on day one instead.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          grep -Eq 'vmx|svm' /proc/cpuinfo || { echo "::error::no vmx/svm in /proc/cpuinfo"; exit 1; }
+          test -w /dev/kvm || { echo "::error::/dev/kvm is not writable"; exit 1; }
+          ls -l /dev/kvm
+
+      - name: Create a box offline, and pin what enter does without a network
+        # checks.box-boot: the pinned image is preloaded from the store
+        # (dockerTools.pullImage is fixed-output), `nixarchy box create` runs
+        # end to end as a rootless user, the recorded distrobox-init mount is
+        # not a /nix/store path (nixpkgs#478154), and the first offline
+        # `distrobox enter` fails loudly at the entrypoint -- the measured
+        # answer to the epic's open first-start question, asserted as
+        # observed. See tests/box-boot.nix.
+        run: nix build .#checks.x86_64-linux.box-boot --print-build-logs

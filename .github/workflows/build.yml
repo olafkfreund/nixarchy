@@ -22,6 +22,29 @@ jobs:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: cachix/cachix-action@v17
+        # A failed cache upload must not fail a build that succeeded. #235: three
+        # of four concurrent pull requests went red in `Post Run
+        # cachix/cachix-action@v17` -- every build step had passed, the daemon
+        # was walking the store skipping paths already in the cache, then it
+        # aborted with exit code 3. The fourth, running in the same
+        # five-minute window, pushed fine. That reads as a ceiling on cachix's
+        # side rather than anything in the change, and a red check that means
+        # "the cache was busy" teaches everyone to re-run without reading --
+        # the habit AGENTS.md 9 exists to prevent.
+        #
+        # `continue-on-error` on the step, not `skipPush`, because pushing
+        # from pull requests is what fills the cache before main needs it. A
+        # post step's continue-on-error is read off the SAME step definition
+        # as the main one -- ActionRunner.ContinueOnError => Action
+        # .ContinueOnError, and the post runner is created with
+        # `actionRunner.Action = Action` -- so this covers the post-job push,
+        # which is where #235 fails.
+        #
+        # What it also covers, stated because it was not free: a failure in
+        # the main step -- installing cachix, adding the substituter -- stops
+        # failing the job too. That one only costs cache misses; the build
+        # steps below still decide the result.
+        continue-on-error: true
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -117,6 +140,8 @@ jobs:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: cachix/cachix-action@v17
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -132,6 +157,8 @@ jobs:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: cachix/cachix-action@v17
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -629,6 +656,8 @@ jobs:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: cachix/cachix-action@v17
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
         with:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}

@@ -9,10 +9,19 @@ name: nightly
 # all, and installs a 15.3 GB closure into a qcow2. That is about an hour and
 # roughly 16 GB of build directory, on a machine with /dev/kvm.
 #
-# So they run here, nightly, on p510 -- 40 cores, 94 GB, KVM, and room for the
-# images: builds land in /home (its own disk, 829 GB free) and the ISO copies
-# below go on /mnt/img_pool (840 GB free). See hosts/p510/nixos/github-runner.nix
-# in the NixOS config repo for the runner itself.
+# So they run here, nightly, on the self-hosted runners -- p510 (40 cores,
+# 94 GB, KVM) and p620 -- where builds land on each host's own build-dir
+# (`/home/nix-build` on p510, `/mnt/games/nix-build` on p620) with hundreds of
+# gigabytes free. See hosts/*/nixos/github-runner.nix in the NixOS config repo
+# for the runners themselves.
+#
+# Nothing here writes outside the Nix store. An earlier version archived each
+# night's ISO to /mnt/img_pool on p510; that never once succeeded (the runner
+# units are ProtectSystem=strict with an empty ReadWritePaths) and it was aimed
+# at the wrong disk anyway -- /mnt/img_pool is p510's SMR drive, which the host
+# deliberately avoids writing to, and it does not exist as a filesystem on p620
+# at all. The ISO's store path is printed in the job summary instead; anyone who
+# wants a copy of a particular night's image can pin it by hand from there.
 #
 # Nightly rather than per-push on purpose. An hour of wall clock per push would
 # make the queue the bottleneck, and what these protect against -- a package
@@ -89,8 +98,8 @@ jobs:
           # had built perfectly well. Bash can split two fields by itself.
           read -r _ closure < <(nix path-info -Sh \
             .#nixosConfigurations.reference.config.system.build.toplevel)
-          printf '| | |\n|---|---|\n| ISO | %s |\n| closure | %s |\n' \
-            "$size" "$closure" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf '| | |\n|---|---|\n| ISO | %s |\n| closure | %s |\n| store path | %s |\n' \
+            "$size" "$closure" "$iso" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # The number the size report prints is only useful if something acts on
       # it. This is that. It builds the network image too, which is the one
@@ -104,33 +113,6 @@ jobs:
 
       - name: Install from it with no network device present
         run: nix build .#checks.x86_64-linux.install-iso --print-build-logs
-
-      - name: Keep a date-stamped copy
-        run: |
-          # On the pool, not as a workflow artifact. A 5.6 GB upload every
-          # night would pass GitHub's free artifact storage in two days and
-          # cost money on the third, to produce a file that already exists on
-          # the machine that built it. Publishing belongs to a tag, which is
-          # what the release workflow is for.
-          #
-          # A symlink into the store rather than a copy: the store path is
-          # already immutable and already there, so this costs nothing until
-          # the store is garbage collected, and `nix-store --add-root` is what
-          # stops that happening.
-          out=$(nix build .#iso --no-link --print-out-paths)
-          iso=$(echo "$out"/iso/*.iso)
-          stamp=$(date -u +%Y-%m-%d)
-          dir=/mnt/img_pool/nixarchy-iso
-          mkdir -p "$dir"
-          nix-store --add-root "$dir/nixarchy-$stamp.iso" --indirect -r "$out" >/dev/null
-          ln -sfn "$iso" "$dir/nixarchy-latest.iso"
-
-          # Fourteen nights. Enough to bisect "it worked last week" without
-          # letting a nightly build fill 840 GB over a year.
-          find "$dir" -maxdepth 1 -name 'nixarchy-????-??-??.iso' -mtime +14 -delete
-
-          printf '| nightly ISO | `%s` |\n' "$dir/nixarchy-$stamp.iso" \
-            | tee -a "$GITHUB_STEP_SUMMARY"
 
   # A failure at 03:00 that nobody sees until someone opens the Actions tab is
   # a failure that costs a day. This turns one into an issue.
@@ -240,10 +222,11 @@ jobs:
           body="The nightly $what: $RUN"
           body="$body
 
-          Both jobs run on the self-hosted runner on p510. If the failure is
-          'no space left', check both /home -- where the nix daemon builds --
-          and /mnt/img_pool, where the nightly ISO copies go. A VM test that
-          runs out of room does not fail cleanly, it wedges."
+          Both jobs run on a self-hosted runner (p510 or p620). If the
+          failure is 'no space left', check that host's nix build-dir and its
+          store -- /home/nix-build and / on p510, /mnt/games/nix-build and /
+          on p620. A VM test that runs out of room does not fail cleanly, it
+          wedges."
           existing=$(gh issue list --state open --search "$title in:title" \
             --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then

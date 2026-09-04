@@ -512,6 +512,12 @@
             # wpctl. "pipewire is running" and "there is a sink" are different
             # questions and only wireplumber answers the second.
             wireplumber
+            # The menu-row probe. The menu is JSONC -- comments and trailing
+            # commas -- and the shell's own parser is three lines of Python
+            # that build.yml and both VM tests already share. A fourth
+            # spelling of it in sed would be a parser that disagrees with the
+            # shell, reporting on a menu nobody has.
+            python3
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

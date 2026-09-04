@@ -106,5 +106,76 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   }
 
   echo "check_store_space refuses what will not fit and nothing else"
+
+  # ------------------------------------------------------------------------
+  # preflight_build (#300): the disk must not be wiped before anything proves
+  # the build could start. Same doctrine as above -- the function on its own,
+  # driven with stubs that lie.
+  # ------------------------------------------------------------------------
+  sed -n '/^preflight_build()/,/^}/p' ${installScript} > pf.sh
+  test -s pf.sh || { echo "preflight_build is not in install.sh any more" >&2; exit 1; }
+  grep '^on_net_image()' ${installScript} >> pf.sh
+
+  cat > pt.sh <<'EOF'
+  NIX_FLAGS=() SUBSTITUTE_FLAGS=()
+  SUBSTITUTERS="https://nixarchy.cachix.org"
+  work=/nonexistent hostname=h
+  . ./pf.sh
+  # The one thing that must never happen before the probes pass.
+  wipefs() { touch wipefs-called; }
+  git() { :; }
+  curl() { [ "$CURL_OK" = 1 ]; }
+  nix() {
+    if [ "$NIX_OK" = 1 ]; then echo 'these 0 derivations will be built'; else
+      echo "error: unable to download 'https://github.com/x/archive/r.tar.gz'"
+      return 1
+    fi
+  }
+  fails=0
+  t() {
+    want=$1 name=$2 img=$3 curlok=$4 nixok=$5
+    if [ "$img" = net ]; then on_net_image() { return 0; }; else on_net_image() { return 1; }; fi
+    if CURL_OK=$curlok NIX_OK=$nixok preflight_build >out 2>&1; then got=proceed; else got=refuse; fi
+    if [ "$got" = "$want" ]; then
+      echo "  ok      $name ($got)"
+    else
+      echo "  FAILED  $name: wanted $want, got $got"; sed 's/^/            /' out
+      fails=$((fails + 1))
+    fi
+  }
+
+  # No marker: checks.install's shape -- no network, seeded store. Probing
+  # here would fail a passing check, so nothing may be probed at all.
+  t proceed "no image marker, network dead"      none 0 0
+  # The filed case: net image, cache dark. Refused, and the message names
+  # the network rather than emitting a dependency cascade.
+  t refuse  "net image, substituter unreachable" net  0 1
+  grep -qi 'network' out || { echo "  FAILED  refusal does not name the network"; fails=$((fails+1)); }
+  # The network died after ask_network let it through: evaluation fails.
+  t refuse  "net image, flake input unreachable" net  1 0
+  grep -qi 'network' out || { echo "  FAILED  eval refusal does not name the network"; fails=$((fails+1)); }
+  # And a network that works installs as before.
+  t proceed "net image, everything answers"      net  1 1
+
+  # (c) of #300: across every scenario, including the refusals, the disk was
+  # never touched.
+  [ ! -e wipefs-called ] || { echo "  FAILED  preflight called wipefs"; fails=$((fails+1)); }
+  exit $fails
+  EOF
+  bash pt.sh
+
+  # And that main() actually runs it ahead of the wipe. The function tests
+  # above stay green with the call site deleted, which would be #133 again:
+  # written, extracted, asserted, and run by nothing.
+  # `|| true` because stdenv sets pipefail, and a grep with no match must
+  # reach the named refusal below rather than kill the script mid-pipe.
+  pf_line=$(grep -n 'preflight_build || exit 1' ${installScript} | cut -d: -f1 | head -1 || true)
+  fmt_line=$(grep -n '^    format_disk &&' ${installScript} | cut -d: -f1 | head -1 || true)
+  [ -n "$pf_line" ] || { echo "main() no longer calls preflight_build" >&2; exit 1; }
+  [ -n "$fmt_line" ] && [ "$pf_line" -lt "$fmt_line" ] || {
+    echo "preflight_build does not run before format_disk; #300 is back" >&2; exit 1;
+  }
+
+  echo "preflight_build refuses before the wipe, and main runs it there"
     touch $out
 ''

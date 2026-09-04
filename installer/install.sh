@@ -1586,6 +1586,80 @@ check_store_space() {
   return 1
 }
 
+# One line so the store-space check can extract it with a grep; the test stubs
+# it to say "network image" without an /etc to write a marker into.
+on_net_image() { [ -f /etc/nixarchy-iso-net ]; }
+
+# Prove the build could start BEFORE the disk is wiped (#300).
+#
+# main() chains format_disk five phases ahead of the build, and that order is
+# load-bearing: the build lands in the live store, a RAM-backed overlay at
+# half the machine's memory (the check_store_space comment above), and when
+# it does not fit the only store big enough is the disk format_disk creates
+# -- run_install's `--store /mnt` fallback. So the build itself cannot move
+# ahead of the wipe. The QUESTION "would this build even start" can, and on
+# the network image the answer is usually about the network.
+#
+# Two probes, both cheap, both while refusal still costs nothing:
+#
+#   - the caches. `nix build --dry-run` does NOT fail on a dark substituter:
+#     nix disables it with a warning and plans a from-source build instead,
+#     which on this image means compiling a desktop into a tmpfs that cannot
+#     hold it. So each cache is asked for its nix-cache-info directly -- the
+#     same test network_ready already applies to cache.nixos.org, extended to
+#     the extra substituters the build actually fetches from.
+#
+#   - the plan. Evaluating the flake fetches its inputs, so this is what
+#     fails when the network died after ask_network let it through --
+#     "unable to download ...tar.gz" -- and what fails on a broken input.
+#     run_install repeats this dry-run after the wipe; by then evaluation is
+#     cached and the repeat is close to free.
+#
+# Only the network image. The offline image carries the closure and has no
+# substituters to probe, and checks.install runs with no network, no marker
+# of either kind and a seeded store -- keying on anything but the net image's
+# own marker would make a passing check demand a network and fail, which is
+# the trap the ask_network comment already names.
+preflight_build() {
+  on_net_image || return 0
+
+  local sub
+  for sub in https://cache.nixos.org $SUBSTITUTERS; do
+    curl -sfI --max-time 8 "$sub/nix-cache-info" >/dev/null 2>&1 && continue
+    echo "nixarchy-install: cannot reach $sub." >&2
+    echo >&2
+    echo "  This image downloads the desktop from that cache as it installs," >&2
+    echo "  and it is not answering. Check the network connection, then run" >&2
+    echo "  nixarchy-install again." >&2
+    echo >&2
+    echo "  Nothing was written: the disk has not been touched." >&2
+    return 1
+  done
+
+  # The flake in a git worktree sees only tracked or staged files
+  # (install_flake_dir says why), and install_flake_dir's later `git init`
+  # on this repository is a no-op.
+  git -C "$work" init -q
+  git -C "$work" add -A
+  local plan
+  plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
+    "$work#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1) && return 0
+
+  echo "nixarchy-install: the system cannot be planned, so no install was started." >&2
+  echo >&2
+  printf '%s\n' "$plan" | grep -m1 'error:' | sed 's/^ */  /' >&2
+  echo >&2
+  if printf '%s' "$plan" | grep -qiE \
+    'unable to download|could not resolve|network is unreachable|couldn.t connect|connection timed out'; then
+    echo "  That is the network: evaluating the flake fetches its inputs, and" >&2
+    echo "  the fetch failed. Check the connection, then run nixarchy-install" >&2
+    echo "  again." >&2
+    echo >&2
+  fi
+  echo "  Nothing was written: the disk has not been touched." >&2
+  return 1
+}
+
 run_install() {
   # What would have to be built, printed before doing it. On a machine with no
   # network an unseeded build input is the difference between an install and a
@@ -1921,6 +1995,12 @@ main() {
     echo "$work"
     exit 0
   fi
+
+  # Refusal is free until format_disk runs; after it there is no OS to go
+  # back to. So what can prove the install would die says so here, on the
+  # screen, instead of five phases deep in a log under a "1 dependency
+  # failed" cascade (#300).
+  preflight_build || exit 1
 
   # From here the screen belongs to the dashboard and every phase writes to the
   # log instead. A wall of store paths tells nobody anything they can act on,

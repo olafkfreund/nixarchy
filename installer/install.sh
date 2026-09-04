@@ -1647,10 +1647,16 @@ preflight_build() {
 
   echo "nixarchy-install: the system cannot be planned, so no install was started." >&2
   echo >&2
-  printf '%s\n' "$plan" | grep -m1 'error:' | sed 's/^ */  /' >&2
+  # Herestrings, not printf pipes -- the #273 shape, again. `grep -m1` and
+  # `grep -q` both close the read end the moment they match, printf dies on
+  # EPIPE, and "printf: Broken pipe" lands immediately above the refusal this
+  # function exists to print. A full closure dry-run is long enough to make
+  # that likely rather than theoretical.
+  grep -m1 'error:' <<<"$plan" | sed 's/^ */  /' >&2
   echo >&2
-  if printf '%s' "$plan" | grep -qiE \
-    'unable to download|could not resolve|network is unreachable|couldn.t connect|connection timed out'; then
+  if grep -qiE \
+    'unable to download|could not resolve|network is unreachable|couldn.t connect|connection timed out' \
+    <<<"$plan"; then
     echo "  That is the network: evaluating the flake fetches its inputs, and" >&2
     echo "  the fetch failed. Check the connection, then run nixarchy-install" >&2
     echo "  again." >&2

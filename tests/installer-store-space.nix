@@ -127,7 +127,12 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   curl() { [ "$CURL_OK" = 1 ]; }
   nix() {
     if [ "$NIX_OK" = 1 ]; then echo 'these 0 derivations will be built'; else
+      # Long on purpose: a real dry-run of a desktop closure is thousands of
+      # lines, which is what makes an early-exiting reader (`grep -m1`, `grep
+      # -q`) kill its producer with EPIPE -- the #273 shape. A short plan
+      # cannot reproduce that race; this one does.
       echo "error: unable to download 'https://github.com/x/archive/r.tar.gz'"
+      seq 1 200000 | sed 's/^/error: cascade line /'
       return 1
     fi
   }
@@ -154,6 +159,10 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   # The network died after ask_network let it through: evaluation fails.
   t refuse  "net image, flake input unreachable" net  1 0
   grep -qi 'network' out || { echo "  FAILED  eval refusal does not name the network"; fails=$((fails+1)); }
+  # The #273 regression, which reached a user: an early-exiting grep killing
+  # its producer puts "printf: Broken pipe" immediately above the refusal, on
+  # the one screen where noise costs the most.
+  ! grep -qi 'broken pipe' out || { echo "  FAILED  refusal is preceded by Broken pipe noise"; fails=$((fails+1)); }
   # And a network that works installs as before.
   t proceed "net image, everything answers"      net  1 1
 

@@ -47,19 +47,44 @@ print(f"all {len(rows)} Install rows are mapped or accounted for")
 # A row whose command is gone renders normally and does nothing when chosen,
 # which is the quietest way for an Omarchy bump to break the desktop.
 #
+# Both prefixes, and the merged menu rather than the package's own, because
+# together those two narrownesses left every row nixarchy writes unchecked.
+#
+# The pattern was `\bomarchy-`, so `nixarchy-apply`, `nixarchy-search`,
+# `nixarchy-app-enable`, `nixarchy-app-disable`, `nixarchy-app-remove` and
+# `nixarchy-service-enable` were invisible to it -- our commands, the ones
+# with no upstream keeping their names still, the ones a refactor here renames
+# in a single commit. And the file it read was the package's menu, which is
+# upstream's plus the Ask rows; the rows those commands appear in are written
+# by modules/apps.nix into the merged defaults ($treeMenu) that OMARCHY_PATH
+# points at, so even a widened pattern aimed at the old file would have found
+# nothing to check. Between them: 75 rows -- every Install and Remove row for
+# an app, every service row, Apply changes, Search -- named a command no check
+# had ever confirmed exists. Renaming one of those writeShellApplications and
+# missing its menu row cost nothing at build time and produced a row that
+# still drew, still highlighted, and did nothing when chosen.
+#
+# `have` is two places for the same reason the names are two families:
+# Omarchy's scripts are files in the tree's bin/, ours are packages on the
+# reference machine's system PATH.
+#
 # Two shapes are excluded because they are not invocations. `when:` guards can
 # name an *Arch package* -- install.editor.emacs tests
 # `omarchy-pkg-present omarchy-emacs`, which is a package, not a command. And
 # remove.webapp greps Exec= lines for `omarchy-webapp-handler`, which is a
 # pattern. Both were flagged the first time this ran, and both are fine.
-menu = json.loads(raw)
+tree_raw = open(os.environ["treeMenu"]).read()
+tree_raw = re.sub(r"^\s*//[^\n]*(\n|$)", "", tree_raw, flags=re.M)
+tree_raw = re.sub(r",(\s*[}\]])", r"\1", tree_raw)
+menu = json.loads(tree_raw)
 have = set(os.listdir(os.path.join(os.environ["omarchyPath"], "bin")))
+have |= set(os.listdir(os.path.join(os.environ["vm"], "sw", "bin")))
 not_invocations = {"omarchy-emacs", "omarchy-webapp-handler"}
 
 missing = {}
 for key, row in menu.items():
     for field in ("action", "when", "disabled", "checked"):
-        for cmd in set(re.findall(r"\bomarchy-[a-z0-9-]+", str(row.get(field, "")))):
+        for cmd in set(re.findall(r"\b(?:omarchy|nixarchy)-[a-z0-9-]+", str(row.get(field, "")))):
             if cmd not in have and cmd not in not_invocations:
                 missing.setdefault(cmd, []).append(key)
 
@@ -67,8 +92,8 @@ if missing:
     sys.exit(
         "these menu rows name a command that does not exist:\n  "
         + "\n  ".join(f"{c} <- {' '.join(sorted(k))}" for c, k in sorted(missing.items()))
-        + "\nAn Omarchy bump removed or renamed it; the rows still draw and do "
-        "nothing when chosen."
+        + "\nAn Omarchy bump removed or renamed it, or a rename here did; the "
+        "rows still draw and do nothing when chosen."
     )
 print(f"all {len(menu)} menu rows name commands that exist")
 

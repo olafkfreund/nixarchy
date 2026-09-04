@@ -9,6 +9,13 @@ let
   cfg = config.programs.nixarchy;
   apps = import ../data/apps.nix;
 
+  # Same gate modules/services/boxes.nix itself applies -- the menu rows
+  # below must not exist at all (not just be hidden) when boxes are off, the
+  # same "Nix-level: lib.optionalAttrs cfg.enable" #226 already established
+  # for sandboxes.
+  boxesEnabled = cfg.enable && cfg.services.boxes.enable;
+  boxTemplates = import ../data/box-templates.nix;
+
   # The command each app puts on PATH, so the menu can tell "you already have
   # this" from "you have not installed it".
   #
@@ -577,6 +584,49 @@ let
           description = "Copy the selection into your flake and nixos-rebuild switch";
         };
       }
+      // lib.optionalAttrs boxesEnabled (
+        {
+          # A new parent under Trigger, appended after upstream's own rows --
+          # the same precedent trigger.snapshot and trigger.home-backup above
+          # already set for this file, and the one #226 set for sandboxes.
+          # `when` is the runtime half of the gate: whether podman is
+          # actually usable THIS login is only knowable now, not at rebuild
+          # time -- the Nix-level half is `boxesEnabled` just above, which
+          # keeps the row from existing at all when the feature is off.
+          "trigger.box" = {
+            icon = "󰆧";
+            label = "Boxes";
+            aliases = [
+              "box"
+              "distrobox"
+            ];
+            when = "nixarchy box --check";
+          };
+
+          "trigger.box.enter" = {
+            icon = "󰆍";
+            label = "Enter a box";
+            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box enter";
+            description = "Pick a box you already have and get a shell in it";
+          };
+
+          "trigger.box.rm" = {
+            icon = "󰩹";
+            label = "Remove a box";
+            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box rm";
+            description = "Pick a box and delete it";
+          };
+        }
+        // lib.mapAttrs' (
+          name: template:
+          lib.nameValuePair "trigger.box.create.${name}" {
+            icon = "󰐕";
+            label = "New: ${template.label}";
+            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box create --template ${name}";
+            description = template.note;
+          }
+        ) boxTemplates
+      )
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: app:
@@ -1749,6 +1799,13 @@ in
           # the real command. See pkgs/microvm.nix for what it does and why.
           (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
 
+          # `nixarchy box <subcommand>`. Its own file for the same reason as
+          # dev-init.nix and microvm.nix above: `checks.box-template` (#258)
+          # has to run the real command. See pkgs/box.nix for what it does
+          # and why -- in particular why it never resolves distrobox through
+          # a /nix/store path.
+          (pkgs.callPackage ../pkgs/box.nix { })
+
           # One name for the commands this repo adds, and a way through to
           # the 431 it vendors.
           #
@@ -1813,6 +1870,7 @@ in
                   esac
                   ;;
                 vm) shift; exec nixarchy-vm "$@" ;;
+                box) shift; exec nixarchy-box "$@" ;;
                 ""|--help|-h|help)
                   cat <<'USAGE'
               nixarchy -- the Omarchy desktop, vendored for NixOS.
@@ -1827,6 +1885,7 @@ in
                 nixarchy apply              Copy the selection into your flake and rebuild
                 nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
                 nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
+                nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                 nixarchy doctor             What this machine needs to run nixarchy
 
               Everything else is Omarchy's own, and reaches it unchanged:

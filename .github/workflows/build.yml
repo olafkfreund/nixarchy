@@ -703,6 +703,13 @@ jobs:
         # job builds.
         run: nix build .#checks.x86_64-linux.microvm-template --print-build-logs
 
+      - name: Read a box template without pulling it online
+        # checks.box-template: the catalogue INI names a real, pinned image
+        # (pulled as a fixed-output derivation, network allowed because the
+        # hash -- not the sandbox -- makes it reproducible), and nixarchy
+        # box never resolves distrobox through a /nix/store path.
+        run: nix build .#checks.x86_64-linux.box-template --print-build-logs
+
       - name: Drive a session and the app-selection loop
         # Boots a machine, picks two apps through nixarchy-app-enable, checks
         # the file still parses, and checks nixarchy-apply copies the

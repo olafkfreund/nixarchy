@@ -323,6 +323,7 @@ pkgs.testers.runNixOSTest {
         "nixarchy/answers".text = ''
           device=/dev/vdb
           encrypt=no
+          recovery_passphrase=rescue-me
           hostname=installed
           username=omarchy
           password_hash=${passwordHash}
@@ -771,6 +772,40 @@ pkgs.testers.runNixOSTest {
             f"through the root subvolume and the data under {mp} is "
             f"unreachable once {subvol} mounts over it."
         )
+
+    # The recovery passphrase is on the machine and NOT in the repository.
+    #
+    # `must fail: grep -rq '[$]6[$]' /mnt/etc/nixos` above is the other half of
+    # this and it is the one that matters: /etc/nixos is a git repository that
+    # nixarchy-config-repo pushes to GitHub, so a crypt hash written into it is
+    # published. boot.initrd.systemd.emergencyAccess takes a literal string and
+    # would do exactly that, which is why this goes through
+    # boot.initrd.secrets instead -- a path read at bootloader-install time.
+    #
+    # Asserted here rather than trusted because the failure is silent: the
+    # machine boots either way, and the difference only shows up in a
+    # repository somebody made public.
+    shadow = target.succeed("cat /var/lib/nixarchy/initrd-shadow")
+    assert shadow.startswith("root:$6$"), (
+        f"/var/lib/nixarchy/initrd-shadow is {shadow!r}, not a root shadow "
+        "line with a sha-512 hash. If the hash looks mangled, substitution ate "
+        "the `$`; if the line is missing its fields, sulogin will not parse it."
+    )
+    login = target.succeed("cat /var/lib/nixarchy/password.hash").strip()
+    assert login not in shadow, (
+        "the recovery hash is the login hash. It goes into the initrd on the "
+        "unencrypted ESP, so this hands anyone holding the disk the credential "
+        "for the account."
+    )
+    perms = target.succeed(
+        "stat -c '%a %U' /var/lib/nixarchy/initrd-shadow").strip()
+    assert perms == "600 root", (
+        f"/var/lib/nixarchy/initrd-shadow is {perms}, want '600 root'"
+    )
+
+    # The config points at that file rather than carrying its contents.
+    target.succeed(
+        "grep -q '/var/lib/nixarchy/initrd-shadow' /etc/nixos/hosts/*/configuration.nix")
 
     subvols = target.succeed("btrfs subvolume list -r /")
     print(subvols)

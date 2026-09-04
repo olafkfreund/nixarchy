@@ -689,6 +689,15 @@ jobs:
         # cannot rot unnoticed between releases.
         run: nix build .#checks.x86_64-linux.reference-toplevel --print-build-logs
 
+      - name: Read a MicroVM runner without booting it
+        # checks.microvm-template: what hypervisor, whether the store is
+        # shared or imaged, whether the network needs root -- read off the
+        # built package and qemu command line, plus nixarchy-vm's launch and
+        # locking behaviour against a stub `nix`. Also how the templates
+        # reach nixarchy.cachix.org: cachix-action above pushes what this
+        # job builds.
+        run: nix build .#checks.x86_64-linux.microvm-template --print-build-logs
+
       - name: Drive a session and the app-selection loop
         # Boots a machine, picks two apps through nixarchy-app-enable, checks
         # the file still parses, and checks nixarchy-apply copies the

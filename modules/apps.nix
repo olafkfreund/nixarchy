@@ -1726,6 +1726,11 @@ in
           # machine that has not enabled it yet.
           (pkgs.callPackage ../pkgs/dev-init.nix { })
 
+          # `nixarchy vm <subcommand>`. Its own file for the same reason as
+          # dev-init.nix above: `checks.microvm-template` (#224) has to run
+          # the real command. See pkgs/microvm.nix for what it does and why.
+          (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
+
           # One name for the commands this repo adds, and a way through to
           # the 431 it vendors.
           #
@@ -1788,6 +1793,7 @@ in
                     init) shift 2; exec nixarchy-dev-init "$@" ;;
                   esac
                   ;;
+                vm) shift; exec nixarchy-vm "$@" ;;
                 ""|--help|-h|help)
                   cat <<'USAGE'
               nixarchy -- the Omarchy desktop, vendored for NixOS.
@@ -1801,6 +1807,7 @@ in
                 nixarchy app remove         Pick what to deselect, interactively
                 nixarchy apply              Copy the selection into your flake and rebuild
                 nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
+                nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                 nixarchy doctor             What this machine needs to run nixarchy
 
               Everything else is Omarchy's own, and reaches it unchanged:

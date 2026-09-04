@@ -582,7 +582,6 @@ list would have been quietly wrong:
 |---|---|
 | Steam | `programs.steam` — an FHS wrapper, or it will not run |
 | 1Password | `programs._1password-gui` — a setuid helper, or it cannot unlock |
-| Tailscale | `services.tailscale` — a daemon |
 | Xbox controllers | `hardware.xpadneo` — a kernel driver |
 | Firefox | `programs.firefox` — so policies and extensions stay declarative |
 
@@ -590,10 +589,22 @@ list would have been quietly wrong:
 app's own option path:
 
 ```nix
-programs.nixarchy.apps.tailscale = {
+programs.nixarchy.apps._1password = {
   enable = true;
-  settings.useRoutingFeatures = "client";   # → services.tailscale.useRoutingFeatures
+  settings.polkitPolicyOwners = [ "you" ];   # → programs._1password-gui.polkitPolicyOwners
 };
+```
+
+Services — Tailscale, remote desktop, Syncthing, OpenSSH — are the companion
+catalogue in `data/services.nix` and a file of their own. A service nixarchy
+only relays gets upstream's own line, `services.openssh.enable = true;`; one it
+integrates gets an option, `programs.nixarchy.services.tailscale.enable`. There
+is no `settings` passthrough on those, because upstream's options are still
+upstream's and are written beside ours:
+
+```nix
+programs.nixarchy.services.tailscale.enable = true;   # + trusts the interface
+services.tailscale.useRoutingFeatures = "client";     # upstream's option, untouched
 ```
 
 ## Usage

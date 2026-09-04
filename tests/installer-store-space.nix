@@ -70,6 +70,41 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   EOF
     bash t.sh
 
-    echo "check_store_space refuses what will not fit and nothing else"
+    # And that the target-store fallback asks for a store that will ACCEPT what
+  # it is handed.
+  #
+  # A path built on the installing machine has no signature, and a fresh store
+  # refuses unsigned paths -- "cannot add path ... because it lacks a signature
+  # by a trusted key". NixOS' own assembly derivations are allowSubstitutes =
+  # false, so they are always built and always unsigned; the fallback therefore
+  # fails on every real machine without this.
+  #
+  # Asserted here because nothing else can. tests/install.nix and
+  # tests/free-space.nix both set require-sigs = false INSIDE the test VM -- and
+  # say why -- so an install check passes whether or not the installer asks for
+  # it. The ISO does not set it. That gap is exactly how #251 shipped broken and
+  # went green.
+  # The URI form, not the bare setting -- the comment above it in install.sh
+  # says "require-sigs=false" too, so a looser pattern matches the explanation
+  # and stays green with the flag deleted. Found by breaking it.
+  grep -q '/mnt?require-sigs=false' ${installScript} || {
+    echo "" >&2
+    echo "the target-store build does not pass require-sigs=false." >&2
+    echo "" >&2
+    echo "Paths built on the installing machine are unsigned, and a fresh" >&2
+    echo "store rejects them:" >&2
+    echo "" >&2
+    echo "  cannot add path '...' because it lacks a signature by a trusted key" >&2
+    echo "" >&2
+    echo "No install check can catch this: they set require-sigs = false in" >&2
+    echo "the test VM, so /mnt accepts unsigned paths there regardless." >&2
+    exit 1
+  }
+  grep -q 'eval-store auto' ${installScript} || {
+    echo "the target-store build no longer splits the evaluation store; see #249" >&2
+    exit 1
+  }
+
+  echo "check_store_space refuses what will not fit and nothing else"
     touch $out
 ''

@@ -21,9 +21,24 @@
 # does not exist as far as evaluation is concerned, and the error says the path
 # is missing rather than that it is untracked.
 {
-  # Pinned to the nixarchy revision this machine was installed from. Bump it
-  # deliberately with `nix flake update nixarchy`, then `nh os switch`.
+  # Your package set. Locked at install time; `nix flake update nixpkgs` (or
+  # `omarchy update`) moves it forward when you decide to.
+  #
+  # To follow STABLE nixpkgs instead, point this at the release branch (e.g.
+  # "github:NixOS/nixpkgs/nixos-25.05") -- and move home-manager with it, as
+  # the two are developed as a pair:
+  #
+  #   inputs.nixarchy.inputs.home-manager.url =
+  #     "github:nix-community/home-manager/release-25.05";
+  #
+  # then `nix flake update nixpkgs home-manager` and `nh os switch`.
+  inputs.nixpkgs.url = "@nixpkgs_url@";
+
+  # Nixarchy itself, locked at the revision this machine was installed from.
+  # `nix flake update nixarchy` moves it to the latest release, deliberately
+  # -- nothing moves until you run it. Then `nh os switch`.
   inputs.nixarchy.url = "@nixarchy_url@";
+  inputs.nixarchy.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs =
     { nixarchy, ... }:

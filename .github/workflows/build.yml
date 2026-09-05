@@ -6,8 +6,20 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Upstream Omarchy and Hyprland both move fast. A weekly run catches a
-    # break before someone else's `nix flake update` does.
+    # A weekly re-run against the COMMITTED lock. This used to claim it
+    # caught a break "before someone else's `nix flake update` does", and it
+    # cannot: the lock pins every flake input, so on those it proves nothing
+    # the last merged PR did not already prove. #320 is the measurement --
+    # nixpkgs renamed ffmpeg_7 away, every downstream consumer broke, and
+    # this run stayed green because its lock still held the old nixpkgs.
+    # nightly.yml's canary job is the one that resolves the inputs the way a
+    # user's update would.
+    #
+    # What this run DOES watch is everything the checks reach past the lock
+    # for: the live issue list the roadmap check reads, the registry nixpkgs
+    # that "every mapped app still evaluates" asks, the fetched upstream
+    # artefacts. Those move on their own schedule, so a scheduled run is
+    # what notices.
     - cron: "0 6 * * 1"
 
 concurrency:

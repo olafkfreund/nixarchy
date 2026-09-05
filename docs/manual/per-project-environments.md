@@ -17,6 +17,8 @@ The next prompt in that directory is inside the environment, and `node
 installed on the machine: that Node is pinned in a file the project owns, and
 committing that file is how a colleague gets the same one.
 
+![nixarchy dev init listing the presets, then scaffolding a real project — the devenv files written into the directory](../img/features/devenv.gif)
+
 This is nixarchy's, not Omarchy's — upstream reaches for `mise use`, which
 [Development tools](development-tools) explains does not fit here. It is also
 not on by default.

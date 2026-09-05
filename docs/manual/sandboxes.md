@@ -16,6 +16,8 @@ booted with your host's `/nix/store` mounted read-only over 9p rather than
 copied into a disk image — a sandbox costs megabytes, not gigabytes, and the
 packages inside it are the same store paths as the ones outside it.
 
+![nixarchy vm templates listing shell, python, podman and persistent; vm create demo --template shell; vm list; then vm run booting the guest through systemd to "Welcome to NixOS 26.11", automatic login as dev, and uname -a answering from inside the guest](../img/features/microvm.gif)
+
 ## What it is not
 
 **Not a desktop VM.** Headless, no display. If you want a GUI machine with a

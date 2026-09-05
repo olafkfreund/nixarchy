@@ -16,11 +16,12 @@ NixOS option is one `Install ▸ Search` away**, plugins and themes still instal
 from a git URL at runtime the way upstream intends, and every command that
 assumed `/usr` either points at what NixOS uses or says why it cannot.
 
-![A tour of nixarchy: the greeter, the menus, themes and the app selection](docs/nixarchy-demo.gif)
+![nixarchy-app-enable helix writing a declaration into ~/.config/nixarchy/apps.nix, grep showing the uncommented line, then nixarchy-apply copying it into the flake and stopping at "Not switching. Run: nh os switch /etc/nixos"](docs/img/features/install.gif)
 
-*Login through the branded greeter, the Omarchy menu, four themes, an app
-selected and applied, and a third-party plugin installed from a git URL into
-the running bar — captured from a real VM by `nix build .#demo`.*
+*The whole model in one clip: a pick becomes a declaration in
+`~/.config/nixarchy/apps.nix`, `nixarchy-apply` copies it into your flake, and
+only then does anything build. More recordings — boxes, sandboxes, themes,
+plugins — throughout [the manual](https://olafkfreund.github.io/nixarchy/).*
 
 ![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
 
@@ -723,6 +724,8 @@ them. Adding one is a command, not a rebuild:
 ```bash
 omarchy plugin add https://github.com/seyhunak/omteleprompt.git --enable
 ```
+
+![omarchy plugin add in a terminal — Cloning, then Added, then Enabled remco.bar-toggle — and the bar showing the plugin's toggle](docs/img/features/plugin.gif)
 
 Or from the menu above, which is where most people will find it. Add opens a
 floating terminal and asks for the URL. Those rows are upstream's own — nixarchy

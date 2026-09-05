@@ -74,6 +74,8 @@ nixarchy box create dev --template archlinux
 nixarchy box enter dev
 ```
 
+![nixarchy box templates listing archlinux and debian, box create pulling the Arch image with podman, distrobox enter, /etc/os-release answering Arch Linux, pacman installing fastfetch inside the box, and fastfetch printing "OS: Arch Linux x86_64" with "WM: Hyprland (Wayland)"](../img/features/boxes.gif)
+
 `nixarchy box` is also reachable from the menu -- `Trigger ▸ Boxes`, or
 search for "box" or "distrobox" -- as one row per template, plus "Enter a
 box" and "Remove a box", which prompt for which one.

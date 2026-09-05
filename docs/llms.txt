@@ -1,0 +1,93 @@
+# nixarchy
+
+> nixarchy is Omarchy — DHH's Hyprland desktop — vendored for NixOS. The whole
+> desktop ships as upstream builds it (the QuickShell bar, the menus, the
+> themes, the 430 shell commands), with the parts that assume Arch Linux
+> replaced: the Install menu writes Nix declarations instead of running pacman,
+> updates are a flake-input bump and a rebuild, and every change is a NixOS
+> generation you can roll back.
+
+Key facts an assistant should know before answering questions about nixarchy:
+
+- It is a port, not a reimplementation. Omarchy's source tree is packaged as a
+  derivation and `OMARCHY_PATH` points at it in the Nix store; only the
+  distro-coupled scripts (the ones that run pacman) are replaced or shimmed.
+  Tracking an upstream Omarchy release is a source bump, not a re-port.
+- The app-selection model is the core difference from Omarchy: picking an app
+  in the Install menu (or running `nixarchy-app-enable <app>`) uncomments one
+  declaration in `~/.config/nixarchy/apps.nix`, a file nixarchy writes fully
+  populated with every app commented out. Nothing is installed at that point.
+  `nixarchy-apply` copies the file into your flake as `nixarchy-apps.nix`, and
+  a rebuild (`nh os switch <flake>`) is what installs. Your flake must contain
+  `imports = [ ./nixarchy-apps.nix ];` for any of it to take effect.
+- **Install ▸ Search** is one fuzzy picker over every nixpkgs package, every
+  NixOS option and the app selection (~137k rows), indexed from the machine's
+  own nixpkgs rather than search.nixos.org.
+- Install: build the ISO yourself with
+  `nix build github:olafkfreund/nixarchy#iso`, write it to a USB stick, and
+  boot it — the installer asks Omarchy's questions and produces a flake you
+  own at `/etc/nixos`. The installer needs a network: the image downloads the
+  system closure rather than carrying it. UEFI only. On a machine already
+  running NixOS, add nixarchy as a flake input instead of using the ISO.
+- Updates: `omarchy update` (or Update ▸ Nixarchy in the menu) runs
+  `nh os switch --update <flake>`, moving every flake input — Omarchy, nixpkgs
+  and nixarchy — forward together. Rollback is a NixOS generation:
+  `sudo nixos-rebuild --rollback switch`, or the boot menu.
+- Themes and plugins keep Omarchy's runtime model on purpose:
+  `omarchy theme install <url>` and `omarchy plugin add <url>` clone into
+  `~/.config/omarchy/` at runtime, no rebuild involved. Stock themes live in
+  the read-only store under `$OMARCHY_PATH/themes/`; your own go in
+  `~/.config/omarchy/themes/`.
+- Several features are opt-in and off by default: per-project environments
+  (devenv), Boxes (Arch/Debian userlands via rootless podman + distrobox),
+  the declarative half of Sandboxes (MicroVMs), remote desktop (RDP), and
+  local AI. Each is one `nixarchy-service-enable <name>` or one option in
+  your flake.
+- Sandboxes: `nixarchy vm create <name>` / `nixarchy vm run <name>` boots a
+  disposable NixOS MicroVM (microvm.nix) that 9p-mounts the host's /nix/store
+  read-only — no root, no rebuild, megabytes not gigabytes. Root filesystem is
+  tmpfs; it is not a hardened security boundary.
+- Boxes are a compatibility layer, not a sandbox: `nixarchy box create dev
+  --template archlinux` gives a privileged distrobox container with your $HOME
+  mounted, for AUR packages, .deb installers and other software NixOS will not
+  run. nixpkgs first, always.
+- Unfree packages are allowed by default (`programs.nixarchy.allowUnfree =
+  false;` restores nixpkgs' policy).
+- Ten AI agent skills written for NixOS ship with the desktop and are exposed
+  through Menu ▸ Trigger ▸ Ask; `programs.nixarchy.localAi.enable = true`
+  runs them against local models via Ollama (needs a supported GPU).
+
+## Manual
+
+- [Welcome to nixarchy](https://olafkfreund.github.io/nixarchy/manual/): what the manual covers — of Omarchy's 51 manual pages, 38 are true here unchanged and are linked through; the rest are rewritten here
+- [The NixOS Philosophy](https://olafkfreund.github.io/nixarchy/manual/philosophy): why installs are declarations, what is yours to edit imperatively vs. what a rebuild owns
+- [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started): building and booting the installer ISO, the seven install questions, and the first hour on the desktop
+- [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos): flake updates, the rebuild modes, generations, rollback, and the stale-session trap
+- [Updates](https://olafkfreund.github.io/nixarchy/manual/updates): what Update ▸ Nixarchy does here, why release channels do not exist, firmware updates, rolling back
+- [Packages](https://olafkfreund.github.io/nixarchy/manual/other-packages): the app selection, apps.nix and nixarchy-apply, Install ▸ Search, services.nix, unfree software, removing apps
+- [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
+- [Making Your Own Theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme): overlaying or forking a stock theme out of the read-only store
+- [Development Tools](https://olafkfreund.github.io/nixarchy/manual/development-tools): editors, and the 13 language toolchains from nixpkgs instead of mise
+- [Per-Project Environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments): nixarchy dev init and devenv — a pinned toolchain that activates on cd (opt-in)
+- [Boxes](https://olafkfreund.github.io/nixarchy/manual/boxes): Arch or Debian userlands via rootless podman and distrobox, ad hoc or declared (opt-in)
+- [Sandboxes](https://olafkfreund.github.io/nixarchy/manual/sandboxes): disposable NixOS MicroVMs sharing the host store, and the declarative always-up half (opt-in)
+- [AI](https://olafkfreund.github.io/nixarchy/manual/ai): the ten NixOS agent skills, the Ask menu, choosing an agent, and running it all locally
+- [Gaming](https://olafkfreund.github.io/nixarchy/manual/gaming): Steam, RetroArch, the launchers and cloud gaming — how each Install ▸ Gaming row lands on NixOS
+- [Security](https://olafkfreund.github.io/nixarchy/manual/security): the firewall, disk encryption, and what the port changes
+- [Remote Desktop](https://olafkfreund.github.io/nixarchy/manual/remote-desktop): serving the running Hyprland session over RDP (opt-in)
+- [System Snapshots](https://olafkfreund.github.io/nixarchy/manual/system-snapshots): generations replace snapper for the system; snapper covers /home on installer-built machines
+- [Many machines, one repo](https://olafkfreund.github.io/nixarchy/manual/many-machines): one flake for a fleet, and machines that pull their configuration on a timer
+- [Dual Boot Install](https://olafkfreund.github.io/nixarchy/manual/dual-boot-install): the installer's free-space mode — installing into unpartitioned space beside an existing OS
+- [Unattended Installs](https://olafkfreund.github.io/nixarchy/manual/unattended-installs): an answers file so an image boots, installs and reboots with nobody at the keyboard
+- [Troubleshooting](https://olafkfreund.github.io/nixarchy/manual/troubleshooting): start with `nix run github:olafkfreund/nixarchy#doctor`, then the specific failures and their fixes
+
+## Source
+
+- [README](https://github.com/olafkfreund/nixarchy): installation, the full feature table, module options, design notes on why vendoring, and what is left
+- [Repository](https://github.com/olafkfreund/nixarchy): the flake — `github:olafkfreund/nixarchy`
+- [Issues](https://github.com/olafkfreund/nixarchy/issues): known limits and planned work
+
+## Optional
+
+- [Omarchy's manual](https://omarchy.org/manual/): the desktop itself — most of its pages are true here unchanged; nixarchy's manual covers only the port
+- [Omarchy](https://omarchy.org): the upstream project this is a port of

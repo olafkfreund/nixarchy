@@ -1360,7 +1360,14 @@ reuse_baked_initrd() {
   # The list depends on the answer to the encryption question: LUKS pulls a
   # dozen crypto modules into the initrd, so the two baked initrds have
   # different module sets and pinning to the wrong one matches neither.
-  if [ "$encrypt" = "yes" ]; then
+    # `true`, not "yes". validate_answers normalises the answers file's yes/no
+    # into true/false before any phase runs, and ask_encrypt sets true/false
+    # directly -- so comparing against "yes" made this branch UNREACHABLE and
+    # every ENCRYPTED install pinned the PLAIN module list. With mkForce, which
+    # then discarded luksroot.nix's dm_crypt and friends: the install succeeded
+    # and the machine could not unlock its root. Every other test of $encrypt in
+    # this file already says `= true`.
+  if [ "$encrypt" = true ]; then
     avail_src="@initrdmodules@"
     forced_src="@initrdforced@"
   else

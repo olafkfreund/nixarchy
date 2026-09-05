@@ -875,14 +875,33 @@
               '';
             };
 
-          # A screencast of a real session, plus the frames it was made from.
-          # Not a check: it boots a desktop, drives a tour of it and encodes a
-          # video, which is minutes of work nobody wants on every push. Build it
-          # with `nix build .#demo` when the screencast needs refreshing.
-          demo = import ./tests/demo.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
+          # Screencasts of a real session, scene by scene -- see
+          # tests/demo/default.nix. Not checks: each boots a desktop, drives
+          # it and encodes a GIF, which is minutes of work nobody wants on
+          # every push.
+          #
+          #   nix build .#demo                 the full tour (mp4 + gif)
+          #   nix run   .#demo-record -- <s>   re-record ONE scene's GIF and
+          #                                    drop it in docs/img/features/
+          #   nix run   .#demo-verify -- f.gif audit any GIF: sampled frames
+          #                                    must change, and must OCR to
+          #                                    what the scene claims to show
+          inherit
+            (import ./tests/demo {
+              inherit inputs;
+              pkgs = pkgsFor.${system};
+              microvmRunner = self.packages.${system}."microvm-shell-tcg";
+            })
+            demo
+            demo-record
+            demo-verify
+            demo-scene-menus
+            demo-scene-themes
+            demo-scene-install
+            demo-scene-devenv
+            demo-scene-plugin
+            demo-scene-microvm
+            ;
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once

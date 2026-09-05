@@ -135,6 +135,22 @@
     # The input has a named exit: when hypr-rdp lands in nixpkgs, delete this
     # and point the module at pkgs.hypr-rdp.
     #
+    # That exit is now IN FLIGHT rather than hypothetical -- NixOS/nixpkgs#560204
+    # ("hypr-rdp: init at 0.1.5") is open. When it merges and reaches the nixpkgs
+    # revision this flake pins, the deletion is:
+    #
+    #   1. remove this input and its `follows`
+    #   2. modules/services/hypr-rdp.nix: `inputs.hypr-rdp.packages.${system}...`
+    #      becomes `pkgs.hypr-rdp`
+    #   3. check nothing else reads `inputs.hypr-rdp` (grep; the module is the
+    #      only consumer today)
+    #
+    # Do NOT delete it merely because the nixpkgs PR merged: a merge into
+    # nixpkgs master is not the same as being present in the revision we pin,
+    # and removing the input before then leaves the module reaching for an
+    # attribute that does not exist yet. The condition is `pkgs.hypr-rdp`
+    # evaluating against OUR lock, not a green tick on a pull request.
+    #
     # `follows` is right here and wrong for hyprland above -- upstream's
     # pkg/nix/package.nix is a plain rustPlatform.buildRustPackage whose
     # cargoHash does not depend on which nixpkgs supplies ffmpeg, and they

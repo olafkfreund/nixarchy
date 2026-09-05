@@ -440,28 +440,127 @@ jobs:
           fi
           echo "all executable scripts patched"
 
-      - name: Verify the pacman bins were replaced
+      - name: Verify no bin touches pacman outside the allowlist
         run: |
-          # The shell's bar widget and its "Update System" notification call
-          # omarchy-update straight from QML, so a replacement that silently
-          # stopped being applied would put a pacman updater back in front of
-          # the user with no menu row to blame.
-          for b in omarchy-update omarchy-update-available omarchy-pkg-install \
-                   omarchy-pkg-aur-install omarchy-pkg-present omarchy-pkg-missing \
-                   omarchy-voxtype-config; do
-            f="result/share/omarchy/bin/$b"
-            # Comments in the replacements name pacman when explaining what
-            # upstream did, so only executable lines count.
+          # This used to check seven named bins -- the ones the shell's QML
+          # calls directly -- and nothing else. An enumeration like that
+          # decays the expensive way: upstream adds an eighth pacman caller,
+          # the seven still pass, and the new one ships silently. Same shape
+          # as the coverage guard parsing indentation. So the scan now walks
+          # EVERY executable bin and the enumeration is inverted into an
+          # allowlist of the ones permitted to touch pacman/yay -- new
+          # arrivals fail closed instead of passing unexamined.
+          #
+          # When this fires on a bin NOT in the list, upstream grew a new
+          # package-management path, and someone must decide which of two
+          # things it is -- the check cannot:
+          #   - reachable on NixOS (a menu row modules/apps.nix does not
+          #     override, a keybinding, the shell's QML, or a call from a bin
+          #     we keep) -> it needs a replacement in pkgs/omarchy/nix-bin/,
+          #     like the seven before it
+          #   - Arch-only plumbing nothing here reaches -> add it to the
+          #     allowlist below WITH the reason, the way each entry carries
+          #     one now
+          # An entry is a deliberate act with a diff and a reviewer; that is
+          # the difference from the old list, which could only fail to grow.
+          #
+          # And so the allowlist cannot rot into matching nothing real, it is
+          # loud in both directions: an entry whose bin went clean, or whose
+          # bin the tree stopped shipping, fails until pruned.
+          #
+          # Seeded from the measured state of the 4.0.2 tree (every entry
+          # below greps hot today). Reasons, grouped:
+          #   - update/channel/keyring/mirror plumbing, unreachable because
+          #     nix-bin replaces the entry points the UI calls (omarchy-update,
+          #     omarchy-update-available): omarchy-channel-current,
+          #     omarchy-channel-set, omarchy-refresh-pacman,
+          #     omarchy-reinstall-pkgs, omarchy-update-aur-pkgs,
+          #     omarchy-update-keyring, omarchy-update-orphan-pkgs,
+          #     omarchy-update-system-pkgs{,-when-conflicted},
+          #     omarchy-upgrade-to-quattro, omarchy-update-pacman-guard (its
+          #     job is PRINTING advice about pacman)
+          #   - menu rows modules/apps.nix overrides away: omarchy-pkg-remove
+          #     (remove.package), omarchy-pkg-drop, omarchy-remove-dev-env,
+          #     omarchy-remove-launcher-entry, omarchy-setup-security-fingerprint
+          #   - reads pacman state for display only: omarchy-debug,
+          #     omarchy-upload-log, omarchy-version-pkgs, omarchy-provision-owner,
+          #     omarchy-dev-pkg-test (dev tooling)
+          #   - OUR OWN nix-bin files whose pacman lines are heredoc prose or
+          #     dead upstream code after an early exit, which comment-stripping
+          #     cannot see: omarchy-migrate, omarchy-version,
+          #     omarchy-version-channel
+          allowed="omarchy-channel-current omarchy-channel-set omarchy-debug
+            omarchy-dev-pkg-test omarchy-migrate omarchy-pkg-drop
+            omarchy-pkg-remove omarchy-provision-owner omarchy-refresh-pacman
+            omarchy-reinstall-pkgs omarchy-remove-dev-env
+            omarchy-remove-launcher-entry omarchy-setup-security-fingerprint
+            omarchy-update-aur-pkgs omarchy-update-keyring
+            omarchy-update-orphan-pkgs omarchy-update-pacman-guard
+            omarchy-update-system-pkgs omarchy-update-system-pkgs-when-conflicted
+            omarchy-upgrade-to-quattro omarchy-upload-log omarchy-version
+            omarchy-version-channel omarchy-version-pkgs"
+          # The list wraps lines; the case patterns below match on single
+          # spaces, so squeeze all whitespace first or the entry at each
+          # line's end silently stops matching -- measured, nine of them did.
+          allowed=$(printf '%s' "$allowed" | tr -s ' \n' ' ')
+
+          fail=0
+          scanned=0
+          while IFS= read -r f; do
+            name=$(basename "$f")
+            scanned=$((scanned + 1))
+            # Comments name pacman when explaining what upstream did, so only
+            # comment-stripped lines count. Heredoc prose survives the strip
+            # -- deliberately: a heredoc is what a script EMITS, and three
+            # entries above exist because of exactly that.
             if sed 's/#.*//' "$f" | grep -qE '\bpacman\b|\byay\b'; then
-              echo "::error::$b still drives pacman/yay"
-              exit 1
+              case " $allowed " in
+                *" $name "*) ;;
+                *)
+                  echo "::error::$name touches pacman/yay and is not allowlisted. Either it is reachable on NixOS and needs a pkgs/omarchy/nix-bin/ replacement, or it is Arch-only plumbing and gets an allowlist entry with its reason -- see this step's comment."
+                  fail=1
+                  ;;
+              esac
+            else
+              case " $allowed " in
+                *" $name "*)
+                  echo "::error::$name is allowlisted but no longer touches pacman/yay -- prune the entry, the list must track reality"
+                  fail=1
+                  ;;
+              esac
             fi
-            grep -q 'omarchy:summary=' "$f" || {
-              echo "::error::$b lost its omarchy:summary= line; the CLI will not list it"
-              exit 1
+          done < <(find result/share/omarchy/bin/ -type f -perm -u+x | sort)
+
+          for a in $allowed; do
+            [ -f "result/share/omarchy/bin/$a" ] || {
+              echo "::error::the allowlist names $a, which the tree no longer ships -- prune the entry"
+              fail=1
             }
           done
-          echo "pacman bins replaced, metadata intact"
+
+          # The old check's other half, its seven names now derived: every
+          # replacement this port ships must keep the omarchy:summary= line
+          # the CLI indexes on. Existence needs no assertion here -- the
+          # build itself fails on a nix-bin file that replaces nothing.
+          for b in pkgs/omarchy/nix-bin/*; do
+            n=$(basename "$b")
+            grep -q 'omarchy:summary=' "result/share/omarchy/bin/$n" || {
+              echo "::error::$n lost its omarchy:summary= line; the CLI will not list it"
+              fail=1
+            }
+          done
+
+          # A scan that walked nothing would pass while checking nothing --
+          # the coverage-guard failure, one directory over. The tree ships
+          # hundreds of bins; a count this low means the path or the find is
+          # wrong, not the tree.
+          if [ "$scanned" -lt 300 ]; then
+            echo "::error::only scanned $scanned bins, which is too few to be real -- this check is not reading the tree"
+            fail=1
+          fi
+
+          [ "$fail" -eq 0 ] && echo "$scanned bins scanned: pacman confined to the allowlist, replacement metadata intact"
+          exit "$fail"
 
       - name: Verify the browser lookup ignores $BROWSER
         run: |

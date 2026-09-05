@@ -264,51 +264,53 @@ pkgs.testers.runNixOSTest {
 
       networking.firewall.enable = false;
 
-      # DHCP for the ISO, and the three cache hostnames resolved to this
-      # node. The test framework gives this node 192.168.1.1 on eth1.
-      services.dnsmasq = {
-        enable = true;
-        settings = {
-          interface = "eth1";
-          bind-interfaces = true;
-          dhcp-range = "192.168.1.100,192.168.1.200,12h";
-          address = [
-            "/cache.nixos.org/192.168.1.1"
-            "/nixarchy.cachix.org/192.168.1.1"
-            "/hyprland.cachix.org/192.168.1.1"
-          ];
+      services = {
+        # DHCP for the ISO, and the three cache hostnames resolved to this
+        # node. The test framework gives this node 192.168.1.1 on eth1.
+        dnsmasq = {
+          enable = true;
+          settings = {
+            interface = "eth1";
+            bind-interfaces = true;
+            dhcp-range = "192.168.1.100,192.168.1.200,12h";
+            address = [
+              "/cache.nixos.org/192.168.1.1"
+              "/nixarchy.cachix.org/192.168.1.1"
+              "/hyprland.cachix.org/192.168.1.1"
+            ];
+          };
         };
-      };
 
-      # The https stub the probes hit. $host in the log line is what turns
-      # this log into the preflight execution trace: only preflight asks
-      # nixarchy.cachix.org.
-      services.nginx = {
-        enable = true;
-        appendHttpConfig = ''
-          log_format probes '$host $request';
-          access_log /var/log/nginx/probes.log probes;
-        '';
-        virtualHosts."cache.nixos.org" = {
-          serverAliases = [
-            "nixarchy.cachix.org"
-            "hyprland.cachix.org"
-          ];
-          onlySSL = true;
-          sslCertificate = "${ca}/cert.pem";
-          sslCertificateKey = "${ca}/key.pem";
-          locations."/nix-cache-info".return = "200 'StoreDir: /nix/store\\n'";
+        # The https stub the probes hit. $host in the log line is what turns
+        # this log into the preflight execution trace: only preflight asks
+        # nixarchy.cachix.org.
+        nginx = {
+          enable = true;
+          appendHttpConfig = ''
+            log_format probes '$host $request';
+            access_log /var/log/nginx/probes.log probes;
+          '';
+          virtualHosts."cache.nixos.org" = {
+            serverAliases = [
+              "nixarchy.cachix.org"
+              "hyprland.cachix.org"
+            ];
+            onlySSL = true;
+            sslCertificate = "${ca}/cert.pem";
+            sslCertificateKey = "${ca}/key.pem";
+            locations."/nix-cache-info".return = "200 'StoreDir: /nix/store\\n'";
+          };
         };
-      };
 
-      # The binary cache itself, plain http on 5000: the daemon on the ISO
-      # reads no SSL_CERT_FILE, so https would only add a failure mode.
-      # harmonia, not nix-serve: the perl server was the prime suspect when
-      # the first run of this test wedged mid-fetch with zero traffic on the
-      # vlan for fifty minutes.
-      services.harmonia = {
-        enable = true;
-        settings.bind = "0.0.0.0:5000";
+        # The binary cache itself, plain http on 5000: the daemon on the ISO
+        # reads no SSL_CERT_FILE, so https would only add a failure mode.
+        # harmonia, not nix-serve: the perl server was the prime suspect when
+        # the first run of this test wedged mid-fetch with zero traffic on
+        # the vlan for fifty minutes.
+        harmonia = {
+          enable = true;
+          settings.bind = "0.0.0.0:5000";
+        };
       };
     };
 

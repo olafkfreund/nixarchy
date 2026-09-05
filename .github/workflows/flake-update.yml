@@ -1,0 +1,238 @@
+# The nixpkgs pin moves every night, so the apps this repo hands people are
+# the ones upstream shipped this week rather than the ones it shipped when
+# somebody last ran `nix flake update` by hand.
+#
+# Nothing in this repo updated flake.lock's nixpkgs before this workflow.
+# omarchy.yml bumps the omarchy input and update.yml bumps the packages pinned
+# here by version and hash; the apps that come FROM nixpkgs followed whatever
+# pin happened to be committed. On 2026-09-05 that pin was 56c02bc, dated
+# 2026-08-23 -- thirteen days old.
+#
+# Measured, by running this workflow's own before/after against 801bef6:
+# SEVENTEEN catalogue apps moved on that single bump, including
+#
+#   vscode       1.133.0 -> 1.135.0
+#   zed-editor   1.16.1  -> 1.17.2
+#   code-cursor  3.16.29 -> 3.17.21
+#   emacs        30.2    -> 31.1
+#   lmstudio     0.4.21-2 -> 0.4.23-1
+#
+# and, for the coding agents this repo does not yet offer but is asked about,
+# claude-code 2.1.238 -> 2.1.258, codex 0.149.0 -> 0.151.0, opencode
+# 1.18.21 -> 1.18.25, ollama 0.32.14 -> 0.33.1.
+#
+# Almost all of that gap was the stale pin, not nixpkgs lagging upstream --
+# nixpkgs tracks these within days. One nightly input bump recovers it for
+# every nixpkgs-sourced app at once, with no per-package version or hash to
+# maintain by hand. Where nixpkgs itself is materially behind (gemini-cli sat
+# at 0.47.0 on both revisions while upstream was at 0.58.0) no pin bump can
+# help and the app needs its own package; that is a separate decision, and not
+# something to automate here.
+#
+# NIXPKGS ONLY, deliberately. `nix flake update` with no argument resolves
+# every mobile input, and some of these are pinned on purpose: the nightly
+# review records disko as "a ref chosen on purpose that has not moved in 227
+# days". A nightly job that quietly undoes a deliberate pin is worse than no
+# job. Naming the input keeps this to the one that carries the apps.
+
+name: flake update
+
+on:
+  schedule:
+    # 07:00 UTC, and the order is the point. nightly.yml (03:00) reports on
+    # today's tree, omarchy.yml (04:00) and update.yml (05:00) each land their
+    # own bump, and review.yml (06:00) rewrites the nightly review issue. This
+    # runs last, so that issue records the staleness which motivated the bump
+    # rather than being overwritten by it mid-run -- and so an Omarchy bump and
+    # a nixpkgs bump are never two pull requests racing for the same base.
+    #
+    # 06:00 was the first choice and is taken twice over: review.yml every day
+    # and build.yml on Mondays.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# One bump at a time, and never cancelled. The loser of a cancelled race is a
+# half-written lock file, and there is nothing to gain by starting over.
+concurrency:
+  group: flake-update
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: What the apps are on today
+        id: before
+        run: |
+          set -euo pipefail
+          ./.github/scripts/app-versions.sh > /tmp/before.json
+          echo "counted $(jq 'length' /tmp/before.json) apps on the current pin"
+
+      - name: Move the pin
+        id: bump
+        run: |
+          set -euo pipefail
+          nix flake update nixpkgs
+          if git diff --quiet -- flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "nixpkgs is already current -- nothing to do"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git --no-pager diff --stat -- flake.lock
+          fi
+
+      - name: What the apps would be on
+        id: after
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          ./.github/scripts/app-versions.sh > /tmp/after.json
+          echo "counted $(jq 'length' /tmp/after.json) apps on the new pin"
+
+      # The point of the whole workflow, in a form a human can read in ten
+      # seconds: which apps actually moved, and to what. A lock-file diff says
+      # one hash became another hash, which tells a reviewer nothing about
+      # whether this bump was worth taking.
+      - name: What actually moved
+        id: delta
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          {
+            echo "delta<<APPDELTA"
+            jq -rn --slurpfile a /tmp/before.json --slurpfile b /tmp/after.json '
+              ($a[0]) as $before | ($b[0]) as $after |
+              [ $after | to_entries[]
+                | select($before[.key] != null and $before[.key] != .value)
+                | "| `\(.key)` | \($before[.key]) | \(.value) |" ]
+              | if length == 0 then
+                  "No package version changed -- the pin moved but nothing this repo installs did."
+                else
+                  (["| app | was | now |", "|---|---|---|"] + .) | join("\n")
+                end'
+            echo "APPDELTA"
+          } >> "$GITHUB_OUTPUT"
+
+          # Named in the title so the PR list is readable without opening it.
+          n=$(jq -rn --slurpfile a /tmp/before.json --slurpfile b /tmp/after.json '
+            ($a[0]) as $before | ($b[0]) as $after |
+            [ $after | to_entries[]
+              | select($before[.key] != null and $before[.key] != .value) ] | length')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+
+      # Cheap and decisive. #320 broke on exactly this surface: the flake
+      # evaluated for the person who changed it and not for a user resolving
+      # inputs fresh. drvPath forces the whole system closure -- every module,
+      # every package in systemPackages -- without building any of it.
+      #
+      # This is a FAST FAIL, not the gate. The gate is build.yml running on the
+      # pull request below, which is why this job does not build anything: a
+      # bump that only this job has verified is a bump verified by the same job
+      # that proposes it.
+      - name: Both toplevels still evaluate
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath
+          echo
+          nix eval --raw .#checks.x86_64-linux.reference-toplevel.drvPath
+          echo
+          echo "both toplevels evaluate against the new pin"
+
+      - name: Open a pull request
+        id: pr
+        if: steps.bump.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          # A PR opened with the default GITHUB_TOKEN triggers no workflows at
+          # all, so its required contexts never report and an armed auto-merge
+          # waits forever. BUMP_TOKEN opens it under a real identity and the
+          # checks run. Measured on 2026-09-05: a PR opened with BUMP_TOKEN
+          # started six check runs within fifteen seconds; the same query
+          # against a GITHUB_TOKEN-opened PR returned zero. Without the secret
+          # this falls back and the merge step below fails saying precisely
+          # that, rather than arming a merge that can never fire.
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+          # Dated, not constant. A bump that stops for a human -- an eval
+          # break, a package that vanished from nixpkgs -- keeps its branch
+          # while the next night still gets a clean attempt of its own.
+          branch: update/nixpkgs-${{ github.run_id }}
+          title: "nixpkgs: ${{ steps.delta.outputs.count }} app version(s) move"
+          commit-message: |
+            Move the nixpkgs pin, and with it ${{ steps.delta.outputs.count }} app version(s)
+
+            Generated by .github/workflows/flake-update.yml.
+          body: |
+            Nightly bump of the `nixpkgs` input. Only that input: the others
+            are left where they are, because at least one of them is pinned on
+            purpose.
+
+            ${{ steps.delta.outputs.delta }}
+
+            Verified before this PR was opened:
+
+            - `.#checks.x86_64-linux.vm-toplevel` evaluates
+            - `.#checks.x86_64-linux.reference-toplevel` evaluates
+
+            That is an evaluation check, not a build. **The gate is the CI on
+            this pull request**, which runs because the PR was opened with
+            `BUMP_TOKEN`; it merges when the required contexts report green and
+            not before.
+
+            What CI does not cover: an app that builds and then misbehaves at
+            runtime. If a package here is one you rely on, launch it before
+            this lands, or roll back afterwards with `nixos-rebuild --rollback`.
+          labels: dependencies
+          delete-branch: true
+
+      - name: Arm auto-merge, gated on the required checks
+        if: steps.bump.outputs.changed == 'true' && steps.pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pr=${{ steps.pr.outputs.pull-request-number }}
+
+          # Needs "Allow auto-merge" (Settings -> General). If it is off, fail
+          # here and say so: the PR is open and safe to merge by hand.
+          if ! gh pr merge "$pr" --auto --squash --delete-branch; then
+            echo "::error::could not arm auto-merge on #$pr -- most likely" \
+              "'Allow auto-merge' is off in the repository settings. The PR" \
+              "is open and waiting; merge it by hand once its checks pass."
+            exit 1
+          fi
+
+          # Armed is not merged. Auto-merge waits for required contexts, which
+          # exist only if opening the PR triggered the workflows. Left
+          # undetected that is a bump which silently never lands: green job,
+          # armed PR, checks that never arrive. Same guard as omarchy.yml, and
+          # for the same reason.
+          sha=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
+          n=0
+          for _ in 1 2 3 4 5 6; do
+            sleep 20
+            n=$(gh api "repos/$GH_REPO/commits/$sha/check-runs" --jq .total_count)
+            [ "$n" -gt 0 ] && break
+          done
+          if [ "$n" -eq 0 ]; then
+            echo "::error::no checks started on #$pr after two minutes. The PR" \
+              "was opened with the default GITHUB_TOKEN, which triggers no" \
+              "workflows, so auto-merge can never fire. Set the BUMP_TOKEN" \
+              "secret. The PR is open; run the checks and merge it by hand."
+            exit 1
+          fi
+          echo "auto-merge armed for the nixpkgs bump (#$pr, $n check runs under way)" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Say so when there was nothing to do
+        if: steps.bump.outputs.changed != 'true'
+        run: echo "nixpkgs was already current; no pull request opened" >> "$GITHUB_STEP_SUMMARY"

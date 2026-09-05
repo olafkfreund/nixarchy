@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "agent-bus": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run", "--with", "mcp", "--with", "httpx",
+        "python", "/REPLACE/WITH/PATH/TO/agent_bus_mcp.py"
+      ],
+      "env": {
+        "MATRIX_HOMESERVER": "https://matrix.freundcloud.org.uk",
+        "MATRIX_SERVER_NAME": "freundcloud.org.uk",
+        "AGENT_BUS_ROOM": "#nixarchy-agents",
+        "AGENT_BUS_NAME": "REPLACE-ME",
+        "MATRIX_USER_ID": "@REPLACE-ME:freundcloud.org.uk",
+        "MATRIX_ACCESS_TOKEN": "REPLACE-ME"
+      }
+    }
+  }
+}

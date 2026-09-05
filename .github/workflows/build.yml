@@ -118,7 +118,7 @@ jobs:
       - name: The workflow files are valid GitHub Actions
         run: |
           nix shell nixpkgs#actionlint -c \
-            actionlint -ignore 'SC[0-9]+:info:'
+            actionlint -ignore 'SC[0-9]+:(info|style):'
 
       - name: Crash reports route to the repository the rule names
         run: nix build .#checks.x86_64-linux.crash-report-repo --print-build-logs

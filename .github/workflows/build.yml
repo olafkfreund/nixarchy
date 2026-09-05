@@ -250,7 +250,12 @@ jobs:
           # rather than left to look accidental:
           #   omarchy                        built as `nix build .#omarchy`
           #   reference-unencrypted-toplevel pulled in by checks.install
-          exempt="omarchy reference-unencrypted-toplevel"
+          #   omarchy-runtime                built as `nix build .#omarchy-runtime`
+          # (omarchy-runtime is the same derivation either way -- the checks
+          # entry is an `inherit` of the package, so building the package IS
+          # building the check. The old awk-based extraction could never see it
+          # at all, which is why it was not listed here before.)
+          exempt="omarchy omarchy-runtime reference-unencrypted-toplevel"
 
           # And the same hole one level up, which is #164. "Some workflow names
           # it" was never the whole question: a check named only by nightly.yml
@@ -265,10 +270,46 @@ jobs:
           # Per-push, an hour of wall clock each makes the queue the bottleneck.
           # Written down here rather than arrived at by omission, which is the
           # argument the guard above already rests on.
-          nightly_only="install-iso iso-budget microvm-boot"
+          #   install-iso-net  the same image build plus a closure fetch; it is
+          #                    install-iso's sibling and belongs in the same
+          #                    bucket. Measured 483s warm, so promoting it to
+          #                    per-PR is affordable if the appetite is there --
+          #                    see the note above about this list's cost
+          #                    argument being stale.
+          nightly_only="install-iso iso-budget microvm-boot install-iso-net"
 
-          names=$(awk '/^      checks = eachSystem/,/^      };/' flake.nix |
-            grep -oE '^        [a-z][a-z0-9-]* =' | tr -d ' =')
+          # Ask Nix, do not parse the file.
+          #
+          # This used to be an awk range plus `grep -oE '^        [a-z]...'` --
+          # EIGHT spaces of indentation. #299 added a `let ... in` around the
+          # checks block, every entry moved to TEN, and the grep silently
+          # matched nothing from that commit onward: the guard printed its
+          # success line having extracted zero names. checks.installer-refusal
+          # and checks.install-iso-net both merged unwired while it stood dead,
+          # which is #133 twice over with the tripwire built for it switched off.
+          #
+          # A guard that reads the source's LAYOUT rather than its VALUE fails
+          # this way. `nix eval` cannot go stale when someone adds a binding.
+          names=$(nix eval --raw \
+            ".#checks.x86_64-linux" \
+            --apply 'c: builtins.concatStringsSep "\n" (builtins.attrNames c)')
+
+          # A floor, because the interesting failure of this guard is not a
+          # wrong answer but an EMPTY one. It has now passed-while-checking-
+          # nothing twice: once when the awk indentation went stale, and it
+          # would do so again if `nix eval` ever returned an empty set for a
+          # reason nobody predicted. AGENTS.md 1 says prove your check fails;
+          # that was never applied to the guard itself.
+          #
+          # 20 is well under the current 33 and well over zero -- it catches
+          # "extracted nothing" without needing maintenance every time a check
+          # is added or removed.
+          count=$(printf '%s\n' "$names" | grep -c . || true)
+          if [ "${count:-0}" -lt 20 ]; then
+            echo "::error::the check list came back with $count names, which is" \
+                 "too few to be real -- this guard is not reading the flake" >&2
+            exit 1
+          fi
 
           missing=""
           ungated=""

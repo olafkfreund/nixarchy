@@ -1448,6 +1448,18 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The same question with encrypt=yes -- the DEFAULT interactive
+          # answer, which until this check had no coverage past evaluation.
+          # Installs, asserts the ENCRYPTED initrd module list was pinned,
+          # boots the result through the LUKS passphrase prompt on the serial
+          # console, and proves autologin and the recovery secret on the ESP.
+          # See tests/install-encrypted.nix for why the passphrase prompt is
+          # not the obstacle tests/install.nix's header once took it for.
+          install-encrypted = import ./tests/install-encrypted.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The #300 guarantee on a real disk: a dark substituter refused with
           # the target intact. installer-store-space covers the same function
           # with stubs; this is the only check that can fail if the installer

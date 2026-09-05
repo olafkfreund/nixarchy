@@ -77,6 +77,38 @@ jobs:
             | grep -E '^(driver|install)_seconds=' \
             | tee -a "$GITHUB_STEP_SUMMARY" || echo "no timing recorded"
 
+  install-encrypted:
+    name: install with encryption and unlock it
+    # Its own job rather than a step in `install`: that job's 60-minute cap
+    # fits one install-class VM, and this check carries the same 85-minute
+    # globalTimeout as checks.install so the driver loses the race to the
+    # job and a hang is a reported failure, not a `cancelled`. Same runner
+    # pool; the runner serialises the two jobs, which is the point -- two
+    # install VMs sharing one disk is what pushed checks.install to 63
+    # minutes on 2026-09-03.
+    #
+    # Nightly rather than per-PR, measured: install-check.yml already runs
+    # two install-class VMs concurrently inside its 90-minute budget on the
+    # one big runner, and that pair has already grazed the driver timeout
+    # under load. A third per-PR would triple the disk-bound phase with no
+    # third budget to give. Encryption being the DEFAULT interactive answer
+    # is a real argument for promoting this per-PR eventually -- the same
+    # argument that moved checks.install per-PR after #123 -- but it should
+    # be made with nightly timings in hand, and this step prints them.
+    runs-on: [self-hosted, nixos, kvm, big]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install with encryption, boot through the LUKS prompt
+        run: nix build .#checks.x86_64-linux.install-encrypted --print-build-logs
+
+      - name: Report the install duration
+        if: always()
+        run: |
+          nix log .#checks.x86_64-linux.install-encrypted 2>/dev/null \
+            | grep -E '^(driver|install)_seconds=' \
+            | tee -a "$GITHUB_STEP_SUMMARY" || echo "no timing recorded"
+
   microvm:
     name: boot a MicroVM on the -tcg runner
     # Moved here from build.yml after two per-PR attempts on ubuntu-latest

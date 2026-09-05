@@ -685,7 +685,6 @@ in
         # Editing the seeded xdph.conf was the other option and is the wrong
         # one: the file is upstream's, so the edit is undone by the next
         # Omarchy bump.
-        hyprland-preview-share-picker
 
         # Omarchy sets a cursor size but never a cursor theme -- on Arch one
         # comes with the desktop packages. NixOS ships none, so Hyprland used
@@ -694,6 +693,9 @@ in
         # the theme: Ice is white for dark themes, Classic black for light.
         bibata-cursors
       ])
+      # ITEM10 EXPERIMENT: absent on nixos-26.05; guarded so stable evaluates.
+      # Dropping it silently breaks screen sharing (#202).
+      ++ lib.optionals (pkgs ? hyprland-preview-share-picker) [ pkgs.hyprland-preview-share-picker ]
       ++ lib.optionals cfg.preinstalls (
         # Filtered by attribute name rather than by pname: the name someone
         # writes in preinstallsExclude is the one they would look up on

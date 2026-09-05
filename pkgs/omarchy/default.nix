@@ -1049,7 +1049,7 @@ stdenvNoCC.mkDerivation {
                 # does not open -- no error anyone can act on. Parse it here instead, so
                 # a bad substitution fails the build of whoever wrote it. This caught
                 # both escaping bugs above.
-                ${python3}/bin/python3 -c '
+                ${python3}/bin/python3 -c 'if 1:
                 import json, re, sys
                 t = open(sys.argv[1]).read()
                 t = re.sub(r"^\s*//.*$", "", t, flags=re.M)

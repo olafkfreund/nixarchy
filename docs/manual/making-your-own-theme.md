@@ -15,6 +15,11 @@ configs and `vscode.json` dropped for the reasons upstream gives. Read
 [the upstream page](https://omarchy.org/manual/making-your-own-theme/) for all
 of that. This page covers only what is different.
 
+What one `colors.toml` drives — the bar, the terminal, the borders and the
+wallpaper all restyle together when a theme is applied:
+
+![Three full desktop restyles in a row: applying a theme recolours the bar, the terminal, the window borders and the wallpaper in one step](../img/features/themes.gif)
+
 ## Where the stock themes live, and why you cannot copy-edit them in place
 
 Upstream says: copy one of the existing themes from `/usr/share/omarchy/themes`

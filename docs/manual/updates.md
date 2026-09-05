@@ -12,6 +12,8 @@ what happened to the rest of upstream's update machinery. The mechanics —
 stale-session trap — are on [Updating NixOS](updating-nixos.md), and are not
 repeated here.
 
+![The Omarchy menu opening its Update submenu, with the rows Nixarchy, Config, Process, Hardware, Firmware, Password, Timezone and Time](../img/features/menus.gif)
+
 ## What an update is
 
 On Arch an update installs a new `omarchy` package, runs its migrations, and

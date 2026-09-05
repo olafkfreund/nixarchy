@@ -64,6 +64,11 @@ Nothing is built until you apply. The index comes from *this machine's* nixpkgs
 and options rather than from search.nixos.org, so it can never offer something
 the machine will then refuse to build.
 
+This is the whole model in twenty seconds — a pick becomes a line in a file
+you own, and only then a rebuild:
+
+![nixarchy-app-enable helix writes a declaration into ~/.config/nixarchy/apps.nix — grep shows the uncommented line — then nixarchy-apply copies it into the flake and offers the rebuild](img/features/install.gif)
+
 See **[other packages](manual/other-packages)** for the whole flow.
 
 ## An agent that knows this machine

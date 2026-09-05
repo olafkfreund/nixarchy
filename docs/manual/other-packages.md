@@ -49,6 +49,8 @@ nixarchy-apply                 # copy into the flake and rebuild
 The ids are the ones in `apps.nix`; `omarchy pkg install` prints the file's
 location and nothing else, because it is the list.
 
+![nixarchy-app-enable helix printing "enabled helix in ~/.config/nixarchy/apps.nix (1 queued)", grep showing the uncommented declaration in apps.nix, then nixarchy-apply copying the file and ending on "Not switching. Run: nh os switch /etc/nixos"](../img/features/install.gif)
+
 One thing has to be true for any of this to work: **your flake must import the
 file.**
 

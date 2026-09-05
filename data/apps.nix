@@ -328,6 +328,57 @@
     unfree = true;
     arch = "openai-codex-desktop";
   };
+  # The terminal coding agents. Four entries that share one shape, so the
+  # reasoning is here once rather than repeated four times.
+  #
+  # NO menuId, deliberately, following t3-code above: Omarchy v4.0.2's menu
+  # ships exactly five install.ai.* rows -- chatgpt, dictation, grok-bot,
+  # lm-studio, ollama -- and the row generator FAILS on a menuId upstream does
+  # not have. These are reachable as programs.nixarchy.apps.<name> and through
+  # `nixarchy-app-enable`, and each gains a menu row for free if upstream ever
+  # adds one.
+  #
+  # NO arch, also deliberately. That field maps an Arch package name onto our
+  # app id so the generator can rewrite upstream's `remove.*` rows, which
+  # identify their target with `omarchy-pkg-present <arch>`. Upstream has no
+  # rows for these, so there is no name to match -- and inventing a plausible
+  # AUR name would create a mapping that fires on somebody else's package.
+  # `archMap` filters on `a ? arch` (modules/apps.nix:787), so omitting it is
+  # supported rather than merely tolerated.
+  claude-code = {
+    label = "Claude Code";
+    category = "AI";
+    attr = "claude-code";
+    # Anthropic's licence is not a free-software licence; nixpkgs marks the
+    # package unfree, and an entry without this flag fails to evaluate for a
+    # user who has not set allowUnfree.
+    unfree = true;
+  };
+  codex = {
+    label = "Codex";
+    category = "AI";
+    attr = "codex";
+    # Apache-2.0. Not unfree, unlike the ChatGPT desktop app above, which is a
+    # different piece of software from the same vendor.
+  };
+  gemini-cli = {
+    label = "Gemini CLI";
+    category = "AI";
+    attr = "gemini-cli";
+    # Apache-2.0.
+    #
+    # Worth knowing before you rely on this one: nixpkgs is a long way behind
+    # upstream here. On 2026-09-05 both the old and the new nixpkgs pin carried
+    # 0.47.0 while upstream had shipped 0.58.0 -- eleven minor versions, and a
+    # gap no pin bump closes, because it is nixpkgs itself that is stale. The
+    # other three track upstream within days.
+  };
+  antigravity = {
+    label = "Antigravity";
+    category = "AI";
+    attr = "antigravity";
+    unfree = true;
+  };
   dictation = {
     menuId = "install.ai.dictation";
     label = "Dictation";

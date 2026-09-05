@@ -29,8 +29,16 @@
 #     ro-store share away, which builds an erofs and still boots: ssh
 #     succeeds, this grep fails.
 #
-# A TCG guest reaches a login prompt in about 2-3 minutes; the timeouts below
-# are sized to that, not to a KVM boot.
+# Timeout provenance, and where this check now runs. Its first two real CI
+# executions -- runs 33940632899 and 33941923132; everything earlier died at
+# workflow startup, so this check and #304's fixed artifact had never met --
+# measured genuine TCG at L2 on a 4-core ubuntu-latest runner: the guest
+# kernel at 13.2 guest-seconds after 74.8 host-seconds (~5.7x, before
+# userspace init pays its 20-40x), sshd unreached at 600s and then at 1200s.
+# The same check reaches "sandbox login: dev" in 113s where L1 has KVM. That
+# ratio is why the job moved to nightly.yml's self-hosted KVM runners: L2 is
+# still the pinned accel=tcg artifact, only L1 stops being emulated. The
+# 1200s below is a generous ceiling for that home, not a hosted-runner hope.
 { inputs, pkgs }:
 let
   # nixpkgs' own test-only snakeoil keypair (RFC 9500) -- reused rather than
@@ -82,7 +90,9 @@ pkgs.testers.runNixOSTest {
     # Room for a 1 GiB guest plus the host itself, and a second core so the
     # emulated guest does not starve the node running it.
     virtualisation.memorySize = 4096;
-    virtualisation.cores = 2;
+    # All four of the runner's cores: the single TCG vCPU thread, qemu's
+    # I/O threads and the host's own userspace were sharing two.
+    virtualisation.cores = 4;
   };
 
   testScript = ''
@@ -99,7 +109,7 @@ pkgs.testers.runNixOSTest {
     # A TCG guest boots in minutes, not seconds. sshd is one of the last
     # things multi-user brings up, so this wait covers the whole guest boot.
     machine.succeed("install -m 600 ${keys.snakeOilEd25519PrivateKey} /root/snakeoil")
-    machine.wait_until_succeeds("${ssh} true", timeout=600)
+    machine.wait_until_succeeds("${ssh} true", timeout=1200)
 
     # The store is shared, not imaged -- asserted from inside the guest.
     mounts = machine.succeed("${ssh} mount")

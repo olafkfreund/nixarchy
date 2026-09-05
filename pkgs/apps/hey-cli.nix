@@ -11,15 +11,15 @@
   gnugrep,
 }:
 let
-  version = "1.4.0";
+  version = "1.4.1";
 
   # Straight from the release's own checksums.txt, which upstream signs with a
   # keyless Sigstore bundle -- not from a local download. Same reasoning as
   # pkgs/apps/once.nix: these should be the artefacts basecamp published, not
   # whatever a machine here happened to fetch.
   hashes = {
-    "x86_64-linux" = "316423686028bbbc999cf0ee0443d9ca73a737681c1515588470774f2b394f10";
-    "aarch64-linux" = "7cb79d265d5491a9d9967c00e36d748bcec0021d0d52c64163d7b8a8bb528466";
+    "x86_64-linux" = "18c4a5eb86dc98a7416fd6c452537a0968df7080cda6c20bd9192f06d95e58b1";
+    "aarch64-linux" = "2a7e3124e8b09313f013dee9f72bef7d302cff27e5e2d7f36571c30b5289ab58";
   };
   arches = {
     "x86_64-linux" = "amd64";
@@ -99,7 +99,11 @@ stdenvNoCC.mkDerivation {
       for pair in "x86_64-linux:amd64" "aarch64-linux:arm64"; do
         key=''${pair%%:*}
         arch=''${pair##*:}
-        hex=$(echo "$sums" | grep "hey_''${latest}_linux_''${arch}.tar.gz" | cut -d' ' -f1 || true)
+        # Anchored to end of line: since 1.4.1 the release also publishes a
+        # .sbom.json beside each tarball, and an unanchored match returned
+        # both hashes -- two lines in $hex, which then broke the sed below
+        # with "unterminated `s' command".
+        hex=$(echo "$sums" | grep "hey_''${latest}_linux_''${arch}.tar.gz\$" | cut -d' ' -f1 || true)
         if [ -z "$hex" ]; then
           echo "hey-cli: checksums.txt names no hey_''${latest}_linux_''${arch}.tar.gz" >&2
           exit 1

@@ -29,8 +29,15 @@
 #     ro-store share away, which builds an erofs and still boots: ssh
 #     succeeds, this grep fails.
 #
-# A TCG guest reaches a login prompt in about 2-3 minutes; the timeouts below
-# are sized to that, not to a KVM boot.
+# Timeout sizing, measured on the machine that matters this time. The first
+# real CI execution of this check (run 33940632899, the #309 repair run --
+# every earlier "run" died at workflow startup) showed the guest kernel at
+# 13.2 guest-seconds after 74.8 host-seconds: a ~5.7x TCG slowdown in KERNEL
+# boot on a 4-core runner, and syscall-heavy userspace init runs far slower
+# than that under TCG. The old 600s wait was reasoned from a 70.8s ssh wait
+# observed on a 128-core dev box with KVM at L1 -- the wrong machine. 1200s
+# fits the job's 30-minute budget beside the ~5 minutes of setup the failed
+# run measured, with margin.
 { inputs, pkgs }:
 let
   # nixpkgs' own test-only snakeoil keypair (RFC 9500) -- reused rather than
@@ -82,7 +89,9 @@ pkgs.testers.runNixOSTest {
     # Room for a 1 GiB guest plus the host itself, and a second core so the
     # emulated guest does not starve the node running it.
     virtualisation.memorySize = 4096;
-    virtualisation.cores = 2;
+    # All four of the runner's cores: the single TCG vCPU thread, qemu's
+    # I/O threads and the host's own userspace were sharing two.
+    virtualisation.cores = 4;
   };
 
   testScript = ''
@@ -99,7 +108,7 @@ pkgs.testers.runNixOSTest {
     # A TCG guest boots in minutes, not seconds. sshd is one of the last
     # things multi-user brings up, so this wait covers the whole guest boot.
     machine.succeed("install -m 600 ${keys.snakeOilEd25519PrivateKey} /root/snakeoil")
-    machine.wait_until_succeeds("${ssh} true", timeout=600)
+    machine.wait_until_succeeds("${ssh} true", timeout=1200)
 
     # The store is shared, not imaged -- asserted from inside the guest.
     mounts = machine.succeed("${ssh} mount")

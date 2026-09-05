@@ -1,4 +1,8 @@
-{ pkgs, hook }:
+{
+  pkgs,
+  hook,
+  peekHook,
+}:
 # The redaction hook, driven with the payloads it will actually meet (#272).
 #
 # AGENTS.md §1 applies with unusual force here: a security hook that passes
@@ -89,7 +93,59 @@ pkgs.runCommand "nixarchy-bus-redact" { nativeBuildInputs = [ pkgs.jq ]; } ''
     fails=$((fails+1))
   fi
 
+  # ------------------------------------------------------------------------
+  # bus-peek.sh (#268): the Stop hook that decides exit 0 (let the turn end)
+  # vs exit 2 (hand pending messages back), from a JSON payload and its
+  # peek command's exit code -- and until now had no test at all. Same
+  # doctrine as above: the real script, driven by stubs that lie.
+  # ------------------------------------------------------------------------
+  cp ${peekHook} peek.sh
+  chmod +x peek.sh
+
+  # The stub peek command AGENT_BUS_CMD points at: rc and output from env.
+  cat > stubpeek.sh <<'EOF'
+  #!/bin/sh
+  printf '%s\n' "''${PEEK_OUT:-}"
+  exit "''${PEEK_RC:-0}"
+  EOF
+  chmod +x stubpeek.sh
+  export AGENT_BUS_CMD=$PWD/stubpeek.sh
+
+  pt() {
+    want=$1 name=$2 payload=$3
+    if printf '%s' "$payload" | bash peek.sh >out 2>err; then got=0; else got=$?; fi
+    if [ "$got" = "$want" ]; then
+      echo "  ok      $name (exit $got)"
+    else
+      echo "  FAILED  $name: wanted exit $want, got $got"
+      sed 's/^/            /' err
+      fails=$((fails + 1))
+    fi
+  }
+
+  # A Stop hook that fires while already continuing from a Stop hook is a
+  # loop; the payload says so and the hook must let the turn end, pending
+  # messages or not.
+  MATRIX_ACCESS_TOKEN=syt_test PEEK_RC=1 PEEK_OUT="you have mail"     pt 0 "stop_hook_active short-circuits" '{"stop_hook_active":true}'
+
+  # No token means not on the bus: get out of the way, never nag.
+  MATRIX_ACCESS_TOKEN= PEEK_RC=1 PEEK_OUT="you have mail"     pt 0 "no token, no wake" '{}'
+
+  # Nothing pending: the turn ends.
+  MATRIX_ACCESS_TOKEN=syt_test PEEK_RC=0     pt 0 "peek quiet" '{}'
+
+  # Something pending: exit 2, and the MESSAGE plus the reply guidance are
+  # what comes back -- an exit 2 with an empty stderr wakes an agent with
+  # nothing to act on.
+  MATRIX_ACCESS_TOKEN=syt_test PEEK_RC=1 PEEK_OUT="agent-x: are the boxes up?"     pt 2 "pending message wakes the agent" '{}'
+  grep -q "are the boxes up" err || { echo "  FAILED  the wake does not carry the message"; fails=$((fails+1)); }
+  grep -q "post(thread=" err || { echo "  FAILED  the wake does not say how to reply"; fails=$((fails+1)); }
+
+  # Garbage payload: jq errors, the case matches nothing, and the hook
+  # continues on its other gates rather than crashing the Stop.
+  MATRIX_ACCESS_TOKEN= PEEK_RC=0     pt 0 "malformed payload falls through" 'not json'
+
   [ "$fails" -eq 0 ] || exit 1
-  echo "bus-redact blocks the decidable leaks and only those"
+  echo "bus-redact blocks the decidable leaks and only those; bus-peek wakes exactly when something is pending"
   touch $out
 ''

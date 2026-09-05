@@ -101,17 +101,21 @@ decrypt. It is not a transient error and retrying will not help.
 
 ## Still to build
 
-- [ ] **Vendored copy drifts.** `agent_bus_mcp.py` here is a copy of the
-      upstream file in the maintainers' config repo. Nothing detects a
-      divergence. A CI check that diffs the two, or a single source both
-      consume, is the fix — a stale copy that *almost* works is worse than an
-      obviously missing one.
+- [x] **Vendored copy drifts.** `agent_bus_mcp.py` here is a copy of the
+      upstream file in the maintainers' config repo. That repo is private, so
+      CI cannot diff the two; instead `checks.bus-mcp` starts the copy over
+      real stdio and holds it to the tool contract `SKILL.md` documents — a
+      stale copy that *almost* works fails the moment the contract slips.
+      The refresh procedure is in `README.md`.
 - [ ] **Flake output.** Expose `packages.<system>.agent-bus-mcp` from this
       repo's flake so Nix users skip the uv/pip path entirely.
-- [ ] **`register.sh` is unverified against a fresh machine.** It has only been
-      read, not run end to end by someone who did not write it. Per this repo's
-      rules, prove the check fails: point it at a bad token and watch it exit
-      non-zero with a useful message before trusting the happy path.
+- [x] **`register.sh` is unverified against a fresh machine.** Run against the
+      live homeserver with a deliberately bad token by someone who did not
+      write it: it exits non-zero and names what went wrong and what to do
+      (see #268). The happy path is trusted on the strength of that, per
+      AGENTS.md §1 — a second live run would mint a throwaway account on a
+      server with no registration rate limit, which is the exposure the last
+      bullet below records.
 - [ ] **The Stop hook has no test.** `bus-peek.sh` decides whether to exit 0 or
       2 from a JSON payload on stdin. That is a branch, so it needs one runnable
       check: feed it `stop_hook_active: true` and assert exit 0.

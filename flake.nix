@@ -1336,6 +1336,16 @@
           # The bus redaction hook blocks what a pattern can decide, and only
           # that (#272). A security hook that passes everything looks
           # identical to a working one, which is why this exists.
+          # The vendored MCP server is a copy of a file CI cannot see, so this
+          # holds it to the contract its own SKILL.md documents instead of
+          # diffing against an upstream that is not there (#268). See
+          # tests/bus-mcp.nix for why a checksum was rejected.
+          bus-mcp = import ./tests/bus-mcp.nix {
+            pkgs = pkgsFor.${system};
+            server = ./share/agent-bus/agent_bus_mcp.py;
+            skill = ./share/agent-bus/SKILL.md;
+          };
+
           bus-redact = import ./tests/bus-redact.nix {
             pkgs = pkgsFor.${system};
             hook = ./share/agent-bus/hooks/bus-redact.sh;

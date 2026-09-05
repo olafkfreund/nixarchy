@@ -294,6 +294,23 @@ jobs:
             ".#checks.x86_64-linux" \
             --apply 'c: builtins.concatStringsSep "\n" (builtins.attrNames c)')
 
+          # A floor, because the interesting failure of this guard is not a
+          # wrong answer but an EMPTY one. It has now passed-while-checking-
+          # nothing twice: once when the awk indentation went stale, and it
+          # would do so again if `nix eval` ever returned an empty set for a
+          # reason nobody predicted. AGENTS.md 1 says prove your check fails;
+          # that was never applied to the guard itself.
+          #
+          # 20 is well under the current 33 and well over zero -- it catches
+          # "extracted nothing" without needing maintenance every time a check
+          # is added or removed.
+          count=$(printf '%s\n' "$names" | grep -c . || true)
+          if [ "${count:-0}" -lt 20 ]; then
+            echo "::error::the check list came back with $count names, which is" \
+                 "too few to be real -- this guard is not reading the flake" >&2
+            exit 1
+          fi
+
           missing=""
           ungated=""
           for c in $names; do

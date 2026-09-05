@@ -393,5 +393,205 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   }
 
   echo "preflight_build refuses before the wipe, and main runs it there"
+
+  # ------------------------------------------------------------------------
+  # format_disk must hand out the diskoScript's status, not the rm's.
+  #
+  # It runs inside main()'s `|| rc=$?` chain, where bash suppresses errexit,
+  # so nothing implicit checks the build or the run. Unchecked, a failed
+  # build executed "" (127, ignored), a partial disko run was ignored too,
+  # and the function returned the status of `rm -f` -- always 0. The failure
+  # then surfaced ~30 minutes later at bootctl, on a disk erased at minute
+  # one, with an error naming the bootloader instead of disko.
+  # ------------------------------------------------------------------------
+  sed -n '/^format_disk()/,/^}/p' ${installScript} > fd.sh
+  test -s fd.sh || { echo "format_disk is not in install.sh any more" >&2; exit 1; }
+
+  cat > fdt.sh <<'EOF'
+  NIX_FLAGS=() work=/nonexistent hostname=h
+  disk_mode=whole luks_passphrase=pw
+  . ./fd.sh
+  findmnt() { return 1; }   # nothing mounted at /mnt
+  fails=0
+  t() {
+    want=$1 name=$2
+    if format_disk >out 2>&1; then got=proceed; else got=refuse; fi
+    if [ "$got" = "$want" ]; then
+      echo "  ok      $name ($got)"
+    else
+      echo "  FAILED  $name: wanted $want, got $got"; sed 's/^/            /' out
+      fails=$((fails + 1))
+    fi
+  }
+
+  # The build fails: nothing to execute, and the status must say so.
+  nix() { echo "error: builder failed" >&2; return 1; }
+  t refuse "diskoScript build fails -> format_disk fails"
+  grep -qi disko out || { echo "  FAILED  build refusal does not name disko"; fails=$((fails+1)); }
+
+  # The build succeeds and disko itself dies partway.
+  printf '#!/bin/sh\nexit 3\n' > fake-disko-bad; chmod +x fake-disko-bad
+  nix() { echo "$PWD/fake-disko-bad"; }
+  t refuse "diskoScript exits 3 -> format_disk fails"
+  grep -qi disko out || { echo "  FAILED  disko refusal does not name disko"; fails=$((fails+1)); }
+
+  # And a run that works still works.
+  printf '#!/bin/sh\nexit 0\n' > fake-disko-ok; chmod +x fake-disko-ok
+  nix() { echo "$PWD/fake-disko-ok"; }
+  t proceed "diskoScript succeeds -> format_disk succeeds"
+  exit $fails
+  EOF
+  bash fdt.sh
+
+  # verify_subvolume_mounts is format_disk's backstop, and /mnt/boot has to
+  # be in it: a disko run that mounted the four btrfs subvolumes and left the
+  # ESP alone used to sail through, and the failure surfaced at bootctl.
+  sed -n '/^verify_subvolume_mounts()/,/^}/p' ${installScript} > vs.sh
+  test -s vs.sh || { echo "verify_subvolume_mounts is not in install.sh any more" >&2; exit 1; }
+  cat > vst.sh <<'EOF'
+  . ./vs.sh
+  findmnt() {
+    case "$*" in
+      *--mountpoint\ /mnt/boot*) return 1 ;;  # everything mounted but the ESP
+      *) return 0 ;;
+    esac
+  }
+  if verify_subvolume_mounts >out 2>&1; then
+    echo "  FAILED  an unmounted /mnt/boot was let through"
+    exit 1
+  fi
+  grep -q '/mnt/boot' out || { echo "  FAILED  refusal does not name /mnt/boot"; exit 1; }
+  echo "  ok      unmounted /mnt/boot is refused by name"
+  findmnt() { return 0; }
+  verify_subvolume_mounts >out 2>&1 || { echo "  FAILED  a fully mounted target was refused"; exit 1; }
+  echo "  ok      fully mounted target proceeds"
+  EOF
+  bash vst.sh
+
+  echo "format_disk fails when disko does, and the backstop checks the ESP"
+
+  # ------------------------------------------------------------------------
+  # boot_medium must resolve the parent disk for every naming convention.
+  #
+  # The old sed 's/[0-9]*$//' turned /dev/nvme0n1p1 into "/dev/nvme0n1p",
+  # which matches no disk, so the exclusion excluded nothing and the
+  # installer offered to format the medium it booted from. The file's own
+  # comment calls that a bug, not an edge case.
+  # ------------------------------------------------------------------------
+  sed -n '/^boot_medium()/,/^}/p' ${installScript} > bm.sh
+  test -s bm.sh || { echo "boot_medium is not in install.sh any more" >&2; exit 1; }
+  cat > bmt.sh <<'EOF'
+  . ./bm.sh
+  findmnt() { printf '%s\n' "$SRC"; }
+  lsblk() { printf '%s\n' "$PARENT"; }
+  fails=0
+  t() {
+    src=$1 parent=$2 want=$3
+    got=$(SRC=$src PARENT=$parent boot_medium)
+    if [ "$got" = "$want" ]; then
+      echo "  ok      $src -> $got"
+    else
+      echo "  FAILED  $src: wanted $want, got '$got'"
+      fails=$((fails + 1))
+    fi
+  }
+  t /dev/sdb1      sdb      /dev/sdb
+  t /dev/nvme0n1p1 nvme0n1  /dev/nvme0n1
+  t /dev/mmcblk0p1 mmcblk0  /dev/mmcblk0
+  # An image dd'd to the whole device: no parent, the device is the medium.
+  t /dev/sdb       ""       /dev/sdb
+  exit $fails
+  EOF
+  bash bmt.sh
+  echo "boot_medium excludes the right disk for sd, nvme and mmcblk names"
+
+  # ------------------------------------------------------------------------
+  # partition_free_space: a failed sgdisk must be named, not narrated over.
+  #
+  # errexit is dead here too (same chain), so an unchecked sgdisk failure
+  # fell through to the settle loop, which timed out and printed "The
+  # partitions were created" -- asserting a creation that never happened, in
+  # free-space mode, on the one disk with somebody else's OS on it.
+  # ------------------------------------------------------------------------
+  sed -n '/^partition_free_space()/,/^}/p' ${installScript} > pfs.sh
+  test -s pfs.sh || { echo "partition_free_space is not in install.sh any more" >&2; exit 1; }
+  cat > pfst.sh <<'EOF'
+  device=/dev/vdz free_start=2048 free_end=20000000 free_why=""
+  encrypt=false FREE_ESP_MIB=2048
+  . ./pfs.sh
+  free_space_possible() { return 0; }
+  blockdev() { echo 512; }
+  partx() { :; }
+  udevadm() { :; }
+  sleep() { :; }               # the settle loop must not cost 15 real seconds
+  wipefs() { touch wipefs-called; }
+  sgdisk() { return 1; }
+  fails=0
+  if ( partition_free_space ) >out 2>&1; then
+    echo "  FAILED  a failed sgdisk was treated as success"; fails=$((fails+1))
+  fi
+  grep -q sgdisk out || { echo "  FAILED  the refusal does not name sgdisk"; sed 's/^/            /' out | head -4; fails=$((fails+1)); }
+  ! grep -q 'were created' out || { echo "  FAILED  the message claims partitions were created"; fails=$((fails+1)); }
+  [ ! -e wipefs-called ] || { echo "  FAILED  wipefs ran after sgdisk failed"; fails=$((fails+1)); }
+  [ "$fails" = 0 ] && echo "  ok      failed sgdisk is refused by name, nothing wiped"
+  exit $fails
+  EOF
+  bash pfst.sh
+  echo "partition_free_space names sgdisk when sgdisk is what failed"
+
+  # ------------------------------------------------------------------------
+  # Escape at a prompt must say what happened, not black-screen (#240).
+  #
+  # The question flow runs at top level where errexit and pipefail are LIVE:
+  # gum exits non-zero on Escape, the `var=$(... gum ...)` assignment carries
+  # that status, and errexit killed the script before any guard on the next
+  # line could run. Run the real functions in a fresh `set -euo pipefail`
+  # process -- the same regime install.sh runs under -- and demand words on
+  # the way out. Driven as a process, not a function, because errexit
+  # suppression does not cross the process boundary.
+  # ------------------------------------------------------------------------
+  {
+    echo 'set -euo pipefail'
+    echo 'ui_screen() { :; }'
+    echo 'ui_left() { printf "%b\n" "$1"; }'
+    echo 'ui_indent() { cat; }'
+    echo 'ui_widget_height() { echo 10; }'
+    echo 'ui_gum_pad() { echo 0; }'
+    echo 'gum() { return 130; }   # Escape, at every prompt'
+    echo 'loadkeys() { :; }'
+    sed -n '/^ui_abort()/,/^}/p' ${installScript}
+    sed -n '/^validate_username()/,/^}/p' ${installScript}
+    sed -n '/^ask_keymap()/,/^}/p' ${installScript}
+    sed -n '/^ask_identity()/,/^}/p' ${installScript}
+    sed -n '/^ask_disk_mode()/,/^}/p' ${installScript}
+  } > esc-common.sh
+  cat > esct.sh <<'EOF'
+  fails=0
+  t() {
+    name=$1; shift
+    { cat esc-common.sh; printf '%s\n' "$@"; } > esc-run.sh
+    if bash esc-run.sh >out 2>&1; then
+      echo "  FAILED  $name: escape was treated as an answer"; fails=$((fails+1)); return
+    fi
+    if grep -q 'Stopped before anything was written' out; then
+      echo "  ok      $name says it stopped"
+    else
+      echo "  FAILED  $name: died with no word of what happened"
+      sed 's/^/            /' out | head -3
+      fails=$((fails + 1))
+    fi
+  }
+  printf 'us\tus\n' > keymaps
+  t "escape at the keymap"    'UI_KEYMAPS=keymaps' 'ask_keymap'
+  t "escape at the username"  'ask_identity'
+  t "escape at the disk mode" 'device=/dev/vda' \
+    'free_space_possible() { return 0; }' \
+    'free_region_human() { echo 10G; }' \
+    'lsblk() { echo part; }' \
+    'ask_disk_mode'
+  exit $fails
+  EOF
+  bash esct.sh
+  echo "escape at a prompt stops with words on the screen, not a black one"
     touch $out
 ''

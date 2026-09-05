@@ -53,26 +53,28 @@ pkgs.testers.runNixOSTest {
   nodes.machine =
     { pkgs, ... }:
     {
-      environment.systemPackages = [
-        inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
-        pkgs.git
-        pkgs.curl
-      ];
+      environment = {
+        systemPackages = [
+          inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
+          pkgs.git
+          pkgs.curl
+        ];
 
-      # The net-image marker. Both guards key on it: ask_network asks only on
-      # this image, and preflight_build probes only on it.
-      environment.etc."nixarchy-iso-net".text = "";
+        # The net-image marker. Both guards key on it: ask_network asks only
+        # on this image, and preflight_build probes only on it.
+        etc."nixarchy-iso-net".text = "";
 
-      environment.etc."nixarchy/answers".text = ''
-        device=/dev/vdb
-        encrypt=no
-        recovery_passphrase=rescue-me
-        hostname=installed
-        username=omarchy
-        password_hash=${passwordHash}
-        timezone=UTC
-        keymap=us
-      '';
+        etc."nixarchy/answers".text = ''
+          device=/dev/vdb
+          encrypt=no
+          recovery_passphrase=rescue-me
+          hostname=installed
+          username=omarchy
+          password_hash=${passwordHash}
+          timezone=UTC
+          keymap=us
+        '';
+      };
 
       networking.hosts."127.0.0.1" = [ "cache.nixos.org" ];
       security.pki.certificateFiles = [ "${cert}/cert.pem" ];

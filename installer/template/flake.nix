@@ -31,7 +31,8 @@
   #   inputs.nixarchy.inputs.home-manager.url =
   #     "github:nix-community/home-manager/release-25.05";
   #
-  # then `nix flake update nixpkgs home-manager` and `nh os switch`.
+  # then `nix flake update nixpkgs` and `nh os switch` (the changed
+  # home-manager override is re-locked in the same pass).
   inputs.nixpkgs.url = "@nixpkgs_url@";
 
   # Nixarchy itself, locked at the revision this machine was installed from.

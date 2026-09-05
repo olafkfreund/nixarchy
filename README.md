@@ -11,7 +11,7 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 Tracking an upstream release is a source bump, not a re-port.
 
 What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **56 applications** are selectable that way, **every other package and
+pacman, **60 applications** are selectable that way, **every other package and
 NixOS option is one `Install ▸ Search` away**, plugins and themes still install
 from a git URL at runtime the way upstream intends, and every command that
 assumed `/usr` either points at what NixOS uses or says why it cannot.
@@ -44,7 +44,7 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 431 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 55 apps in the selection | 41 from nixpkgs, 4 as NixOS modules, 8 built here, 2 with no equivalent |
+| 59 apps in the selection | 45 from nixpkgs, 4 as NixOS modules, 8 built here, 2 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -387,7 +387,7 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 55 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
+The 59 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
 
@@ -410,7 +410,7 @@ from a terminal:
   enter to select · tab for several · esc to cancel
 ```
 
-**137,599 rows: 25,102 NixOS options, 112,443 packages, and 53 of the 55 apps
+**137,599 rows: 25,102 NixOS options, 112,443 packages, and 57 of the 59 apps
 (the two with no nixpkgs equivalent cannot be indexed).** Three kinds,
 one picker, because you should not have to know which kind you want before you
 can look. They are not interchangeable and the rows say so — picking Tailscale
@@ -1250,7 +1250,7 @@ done
 
 Almost nothing here waits on a maintainer.
 
-**45 of the 55 apps never touch this repo.** Brave, VSCode, Signal and the rest
+**49 of the 59 apps never touch this repo.** Brave, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own
@@ -1309,7 +1309,7 @@ Most of it is not our job, and should not be:
 
 | where the app comes from | who updates it |
 |---|---|
-| nixpkgs (45 of 55 apps) | **nobody** — your own `nix flake update` |
+| nixpkgs (49 of 59 apps) | **nobody** — your own `nix flake update` |
 | pinned in this repo (2) | a weekly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |

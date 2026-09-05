@@ -6,6 +6,16 @@
 
     systems.url = "github:nix-systems/default-linux";
 
+    # Deliberately UNPINNED, unlike hyprland, sops-nix and microvm below, and
+    # not for lack of tags (home-manager has none; its releases are
+    # `release-XX.XX` branches that pair with STABLE nixpkgs, which is not
+    # what this flake tracks). master is co-developed against
+    # nixpkgs-unstable, and nixpkgs above is itself a branch ref: one `nix
+    # flake update` moves both to their tips together, which is the only
+    # pairing home-manager tests. Pinning one side of that pair would CREATE
+    # skew -- a frozen home-manager evaluating renamed and removed nixpkgs
+    # attrs a few updates from now -- which is the exact failure pinning is
+    # supposed to prevent. Pin this the day nixpkgs is pinned, and not before.
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -76,8 +86,25 @@
 
     # Zen is not in nixpkgs and upstream maintains its own flake, which tracks
     # Zen's releases far more closely than a derivation here ever would.
+    #
+    # Pinned to a COMMIT because upstream's only tags are automated
+    # `twilight-*` build tags, not releases of the flake -- main is the
+    # release channel, the same position sops-nix and microvm already hold in
+    # this file. What makes the pin worth its bump burden here is that this
+    # flake's default.nix couples to nixpkgs' wrapFirefox SIGNATURE: at this
+    # rev it overrides both the `ffmpeg_7` and `ffmpeg_8` formals, so it
+    # needs a nixpkgs that declares both -- ours does -- and a branch ref
+    # here hands whatever main has become to every downstream lock, against
+    # whatever nixpkgs THEY have, where an eval throw is a break our CI
+    # structurally cannot see (#320 was this, in one direction; stable
+    # consumers hit it in the other). A commit makes the pair deliberate.
+    #
+    # What the pin costs: Zen security releases stop arriving on their own.
+    # Bump this routinely alongside `nix flake update`, and expect the bump
+    # to become MANDATORY the day nixpkgs drops its `ffmpeg_7` formal, when
+    # this rev's override starts throwing. Never track a branch here.
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake";
+      url = "github:0xc000022070/zen-browser-flake/51df7b8cbb0fcba14a9b159531ef48d0cd69dde9";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -9,6 +9,16 @@
 
 UI_BAR_CELLS=34
 
+# How long the log may sit still before the bar stops advancing, and before
+# the dashboard says so out loud. Two thresholds because they answer two
+# different questions: 30 seconds of silence is ordinary (one large
+# derivation, one slow disk sync) and only means the curve should stop
+# guessing; three minutes is when a person watching starts wondering whether
+# to reboot, and rebooting mid-install is how a recoverable stall becomes an
+# unrecoverable one.
+UI_STALL_FREEZE=30
+UI_STALL_SAY=180
+
 # Progress has two sources and takes whichever is further along.
 #
 # The honest one counts store paths under the target as nixos-install copies
@@ -18,11 +28,24 @@ UI_BAR_CELLS=34
 # moves during partitioning and bootloader installation, when nothing is being
 # copied and a frozen bar reads as a hung install.
 ui_progress() {
-  local elapsed=$1 copied=0 by_paths=0 by_time
+  local elapsed=$1 stall=${2:-0} copied=0 by_paths=0 by_time
 
   if [ -d /mnt/nix/store ]; then
     copied=$(find /mnt/nix/store -maxdepth 1 -mindepth 1 -printf . 2>/dev/null | wc -c)
     [ "$UI_EXPECTED_PATHS" -gt 0 ] && by_paths=$((copied * 100 / UI_EXPECTED_PATHS))
+  fi
+
+  # The time curve only advances while the log does. It exists so the bar
+  # moves through phases that copy nothing -- but that assumes the install is
+  # doing SOMETHING. The phases write only to the log by construction, so a
+  # log that has stopped growing is an install that has stopped doing
+  # observable work, and a percentage that keeps creeping toward 95 over a
+  # stopped log is a lie with a progress bar on it: the person watching 87%
+  # has no basis for choosing between "slow" and "wedged". Stalled time is
+  # subtracted, so the bar freezes where the log stopped -- a frozen bar is
+  # at least not a claim of progress.
+  if [ "$stall" -gt "$UI_STALL_FREEZE" ]; then
+    elapsed=$((elapsed - stall + UI_STALL_FREEZE))
   fi
 
   # Approaches but never reaches 95 -- a bar that sits at 100 while the install
@@ -45,8 +68,8 @@ ui_bar() {
 }
 
 ui_dashboard_draw() {
-  local elapsed=$1 pct tip n idx
-  pct=$(ui_progress "$elapsed")
+  local elapsed=$1 stall=${2:-0} pct tip n idx
+  pct=$(ui_progress "$elapsed" "$stall")
 
   # A tip every eight seconds, as upstream does. Long enough to read, short
   # enough that a slow install is not one sentence for ten minutes.
@@ -62,11 +85,52 @@ ui_dashboard_draw() {
   echo
   ui_centre "\e[32m$(ui_bar "$pct")\e[0m  ${pct}%" $((UI_BAR_CELLS + 6))
   echo
-  ui_centre "\e[90m$tip\e[0m" "${#tip}"
+  if [ "$stall" -ge "$UI_STALL_SAY" ]; then
+    # Said out loud, in the tip's place, because the tip is the one line a
+    # person watching actually reads. What they most need to hear is that
+    # waiting is safe and rebooting is not: a stall this long is usually a
+    # slow download, and 20-minute cache stalls that ended fine have been
+    # watched from the outside, indistinguishable from a hang.
+    local said
+    said="Nothing has reached the log in $(ui_elapsed "$stall")."
+    ui_centre "\e[33m$said\e[0m" "${#said}"
+    said="Usually a slow download; waiting is safe. Ctrl-C stops and shows the log."
+    ui_centre "\e[90m$said\e[0m" "${#said}"
+  else
+    ui_centre "\e[90m$tip\e[0m" "${#tip}"
+  fi
+}
+
+# One frame: measure the log, then draw. Split from the redraw loop so the
+# measurement -- the part that tells "still working" from "stopped" -- can be
+# driven by a test one tick at a time, without an infinite loop on a timer.
+#
+# The log is the right thing to watch because it is the ONLY thing the
+# install phases write to: main() redirects the whole chain into it, and the
+# dashboard deliberately hides it. So the drawer, the one process watching
+# from outside, is the one that can notice it has stopped.
+ui_dashboard_tick() {
+  local now size
+  now=$(date +%s)
+  if [ -n "${UI_DASH_LOG:-}" ]; then
+    size=$(wc -c 2>/dev/null <"$UI_DASH_LOG") || size=-1
+    if [ "$size" != "$UI_DASH_SIZE" ]; then
+      UI_DASH_SIZE=$size
+      UI_DASH_CHANGED=$now
+    fi
+  else
+    # Nothing to measure. Claiming a stall over a log nobody named would be
+    # the same lie in the other direction.
+    UI_DASH_CHANGED=$now
+  fi
+  ui_dashboard_draw $((now - UI_DASH_START)) $((now - UI_DASH_CHANGED))
 }
 
 ui_dashboard_start() {
   UI_DASH_START=$(date +%s)
+  UI_DASH_LOG=${1:-}
+  UI_DASH_SIZE=""
+  UI_DASH_CHANGED=$UI_DASH_START
   # No cursor while the dashboard owns the screen. It has nowhere sensible to
   # sit -- the screen is redrawn every second -- so it ends up parked in a
   # corner blinking at nothing.
@@ -74,7 +138,7 @@ ui_dashboard_start() {
   trap 'printf "\e[?25h"' EXIT
   (
     while :; do
-      ui_dashboard_draw $(($(date +%s) - UI_DASH_START))
+      ui_dashboard_tick
       sleep 1
     done
   ) &

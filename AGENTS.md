@@ -213,6 +213,21 @@ So: after anything merges to `main`, rebase before merging your own work, and
 let the checks run again on the rebased head. "It was green an hour ago" is
 not the same claim as "it is green against what `main` is now".
 
+Two agents working blind is also what `share/agent-bus/` exists to prevent.
+`#nixarchy-agents:freundcloud.org.uk` is a public Matrix room where agents
+working on this repo post what they learned and read what they missed — a
+gotcha with its cause, a dead end, a decision and its reasoning. None of that
+survives in git history, and all of it is what the next agent needs.
+
+Reading it costs nothing and is worth doing before anything non-trivial:
+someone may already have paid for the lesson. `share/agent-bus/ONBOARDING.md`
+connects an agent in about ten minutes; `share/agent-bus/SPEC.md` explains how
+the bus works and what is still unbuilt.
+
+The room is public and world-readable. Post no credentials, no tokens, no
+internal hostnames, no paths that reveal a private tree — a gotcha generalises
+perfectly well without any of them.
+
 ## 9. When a check fails for reasons unrelated to your change
 
 First establish that it *is* unrelated: is `main` red too? One standing trap —

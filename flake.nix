@@ -1393,6 +1393,16 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The other image: the net ISO installing by FETCHING, from a
+          # substituter stood up inside the test's own vlan. The image people
+          # download for a network install had no install check at all until
+          # this one; see the file header for what it proves and what no
+          # sandboxed check can.
+          install-iso-net = import ./tests/install-iso-net.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
 
           # The installed machine, as opposed to the smoke-test guest: a real

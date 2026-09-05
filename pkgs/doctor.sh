@@ -521,16 +521,39 @@ enc=$(printf '%s' "$va" | grep -c 'VAEntrypointEncSlice' 2>/dev/null) || enc=0
 
 if [ -z "$igpu$dgpu" ]; then
   say "  ${dim}No PCI display controller here -- a VM, or a framebuffer.${off}"
-elif [ -z "$va" ]; then
+elif [ -z "$va_driver" ]; then
+  # On the DRIVER line, not on emptiness. `[ -z "$va" ]` was unreachable: real
+  # vainfo writes "Trying display: wayland" to STDOUT before it opens anything,
+  # and keeps writing it when va_openDriver() fails. Measured with the pinned
+  # binary the doctor actually runs:
+  #
+  #   LIBVA_DRIVER_NAME=nosuchdrv vainfo 2>/dev/null
+  #   -> "Trying display: wayland", exit 3, 23 bytes on stdout
+  #
+  # So $va was never empty, this branch never fired, and a machine with NO
+  # driver fell through to "This driver cannot encode -- decode only" and was
+  # told about nvidia-vaapi-driver it may not have. The one branch written for
+  # those users was the one they could not reach.
+  #
+  # `Driver version:` is printed only once a driver has actually opened, so an
+  # empty $va_driver is the honest test -- and it still covers vainfo being
+  # absent entirely, where both are empty.
   finding "No VAAPI driver answered" "$warn" "video will decode and encode on the CPU"
-  snippet+=("  hardware.graphics.extraPackages = with pkgs; [ intel-media-driver ];")
+  if [ "$igpu" = Intel ]; then
+    snippet+=("  hardware.graphics.extraPackages = with pkgs; [ intel-media-driver ];")
+  fi
   notes+=("Nothing answered vainfo. On Intel that is usually intel-media-driver, which mesa does not ship; AMD gets one from mesa already.")
 elif [ "$enc" -gt 0 ]; then
   finding "Video encoding available" "$ok" "${va_driver:-a VAAPI driver}"
 else
   finding "This driver cannot encode" "$warn" "${va_driver:-VAAPI}, decode only"
   notes+=("vainfo reports no VAEntrypointEncSlice, so screen recording and any encoder that wants the GPU will fail. nvidia-vaapi-driver is decode-only by design; Intel's iHD, from intel-media-driver, does encode.")
-  snippet+=("  hardware.graphics.extraPackages = with pkgs; [ intel-media-driver ];")
+  # Only where it can help. The note above hedges in prose, but the SNIPPET is
+  # what people paste, and on an NVIDIA-only desktop intel-media-driver is a
+  # package for hardware that is not there. $igpu is already known.
+  if [ "$igpu" = Intel ]; then
+    snippet+=("  hardware.graphics.extraPackages = with pkgs; [ intel-media-driver ];")
+  fi
 fi
 
 # And the variable that hides all of the above. Set to a decode-only driver, it
@@ -568,6 +591,17 @@ if [ -n "$igpu" ] && [ -n "$dgpu" ]; then
   notes+=("offload is written above because it is the better default on a laptop, but it IS a choice: offload for battery, sync for performance. Read both before rebuilding.")
 elif [ -n "$dgpu" ]; then
   finding "Discrete $dgpu only" "$ok" "no hybrid setup needed"
+elif [ -n "$igpu" ]; then
+  # The case that printed NOTHING. `dgpu` is only ever set for 0x10de, so an
+  # AMD or Intel machine with no NVIDIA card -- which includes every AMD
+  # desktop, this one among them -- fell past both branches above and the
+  # Graphics section named no GPU at all. It reported on a VAAPI driver for
+  # hardware it never mentioned.
+  #
+  # "single" rather than "integrated": the vendor tells us who made it, not
+  # whether it is on the CPU package. Calling a discrete Radeon "integrated"
+  # would be a confident wrong answer, and the honest one costs nothing.
+  finding "Single $igpu GPU" "$ok" "no hybrid setup needed"
 fi
 
 # ---- what a laptop or a shared machine will want to know ----------------
@@ -626,7 +660,7 @@ case "$(basename "${SHELL:-unknown}")" in
 esac
 if [ -n "$devenv_rc" ] && [ -r "$devenv_rc" ] && grep -q 'devenv hook' "$devenv_rc"; then
   if command -v devenv >/dev/null 2>&1; then
-    finding "devenv activates in ${SHELL:-unknown}" "$ok" "cd into a devenv allow'ed project"
+    finding "devenv activates in $(basename "${SHELL:-unknown}")" "$ok" "cd into a devenv allow'ed project"
   else
     finding "devenv is selected but not on this session's PATH" "$warn" ""
     say "     ${devenv_rc} has the activation hook, so the rebuild landed."

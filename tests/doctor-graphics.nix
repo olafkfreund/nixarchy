@@ -23,7 +23,28 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   printf '#!/bin/sh\necho "vainfo: Driver version: VA-API NVDEC driver"\necho "  VAProfileH264Main : VAEntrypointVLD"\n' > fix/bin/vainfo
   # And one that can.
   printf '#!/bin/sh\necho "vainfo: Driver version: Mesa Gallium radeonsi"\necho "  VAProfileH264Main : VAEntrypointEncSlice"\n' > fix/bin/vainfo-enc
-  chmod +x fix/bin/vainfo fix/bin/vainfo-enc
+
+  # NO driver at all -- and this stub is why the branch for it was broken.
+  #
+  # The other two stubs print only what a SUCCEEDING vainfo prints, so they
+  # never reproduced the preamble real vainfo writes to STDOUT before it opens
+  # anything, and keeps writing when va_openDriver() fails. Measured against
+  # the pinned binary the doctor runs:
+  #
+  #   LIBVA_DRIVER_NAME=nosuchdrv vainfo 2>/dev/null
+  #   -> "Trying display: wayland", exit 3
+  #
+  # With no fixture for it, `[ -z "$va" ]` looked correct and could never fire
+  # on a real machine: $va always held that line. The no-driver branch was
+  # untested AND unreachable, so a machine with no VAAPI at all was told
+  # "decode only" and pointed at nvidia-vaapi-driver. A stub that omits the
+  # preamble is a stub that agrees with the bug.
+  printf '#!/bin/sh\necho "Trying display: wayland"\nexit 3\n' > fix/bin/vainfo-none
+
+  # NVIDIA alone, to catch Intel advice on a machine with no Intel in it.
+  mk fix/nvidia "0000:01:00.0" 0x10de
+
+  chmod +x fix/bin/vainfo fix/bin/vainfo-enc fix/bin/vainfo-none
 
   # HOME and USER because the doctor reads ~/.config and names the user in its
   # snippet, and a build sandbox has neither -- without them it dies on line 24
@@ -79,6 +100,34 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   # e3 is the case that makes the conversion undeniable: read as decimal it is
   # nonsense, and this machine really has a GPU there.
   wantnot "no prime for one GPU"     "$a" 'nvidiaBusId'
+  # The section named a VAAPI driver and never named the GPU: `dgpu` is set
+  # only for 0x10de, so every AMD and Intel machine without an NVIDIA card
+  # fell past both the hybrid and the discrete branch in silence.
+  want    "a single GPU is named"    "$a" 'Single AMD GPU'
+
+  # No driver answered -- the branch that could not fire.
+  n=$(run amd vainfo-none)
+  want    "no driver is said so"     "$n" 'No VAAPI driver answered'
+  # And is NOT mistaken for a driver that merely cannot encode, which is what
+  # this machine was told before: a wrong diagnosis, plus advice about
+  # nvidia-vaapi-driver it does not have.
+  wantnot "not called decode-only"   "$n" 'cannot encode'
+
+  # Intel advice belongs on Intel machines. Matched on the SNIPPET LINE, not on
+  # the string: the notes mention intel-media-driver in prose on purpose
+  # ("on Intel that is usually...") and that prose is fine to read on any
+  # machine. What was wrong is a paste-in line installing a package for
+  # hardware that is not there -- a first draft of this assertion forbade the
+  # bare string and failed against correctly-gated code, which would have sent
+  # someone deleting the explanation instead of the snippet.
+  nv=$(run nvidia vainfo-none)
+  wantnot "no intel snippet on nvidia" "$nv" 'extraPackages.*intel-media-driver'
+  nvd=$(run nvidia vainfo)
+  wantnot "none on decode-only nvidia" "$nvd" 'extraPackages.*intel-media-driver'
+  # ...and it is still offered where it helps, so the gate did not simply
+  # delete the advice.
+  i=$(run hybrid vainfo-none)
+  want    "intel snippet on intel"    "$i" 'extraPackages.*intel-media-driver'
 
   [ "$fails" = 0 ] || { echo "$fails case(s) failed"; exit 1; }
   echo "the doctor reads a GPU correctly"

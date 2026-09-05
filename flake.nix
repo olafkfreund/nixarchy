@@ -408,6 +408,10 @@
             # pkgs/box.nix's hazard. distrobox itself is deliberately NOT
             # here: it is looked up by bare name (`command -v distrobox`),
             # the same wrapper-only rule that command's own header explains.
+            # hyprctl is deliberately not here either -- the client has to
+            # match the RUNNING compositor, which the session's PATH carries
+            # and this list cannot; the Graphics section's comment in
+            # verify.sh makes the argument.
             podman
             # nix-store, for the MicroVM guests section's GC-root check
             # (#229): `--print-roots` reads the store, never `--gc`. Pinning

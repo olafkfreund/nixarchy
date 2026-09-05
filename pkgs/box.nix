@@ -180,6 +180,18 @@ writeShellApplication {
     promote_box() {
       name="''${1:?usage: nixarchy box promote <name>}"
       require_distrobox
+      # podman by bare name, and NOT in runtimeInputs, even though this call
+      # only reads. runtimeInputs is one PATH for the whole script, so a
+      # podman pinned for this line would also be the podman distrobox's own
+      # calls in create_box inherit -- container creation handed to this
+      # flake's podman instead of the system's, which is the header's hazard
+      # by another road. (verify.sh pins podman because it only ever reads.)
+      # Bare means absent is possible, and absent must not be reported as
+      # "no box named ..." -- check first.
+      if ! command -v podman >/dev/null 2>&1; then
+        echo "nixarchy-box: podman is not on PATH -- cannot inspect '$name'." >&2
+        exit 1
+      fi
       image=$(podman inspect --type container --format '{{.Config.Image}}' "$name" 2>/dev/null) || true
       if [ -z "$image" ]; then
         echo "nixarchy-box: no box named '$name' (podman inspect found nothing)." >&2

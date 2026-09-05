@@ -172,9 +172,26 @@ renderer=$(
 # The lspci lines are still worth printing -- they name the hardware, which the
 # renderer string does not on a hybrid machine. Strip the PCI address, the
 # vendor:device ids and the (rev ..) noise; keep the model.
+#
+# hyprctl by BARE NAME, deliberately not in runtimeInputs -- the same
+# wrapper-only rule as distrobox in pkgs/box.nix, for a different reason.
+# hyprctl speaks to the compositor over its instance socket, and the client
+# that matches the running Hyprland is the one the session put on PATH
+# (0.56, from flake.nix's pinned input); pinning nixpkgs' hyprctl here would
+# be a client one protocol behind the server it questions. The cost of bare
+# is that an absent hyprctl and an empty answer look identical downstream,
+# so tell them apart first: "no GPU listed" must never be this report's
+# spelling of "the tool was missing" -- that is the vainfo trap the
+# runtimeInputs list in flake.nix exists to prevent.
+if command -v hyprctl >/dev/null 2>&1; then
+  have_hyprctl=1
+else
+  have_hyprctl=0
+fi
 gpus=$(
   {
-    timeout 5 hyprctl systeminfo 2>/dev/null |
+    [ "$have_hyprctl" = 1 ] &&
+      timeout 5 hyprctl systeminfo 2>/dev/null |
       sed -n 's/^[0-9a-f]\{2\}:[0-9a-f.]* \(VGA compatible controller\|3D controller\|Display controller\)[^:]*: //p' |
       sed -e 's/ \[[0-9a-f]\{4\}:[0-9a-f]\{4\}\].*$//' -e 's/ Corporation / /' -e 's/ Inc\. / /'
   } || true
@@ -195,6 +212,8 @@ case "$renderer" in
 esac
 if [ -n "$gpus" ]; then
   while IFS= read -r gpu; do say_dim "$gpu"; done <<<"$gpus"
+elif [ "$have_hyprctl" = 0 ]; then
+  hmm "could not list GPUs" "hyprctl is not on PATH -- is this a Hyprland session?"
 else
   hmm "no GPU listed" "hyprctl systeminfo named no display controller"
 fi

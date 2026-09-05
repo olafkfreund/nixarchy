@@ -76,12 +76,24 @@ in
           dataDir = lib.mkDefault "/home/${svc.user}";
           configDir = lib.mkDefault "/home/${svc.user}/.config/syncthing";
 
-          # NOT mkDefault. Upstream's default is true, and true here means
-          # "delete any folder or device the Nix configuration does not mention"
-          # -- which silently discards everything added through the web
-          # interface, the way most people actually use Syncthing.
-          overrideFolders = false;
-          overrideDevices = false;
+          # The VALUE is the decision here: upstream defaults these to true,
+          # and true means "delete any folder or device the Nix configuration
+          # does not mention" -- which silently discards everything added
+          # through the web interface, the way most people actually use
+          # Syncthing.
+          #
+          # mkDefault, though this once said "NOT mkDefault" -- that comment
+          # conflated the value with the priority. mkDefault (1000) still
+          # outranks the option's own default (1500), so everyone who writes
+          # nothing keeps the protection; what plain assignment added on top
+          # was a "defined multiple times" error for the user who explicitly
+          # asks for upstream's declarative mode, whose only exit was
+          # mkForce -- the one-way door this directory's header forbids.
+          # Someone who writes `overrideFolders = true` themselves has
+          # accepted the deletion; the shield is only for those who didn't
+          # choose.
+          overrideFolders = lib.mkDefault false;
+          overrideDevices = lib.mkDefault false;
         };
       }
 

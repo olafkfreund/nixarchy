@@ -785,11 +785,6 @@ jobs:
   # job's 30-minute budget is already mostly spent, and this needs /dev/kvm
   # arranged first, which no step there does.
   box:
-  # Boots a declared MicroVM inside a NixOS test VM -- see
-  # tests/microvm-boot.nix. Its own job rather than a step in `system`: the
-  # boot is minutes of wall clock against that job's 30-minute budget, and it
-  # needs /dev/kvm arranged first, which no other step there does.
-  microvm:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -809,6 +804,43 @@ jobs:
         # /dev/kvm the test driver would run the node under TCG and this job
         # would quietly get slower until it started flapping against its
         # timeout -- fail on day one instead.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          grep -Eq 'vmx|svm' /proc/cpuinfo || { echo "::error::no vmx/svm in /proc/cpuinfo"; exit 1; }
+          test -w /dev/kvm || { echo "::error::/dev/kvm is not writable"; exit 1; }
+          ls -l /dev/kvm
+
+      - name: Create a box offline, and pin what enter does without a network
+        # checks.box-boot: the pinned image is preloaded from the store
+        # (dockerTools.pullImage is fixed-output), `nixarchy box create` runs
+        # end to end as a rootless user, the recorded distrobox-init mount is
+        # not a /nix/store path (nixpkgs#478154), and the first offline
+        # `distrobox enter` fails loudly at the entrypoint -- the measured
+        # answer to the epic's open first-start question, asserted as
+        # observed. See tests/box-boot.nix.
+        run: nix build .#checks.x86_64-linux.box-boot --print-build-logs
+
+  # Boots a declared MicroVM inside a NixOS test VM -- see
+  # tests/microvm-boot.nix. Its own job rather than a step in `system`: the
+  # boot is minutes of wall clock against that job's 30-minute budget, and it
+  # needs /dev/kvm arranged first, which no other step there does.
+  microvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: cachix/cachix-action@v17
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
+        with:
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: /dev/kvm is real and writable, or fail here
         # ubuntu-latest runners have had /dev/kvm since 2023, but it arrives
         # root:kvm 0660 and the nix build users are not in `kvm`. The udev
         # rule is GitHub's own documented fix (static_node keeps it across
@@ -830,15 +862,6 @@ jobs:
           test -w /dev/kvm || { echo "::error::/dev/kvm is not writable"; exit 1; }
           ls -l /dev/kvm
 
-      - name: Create a box offline, and pin what enter does without a network
-        # checks.box-boot: the pinned image is preloaded from the store
-        # (dockerTools.pullImage is fixed-output), `nixarchy box create` runs
-        # end to end as a rootless user, the recorded distrobox-init mount is
-        # not a /nix/store path (nixpkgs#478154), and the first offline
-        # `distrobox enter` fails loudly at the entrypoint -- the measured
-        # answer to the epic's open first-start question, asserted as
-        # observed. See tests/box-boot.nix.
-        run: nix build .#checks.x86_64-linux.box-boot --print-build-logs
       - name: Boot a MicroVM on the -tcg runner
         # checks.microvm-boot: microvm@sandbox.service reaches active, ssh
         # over the forwarded SLiRP port answers, and `ro-store on

@@ -23,6 +23,36 @@
 # built only `if !(username.is_empty() && password.is_empty())`, so with
 # neither set there is no authentication at all.
 #
+# UPSTREAM HAS SINCE FIXED THE CAUSE, and this module can shed most of the
+# machinery below once that reaches a tag. MuNeNICK/hypr-rdp#84 is MERGED
+# (2026-09-04), adding `--password-file` and a `password_file` config key: the
+# secret no longer has to live inside the config file, which is the single fact
+# that forced the sops.templates shim. Upstream also made the empty case fail
+# startup rather than fall through to unauthenticated.
+#
+# NOT YET USABLE HERE: it is on upstream main and in no tag -- v0.1.5 is still
+# the newest, and the input above pins a tag deliberately ("a bad rebuild here
+# breaks the machine you are remote to"). So this stays exactly as it is until
+# a release carries it.
+#
+# WHEN A TAG SHIPS IT, the deletion is:
+#
+#   1. bump inputs.hypr-rdp to that tag
+#   2. replace the sops.templates."hypr-rdp.toml" render with a plain config
+#      file in the store plus `password_file = <the sops secret's path>`
+#   3. delete `secretUsable`, `configPath` and the whole ExecStartPre guard
+#      below -- upstream now refuses on an empty password itself, which is what
+#      that guard exists to do
+#   4. KEEP the evaluation-time assertion. It catches "no secret named at all",
+#      which upstream cannot see and which is a configuration mistake rather
+#      than a runtime one.
+#
+# Verify before deleting step 3, do not assume: confirm against the tagged
+# binary that an empty password_file exits non-zero. The guard exists because
+# this daemon FAILED OPEN once; removing it on the strength of a merged PR
+# rather than an observed refusal would be trading a checked property for a
+# trusted one.
+#
 # So this module is the only thing between an unrendered secret and an open
 # remote desktop, and it refuses in two places rather than one:
 #

@@ -70,9 +70,25 @@ fi
   exit 1
 }
 
-session="$(curl -sS -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/register" \
-  | python3 -c 'import json,sys;print(json.load(sys.stdin).get("session",""))')"
-[ -n "$session" ] || { echo "server did not offer a registration session" >&2; exit 1; }
+# A reverse proxy answering for a down homeserver sends HTML, not JSON; a
+# parser that assumes JSON dies in a traceback, which tells the reader
+# nothing. Swallow the parse error and let the empty-session check speak.
+resp="$(curl -sS -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/register")" || {
+  echo "could not reach $HOMESERVER (curl's error is above)." >&2
+  echo "Check your network and the homeserver URL, then rerun. If the server is" >&2
+  echo "down it is down -- this is a homelab machine; try again later." >&2
+  exit 1
+}
+session="$(python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("session",""))
+except Exception: pass' <<<"$resp")"
+[ -n "$session" ] || {
+  echo "the server at $HOMESERVER did not offer a registration session." >&2
+  echo "Either it is unreachable / not a Matrix homeserver, or registration is" >&2
+  echo "switched off (the maintainers' kill switch). Try again later, or open an" >&2
+  echo "issue on olafkfreund/nixarchy if it persists." >&2
+  exit 1
+}
 
 body="$(python3 - "$name" "$token" "$session" <<'PY'
 import json, secrets, sys
@@ -86,7 +102,38 @@ PY
 
 reg="$(curl -sS -X POST -H 'Content-Type: application/json' -d "$body" "$BASE/register")"
 user_id="$(python3 -c 'import json,sys;print(json.load(sys.stdin).get("user_id",""))' <<<"$reg")"
-[ -n "$user_id" ] || { echo "registration failed: $reg" >&2; exit 1; }
+# The raw reply is UIA internals -- flows, params, a session id -- and the
+# one line a person needs is buried in it. Name the cause and the remedy;
+# fall back to the raw body only for a shape this does not know.
+[ -n "$user_id" ] || {
+  errcode="$(python3 -c 'import json,sys;print(json.load(sys.stdin).get("errcode",""))' <<<"$reg" 2>/dev/null || true)"
+  errmsg="$(python3 -c 'import json,sys;print(json.load(sys.stdin).get("error",""))' <<<"$reg" 2>/dev/null || true)"
+  case "$errcode" in
+    M_FORBIDDEN|M_UNAUTHORIZED)
+      echo "registration refused: the server rejected the registration token ($errmsg)." >&2
+      echo "The token in REGISTRATION-TOKEN (or MATRIX_REGISTRATION_TOKEN) is wrong or has" >&2
+      echo "been rotated. Pull the latest copy of this folder, or ask the maintainers" >&2
+      echo "for the current token -- see README.md." >&2
+      ;;
+    M_USER_IN_USE)
+      echo "registration refused: the name '$name' is already taken on this homeserver." >&2
+      echo "Pick another name and rerun: $0 <name>" >&2
+      ;;
+    M_INVALID_USERNAME)
+      echo "registration refused: the server did not accept '$name' as a username ($errmsg)." >&2
+      echo "Pick a simpler name (lowercase letters, digits, . _ = -) and rerun." >&2
+      ;;
+    "")
+      echo "registration failed and the server's reply was not JSON this script knows:" >&2
+      echo "  $reg" >&2
+      echo "Is $HOMESERVER reachable and actually a Matrix homeserver?" >&2
+      ;;
+    *)
+      echo "registration failed: $errcode -- $errmsg" >&2
+      ;;
+  esac
+  exit 1
+}
 access="$(python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])' <<<"$reg")"
 
 # Without a display name the room is a wall of raw mxids.

@@ -1180,6 +1180,35 @@ from `$HOME/.config` and nothing else. Only the entry point differs.
 
 ## Try it in a VM
 
+The front door needs no repository knowledge at all -- it boots the same
+installer ISO a release ships, in a local UEFI VM, and you answer the wizard
+yourself:
+
+```sh
+nix run github:olafkfreund/nixarchy#try            # offline image, ~5.6 GB download
+nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~1.9 GB download
+```
+
+The offline image installs with no network at all; the network image fetches
+the rest from binary caches during the install. Both write to a
+`nixarchy-try.qcow2` in the current directory (up to 24 GB), and when the
+install finishes, `-- --boot` starts the installed system from that disk;
+`-- --fresh` wipes it and installs again. `-- --help` lists the rest.
+
+Before anything heavy starts it says what is about to happen and refuses what
+cannot work: whether the image is a download or would be a source build --
+and when the commit you are on has no cached image, it falls back to the
+latest release's prebuilt, install-tested one (verified against the
+release's checksums) instead of quietly compiling for hours. It checks there
+is enough RAM (8 GB by default, `--memory` to shrink it) and disk first,
+and whether `/dev/kvm` is usable -- without it the VM still runs, with a
+loud warning, several times slower. On a machine with no display it serves
+the screen over VNC on `127.0.0.1:5900` instead of dying.
+
+The two apps below are different animals: `#vm` boots a prebuilt smoke-test
+*of the installed system* -- no installer, no disk -- and is mainly a
+development tool.
+
 ```sh
 # graphical -- this is the one that shows the desktop
 QEMU_OPTS="-device virtio-vga-gl -display gtk,gl=on" \

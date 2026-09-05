@@ -369,9 +369,11 @@
             # spelling of it in sed would be a parser that disagrees with the
             # shell, reporting on a menu nobody has.
             python3
-            # rfkill, for the Radios section (#277). An undeclared rfkill
-            # reads as "no radios on this machine" rather than "rfkill is
-            # missing" -- the same trap the doctor's vainfo hit.
+            # rfkill, and flock for the MicroVM guests section below (#229):
+            # the same running/stopped test `nixarchy-vm list` uses on
+            # $dir/.lock. An undeclared rfkill reads as "no radios on this
+            # machine" rather than "rfkill is missing" -- the same trap the
+            # doctor's vainfo hit.
             util-linux
             # podman info / podman inspect, for the Boxes section. Safe to
             # pin here -- unlike distrobox, podman does not resolve anything
@@ -380,6 +382,17 @@
             # here: it is looked up by bare name (`command -v distrobox`),
             # the same wrapper-only rule that command's own header explains.
             podman
+            # nix-store, for the MicroVM guests section's GC-root check
+            # (#229): `--print-roots` reads the store, never `--gc`. Pinning
+            # a second nix here is fine in a way it is not in pkgs/microvm.nix
+            # -- that one execs `nix build` against live system state and a
+            # version drift there is a real hazard; this only lists roots.
+            nix
+            # ssh, for the same section's clocksource read over a forwarded
+            # port on a declarative machine. Undeclared here reads as "could
+            # not read clocksource" for a reason that has nothing to do with
+            # whether the guest has a key configured.
+            openssh
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };
@@ -920,6 +933,36 @@
         # `/dev/kvm` (including nixarchy running inside a VM) can boot, and
         # the one CI builds. No separate "disable kvm" option exists to set;
         # there is only this one.
+        #
+        # machineOpts on the -tcg variant, and every entry is load-bearing:
+        #
+        #   - `pit = "on"`, `pic = "on"`. Upstream's default microvm machine
+        #     sets both off, which is correct under KVM -- kvmclock is the
+        #     guest's clock -- and fatal under TCG, which has no kvmclock:
+        #     with no PIT, no PIC and no HPET on this machine type, early
+        #     timer init has nothing to calibrate from, and the kernel
+        #     triple-faults or wedges right after "Poking KASLR", outcome
+        #     depending on where KASLR happened to land. Measured on a real
+        #     A/B: the shipped runner under forced TCG produced zero output
+        #     for five minutes; the same runner with pit/pic on booted to a
+        #     login prompt in 2m13s. `-cpu qemu64` wedged identically, so
+        #     the CPU model was ruled out.
+        #
+        #   - `accel = "tcg"`, PINNED -- not upstream's `kvm:tcg` fallback
+        #     chain. The fallback is how the wedge above shipped unnoticed:
+        #     qemu silently takes KVM wherever /dev/kvm exists (including
+        #     inside a test VM on a host with nested virtualisation), so
+        #     every local run of the "-tcg" artifact was measuring a KVM
+        #     boot, and the one environment that exercised real TCG was CI
+        #     -- at the moment something first tried to boot it. This
+        #     variant's entire reason to exist is hosts with no /dev/kvm; a
+        #     KVM host should run the normal runner. Do not "optimise" the
+        #     fallback back in: an artifact that never runs as what its
+        #     name promises is how this bug lived long enough to gate a PR.
+        #
+        #   - the rest reproduce upstream's x86 defaults (machineOpts
+        #     REPLACES the whole set, so omitting one is turning it off).
+        #     `pcie = "on"` because the 9p shares sit on virtio-pci.
         // lib.concatMapAttrs (
           name: template:
           let
@@ -932,7 +975,21 @@
           in
           {
             "microvm-${name}" = mkMicrovm [ ];
-            "microvm-${name}-tcg" = mkMicrovm [ { microvm.cpu = "max"; } ];
+            "microvm-${name}-tcg" = mkMicrovm [
+              {
+                microvm.cpu = "max";
+                microvm.qemu.machineOpts = {
+                  accel = "tcg";
+                  acpi = "on";
+                  "mem-merge" = "on";
+                  pcie = "on";
+                  pit = "on";
+                  pic = "on";
+                  rtc = "on";
+                  usb = "off";
+                };
+              }
+            ];
           }
         ) (import ./data/microvm-templates.nix)
       );
@@ -1156,204 +1213,18 @@
 
       formatter = eachSystem (system: pkgsFor.${system}.nixfmt-tree);
 
-      checks = eachSystem (system: {
-        omarchy = self.packages.${system}.omarchy;
-        inherit (self.packages.${system}) omarchy-runtime;
-
-        # Drives a real session and reports what it logged. See tests/session.nix
-        # for why neither a serial console nor the smoke-test VM can do this.
-        session = import ./tests/session.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-          inherit (self.packages.${system}) doctor;
-        };
-        # Boots the Omarchy session on a machine whose hyprland.lua belongs to
-        # somebody else -- the case the session entry exists for.
-        coexist = import ./tests/coexist.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The installer's interactive screens, at every width worth caring
-        # about. Nothing else draws them: every other harness passes
-        # --answers, which is exactly how #133 shipped.
-        doctor-graphics = import ./tests/doctor-graphics.nix {
-          pkgs = pkgsFor.${system};
-          inherit (self.packages.${system}) doctor;
-        };
-
-        installer-store-space = import ./tests/installer-store-space.nix {
-          pkgs = pkgsFor.${system};
-          installScript = ./installer/install.sh;
-        };
-
-        installer-lock = import ./tests/installer-lock.nix {
-          pkgs = pkgsFor.${system};
-          flakeTemplate = self.packages.${system}.flake-template;
-        };
-
-        # Where a crash report goes. The prose said Nixarchy and every gh
-        # command said Basecamp; this greps the built tree so the two cannot
-        # disagree again.
-        crash-report-repo = import ./tests/crash-report-repo.nix {
-          pkgs = pkgsFor.${system};
-          omarchy = self.packages.${system}.omarchy;
-        };
-
-        installer-ui = import ./tests/installer-ui.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The other half of the installer: the questions themselves, answered
-        # over a serial line. checks.installer-ui proves a widget can be drawn;
-        # this proves the wizard can be answered, which no harness passing
-        # --answers has ever done. See tests/installer-wizard.nix.
-        installer-wizard = import ./tests/installer-wizard.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The package delta that goes in every Omarchy bump PR. Its dangerous
-        # failure is silence, so this feeds it a known answer. See
-        # tests/package-delta.nix.
-        package-delta = import ./tests/package-delta.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The other two halves of that PR body. Same shape, same reason: both
-        # report on a release by grepping upstream's file layout, and a grep
-        # that has stopped matching prints what a quiet release prints. See
-        # tests/config-delta.nix and tests/patched-files.nix.
-        config-delta = import ./tests/config-delta.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-        patched-files = import ./tests/patched-files.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The release notes, against a fixture repository whose diff is known.
-        # Same dangerous failure as the delta above, over more scans: a release
-        # note that reads calm because a grep stopped matching. See
-        # tests/release-notes.nix.
-        release-notes = import ./tests/release-notes.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # `nix run .#review` watches the pinned packages; this watches that
-        # it can still see them. See tests/review-pins.nix.
-        review-pins = import ./tests/review-pins.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # Every option that adds something, checked with it turned off too --
-        # see tests/options.nix for why that half is the one at risk.
-        options = import ./tests/options.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The other half of that: every option path the README and the manual
-        # quote, checked against the option set they claim to describe. See
-        # tests/doc-options.nix and #214.
-        doc-options = import ./tests/doc-options.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # Built, not evaluated, and onto a config that already exists. See
-        # tests/integration.nix for the three bugs that shipped because every
-        # other check here starts from a clean machine.
-        integration = import ./tests/integration.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # Adds a real third-party plugin from a real repo. The plugin system
-        # is the one deliberately imperative corner of Omarchy, and the part
-        # of it that could break here is the writable ~/.config/omarchy the
-        # seed creates.
-        plugin = import ./tests/plugin.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # Installs onto a blank disk, reboots into the result on the
-        # bootloader the installer wrote, and asserts a rebuild builds
-        # nothing. See tests/install.nix for why the second machine is not a
-        # normal test node.
-        install = import ./tests/install.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The dangerous one. Installs into free space on a disk that already
-        # carries partitions and asserts those partitions are byte-identical
-        # afterwards -- entry and content. See tests/free-space.nix; #47 is
-        # the only item in the epic whose failure mode is destroying data
-        # that is not ours, and this is the gate it sits behind.
-        free-space = import ./tests/free-space.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # The same question as checks.install, asked of the artefact people
-        # download rather than of a test node: boots the ISO with no network
-        # device at all and installs from what the image carries.
-        install-iso = import ./tests/install-iso.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
-
-        # The installed machine, as opposed to the smoke-test guest: a real
-        # bootloader, disko-provided filesystems, nothing faked. If this builds
-        # and vm-toplevel builds, the extraction has not let the two drift.
-        reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
-
-        # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
-        # for what that can and cannot prove. Costs about what reference-toplevel
-        # above does: a runCommand plus a ~1-1.5 GB guest closure from
-        # cache.nixos.org. This step is also how the templates reach
-        # nixarchy.cachix.org: cachix-action pushes what this job builds.
-        microvm-template = import ./tests/microvm-template.nix {
-          pkgs = pkgsFor.${system};
-          inherit lib;
-          templates = lib.mapAttrs (name: _: {
-            kvm = self.packages.${system}."microvm-${name}";
-            tcg = self.packages.${system}."microvm-${name}-tcg";
-          }) (import ./data/microvm-templates.nix);
-          nixarchyVm = self.packages.${system}.nixarchy-vm;
-        };
-
-        # The other half of that: a declared machine actually boots, on the
-        # -tcg runner, and the ro-store mount is asserted from inside the
-        # running guest. See tests/microvm-boot.nix for why the KVM runner --
-        # the one nearly every user runs -- cannot be proved here.
-        microvm-boot = import ./tests/microvm-boot.nix {
-          inherit inputs;
-          pkgs = pkgsFor.${system};
-        };
-
-        # Reads the box catalogue and `nixarchy box` structurally -- see
-        # tests/box-template.nix for what that can and cannot prove, and why
-        # (the network-needing half is `checks.box-boot`, a later, CI-gate
-        # issue). `imagePins` is taken by hand against registry-1.docker.io,
-        # once per template, the same way a `fetchurl` sha256 is -- #259
-        # adding `debian` adds an entry here too, or this check fails loudly
-        # with "no imagePins entry for".
-        box-template = import ./tests/box-template.nix {
-          pkgs = pkgsFor.${system};
-          inherit lib;
-          templates = import ./data/box-templates.nix;
-          nixarchyBox = self.packages.${system}.nixarchy-box;
-          imagePins = {
+      checks = eachSystem (
+        system:
+        let
+          # `imagePins` for the box checks, taken by hand against
+          # registry-1.docker.io, once per template, the same way a `fetchurl`
+          # sha256 is -- a new template (data/box-templates.nix) adds an entry
+          # here too, or checks.box-template fails loudly with "no imagePins
+          # entry for". One table, shared: checks.box-template reads every
+          # entry structurally, checks.box-boot creates a real container from
+          # the default template's -- two checks disagreeing about which image
+          # is pinned would be the #288/#289 failure shape again.
+          boxImagePins = {
             archlinux = {
               imageName = "archlinux";
               imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
@@ -1367,67 +1238,272 @@
               sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
             };
           };
-        };
+        in
+        {
+          omarchy = self.packages.${system}.omarchy;
+          inherit (self.packages.${system}) omarchy-runtime;
 
-        # The other disk mode, built so the cache has it: installer/cd.nix
-        # bakes both onto the ISO, and an image built on a runner that has
-        # only one of them compiles the difference from source.
-        reference-unencrypted-toplevel =
-          self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel;
-
-        # Both images, against the budgets recorded in installer/cd.nix.
-        #
-        # A check rather than a comment because a number nobody enforces is a
-        # number that drifts. The nightly runs this; it costs nothing beyond
-        # the ISO builds it already does.
-        #
-        # The iso-net budget is the load-bearing one, and it is not a taste
-        # question: GitHub refuses a release asset over 2 GiB, so an iso-net
-        # that crosses it stops being publishable as a single file and
-        # release.yml would have to start splitting it. Failing here says so
-        # while there is still something to do about it, rather than at the
-        # next tag.
-        iso-budget =
-          let
+          # Drives a real session and reports what it logged. See tests/session.nix
+          # for why neither a serial console nor the smoke-test VM can do this.
+          session = import ./tests/session.nix {
+            inherit inputs;
             pkgs = pkgsFor.${system};
-            # MiB, as integers: nix has floats but this needs exact bytes, and
-            # 6656 is less to get wrong than 6.5 * 1073741824.
-            images = [
-              {
-                name = "iso";
-                drv = self.packages.${system}.iso;
-                mib = 6656; # 6.5 GiB, over a measured 5.6 GB
-              }
-              {
-                name = "iso-net";
-                drv = self.packages.${system}.iso-net;
-                mib = 2048; # GitHub's release-asset limit, not a preference
-              }
-            ];
-          in
-          pkgs.runCommand "iso-budget" { } (
-            "fail=0\n"
-            + nixpkgs.lib.concatMapStrings (i: ''
-              size=$(stat -Lc %s ${i.drv}/iso/*.iso)
-              budget=$((${toString i.mib} * 1048576))
-              awk -v n=${i.name} -v s="$size" -v b="$budget" \
-                'BEGIN { printf "%-8s %6.2f GiB   budget %5.2f GiB   %s\n", \
-                   n, s/1073741824, b/1073741824, (s > b ? "OVER" : "ok") }'
-              [ "$size" -le "$budget" ] || fail=1
-            '') images
-            + ''
-              if [ "$fail" -ne 0 ]; then
-                echo
-                echo "An image outgrew its budget. Either something large joined the"
-                echo "closure by accident, or the budget in installer/cd.nix needs"
-                echo "raising on purpose -- but iso-net's 2 GiB is GitHub's limit on"
-                echo "a release asset, and cannot be raised, only worked around by"
-                echo "splitting the image the way release.yml splits the other one."
-                exit 1
-              fi
-              touch $out
-            ''
-          );
-      });
+            inherit (self.packages.${system}) doctor;
+          };
+          # Boots the Omarchy session on a machine whose hyprland.lua belongs to
+          # somebody else -- the case the session entry exists for.
+          coexist = import ./tests/coexist.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The installer's interactive screens, at every width worth caring
+          # about. Nothing else draws them: every other harness passes
+          # --answers, which is exactly how #133 shipped.
+          doctor-graphics = import ./tests/doctor-graphics.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+          };
+
+          installer-store-space = import ./tests/installer-store-space.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
+          installer-lock = import ./tests/installer-lock.nix {
+            pkgs = pkgsFor.${system};
+            flakeTemplate = self.packages.${system}.flake-template;
+          };
+
+          # Where a crash report goes. The prose said Nixarchy and every gh
+          # command said Basecamp; this greps the built tree so the two cannot
+          # disagree again.
+          crash-report-repo = import ./tests/crash-report-repo.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          installer-ui = import ./tests/installer-ui.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The other half of the installer: the questions themselves, answered
+          # over a serial line. checks.installer-ui proves a widget can be drawn;
+          # this proves the wizard can be answered, which no harness passing
+          # --answers has ever done. See tests/installer-wizard.nix.
+          installer-wizard = import ./tests/installer-wizard.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The package delta that goes in every Omarchy bump PR. Its dangerous
+          # failure is silence, so this feeds it a known answer. See
+          # tests/package-delta.nix.
+          package-delta = import ./tests/package-delta.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The other two halves of that PR body. Same shape, same reason: both
+          # report on a release by grepping upstream's file layout, and a grep
+          # that has stopped matching prints what a quiet release prints. See
+          # tests/config-delta.nix and tests/patched-files.nix.
+          config-delta = import ./tests/config-delta.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+          patched-files = import ./tests/patched-files.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The release notes, against a fixture repository whose diff is known.
+          # Same dangerous failure as the delta above, over more scans: a release
+          # note that reads calm because a grep stopped matching. See
+          # tests/release-notes.nix.
+          release-notes = import ./tests/release-notes.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # `nix run .#review` watches the pinned packages; this watches that
+          # it can still see them. See tests/review-pins.nix.
+          review-pins = import ./tests/review-pins.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Every option that adds something, checked with it turned off too --
+          # see tests/options.nix for why that half is the one at risk.
+          options = import ./tests/options.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The other half of that: every option path the README and the manual
+          # quote, checked against the option set they claim to describe. See
+          # tests/doc-options.nix and #214.
+          doc-options = import ./tests/doc-options.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Built, not evaluated, and onto a config that already exists. See
+          # tests/integration.nix for the three bugs that shipped because every
+          # other check here starts from a clean machine.
+          integration = import ./tests/integration.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Adds a real third-party plugin from a real repo. The plugin system
+          # is the one deliberately imperative corner of Omarchy, and the part
+          # of it that could break here is the writable ~/.config/omarchy the
+          # seed creates.
+          plugin = import ./tests/plugin.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Installs onto a blank disk, reboots into the result on the
+          # bootloader the installer wrote, and asserts a rebuild builds
+          # nothing. See tests/install.nix for why the second machine is not a
+          # normal test node.
+          install = import ./tests/install.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The dangerous one. Installs into free space on a disk that already
+          # carries partitions and asserts those partitions are byte-identical
+          # afterwards -- entry and content. See tests/free-space.nix; #47 is
+          # the only item in the epic whose failure mode is destroying data
+          # that is not ours, and this is the gate it sits behind.
+          free-space = import ./tests/free-space.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The same question as checks.install, asked of the artefact people
+          # download rather than of a test node: boots the ISO with no network
+          # device at all and installs from what the image carries.
+          install-iso = import ./tests/install-iso.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
+
+          # The installed machine, as opposed to the smoke-test guest: a real
+          # bootloader, disko-provided filesystems, nothing faked. If this builds
+          # and vm-toplevel builds, the extraction has not let the two drift.
+          reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
+
+          # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
+          # for what that can and cannot prove. Costs about what reference-toplevel
+          # above does: a runCommand plus a ~1-1.5 GB guest closure from
+          # cache.nixos.org. This step is also how the templates reach
+          # nixarchy.cachix.org: cachix-action pushes what this job builds.
+          microvm-template = import ./tests/microvm-template.nix {
+            pkgs = pkgsFor.${system};
+            inherit lib;
+            templates = lib.mapAttrs (name: _: {
+              kvm = self.packages.${system}."microvm-${name}";
+              tcg = self.packages.${system}."microvm-${name}-tcg";
+            }) (import ./data/microvm-templates.nix);
+            nixarchyVm = self.packages.${system}.nixarchy-vm;
+          };
+
+          # The other half of that: a declared machine actually boots, on the
+          # -tcg runner, and the ro-store mount is asserted from inside the
+          # running guest. See tests/microvm-boot.nix for why the KVM runner --
+          # the one nearly every user runs -- cannot be proved here.
+          microvm-boot = import ./tests/microvm-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Reads the box catalogue and `nixarchy box` structurally -- see
+          # tests/box-template.nix for what that can and cannot prove. The
+          # pins live in `boxImagePins` above, shared with checks.box-boot.
+          box-template = import ./tests/box-template.nix {
+            pkgs = pkgsFor.${system};
+            inherit lib;
+            templates = import ./data/box-templates.nix;
+            nixarchyBox = self.packages.${system}.nixarchy-box;
+            imagePins = boxImagePins;
+          };
+
+          # The half checks.box-template deliberately leaves alone: create a
+          # real container from the default template's pinned image and enter
+          # it, offline -- see tests/box-boot.nix.
+          box-boot = import ./tests/box-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            imagePin = boxImagePins.archlinux;
+          };
+
+          # The other disk mode, built so the cache has it: installer/cd.nix
+          # bakes both onto the ISO, and an image built on a runner that has
+          # only one of them compiles the difference from source.
+          reference-unencrypted-toplevel =
+            self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel;
+
+          # Both images, against the budgets recorded in installer/cd.nix.
+          #
+          # A check rather than a comment because a number nobody enforces is a
+          # number that drifts. The nightly runs this; it costs nothing beyond
+          # the ISO builds it already does.
+          #
+          # The iso-net budget is the load-bearing one, and it is not a taste
+          # question: GitHub refuses a release asset over 2 GiB, so an iso-net
+          # that crosses it stops being publishable as a single file and
+          # release.yml would have to start splitting it. Failing here says so
+          # while there is still something to do about it, rather than at the
+          # next tag.
+          iso-budget =
+            let
+              pkgs = pkgsFor.${system};
+              # MiB, as integers: nix has floats but this needs exact bytes, and
+              # 6656 is less to get wrong than 6.5 * 1073741824.
+              images = [
+                {
+                  name = "iso";
+                  drv = self.packages.${system}.iso;
+                  mib = 6656; # 6.5 GiB, over a measured 5.6 GB
+                }
+                {
+                  name = "iso-net";
+                  drv = self.packages.${system}.iso-net;
+                  mib = 2048; # GitHub's release-asset limit, not a preference
+                }
+              ];
+            in
+            pkgs.runCommand "iso-budget" { } (
+              "fail=0\n"
+              + nixpkgs.lib.concatMapStrings (i: ''
+                size=$(stat -Lc %s ${i.drv}/iso/*.iso)
+                budget=$((${toString i.mib} * 1048576))
+                awk -v n=${i.name} -v s="$size" -v b="$budget" \
+                  'BEGIN { printf "%-8s %6.2f GiB   budget %5.2f GiB   %s\n", \
+                     n, s/1073741824, b/1073741824, (s > b ? "OVER" : "ok") }'
+                [ "$size" -le "$budget" ] || fail=1
+              '') images
+              + ''
+                if [ "$fail" -ne 0 ]; then
+                  echo
+                  echo "An image outgrew its budget. Either something large joined the"
+                  echo "closure by accident, or the budget in installer/cd.nix needs"
+                  echo "raising on purpose -- but iso-net's 2 GiB is GitHub's limit on"
+                  echo "a release asset, and cannot be raised, only worked around by"
+                  echo "splitting the image the way release.yml splits the other one."
+                  exit 1
+                fi
+                touch $out
+              ''
+            );
+        }
+      );
     };
 }

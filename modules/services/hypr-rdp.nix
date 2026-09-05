@@ -348,6 +348,25 @@ in
         # /proc/*/cmdline is world-readable, so `-p` would publish it to every
         # process on the machine. 0400 and owned by the user whose session it
         # is; the rendered path is under /run, never the store and never git.
+        #
+        # WHAT TO DELETE WHEN UPSTREAM GAINS A PASSWORD FILE (#157). Asked for
+        # in MuNeNiCK/hypr-rdp#80; the maintainer answered on 2026-09-02 with
+        # the shape they want, so the semantics below are theirs, not a guess:
+        # `--password-file` plus a `password_file` config key, conflicting with
+        # the inline `password` rather than overriding it, and a hard startup
+        # failure when the named file is missing, unreadable or empty. Nothing
+        # is merged and no PR is open; the check is whether a release past
+        # v0.1.5 (the input's pin in flake.nix) has `password_file` in
+        # src/config.rs.
+        #
+        # When it lands: this template becomes a plain `sops.secrets.<name>`
+        # file (no rendering, no placeholder, no restart-on-change caveat), the
+        # config file becomes store-safe and can be a `writeText`, and the
+        # `password = ".+"` arm of the guard below moves to checking the secret
+        # file is non-empty. The username arm and the assertions stay -- an
+        # upstream hard failure still leaves the "no credentials at all serves
+        # the desktop unauthenticated" default in place for anyone who
+        # configures neither.
         sops.templates."hypr-rdp.toml" = {
           owner = svc.user;
           mode = "0400";

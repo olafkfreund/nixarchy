@@ -49,11 +49,13 @@
   # to review, the same reason data/microvm-templates.nix names a release
   # rather than tracking a channel.
   #
-  # Verified against this template's own base image (#259's "verify before
-  # writing much"): entering a freshly created box with apt-get unable to
-  # reach the network still reaches a shell -- distrobox-init's first-start
-  # package-manager update warns rather than aborting on Debian too, the
-  # same answer #256 got for archlinux's pacman -Syy.
+  # On first start with a broken-but-resolving network, distrobox-init's
+  # package-manager update warns and a shell still comes up (the branch
+  # test #259 ran, same answer #256 got for archlinux's pacman -Syy). With
+  # NO resolvable network at all the answer is different: init aborts and
+  # enter reports "could not start entrypoint" -- measured by
+  # checks.box-boot (tests/box-boot.nix), which pins that failure as loud
+  # and named rather than trusting either branch result to generalise.
   debian = {
     label = "Debian";
     note = "A .deb/apt userland -- AUR's opposite number. Software packaged for Debian and nothing else.";

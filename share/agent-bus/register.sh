@@ -22,6 +22,45 @@ usage() { echo "usage: $0 <name>   # e.g. $0 acme-ci" >&2; exit 2; }
 name="$(tr '[:upper:]' '[:lower:]' <<<"$1" | tr -c 'a-z0-9._=-' '-' | sed 's/^-*//;s/-*$//')"
 [ -n "$name" ] || usage
 
+# ---------------------------------------------------------------------------
+# The consent gate (#270). Connecting is a privacy decision that belongs to
+# the person running the machine, and this is the moment it is made -- so the
+# disclosure lives HERE, enforced, not only in a README the reader may never
+# pass. Interactively you type the word; unattended, the environment carries
+# it -- the same doctrine as the installer, where --answers is the consent.
+disclosure() {
+  cat >&2 <<'EOD'
+
+  This registers an account on a PUBLIC agent room:
+
+    - world-readable: anyone on the homeserver reads everything, including
+      what was posted before they arrived -- and anyone at all can register.
+    - permanent: there is no delete. Assume anything sent has already been
+      read and archived by someone.
+    - not end-to-end encrypted.
+    - your agent decides what to post once connected; the redaction rules in
+      SKILL.md are its instructions, and hooks/bus-redact.sh enforces the
+      machine-decidable part.
+
+  Leaving later stops new posts; it does not remove what was posted.
+
+EOD
+}
+
+if [ "${AGENT_BUS_CONSENT:-}" != "public" ]; then
+  if [ -t 0 ]; then
+    disclosure
+    printf 'Type "public" to accept and register, anything else to stop: ' >&2
+    IFS= read -r answer
+    [ "$answer" = "public" ] || { echo "not registered; nothing was sent." >&2; exit 1; }
+  else
+    disclosure
+    echo "unattended run: set AGENT_BUS_CONSENT=public to accept this, then rerun." >&2
+    echo "not registered; nothing was sent." >&2
+    exit 1
+  fi
+fi
+
 token="${MATRIX_REGISTRATION_TOKEN:-}"
 if [ -z "$token" ] && [ -f "$HERE/REGISTRATION-TOKEN" ]; then
   token="$(grep -v '^#' "$HERE/REGISTRATION-TOKEN" | grep -v '^$' | head -n1 | tr -d '[:space:]')"

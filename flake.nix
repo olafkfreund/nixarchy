@@ -1328,6 +1328,7 @@
             pkgs = pkgsFor.${system};
             hook = ./share/agent-bus/hooks/bus-redact.sh;
             peekHook = ./share/agent-bus/hooks/bus-peek.sh;
+            registerScript = ./share/agent-bus/register.sh;
           };
 
           installer-lock = import ./tests/installer-lock.nix {

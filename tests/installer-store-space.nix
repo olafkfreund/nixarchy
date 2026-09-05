@@ -166,6 +166,36 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   # And a network that works installs as before.
   t proceed "net image, everything answers"      net  1 1
 
+  # An ENCRYPTED install must pin the ENCRYPTED module list.
+  #
+  # reuse_baked_initrd chose between two baked lists on `[ "$encrypt" = "yes" ]`
+  # while validate_answers normalises the answers file's yes/no into true/false
+  # before any phase runs -- so the encrypted branch was UNREACHABLE and every
+  # encrypted install pinned the PLAIN list with mkForce, discarding
+  # luksroot.nix's dm_crypt. Install succeeds; machine will not unlock its root.
+  # Nothing caught it because every install test in this repo uses encrypt=no.
+  #
+  # No nested heredoc here on purpose: this is inside a Nix indented string,
+  # where the terminator would itself be indented and so would not terminate --
+  # the same trap that once swallowed a theme install. (Writing the two-quote
+  # delimiter in this comment would also end the string, which is how the first
+  # attempt at this comment broke the file.)
+  sed -n '/^reuse_baked_initrd()/,/^}/p' ${installScript} > rb.sh
+  test -s rb.sh || { echo "reuse_baked_initrd is not in install.sh any more" >&2; exit 1; }
+  sed -i 's/@initrdmodules@/ENCRYPTEDLIST ahci/; s/@initrdforced@/ENCFORCED/' rb.sh
+  sed -i 's/@initrdmodulesplain@/PLAINLIST ahci/; s/@initrdforcedplain@/PLAINFORCED/' rb.sh
+
+  # Ends with a closing brace: reuse_baked_initrd refuses to touch a file whose
+  # last line is not `}`, because the pin has to go inside it.
+  printf '{\n  boot.initrd.availableKernelModules = [ "ahci" ];\n  boot.initrd.kernelModules = [ ];\n}\n' > hw.nix
+  ( . ./rb.sh; encrypt=true reuse_baked_initrd hw.nix )
+  if grep -q ENCRYPTEDLIST hw.nix; then
+    echo "  ok      encrypt=true pins the encrypted list"
+  else
+    echo "  FAILED  encrypt=true pinned the PLAIN list -- LUKS modules mkForce'd away"
+    fails=$((fails + 1))
+  fi
+
   # (c) of #300: across every scenario, including the refusals, the disk was
   # never touched.
   [ ! -e wipefs-called ] || { echo "  FAILED  preflight called wipefs"; fails=$((fails+1)); }

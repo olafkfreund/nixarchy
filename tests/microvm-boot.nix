@@ -29,15 +29,16 @@
 #     ro-store share away, which builds an erofs and still boots: ssh
 #     succeeds, this grep fails.
 #
-# Timeout sizing, measured on the machine that matters this time. The first
-# real CI execution of this check (run 33940632899, the #309 repair run --
-# every earlier "run" died at workflow startup) showed the guest kernel at
-# 13.2 guest-seconds after 74.8 host-seconds: a ~5.7x TCG slowdown in KERNEL
-# boot on a 4-core runner, and syscall-heavy userspace init runs far slower
-# than that under TCG. The old 600s wait was reasoned from a 70.8s ssh wait
-# observed on a 128-core dev box with KVM at L1 -- the wrong machine. 1200s
-# fits the job's 30-minute budget beside the ~5 minutes of setup the failed
-# run measured, with margin.
+# Timeout provenance, and where this check now runs. Its first two real CI
+# executions -- runs 33940632899 and 33941923132; everything earlier died at
+# workflow startup, so this check and #304's fixed artifact had never met --
+# measured genuine TCG at L2 on a 4-core ubuntu-latest runner: the guest
+# kernel at 13.2 guest-seconds after 74.8 host-seconds (~5.7x, before
+# userspace init pays its 20-40x), sshd unreached at 600s and then at 1200s.
+# The same check reaches "sandbox login: dev" in 113s where L1 has KVM. That
+# ratio is why the job moved to nightly.yml's self-hosted KVM runners: L2 is
+# still the pinned accel=tcg artifact, only L1 stops being emulated. The
+# 1200s below is a generous ceiling for that home, not a hosted-runner hope.
 { inputs, pkgs }:
 let
   # nixpkgs' own test-only snakeoil keypair (RFC 9500) -- reused rather than

@@ -77,6 +77,22 @@ jobs:
             | grep -E '^(driver|install)_seconds=' \
             | tee -a "$GITHUB_STEP_SUMMARY" || echo "no timing recorded"
 
+  microvm:
+    name: boot a MicroVM on the -tcg runner
+    # Moved here from build.yml after two per-PR attempts on ubuntu-latest
+    # (runs 33940632899 and 33941923132): genuine TCG at L2 on a 4-core
+    # runner did not reach sshd inside 600s and then not inside 1200s, and a
+    # third rung would need the job cap raised for a check that takes 113
+    # SECONDS on hardware with KVM at L1 -- which is exactly what this
+    # runner is. Here it is fast AND honest: L2 is still the pinned
+    # accel=tcg artifact (#304), only L1 stops being emulated.
+    runs-on: [self-hosted, nixos, kvm, big]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Boot a MicroVM on the -tcg runner
+        run: nix build .#checks.x86_64-linux.microvm-boot --print-build-logs
+
   install-iso:
     name: install from the ISO, with no network
     runs-on: [self-hosted, nixos, kvm, big]
@@ -212,7 +228,7 @@ jobs:
   report:
     name: report a failure
     runs-on: ubuntu-latest
-    needs: [install, install-iso, cache]
+    needs: [install, install-iso, microvm, cache]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day

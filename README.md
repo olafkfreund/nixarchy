@@ -1233,6 +1233,29 @@ It needs no display and no SSH, because the frames come from qemu's own
 screendump rather than a compositor screencopy -- `grim` cannot help here, as
 nothing consumes the frames and it blocks forever.
 
+The feature GIFs in `docs/img/features/` are recorded one scene at a time, so
+a single menu changing means re-recording one GIF rather than the whole tour:
+
+```sh
+nix run .#demo-record -- --list      # menus, themes, install, devenv, plugin, microvm
+nix run .#demo-record -- install     # boots a VM, records, verifies, writes
+                                     # docs/img/features/install.gif
+```
+
+Every scene's GIF is gated before the build may succeed: frames sampled
+across it must actually change, and their OCR text must contain what the
+scene claims to show -- a recording of a wallpaper cannot pass the microvm
+scene no matter how it was produced. The same gate is a standalone tool for
+auditing any GIF somebody hands you:
+
+```sh
+nix run .#demo-verify -- some.gif --expect 'dev@demo'
+```
+
+The gate is a floor, not a reviewer: `demo-record` leaves the sampled frames
+next to the build result, and the person committing the GIF is expected to
+look at them.
+
 `docs/capture-screenshots.sh` is the older path and still captures menus the
 tour does not visit. It has to run against a **graphical** VM, for that same
 reason:

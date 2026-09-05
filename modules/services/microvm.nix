@@ -123,6 +123,14 @@ in
                 declarative half and not the disposable templates, which
                 share one closure across every VM of a template and so
                 cannot each carry a different port.
+
+                A forwarded port is not yet a login: the guest's only user
+                (`dev`, modules/microvm/guest.nix) has no password, and
+                sshd's default `PermitEmptyPasswords no` refuses exactly
+                that. Until this machine's `modules` add an authorized key
+                (`users.users.dev.openssh.authorizedKeys.keys`), the port
+                reaches a daemon that will let nobody in -- the console
+                still works either way.
               '';
             };
 

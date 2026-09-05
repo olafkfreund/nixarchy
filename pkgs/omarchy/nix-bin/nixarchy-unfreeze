@@ -93,7 +93,7 @@ esac
 cp "$nixfile" "$nixfile.pre-unfreeze"
 cp "$lock" "$lock.pre-unfreeze"
 
-sed -i -E 's|^  inputs\.nixarchy\.url = "github:olafkfreund/nixarchy/[0-9a-f]{40}";$|  inputs.nixpkgs.url = "'"$nixpkgs_url"'";\n  inputs.nixarchy.url = "github:olafkfreund/nixarchy/'"$ref"'";\n  inputs.nixarchy.inputs.nixpkgs.follows = "nixpkgs";|' "$nixfile"
+sed -i -E 's|^  inputs\.nixarchy\.url = "github:olafkfreund/nixarchy/[0-9a-f]{40}";$|  inputs = {\n    nixpkgs.url = "'"$nixpkgs_url"'";\n    nixarchy = {\n      url = "github:olafkfreund/nixarchy/'"$ref"'";\n      inputs.nixpkgs.follows = "nixpkgs";\n    };\n  };|' "$nixfile"
 
 jq --arg ref "$ref" --arg n "$nixpkgs_node" '
   .nodes.nixarchy.original = {

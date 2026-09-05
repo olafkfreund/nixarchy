@@ -97,10 +97,10 @@ pkgs.runCommand "nixarchy-installer-lock"
     # have. A rev-shaped URL here is the same freeze wearing different
     # clothes: `nix flake update nixarchy` obeys flake.nix, not the lock.
     ref=$(jq -r '.ref' <<<"$original")
-    grep -Fq "inputs.nixarchy.url = \"github:olafkfreund/nixarchy/$ref\";" \
+    grep -Fq "url = \"github:olafkfreund/nixarchy/$ref\";" \
       ${flakeTemplate}/flake.nix || {
       echo "flake.nix does not pin nixarchy to the ref the lock names ('$ref'):" >&2
-      grep -n 'inputs.nixarchy.url' ${flakeTemplate}/flake.nix >&2 || true
+      grep -n 'olafkfreund/nixarchy' ${flakeTemplate}/flake.nix >&2 || true
       exit 1
     }
 
@@ -125,7 +125,7 @@ pkgs.runCommand "nixarchy-installer-lock"
     # first offline use re-resolves it and dies without a network.
     nixpkgs_url=$(jq -r '.nodes.root.inputs.nixpkgs as $n
       | .nodes[$n].original | "github:\(.owner)/\(.repo)/\(.ref)"' "$lock")
-    grep -Fq "inputs.nixpkgs.url = \"$nixpkgs_url\";" ${flakeTemplate}/flake.nix || {
+    grep -Fq "nixpkgs.url = \"$nixpkgs_url\";" ${flakeTemplate}/flake.nix || {
       echo "flake.nix's nixpkgs URL does not match the lock's original" >&2
       echo "($nixpkgs_url); nix would re-resolve it on first use, offline:" >&2
       grep -n 'inputs.nixpkgs.url' ${flakeTemplate}/flake.nix >&2 || true

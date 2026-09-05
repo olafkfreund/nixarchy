@@ -4,6 +4,8 @@
   fetchFromGitHub,
   qt6,
   ffmpeg,
+  nix-update,
+  writeShellApplication,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omacut";
@@ -51,6 +53,17 @@ stdenv.mkDerivation (finalAttrs: {
 
     runHook postInstall
   '';
+
+  # Same shape as omawrite's, and the reasoning lives there. Proven by winding
+  # version back to 0.3.0 and watching it restore 0.4.0's exact hash.
+  passthru.updateScript = writeShellApplication {
+    name = "update-omacut";
+    runtimeInputs = [ nix-update ];
+    text = ''
+      [ -f flake.nix ] || { echo "omacut: run from the repo root" >&2; exit 1; }
+      nix-update --flake omacut
+    '';
+  };
 
   meta = {
     description = "Cut a video to the right trim, built with Qt Quick";

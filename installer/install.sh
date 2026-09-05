@@ -254,6 +254,24 @@ network_ready() {
   curl -sfI --max-time 8 https://cache.nixos.org/nix-cache-info >/dev/null 2>&1
 }
 
+# The way out of any question, said out loud.
+#
+# Every prompt in the flow is a `var=$(... gum ...)` assignment, and the flow
+# runs at top level where errexit and pipefail are both live. gum exits
+# non-zero on Escape, pipefail hands that status to the assignment, and
+# errexit exits on it -- BEFORE any `[ -n "$var" ] || exit` guard on the next
+# line can run. The result was the exact failure ask_encrypt's comment and
+# #240 set out to eliminate: a black screen with nothing running and no word
+# of what happened. So every prompt catches its own status with `|| ui_abort`,
+# and the abort says what the person most needs to hear.
+ui_abort() {
+  ui_left ""
+  ui_left "\e[1mStopped before anything was written.\e[0m"
+  ui_left "\e[90mNo disk has been changed. Power off, or reboot to try again.\e[0m"
+  ui_left ""
+  exit 1
+}
+
 connect_wifi() {
   ui_screen "Let's get you on Wi-Fi..."
   nmcli radio wifi on >/dev/null 2>&1 || true
@@ -325,7 +343,7 @@ ask_network() {
 
     local choice
     choice=$(printf '%s\n' "Wi-Fi" "Try again" |
-      gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "No network yet")
+      gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "No network yet") || choice=""
 
     case $choice in
       "Wi-Fi") connect_wifi || true ;;
@@ -334,7 +352,7 @@ ask_network() {
       "Try again") ;;
       # gum returns nothing on an interrupt. Leave, rather than loop forever
       # on a screen someone is trying to escape.
-      *) exit 1 ;;
+      *) ui_abort ;;
     esac
 
     if network_ready; then
@@ -346,8 +364,8 @@ ask_network() {
 ask_keymap() {
   ui_screen "Let's set up your keyboard..."
   local choice
-  choice=$(cut -f1 "$UI_KEYMAPS" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select keyboard layout")
-  [ -n "$choice" ] || exit 1
+  choice=$(cut -f1 "$UI_KEYMAPS" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select keyboard layout") || ui_abort
+  [ -n "$choice" ] || ui_abort
   keymap=$(grep -F "$choice"$'\t' "$UI_KEYMAPS" | cut -f2)
   loadkeys "$keymap" 2>/dev/null || true
 }
@@ -386,8 +404,8 @@ validate_hostname() {
 ask_password() {
   while :; do
     local pw pw2
-    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
-    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ")
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ") || ui_abort
+    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ") || ui_abort
     if [ "$pw" != "$pw2" ]; then
       ui_left "\e[31mThose do not match.\e[0m"
       continue
@@ -436,12 +454,12 @@ ask_recovery() {
   ui_left "different from your password. Press enter to skip."
   while :; do
     local pw pw2
-    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Recovery> ")
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Recovery> ") || ui_abort
     if [ -z "$pw" ]; then
       recovery_hash=""
       break
     fi
-    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ")
+    pw2=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Confirm> ") || ui_abort
     if [ "$pw" != "$pw2" ]; then
       ui_left "\e[31mThose do not match.\e[0m"
       continue
@@ -460,7 +478,7 @@ ask_identity() {
   ui_screen "Let's set up your user account..."
   local why
   while :; do
-    username=$(gum input --padding "$(ui_gum_pad)" --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ")
+    username=$(gum input --padding "$(ui_gum_pad)" --placeholder "Alphanumeric, no spaces (like dhh)" --prompt "Username> ") || ui_abort
     why=$(validate_username "$username") && break
     gum style --foreground 1 "$why"
   done
@@ -469,7 +487,7 @@ ask_identity() {
   ask_recovery
 
   while :; do
-    hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ")
+    hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ") || ui_abort
     hostname=${hostname:-nixarchy}
     why=$(validate_hostname "$hostname") && break
     gum style --foreground 1 "$why"
@@ -479,14 +497,32 @@ ask_identity() {
     find "$TZDIR" -type f -not -path '*/posix/*' -not -path '*/right/*' |
       sed "s#.*/zoneinfo/##" | grep '/' | sort |
       gum filter --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --placeholder "Type to search" --value "UTC"
-  )
+  ) || ui_abort
   timezone=${timezone:-UTC}
 }
 
 # The medium we booted from must never be in the list. An installer that offers
 # to format itself is a bug, not an edge case.
+#
+# The parent disk comes from lsblk's PKNAME, not from trimming digits off the
+# partition name. `sed 's/[0-9]*$//'` turns /dev/sdb1 into /dev/sdb and
+# looks finished -- and turns /dev/nvme0n1p1 into "/dev/nvme0n1p" and
+# /dev/mmcblk0p1 into "/dev/mmcblk0p", which match no disk, so the exclusion
+# excluded nothing and an ISO written to an internal NVMe or an SD reader was
+# offered as its own install target. The kernel already knows the parent;
+# ask it.
 boot_medium() {
-  findmnt -no SOURCE /iso 2>/dev/null | sed 's/[0-9]*$//' || true
+  local src parent
+  src=$(findmnt -no SOURCE /iso 2>/dev/null) || return 0
+  [ -n "$src" ] || return 0
+  parent=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1) || parent=""
+  if [ -n "$parent" ]; then
+    printf '/dev/%s\n' "$parent"
+  else
+    # Already a whole device: an ISO dd'd to a disk and booted without a
+    # partition table has no parent, and is itself the thing to exclude.
+    printf '%s\n' "$src"
+  fi
 }
 
 ask_device() {
@@ -524,8 +560,8 @@ ask_device() {
     echo "nixarchy needs at least 8 GiB; nothing attached qualifies." >&2
     exit 1
   fi
-  device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}')
-  [ -n "$device" ] || exit 1
+  device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}') || ui_abort
+  [ -n "$device" ] || ui_abort
 }
 
 # ---------------------------------------------------------------------------
@@ -717,13 +753,13 @@ ask_disk_mode() {
   choice=$(printf '%s\n' \
     "Free space install -- keep what is on $device, use the $(free_region_human) free" \
     "Full disk install -- erase $device and everything on it" |
-    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "How should nixarchy use $device?")
+    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "How should nixarchy use $device?") || choice=""
   case $choice in
     "Free space install"*) disk_mode=free ;;
     "Full disk install"*) disk_mode=whole ;;
     # Escape, or a gum that could not draw. Neither is consent to format a
     # disk with an operating system on it.
-    *) exit 1 ;;
+    *) ui_abort ;;
   esac
 }
 
@@ -759,11 +795,7 @@ ask_encrypt() {
       # "do it anyway, differently" -- but it used to refuse in silence, and on
       # the ISO a silent exit leaves a terminal with nothing on it. Say what
       # happened, and say the thing the person most needs to hear.
-      ui_left ""
-      ui_left "\e[1mStopped before anything was written.\e[0m"
-      ui_left "\e[90mNo disk has been changed. Power off, or reboot to try again.\e[0m"
-      ui_left ""
-      exit 1
+      ui_abort
       ;;
   esac
 }
@@ -1191,10 +1223,24 @@ partition_free_space() {
   root_type=8300
   [ "$encrypt" = true ] && root_type=8309
 
+  # Checked by hand: this runs inside main()'s `|| rc=$?` chain, where bash
+  # suppresses errexit. Unchecked, a failed sgdisk fell through to the settle
+  # loop below, which timed out and printed "The partitions were created" --
+  # asserting a creation that never happened, in free-space mode, on the one
+  # disk that has somebody else's OS on it.
   sgdisk --new=0:"$free_start":"$esp_end" \
-    --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev"
+    --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev" || {
+    echo "nixarchy-install: sgdisk could not create the ESP on $dev (exit $?)." >&2
+    echo "  Nothing was formatted. Check the partition table before retrying." >&2
+    exit 1
+  }
   sgdisk --new=0:"$root_start":"$free_end" \
-    --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev"
+    --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev" || {
+    echo "nixarchy-install: sgdisk could not create the root partition on $dev (exit $?)." >&2
+    echo "  The ESP entry was created; nothing was formatted. Check the" >&2
+    echo "  partition table before retrying." >&2
+    exit 1
+  }
 
   # sgdisk asks the kernel to re-read the table itself; partx is the fallback
   # for when it cannot, which is any disk that has a partition mounted.
@@ -1274,12 +1320,30 @@ format_disk() {
   # Built and then executed, rather than `nix run`: diskoScript's output IS the
   # script, and `nix run` looks for $out/bin/<name> inside it, which fails with
   # "Not a directory".
-  local script
+  # Both the build and the run are checked by hand, because errexit cannot do
+  # it here: main() tests this whole chain's status with `|| rc=$?`, and bash
+  # suppresses errexit inside any compound whose status is tested. Unchecked,
+  # a failed build handed `""` to the exec line (exit 127, ignored), a partial
+  # disko run was ignored too, and format_disk's status was that of its last
+  # command -- the rm, which always succeeds. The failure then surfaced half
+  # an hour later at the bootloader step, naming bootctl instead of disko, on
+  # a disk that was erased in the first minute.
+  local script rc=0
   script=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths \
-    "$work#nixosConfigurations.$hostname.config.system.build.diskoScript")
-  "$script"
-
+    "$work#nixosConfigurations.$hostname.config.system.build.diskoScript") || rc=$?
+  if [ "$rc" -ne 0 ] || [ -z "$script" ]; then
+    rm -f /tmp/nixarchy-luks.key
+    echo "nixarchy-install: the disko script did not build (exit $rc)." >&2
+    echo "  Nothing was formatted; the error above this is the one to read." >&2
+    return 1
+  fi
+  "$script" || rc=$?
   rm -f /tmp/nixarchy-luks.key
+  if [ "$rc" -ne 0 ]; then
+    echo "nixarchy-install: disko exited $rc; the disk may be partly formatted." >&2
+    echo "  Nothing was installed. This is disko failing, not the bootloader." >&2
+    return 1
+  fi
 }
 
 # Prove disko mounted what the layout asked for.
@@ -1294,8 +1358,13 @@ format_disk() {
 # `findmnt --mountpoint` matches only a real mountpoint, so a plain
 # directory inside `@` does not satisfy it.
 verify_subvolume_mounts() {
+  # /mnt/boot is in the list because it is the one mountpoint whose absence
+  # this check used to let through: a disko run that mounted the four btrfs
+  # subvolumes but left the ESP unformatted sailed past here, and the failure
+  # surfaced ~30 minutes later when bootctl refused -- with an error naming
+  # the bootloader, on a disk erased at minute one.
   local mp missing=""
-  for mp in /mnt /mnt/nix /mnt/home /mnt/var/log; do
+  for mp in /mnt /mnt/boot /mnt/nix /mnt/home /mnt/var/log; do
     findmnt -rno TARGET --mountpoint "$mp" >/dev/null 2>&1 || missing="$missing $mp"
   done
   if [ -n "$missing" ]; then

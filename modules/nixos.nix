@@ -462,7 +462,10 @@ in
           + "kdenlive gnome-disk-utility sushi cliamp.";
       }
       {
-        assertion = config.programs.hyprland.package.version or "0" >= "0.55";
+        # versionAtLeast, not string >=: Nix compares strings lexicographically,
+        # so "0.100.0" >= "0.55" is false and the day Hyprland reaches 0.100
+        # this assertion would fire wrongly on every machine at once.
+        assertion = lib.versionAtLeast (config.programs.hyprland.package.version or "0") "0.55";
         message = ''
           Nixarchy needs Hyprland >= 0.55 for the Lua config API that
           Omarchy 4.x is written against (hl.bind / hl.window_rule / hl.on).

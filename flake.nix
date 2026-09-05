@@ -1,6 +1,32 @@
 {
   description = "Nixarchy - Omarchy, vendored for NixOS";
 
+  # For the person who has never seen this repository and types
+  # `nix run github:olafkfreund/nixarchy#try` (or #doctor, or #vm): without
+  # this, nothing tells their nix that this flake's packages and closures
+  # are already built and cached, and Hyprland alone becomes a compile.
+  # nixConfig is honoured only from the flake you invoke -- the same rule
+  # the sops-nix comment below leans on from the other side -- so the
+  # module's `programs.nixarchy.binaryCaches` cannot reach a bare `nix run`;
+  # only this can. Nix asks before trusting either entry (or accepts them
+  # silently for users already trusting the caches), and a "no" costs
+  # nothing but the download it was offered.
+  #
+  # What this does NOT cover, measured rather than assumed: the ISO images
+  # themselves are not pushed to cachix -- they ship as release assets --
+  # so `#try` detects that case with a dry-run and falls back to the
+  # release download instead of leaning on these substituters.
+  nixConfig = {
+    extra-substituters = [
+      "https://nixarchy.cachix.org"
+      "https://hyprland.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
+      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -1004,6 +1030,54 @@
                   (builtins.readFile ./installer/vm-preflight.sh);
             };
 
+          # The front door: `nix run github:olafkfreund/nixarchy#try` boots
+          # the installer ISO in a local UEFI VM, wizard and all, for someone
+          # who knows nothing about this repository. `-- --net` takes the
+          # network image instead.
+          #
+          # Deliberately NOT depending on the ISO derivation: referencing it
+          # here would make `nix run .#try` download -- or worse, silently
+          # build -- 5.6 GB before the script's first line ran. The script
+          # resolves the image itself at runtime, dry-run first, so "this is
+          # a download of X" or "STOP, this would be a source build" is said
+          # BEFORE either happens. See installer/try.sh for the rest of the
+          # refusals; checks.try-preflight exercises each of them.
+          #
+          # Also not a wrapper around .#installer-vm: that VM answers the
+          # wizard itself from a baked answers file -- a test harness, and
+          # exactly the thing a person trying nixarchy must not get.
+          try =
+            let
+              pkgs = pkgsFor.${system};
+            in
+            pkgs.writeShellApplication {
+              name = "nixarchy-try";
+              runtimeInputs = with pkgs; [
+                coreutils # df, install, mktemp, nproc, sha256sum
+                curl # the release-image fallback
+                gnugrep
+                gnused
+                gawk
+              ];
+              text =
+                builtins.replaceStrings
+                  [
+                    "@rev@"
+                    "@qemu@"
+                    "@qemu_img@"
+                    "@ovmf_code@"
+                    "@ovmf_vars@"
+                  ]
+                  [
+                    (self.rev or "")
+                    "${pkgs.qemu_kvm}/bin/qemu-system-x86_64"
+                    "${pkgs.qemu_kvm}/bin/qemu-img"
+                    "${pkgs.OVMF.firmware}"
+                    "${pkgs.OVMF.variables}"
+                  ]
+                  (builtins.readFile ./installer/try.sh);
+            };
+
           # Every command the vendored scripts exec by name, in one prefix.
           # The bins are unwrapped on purpose, so an incomplete runtimeDeps list
           # produces a package that builds cleanly and then fails at the click
@@ -1370,6 +1444,17 @@
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
             dashboardScript = ./installer/lib/dashboard.sh;
+          };
+
+          # The `try` front door's refusals, each driven with a stubbed
+          # environment that lies about KVM, RAM, disk and the build plan.
+          # Building tryApp is itself half the assertion: the app evaluates
+          # and its script passes shellcheck, by writeShellApplication's own
+          # checkPhase. See tests/try-preflight.nix.
+          try-preflight = import ./tests/try-preflight.nix {
+            pkgs = pkgsFor.${system};
+            tryScript = ./installer/try.sh;
+            tryApp = self.packages.${system}.try;
           };
 
           # --from-repo's two branches -- host already in the repository, host

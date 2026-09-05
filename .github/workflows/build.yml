@@ -108,6 +108,17 @@ jobs:
       - name: The installer refuses a build the live store cannot hold
         run: nix build .#checks.x86_64-linux.installer-store-space --print-build-logs
 
+      # The `nix run #try` front door, on the machines it will actually meet:
+      # no KVM, no kvm group, 1 GB of RAM, a tmpfs working directory, a
+      # declined binary cache, a disk left by a ctrl-C'd install. Each must
+      # refuse in a sentence naming the number and the way out, and a
+      # preflight nobody has seen fail is a preflight nobody knows works --
+      # so every path is driven here with a stubbed environment, in seconds.
+      # The happy path (a bootable UEFI window) needs KVM and a display no
+      # sandbox has; what CAN be asserted cheaply is asserted on every PR.
+      - name: The try front door refuses in sentences, not stack traces
+        run: nix build .#checks.x86_64-linux.try-preflight --print-build-logs
+
       # --from-repo, the install mode that clones the user's OWN configuration
       # repository and installs the host it finds there. Both of its branches
       # -- host already in the repo, host added to it -- had zero coverage

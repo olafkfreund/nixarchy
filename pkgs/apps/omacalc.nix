@@ -5,6 +5,8 @@
   qt6,
   makeDesktopItem,
   copyDesktopItems,
+  nix-update,
+  writeShellApplication,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omacalc";
@@ -66,6 +68,19 @@ stdenv.mkDerivation (finalAttrs: {
     install -Dm755 omacalc $out/bin/omacalc
     runHook postInstall
   '';
+
+  # Same shape as omawrite's, and the reasoning lives there. One note of its
+  # own: this repo has no GitHub releases, only tags -- nix-update still
+  # resolves the newest (GitHub's releases.atom is fed by tags), proven by
+  # winding version back to 0.2.1 and watching it restore 0.2.2's exact hash.
+  passthru.updateScript = writeShellApplication {
+    name = "update-omacalc";
+    runtimeInputs = [ nix-update ];
+    text = ''
+      [ -f flake.nix ] || { echo "omacalc: run from the repo root" >&2; exit 1; }
+      nix-update --flake omacalc
+    '';
+  };
 
   meta = {
     description = "Calculator built with Qt Quick, from the Omarchy family";

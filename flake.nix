@@ -910,10 +910,10 @@
           # reached, and needed a human (#195, 2026-09-05).
           #
           # `nix eval .#update.pinned` lists the covered attributes; update.yml
-          # builds exactly those after a rewrite, off the same set. Packages
-          # pinned by hand WITHOUT an updateScript are still invisible to this
-          # -- as of this writing grok-bot, omacalc, omacut, omawrite and ttfx
-          # carry none.
+          # builds exactly those after a rewrite, off the same set. A package
+          # pinned by hand WITHOUT an updateScript is still invisible to this
+          # -- as of this writing only grok-bot, whose Cursor CDN pin has no
+          # queryable "latest" (pkgs/review.sh probes its age instead).
           update =
             let
               pinned = lib.filterAttrs (_: p: p ? updateScript) pkgsFor.${system}.nixarchy-apps;

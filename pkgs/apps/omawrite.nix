@@ -3,6 +3,8 @@
   stdenv,
   fetchFromGitHub,
   qt6,
+  nix-update,
+  writeShellApplication,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omawrite";
@@ -53,6 +55,29 @@ stdenv.mkDerivation (finalAttrs: {
 
     runHook postInstall
   '';
+
+  # Found and run by `nix run .#update` (see .#update.pinned in flake.nix).
+  #
+  # Unlike once's and hey-cli's hand-rolled fetch-and-sed, this delegates to
+  # nix-update: the pin is a plain GitHub tag plus a source hash, exactly the
+  # case it handles structurally. It rewrites version and hash by nix position
+  # rather than by grepping a release manifest, so there is no pattern to
+  # anchor and nothing for upstream growing a new file beside its artefacts to
+  # collide with -- which is how hey-cli's updater broke on 1.4.1's SBOMs.
+  # once and hey-cli keep their own scripts on purpose: their hashes come from
+  # upstream's signed checksums.txt, a provenance nix-update cannot give.
+  #
+  # Proven by winding version back to 0.4.0 and watching it restore the exact
+  # committed hash for 0.5.0. Its siblings (omacalc, omacut, ttfx) carry the
+  # same script and point here.
+  passthru.updateScript = writeShellApplication {
+    name = "update-omawrite";
+    runtimeInputs = [ nix-update ];
+    text = ''
+      [ -f flake.nix ] || { echo "omawrite: run from the repo root" >&2; exit 1; }
+      nix-update --flake omawrite
+    '';
+  };
 
   meta = {
     description = "Dead-simple Markdown writing app built with Qt Quick";

@@ -3,6 +3,8 @@
   rustPlatform,
   installShellFiles,
   fetchFromGitHub,
+  nix-update,
+  writeShellApplication,
 }:
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "ttfx";
@@ -27,6 +29,21 @@ rustPlatform.buildRustPackage (finalAttrs: {
       --bash <($out/bin/ttfx --print-completion bash) \
       --zsh  <($out/bin/ttfx --print-completion zsh)
   '';
+
+  # Same shape as omawrite's, and the reasoning lives there. The one thing
+  # this package adds is cargoHash, and it is the reason nix-update earns its
+  # keep here: it recomputes the vendored-dependency hash too, which a
+  # hand-rolled sed script has no honest way to know. Proven by winding
+  # version back to 0.3.1 and watching it restore 0.3.2's exact hash AND
+  # cargoHash.
+  passthru.updateScript = writeShellApplication {
+    name = "update-ttfx";
+    runtimeInputs = [ nix-update ];
+    text = ''
+      [ -f flake.nix ] || { echo "ttfx: run from the repo root" >&2; exit 1; }
+      nix-update --flake ttfx
+    '';
+  };
 
   meta = {
     description = "Terminal text effects as a single static binary, a Rust port of terminaltexteffects";

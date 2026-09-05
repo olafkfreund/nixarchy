@@ -409,18 +409,20 @@
           hey-cli = final.callPackage ./pkgs/apps/hey-cli.nix { };
 
           # Not built here -- upstream's own flake, re-exported into the overlay
-          # so nixarchy-doctor and the Install menu can find it.
+          # so nixarchy-doctor can find it.
           #
-          # Both ask pkgs for an app's meta.mainProgram to learn which command it
-          # puts on PATH, and fall back to the attribute name when the lookup
-          # fails. zen-browser lived only in packages.<system>, so the lookup
-          # returned null and the fallback answered "zen" -- a command that does
-          # not exist, because this package installs bin/zen-beta. The doctor
-          # could never report Zen as present and the menu never dimmed its row.
+          # The doctor asks pkgs for an app's meta.mainProgram to learn which
+          # command it puts on PATH, and falls back to the attribute name when
+          # the lookup fails. zen-browser lived only in packages.<system>, so
+          # the lookup returned null and the fallback answered "zen" -- a
+          # command that does not exist, because this package installs
+          # bin/zen-beta. The doctor could never report Zen as present.
           #
           # Exactly the vscode/code trap the doctor was written to avoid, reached
           # by a different road: not a wrong mainProgram, but a package the probe
-          # could not see.
+          # could not see. The Install menu's copy of the probe had the same bug
+          # for longer -- it reads cfg.apps.<name>.package instead of this
+          # overlay; see appBinary in modules/apps.nix.
           zen-browser = zen-browser.packages.${final.stdenv.hostPlatform.system}.default;
 
           # Two of the four applications Omarchy writes itself. nixpkgs has

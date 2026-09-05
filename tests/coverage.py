@@ -97,3 +97,30 @@ if missing:
     )
 print(f"all {len(menu)} menu rows name commands that exist")
 
+# ---- packaged apps dim on the command their package installs --------------
+# An Install row dims when its `disabled` probe's `command -v <binary>`
+# succeeds, and <binary> is supposed to be the app package's meta.mainProgram.
+# For `ours` apps that package is not in plain nixpkgs, so a probe that asks
+# only pkgs finds nothing and falls back to the app id -- `command -v zen`
+# for a package whose only binary is zen-beta -- and the row never dims on a
+# machine that HAS the app. $oursBinaries (tests/options.nix) carries the
+# binary each `ours` package really installs, read off the flake's own
+# packages, so this compares what the menu probes against ground truth.
+wrong = []
+for pair in os.environ["oursBinaries"].split():
+    row_id, binary = pair.split("=", 1)
+    disabled = str(menu.get(row_id, {}).get("disabled", ""))
+    if f"command -v {binary} >" not in disabled:
+        probed = re.search(r"command -v (\S+)", disabled)
+        wrong.append(
+            f"{row_id}: dims on `{probed.group(1) if probed else '(nothing)'}`, "
+            f"but its package installs `{binary}`"
+        )
+if wrong:
+    sys.exit(
+        "these Install rows dim on a command their package does not install, "
+        "so they never dim on a machine that has the app:\n  "
+        + "\n  ".join(wrong)
+    )
+print(f"all {len(os.environ['oursBinaries'].split())} packaged apps' rows dim on the command they install")
+

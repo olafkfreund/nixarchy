@@ -1276,6 +1276,7 @@
           bus-redact = import ./tests/bus-redact.nix {
             pkgs = pkgsFor.${system};
             hook = ./share/agent-bus/hooks/bus-redact.sh;
+            registerScript = ./share/agent-bus/register.sh;
           };
 
           installer-lock = import ./tests/installer-lock.nix {

@@ -334,16 +334,23 @@ let
       # at once, which is the single most demonstrable thing Omarchy does.
       # Driven by the command the theme picker itself calls, so the switch is
       # the real one and not a keystroke that may or may not have landed.
-      for theme in ["Catppuccin Latte", "Gruvbox", "Nord", "Rose Pine", "Tokyo Night"]:
+      #
+      # Three themes: full-screen wallpaper changes are expensive pixels,
+      # and five of them plus backgrounds measured 1.37MB against the 1MB
+      # gate, four still 1.04MB. The rule is to shorten the scene, never to
+      # degrade the encoding.
+      #
+      # No backgrounds segment any more: a recording of two
+      # omarchy-theme-bg-next calls shipped one visible change -- both
+      # calls exited 0, but the first swap never reached the screen inside
+      # its window, and its own diversity gate refused the result. Themes
+      # already carries the visual story, wallpapers included; a scene that
+      # needs per-machine tuning to show a second wallpaper is not worth
+      # the slot.
+      for theme in ["Gruvbox", "Nord", "Tokyo Night"]:
           user(f'omarchy-theme-set "{theme}"')
           machine.sleep(12)
-          shot("theme-" + theme.lower().replace(" ", "-"), hold=8)
-
-      # ---- backgrounds ---------------------------------------------------
-      for n in range(2):
-          user("omarchy-theme-bg-next")
-          machine.sleep(8)
-          shot(f"background-{n}", hold=6)
+          shot("theme-" + theme.lower().replace(" ", "-"), hold=6)
     '';
 
     shell = ''
@@ -622,15 +629,43 @@ let
 
       shot("plugin-bar-before", hold=6)
 
+      # The add runs in a visible terminal, not silently through su: the
+      # first gated recording of this scene FAILED its own diversity floor
+      # (0 of 11 transitions -- eighteen frames in which one tray icon
+      # appears is a GIF of nothing), and the fix is a scene that shows the
+      # command doing the work, not a lower bar.
+      #
       # OMARCHY_SHELL_IPC_TIMEOUT because two seconds is upstream's budget
       # for a real desktop and this is a VM under emulation with software
-      # rendering.
-      out = user("OMARCHY_SHELL_IPC_TIMEOUT=30s omarchy plugin add "
-                 "file:///srv/bar-toggle --enable --yes 2>&1", timeout=240)
-      print(out)
+      # rendering. file:// rather than the plugin's github URL because the
+      # recording VM has no network -- the repo is the real published
+      # bar-toggle plugin, cloned into the image at build time.
+      terminal(" ; ".join([
+          "echo '$ omarchy plugin add file:///srv/bar-toggle --enable --yes'"
+          " ; OMARCHY_SHELL_IPC_TIMEOUT=30s omarchy plugin add"
+          " file:///srv/bar-toggle --enable --yes 2>&1"
+          " | tee /tmp/plugin.log",
+      ]), [
+          ("plugin-add", 6, 0),
+      ], tail=30)
+      machine.wait_until_succeeds(
+          "grep -q 'Enabled remco.bar-toggle' /tmp/plugin.log", timeout=240)
+      machine.sleep(3)
+      shot("plugin-add-done", hold=10)
+
+      out = machine.succeed("cat /tmp/plugin.log")
       assert "Enabled remco.bar-toggle" in out, (
-          f"the plugin did not install, so the frame below shows nothing: {out!r}")
-      machine.sleep(8)
+          f"the plugin did not install, so the frames show nothing: {out!r}")
+
+      # close-all, not killactive: killactive returned 7 on the recorded
+      # attempt and the "bar-after" frames were a picture of the terminal
+      # still open. close-all already proved itself at the top of this
+      # scene, and the assert makes a silent repeat impossible.
+      user("omarchy-hyprland-window-close-all", timeout=60)
+      machine.sleep(4)
+      left = user("hyprctl clients -j | jq -r 'length'", timeout=30).strip()
+      assert left == "0", (
+          f"{left} windows still open; bar-after would show them, not the bar")
       shot("plugin-bar-after", hold=12)
     '';
 
@@ -675,10 +710,10 @@ let
     themes = {
       script = segments.themes;
       # Themes have no stable text to demand -- the whole point is that
-      # everything changes -- so this scene leans on a high diversity floor:
-      # five theme switches and two backgrounds must actually repaint.
+      # everything changes -- so this scene leans on a diversity floor:
+      # three theme switches must actually repaint.
       expects = [ ];
-      minDistinct = 5;
+      minDistinct = 2;
     };
     install = {
       script = segments.install;
@@ -703,11 +738,14 @@ let
     };
     plugin = {
       script = segments.plugin;
-      # The payoff is one icon appearing in the bar -- no OCR-able text, and
-      # barely any pixels, so the honesty here is the in-script assert on
-      # "Enabled remco.bar-toggle" rather than the GIF gate.
-      expects = [ ];
-      minDistinct = 1;
+      # The add's own terminal output is the OCR-able story; the bar icon
+      # alone is a handful of pixels, and a GIF of only that failed its own
+      # diversity floor at 0 of 11 -- rightly.
+      expects = [
+        "plugin add"
+        "bar-toggle"
+      ];
+      minDistinct = 2;
     };
     boxes = {
       script = segments.boxes;

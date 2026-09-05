@@ -92,7 +92,11 @@ if [ -z "$total" ] || [ "$total" -lt 2 ]; then
   echo "FAIL: $gif decodes to ${total:-0} frames -- not a recording." >&2
   exit 1
 fi
-step=$(( (total - 1) / (frames - 1) ))
+# Ceiling division, so a short GIF is sampled across its WHOLE length: the
+# floor form truncated to step=1 on an 18-frame recording and quietly
+# sampled only its first twelve frames -- the third theme switch was never
+# looked at, and a real recording failed its own gate.
+step=$(( (total + frames - 1) / frames ))
 [ "$step" -lt 1 ] && step=1
 ffmpeg -v error -i "$gif" -vf "select='not(mod(n\\,$step))'" \
   -fps_mode vfr -frames:v "$frames" "$dump/sample-%02d.png"

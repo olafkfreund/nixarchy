@@ -1270,6 +1270,14 @@
             installScript = ./installer/install.sh;
           };
 
+          # The bus redaction hook blocks what a pattern can decide, and only
+          # that (#272). A security hook that passes everything looks
+          # identical to a working one, which is why this exists.
+          bus-redact = import ./tests/bus-redact.nix {
+            pkgs = pkgsFor.${system};
+            hook = ./share/agent-bus/hooks/bus-redact.sh;
+          };
+
           installer-lock = import ./tests/installer-lock.nix {
             pkgs = pkgsFor.${system};
             flakeTemplate = self.packages.${system}.flake-template;
@@ -1413,6 +1421,15 @@
               tcg = self.packages.${system}."microvm-${name}-tcg";
             }) (import ./data/microvm-templates.nix);
             nixarchyVm = self.packages.${system}.nixarchy-vm;
+          };
+
+          # The other half of that: a declared machine actually boots, on the
+          # -tcg runner, and the ro-store mount is asserted from inside the
+          # running guest. See tests/microvm-boot.nix for why the KVM runner --
+          # the one nearly every user runs -- cannot be proved here.
+          microvm-boot = import ./tests/microvm-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
           };
 
           # Reads the box catalogue and `nixarchy box` structurally -- see

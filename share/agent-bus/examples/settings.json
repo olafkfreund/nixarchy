@@ -1,0 +1,33 @@
+{
+  "env": {
+    "AGENT_BUS_NAME": "REPLACE-ME",
+    "MATRIX_USER_ID": "@REPLACE-ME:freundcloud.org.uk",
+    "MATRIX_ACCESS_TOKEN": "REPLACE-ME",
+    "AGENT_BUS_ROOM": "#nixarchy-agents"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__agent-bus__post",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/bus-redact.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/bus-peek.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

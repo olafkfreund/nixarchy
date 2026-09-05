@@ -232,10 +232,55 @@ jobs:
             exit 1
           fi
 
+  # Tomorrow's user. build.yml's weekly cron re-runs the checks against the
+  # COMMITTED lock, so on the flake inputs it proves nothing a merged PR did
+  # not already prove -- the break that reaches people arrives through their
+  # own `nix flake update`, resolving every input this repo leaves mobile:
+  # nixpkgs on nixos-unstable, disko on the moving `latest` tag. zen-browser
+  # tracked master the same way until #320, and that is the incident this job
+  # exists for: nixpkgs renamed ffmpeg_7 away, every downstream consumer's
+  # eval broke, and this repo's CI stayed green the whole time because its
+  # own lock still held the old nixpkgs.
+  #
+  # So: update the lock in a scratch checkout and evaluate what a user's
+  # machine would evaluate. Eval, not build -- the class of break this
+  # catches (a removed attribute, a renamed option, an input that stopped
+  # evaluating) lives entirely in evaluation, and eval needs no KVM, no
+  # binary cache and no disk games. Nothing is committed; the lock this repo
+  # ships is untouched.
+  #
+  # Non-gating by design. A red here means upstream moved, not that a PR
+  # broke something, so it blocks nobody -- the report job below files it as
+  # its own issue, and review.yml's `ci nightly.yml` line keeps the night
+  # from failing silently.
+  canary:
+    name: what a user's flake update gets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Resolve every input the way a user would tomorrow
+        run: nix flake update
+
+      - name: Their machine still evaluates
+        run: |
+          # drvPath forces the full evaluation of the system closure --
+          # every module, every package in systemPackages, every input the
+          # flake reaches for -- which is exactly the surface #320 broke on.
+          # Both hosts, because they diverge: vm is what checks boot,
+          # reference is what the installer writes.
+          nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath
+          echo
+          nix eval --raw .#checks.x86_64-linux.reference-toplevel.drvPath
+          echo
+          echo "both toplevels evaluate against tomorrow's inputs"
+
   report:
     name: report a failure
     runs-on: ubuntu-latest
-    needs: [install, install-iso, microvm, cache]
+    needs: [install, install-iso, microvm, cache, canary]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -263,6 +308,15 @@ jobs:
           # more than the bug did.
           if [ "${{ needs.cache.result }}" = "failure" ]; then
             title="nightly: nothing is reaching the binary cache"
+          elif [ "${{ needs.canary.result }}" = "failure" ] &&
+            [ "${{ needs.install.result }}" = "success" ] &&
+            [ "${{ needs.install-iso.result }}" = "success" ]; then
+            # Its own identity: a canary failure means UPSTREAM moved under
+            # a mobile input, and sending the reader at the install checks
+            # would hide it -- the #236 shape again. Only when the installs
+            # themselves are green, though; a night where both broke is an
+            # install problem first.
+            title="nightly: tomorrow's flake update breaks a user's eval"
           else
             title="nightly: the install checks are failing"
           fi

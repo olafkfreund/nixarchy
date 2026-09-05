@@ -56,8 +56,17 @@ jobs:
           # A stale hash left behind by a broken rewrite fails here rather than
           # in a user's rebuild. The updater refuses to bump a version without
           # its hashes, but this is the check that actually proves it.
-          nix build --impure --print-build-logs \
-            .#once .#grok-bot
+          #
+          # Derived from the same set the updater ran, not named by hand: the
+          # old list here was `.#once .#grok-bot`, which built a package this
+          # job could never change (grok-bot has no updateScript) and skipped
+          # one it could (hey-cli). Building every covered package rather than
+          # only what changed is deliberate -- the set is two small binary
+          # repacks, and it avoids trusting a filename-to-attribute convention
+          # nothing enforces.
+          mapfile -t attrs < <(nix eval --json .#update.pinned | jq -r '.[] | ".#" + .')
+          echo "building: ${attrs[*]}"
+          nix build --impure --print-build-logs "${attrs[@]}"
 
       - name: Open a pull request
         if: steps.bump.outputs.changed == 'true'

@@ -899,10 +899,39 @@
           # `ours` app, without every consumer needing the extra flake input.
           zen-browser = zen-browser.packages.${system}.default;
 
-          # `nix run .#update` -- rewrites the pinned version and hashes in
-          # place. CI runs it weekly and opens a PR. Only `once` is pinned by
-          # hand now; everything else follows nixpkgs or upstream's own flake.
-          update = pkgsFor.${system}.nixarchy-apps.once.updateScript;
+          # `nix run .#update` -- rewrites the pinned versions and hashes in
+          # place. CI runs it nightly and opens a PR (update.yml).
+          #
+          # Derived, not enumerated: every nixarchy-apps package carrying a
+          # passthru.updateScript is run, so a new hand-pinned package is
+          # covered the day it lands, without an edit here. This line used to
+          # name `once` alone -- beside a comment claiming once was the only
+          # hand pin -- while hey-cli sat pinned with an updateScript nothing
+          # reached, and needed a human (#195, 2026-09-05).
+          #
+          # `nix eval .#update.pinned` lists the covered attributes; update.yml
+          # builds exactly those after a rewrite, off the same set. Packages
+          # pinned by hand WITHOUT an updateScript are still invisible to this
+          # -- as of this writing grok-bot, omacalc, omacut, omawrite and ttfx
+          # carry none.
+          update =
+            let
+              pinned = lib.filterAttrs (_: p: p ? updateScript) pkgsFor.${system}.nixarchy-apps;
+            in
+            pkgsFor.${system}.writeShellApplication {
+              name = "nixarchy-update";
+              text = ''
+                rc=0
+                ${lib.concatMapStrings (p: ''
+                  ${lib.getExe p.updateScript} || rc=1
+                '') (lib.attrValues pinned)}
+                exit "$rc"
+              '';
+              # `|| rc=1` rather than fail-fast: one upstream breaking its
+              # release layout (hey-cli's 1.4.1 SBOMs did exactly that) must
+              # not block every other package's bump for the night.
+              derivationArgs.passthru.pinned = lib.attrNames pinned;
+            };
 
           # Boot the smoke test: `nix run .#vm`
           vm = self.nixosConfigurations.vm.config.system.build.vm;

@@ -95,6 +95,31 @@ jobs:
       # and then copied a command that filed into somebody else's tracker --
       # people who cannot act on a NixOS store or rebuild problem. Cheap enough
       # to sit here: a runCommand over the already-built package, no VM.
+      # The workflow files themselves, against GitHub's own schema.
+      #
+      # Added because build.yml shipped BROKEN and nothing caught it: a bad
+      # conflict resolution left `box:` with no body, GitHub rejected the
+      # whole workflow at startup, and every run produced ZERO JOBS. No job
+      # meant no check, so the four required contexts never reported and
+      # branch protection blocked every merge -- a dead CI gate that looked
+      # from the outside like "checks pending", for hours.
+      #
+      # `yq` parses that file happily, which is why local validation passed.
+      # actionlint uses GitHub's schema and says exactly what is wrong:
+      #
+      #   "runs-on" section is missing in job "box"
+      #   "steps" section is missing in job "box"
+      #   "box" job should not be empty
+      #
+      # -ignore drops shellcheck's info level only, matching the -S warning
+      # this repo already uses for its own scripts. Errors and warnings still
+      # fail. Without it the four pre-existing info notes (SC2012/2013/2016)
+      # would fail a workflow file that is fine.
+      - name: The workflow files are valid GitHub Actions
+        run: |
+          nix shell nixpkgs#actionlint -c \
+            actionlint -ignore 'SC[0-9]+:(info|style):'
+
       - name: Crash reports route to the repository the rule names
         run: nix build .#checks.x86_64-linux.crash-report-repo --print-build-logs
 

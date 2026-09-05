@@ -312,6 +312,19 @@ jobs:
         id: pr
         uses: peter-evans/create-pull-request@v8
         with:
+          # A PR opened with the default GITHUB_TOKEN triggers no
+          # pull_request workflows at all -- GitHub's guard against runaway
+          # recursion, and measured here: PR #1's head commit carries ZERO
+          # check runs. That was invisible while the merge below used
+          # --admin, and fatal once it waits for checks instead: required
+          # contexts that never report never turn green. BUMP_TOKEN -- a
+          # fine-grained PAT or app token with contents and pull-requests
+          # write -- makes the PR trigger build.yml like a person's would.
+          # Without the secret this falls back to the default token, the
+          # checks still do not run, and the merge step below fails saying
+          # exactly that rather than arming an auto-merge that can never
+          # fire.
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
           # The version is in the branch name, not just the title. With a
           # constant name, a bump that stops for a human -- a new app to map,
           # a moved anchor -- is overwritten by the next night's run, and the
@@ -324,7 +337,8 @@ jobs:
           body: |
             Bumps the vendored Omarchy to `${{ steps.rel.outputs.latest }}`.
 
-            Merged automatically because every check passed:
+            Merges automatically once the required checks report green.
+            This job has already proved, against the new tree:
 
             - the vendored tree builds
             - every bin this port replaces is still present
@@ -346,17 +360,64 @@ jobs:
           labels: dependencies
           delete-branch: true
 
-      # Auto-merge only because the session check above actually boots the
-      # desktop. Reaching this step already means every check passed -- a
-      # failure anywhere above fails the job and never gets here.
-      - name: Merge it
+      # PROPOSED CI-GATE CHANGE (AGENTS.md 10): --admin becomes --auto, so
+      # the required checks gate this PR like every other.
+      #
+      # The comment that stood here said "Reaching this step already means
+      # every check passed", and that was true only of the checks INSIDE this
+      # job: the tree builds, the menu maps, a session renders. The other
+      # assertions live in build.yml -- the pacman bins replaced, shebangs
+      # patched, the agent skills NixOS-aware, every desktop entry's command
+      # resolving, the browser lookup guarded -- and --admin merged without
+      # waiting for any of them, or for lint, system and devenv-presets,
+      # which are the four required contexts. The one PR class written by a
+      # robot at 4am was the one class none of the gates applied to.
+      #
+      # --auto arms GitHub's own auto-merge instead: the PR lands when the
+      # required checks report green, and not before. What it costs is one
+      # CI cycle of latency (~19 minutes) on a PR nobody is waiting up for.
+      - name: Arm auto-merge, gated on the required checks
         if: steps.rel.outputs.changed == 'true' && steps.pr.outputs.pull-request-number
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh pr merge ${{ steps.pr.outputs.pull-request-number }} \
-            --squash --delete-branch --admin
-          echo "merged Omarchy ${{ steps.rel.outputs.latest }}" >> "$GITHUB_STEP_SUMMARY"
+          pr=${{ steps.pr.outputs.pull-request-number }}
+
+          # Needs the repository setting "Allow auto-merge" (Settings ->
+          # General). If it is off, fail HERE and say so: the PR is already
+          # open and safe to merge by hand, and the report step below fires.
+          if ! gh pr merge "$pr" --auto --squash --delete-branch; then
+            echo "::error::could not arm auto-merge on #$pr -- most likely" \
+              "'Allow auto-merge' is off in the repository settings. The PR" \
+              "is open and waiting; merge it by hand once its checks pass."
+            exit 1
+          fi
+
+          # Armed is not merged. Auto-merge waits for the required contexts,
+          # which only exist if opening the PR triggered the workflows -- and
+          # a PR opened with the default GITHUB_TOKEN triggers none (see the
+          # token comment on the open step). Left undetected, that is a bump
+          # that silently never lands: green job, armed PR, checks that will
+          # never arrive. So wait up to two minutes for the first check run
+          # to appear on the head commit, and fail loudly if none does.
+          sha=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
+          n=0
+          for _ in 1 2 3 4 5 6; do
+            sleep 20
+            n=$(gh api "repos/$GH_REPO/commits/$sha/check-runs" --jq .total_count)
+            [ "$n" -gt 0 ] && break
+          done
+          if [ "$n" -eq 0 ]; then
+            echo "::error::no checks started on #$pr after two minutes. The" \
+              "PR was opened with the default GITHUB_TOKEN, which triggers" \
+              "no workflows, so auto-merge can never fire. Set the" \
+              "BUMP_TOKEN secret (see the open step above). The PR is open;" \
+              "run the checks and merge it by hand."
+            exit 1
+          fi
+          echo "auto-merge armed for Omarchy ${{ steps.rel.outputs.latest }} (#$pr, $n check runs under way)" \
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report what needs a human
         # cancelled() as well as failure(): the timeout that killed this job
@@ -376,3 +437,4 @@ jobs:
           echo "- a renamed bin -> pkgs/omarchy/nix-bin/" >> "$GITHUB_STEP_SUMMARY"
           echo "- a changed substituteInPlace anchor -> pkgs/omarchy/default.nix" >> "$GITHUB_STEP_SUMMARY"
           echo "- a menu row id that no longer exists -> modules/apps.nix" >> "$GITHUB_STEP_SUMMARY"
+          echo "- auto-merge would not arm, or no checks started -> the merge step's error says which setting is missing" >> "$GITHUB_STEP_SUMMARY"

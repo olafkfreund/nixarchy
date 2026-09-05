@@ -102,6 +102,20 @@ jobs:
       - name: The installer refuses a build the live store cannot hold
         run: nix build .#checks.x86_64-linux.installer-store-space --print-build-logs
 
+      # --from-repo, the install mode that clones the user's OWN configuration
+      # repository and installs the host it finds there. Both of its branches
+      # -- host already in the repo, host added to it -- had zero coverage
+      # until now, and it is the only mode that writes to something the user
+      # owns as well as to a disk.
+      #
+      # Wired here rather than left for a follow-up. #323 makes this file's
+      # coverage guard actually work; a check in the flake that no workflow
+      # runs fails that guard on main and on every PR after it, which is the
+      # empty-`box:` deadlock from another direction. An unrun check is worse
+      # than no check -- it occupies the slot.
+      - name: --from-repo installs the host the repository names
+        run: nix build .#checks.x86_64-linux.installer-from-repo --print-build-logs
+
       # Where a crash report goes. The prose said Nixarchy and every `gh`
       # command said Basecamp, so an agent read the rule, concluded correctly,
       # and then copied a command that filed into somebody else's tracker --

@@ -1324,6 +1324,15 @@
             dashboardScript = ./installer/lib/dashboard.sh;
           };
 
+          # --from-repo's two branches -- host already in the repository, host
+          # added to it -- against git repositories built in the check. The
+          # mode touches a user's config repository and had never executed
+          # under any test.
+          installer-from-repo = import ./tests/installer-from-repo.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # The bus redaction hook blocks what a pattern can decide, and only
           # that (#272). A security hook that passes everything looks
           # identical to a working one, which is why this exists.

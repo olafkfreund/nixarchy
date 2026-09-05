@@ -490,6 +490,37 @@ pkgs.testers.runNixOSTest {
             f"a notification is sent before `{guard.strip()}` decided it should be")
     print("both post-boot notifications stand behind a check")
 
+    # ...and the OTHER notification, the welcome one, stops coming back.
+    #
+    # That assertion above reads the hook's SHAPE -- each send sits behind a
+    # guard. It cannot see whether a guard ever becomes true, and #278 was
+    # exactly that failure: omarchy-provision-first-run marks itself done only
+    # when EVERY step succeeded, two user units can never exist on NixOS, so
+    # the marker was never written and first-run ran again at every login. A
+    # welcome notification on every boot, for the life of the machine.
+    #
+    # Nothing checked it. There is no test in this repo that boots twice, so
+    # the fix shipped verified only by reading the code that was changed.
+    #
+    # This checks the property WITHOUT a second boot, which would double the
+    # cost of the most expensive check here: the marker is what a second login
+    # consults, so asserting the marker exists and that a re-run declines is
+    # the same question asked cheaply.
+    #
+    # Red before green: on the pre-#278 tree this fails on the first assertion,
+    # because the marker is precisely what never got written.
+    machine.succeed("su - omarchy -c 'omarchy-done check first-run-user'")
+    print("first-run wrote its completion marker")
+
+    # And the marker is USED, not merely present. A machine that records
+    # completion and re-provisions anyway would pass the line above.
+    again = machine.succeed(
+        "su - omarchy -c 'omarchy-provision-first-run 2>&1'")
+    assert "already complete" in again, (
+        "a second first-run did not decline; the welcome notification would "
+        f"fire again on every login. It said:\n{again}")
+    print("a second first-run declines, so the welcome notification is once-only")
+
     # Silence, gate zero: nixarchy did not write this machine.
     #
     # This VM imports nixosModules.nixarchy into a configuration of its own and

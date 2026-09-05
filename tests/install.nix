@@ -555,6 +555,24 @@ pkgs.testers.runNixOSTest {
     installer.succeed("test -d /mnt/etc/nixos/.git")
     installer.succeed("test -d /mnt/boot/EFI")
 
+    # /etc/nixos belongs to the user, because both commands this installer
+    # ships need to write there and NEITHER runs as root (#356).
+    #
+    # `omarchy update` runs `nh os switch --update`, which rewrites flake.lock
+    # as the user, and refused outright on the first update of every fresh
+    # install. `nixarchy-apply`'s `git add` runs unprivileged too, and its
+    # failure was papered over with a NOTE telling the user to re-run it under
+    # sudo. Two workarounds, one cause.
+    #
+    # Asserted by OWNER, not by `test -w`: this test runs as root, for whom
+    # everything is writable, so a writability check here would pass against a
+    # root-owned directory and prove nothing at all.
+    owner = installer.succeed("stat -c %U /mnt/etc/nixos").strip()
+    assert owner == "omarchy", (
+        f"/mnt/etc/nixos is owned by {owner}, not the installed user. "
+        "The first `omarchy update` on this machine will refuse with "
+        "'not writable', and nixarchy-apply cannot stage its own copies.")
+
     # The install log reached the disk (#239).
     #
     # Asserted under /mnt rather than on the installer, because on the

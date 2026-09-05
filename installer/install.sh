@@ -1587,11 +1587,73 @@ install_flake_dir() {
   # the add, nixos-install fails on the first import. No commit: git needs an
   # identity and choosing the user's is not the installer's business.
   #
-  # Not chowned to the user. /etc/nixos is root-owned on a real machine and
-  # nixarchy-apply runs its copy under sudo; vm/configuration.nix chowns it
-  # only because `nix flake update` runs unprivileged there.
   git -C /mnt/etc/nixos init -q
   git -C /mnt/etc/nixos add -A
+
+  # NOT chowned here. The user does not exist yet -- this runs before
+  # nixos-install creates the account, so `chown omarchy:users` resolves the
+  # name against the ISO's passwd and dies with "invalid user". See
+  # chown_flake_dir below, which runs after run_install.
+  #
+  # The rest of the reasoning, kept here because this is where someone will
+  # look for it (#356).
+  #
+  # The comment that stood here said "/etc/nixos is root-owned on a real
+  # machine and nixarchy-apply runs its copy under sudo; vm/configuration.nix
+  # chowns it only because `nix flake update` runs unprivileged there". Right
+  # about the copy, wrong about everything else, and the consequence was two
+  # workarounds for one cause:
+  #
+  #   omarchy-update      refuses outright -- "not writable by $USER" -- on the
+  #                       FIRST update of every fresh install, because
+  #                       `nh os switch --update` rewrites flake.lock as the
+  #                       user. Loud, with the fix printed, and still a wall in
+  #                       front of step one.
+  #
+  #   nixarchy-apply      its `git add` is already wrapped in a guard that
+  #                       prints "Fix with: sudo git -C $flake add -A" and warns
+  #                       the rebuild may fail (modules/apps.nix:1968). The COPY
+  #                       is elevated; the staging is not.
+  #
+  # And the reasoning it gave against chowning defeats itself: vm/configuration
+  # .nix chowns for precisely the reason that applies here -- `nix flake update`
+  # running unprivileged -- which is what `omarchy update` does on a real
+  # machine too.
+  #
+  # No secret moves by doing this. The password hash and the initrd shadow are
+  # written to /var/lib/nixarchy and explicitly `chown 0:0`'d above; nothing
+  # under /etc/nixos is privileged, which is why it is a git repository the
+  # user is expected to push.
+  #
+  # A single-user desktop where the installed user is the administrator is the
+  # case this installer builds for. Someone who wants root-owned /etc/nixos can
+  # chown it back, and both commands then tell them what to do.
+}
+
+# /etc/nixos belongs to the user, run AFTER nixos-install so the account exists.
+#
+# Resolved from the TARGET's passwd, not by name and not by assuming 1000. The
+# name cannot be used because chown resolves it against the installer ISO,
+# where this user has never existed -- that is what "chown: invalid user:
+# 'omarchy:users'" was. And 1000 would be a guess: NixOS assigns it to the
+# first normal user by default, but a host that sets users.users.<name>.uid
+# gets whatever it asked for, and a silently wrong owner is worse than a loud
+# failure.
+chown_flake_dir() {
+  local uid gid
+  uid=$(chroot /mnt getent passwd "$username" | cut -d: -f3)
+  gid=$(chroot /mnt getent passwd "$username" | cut -d: -f4)
+
+  # Guarded rather than assumed. If the account is somehow absent the install
+  # has already succeeded, so this warns and leaves /etc/nixos root-owned --
+  # recoverable with one chown -- instead of failing a completed install.
+  if [ -z "$uid" ] || [ -z "$gid" ]; then
+    echo "warning: could not resolve $username on the target; leaving /etc/nixos root-owned" >&2
+    echo "  fix with: sudo chown -R $username /etc/nixos" >&2
+    return 0
+  fi
+
+  chown -R "$uid:$gid" /mnt/etc/nixos
 }
 
 # Refuse a build the live store has no room for, and say which number is the
@@ -2161,6 +2223,7 @@ main() {
       install_flake_dir &&
       write_password_hash &&
       run_install &&
+      chown_flake_dir &&
       take_factory_snapshot
   } >>"$log" 2>&1 || rc=$?
   ui_dashboard_stop

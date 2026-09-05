@@ -2097,7 +2097,12 @@ in
               # does not exist" -- the trap installer/mkFlake.nix documents and
               # the installer works around by staging at install time.
               #
-              # Guarded: /etc/nixos is root-owned, and a failure to stage should
+              # Guarded, and still guarded after #356 chowned /etc/nixos to the
+              # installed user. This no longer fires on a machine this
+              # installer wrote -- staging succeeds there now -- but it is not
+              # dead code: an own-flake adopter keeps whatever ownership their
+              # configuration already has, and `--from-repo` installs onto a
+              # tree somebody else created. A failure to stage should still
               # print the fix rather than abort an apply that has already
               # copied everything correctly.
               if [ -e "$flake/.git" ]; then

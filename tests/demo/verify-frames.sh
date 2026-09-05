@@ -34,6 +34,9 @@ usage: verify-frames <gif> [options]
                     (default 2; a held-still terminal scene measures 2)
   --expect REGEX    OCR'd sample text must match (repeatable, extended
                     regex, case-insensitive)
+  --forbid REGEX    OCR'd sample text must NOT match (repeatable) -- for
+                    text that only appears when the scene took a path the
+                    showcase must not show, like an error banner
   --max-bytes N     fail if the GIF is bigger than this (default: no limit)
   --dump DIR        keep the sampled PNGs here (default: a temp dir,
                     removed on success, kept and named on failure)
@@ -47,11 +50,13 @@ min_distinct=2
 max_bytes=0
 dump=""
 expects=()
+forbids=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --frames) frames="${2:?}"; shift 2 ;;
     --min-distinct) min_distinct="${2:?}"; shift 2 ;;
     --expect) expects+=("${2:?}"); shift 2 ;;
+    --forbid) forbids+=("${2:?}"); shift 2 ;;
     --max-bytes) max_bytes="${2:?}"; shift 2 ;;
     --dump) dump="${2:?}"; shift 2 ;;
     -h|--help) usage ;;
@@ -124,13 +129,19 @@ else
 fi
 
 # ---- content ---------------------------------------------------------------
-if [ "${#expects[@]}" -gt 0 ]; then
+if [ "${#expects[@]}" -gt 0 ] || [ "${#forbids[@]}" -gt 0 ]; then
   text="$dump/ocr.txt"
   : > "$text"
   for f in "$dump"/sample-*.png; do
-    tesseract "$f" - 2>/dev/null >> "$text" || true
+    # Upscaled 2x first: at README size the terminal font is small enough
+    # that tesseract misread "nixarchy-app-enable" as noise on the first
+    # real recording, while the same frame doubled reads clean. Measured,
+    # not assumed.
+    magick "$f" -resize 200% "$dump/.ocr-tmp.png"
+    tesseract "$dump/.ocr-tmp.png" - 2>/dev/null >> "$text" || true
   done
-  for want in "${expects[@]}"; do
+  rm -f "$dump/.ocr-tmp.png"
+  for want in ${expects[@]+"${expects[@]}"}; do
     if grep -qiE -- "$want" "$text"; then
       echo "content: found /$want/ in the sampled frames"
     else
@@ -138,6 +149,16 @@ if [ "${#expects[@]}" -gt 0 ]; then
       echo "  Whatever this GIF shows, it is not the thing the scene claims." >&2
       echo "  Read $text and look at the PNGs in $dump." >&2
       fail=1
+    fi
+  done
+  for bad in ${forbids[@]+"${forbids[@]}"}; do
+    if grep -qiE -- "$bad" "$text"; then
+      echo "FAIL: a sampled frame's OCR text matches forbidden /$bad/." >&2
+      echo "  The scene took a path the showcase must not show." >&2
+      echo "  Read $text and look at the PNGs in $dump." >&2
+      fail=1
+    else
+      echo "content: /$bad/ absent from the sampled frames, as required"
     fi
   done
 fi

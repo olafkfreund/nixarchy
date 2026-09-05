@@ -79,9 +79,28 @@ let
       chmod -R a+rX /srv/bar-toggle
     '';
 
+    # Shaped like a machine the installer wrote, not a bare directory: the
+    # host configuration imports nixarchy-apps.nix exactly as
+    # installer/template/host/configuration.nix does (and mkFlake.nix seeds
+    # the same empty stub). Without this the recording node was the one
+    # machine shape nixarchy warns about, and the install scene faithfully
+    # ended on four paragraphs of "a rebuild will ignore it" -- correct for
+    # THIS node, and the opposite of the story an installed machine tells.
     system.activationScripts.demoFlakeDir = ''
       mkdir -p /etc/nixos
+      if [ ! -f /etc/nixos/configuration.nix ]; then
+        cat > /etc/nixos/configuration.nix <<'EOF'
+      { ... }:
+      {
+        # nixarchy-apply copies your app selection here. Without this line the
+        # menu marks apps enabled and nothing is ever installed.
+        imports = [ ./nixarchy-apps.nix ];
+      }
+      EOF
+        printf '{ ... }:\n{ }\n' > /etc/nixos/nixarchy-apps.nix
+      fi
       chmod 0777 /etc/nixos
+      chmod 0666 /etc/nixos/*.nix
     '';
 
     users.users.omarchy = {
@@ -229,22 +248,41 @@ let
       machine.sleep(20)
 
       # The first-run notifications ("Update System", "Learn Keybindings")
-      # sat in the corner of every previously shipped GIF as noise. Dismiss
-      # them; `|| true` because a desktop with no notification daemon up yet
-      # is not a reason to lose the recording.
-      user("makoctl dismiss -a || true", timeout=20)
+      # sat in the corner of every previously shipped GIF as noise. They are
+      # omarchy-shell's own toasts, not a mako daemon's (the first recording
+      # proved it: `makoctl dismiss` quietly did nothing), and they are sent
+      # whenever the first-run service finishes -- which the second
+      # recording proved can be after the desktop has settled, so a single
+      # dismissAll here missed them too. Poll them away by summary through
+      # the shell's own IPC (the same call their action buttons use),
+      # targeted so a scene's own toasts -- "helix queued" is content --
+      # survive. Sent -u critical, they never expire on their own.
+      gone = set()
+      for _ in range(18):
+          for s in ["Update System", "Learn Keybindings"]:
+              if s not in gone:
+                  r = user(f'omarchy-shell notifications dismiss "{s}"',
+                           timeout=15).strip()
+                  if r == "ok":
+                      gone.add(s)
+          if len(gone) == 2:
+              break
+          machine.sleep(5)
+      print(f"  first-run toasts dismissed: {sorted(gone)}")
       machine.sleep(2)
       ${lib.optionalString greeterShots ''shot("desktop", hold=10)''}
     '';
 
   epilogue = ''
     print(f"captured {frame} frames")
-    # os.environ.get, not os.environ[]: an online scene's driver runs
-    # outside the sandbox with no $out, writing frames into -o's directory,
-    # and a KeyError on the very last line would throw away a finished
-    # recording.
-    with open(os.path.join(os.environ.get("out", os.getcwd()),
-                           "frame-count"), "w") as fh:
+    # Trust $out only if it is a directory that exists: inside the sandbox
+    # it is the output; outside it, the user's shell can leak an unrelated
+    # $out (one did -- pointing into another checkout's outputs/, and the
+    # write crashed a recording whose every frame had already succeeded).
+    outdir = os.environ.get("out", "")
+    if not os.path.isdir(outdir):
+        outdir = os.getcwd()
+    with open(os.path.join(outdir, "frame-count"), "w") as fh:
         fh.write(str(frame))
   '';
 
@@ -341,23 +379,24 @@ let
       machine.send_key("esc")
       machine.sleep(3)
 
-      # nixarchy-apply is answered "no": this VM has no flake at /etc/nixos
-      # and no network, so a real switch cannot run inside the recording, and
-      # a screencast that appeared to complete one would be a lie. What it
-      # does show is the selection being copied and the exact nixos-rebuild
-      # command it hands you.
+      # The recording node's /etc/nixos imports nixarchy-apps.nix the way an
+      # installer-written machine does (see demoFlakeDir above), so apply
+      # takes the happy path: copy, then the switch prompt. Answered "no":
+      # this VM has no network, so a real switch cannot run inside the
+      # recording, and a screencast that appeared to complete one would be a
+      # lie -- the scene ends on "apply succeeded, run nh os switch", which
+      # is where a real user's rebuild begins. The disable that used to
+      # close the flow is gone: a showcase's last beat should be the app
+      # enabled, not it being taken away again.
       terminal(" ; ".join([
           "echo '$ nixarchy-app-enable helix' ; nixarchy-app-enable helix ; sleep 8",
           "echo ; echo '$ grep helix ~/.config/nixarchy/apps.nix'"
           " ; grep -n helix ~/.config/nixarchy/apps.nix ; sleep 8",
-          "echo ; echo '$ nixarchy-apply' ; echo n | nixarchy-apply ; sleep 10",
-          "echo ; echo '$ nixarchy-app-disable helix' ; nixarchy-app-disable helix ; sleep 8",
+          "echo ; echo '$ nixarchy-apply' ; echo n | nixarchy-apply ; sleep 8",
       ]), [
           ("install-enable", 8, 9),
           ("install-selection", 8, 9),
-          ("install-apply-prompt", 10, 9),
-          ("install-apply-done", 10, 6),
-          ("install-disable", 8, 0),
+          ("install-apply", 12, 0),
       ])
       user("hyprctl dispatch killactive", timeout=20)
       machine.sleep(3)
@@ -369,6 +408,15 @@ let
       machine.succeed("test -f /etc/nixos/nixarchy-apps.nix")
       machine.succeed("test -f /etc/nixos/nixarchy/apps.nix")
       print("selection reached /etc/nixos/nixarchy/apps.nix")
+
+      # And the node stayed installer-shaped: something in the flake other
+      # than the copy itself names nixarchy-apps.nix. If a future change
+      # breaks this wiring, the scene must fail here rather than quietly
+      # re-record the four-paragraph warning as if it were the feature.
+      machine.succeed(
+          "grep -rl 'nixarchy-apps\\.nix' /etc/nixos --include='*.nix'"
+          " | grep -v nixarchy-apps.nix")
+      print("the host configuration imports the selection")
     '';
 
     devenv = ''
@@ -403,12 +451,16 @@ let
       # any builder, and the recording waits for the guest's autologin
       # prompt before it claims anything.
       #
-      # One honest asterisk, stated here and in the scene's docs:
-      # `nixarchy vm run` starts by `nix build`ing the runner from GitHub,
-      # and this VM has no network. The scene pre-places the very out-link
-      # that build would have produced (the same store path, built by the
-      # same flake) and then runs exactly what run_vm execs. The boot, the
-      # console and the guest are real; the elided step is a download.
+      # THE REAL `nixarchy vm run`, network and all. An earlier draft
+      # pre-placed the out-link that run's `nix build` would have produced,
+      # because a sandboxed build has no network; recording this scene
+      # unsandboxed (like boxes) removes the need for that elision. What the
+      # command actually does on a user's machine is what happens on screen:
+      # fetch this repo's flake from GitHub at the pinned rev, build the
+      # template's runner (the closure is already valid in the shared store,
+      # so the build resolves rather than compiles), and exec it. The guest
+      # closure being pre-registered is exactly the situation on a real
+      # nixarchy machine, where the substituter serves it.
       terminal(" ; ".join([
           "echo '$ nixarchy vm templates' ; nixarchy vm templates ; sleep 8",
           # --template shell spelled out even though it is the default: the
@@ -419,22 +471,22 @@ let
           "echo ; echo '$ nixarchy vm create demo --template shell'"
           " ; nixarchy vm create demo --template shell ; sleep 4",
           "echo ; echo '$ nixarchy vm list' ; nixarchy vm list ; sleep 6",
-          "cd ~/.local/state/nixarchy/microvm/demo",
-          "ln -sfn ${microvmRunner} current",
-          "echo ; echo '$ nixarchy vm run demo'",
-          "./current/bin/microvm-run 2>&1 | tee /tmp/microvm-console.log",
+          "echo ; echo '$ nixarchy vm run demo'"
+          " ; nixarchy vm run demo 2>&1 | tee /tmp/microvm-console.log",
       ]), [
           ("vm-templates", 8, 7),
           ("vm-create", 8, 6),
           ("vm-list", 8, 0),
       ], tail=0)
 
-      # TCG boots this guest in a couple of minutes; wait on the console
-      # log for the autologin prompt rather than on a clock. The hostname
-      # is 'demo' because create wrote it and the guest's oneshot read it --
+      # The flake fetch and eval happen inside the VM first, then TCG boots
+      # the guest; wait on the console log for the autologin prompt rather
+      # than on a clock, with a budget that covers both. The hostname is
+      # 'demo' because create wrote it and the guest's oneshot read it --
       # seeing dev@demo is seeing that whole mechanism work.
+      shot("vm-run-build", hold=8)
       machine.wait_until_succeeds(
-          "grep -q 'dev@demo' /tmp/microvm-console.log", timeout=600)
+          "grep -q 'dev@demo' /tmp/microvm-console.log", timeout=1800)
       machine.sleep(4)
       shot("vm-guest-prompt", hold=10)
 
@@ -464,6 +516,19 @@ let
       # creates a box online; so does this recording. It therefore cannot be
       # a sandboxed `nix build`: demo-record runs this scene's driver
       # outside the sandbox, where qemu's user-mode netdev reaches out.
+
+      # Fail in two minutes with a cause, not in fifteen with a timeout: the
+      # first recording attempt spent its whole 900s budget on a pull that
+      # had hung at the network layer, and the only trace was podman scopes
+      # going quiet. If the registry is not reachable from in here, no later
+      # step can work, so prove it before the camera rolls.
+      print(machine.execute("cat /etc/resolv.conf")[1])
+      machine.wait_until_succeeds(
+          "curl -s -m 10 -o /dev/null -w '%{http_code}' "
+          "https://registry-1.docker.io/v2/ | grep -qE '401|200'",
+          timeout=120)
+      print("registry reachable")
+
       terminal(" ; ".join([
           "echo '$ nixarchy box templates' ; nixarchy box templates ; sleep 8",
           "echo ; echo '$ nixarchy box create demo --template archlinux'"
@@ -481,10 +546,16 @@ let
           ("box-templates", 8, 0),
       ], tail=0)
 
-      # The image pull is real and takes minutes; wait for create's own
-      # closing line, not a clock.
-      machine.wait_until_succeeds(
-          "grep -q 'nixarchy box enter' /tmp/box-create.log", timeout=900)
+      # The image pull is real and takes minutes over SLIRP; wait for
+      # create's own closing line, not a clock, and on timeout hand back
+      # the create log instead of a bare stack trace.
+      try:
+          machine.wait_until_succeeds(
+              "grep -q 'nixarchy box enter' /tmp/box-create.log", timeout=1500)
+      except Exception:
+          print("=== box-create.log at timeout ===")
+          print(machine.execute("cat /tmp/box-create.log")[1])
+          raise
       shot("box-created", hold=8)
 
       # First enter provisions the container (distrobox-init) before it
@@ -501,23 +572,38 @@ let
       machine.sleep(2)
       shot("box-os-release", hold=10)
 
-      machine.send_chars("sudo pacman -S --noconfirm figlet\n")
+      # Install something real, from the network, inside the box -- then RUN
+      # it. fastfetch, because its output says "Arch Linux" in so many words:
+      # an Arch binary, installed by pacman, printing its own distro's name
+      # on a NixOS host is the single most legible frame this feature has,
+      # and it is what the OCR gate below demands.
+      machine.send_chars("sudo pacman -S --noconfirm fastfetch\n")
       machine.wait_until_succeeds(
-          "grep -qiE 'installing figlet|figlet.*is up to date' /tmp/box-tty.log",
+          "grep -qiE 'installing fastfetch|fastfetch.*is up to date' /tmp/box-tty.log",
           timeout=600)
       machine.sleep(4)
       shot("box-pacman", hold=10)
 
-      machine.send_chars("figlet 'Arch on NixOS'\n")
-      machine.sleep(4)
-      shot("box-figlet", hold=12)
+      machine.send_chars("fastfetch\n")
+      # Not 'OS:.*Arch': fastfetch colours its keys, so the raw tty log
+      # holds "OS<ESC>[0m: Arch" and the literal "OS:" never occurs -- the
+      # fourth recording attempt timed out on exactly that, with the right
+      # output on screen. The key WORDS are contiguous plain text, and none
+      # of them appears in the log before fastfetch runs (pacman says
+      # "packages", lowercase). -a, because the escape-laden log can trip
+      # grep's binary detection.
+      machine.wait_until_succeeds(
+          "grep -qaE 'Packages|Uptime|Kernel' /tmp/box-tty.log", timeout=60)
+      machine.sleep(3)
+      shot("box-fastfetch", hold=14)
       machine.send_chars("exit\n")
       machine.sleep(2)
 
-      # The claim, asserted: an Arch userland answered, and pacman ran in it.
+      # The claim, asserted: an Arch userland answered, pacman installed a
+      # package in it, and the installed binary ran.
       out = machine.succeed("cat /tmp/box-tty.log")
       assert "Arch Linux" in out, "the box never showed an Arch userland"
-      assert "pacman" in out, "nothing was installed inside the box"
+      assert "fastfetch" in out, "nothing was installed inside the box"
     '';
 
     plugin = ''
@@ -600,6 +686,10 @@ let
         "nixarchy-app-enable"
         "apps\\.nix"
       ];
+      # The un-wired-flake warning ends with this phrase and nothing on the
+      # happy path resembles it. A recording that shows it is a recording of
+      # a misconfigured node, whatever else it also shows.
+      forbids = [ "never be built" ];
       minDistinct = 3;
     };
     devenv = {
@@ -621,9 +711,18 @@ let
     };
     boxes = {
       script = segments.boxes;
+      # All three can only appear if the guest userland actually ran --
+      # "Arch Linux" is printed by the container's os-release and fastfetch,
+      # and "omarchy@demo" is the prompt INSIDE the container, hostname
+      # assigned by create. Not "pacman": the install visibly happens, but
+      # its command line scrolls off screen under its own output, and the
+      # first gated recording failed on exactly that -- a token that
+      # depends on scroll position is a flaky witness, while the prompt
+      # recurs on every frame that shows the shell.
       expects = [
         "Arch Linux"
-        "pacman"
+        "omarchy@demo"
+        "fastfetch"
       ];
       minDistinct = 3;
       # Online: the image pull and the first `distrobox enter` need the real
@@ -635,30 +734,71 @@ let
       online = true;
       extraNode = {
         programs.nixarchy.services.boxes.enable = true;
-        # The SLIRP interface, made usable: qemu's user netdev serves DHCP
-        # and a DNS proxy at 10.0.2.3, but the test instrumentation leaves
-        # interfaces static. Both lines are inert in the sandbox (no route
-        # out) and load-bearing outside it.
-        networking.interfaces.eth0.useDHCP = lib.mkForce true;
-        networking.nameservers = [ "10.0.2.3" ];
+        # The default test-VM root disk is 1GB, and the second recording
+        # attempt died inside podman with "no space left on device" while
+        # staging image blobs in /var/tmp -- the pull itself had worked.
+        # Room for the image, its extracted layers, and the container.
+        virtualisation.diskSize = 16 * 1024;
+        networking = {
+          # The SLIRP interface, made usable: qemu's user netdev serves
+          # DHCP and a DNS proxy at 10.0.2.3, but the test instrumentation
+          # leaves interfaces static. Inert in the sandbox (no route out),
+          # load-bearing outside it.
+          interfaces.eth0.useDHCP = lib.mkForce true;
+          nameservers = [ "10.0.2.3" ];
+          # SLIRP advertises IPv6 (dhcpcd took a default route via fe80::2
+          # on the first recording attempt) but cannot route it, and a
+          # registry that resolves to AAAA first then hangs is exactly how
+          # that attempt spent 900s in silence. v4-only is what SLIRP is.
+          enableIPv6 = false;
+        };
       };
     };
     microvm = {
       script = segments.microvm;
+      # dev@de[mn]o, not dev@demo: tesseract reads the guest prompt's 'm'
+      # as 'n' at terminal size ("[dev@deno:~]$") and the first gated
+      # recording failed on exactly that with the right prompt on screen.
+      # The in-script assert still demands the exact "dev@demo" in the
+      # console log -- the OCR gate only has to prove it reached the SCREEN.
       expects = [
         "nixarchy vm"
-        "dev@demo"
+        "dev@de[mn]o"
       ];
       minDistinct = 2;
+      # Online, like boxes, and for the same honest reason: recording
+      # unsandboxed lets the scene run the REAL `nixarchy vm run` -- flake
+      # fetch from GitHub included -- instead of pre-placing the out-link
+      # that fetch would have produced. demo-record runs this driver outside
+      # the sandbox and gates the frames the same as everything else.
+      online = true;
       extraNode = {
-        # The guest's whole closure has to be in this VM's store: the runner
-        # 9p-shares the host store into the guest, and here the "host" is
-        # the recording VM.
-        virtualisation.additionalPaths = [ microvmRunner ];
-        # Room for a TCG guest beside a full desktop. mkForce because the
-        # base node pins the session test's 4096 and both land at the same
-        # priority otherwise.
-        virtualisation.memorySize = lib.mkForce 6144;
+        virtualisation = {
+          # The guest's whole closure, valid in this VM's store: the runner
+          # 9p-shares the host store into the guest, and here the "host" is
+          # the recording VM. It also means the in-VM `nix build` resolves
+          # to already-present paths instead of compiling a guest from
+          # source -- the same shape as a machine with the substituter warm.
+          additionalPaths = [ microvmRunner ];
+          # Room for a TCG guest beside a full desktop, plus a flake eval.
+          # mkForce because the base node pins the session test's 4096 and
+          # both land at the same priority otherwise.
+          memorySize = lib.mkForce 8192;
+          # The in-VM `nix build` writes derivations and fetched sources.
+          # On the DISK, not the default tmpfs overlay: a flake eval's
+          # fetched inputs would otherwise compete with the desktop for the
+          # same RAM, and the boxes scene already proved the 1GB default
+          # disk too small for real work.
+          writableStore = true;
+          writableStoreUseTmpfs = false;
+          diskSize = 20 * 1024;
+        };
+        # The SLIRP interface, made usable, v4-only -- see the boxes scene.
+        networking = {
+          interfaces.eth0.useDHCP = lib.mkForce true;
+          nameservers = [ "10.0.2.3" ];
+          enableIPv6 = false;
+        };
       };
     };
   };
@@ -707,13 +847,19 @@ let
   # sandboxed build below and demo-record's online path -- two gates that
   # drifted apart would let a GIF pass a bar its sibling was never held to.
   verifyArgs =
-    { minDistinct, expects, ... }:
+    {
+      minDistinct,
+      expects,
+      forbids ? [ ],
+      ...
+    }:
     lib.concatStringsSep " " (
       [
         "--max-bytes 1000000"
         "--min-distinct ${toString minDistinct}"
       ]
       ++ map (e: "--expect ${lib.escapeShellArg e}") expects
+      ++ map (e: "--forbid ${lib.escapeShellArg e}") forbids
     );
 
   # One scene, encoded and gated. The GIF is 900px wide -- the size the
@@ -886,7 +1032,14 @@ let
           work=$(mktemp -d "demo-record-$scene.XXXXXX")
           echo "'$scene' needs the network in the VM (a real image pull);"
           echo "running its driver outside the sandbox, frames in $work..."
-          "$link/bin/nixos-test-driver" --no-interactive -o "$work"
+          # env -u out: the driver's test script writes its frame count to
+          # $out when one exists, and a user shell can leak an unrelated
+          # $out into this process (one did, and the write crashed a
+          # recording whose every frame had already succeeded).
+          # In a subshell cd'd to the work dir, so the script's own
+          # fallback writes (the frame count) land there and not in the
+          # repo root the user ran demo-record from.
+          ( cd "$work" && env -u out "$OLDPWD/$link/bin/nixos-test-driver" --no-interactive -o . )
 
           mkdir -p "$work/verify"
           bash ${encodeScript} "$work" "$work/$scene.gif"

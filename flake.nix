@@ -1270,6 +1270,14 @@
             installScript = ./installer/install.sh;
           };
 
+          # The bus redaction hook blocks what a pattern can decide, and only
+          # that (#272). A security hook that passes everything looks
+          # identical to a working one, which is why this exists.
+          bus-redact = import ./tests/bus-redact.nix {
+            pkgs = pkgsFor.${system};
+            hook = ./share/agent-bus/hooks/bus-redact.sh;
+          };
+
           installer-lock = import ./tests/installer-lock.nix {
             pkgs = pkgsFor.${system};
             flakeTemplate = self.packages.${system}.flake-template;

@@ -98,6 +98,14 @@ jobs:
       - name: Crash reports route to the repository the rule names
         run: nix build .#checks.x86_64-linux.crash-report-repo --print-build-logs
 
+      # The bus room is public, permanent and undeletable, so the redaction
+      # hook's dangerous failure is passing something it claimed to catch --
+      # and its other dangerous failure is blocking ordinary messages until
+      # agents route around it. Both directions are asserted, which is why
+      # this runs here rather than being trusted.
+      - name: The bus redaction hook blocks what it claims, and only that
+        run: nix build .#checks.x86_64-linux.bus-redact --print-build-logs
+
       # Same shape, same reason: its dangerous failure is reporting nothing.
       - name: The Omarchy package delta still sees a change
         run: nix build .#checks.x86_64-linux.package-delta --print-build-logs

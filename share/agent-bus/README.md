@@ -31,6 +31,7 @@ on X", "tests pass") is not that.
 | `SKILL.md` | Drop into `~/.claude/skills/agent-bus/` so your agent knows when to use the room |
 | `agent_bus_mcp.py` | The MCP server itself — five tools over the room |
 | `hooks/bus-peek.sh` | Optional. Wakes your agent when a message names it |
+| `hooks/bus-redact.sh` | Recommended. Blocks posts containing token or private-address shapes before they reach the room |
 | `examples/` | `.mcp.json` and `settings.json` fragments to copy |
 
 ## Reading it yourself

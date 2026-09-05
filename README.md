@@ -1266,10 +1266,16 @@ The feature GIFs in `docs/img/features/` are recorded one scene at a time, so
 a single menu changing means re-recording one GIF rather than the whole tour:
 
 ```sh
-nix run .#demo-record -- --list      # menus, themes, install, devenv, plugin, microvm
+nix run .#demo-record -- --list      # menus, themes, install, devenv, plugin, microvm, boxes
 nix run .#demo-record -- install     # boots a VM, records, verifies, writes
                                      # docs/img/features/install.gif
 ```
+
+Most scenes record inside the sandbox. `boxes` cannot: creating a box pulls
+its image with podman over the real network, and the first `distrobox
+enter` provisions online — so `demo-record` runs that scene's test driver
+outside the sandbox (where qemu's user-mode network reaches out) and then
+applies the very same encode and verification gate to the frames.
 
 Every scene's GIF is gated before the build may succeed: frames sampled
 across it must actually change, and their OCR text must contain what the

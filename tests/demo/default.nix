@@ -239,7 +239,12 @@ let
 
   epilogue = ''
     print(f"captured {frame} frames")
-    with open(os.path.join(os.environ["out"], "frame-count"), "w") as fh:
+    # os.environ.get, not os.environ[]: an online scene's driver runs
+    # outside the sandbox with no $out, writing frames into -o's directory,
+    # and a KeyError on the very last line would throw away a finished
+    # recording.
+    with open(os.path.join(os.environ.get("out", os.getcwd()),
+                           "frame-count"), "w") as fh:
         fh.write(str(frame))
   '';
 
@@ -406,14 +411,22 @@ let
       # console and the guest are real; the elided step is a download.
       terminal(" ; ".join([
           "echo '$ nixarchy vm templates' ; nixarchy vm templates ; sleep 8",
-          "echo ; echo '$ nixarchy vm create demo' ; nixarchy vm create demo ; sleep 6",
+          # --template shell spelled out even though it is the default: the
+          # owner's ask is "working from the given templates", so the
+          # template is the visible subject of the create, not an implied
+          # default. The templates listing above is data/microvm-templates.nix
+          # verbatim -- every entry, not a fixture.
+          "echo ; echo '$ nixarchy vm create demo --template shell'"
+          " ; nixarchy vm create demo --template shell ; sleep 4",
+          "echo ; echo '$ nixarchy vm list' ; nixarchy vm list ; sleep 6",
           "cd ~/.local/state/nixarchy/microvm/demo",
           "ln -sfn ${microvmRunner} current",
           "echo ; echo '$ nixarchy vm run demo'",
           "./current/bin/microvm-run 2>&1 | tee /tmp/microvm-console.log",
       ]), [
           ("vm-templates", 8, 7),
-          ("vm-create", 8, 0),
+          ("vm-create", 8, 6),
+          ("vm-list", 8, 0),
       ], tail=0)
 
       # TCG boots this guest in a couple of minutes; wait on the console
@@ -435,6 +448,76 @@ let
       # The claim, asserted: a guest booted and answered.
       out = machine.succeed("cat /tmp/microvm-console.log")
       assert "dev@demo" in out, "no guest prompt ever reached the console"
+    '';
+
+    boxes = ''
+      # ---- boxes (distrobox) ---------------------------------------------
+      # Not command output ABOUT a box -- a distro installed, entered, and
+      # visibly running: pacman installing a package inside the Arch
+      # userland, on a NixOS host, which is the entire point of the feature.
+      #
+      # This scene runs with a NETWORK, and that is honest rather than a
+      # concession: `nixarchy box create` pulls the image with podman over
+      # the real network -- the one step checks.box-template deliberately
+      # does not attempt -- and tests/box-boot.nix pins that the offline
+      # first `distrobox enter` fails loudly at the entrypoint. A real user
+      # creates a box online; so does this recording. It therefore cannot be
+      # a sandboxed `nix build`: demo-record runs this scene's driver
+      # outside the sandbox, where qemu's user-mode netdev reaches out.
+      terminal(" ; ".join([
+          "echo '$ nixarchy box templates' ; nixarchy box templates ; sleep 8",
+          "echo ; echo '$ nixarchy box create demo --template archlinux'"
+          # tee, because foot's own log only carries foot's stderr: the wait
+          # below needs the create's last line, and the screen alone cannot
+          # be grepped.
+          " ; nixarchy box create demo --template archlinux 2>&1"
+          " | tee /tmp/box-create.log",
+          # `script` keeps the enter interactive -- a plain pipe through tee
+          # would take the TTY away from the container shell -- while still
+          # logging everything typed and printed for the waits below.
+          "echo ; echo '$ nixarchy box enter demo'"
+          " ; script -qfc 'distrobox enter demo' /tmp/box-tty.log",
+      ]), [
+          ("box-templates", 8, 0),
+      ], tail=0)
+
+      # The image pull is real and takes minutes; wait for create's own
+      # closing line, not a clock.
+      machine.wait_until_succeeds(
+          "grep -q 'nixarchy box enter' /tmp/box-create.log", timeout=900)
+      shot("box-created", hold=8)
+
+      # First enter provisions the container (distrobox-init) before it
+      # hands over a prompt; its completion banner is the condition.
+      machine.wait_until_succeeds(
+          "grep -qi 'container setup complete' /tmp/box-tty.log", timeout=900)
+      machine.sleep(4)
+      shot("box-entered", hold=8)
+
+      # Now type into the Arch userland through the terminal.
+      machine.send_chars("cat /etc/os-release | head -3\n")
+      machine.wait_until_succeeds(
+          "grep -q 'Arch Linux' /tmp/box-tty.log", timeout=60)
+      machine.sleep(2)
+      shot("box-os-release", hold=10)
+
+      machine.send_chars("sudo pacman -S --noconfirm figlet\n")
+      machine.wait_until_succeeds(
+          "grep -qiE 'installing figlet|figlet.*is up to date' /tmp/box-tty.log",
+          timeout=600)
+      machine.sleep(4)
+      shot("box-pacman", hold=10)
+
+      machine.send_chars("figlet 'Arch on NixOS'\n")
+      machine.sleep(4)
+      shot("box-figlet", hold=12)
+      machine.send_chars("exit\n")
+      machine.sleep(2)
+
+      # The claim, asserted: an Arch userland answered, and pacman ran in it.
+      out = machine.succeed("cat /tmp/box-tty.log")
+      assert "Arch Linux" in out, "the box never showed an Arch userland"
+      assert "pacman" in out, "nothing was installed inside the box"
     '';
 
     plugin = ''
@@ -536,6 +619,30 @@ let
       expects = [ ];
       minDistinct = 1;
     };
+    boxes = {
+      script = segments.boxes;
+      expects = [
+        "Arch Linux"
+        "pacman"
+      ];
+      minDistinct = 3;
+      # Online: the image pull and the first `distrobox enter` need the real
+      # network, so this scene cannot be a sandboxed `nix build`.
+      # demo-record builds this attr -- which is the scene's test DRIVER, not
+      # a GIF -- runs it outside the sandbox where qemu's user-mode netdev
+      # reaches out, and encodes and gates the result itself, with the same
+      # encoder and the same verify gate as every sandboxed scene.
+      online = true;
+      extraNode = {
+        programs.nixarchy.services.boxes.enable = true;
+        # The SLIRP interface, made usable: qemu's user netdev serves DHCP
+        # and a DNS proxy at 10.0.2.3, but the test instrumentation leaves
+        # interfaces static. Both lines are inert in the sandbox (no route
+        # out) and load-bearing outside it.
+        networking.interfaces.eth0.useDHCP = lib.mkForce true;
+        networking.nameservers = [ "10.0.2.3" ];
+      };
+    };
     microvm = {
       script = segments.microvm;
       expects = [
@@ -594,47 +701,60 @@ let
     (pkgs.tesseract.override { enableLanguages = [ "eng" ]; })
   ];
 
+  encodeScript = ./encode-gif.sh;
+
+  # The verify invocation for one scene, shared verbatim between the
+  # sandboxed build below and demo-record's online path -- two gates that
+  # drifted apart would let a GIF pass a bar its sibling was never held to.
+  verifyArgs =
+    { minDistinct, expects, ... }:
+    lib.concatStringsSep " " (
+      [
+        "--max-bytes 1000000"
+        "--min-distinct ${toString minDistinct}"
+      ]
+      ++ map (e: "--expect ${lib.escapeShellArg e}") expects
+    );
+
   # One scene, encoded and gated. The GIF is 900px wide -- the size the
   # README's existing good recording uses -- and the build FAILS if the
   # result is over 1MB (split the scene instead of degrading it), if the
   # sampled frames barely change, or if the OCR never shows what the scene
   # claims. The sampled frames land in $out/verify for human eyes.
+  #
+  # An online scene (needs the real network in the VM) cannot record inside
+  # the sandbox, so its attr is the test DRIVER for demo-record to run
+  # outside it; everything else is the finished, gated GIF.
   mkScene =
-    name:
-    {
-      script,
-      expects,
-      minDistinct,
-      extraNode ? { },
-    }:
-    let
-      test = mkTest name { inherit script extraNode; };
-    in
-    pkgs.runCommand "nixarchy-demo-${name}"
-      {
-        nativeBuildInputs = verifyInputs;
-      }
-      ''
-        mkdir -p $out/screenshots $out/verify
-        cp ${test}/*.png $out/screenshots/
+    name: def:
+    if def.online or false then
+      (mkTest name {
+        inherit (def) script;
+        extraNode = def.extraNode or { };
+      }).driver
+    else
+      let
+        test = mkTest name {
+          inherit (def) script;
+          extraNode = def.extraNode or { };
+        };
+      in
+      pkgs.runCommand "nixarchy-demo-${name}"
+        {
+          nativeBuildInputs = verifyInputs;
+        }
+        ''
+          mkdir -p $out/screenshots $out/verify
+          cp ${test}/*.png $out/screenshots/
 
-        # 4fps: each step was held for several frames, so this dwells about
-        # a second and a half per state -- long enough to read, short enough
-        # to sit through.
-        ffmpeg -hide_banner -loglevel error \
-          -framerate 4 -pattern_type glob -i "$out/screenshots/*.png" \
-          -vf "fps=4,scale=900:-1:flags=lanczos,split[a][b];\
-        [a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer" \
-          $out/${name}.gif
+          bash ${encodeScript} $out/screenshots $out/${name}.gif
 
-        bash ${verifyScript} $out/${name}.gif \
-          --max-bytes 1000000 \
-          --min-distinct ${toString minDistinct} \
-          ${lib.concatMapStringsSep " " (e: "--expect ${lib.escapeShellArg e}") expects} \
-          --dump $out/verify
+          bash ${verifyScript} $out/${name}.gif \
+            ${verifyArgs def} \
+            --dump $out/verify
 
-        ls -lh $out/${name}.gif >&2
-      '';
+          ls -lh $out/${name}.gif >&2
+        '';
 
   scenes = lib.mapAttrs mkScene sceneDefs;
 
@@ -686,13 +806,24 @@ let
     '';
   };
 
+  onlineScenes = lib.filterAttrs (_: d: d.online or false) sceneDefs;
+
   # `nix run .#demo-record -- <scene>` -- rebuild one scene's GIF and put it
   # where the README looks for it. Builds from the flake in the current
   # directory, on purpose: re-recording after a change is the whole use case.
+  #
+  # Two paths through it. An offline scene is a sandboxed `nix build` whose
+  # derivation already encoded and gated the GIF. An online scene (boxes:
+  # the image pull and first enter need the real network) builds the same
+  # test's DRIVER instead and runs it right here, outside the sandbox, where
+  # qemu's user netdev reaches the internet -- then encodes and gates the
+  # frames with the same scripts the sandboxed path uses.
   recorder = pkgs.writeShellApplication {
     name = "demo-record";
+    runtimeInputs = verifyInputs;
     text = ''
       scenes="${lib.concatStringsSep " " (builtins.attrNames sceneDefs)}"
+      online_scenes="${lib.concatStringsSep " " (builtins.attrNames onlineScenes)}"
 
       usage() {
         cat <<EOF
@@ -706,8 +837,20 @@ let
       before committing; the gate is a floor, not a reviewer.
 
       scenes: $scenes
+      (need the network, recorded outside the sandbox: $online_scenes)
       EOF
         exit 2
+      }
+
+      verify_args() {
+        case "$1" in
+      ${lib.concatStrings (
+        lib.mapAttrsToList (n: d: ''
+          ${n}) echo ${lib.escapeShellArg (verifyArgs d)} ;;
+        '') onlineScenes
+      )}
+          *) echo ""; return 1 ;;
+        esac
       }
 
       scene=""
@@ -735,11 +878,38 @@ let
       echo "recording '$scene' -- this boots a VM and takes minutes..."
       nix build ".#demo-scene-$scene" --out-link "$link" --print-build-logs
 
+      case " $online_scenes " in
+        *" $scene "*)
+          # The built attr is the test driver. Run it here, unsandboxed, so
+          # the VM's user-mode network reaches out; frames land in a scratch
+          # directory and go through the very same encode and gate.
+          work=$(mktemp -d "demo-record-$scene.XXXXXX")
+          echo "'$scene' needs the network in the VM (a real image pull);"
+          echo "running its driver outside the sandbox, frames in $work..."
+          "$link/bin/nixos-test-driver" --no-interactive -o "$work"
+
+          mkdir -p "$work/verify"
+          bash ${encodeScript} "$work" "$work/$scene.gif"
+          # The args string carries shell quoting ("--expect 'Arch Linux'"),
+          # so it is re-parsed into an array rather than word-split raw.
+          declare -a vargs=()
+          eval "vargs=($(verify_args "$scene"))"
+          bash ${verifyScript} "$work/$scene.gif" \
+            "''${vargs[@]}" --dump "$work/verify"
+          gif="$work/$scene.gif"
+          frames="$work/verify"
+          ;;
+        *)
+          gif="$link/$scene.gif"
+          frames="$(readlink -f "$link")/verify"
+          ;;
+      esac
+
       mkdir -p "$outdir"
-      install -m 0644 "$link/$scene.gif" "$outdir/$scene.gif"
+      install -m 0644 "$gif" "$outdir/$scene.gif"
       echo
       echo "wrote $outdir/$scene.gif ($(stat -c %s "$outdir/$scene.gif") bytes)"
-      echo "verification frames to LOOK at: $(readlink -f "$link")/verify/"
+      echo "verification frames to LOOK at: $frames/"
     '';
   };
 in

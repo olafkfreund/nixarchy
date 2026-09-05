@@ -927,6 +927,12 @@
             demo-scene-devenv
             demo-scene-plugin
             demo-scene-microvm
+            # Not a GIF but the scene's test DRIVER: boxes needs the real
+            # network in the VM (podman pulls the image, and the first
+            # `distrobox enter` provisions online), which no sandboxed build
+            # has. demo-record runs it outside the sandbox and applies the
+            # same encode and the same verify gate to the frames.
+            demo-scene-boxes
             ;
 
           inherit (pkgsFor.${system}.nixarchy-apps)

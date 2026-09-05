@@ -557,6 +557,26 @@
           default = self.packages.${system}.omarchy;
           inherit (pkgsFor.${system}) omarchy nixarchy-plymouth;
 
+          # `nix run github:olafkfreund/nixarchy#agent-bus-mcp` -- the bus MCP
+          # server as a flake output (#268), so an outside agent's mcp.json can
+          # name a store path instead of `uv run --with mcp --with httpx` on a
+          # copy of the script. The script itself stays the single source in
+          # share/agent-bus/; this wraps it with its two dependencies from the
+          # locked nixpkgs. bus-peek.sh's AGENT_BUS_CMD accepts this binary
+          # verbatim.
+          agent-bus-mcp = pkgsFor.${system}.writeShellApplication {
+            name = "agent-bus-mcp";
+            runtimeInputs = [
+              (pkgsFor.${system}.python3.withPackages (p: [
+                p.mcp
+                p.httpx
+              ]))
+            ];
+            text = ''
+              exec python3 ${./share/agent-bus/agent_bus_mcp.py} "$@"
+            '';
+          };
+
           # `nix run github:olafkfreund/nixarchy#verify`, from inside a running
           # Omarchy session. Everything in checks/ runs in a machine with no GPU,
           # no Bluetooth radio, no network and no sound; this asks the questions
@@ -1276,6 +1296,7 @@
           bus-redact = import ./tests/bus-redact.nix {
             pkgs = pkgsFor.${system};
             hook = ./share/agent-bus/hooks/bus-redact.sh;
+            peekHook = ./share/agent-bus/hooks/bus-peek.sh;
             registerScript = ./share/agent-bus/register.sh;
           };
 

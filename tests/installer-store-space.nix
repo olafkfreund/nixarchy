@@ -1,4 +1,8 @@
-{ pkgs, installScript }:
+{
+  pkgs,
+  installScript,
+  dashboardScript,
+}:
 # check_store_space, driven with plans nix really prints and a df that lies.
 #
 # Its answer selects a build store rather than refusing an install: non-zero
@@ -106,6 +110,179 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   }
 
   echo "check_store_space refuses what will not fit and nothing else"
+
+  # ------------------------------------------------------------------------
+  # The dashboard must not impersonate progress over a stopped install.
+  #
+  # The phase chain prints nothing to the screen by construction, and the
+  # bar's time curve used to keep creeping toward 95% whatever the install
+  # was doing -- so a stalled install looked exactly like a slow one. Watched
+  # happening: twenty minutes of total silence behind a moving bar, and the
+  # three states finished-and-slow, finished-and-hung, and wedged were
+  # indistinguishable without a process table. A person watching 87% has no
+  # basis for choosing between waiting and rebooting, and rebooting
+  # mid-install turns a recoverable stall into an unrecoverable one.
+  #
+  # The property under test: the bar stops when the log stops, and the
+  # dashboard eventually says so in words.
+  # ------------------------------------------------------------------------
+  sed -n '/^ui_progress()/,/^}/p' ${dashboardScript} > prog.sh
+  test -s prog.sh || { echo "ui_progress is not in dashboard.sh any more" >&2; exit 1; }
+  grep '^UI_STALL' ${dashboardScript} >> prog.sh || true
+
+  cat > progt.sh <<'EOF'
+  UI_EXPECTED_PATHS=0
+  . ./prog.sh
+  fails=0
+  # Ten minutes in, of which the last five wrote nothing to the log: the bar
+  # must sit where the log stopped, not where the clock got to.
+  working=$(ui_progress 600 0)
+  stalled=$(ui_progress 600 300)
+  [ "$stalled" -lt "$working" ] || {
+    echo "  FAILED  a stalled install reports the same progress as a working one ($stalled)"
+    fails=$((fails + 1))
+  }
+  # And it stays sat: another 100 seconds of stall moves nothing.
+  later=$(ui_progress 700 400)
+  [ "$later" = "$stalled" ] || {
+    echo "  FAILED  the bar keeps creeping while the log is stopped ($stalled -> $later)"
+    fails=$((fails + 1))
+  }
+  [ "$fails" = 0 ] && echo "  ok      the bar freezes where the log stopped"
+  exit $fails
+  EOF
+  bash progt.sh
+
+  # The words. After UI_STALL_SAY seconds of silence the tip line becomes a
+  # statement that the log has stopped and that waiting beats rebooting.
+  {
+    echo 'ui_init() { :; }'
+    echo 'ui_clear() { :; }'
+    echo 'ui_logo() { :; }'
+    echo 'ui_centre() { printf "%b\n" "$1"; }'
+    echo 'UI_EXPECTED_PATHS=0'
+    sed -n '/^UI_BAR_CELLS=/p;/^UI_STALL/p' ${dashboardScript}
+    sed -n '/^ui_progress()/,/^}/p' ${dashboardScript}
+    sed -n '/^ui_bar()/,/^}/p' ${dashboardScript}
+    sed -n '/^ui_elapsed()/,/^}/p' ${dashboardScript}
+    sed -n '/^ui_dashboard_draw()/,/^}/p' ${dashboardScript}
+  } > draw.sh
+  cat > drawt.sh <<'EOF'
+  . ./draw.sh
+  printf 'a tip about keybindings\n' > tips; UI_TIPS=tips
+  fails=0
+  ui_dashboard_draw 600 400 > out 2>&1
+  grep -q 'reached the log' out || {
+    echo "  FAILED  six minutes of silence and the dashboard says nothing about it"
+    fails=$((fails + 1))
+  }
+  grep -q 'aiting is safe' out || {
+    echo "  FAILED  the stall notice does not tell the person what to do"
+    fails=$((fails + 1))
+  }
+  ui_dashboard_draw 600 5 > out 2>&1
+  grep -q 'a tip about keybindings' out || {
+    echo "  FAILED  a working install lost its tip line"
+    fails=$((fails + 1))
+  }
+  grep -q 'reached the log' out && {
+    echo "  FAILED  five seconds of quiet is reported as a stall"
+    fails=$((fails + 1))
+  }
+  [ "$fails" = 0 ] && echo "  ok      a long stall is said in words, a short one is not"
+  exit $fails
+  EOF
+  bash drawt.sh
+
+  # The measurement itself, one tick at a time with a clock that lies.
+  # ui_dashboard_tick is the frame the redraw loop runs: measure the log,
+  # then draw with (elapsed, stall).
+  sed -n '/^ui_dashboard_tick()/,/^}/p' ${dashboardScript} > tick.sh
+  test -s tick.sh || { echo "ui_dashboard_tick is not in dashboard.sh: the drawer does not measure the log" >&2; exit 1; }
+  cat > tickt.sh <<'EOF'
+  . ./tick.sh
+  date() { echo "$NOW"; }
+  ui_dashboard_draw() { echo "draw elapsed=$1 stall=$2"; }
+  UI_DASH_LOG=log UI_DASH_SIZE="" UI_DASH_START=1000 UI_DASH_CHANGED=1000
+  fails=0
+  t() {
+    now=$1 want=$2 name=$3
+    # Not $(NOW=... ui_dashboard_tick): a subshell would lose the size and
+    # timestamp state the tick keeps between frames.
+    NOW=$now; ui_dashboard_tick > out; got=$(cat out)
+    if [ "$got" = "$want" ]; then
+      echo "  ok      $name"
+    else
+      echo "  FAILED  $name: wanted '$want', got '$got'"
+      fails=$((fails + 1))
+    fi
+  }
+  echo grow > log
+  t 1010 "draw elapsed=10 stall=0"    "a growing log is not a stall"
+  t 1200 "draw elapsed=200 stall=190" "an unchanged log counts as stalled from its last write"
+  echo more >> log
+  t 1300 "draw elapsed=300 stall=0"   "the log growing again resets the stall"
+  exit $fails
+  EOF
+  bash tickt.sh
+
+  # And that main() hands the drawer the log at all -- the function tests
+  # stay green with the call site never wired, which would be #133 again.
+  grep -q 'ui_dashboard_start "$log"' ${installScript} || {
+    echo "main() does not hand the log to the dashboard; the drawer cannot" >&2
+    echo "tell a stalled install from a slow one without it" >&2
+    exit 1
+  }
+
+  echo "a stalled install looks stalled: frozen bar, then words"
+
+  # ------------------------------------------------------------------------
+  # Two files of secrets that outlived their use.
+  # ------------------------------------------------------------------------
+  # An interrupt during the install phase lands in the INT/TERM trap, which
+  # used to exit without the rm that format_disk's own success path runs --
+  # leaving the LUKS passphrase in /tmp, readable from the "Open a shell"
+  # option on the failure screen the same trap draws.
+  grep -q "trap 'rm -f /tmp/nixarchy-luks.key" ${installScript} || {
+    echo "the INT/TERM trap does not remove the LUKS passphrase file;" >&2
+    echo "Ctrl-C during the install leaves it in /tmp for the failure" >&2
+    echo "screen's shell to read" >&2
+    exit 1
+  }
+
+  # The fetched answers file is a password and a LUKS passphrase in clear.
+  # resolve_answers must mark the copy for cleanup, and main() must remove it
+  # once read_answers has taken what it needs -- after the read, not before.
+  sed -n '/^resolve_answers()/,/^}/p' ${installScript} > ra.sh
+  test -s ra.sh || { echo "resolve_answers is not in install.sh any more" >&2; exit 1; }
+  cat > rat.sh <<'EOF'
+  . ./ra.sh
+  curl() {
+    while [ "$1" != -o ]; do shift; done
+    echo "password=secret" > "$2"
+  }
+  answers_file=https://example.invalid/answers
+  resolve_answers
+  [ -f "$answers_file" ] || { echo "  FAILED  the fetched file is gone before it was read"; exit 1; }
+  [ -n "$answers_fetched" ] || {
+    echo "  FAILED  resolve_answers does not mark the fetched copy for cleanup,"
+    echo "          so the plaintext password outlives its one read"
+    exit 1
+  }
+  rm -f "$answers_fetched"
+  echo "  ok      the fetched copy is marked for cleanup"
+  EOF
+  bash rat.sh
+  # The rm has to come after the read. Same line-order doctrine as the
+  # preflight/format_disk assertion above.
+  read_line=$(grep -n 'read_answers "$answers_file"' ${installScript} | cut -d: -f1 | head -1 || true)
+  rm_line=$(grep -n 'rm -f "$answers_fetched"' ${installScript} | cut -d: -f1 | head -1 || true)
+  [ -n "$rm_line" ] || { echo "main() never removes the fetched answers file" >&2; exit 1; }
+  [ -n "$read_line" ] && [ "$read_line" -lt "$rm_line" ] || {
+    echo "the fetched answers file is removed before read_answers reads it" >&2; exit 1;
+  }
+
+  echo "the passphrase file and the fetched answers do not outlive their use"
 
   # ------------------------------------------------------------------------
   # preflight_build (#300): the disk must not be wiped before anything proves

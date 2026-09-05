@@ -1321,6 +1321,7 @@
           installer-store-space = import ./tests/installer-store-space.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
+            dashboardScript = ./installer/lib/dashboard.sh;
           };
 
           # The bus redaction hook blocks what a pattern can decide, and only

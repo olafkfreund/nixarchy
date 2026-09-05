@@ -88,6 +88,7 @@ SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
 
 dry_run=false
 answers_file=""
+answers_fetched=""
 
 # --from <url> and --host <name>: install this machine from a configuration
 # repository that already exists, instead of generating a fresh flake.
@@ -832,6 +833,11 @@ resolve_answers() {
     exit 1
   }
   answers_file=$tmp
+  # Remembered so main() can remove it the moment read_answers has taken what
+  # it needs. The file's whole content is secrets -- a password and a LUKS
+  # passphrase in clear -- and it used to sit in /tmp for the rest of the
+  # session, including inside the shell the failure screen offers.
+  answers_fetched=$tmp
 }
 
 read_answers() {
@@ -1948,6 +1954,10 @@ main() {
   if [ -n "$answers_file" ]; then
     resolve_answers
     read_answers "$answers_file"
+    # The fetched copy has just been read, and that read is the only thing it
+    # ever exists for. Gone now, not at exit: everything after this line can
+    # take an hour, fail, and offer a shell.
+    [ -n "$answers_fetched" ] && rm -f "$answers_fetched"
     # --host names the machine, and clone_repo has already chosen $hostdir from
     # it. A hostname in the answers file cannot also name it: leaving both to
     # fight would give a machine whose directory and hostName disagree, which
@@ -2046,9 +2056,17 @@ main() {
   # there -- and the log, which is the only thing worth having at that point,
   # unmentioned. The EXIT trap ui_dashboard_start sets restores the cursor;
   # this adds the part that says what happened and where to read about it.
-  trap 'ui_dashboard_stop; ui_failed "$log" 130; exit 130' INT TERM
+  #
+  # The rm first: format_disk removes the passphrase file itself, but an
+  # interrupt between writing it and that rm used to leave the LUKS
+  # passphrase sitting in /tmp -- world-invisible, but readable from the
+  # "Open a shell" option on the very screen this trap draws.
+  trap 'rm -f /tmp/nixarchy-luks.key; ui_dashboard_stop; ui_failed "$log" 130; exit 130' INT TERM
 
-  ui_dashboard_start
+  # Handed the log so the drawer can tell "still working" from "stopped":
+  # the phases below write only to this file, so a log that stops growing is
+  # the one observable sign that the install has too.
+  ui_dashboard_start "$log"
   # `&&` between the phases, not newlines, and it is load-bearing.
   #
   # This group's status is tested by `|| rc=$?`, and the comment on run_install

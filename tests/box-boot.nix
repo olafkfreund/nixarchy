@@ -109,10 +109,10 @@ pkgs.testers.runNixOSTest {
     # First start, offline -- the epic's stated unknown, ANSWERED by this
     # check rather than assumed: with no resolvable network at all,
     # distrobox-init's first-start `pacman -Syy` fails ("Could not resolve
-    # host: geo.mirror.pkgbuild.com"), init aborts, and enter reports "could
-    # not start entrypoint". It does NOT reach a shell. That contradicts the
-    # branch-tested note data/box-templates.nix carried (amended in the same
-    # commit as this file) -- the branch test evidently had DNS.
+    # host: geo.mirror.pkgbuild.com"), init aborts, and enter fails loudly --
+    # in one of two ways, enumerated below. It does NOT reach a shell. That
+    # contradicts the branch-tested note data/box-templates.nix carried
+    # (amended in the same commit as this file) -- the branch test had DNS.
     #
     # Asserted as observed, not as hoped, so this stays honest either way:
     # a real user creates a box online (the image pull needs the network
@@ -121,9 +121,37 @@ pkgs.testers.runNixOSTest {
     # half-initialised shell. If a distrobox bump ever makes offline
     # first-start survive, this goes red and gets retargeted to succeed(),
     # with a PR that says so.
+    # WHICH loud failure you get is a race, so this accepts either.
+    #
+    # distrobox-init cannot finish offline whatever happens, but where it dies
+    # depends on how far the container got before it needed the network:
+    #
+    #   "could not start entrypoint"  init aborted, and enter reports it
+    #   "Error: An error occurred"    init died earlier, inside its
+    #                                 "Installing basic packages" step
+    #
+    # Pinning only the first made this check flaky. On 2026-09-05 it went red
+    # on a pull request that touched nothing but a workflow file, while
+    # sibling pull requests from the same base were green and a rerun of the
+    # same commit passed. A test that fails on which of two correct outcomes
+    # won a race is measuring the race, not the property -- and this check is
+    # now a REQUIRED context, so that flake would block an unattended nightly
+    # bump with nobody watching to press rerun.
+    #
+    # The property is the one stated above: the failure is LOUD and NAMED, not
+    # a hang and not a half-initialised shell. machine.fail already proves the
+    # command exited non-zero; this proves the user was told something. It
+    # stays an ALLOWLIST rather than a truthiness check, so a genuinely new
+    # failure mode -- or a silent one -- still goes red and gets read by a
+    # person, which is what the original assertion was for.
     out = machine.fail(alice("distrobox enter scratch -- true 2>&1"), timeout=600)
-    assert "could not start entrypoint" in out, (
-        "offline first enter failed some OTHER way than the entrypoint abort this pins:\n" + out
+    aborts = [
+        "could not start entrypoint",
+        "Error: An error occurred",
+    ]
+    assert any(a in out for a in aborts), (
+        "offline first enter failed in a way this check does not recognise.\n"
+        "Expected one of: " + repr(aborts) + "\nGot:\n" + out
     )
   '';
 }

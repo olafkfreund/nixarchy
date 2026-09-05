@@ -308,7 +308,15 @@ jobs:
           #                    per-PR is affordable if the appetite is there --
           #                    see the note above about this list's cost
           #                    argument being stale.
-          nightly_only="install-iso iso-budget microvm-boot install-iso-net"
+          #   install-encrypted  an install-class VM with the same 85-minute
+          #                    driver budget as checks.install. install-check.yml
+          #                    already runs two of those concurrently against its
+          #                    90-minute job on the one big runner, and that pair
+          #                    grazed the timeout under load on 2026-09-03; a
+          #                    third has no budget to fit in. nightly.yml's job
+          #                    prints its timings -- promote per-PR with those in
+          #                    hand, since encryption is the default answer.
+          nightly_only="install-iso iso-budget microvm-boot install-iso-net install-encrypted"
 
           # Ask Nix, do not parse the file.
           #

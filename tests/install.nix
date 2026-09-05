@@ -50,9 +50,11 @@
 # comment claiming coverage that does not exist is the same failure as a test
 # that cannot fail, and every install test choosing encrypt=no is exactly how
 # an encrypted install shipped unable to unlock its root (#322). So, honestly:
-# this one proves the UNENCRYPTED install flow, and the encrypted layout is
-# proved by nothing here. Narrowing was still cheaper than an OCR anchor on a
-# passphrase prompt; the gap belongs to a check of its own.
+# this one proves the UNENCRYPTED install flow. Narrowing was still cheaper
+# than an OCR anchor on a passphrase prompt -- and the prompt turned out not
+# to need a screen at all: the gap is checks.install-encrypted's, which
+# installs with encrypt=yes and answers the LUKS prompt over the serial
+# console (tests/install-encrypted.nix).
 let
   # hyprland does not follow nixpkgs, so its inputs are separate locked entries
   # and are needed to evaluate the generated flake. Collected rather than

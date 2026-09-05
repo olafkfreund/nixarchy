@@ -176,6 +176,39 @@ jobs:
           echo "token before looking anywhere else."
           exit 1
 
+      - name: The cache holds the MicroVM template runners
+        # The "first launch is a download, not a build" half of #221's cache
+        # promise, which no PR check can gate: cachix-action pushes in a
+        # post-job step, AFTER build.yml's system job has already reported --
+        # so a probe on a pull request would race the very push it is
+        # checking. Nightly, like the omarchy probe above, and for the same
+        # token-expiry reason.
+        #
+        # Both variants per template: users download the KVM runner,
+        # checks.microvm-boot downloads -tcg.
+        run: |
+          fail=0
+          for name in $(nix eval --impure --raw --expr \
+              'toString (builtins.attrNames (import ./data/microvm-templates.nix))'); do
+            for variant in "" "-tcg"; do
+              attr="microvm-$name$variant"
+              path=$(nix eval --raw ".#$attr.outPath")
+              hash=$(basename "$path" | cut -d- -f1)
+              code=$(curl -s -o /dev/null -w '%{http_code}' \
+                "https://nixarchy.cachix.org/$hash.narinfo")
+              echo "$attr: $path -> HTTP $code"
+              [ "$code" = 200 ] || fail=1
+            done
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::a template runner is missing from nixarchy.cachix.org."
+            echo "A user's first 'nixarchy vm run' of that template is a build,"
+            echo "not a download. build.yml's system job (checks.microvm-template)"
+            echo "is what builds and pushes these -- check its last run on main,"
+            echo "then the CACHIX_AUTH_TOKEN, in that order."
+            exit 1
+          fi
+
   report:
     name: report a failure
     runs-on: ubuntu-latest

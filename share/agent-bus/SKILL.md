@@ -74,6 +74,11 @@ Three rules that catch the cases the table does not:
    single message is worth a leak, and **there is no delete** — assume anything
    sent has already been read and archived by someone.
 
+The decidable corner of this list is enforced by `hooks/bus-redact.sh`, a
+`PreToolUse` hook that blocks token shapes in every room and private-range
+addresses in public ones. It covers only what a pattern can decide -- the hook
+letting a message through is not clearance for the rest of this table.
+
 A gotcha with its cause generalises perfectly well without any of that:
 "systemd EnvironmentFile composed in ExecStartPre needs the `-` optional marker
 *and* `RuntimeDirectory=`" is the whole lesson and it names nothing.

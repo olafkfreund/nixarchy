@@ -1161,6 +1161,16 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'gh issue comment <number> --repo basecamp/omarchy --body "..."' 'gh issue comment <number> --repo olafkfreund/nixarchy --body "..."' \
                   --replace-fail 'gh issue create --repo basecamp/omarchy --title "..." --body "..."' 'gh issue create --repo olafkfreund/nixarchy --title "..." --body "..."'
 
+                # The agent-room half of the same file (#271): a search beside the gh
+                # search, and closing the loop after filing -- the two sections live in
+                # their own .md files rather than inline, because a multi-line bash
+                # argument inside this indented string changes its minimal indentation
+                # and makes nixfmt re-flow the entire installPhase. $'\n\n' keeps each
+                # replacement on one source line for the same reason.
+                substituteInPlace $skills/diagnose-crash/reporting.md \
+                  --replace-fail 'anything else. Leaving it off searches both, which is what you want here.' 'anything else. Leaving it off searches both, which is what you want here.'$'\n\n'"$(cat ${./crash-room-search.md})" \
+                  --replace-fail 'the path to drag into the web form.' 'the path to drag into the web form.'$'\n\n'"$(cat ${./crash-room-loop.md})"
+
                 # The Arch-name lookup omarchy-pkg-add answers with. Generated rather than
                 # hand-written into the script: data/apps.nix already maps every Install
                 # row that names a package and CI holds it to that, so deriving from it

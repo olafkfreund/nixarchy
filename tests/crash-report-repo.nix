@@ -58,6 +58,41 @@ pkgs.runCommand "nixarchy-crash-report-repo"
       fail=1
     }
 
+    # 4. The agent-room search (#271), executable in the same way as the gh
+    #    lines: the search command must name the room the prose chose...
+    grep -q 'search(query=.*room="#nixarchy-agents")' "$report" || {
+      echo "reporting.md has no agent-room search naming #nixarchy-agents" >&2
+      fail=1
+    }
+    #    ...and no other room. An agent copies the command, not the sentence
+    #    above it -- the exact failure section 1 exists for.
+    if bad=$(grep -n 'room="#' "$report" | grep -v 'nixarchy-agents'); then
+      echo "reporting.md searches a room the prose did not choose:" >&2
+      echo "$bad" >&2
+      fail=1
+    fi
+
+    # 5. The step is gated on the bus existing. A machine without the bus is
+    #    the majority; a step that nags or blocks there gets the whole
+    #    section deleted, taking the useful half with it.
+    grep -q 'No bus means no step' "$report" || {
+      echo "the room search is no longer gated on the bus being configured" >&2
+      fail=1
+    }
+
+    # 6. Posting back restates redaction AT THE POINT OF PASTING. Crash
+    #    output is the likeliest content on the whole bus to carry paths,
+    #    hostnames and tokens; a rule that lives only in a skill the agent
+    #    may not have read is #303's lesson unlearned.
+    grep -q '^## Close the loop in the agent room' "$report" || {
+      echo "reporting.md never closes the loop in the room after filing" >&2
+      fail=1
+    }
+    grep -q 'paste nothing you have not read in full' "$report" || {
+      echo "the post-back section does not restate redaction where the paste happens" >&2
+      fail=1
+    }
+
     # 4. The prompt that runs before the skill is read. It set the destination
     #    first, so porting reporting.md alone left the agent already pointed at
     #    Basecamp when it arrived.

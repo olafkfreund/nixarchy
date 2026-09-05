@@ -130,6 +130,13 @@ jobs:
       - name: Install from it with no network device present
         run: nix build .#checks.x86_64-linux.install-iso --print-build-logs
 
+      # The other image. Same shape, different failure: this one probes a
+      # substituter, fetches the closure it does not carry, and asserts the
+      # preflight's probe landed on the wire -- the half the offline image
+      # cannot exercise, because its preflight returns at the marker check.
+      - name: Install from the NETWORK ISO, fetching the closure
+        run: nix build .#checks.x86_64-linux.install-iso-net --print-build-logs
+
   # A failure at 03:00 that nobody sees until someone opens the Actions tab is
   # a failure that costs a day. This turns one into an issue.
   # Is the binary cache actually being filled?

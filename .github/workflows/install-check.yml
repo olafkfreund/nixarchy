@@ -227,7 +227,8 @@ jobs:
         run: |
           nix build --print-build-logs --max-jobs 2 \
             .#checks.x86_64-linux.install \
-            .#checks.x86_64-linux.free-space
+            .#checks.x86_64-linux.free-space \
+            .#checks.x86_64-linux.installer-refusal
 
       - name: Report what it cost
         if: always() && needs.gate.outputs.relevant == 'true'

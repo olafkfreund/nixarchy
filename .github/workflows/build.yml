@@ -95,6 +95,31 @@ jobs:
       # and then copied a command that filed into somebody else's tracker --
       # people who cannot act on a NixOS store or rebuild problem. Cheap enough
       # to sit here: a runCommand over the already-built package, no VM.
+      # The workflow files themselves, against GitHub's own schema.
+      #
+      # Added because build.yml shipped BROKEN and nothing caught it: a bad
+      # conflict resolution left `box:` with no body, GitHub rejected the
+      # whole workflow at startup, and every run produced ZERO JOBS. No job
+      # meant no check, so the four required contexts never reported and
+      # branch protection blocked every merge -- a dead CI gate that looked
+      # from the outside like "checks pending", for hours.
+      #
+      # `yq` parses that file happily, which is why local validation passed.
+      # actionlint uses GitHub's schema and says exactly what is wrong:
+      #
+      #   "runs-on" section is missing in job "box"
+      #   "steps" section is missing in job "box"
+      #   "box" job should not be empty
+      #
+      # -ignore drops shellcheck's info level only, matching the -S warning
+      # this repo already uses for its own scripts. Errors and warnings still
+      # fail. Without it the four pre-existing info notes (SC2012/2013/2016)
+      # would fail a workflow file that is fine.
+      - name: The workflow files are valid GitHub Actions
+        run: |
+          nix shell nixpkgs#actionlint -c \
+            actionlint -ignore 'SC[0-9]+:(info|style):'
+
       - name: Crash reports route to the repository the rule names
         run: nix build .#checks.x86_64-linux.crash-report-repo --print-build-logs
 
@@ -240,7 +265,7 @@ jobs:
           # Per-push, an hour of wall clock each makes the queue the bottleneck.
           # Written down here rather than arrived at by omission, which is the
           # argument the guard above already rests on.
-          nightly_only="install-iso iso-budget"
+          nightly_only="install-iso iso-budget microvm-boot"
 
           names=$(awk '/^      checks = eachSystem/,/^      };/' flake.nix |
             grep -oE '^        [a-z][a-z0-9-]* =' | tr -d ' =')
@@ -822,49 +847,3 @@ jobs:
         # answer to the epic's open first-start question, asserted as
         # observed. See tests/box-boot.nix.
         run: nix build .#checks.x86_64-linux.box-boot --print-build-logs
-
-  # Boots a declared MicroVM inside a NixOS test VM -- see
-  # tests/microvm-boot.nix. Its own job rather than a step in `system`: the
-  # boot is minutes of wall clock against that job's 30-minute budget, and it
-  # needs /dev/kvm arranged first, which no other step there does.
-  microvm:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: cachix/cachix-action@v17
-        # A cache upload failing must not fail a build that succeeded (#235).
-        continue-on-error: true
-        with:
-          name: nixarchy
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-
-      - name: /dev/kvm is real and writable, or fail here
-        # ubuntu-latest runners have had /dev/kvm since 2023, but it arrives
-        # root:kvm 0660 and the nix build users are not in `kvm`. The udev
-        # rule is GitHub's own documented fix (static_node keeps it across
-        # re-triggers).
-        #
-        # The preflight is deliberately LOUD. The test node (L1) must run
-        # accelerated; only the MicroVM inside it (L2) is the -tcg runner --
-        # a shipped artifact for hosts without KVM, not a test-only variant.
-        # If /dev/kvm quietly stopped being usable, the NixOS test driver
-        # would fall back to TCG at L1 too and this job would measure a
-        # different runner while staying green -- exactly the "green light"
-        # AGENTS.md 1 warns about. So: fail here, on day one, instead.
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          grep -Eq 'vmx|svm' /proc/cpuinfo || { echo "::error::no vmx/svm in /proc/cpuinfo"; exit 1; }
-          test -w /dev/kvm || { echo "::error::/dev/kvm is not writable"; exit 1; }
-          ls -l /dev/kvm
-
-      - name: Boot a MicroVM on the -tcg runner
-        # checks.microvm-boot: microvm@sandbox.service reaches active, ssh
-        # over the forwarded SLiRP port answers, and `ro-store on
-        # /nix/.ro-store type 9p` is read from the guest's own mount table --
-        # the shared-store claim, verified from inside a running guest.
-        run: nix build .#checks.x86_64-linux.microvm-boot --print-build-logs

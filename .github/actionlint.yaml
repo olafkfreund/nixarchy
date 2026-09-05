@@ -1,0 +1,12 @@
+# The self-hosted runners this repository actually has. actionlint cannot
+# know them -- they are labels on machines, not GitHub-provided images -- and
+# without this it reports every `runs-on: [self-hosted, nixos, kvm, big]` in
+# nightly.yml, release.yml and install.yml as an unknown label.
+#
+# Keep this in step with the runners registered on the repository; a label
+# here that no runner carries is a job that queues forever.
+self-hosted-runner:
+  labels:
+    - nixos
+    - kvm
+    - big

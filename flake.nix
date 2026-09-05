@@ -1383,6 +1383,15 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The #300 guarantee on a real disk: a dark substituter refused with
+          # the target intact. installer-store-space covers the same function
+          # with stubs; this is the only check that can fail if the installer
+          # wipes anyway, because it is the only one holding a disk.
+          installer-refusal = import ./tests/installer-refusal.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The dangerous one. Installs into free space on a disk that already
           # carries partitions and asserts those partitions are byte-identical
           # afterwards -- entry and content. See tests/free-space.nix; #47 is

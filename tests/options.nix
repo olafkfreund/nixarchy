@@ -306,6 +306,28 @@ let
     )
     ++ pkgs.lib.mapAttrsToList (_: s: s.menuId) (pkgs.lib.filterAttrs (_: s: s ? menuId) services);
 
+  # menuId=binary, for every `ours` app with an Install row. The binary is
+  # read off the flake's own package -- meta.mainProgram, falling back to the
+  # app id the way modules/apps.nix does -- so this is ground truth for the
+  # row's "already installed" dim probe: the command the package actually
+  # puts on PATH, not whatever a lookup in plain nixpkgs answers. Plain
+  # nixpkgs cannot answer for these at all (the module's pkgs carries no
+  # nixarchy overlay), which is exactly the bug this feeds coverage.py to
+  # catch: a probe that falls back to `command -v zen` for a package whose
+  # only binary is zen-beta, so the row never dims on a machine that has it.
+  oursBinaries =
+    pkgs.lib.mapAttrsToList
+      (
+        name: app:
+        let
+          probe = builtins.tryEval (inputs.self.packages.${system}.${app.attr}.meta.mainProgram or name);
+        in
+        "${app.menuId}=${if probe.success then probe.value else name}"
+      )
+      (
+        pkgs.lib.filterAttrs (_: a: (a.ours or false) && a ? menuId && a ? attr) (import ../data/apps.nix)
+      );
+
   # Rows that are actions rather than applications, plus the gaps the README
   # names. Fonts go through omarchy-install-font and the Arch-name map; the
   # four gaming rows and three frameworks are documented as needing a hand.
@@ -956,6 +978,7 @@ pkgs.runCommand "nixarchy-options"
     # command check pointed at the package's menu could never see one of them.
     treeMenu = "${inputs.self.nixosConfigurations.vm.config.programs.nixarchy.tree}/default/omarchy/omarchy-menu.jsonc";
     mapped = pkgs.lib.concatStringsSep " " mappedRows;
+    oursBinaries = pkgs.lib.concatStringsSep " " oursBinaries;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
     microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;

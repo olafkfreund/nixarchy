@@ -28,13 +28,24 @@ let
   # would have broken evaluation for everyone who has not opted into unfree --
   # a far worse outcome than the dim row it is here to draw. Falling back to
   # the app's own name is the same guess omarchy-pkg-present already makes.
+  #
+  # `ours` apps are answered by cfg.apps.<name>.package -- the very derivation
+  # the row would install, including any override the user put on it -- and
+  # NOT by a lookup in `pkgs`, which cannot see them: this module's pkgs
+  # carries no nixarchy overlay (modules/services/default.nix says why), so
+  # the lookup returned null for every app this repo packages and the
+  # fallback answered with the app id. That was `command -v zen` for a
+  # package whose only binary is zen-beta, so the row never dimmed on a
+  # machine that HAS Zen. nixarchy-doctor hit the same trap and fixed its
+  # copy first, by probing final.nixarchy-apps (flake.nix); this is the
+  # menu's half, asserted by tests/coverage.py against the flake's packages.
   appBinary =
     name: app:
     let
       path = lib.splitString "." (app.attr or name);
       probe = builtins.tryEval (
         let
-          p = lib.attrByPath path null pkgs;
+          p = if app.ours or false then cfg.apps.${name}.package or null else lib.attrByPath path null pkgs;
         in
         if p == null then null else (p.meta.mainProgram or null)
       );

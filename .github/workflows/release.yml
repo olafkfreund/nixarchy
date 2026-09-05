@@ -284,6 +284,78 @@ jobs:
             --discussion-category announcements \
             --prerelease
 
+      # `gh release create` exiting 0 does not mean the assets are attached.
+      #
+      # v4.0.2-2, -3 and -4 each shipped with NO network ISO while SHA256SUMS
+      # carried its checksum and the notes told people to download it (#347).
+      # The job was green every time: the command succeeded, printed the
+      # release URL, and said nothing about the file it had not uploaded. The
+      # cause was never established -- not the 2 GiB cap (the image measured
+      # 1.6G and the parts that DID attach are 1900 MiB), not a missing file
+      # (SHA256SUMS is computed from it, inside out/), not a failed step.
+      #
+      # So this does not try to prevent the cause. It makes the omission
+      # impossible to ship silently, which is the part that actually failed:
+      # nothing compared what was built against what was published.
+      #
+      # SHA256SUMS is the sharper of the two comparisons. out/* is what we
+      # meant to upload, but SHA256SUMS is what the release PROMISES, and a
+      # promise the release cannot keep is the thing a user hits.
+      - name: The release attached everything it promised
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          # The ASSEMBLED image, which SHA256SUMS names on purpose and which is
+          # never an asset: the parts ship, the user cats them back together,
+          # and that line is what `sha256sum -c` checks afterwards. Exempted by
+          # name rather than by a pattern, because "the one file in SHA256SUMS
+          # that is deliberately absent" is a fact about this release's shape,
+          # not something to infer. Written down after a first draft of this
+          # check flagged it and would have failed every release.
+          ASSEMBLED: ${{ steps.split.outputs.iso }}
+        run: |
+          set -euo pipefail
+
+          attached() { gh release view "$TAG" --json assets --jq '.assets[].name'; }
+
+          # Two lists, because they can disagree in both directions: a file
+          # built but not promised, and a file promised but not built.
+          built=$(cd out && ls -1)
+          promised=$(awk '{ print $2 }' out/SHA256SUMS | grep -vxF "$ASSEMBLED")
+
+          missing=""
+          for want in $built $promised; do
+            attached | grep -qxF "$want" || case " $missing " in
+              *" $want "*) ;;
+              *) missing="$missing $want" ;;
+            esac
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::warning::not attached on the first attempt:$missing -- retrying"
+            for f in $missing; do
+              # From out/ when we have it. A name that is only in SHA256SUMS
+              # and not on disk cannot be retried, and is reported below.
+              [ -f "out/$f" ] && gh release upload "$TAG" "out/$f" --clobber || true
+            done
+
+            still=""
+            for want in $missing; do
+              attached | grep -qxF "$want" || still="$still $want"
+            done
+            if [ -n "$still" ]; then
+              echo "::error::the release is missing:$still"
+              echo "SHA256SUMS names these files and the release does not carry them." >&2
+              echo "Users following the notes will get a 404. Attach them by hand" >&2
+              echo "or delete the release; do not leave it half-published." >&2
+              exit 1
+            fi
+            echo "recovered on retry:$missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          printf 'attached %s assets, and every name in SHA256SUMS is one of them\n' \
+            "$(attached | grep -c .)" >> "$GITHUB_STEP_SUMMARY"
+
       # Every installed machine points its flake at the `release` branch
       # (installer/mkFlake.nix): `nix flake update nixarchy` resolves whatever
       # this branch names, so moving it IS shipping the release to users --

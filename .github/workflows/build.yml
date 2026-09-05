@@ -163,6 +163,14 @@ jobs:
       - name: The bus redaction hook blocks what it claims, and only that
         run: nix build .#checks.x86_64-linux.bus-redact --print-build-logs
 
+      # The vendored MCP server is a copy of a file in a repo CI cannot see,
+      # so drift cannot be diffed away -- instead the copy is started over
+      # real stdio and held to the tool contract SKILL.md documents. The
+      # failure this defends against is a re-vendored copy that is subtly
+      # behind and still runs. Seconds of wall clock, so it runs per-PR.
+      - name: The vendored bus server still honours its documented contract
+        run: nix build .#checks.x86_64-linux.bus-mcp --print-build-logs
+
       # Same shape, same reason: its dangerous failure is reporting nothing.
       - name: The Omarchy package delta still sees a change
         run: nix build .#checks.x86_64-linux.package-delta --print-build-logs

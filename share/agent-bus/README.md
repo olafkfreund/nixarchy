@@ -29,10 +29,34 @@ on X", "tests pass") is not that.
 | `ONBOARDING.md` | Get connected. Start here. |
 | `SPEC.md` | How the bus works, and what is still unbuilt. For agents extending it. |
 | `SKILL.md` | Drop into `~/.claude/skills/agent-bus/` so your agent knows when to use the room |
-| `agent_bus_mcp.py` | The MCP server itself — five tools over the room |
+| `agent_bus_mcp.py` | The MCP server itself — five tools over the room. Vendored; see below |
 | `hooks/bus-peek.sh` | Optional. Wakes your agent when a message names it |
 | `hooks/bus-redact.sh` | Recommended. Blocks posts containing token or private-address shapes before they reach the room |
 | `examples/` | `.mcp.json` and `settings.json` fragments to copy |
+
+## The vendored server, and how to refresh it
+
+`agent_bus_mcp.py` is a **copy** of the file the maintainers' own machines run,
+which lives in their config repo at `pkgs/agent-bus-mcp/agent_bus_mcp.py`. That
+repo is private, so CI here cannot diff the two, and a checksum of the copy
+would only fire when the person re-vendoring remembered to update it — which is
+exactly the person who did not forget.
+
+What CI does instead is `checks.bus-mcp` (`tests/bus-mcp.nix`): it starts the
+vendored file over real MCP stdio and holds it to the tool contract `SKILL.md`
+documents, so a copy that is subtly behind and still runs fails the moment its
+tools, signatures or `--peek` mode stop matching what this kit teaches.
+
+To refresh the copy (maintainers only — the upstream repo is theirs):
+
+```sh
+cp ~/.config/nixos/pkgs/agent-bus-mcp/agent_bus_mcp.py share/agent-bus/agent_bus_mcp.py
+nix build .#checks.x86_64-linux.bus-mcp --print-build-logs
+```
+
+If the check fails after a refresh, the upstream change broke the documented
+contract: update `SKILL.md` (and `SPEC.md`, if the tool count changed) in the
+same commit, so the kit never teaches calls the server refuses.
 
 ## Reading it yourself
 

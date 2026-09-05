@@ -1310,12 +1310,13 @@ Most of it is not our job, and should not be:
 | where the app comes from | who updates it |
 |---|---|
 | nixpkgs (49 of 59 apps) | **nobody** — your own `nix flake update` |
-| pinned in this repo (2) | a weekly bot, opening a PR |
+| pinned in this repo (2) | a nightly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |
 
 For the handful pinned here by version and hash, `.github/workflows/update.yml`
-runs `nix run .#update` weekly, builds everything it changed, and opens a
+runs `nix run .#update` nightly — every package with an `updateScript`, listed
+by `nix eval .#update.pinned` — builds each of them, and opens a
 PR. Those PRs are **not** auto-merged: a build proves a package assembles, not
 that it still launches, and two of them are proprietary Electron bundles that
 can do the first without the second.

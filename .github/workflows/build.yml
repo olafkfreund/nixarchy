@@ -24,7 +24,13 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # On a PR branch, a newer push supersedes the older one and cancelling is
+  # right. On main it is data loss: every push here is a DIFFERENT merged
+  # commit, and cancelling discards the only verdict that commit will ever
+  # get -- nothing re-tests it. Five consecutive merges this morning left
+  # main with no `box` result at all, each run killed by the next merge.
+  # Same argument the `system` job already makes below, one scope up.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint:

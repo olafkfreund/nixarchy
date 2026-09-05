@@ -115,10 +115,20 @@ pkgs.testers.runNixOSTest {
     rc, out = machine.execute("nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=600)
     print(out)
 
-    # (a) refused, non-zero.
+    # (a) THE GUARANTEE, checked first because it is the one #300 is about:
+    # whatever else happened, the disk is intact. tests/installer-store-space
+    # cannot make this assertion at all -- it has no disk -- and proving this
+    # line can bite is the red that justifies the whole VM: delete the
+    # iso-net marker above and the install proceeds to format_disk, and this
+    # fails with partitions in the output.
+    after = machine.succeed("lsblk -no NAME /dev/vdb").strip()
+    assert after == "vdb", f"the disk was touched despite the refusal:\n{after}"
+    machine.succeed("test -z \"$(blkid /dev/vdb 2>/dev/null)\"")
+
+    # (b) refused, non-zero.
     assert rc != 0, "the install proceeded (rc=0) with a dark substituter"
 
-    # (b) the refusal is preflight's, names the cache and the network, and
+    # (c) the refusal is preflight's, names the cache and the network, and
     # says the disk is intact -- not a dependency cascade...
     assert "cannot reach https://nixarchy.cachix.org" in out, (
         "the refusal does not name the unreachable substituter:\n" + out)
@@ -129,11 +139,6 @@ pkgs.testers.runNixOSTest {
     # describes: if this fires, the test stopped covering #302's code.
     assert "this image installs over the network and there is none" not in out, (
         "ask_network refused before preflight ever ran -- wrong guard exercised")
-
-    # (c) the whole point of #300: the disk IS intact.
-    after = machine.succeed("lsblk -no NAME /dev/vdb").strip()
-    assert after == "vdb", f"the disk was touched despite the refusal:\n{after}"
-    machine.succeed("test -z \"$(blkid /dev/vdb 2>/dev/null)\"")
 
     print("refused before the wipe; /dev/vdb untouched")
   '';

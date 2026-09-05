@@ -1644,11 +1644,21 @@ is the shape.
 | epic | what it is for | |
 | --- | --- | --- |
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | 4 of 5 done |
-| [#221](https://github.com/olafkfreund/nixarchy/issues/221) | **sandboxes** — a throwaway NixOS machine from a template, in seconds, with no root and no rebuild | planned, 8 issues |
-| [#230](https://github.com/olafkfreund/nixarchy/issues/230) | **boxes** — an Arch or Debian userland for software NixOS will not run, and its apps in your launcher | planned, 8 issues |
 | [#268](https://github.com/olafkfreund/nixarchy/issues/268) | **agent bus** — a public room where agents working on this repo leave each other notes, and the setup to join it | room live, kit landed, 3 issues |
 
 **Recently finished:**
+[sandboxes](https://github.com/olafkfreund/nixarchy/issues/221)
+— a throwaway NixOS MicroVM from a template, in seconds, with no root and no
+rebuild: the catalogue and guest module, the declarative service, `nixarchy
+vm`, four templates, a menu group, the manual page, a boot check in the
+nightly, and the `verify.sh` section for what only real hardware can answer.
+Also
+[boxes](https://github.com/olafkfreund/nixarchy/issues/230)
+— an Arch or Debian userland for software NixOS will not run: rootless podman
+and distrobox, the declarative half through Home Manager, `nixarchy box` with
+`promote` to turn a hand-made container into config, a menu group, the manual
+page, and an offline check that creates and enters one for real.
+
 [bare metal to a desktop](https://github.com/olafkfreund/nixarchy/issues/6)
 — all 22 of it: disko layout, generated flake, interactive and unattended
 install, a bootable ISO that autostarts it, release automation, free-space

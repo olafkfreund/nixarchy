@@ -1457,15 +1457,20 @@
           # The installer's interactive screens, at every width worth caring
           # about. Nothing else draws them: every other harness passes
           # --answers, which is exactly how #133 shipped.
-          doctor-graphics = import ./tests/doctor-graphics.nix {
-            pkgs = pkgsFor.${system};
-            inherit (self.packages.${system}) doctor;
-          };
-
           installer-store-space = import ./tests/installer-store-space.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
             dashboardScript = ./installer/lib/dashboard.sh;
+          };
+
+          # The doctor's GPU rules, against fixture machines. checks.install's
+          # VM runs llvmpipe and has no PCI display controller, so this is the
+          # only place these branches are ever exercised -- and one of them was
+          # unreachable until the fixtures grew a vainfo that behaves like the
+          # real one.
+          doctor-graphics = import ./tests/doctor-graphics.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
           };
 
           # The `try` front door's refusals, each driven with a stubbed

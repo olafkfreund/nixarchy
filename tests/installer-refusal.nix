@@ -103,7 +103,50 @@ pkgs.testers.runNixOSTest {
       };
     };
 
+  # A machine that booted the way require_root_and_uefi refuses: SeaBIOS, no
+  # /sys/firmware/efi. useEFIBoot deliberately absent -- every other node in
+  # this repo sets it true, which is precisely why the BIOS refusal at
+  # install.sh:221 had never executed under any test. No stubs and no
+  # extraction here: qemu's default firmware IS the condition, so the real
+  # guard runs against a real absent /sys/firmware/efi, as root, the way it
+  # would on a user's machine. Same answers file and a spare disk, so "refused
+  # AND the disk is bare" is assertable the same way as above.
+  nodes.bios =
+    { pkgs, ... }:
+    {
+      environment = {
+        systemPackages = [
+          inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.install
+        ];
+        etc."nixarchy/answers".text = ''
+          device=/dev/vdb
+          encrypt=no
+          recovery_passphrase=rescue-me
+          hostname=installed
+          username=omarchy
+          password_hash=${passwordHash}
+          timezone=UTC
+          keymap=us
+        '';
+      };
+      virtualisation.emptyDiskImages = [ 2048 ];
+    };
+
   testScript = ''
+    # The BIOS machine first: its whole test is one command, and a refusal
+    # this early must not depend on anything the EFI machine sets up.
+    bios.wait_for_unit("multi-user.target")
+    bios.fail("test -d /sys/firmware/efi")
+    rc_bios, out_bios = bios.execute(
+        "nixarchy-install --answers /etc/nixarchy/answers 2>&1", timeout=120)
+    print(out_bios)
+    assert rc_bios != 0, "the install proceeded (rc=0) on a BIOS-booted machine"
+    assert "booted in BIOS/legacy mode" in out_bios, (
+        "the refusal does not say the machine booted BIOS:\n" + out_bios)
+    # Refused at the door, before any question or wipe: the disk stays bare.
+    bios.succeed("test -z \"$(blkid /dev/vdb 2>/dev/null)\"")
+    bios.shutdown()
+
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("nginx.service")
 

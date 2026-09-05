@@ -2,10 +2,20 @@ name: update
 
 on:
   schedule:
-    # Weekly. The 29 apps that come from nixpkgs need nothing here -- they
-    # follow whatever nixpkgs a user's own `nix flake update` pulls. This is
-    # only for the handful pinned by version and hash in this repo.
-    - cron: "0 5 * * 1"
+    # Nightly, not weekly. These publish often -- hey-cli moved to 1.4.1 while
+    # the 2026-09-05 nightly review watched a weekly job that would not look
+    # again until Monday. A bump that waits six days for its cron is stale on
+    # arrival.
+    #
+    # The comment that stood here said the nixpkgs-sourced apps "need nothing
+    # here -- they follow whatever nixpkgs a user's own `nix flake update`
+    # pulls". They follow the pin this repo commits, and nothing updated it:
+    # on 2026-09-05 that pin was twelve days old, and claude-code, codex,
+    # opencode, ollama and zed-editor were each several versions behind what
+    # nixpkgs already had ready. flake-update.yml now moves the pin nightly;
+    # this job keeps its own scope, the packages pinned here by version and
+    # hash.
+    - cron: "0 5 * * *"
   workflow_dispatch:
 
 permissions:
@@ -53,6 +63,15 @@ jobs:
         if: steps.bump.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
+          # Opened under BUMP_TOKEN so build.yml actually runs on it. With the
+          # default GITHUB_TOKEN a pull request triggers no workflows at all,
+          # which made the claim in the body below -- "Every package here built
+          # successfully in CI" -- mean only "built in this same job".
+          # Measured 2026-09-05: a PR opened with BUMP_TOKEN started six check
+          # runs within fifteen seconds; the same query against a
+          # GITHUB_TOKEN-opened PR returned zero. This one still does NOT
+          # auto-merge, for the reason the body gives.
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
           branch: update/pinned-packages
           title: "Bump pinned packages"
           commit-message: |
@@ -64,7 +83,8 @@ jobs:
             by hand. Apps that come from nixpkgs are not touched: they follow
             whatever nixpkgs a user's own `nix flake update` resolves.
 
-            Every package here built successfully in CI.
+            Every package here built in the job that opened this pull
+            request, and the repository CI runs on it as well.
 
             **A build is not proof the app still works.** Two of these are
             proprietary Electron bundles that can compile fine and crash at

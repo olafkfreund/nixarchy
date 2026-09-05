@@ -43,10 +43,32 @@ if [ ! -w "$flake" ]; then
   exit 1
 fi
 
+# Machines installed before nixarchy-unfreeze existed carry a lock whose
+# update target is a commit, and updating a commit returns the same commit:
+# `nh os switch --update` would rebuild the identical system while this
+# script narrates progress. Saying "updated" there is the one thing this
+# script must never do, so the frozen shape is caught first and the fix
+# offered -- it is a two-line rewrite with its own confirmation.
+if jq -e '.nodes.nixarchy.original | has("rev")' "$flake/flake.lock" >/dev/null 2>&1; then
+  red "This machine's flake is frozen at its install day."
+  echo
+  echo "The installer pinned nixarchy by commit in the update target, so"
+  echo "'--update' re-resolves to the same commit forever: no new nixpkgs,"
+  echo "no new nixarchy, while everything reports success."
+  echo
+  read -r -p "Run nixarchy-unfreeze to fix that first? [y/N] " reply
+  case "$reply" in
+    [yY]*) nixarchy-unfreeze ;;
+    *) echo "Left frozen. Updating would rebuild what you already have."; exit 0 ;;
+  esac
+  echo
+fi
+
 echo "Updating from $flake"
 echo
-dim "This moves your flake inputs forward -- nixpkgs, nixarchy and Omarchy"
-dim "itself -- and then rebuilds. Your app selections are untouched."
+dim "This moves your flake inputs forward -- nixpkgs, home-manager, and"
+dim "nixarchy to its latest release -- and then rebuilds. Your app"
+dim "selections are untouched."
 echo
 
 read -r -p "Update flake inputs and rebuild? [y/N] " reply

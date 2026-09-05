@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Let this machine receive updates again
+# omarchy:examples=nixarchy unfreeze
+
+# Machines installed before the fix carry a flake that can never move: the
+# installer wrote a COMMIT into both flake.nix's nixarchy URL and the lock's
+# `original`, and `nix flake update` re-resolves `original` -- re-resolving a
+# commit returns that commit, forever. No nixpkgs update, no security fixes,
+# while `omarchy update` printed that inputs were moving forward.
+#
+# This rewrites exactly the two things the installer got wrong, in place:
+#
+#   flake.nix   nixarchy pinned by commit  ->  pinned to the release branch,
+#               plus nixpkgs as an input of your own that nixarchy follows
+#   flake.lock  `original` rev             ->  `original` ref
+#
+# and touches NOTHING else. `locked` keeps the rev and hash you are running
+# today, so nothing changes until you choose to run an update. It only
+# rewrites lines the installer wrote; a flake.nix you have reshaped yourself
+# is yours, and this prints what to change instead of guessing at it.
+
+set -euo pipefail
+
+flake="${NIXARCHY_FLAKE:-/etc/nixos}"
+ref="release"
+
+red() { printf '\033[0;31m%s\033[0m\n' "$1"; }
+dim() { printf '\033[0;90m%s\033[0m\n' "$1"; }
+
+nixfile="$flake/flake.nix"
+lock="$flake/flake.lock"
+
+for f in "$nixfile" "$lock"; do
+  [ -f "$f" ] || { red "No $f."; exit 1; }
+  [ -w "$f" ] || {
+    red "$f is not writable by $USER."
+    echo
+    echo "  sudo chown -R $USER $flake"
+    exit 1
+  }
+done
+
+# Frozen means: the lock's update target is a commit. That is the exact state
+# the old installer wrote, and the only state this command exists to fix.
+if ! jq -e '.nodes.nixarchy.original | has("rev")' "$lock" >/dev/null 2>&1; then
+  echo "This machine is not frozen: the lock's nixarchy input already names"
+  echo "a ref that 'nix flake update' can move. Nothing to do."
+  exit 0
+fi
+
+# Only the installer's own line is rewritten. If the URL has been edited into
+# another shape, this flake has an owner with opinions, and sed-ing their file
+# is how their opinions get destroyed.
+if ! grep -Eq '^  inputs\.nixarchy\.url = "github:olafkfreund/nixarchy/[0-9a-f]{40}";$' "$nixfile"; then
+  red "flake.nix does not carry the installer's nixarchy line, so it will"
+  red "not be edited for you. To unfreeze by hand:"
+  echo
+  echo "  1. point inputs.nixarchy.url at \"github:olafkfreund/nixarchy/$ref\""
+  echo "  2. add   inputs.nixpkgs.url = \"github:NixOS/nixpkgs/nixos-unstable\";"
+  echo "           inputs.nixarchy.inputs.nixpkgs.follows = \"nixpkgs\";"
+  echo "  3. run   nix flake lock $flake"
+  exit 1
+fi
+
+# What nixarchy's nixpkgs is locked to today -- the node name after nix's
+# disambiguation, and the branch its `original` already carries. Copied, never
+# invented, for the same reason mkFlake copies it: inventing "nixpkgs" when
+# the node is called "nixpkgs_2" points the lock at nothing.
+nixpkgs_node=$(jq -r '.nodes.nixarchy.inputs.nixpkgs' "$lock")
+nixpkgs_url=$(jq -r --arg n "$nixpkgs_node" '
+  .nodes[$n].original | "github:\(.owner)/\(.repo)/\(.ref)"' "$lock")
+
+echo "Unfreezing $flake"
+echo
+dim "flake.nix:  nixarchy moves from its install commit to the '$ref' branch,"
+dim "            and nixpkgs ($nixpkgs_url) becomes an input"
+dim "            you own and can retarget."
+dim "flake.lock: the update target loses its rev. The rev you are RUNNING is"
+dim "            untouched -- nothing rebuilds, nothing downloads, and nothing"
+dim "            moves until you run an update yourself."
+echo
+
+read -r -p "Rewrite flake.nix and flake.lock? [y/N] " reply
+case "$reply" in
+  [yY]*) ;;
+  *) echo "Nothing changed."; exit 0 ;;
+esac
+
+# Plain-file backups rather than git: the installer staged this repo but
+# committed nothing, so there may be no commit to go back to.
+cp "$nixfile" "$nixfile.pre-unfreeze"
+cp "$lock" "$lock.pre-unfreeze"
+
+sed -i -E 's|^  inputs\.nixarchy\.url = "github:olafkfreund/nixarchy/[0-9a-f]{40}";$|  inputs = {\n    nixpkgs.url = "'"$nixpkgs_url"'";\n    nixarchy = {\n      url = "github:olafkfreund/nixarchy/'"$ref"'";\n      inputs.nixpkgs.follows = "nixpkgs";\n    };\n  };|' "$nixfile"
+
+jq --arg ref "$ref" --arg n "$nixpkgs_node" '
+  .nodes.nixarchy.original = {
+    type: "github", owner: "olafkfreund", repo: "nixarchy", ref: $ref }
+  | .nodes.nixarchy.inputs.nixpkgs = ["nixpkgs"]
+  | .nodes.root.inputs.nixpkgs = $n
+' "$lock" > "$lock.tmp" && mv "$lock.tmp" "$lock"
+
+# An unstaged file does not exist as far as flake evaluation is concerned,
+# and the backups should not become part of anyone's configuration.
+git -C "$flake" add flake.nix flake.lock 2>/dev/null || true
+
+echo
+echo "Done. This machine can update again:"
+echo
+echo "  omarchy update              everything, with a confirmation first"
+echo "  nix flake update nixpkgs    just the package set"
+echo "  nix flake update nixarchy   just nixarchy, to its latest release"
+echo
+dim "The previous files are at flake.nix.pre-unfreeze and"
+dim "flake.lock.pre-unfreeze if you want to compare or go back."

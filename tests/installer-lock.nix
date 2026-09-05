@@ -68,5 +68,70 @@ pkgs.runCommand "nixarchy-installer-lock"
       echo "lastModified is not a positive timestamp" >&2; exit 1; }
 
     echo "the generated lock carries every field mkFlake writes by hand"
+
+    # The other half of the node: `original` is what `nix flake update`
+    # re-resolves, and a rev there resolves to itself -- which is how every
+    # machine installed before this check existed was frozen at its install
+    # day. `omarchy update` printed "this moves your flake inputs forward"
+    # and moved nothing. `locked` (asserted above) is where reproducibility
+    # lives; `original` must be somewhere update can GO.
+    original=$(jq -c '.nodes.nixarchy.original // empty' "$lock")
+    if jq -e 'has("rev")' <<<"$original" >/dev/null 2>&1; then
+      echo "" >&2
+      echo "the nixarchy lock node's 'original' carries a rev: $original" >&2
+      echo "" >&2
+      echo "'original' is the update target: nix flake update re-resolves it," >&2
+      echo "and re-resolving a commit returns that commit. Every machine" >&2
+      echo "installed from this template can never move -- no nixarchy" >&2
+      echo "update, and since nixarchy used to carry nixpkgs, no nixpkgs" >&2
+      echo "update either. Pin the rev in 'locked'; give 'original' a ref." >&2
+      exit 1
+    fi
+    jq -e '.ref | type == "string" and length > 0' <<<"$original" >/dev/null || {
+      echo "the nixarchy 'original' has no ref to update against: $original" >&2
+      exit 1
+    }
+
+    # And the URL in flake.nix must agree with it, because nix re-resolves on
+    # a flake.nix/lock mismatch -- over a network the offline ISO does not
+    # have. A rev-shaped URL here is the same freeze wearing different
+    # clothes: `nix flake update nixarchy` obeys flake.nix, not the lock.
+    ref=$(jq -r '.ref' <<<"$original")
+    grep -Fq "url = \"github:olafkfreund/nixarchy/$ref\";" \
+      ${flakeTemplate}/flake.nix || {
+      echo "flake.nix does not pin nixarchy to the ref the lock names ('$ref'):" >&2
+      grep -n 'olafkfreund/nixarchy' ${flakeTemplate}/flake.nix >&2 || true
+      exit 1
+    }
+
+    # The machine owns nixpkgs: a root input the user can retarget (stable vs
+    # unstable) and update on its own, with nixarchy following it. Without
+    # the follows re-rooting, nixarchy's locked nixpkgs would shadow the
+    # user's choice and this root input would be decoration.
+    jq -e '.nodes.root.inputs.nixpkgs | type == "string"' "$lock" >/dev/null || {
+      echo "the generated lock has no root nixpkgs input; the machine cannot" >&2
+      echo "choose or update its package set:" >&2
+      jq -c '.nodes.root.inputs' "$lock" >&2
+      exit 1
+    }
+    jq -e '.nodes.nixarchy.inputs.nixpkgs == ["nixpkgs"]' "$lock" >/dev/null || {
+      echo "nixarchy does not follow the machine's nixpkgs; the root input" >&2
+      echo "would be dead weight while nixarchy builds from its own:" >&2
+      jq -c '.nodes.nixarchy.inputs.nixpkgs' "$lock" >&2
+      exit 1
+    }
+
+    # flake.nix's nixpkgs URL must be the locked node's own original, or the
+    # first offline use re-resolves it and dies without a network.
+    nixpkgs_url=$(jq -r '.nodes.root.inputs.nixpkgs as $n
+      | .nodes[$n].original | "github:\(.owner)/\(.repo)/\(.ref)"' "$lock")
+    grep -Fq "nixpkgs.url = \"$nixpkgs_url\";" ${flakeTemplate}/flake.nix || {
+      echo "flake.nix's nixpkgs URL does not match the lock's original" >&2
+      echo "($nixpkgs_url); nix would re-resolve it on first use, offline:" >&2
+      grep -n 'inputs.nixpkgs.url' ${flakeTemplate}/flake.nix >&2 || true
+      exit 1
+    }
+
+    echo "and 'original' is a ref nix flake update can actually move"
     touch $out
   ''

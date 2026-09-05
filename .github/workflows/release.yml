@@ -284,6 +284,18 @@ jobs:
             --discussion-category announcements \
             --prerelease
 
+      # Every installed machine points its flake at the `release` branch
+      # (installer/mkFlake.nix): `nix flake update nixarchy` resolves whatever
+      # this branch names, so moving it IS shipping the release to users --
+      # deliberately, when a human cuts a tag, not with every bot merge that
+      # moves main. Plain push, not force: a release branch that moved
+      # backwards would downgrade the next machine to update, so a non
+      # fast-forward here should fail loudly and be looked at.
+      - name: Move the release branch to this tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: git push origin "refs/tags/$TAG^{}:refs/heads/release"
+
       # 5.6 GB of parts on the runner's root filesystem, which is the small
       # one. The workspace is cleaned at the start of the next run, but a
       # failed release should not sit on the disk until then.

@@ -23,11 +23,30 @@ let
       or (throw "flake-template: build from a committed tree; the generated flake pins nixarchy by commit");
 
   url = "github:olafkfreund/nixarchy/${rev}";
+
+  # What the machine ASKS for when it updates, as opposed to what it GOT
+  # (`url` above, which is provenance and stays rev-pinned). This goes into
+  # flake.nix and the lock's `original`; the rev goes into `locked`. Nix never
+  # consults `original` until the user runs `nix flake update`, so first boot
+  # still builds the exact installed rev, offline -- but the update command
+  # has somewhere to go. A rev here froze every installed machine at its
+  # install day: re-resolving a commit returns that commit, forever.
+  #
+  # `release` moves when a human cuts a release, not with the bot merges that
+  # move main. nixpkgs and home-manager are the machine's own inputs and
+  # update independently of it.
+  ref = "release";
+  refUrl = "github:olafkfreund/nixarchy/${ref}";
 in
 runCommand "nixarchy-flake-template"
   {
     nativeBuildInputs = [ jq ];
-    inherit rev url;
+    inherit
+      rev
+      url
+      ref
+      refUrl
+      ;
     inherit (self) narHash;
 
     # And the timestamp, which nix writes into every lock node it produces and
@@ -43,7 +62,7 @@ runCommand "nixarchy-flake-template"
     # was never the problem: shortRev is identical on both sides.
     lastModified = toString self.lastModified;
 
-    passthru = { inherit url rev; };
+    passthru = { inherit url rev refUrl; };
   }
   ''
     mkdir -p $out/host
@@ -69,7 +88,15 @@ runCommand "nixarchy-flake-template"
     # target would re-resolve every input against whatever is current, so the
     # first `nixos-rebuild switch` would build a different system from the one
     # just installed -- and it needs a network the offline ISO does not have.
-    jq --arg rev "$rev" --arg narHash "$narHash" --argjson lastModified "$lastModified" '
+    #
+    # The `locked`/`original` split is the whole design: `locked` (rev +
+    # narHash) is what evaluation reads, and is where reproducibility lives;
+    # `original` is read only by `nix flake update`, which re-resolves it. So
+    # `locked` carries the installed rev and `original` carries a branch ref.
+    # A rev in `original` is what froze every installed machine: update
+    # re-resolved the commit back to itself, forever.
+    jq --arg rev "$rev" --arg narHash "$narHash" --arg ref "$ref" \
+       --argjson lastModified "$lastModified" '
       # nixarchy inherits our root inputs verbatim. NOT a name-to-name map:
       # once nix has disambiguated names, root.nixpkgs points at a node called
       # "nixpkgs_2", and inventing the mapping rather than copying it points
@@ -78,11 +105,12 @@ runCommand "nixarchy-flake-template"
 
       # An input whose value is an ARRAY is a follows path resolved from the
       # ROOT: disko.nixpkgs is ["nixpkgs"], meaning "whatever the root calls
-      # nixpkgs". Once nixarchy is the root'"'"'s only input every one of those
-      # paths points at nothing, and nix refuses with "follows a non-existent
-      # input" while trying to update a lock it must never update. So re-root
-      # them all under nixarchy. There are around forty, nearly all beneath
-      # hyprland, which is why this is structural rather than a list.
+      # nixpkgs". Once the root'"'"'s inputs are replaced below, every one of
+      # those paths points at nothing, and nix refuses with "follows a
+      # non-existent input" while trying to update a lock it must never
+      # update. So re-root them all under nixarchy. There are around forty,
+      # nearly all beneath hyprland, which is why this is structural rather
+      # than a list.
       | .nodes |= with_entries(
           if .key == "root" or (.value | has("inputs") | not) then .
           else .value.inputs |= with_entries(
@@ -92,7 +120,9 @@ runCommand "nixarchy-flake-template"
           end)
 
       | .nodes.nixarchy = {
-          inputs: $rootInputs,
+          # The machine owns nixpkgs (root input, below) and nixarchy follows
+          # it -- the lock half of the template'"'"'s `follows = "nixpkgs"`.
+          inputs: ($rootInputs | .nixpkgs = ["nixpkgs"]),
           locked: {
             type: "github",
             owner: "olafkfreund",
@@ -105,11 +135,29 @@ runCommand "nixarchy-flake-template"
             type: "github",
             owner: "olafkfreund",
             repo: "nixarchy",
-            rev: $rev
+            ref: $ref
           }
         }
-      | .nodes.root.inputs = { nixarchy: "nixarchy" }
+
+      # nixpkgs re-exposed at the root, pointing at the SAME already-locked
+      # node ($rootInputs.nixpkgs is the disambiguated name -- copy, never
+      # invent). Its original already carries the branch this repo tracks, so
+      # `nix flake update nixpkgs` works from day one; making it a root input
+      # is what lets the user retarget it -- stable instead of unstable -- in
+      # a flake.nix they own.
+      | .nodes.root.inputs = { nixarchy: "nixarchy", nixpkgs: $rootInputs.nixpkgs }
     ' ${../flake.lock} > $out/flake.lock
+
+    # The nixpkgs URL the machine's flake.nix declares must be EXACTLY the
+    # `original` of the node the lock carries -- a mismatch makes nix
+    # re-resolve on first use, which needs the network the offline ISO does
+    # not have. So it is read out of the lock rather than written down a
+    # second time.
+    nixpkgs_url=$(jq -r '
+      .nodes.root.inputs.nixpkgs as $n
+      | .nodes[$n].original
+      | "github:\(.owner)/\(.repo)/\(.ref)"
+    ' $out/flake.lock)
 
     # So the installer does not have to recompute what this already knows.
     #
@@ -121,5 +169,6 @@ runCommand "nixarchy-flake-template"
     # via installer/host.nix. Nothing should gate on this file.
     printf '%s\n' "$url" > $out/.nixarchy-url
 
-    sed -i "s|@nixarchy_url@|$url|g" $out/flake.nix
+    sed -i -e "s|@nixarchy_url@|$refUrl|g" \
+           -e "s|@nixpkgs_url@|$nixpkgs_url|g" $out/flake.nix
   ''

@@ -777,6 +777,11 @@ jobs:
   # job's 30-minute budget is already mostly spent, and this needs /dev/kvm
   # arranged first, which no step there does.
   box:
+  # Boots a declared MicroVM inside a NixOS test VM -- see
+  # tests/microvm-boot.nix. Its own job rather than a step in `system`: the
+  # boot is minutes of wall clock against that job's 30-minute budget, and it
+  # needs /dev/kvm arranged first, which no other step there does.
+  microvm:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -796,6 +801,18 @@ jobs:
         # /dev/kvm the test driver would run the node under TCG and this job
         # would quietly get slower until it started flapping against its
         # timeout -- fail on day one instead.
+        # ubuntu-latest runners have had /dev/kvm since 2023, but it arrives
+        # root:kvm 0660 and the nix build users are not in `kvm`. The udev
+        # rule is GitHub's own documented fix (static_node keeps it across
+        # re-triggers).
+        #
+        # The preflight is deliberately LOUD. The test node (L1) must run
+        # accelerated; only the MicroVM inside it (L2) is the -tcg runner --
+        # a shipped artifact for hosts without KVM, not a test-only variant.
+        # If /dev/kvm quietly stopped being usable, the NixOS test driver
+        # would fall back to TCG at L1 too and this job would measure a
+        # different runner while staying green -- exactly the "green light"
+        # AGENTS.md 1 warns about. So: fail here, on day one, instead.
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -814,3 +831,9 @@ jobs:
         # answer to the epic's open first-start question, asserted as
         # observed. See tests/box-boot.nix.
         run: nix build .#checks.x86_64-linux.box-boot --print-build-logs
+      - name: Boot a MicroVM on the -tcg runner
+        # checks.microvm-boot: microvm@sandbox.service reaches active, ssh
+        # over the forwarded SLiRP port answers, and `ro-store on
+        # /nix/.ro-store type 9p` is read from the guest's own mount table --
+        # the shared-store claim, verified from inside a running guest.
+        run: nix build .#checks.x86_64-linux.microvm-boot --print-build-logs

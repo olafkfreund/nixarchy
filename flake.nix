@@ -1415,6 +1415,15 @@
             nixarchyVm = self.packages.${system}.nixarchy-vm;
           };
 
+          # The other half of that: a declared machine actually boots, on the
+          # -tcg runner, and the ro-store mount is asserted from inside the
+          # running guest. See tests/microvm-boot.nix for why the KVM runner --
+          # the one nearly every user runs -- cannot be proved here.
+          microvm-boot = import ./tests/microvm-boot.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Reads the box catalogue and `nixarchy box` structurally -- see
           # tests/box-template.nix for what that can and cannot prove. The
           # pins live in `boxImagePins` above, shared with checks.box-boot.

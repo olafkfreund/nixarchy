@@ -36,6 +36,21 @@ let
     podman = "var-lib-containers.img";
     persistent = "home.img";
   };
+
+  # The CLI as a machine built from a DIRTY checkout evaluates it: no
+  # `self.rev`, only `self.dirtyRev` -- the underlying commit with "-dirty"
+  # appended, which is not a ref GitHub can resolve. `nixarchyVm` above is
+  # built from whatever state CI's own checkout happens to be in, so the
+  # dirty case has to be pinned here or it is only ever tested by accident --
+  # and it shipped broken exactly that way: `run` handed
+  # `github:olafkfreund/nixarchy/<rev>-dirty` to `nix build`, which 404s with
+  # nothing to say why.
+  dirtyRev = "0000000000000000000000000000000000000000";
+  dirtyVm = pkgs.callPackage ../pkgs/microvm.nix {
+    self = {
+      dirtyRev = "${dirtyRev}-dirty";
+    };
+  };
 in
 pkgs.runCommand "nixarchy-microvm-template"
   {
@@ -269,6 +284,72 @@ pkgs.runCommand "nixarchy-microvm-template"
 
     kill "$first" 2>/dev/null || true
     wait "$first" 2>/dev/null || true
+
+    echo "== nixarchy vm: a machine built from a dirty or unpushed commit =="
+
+    # The URL baked into the dirty-checkout CLI. "<rev>-dirty" is what
+    # self.dirtyRev holds, and github:owner/repo/<rev>-dirty is a ref GitHub
+    # cannot resolve -- `nixarchy vm run` on any machine built from a dirty
+    # tree 404s at build time, with nix's fetch error as the only word on it.
+    if grep -q -- '-dirty' ${dirtyVm}/bin/nixarchy-vm; then
+      echo "the dirty-checkout CLI embeds a flake URL ending in -dirty:" >&2
+      grep -o 'github:[^"]*' ${dirtyVm}/bin/nixarchy-vm | sort -u >&2
+      echo "GitHub has no such ref, so 'nixarchy vm run' can never build" >&2
+      fail=1
+    fi
+
+    # And the pinned commit itself is only a promise: a stripped dirty rev or
+    # a clean but unpushed commit resolves no better. A second stub `nix`
+    # that refuses everything except .../main -- exactly what GitHub does for
+    # a commit it does not have -- so `run` has to fall back to main, out
+    # loud, instead of dying on the fetch.
+    mkdir -p bin2
+    calls2=$PWD/nix-calls2.log
+    cat > bin2/nix <<STUB2
+    #!${pkgs.bash}/bin/bash
+    echo "\$*" >> $calls2
+    case "\$2" in
+      */main#*) exec $PWD/bin/nix "\$@" ;;
+      *) echo "stub nix: cannot find flake reference '\$2' (no such ref)" >&2; exit 1 ;;
+    esac
+    STUB2
+    chmod +x bin2/nix
+    export PATH="$PWD/bin2:$PATH"
+    export HOME=$PWD/home2
+    export XDG_STATE_HOME=$HOME/.local/state
+    mkdir -p "$HOME"
+
+    ${dirtyVm}/bin/nixarchy-vm create pinned
+    ( ${dirtyVm}/bin/nixarchy-vm run pinned > run3.log 2>&1; echo $? > run3.status ) &
+    third=$!
+    for _ in $(seq 1 50); do
+      [ -f "$XDG_STATE_HOME/nixarchy/microvm/pinned/run.marker" ] && break
+      sleep 0.2
+    done
+    if [ ! -f "$XDG_STATE_HOME/nixarchy/microvm/pinned/run.marker" ]; then
+      echo "'run' did not fall back to main after the pinned commit failed to resolve:" >&2
+      echo "a machine built from an unpushed (or dirty) commit cannot run a VM at all" >&2
+      echo "-- see run3.log:" >&2
+      cat run3.log >&2
+      fail=1
+    else
+      # The pin was still tried first -- falling straight to main would throw
+      # away the exact-commit match every pushed machine is entitled to.
+      if ! grep -q -- "/${dirtyRev}#" "$calls2"; then
+        echo "the fallback skipped the pinned commit entirely:" >&2
+        cat "$calls2" >&2
+        fail=1
+      fi
+      # And the switch to main was said out loud, not done silently.
+      if ! grep -qi 'falling back' run3.log; then
+        echo "the fallback to main happened without a word to the user:" >&2
+        cat run3.log >&2
+        fail=1
+      fi
+      echo "the pinned commit was tried, refused, and main took over audibly"
+    fi
+    kill "$third" 2>/dev/null || true
+    wait "$third" 2>/dev/null || true
 
     [ "$fail" -eq 0 ] || exit 1
     echo "every template's runner is qemu, shares the host store read-only," \

@@ -43,15 +43,25 @@ let
 
   # `self.rev` is what mkFlake.nix uses to pin the generated installer flake,
   # and it throws on a dirty tree because that pin has to survive forever on
-  # an installed machine. This is not that: worst case here is a `nix build`
-  # against `main` instead of the exact commit, so `self.dirtyRev` (present
-  # once this tree has ANY commit, dirty or not) and a plain "main" fallback
-  # both keep evaluation working -- which matters because, unlike
-  # mkFlake.nix, this package is evaluated by every ordinary
-  # `nixosModules.nixarchy` consumer, including every check in this repo's
-  # own flake, not only the installer image.
-  rev = self.rev or self.dirtyRev or "main";
+  # an installed machine. This is not that -- unlike mkFlake.nix, this
+  # package is evaluated by every ordinary `nixosModules.nixarchy` consumer,
+  # including every check in this repo's own flake, so evaluation has to keep
+  # working with no rev at all, dirty tree included.
+  #
+  # On a dirty tree there is no `self.rev`, only `self.dirtyRev`: the
+  # underlying commit with "-dirty" appended, which is NOT a ref GitHub can
+  # resolve -- handed to `nix build github:...` verbatim it 404s at `run`
+  # time, with nix's fetch error as the only word on why. So the suffix is
+  # stripped and the underlying commit pinned instead. Even a clean rev is a
+  # promise rather than a guarantee -- a commit never pushed resolves no
+  # better -- which is why run_vm below falls back to `main`, out loud, when
+  # the pinned rev cannot be fetched. Worst case is therefore a `nix build`
+  # against `main` instead of the exact commit, and the user is told so.
+  # checks.microvm-template asserts both halves, on a pinned fake dirtyRev
+  # rather than whatever state CI's checkout happens to be in.
+  rev = lib.removeSuffix "-dirty" (self.rev or self.dirtyRev or "main");
   flakeUrl = "github:olafkfreund/nixarchy/${rev}";
+  fallbackUrl = "github:olafkfreund/nixarchy/main";
 
   # One file per template plus a tab-separated index -- same shape as
   # pkgs/dev-init.nix's presetDir, and for the same reason: the script then
@@ -83,6 +93,7 @@ writeShellApplication {
         stateDir="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/microvm"
         templates=${templateDir}
         flakeUrl=${lib.escapeShellArg flakeUrl}
+        fallbackUrl=${lib.escapeShellArg fallbackUrl}
 
         list_templates() {
           echo "Templates:"
@@ -217,7 +228,21 @@ writeShellApplication {
 
           # Never `nix run`: see the header comment on why that would leave this
           # guest's store share unprotected from garbage collection.
-          nix build "$flakeUrl#$attr" --out-link "$dir/current"
+          #
+          # The pinned rev is this system's own commit, but only a commit
+          # GitHub actually has can be fetched -- a dirty checkout's stripped
+          # rev and an unpushed local commit both fail here. Falling back to
+          # main, with a word about it, beats nix's bare fetch error, which
+          # says nothing a user can act on.
+          if ! nix build "$flakeUrl#$attr" --out-link "$dir/current"; then
+            [ "$flakeUrl" != "$fallbackUrl" ] || exit 1
+            echo "nixarchy-vm: could not build $flakeUrl#$attr." >&2
+            echo "This machine was built from a commit GitHub does not have" >&2
+            echo "(a dirty checkout, or one never pushed). Falling back to" >&2
+            echo "$fallbackUrl -- the template may differ from the commit" >&2
+            echo "this system was built from." >&2
+            nix build "$fallbackUrl#$attr" --out-link "$dir/current"
+          fi
 
           echo "$name" > "$dir/hostname"
           cd "$dir"

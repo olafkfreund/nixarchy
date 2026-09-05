@@ -7,10 +7,10 @@
 #
 # The template files carry @tokens@; the installer substitutes the answers it
 # collected. What cannot be a template file is the lock, so it is derived here.
-{ runCommand
-, jq
-, self
-,
+{
+  runCommand,
+  jq,
+  self,
 }:
 let
   # Building from a dirty tree gives no rev, and the generated flake pins
@@ -39,31 +39,31 @@ let
   refUrl = "github:olafkfreund/nixarchy/${ref}";
 in
 runCommand "nixarchy-flake-template"
-{
-  nativeBuildInputs = [ jq ];
-  inherit
-    rev
-    url
-    ref
-    refUrl
-    ;
-  inherit (self) narHash;
+  {
+    nativeBuildInputs = [ jq ];
+    inherit
+      rev
+      url
+      ref
+      refUrl
+      ;
+    inherit (self) narHash;
 
-  # And the timestamp, which nix writes into every lock node it produces and
-  # this one was leaving out (#208).
-  #
-  # An input node without it evaluates: `self.lastModified` is simply absent
-  # on the other side, so anything reading it takes its fallback. That made
-  # the omission invisible until something in the closure DEPENDED on it --
-  # nixarchy-version, which prints the build's date. This flake evaluates to
-  # a different omarchy than the one the installer seeded, the offline
-  # install cannot copy what it now has to build, and it walks back to the
-  # source bootstrap and dies fetching a Debian patch for libssh2. The rev
-  # was never the problem: shortRev is identical on both sides.
-  lastModified = toString self.lastModified;
+    # And the timestamp, which nix writes into every lock node it produces and
+    # this one was leaving out (#208).
+    #
+    # An input node without it evaluates: `self.lastModified` is simply absent
+    # on the other side, so anything reading it takes its fallback. That made
+    # the omission invisible until something in the closure DEPENDED on it --
+    # nixarchy-version, which prints the build's date. This flake evaluates to
+    # a different omarchy than the one the installer seeded, the offline
+    # install cannot copy what it now has to build, and it walks back to the
+    # source bootstrap and dies fetching a Debian patch for libssh2. The rev
+    # was never the problem: shortRev is identical on both sides.
+    lastModified = toString self.lastModified;
 
-  passthru = { inherit url rev refUrl; };
-}
+    passthru = { inherit url rev refUrl; };
+  }
   ''
     mkdir -p $out/host
     cp ${./template}/flake.nix           $out/flake.nix

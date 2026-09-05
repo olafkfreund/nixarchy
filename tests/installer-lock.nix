@@ -21,9 +21,9 @@
 # network, seconds. The 25-minute install check can see the same bug, but only
 # after the damage and only as something four levels away.
 pkgs.runCommand "nixarchy-installer-lock"
-{
-  nativeBuildInputs = [ pkgs.jq ];
-}
+  {
+    nativeBuildInputs = [ pkgs.jq ];
+  }
   ''
     lock=${flakeTemplate}/flake.lock
     test -f "$lock" || { echo "no flake.lock in the generated template" >&2; exit 1; }

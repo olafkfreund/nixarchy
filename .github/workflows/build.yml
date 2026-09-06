@@ -1049,6 +1049,14 @@ jobs:
         # than no check, because it reads like coverage.
         run: nix build .#checks.x86_64-linux.installer-ui --print-build-logs
 
+      - name: The install dashboard survives a rewound clock
+        # The VM install checks cannot catch this: their clocks are stable, so
+        # every duration they compute is positive. On a real machine the RTC is
+        # wrong, the installer asks for a timezone, NTP corrects it mid-install
+        # and `now - UI_DASH_START` goes negative -- which fed sed a negative
+        # line number and drew its usage text over the installer.
+        run: nix build .#checks.x86_64-linux.dashboard-clock --print-build-logs
+
       - name: Answer the installer's questions
         # The interactive path, which every other harness skips by passing
         # --answers: the greeter, the six questions, the two validators and the

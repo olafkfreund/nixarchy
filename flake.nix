@@ -361,6 +361,10 @@
             # Bluetooth check reads /sys/class/bluetooth, and sysfs hands over
             # the PCI address already in the form the bus IDs need.
             libva-utils
+            # For reading the machine's flake.lock, which is JSON. Reaching for
+            # sed on JSON is how a check starts reporting confidently wrong
+            # things the first time nix reformats a lock.
+            jq
           ];
           # @apps@ is the app-to-command table, generated here for the same
           # reason the menu's is: the doctor has to answer "which of these do
@@ -373,7 +377,7 @@
           # evaluation when allowUnfree is off.
           text =
             builtins.replaceStrings
-              [ "@apps@" ]
+              [ "@apps@" "@nixpkgstested@" ]
               [
                 (
                   let
@@ -406,6 +410,20 @@
                   final.lib.concatStringsSep "\n" (
                     final.lib.mapAttrsToList (n: a: "${binaryOf n a}\t${a.label or n}") usable
                   )
+                )
+                # The nixpkgs THIS build was tested against, so a machine can
+                # say how far its own has drifted from it.
+                #
+                # Read from the lock at build time because it is knowable then
+                # and unknowable later: nixarchy follows the machine's nixpkgs,
+                # so on the installed system both names resolve to the same
+                # node and the question cannot be asked at runtime at all.
+                (
+                  let
+                    lock = builtins.fromJSON (builtins.readFile ./flake.lock);
+                    node = lock.nodes.${lock.nodes.root.inputs.nixpkgs};
+                  in
+                  toString node.locked.lastModified
                 )
               ]
               (builtins.readFile ./pkgs/doctor.sh);

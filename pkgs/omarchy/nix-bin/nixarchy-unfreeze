@@ -34,8 +34,14 @@ lock="$flake/flake.lock"
 
 for f in "$nixfile" "$lock"; do
   [ -f "$f" ] || { red "No $f."; exit 1; }
+  # No prompt-and-fix here, unlike omarchy-update. The usual way in is
+  # `omarchy update`, which offers the chown before it ever calls this, so
+  # reaching this message means the script was run on its own -- and a second
+  # copy of that prompt is a second place for it to drift.
   [ -w "$f" ] || {
     red "$f is not writable by $USER."
+    echo
+    echo "Run 'omarchy update', which offers to fix this, or:"
     echo
     echo "  sudo chown -R $USER $flake"
     exit 1

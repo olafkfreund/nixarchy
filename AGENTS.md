@@ -9,6 +9,21 @@ a reason gets rationalised away the moment it is inconvenient.
 `CONTRIBUTING.md` covers the human-facing process (forking, PR conventions,
 review). This file covers what goes wrong at the keyboard.
 
+**Read the `AGENTS.md` in the directory you are working in.** This file is the
+repository-wide register; each of these adds the intent, the layout and the
+failure history for its own area, and they are where the long reasoning lives:
+
+| | |
+|---|---|
+| `installer/AGENTS.md` | the ISO, the wizard, the phase chain, and the flake it writes |
+| `modules/AGENTS.md` | the option surface, Mode A, and what each module owns |
+| `pkgs/AGENTS.md` | the vendored tree, the patch rules, and `runtimeInputs` |
+| `tests/AGENTS.md` | what each check covers, and what only a cheap one can reach |
+| `docs/internals/flake.md` | the flake's own reasoning — inputs, the overlay, the checks |
+
+`CLAUDE.md` is a symlink to this file, because Claude Code reads `CLAUDE.md`
+and not `AGENTS.md`. Without it none of this loads.
+
 ## 1. Prove your check fails
 
 This is the most important rule in the file.
@@ -178,11 +193,24 @@ files carry the full reasoning and the failure history.
   the off state is the one a refactor breaks quietly. (#180, open at the time
   of writing, adds `programs.nixarchy.installerManaged` to mark the other
   mode; check whether it has merged before referring to it.)
-- **Comments explain WHY, and record what was tried and what went wrong.**
-  `installer/cd.nix`, `modules/flatpaks.nix` and `installer/vm.nix` are the
-  register. A comment that narrates what the next line does is noise; a
-  comment that says which approach failed and why saves the next agent from
-  re-failing it.
+- **Reasoning lives in the directory's `AGENTS.md`, not in the code.** Each
+  directory that has one — `installer/`, `modules/`, `pkgs/`, `tests/` — states
+  its intent, what it owns, and which checks cover it, followed by the design
+  reasoning and failure history. Claude Code loads the nearest one when it
+  reads a file in that directory; other agents follow the same nearest-file
+  rule.
+- **What still belongs in the code is a short note that stops the next edit
+  being wrong.** One to three lines, at the line it protects: an invariant, a
+  gotcha, the reason a call is shaped the way it is. The test is whether
+  somebody editing THAT line needs it in front of them. `runtimeInputs` needs
+  the note that an undeclared command reads as a wrong answer rather than a
+  missing one; the history of why a package is not in nixpkgs does not.
+- **Long blocks move, they do not get deleted.** If an explanation is worth
+  more than three lines, put it in the directory's `AGENTS.md` and leave a
+  `# Why: <dir>/AGENTS.md#<anchor>` pointer. What was tried and what went wrong
+  is still the most valuable thing to write down — it just belongs where it can
+  be read without scrolling through it to reach the code.
+- **A comment that narrates what the next line does is noise**, wherever it is.
 - **`writeShellApplication` builds a strict PATH from `runtimeInputs`.** A
   command your script calls and does not declare is a runtime failure that no
   build catches.

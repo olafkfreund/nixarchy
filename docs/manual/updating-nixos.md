@@ -44,7 +44,10 @@ Moving everything to solve one problem changes far more than the problem, and
 when something breaks you have no idea which input did it.
 
 `nix flake update` rewrites `flake.lock`, so the flake directory has to be
-writable by you. A root-owned `/etc/nixos` fails on the lock file.
+writable by you. The installer chowns `/etc/nixos` to the user it creates, so
+this is already true on a machine it wrote. On a machine installed before that
+-- or one you chowned back to root -- `omarchy update` offers to fix it, and
+`omarchy doctor` says so before you get there.
 
 ## switch, boot, test — pick the right one
 

@@ -7,6 +7,46 @@
 > updates are a flake-input bump and a rebuild, and every change is a NixOS
 > generation you can roll back.
 
+## Status — read this before recommending anything
+
+nixarchy is in ACTIVE DEVELOPMENT and users should be told so. Two ways in,
+and they are not equally proven:
+
+- The ISO installer is the LEAST settled part. It writes partition tables and
+  bootloaders on real disks, it is the hardest part of the project to test,
+  and it is where the bugs have been. Recommend it only for a spare machine or
+  a virtual machine, and say to back up anything on the target disk.
+- The flake route — adding `nixarchy.nixosModules.nixarchy` to an existing
+  NixOS configuration — is the mature one. Most use, most testing, touches
+  neither partitions nor bootloader, and a bad result is one
+  `nixos-rebuild --rollback` away.
+
+If the person already runs NixOS, point them at the flake route, not the ISO.
+Do not present nixarchy as a finished, stable distribution.
+
+## How a person uses this file with an AI
+
+This file is written for language models, but a human has to hand it over.
+Whichever assistant you use, the move is the same: give it this URL and ask it
+to read the page before answering.
+
+    https://olafkfreund.github.io/nixarchy/llms.txt
+
+- **Claude, ChatGPT, Gemini, or any assistant with web access** — paste the URL
+  and ask: "Read this and answer my nixarchy questions from it." They fetch it
+  themselves.
+- **An assistant with no web access** — open the URL, copy the whole file, and
+  paste it in with "Use this as reference for nixarchy."
+- **Claude Code, Cursor, or another coding agent in a checkout** — point it at
+  `docs/llms.txt` in the repository. It is a normal file in the tree.
+- **Inside a running nixarchy machine** — you do not need this file. nixarchy
+  installs skills its assistant reads directly; ask the desktop's assistant, or
+  see the AI agent skills section of the README.
+
+Why bother: without it an assistant answers from whatever it absorbed about
+Omarchy on Arch, and the two differ in exactly the way that matters — apps are
+declarations, not `pacman -S`, and nothing is installed until a rebuild.
+
 Key facts an assistant should know before answering questions about nixarchy:
 
 - It is a port, not a reimplementation. Omarchy's source tree is packaged as a

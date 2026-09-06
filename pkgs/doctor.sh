@@ -442,6 +442,112 @@ if [ -n "${BROWSER:-}" ]; then
 fi
 say ""
 
+# ---- can you actually update this machine? -------------------------------
+#
+# The single most likely thing to be wrong on a machine installed before this
+# was fixed, and the one the user meets first: `omarchy update` rewrites
+# flake.lock through `nh os switch --update`, unprivileged, so a root-owned
+# flake directory refuses the very first update (#356).
+#
+# Checked here because the refusal happens at the moment somebody wants to
+# update, which is the worst moment to start reading about ownership. The
+# doctor can say it in advance and name the one command that fixes it.
+say "${bold}Updates${off}"
+flake_dir="${NIXARCHY_FLAKE:-/etc/nixos}"
+if [ ! -d "$flake_dir" ]; then
+  finding "No flake directory at $flake_dir" "$warn" ""
+  say "     ${dim}Set programs.nixarchy.flake, or export NIXARCHY_FLAKE.${off}"
+elif [ -w "$flake_dir" ]; then
+  finding "$flake_dir is yours" "$ok" "omarchy update can write the lock"
+else
+  finding "$flake_dir is not writable by ${USER:-$(id -un)}" "$warn" ""
+  say "     Updating rewrites flake.lock, so the directory has to be yours."
+  say "     ${bold}omarchy update offers to fix this for you${off}, or:"
+  say ""
+  say "       sudo chown -R ${USER:-$(id -un)} $flake_dir"
+  say ""
+  say "     ${dim}Machines installed before this was fixed are all like this.${off}"
+fi
+
+# The other half of the same question, and the one nobody diagnoses correctly
+# on their own. nix opens the flake through libgit2, which refuses a
+# repository owned by somebody else -- and reports it as "could not find a
+# flake.nix file", which sends people looking for a missing file that is
+# right there. git and libgit2 exempt root when SUDO_UID names the owner, so
+# `sudo nixos-rebuild` is fine; root WITHOUT sudo is not, which is every root
+# systemd unit and any rescue nixos-install from a live ISO.
+#
+# Current nixarchy ships the safe.directory entry that settles this. A
+# machine that predates it has a user-owned flake and no entry, so this looks
+# for the entry rather than for the ownership.
+#
+# Read with grep rather than `git config --system`: writeShellApplication
+# builds a strict PATH and git is not among this script's runtimeInputs, so
+# calling it would fail as "command not found" and be reported as a missing
+# entry on a machine that has one. Adding git just to read one line is the
+# worse trade -- see the vainfo note on runtimeInputs for the same trap.
+if [ -d "$flake_dir/.git" ] && [ -O "$flake_dir" ] && [ "$(id -u)" -ne 0 ]; then
+  if grep -qs "directory *= *\"\?$flake_dir\"\?\$" /etc/gitconfig; then
+    finding "root can read $flake_dir" "$ok" "safe.directory is set system-wide"
+  else
+    finding "No system safe.directory for $flake_dir" "$warn" ""
+    say "     $flake_dir is yours, and root without sudo -- a systemd unit, or"
+    say "     nixos-install from a rescue ISO -- cannot open it. nix reports"
+    say "     that as \"could not find a flake.nix file\", which is misleading."
+    say "     ${dim}Rebuild on current nixarchy: it ships the entry itself.${off}"
+  fi
+fi
+
+# How far this machine's package set has drifted from the one this nixarchy
+# was built and tested against.
+#
+# Worth saying because the two are deliberately independent -- nixpkgs is a
+# root input of the machine's flake and nixarchy follows it, so `omarchy
+# update --system` moves the package set and leaves the desktop alone. That is
+# the point, and it also means a machine can end up running a combination
+# nothing has ever built. Nixarchy tests against exactly one nixpkgs.
+#
+# Reported, never enforced. A drift is not a fault: following nixpkgs directly
+# is a supported thing to do and the rebuild is its own safety net -- a build
+# that fails changes nothing, and a bad activation is one rollback away. What
+# this buys is that somebody debugging a strange failure learns their package
+# set is four months from the tested one BEFORE they go looking in the wrong
+# place.
+#
+# The tested figure is spliced in at build time (@nixpkgstested@). It cannot
+# be read at runtime: nixarchy follows the machine's nixpkgs, so on the
+# installed system both names resolve to the same lock node and the question
+# answers itself trivially and uselessly.
+tested_nixpkgs=@nixpkgstested@
+if [ -r "$flake_dir/flake.lock" ]; then
+  mine=$(jq -r '
+    (.nodes.root.inputs.nixpkgs // empty) as $n
+    | if $n then .nodes[$n].locked.lastModified // empty else empty end
+  ' "$flake_dir/flake.lock" 2>/dev/null || true)
+
+  if [ -n "$mine" ] && [ "$tested_nixpkgs" -gt 0 ] 2>/dev/null; then
+    drift_days=$(((mine - tested_nixpkgs) / 86400))
+    ahead=$drift_days
+    [ "$ahead" -lt 0 ] && ahead=$((-ahead))
+
+    if [ "$ahead" -le 30 ]; then
+      finding "Your nixpkgs is close to the tested one" "$ok" "${ahead}d apart"
+    elif [ "$drift_days" -gt 0 ]; then
+      finding "Your nixpkgs is ${ahead}d NEWER than the tested one" "$warn" ""
+      say "     That is allowed and often fine -- following nixpkgs directly is"
+      say "     the point of it being your own input. But this combination is"
+      say "     one nixarchy has not built, so if something here is strange,"
+      say "     this is worth knowing before you look anywhere else."
+      say "     ${dim}omarchy update --nixarchy takes a nixarchy built nearer to it.${off}"
+    else
+      finding "Your nixpkgs is ${ahead}d OLDER than the tested one" "$warn" ""
+      say "     Your packages are behind what this nixarchy was built against."
+      say "     ${dim}omarchy update --system moves the package set on its own.${off}"
+    fi
+  fi
+fi
+say ""
+
 # ---- things nixarchy defers on -------------------------------------------
 say "${bold}Services${off}"
 if systemctl is-enabled tlp.service >/dev/null 2>&1; then

@@ -1610,15 +1610,29 @@ install_flake_dir() {
   #                       user. Loud, with the fix printed, and still a wall in
   #                       front of step one.
   #
-  #   nixarchy-apply      its `git add` is already wrapped in a guard that
-  #                       prints "Fix with: sudo git -C $flake add -A" and warns
-  #                       the rebuild may fail (modules/apps.nix:1968). The COPY
-  #                       is elevated; the staging is not.
+  #   nixarchy-apply      dies at its unprivileged `cp` into $flake/nixarchy/,
+  #                       under `set -euo pipefail`, before it ever reaches the
+  #                       `git add` guard that prints "Fix with: sudo git -C
+  #                       $flake add -A" (modules/apps.nix).
   #
-  # And the reasoning it gave against chowning defeats itself: vm/configuration
-  # .nix chowns for precisely the reason that applies here -- `nix flake update`
-  # running unprivileged -- which is what `omarchy update` does on a real
-  # machine too.
+  # That second entry said "the COPY is elevated; the staging is not" when this
+  # was written, and it was wrong -- nothing in nixarchy-apply is elevated. The
+  # correction matters because it was half the argument for chowning, and an
+  # argument that survives its own evidence being wrong is worth re-checking:
+  # it does survive, on the omarchy-update half alone.
+  #
+  # The other half of the old reasoning defeated itself: vm/configuration.nix
+  # chowns for precisely the reason that applies here -- `nix flake update`
+  # running unprivileged. (Though not for the same MECHANISM: that VM's
+  # /etc/nixos is not a git repository, so it fails on a plain file write and
+  # never meets libgit2 at all.)
+  #
+  # What the chown costs, and what pays for it: git and nix both refuse a
+  # repository owned by somebody else. Not `sudo nixos-rebuild` -- git and
+  # libgit2 exempt root when SUDO_UID names the owner -- but root WITHOUT
+  # sudo, which is every root systemd unit and any rescue `nixos-install` from
+  # a live ISO. modules/nixos.nix and installer/cd.nix ship the safe.directory
+  # entry that settles it; without that this chown is not safe to make.
   #
   # No secret moves by doing this. The password hash and the initrd shadow are
   # written to /var/lib/nixarchy and explicitly `chown 0:0`'d above; nothing
@@ -1641,15 +1655,42 @@ install_flake_dir() {
 # failure.
 chown_flake_dir() {
   local uid gid
-  uid=$(chroot /mnt getent passwd "$username" | cut -d: -f3)
-  gid=$(chroot /mnt getent passwd "$username" | cut -d: -f4)
+  # ONE CONSEQUENCE, so nobody meets it as a mystery: git refuses to operate on
+  # a repository owned by somebody else, so `sudo git -C /etc/nixos ...` now
+  # says "detected dubious ownership" and prints a safe.directory incantation.
+  # That is git working as designed and it is the correct trade -- the commands
+  # this installer SHIPS run as the user and could not write there at all
+  # before -- but it is a new paper cut for anyone in the habit of sudo-ing
+  # git. Run it as yourself, or pass -c safe.directory=/etc/nixos for one
+  # command. checks.install, free-space, install-encrypted and install-iso all
+  # do the latter, because a test driver is root by construction.
+  #
+  # Read /mnt/etc/passwd directly. `chroot /mnt getent passwd` was the first
+  # attempt and it FAILED -- "chroot: failed to run command 'getent': No such
+  # file or directory" -- because the target's PATH is not set up for a chroot
+  # at this point in the install. awk over the file needs nothing from the
+  # target at all, which is the property worth having here.
+  uid=$(awk -F: -v u="$username" '$1 == u { print $3 }' /mnt/etc/passwd)
+  gid=$(awk -F: -v u="$username" '$1 == u { print $4 }' /mnt/etc/passwd)
 
   # Guarded rather than assumed. If the account is somehow absent the install
   # has already succeeded, so this warns and leaves /etc/nixos root-owned --
   # recoverable with one chown -- instead of failing a completed install.
   if [ -z "$uid" ] || [ -z "$gid" ]; then
-    echo "warning: could not resolve $username on the target; leaving /etc/nixos root-owned" >&2
-    echo "  fix with: sudo chown -R $username /etc/nixos" >&2
+    # Deliberately non-fatal -- the install itself succeeded and the machine
+    # boots -- but this wording is not "warning" any more, because the soft
+    # version of this message is what let a broken chown through: the first
+    # implementation used `chroot /mnt getent`, that failed on every install,
+    # and this branch turned it into a line nobody read. checks.install's
+    # `stat -c %U` assertion is what actually caught it, which is the argument
+    # for the assertion existing at all.
+    echo "" >&2
+    echo "NOT FIXED: $username is not in /mnt/etc/passwd, so /etc/nixos stays" >&2
+    echo "root-owned. Your first \`omarchy update\` WILL refuse with \"not" >&2
+    echo "writable\", and nixarchy-apply cannot stage its own copies." >&2
+    echo "" >&2
+    echo "  sudo chown -R $username /etc/nixos" >&2
+    echo "" >&2
     return 0
   fi
 

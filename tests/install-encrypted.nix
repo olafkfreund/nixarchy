@@ -261,6 +261,17 @@ pkgs.testers.runNixOSTest {
       };
 
       environment.etc = {
+        # This node stands in for the installer ISO, so it carries the ISO's
+        # gitconfig -- installer/cd.nix has the same entry and the reasoning.
+        # Without it the second nixos-install below cannot open /mnt/etc/nixos
+        # at all: the install chowned it to the installed user, this driver is
+        # root and never sudo'd, and nix's libgit2 refuses a repository owned
+        # by somebody else.
+        "gitconfig".text = ''
+          [safe]
+          	directory = /mnt/etc/nixos
+        '';
+
         # encrypt=yes: the whole subject. luks_passphrase is required with it
         # and is what the target boot types back at stage 1.
         "nixarchy/answers".text = ''

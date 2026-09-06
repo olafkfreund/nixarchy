@@ -58,24 +58,44 @@ while (($#)); do
   esac
 done
 
-# /etc/nixos is root-owned (installer/install.sh leaves it that way on purpose),
-# which splits every git call in two.
+# installer/install.sh chowns $FLAKE to the installed user, so on a machine
+# this installer wrote, every git call here -- read and write -- is just the
+# user operating on their own repository.
 #
-# Reads work as the user, but only once git is told the repository is not theirs
-# -- without safe.directory it refuses with "dubious ownership" and the message
-# does not name the fix.
+# It was not always so, and both accommodations below are for the machines
+# where it is not.
 #
-# Writes need root, and root has no user.name/user.email of its own, so the
-# identity is passed in from the user's global config on each commit. Doing it
-# this way rather than setting a root identity keeps the config where the user
-# can see and change it.
+# safe.directory stays. A machine installed before the chown, or one whose
+# owner deliberately chowned back to root, still needs it for reads: git
+# refuses a repository owned by somebody else with "dubious ownership" and a
+# message that does not name the fix. On a repository the user owns it costs
+# nothing.
 GIT_COMMON=(-c "safe.directory=$FLAKE" -C "$FLAKE")
 # Resolved once, and passed to sudo as a path: sudo runs a binary and cannot
 # see the `git` function below, so naming it here is what makes that explicit
 # rather than a coincidence of how PATH happens to resolve under sudo.
 GIT_BIN=$(command -v git)
 git() { command git "${GIT_COMMON[@]}" "$@"; }
-wgit() { sudo "$GIT_BIN" "${GIT_COMMON[@]}" "$@"; }
+
+# Writes elevate ONLY when the user cannot write the repository themselves.
+#
+# Unconditional sudo was the old shape, and on a chowned repository it is
+# actively harmful: root's commits leave root-owned loose objects and refs
+# inside a .git the user owns, and the user's own later `git gc`, branch
+# update or commit then fails with EACCES on files they cannot touch. The
+# damage outlives the command that did it, which is the kind worth avoiding.
+wgit() {
+  if [ -w "$FLAKE/.git" ]; then
+    git "$@"
+  else
+    sudo "$GIT_BIN" "${GIT_COMMON[@]}" "$@"
+  fi
+}
+
+# Root has no user.name/user.email of its own, so the identity is passed in
+# from the user's global config on each commit -- kept where the user can see
+# and change it rather than written into a root identity. Harmless on the
+# user-owned path, where it just restates what git would have used anyway.
 wcommit() {
   wgit -c "user.name=$(command git config --global user.name)" \
        -c "user.email=$(command git config --global user.email)" \
@@ -328,9 +348,10 @@ ensure_identity() {
 
   [[ -z $name || -z $email ]] && { fail "Both are needed to commit."; return 1; }
 
-  # --global, not on the repo: /etc/nixos is root-owned, so a repo-local
-  # identity would have to be written as root and would not follow the user to
-  # their own projects, which is where they will next want it.
+  # --global, not on the repo: an identity set here would not follow the user
+  # to their own projects, which is where they will next want it. (It would
+  # also have to be written as root on a flake that is still root-owned --
+  # machines installed before the installer chowned it.)
   command git config --global user.name "$name"
   command git config --global user.email "$email"
   ok "identity set globally"
@@ -633,8 +654,9 @@ if ! has_remote; then
           say "\n  Signing in to GitHub. This opens a browser."
           gh auth login -p ssh -h github.com -w || { fail "Sign-in failed."; exit 1; }
         fi
-        # -C over --source: --source insists on running inside the repo, and
-        # this one is root-owned.
+        # -C over --source: --source insists on running inside the repo,
+        # which is not somewhere this can assume it may cd into -- the flake
+        # is still root-owned on machines installed before it was chowned.
         gh repo create "$reponame" "$vis_flag" --disable-wiki || { fail "Could not create the repository."; exit 1; }
         owner=$(gh api user --jq .login)
         url="git@github.com:$owner/$reponame.git"

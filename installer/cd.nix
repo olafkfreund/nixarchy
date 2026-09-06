@@ -615,7 +615,36 @@ in
   # mechanism -- install.sh already carries both cachix substituters and only
   # clears them when it finds this file. So there is no second install path to
   # keep working; there is one, and this file switches it.
-  environment.etc =
+  #
+  # The gitconfig is merged into both variants because it has nothing to do
+  # with the offline/online split.
+  #
+  # A rescue reinstall is the flow that needs it: boot this ISO because the
+  # disk will not, mount it at /mnt, and re-run
+  #
+  #   nixos-install --root /mnt --flake /mnt/etc/nixos#<host>
+  #
+  # /mnt/etc/nixos belongs to the installed user -- installer/install.sh
+  # chowns it -- and nix opens the flake through libgit2, which refuses a
+  # repository owned by anybody else and reports it as
+  #
+  #   error: opening Git repository "/mnt/etc/nixos": ... is not owned by
+  #   current user (libgit2 error code = 7)
+  #   error: could not find a flake.nix file
+  #
+  # The live image autologins as root and nothing here goes through sudo, so
+  # there is no SUDO_UID for git's usual root exemption to match, and the
+  # refusal stands. `git -c safe.directory=...` does not help: it fixes the
+  # one git command it is passed to and never reaches nixos-install's own
+  # libgit2. Only a real config file does. See modules/nixos.nix, which ships
+  # the same entry to the installed machine for its own root contexts.
+  environment.etc = {
+    "gitconfig".text = ''
+      [safe]
+      	directory = /mnt/etc/nixos
+    '';
+  }
+  // (
     if offline then
       {
         "nixarchy-iso".text = ''
@@ -631,7 +660,8 @@ in
         "nixarchy-iso-net".text = ''
           ${inputs.self.shortRev or "dirty"}
         '';
-      };
+      }
+  );
 
   system.stateVersion = "25.05";
 }

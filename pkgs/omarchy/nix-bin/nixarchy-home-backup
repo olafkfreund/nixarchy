@@ -18,10 +18,11 @@
 # of $HOME.
 #
 # Why a second repository rather than a directory inside /etc/nixos: that tree
-# is root-owned on purpose (installer/install.sh, install_flake_dir). Putting
-# $HOME files there would mean sudo to back up your own dotfiles, root in the
-# history of user data, and a public/private decision made once, for the
-# system, that then silently governs personal files too.
+# is the SYSTEM's, and a public/private decision made once for it would then
+# silently govern personal files too. It is also not reliably yours -- the
+# installer chowns it to the installed user, but a machine installed earlier,
+# or one deliberately chowned back, would mean sudo to back up your own
+# dotfiles and root in the history of user data.
 #
 # Everything here is idempotent. A second run backs up the difference; a
 # restore into a $HOME that already matches changes nothing and says so.
@@ -219,10 +220,11 @@ abort_on_quit() { (($1 == 130)) && { echo; exit 130; }; }
 gh()   { nix --extra-experimental-features "nix-command flakes" shell nixpkgs#gh -c gh "$@"; }
 glab() { nix --extra-experimental-features "nix-command flakes" shell nixpkgs#glab -c glab "$@"; }
 
-# This repository is the user's. No sudo, no safe.directory, no identity
-# passed in per commit -- all three of which nixarchy-config-repo needs only
-# because /etc/nixos is root-owned. That difference is the argument for a
-# second repository rather than a subdirectory of the first.
+# This repository is the user's, unconditionally. No sudo, no safe.directory,
+# no identity passed in per commit -- all three of which nixarchy-config-repo
+# still carries for the machines where /etc/nixos is not the user's. That
+# difference is the argument for a second repository rather than a
+# subdirectory of the first.
 git() { command git -C "$REPO" "$@"; }
 
 has_commits() { git rev-parse HEAD &>/dev/null; }

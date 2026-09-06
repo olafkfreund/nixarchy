@@ -325,6 +325,17 @@ pkgs.testers.runNixOSTest {
       };
 
       environment.etc = {
+        # This node stands in for the installer ISO, so it carries the ISO's
+        # gitconfig -- installer/cd.nix has the same entry and the reasoning.
+        # Without it the second nixos-install below cannot open /mnt/etc/nixos
+        # at all: the install chowned it to the installed user, this driver is
+        # root and never sudo'd, and nix's libgit2 refuses a repository owned
+        # by somebody else.
+        "gitconfig".text = ''
+          [safe]
+          	directory = /mnt/etc/nixos
+        '';
+
         # The answers the wizard would have collected. device is the blank
         # second disk; /dev/vda is this node's own root.
         "nixarchy/answers".text = ''
@@ -567,11 +578,27 @@ pkgs.testers.runNixOSTest {
     # Asserted by OWNER, not by `test -w`: this test runs as root, for whom
     # everything is writable, so a writability check here would pass against a
     # root-owned directory and prove nothing at all.
-    owner = installer.succeed("stat -c %U /mnt/etc/nixos").strip()
-    assert owner == "omarchy", (
-        f"/mnt/etc/nixos is owned by {owner}, not the installed user. "
-        "The first `omarchy update` on this machine will refuse with "
-        "'not writable', and nixarchy-apply cannot stage its own copies.")
+    # By NUMERIC uid, compared against the TARGET's passwd.
+    #
+    # `stat -c %U` was the first attempt and it reported UNKNOWN against a
+    # correctly-chowned directory: stat runs on the INSTALLER and resolves
+    # uid -> name through the installer's /etc/passwd, where the target's user
+    # does not exist. The ownership was right and the assertion was asking the
+    # wrong machine.
+    #
+    # /mnt/etc/passwd is the reference because it is the passwd the installed
+    # system will boot with -- the same file installer/install.sh reads to
+    # decide what to chown to, so this checks the outcome against the same
+    # source of truth rather than against a hardcoded 1000.
+    owner_uid = installer.succeed("stat -c %u /mnt/etc/nixos").strip()
+    want_uid = installer.succeed(
+        "awk -F: '$1 == \"omarchy\" { print $3 }' /mnt/etc/passwd").strip()
+    assert want_uid, "omarchy is not in /mnt/etc/passwd; the install did not create the user"
+    assert owner_uid == want_uid, (
+        f"/mnt/etc/nixos is owned by uid {owner_uid}, but omarchy is uid "
+        f"{want_uid} on the target. The first `omarchy update` on this machine "
+        "will refuse with 'not writable', and nixarchy-apply cannot stage its "
+        "own copies.")
 
     # The install log reached the disk (#239).
     #
@@ -713,6 +740,39 @@ pkgs.testers.runNixOSTest {
     print("the hash survived the boot, and the repo is still clean of it")
 
     # ---- the flake on disk is the user's -------------------------------
+    #
+    # Both directions on one machine, because the whole design claim is that
+    # a user-owned /etc/nixos serves BOTH the user and root.
+    #
+    # The user side is what #356 was about: `omarchy update` rewrites
+    # flake.lock through `nh os switch --update`, unprivileged.
+    #
+    # The root side is what the chown broke and what modules/nixos.nix's
+    # safe.directory entry restores. This driver is root and has never
+    # sudo'd, which is exactly the case git and libgit2 do NOT exempt --
+    # `sudo nixos-rebuild`, with SUDO_UID set, was passing all along and
+    # would not have caught the regression. The commands below deliberately
+    # carry no `-c safe.directory`: passing one would test the flag rather
+    # than the configuration this module ships.
+    target.succeed("test -s /etc/gitconfig")
+    print(target.succeed("git config --system --get-all safe.directory"))
+
+    # The resolved-path half. /etc/nixos is a real directory on a machine the
+    # installer wrote, so this file is expected to hold nothing but its own
+    # header -- what is asserted is that activation WROTE it, with the mode
+    # and owner that make it safe for root to include. A file a normal user
+    # could write is a way to hand root arbitrary git configuration, so the
+    # permissions are the point of the check, not a detail of it.
+    include_mode = target.succeed(
+        "stat -c '%a %U:%G' /var/lib/nixarchy/gitconfig-flake").strip()
+    assert include_mode == "644 root:root", (
+        f"the safe.directory include is {include_mode}, not 644 root:root")
+    print("the resolved-path include is written and root-owned")
+
+    target.succeed("runuser -u omarchy -- test -w /etc/nixos/flake.lock")
+    target.succeed("runuser -u omarchy -- git -C /etc/nixos status --porcelain")
+    print("the installed user can write the lock and read the repo")
+
     target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")
     for f in ["flake.nix", "flake.lock", "disk-config.nix"]:
         target.succeed(f"test -s /etc/nixos/{f}")

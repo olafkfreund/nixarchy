@@ -237,8 +237,9 @@ sudo nixos-rebuild switch --flake <flake>
 ```
 
 `nix flake update` rewrites `flake.lock`, so the flake directory has to be writable
-by the user running it. A root-owned `/etc/nixos` fails with a permission error on
-the lock file.
+by the user running it. The installer chowns `/etc/nixos` to the user it creates.
+A root-owned one fails with a permission error on the lock file; `omarchy update`
+offers the chown that fixes it.
 
 ## When Something Breaks
 

@@ -567,11 +567,27 @@ pkgs.testers.runNixOSTest {
     # Asserted by OWNER, not by `test -w`: this test runs as root, for whom
     # everything is writable, so a writability check here would pass against a
     # root-owned directory and prove nothing at all.
-    owner = installer.succeed("stat -c %U /mnt/etc/nixos").strip()
-    assert owner == "omarchy", (
-        f"/mnt/etc/nixos is owned by {owner}, not the installed user. "
-        "The first `omarchy update` on this machine will refuse with "
-        "'not writable', and nixarchy-apply cannot stage its own copies.")
+    # By NUMERIC uid, compared against the TARGET's passwd.
+    #
+    # `stat -c %U` was the first attempt and it reported UNKNOWN against a
+    # correctly-chowned directory: stat runs on the INSTALLER and resolves
+    # uid -> name through the installer's /etc/passwd, where the target's user
+    # does not exist. The ownership was right and the assertion was asking the
+    # wrong machine.
+    #
+    # /mnt/etc/passwd is the reference because it is the passwd the installed
+    # system will boot with -- the same file installer/install.sh reads to
+    # decide what to chown to, so this checks the outcome against the same
+    # source of truth rather than against a hardcoded 1000.
+    owner_uid = installer.succeed("stat -c %u /mnt/etc/nixos").strip()
+    want_uid = installer.succeed(
+        "awk -F: '$1 == \"omarchy\" { print $3 }' /mnt/etc/passwd").strip()
+    assert want_uid, "omarchy is not in /mnt/etc/passwd; the install did not create the user"
+    assert owner_uid == want_uid, (
+        f"/mnt/etc/nixos is owned by uid {owner_uid}, but omarchy is uid "
+        f"{want_uid} on the target. The first `omarchy update` on this machine "
+        "will refuse with 'not writable', and nixarchy-apply cannot stage its "
+        "own copies.")
 
     # The install log reached the disk (#239).
     #

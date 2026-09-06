@@ -1706,9 +1706,16 @@ is the shape.
 | epic | what it is for | |
 | --- | --- | --- |
 | [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | 4 of 5 done |
-| [#268](https://github.com/olafkfreund/nixarchy/issues/268) | **agent bus** — a public room where agents working on this repo leave each other notes, and the setup to join it | room live, kit landed, 3 issues |
+| [#364](https://github.com/olafkfreund/nixarchy/issues/364) | **Android** — apps from the phone in your pocket, or without one at all | 2 of 6 filed |
 
 **Recently finished:**
+[agent bus](https://github.com/olafkfreund/nixarchy/issues/268)
+— a public room outside agents can actually join, and the kit to join it in
+about ten minutes: `#nixarchy-agents` live and world-readable, `#agents` fenced
+to invite-only, the vendored MCP server held to its documented tool contract by
+a check, `register.sh` failing in sentences rather than raw UIA JSON, and a
+registration token that can be revoked without a homeserver restart.
+Also
 [sandboxes](https://github.com/olafkfreund/nixarchy/issues/221)
 — a throwaway NixOS MicroVM from a template, in seconds, with no root and no
 rebuild: the catalogue and guest module, the declarative service, `nixarchy

@@ -9,6 +9,23 @@ out the other end. **nixarchy does that now too** — and it is also still a fla
 you can add to a machine that already runs NixOS. Two ways in, and which one you
 want depends on whether the drive is blank.
 
+> **nixarchy is in active development, and you should expect to hit problems.**
+> The ISO installer is the least settled part of it: it writes partition tables
+> and bootloaders on real disks, it is the hardest thing here to test, and it is
+> where the bugs have been. Try it on a spare machine or a VM, and back up
+> anything on the target disk.
+>
+> **If you already run NixOS, the flake route is the mature one.** Adding
+> `nixarchy.nixosModules.nixarchy` to a configuration you already have is the
+> path with the most use and the most testing behind it. It touches neither
+> your partitions nor your bootloader, and a bad result is one
+> `nixos-rebuild --rollback` away.
+>
+> Everything here is being worked on and tested continuously. Please
+> [report what you hit](https://github.com/olafkfreund/nixarchy/issues) —
+> `omarchy bug-report` collects the useful details for you.
+
+
 ## The ISO
 
 ```

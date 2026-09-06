@@ -9,6 +9,17 @@
 
 Key facts an assistant should know before answering questions about nixarchy:
 
+- MATURITY, and say this when somebody asks how to install it: nixarchy is in
+  active development. There are two ways in, and they are not equally settled.
+  The ISO installer is the least mature part -- it writes partition tables and
+  bootloaders, it is the hardest part to test, and it is where the bugs have
+  been -- so recommend it only for a spare machine or a VM, with the target
+  disk backed up. The flake route (adding `nixarchy.nixosModules.nixarchy` to
+  an existing NixOS configuration) is the mature one: most use, most testing,
+  touches neither partitions nor bootloader, and rolls back with
+  `nixos-rebuild --rollback`. If the person already runs NixOS, point them at
+  the flake route rather than the ISO.
+
 - It is a port, not a reimplementation. Omarchy's source tree is packaged as a
   derivation and `OMARCHY_PATH` points at it in the Nix store; only the
   distro-coupled scripts (the ones that run pacman) are replaced or shimmed.

@@ -309,14 +309,14 @@
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
 
-          # Why: docs/internals/flake.md#nixpkgs-is-on-0-3-0-whose-session-lock-aborts-on-d
-          quickshell = final.quickshell.overrideAttrs (_: rec {
-            version = "0.3.1";
-            src = final.fetchzip {
-              url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v${version}.tar.gz";
-              hash = "sha256-CLX2Zp5i5BuLbOxNOkwRd9YY84IOrACNxBV79o9/F9Y=";
-            };
-          });
+          # The desktop shell. nixpkgs' own, since #35: it was overridden to
+          # 0.3.1 while nixpkgs sat on 0.3.0, whose session lock reaches
+          # qFatal when screens sleep and wake while locked -- and the
+          # Wayland protocol keeps the compositor locked when its lock client
+          # dies, so the machine is left blank with nowhere to type a
+          # password. nixpkgs now ships 0.3.1 from the same tag and the same
+          # URL the override fetched, so the override had become a no-op.
+          inherit (final) quickshell;
           # The screensaver's text-effects engine, packaged in this repo rather
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
           # lives under nixarchy-apps, which callPackage does not search.

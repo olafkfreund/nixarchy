@@ -757,6 +757,18 @@ pkgs.testers.runNixOSTest {
     target.succeed("test -s /etc/gitconfig")
     print(target.succeed("git config --system --get-all safe.directory"))
 
+    # The resolved-path half. /etc/nixos is a real directory on a machine the
+    # installer wrote, so this file is expected to hold nothing but its own
+    # header -- what is asserted is that activation WROTE it, with the mode
+    # and owner that make it safe for root to include. A file a normal user
+    # could write is a way to hand root arbitrary git configuration, so the
+    # permissions are the point of the check, not a detail of it.
+    include_mode = target.succeed(
+        "stat -c '%a %U:%G' /var/lib/nixarchy/gitconfig-flake").strip()
+    assert include_mode == "644 root:root", (
+        f"the safe.directory include is {include_mode}, not 644 root:root")
+    print("the resolved-path include is written and root-owned")
+
     target.succeed("runuser -u omarchy -- test -w /etc/nixos/flake.lock")
     target.succeed("runuser -u omarchy -- git -C /etc/nixos status --porcelain")
     print("the installed user can write the lock and read the repo")

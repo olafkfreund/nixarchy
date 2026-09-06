@@ -8,6 +8,15 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
+  # Where the resolved-path half of the flake's safe.directory entry lives.
+  #
+  # Under /var/lib rather than /etc: /etc/gitconfig is a store symlink that
+  # nothing can append to, and this value is not knowable until the machine
+  # it describes exists. Root-owned and root-writable only, because git reads
+  # it as configuration for whoever loads it -- a file a normal user could
+  # write would be a way to hand root arbitrary git settings.
+  safeDirInclude = "/var/lib/nixarchy/gitconfig-flake";
+
   # Omarchy's session, launched from its own hyprland.lua in the store rather
   # than from ~/.config/hypr/hyprland.lua. Hyprland's --config takes the entry
   # point; the modules it requires still resolve through $HOME/.config, which
@@ -574,7 +583,26 @@ in
       # installer writes have a real /etc/nixos, so the default is fine.
       git = {
         enable = lib.mkDefault true;
-        config.safe.directory = [ cfg.flake ];
+        config = {
+          safe.directory = [ cfg.flake ];
+
+          # The literal path above is not always enough, because the ownership
+          # check runs against the RESOLVED directory: point
+          # programs.nixarchy.flake at a symlink -- /etc/nixos -> a repository
+          # in $HOME, which is how plenty of people arrange this -- and the
+          # entry never matches what libgit2 actually opened. Measured, not
+          # assumed: safe.directory naming the symlink is refused, naming the
+          # real directory is accepted.
+          #
+          # Resolving it needs the filesystem of the machine being configured,
+          # which evaluation cannot see (and reading it at eval time would mean
+          # IFD). So the resolved form is written at activation, and included
+          # from here. libgit2 does follow include.path when it collects
+          # safe.directory -- also measured -- and a missing include target is
+          # silently ignored, which is what makes the file safe to reference
+          # before the first activation has written it.
+          include.path = safeDirInclude;
+        };
       };
 
       hyprland = {
@@ -634,6 +662,38 @@ in
         source ${cfg.package}/share/omarchy/default/fish/rc
       '';
     };
+
+    # The resolved half of the flake's safe.directory entry -- see the
+    # programs.git block above for why it cannot be written at evaluation
+    # time. Writes a real path only when it differs from the configured one,
+    # so on the normal case (a real directory at /etc/nixos) this leaves an
+    # empty file and changes nothing.
+    #
+    # Always writes, never appends: the file is derived state, and a stale
+    # entry left behind after somebody repoints programs.nixarchy.flake would
+    # keep exempting a directory nobody asked about.
+    system.activationScripts.nixarchyFlakeSafeDirectory = ''
+      install -d -m 0755 -o root -g root /var/lib/nixarchy
+
+      # readlink -f, not realpath: coreutils is guaranteed here and this runs
+      # before much else. A flake directory that does not exist yet resolves
+      # to nothing, which is the empty-file case and correct -- the machine
+      # simply has no flake to exempt.
+      nixarchy_flake_resolved=$(${pkgs.coreutils}/bin/readlink -f ${lib.escapeShellArg cfg.flake} 2>/dev/null || true)
+
+      {
+        echo "# Written by programs.nixarchy. Do not edit; see modules/nixos.nix."
+        if [ -n "$nixarchy_flake_resolved" ] &&
+           [ "$nixarchy_flake_resolved" != ${lib.escapeShellArg cfg.flake} ]; then
+          echo "[safe]"
+          echo "	directory = $nixarchy_flake_resolved"
+        fi
+      } > ${safeDirInclude}.tmp
+
+      chmod 0644 ${safeDirInclude}.tmp
+      chown root:root ${safeDirInclude}.tmp
+      mv -f ${safeDirInclude}.tmp ${safeDirInclude}
+    '';
 
     environment = {
       # The single indirection point. bin/, shell/, themes/, the Hyprland Lua

@@ -1641,15 +1641,32 @@ install_flake_dir() {
 # failure.
 chown_flake_dir() {
   local uid gid
-  uid=$(chroot /mnt getent passwd "$username" | cut -d: -f3)
-  gid=$(chroot /mnt getent passwd "$username" | cut -d: -f4)
+  # Read /mnt/etc/passwd directly. `chroot /mnt getent passwd` was the first
+  # attempt and it FAILED -- "chroot: failed to run command 'getent': No such
+  # file or directory" -- because the target's PATH is not set up for a chroot
+  # at this point in the install. awk over the file needs nothing from the
+  # target at all, which is the property worth having here.
+  uid=$(awk -F: -v u="$username" '$1 == u { print $3 }' /mnt/etc/passwd)
+  gid=$(awk -F: -v u="$username" '$1 == u { print $4 }' /mnt/etc/passwd)
 
   # Guarded rather than assumed. If the account is somehow absent the install
   # has already succeeded, so this warns and leaves /etc/nixos root-owned --
   # recoverable with one chown -- instead of failing a completed install.
   if [ -z "$uid" ] || [ -z "$gid" ]; then
-    echo "warning: could not resolve $username on the target; leaving /etc/nixos root-owned" >&2
-    echo "  fix with: sudo chown -R $username /etc/nixos" >&2
+    # Deliberately non-fatal -- the install itself succeeded and the machine
+    # boots -- but this wording is not "warning" any more, because the soft
+    # version of this message is what let a broken chown through: the first
+    # implementation used `chroot /mnt getent`, that failed on every install,
+    # and this branch turned it into a line nobody read. checks.install's
+    # `stat -c %U` assertion is what actually caught it, which is the argument
+    # for the assertion existing at all.
+    echo "" >&2
+    echo "NOT FIXED: $username is not in /mnt/etc/passwd, so /etc/nixos stays" >&2
+    echo "root-owned. Your first \`omarchy update\` WILL refuse with \"not" >&2
+    echo "writable\", and nixarchy-apply cannot stage its own copies." >&2
+    echo "" >&2
+    echo "  sudo chown -R $username /etc/nixos" >&2
+    echo "" >&2
     return 0
   fi
 

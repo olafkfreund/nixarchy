@@ -12,20 +12,7 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
-  # What OMARCHY_PATH points at, and the source of every file seeded below.
-  #
-  # Read across from the NixOS module when there is one, the same way localAi
-  # is: it is the package's own tree with the files nixarchy generates for THIS
-  # machine in it, and the app selection those are built from is only visible
-  # over there. The menu's defaults file is the one that matters -- it carries
-  # the Install-row rewrites, which is how the Install menu stays off pacman
-  # without nixarchy taking ~/.config/omarchy/extensions/omarchy-menu.jsonc,
-  # the file upstream documents as the user's and points plugins at (#210).
-  #
-  # A standalone home-manager configuration has no NixOS module and therefore
-  # no selection, so it falls back to the package's tree -- the same menu
-  # Omarchy ships, which is the honest answer when there is no selection for
-  # the Install rows to reach.
+  # Why: modules/AGENTS.md#what-omarchy-path-points-at-and-the-source-of-ever
   omarchyPath = osConfig.programs.nixarchy.tree or "${cfg.package}/share/omarchy";
 
   # Upstream's user menu file, which nixarchy does not write -- named here
@@ -130,20 +117,7 @@ let
       ''
     );
 
-  # Each declared plugin, checked at build time against the schema the shell
-  # enforces, and carrying the id its own manifest claims.
-  #
-  # Validated with upstream's own omarchy-plugin-validate rather than a
-  # reimplementation of it here: that script exists precisely to refuse what
-  # the running shell would silently reject, and a second copy of those rules
-  # in Nix would drift from it at the first upstream bump. A plugin that would
-  # not load now fails the rebuild, with the reason, instead of being installed
-  # and doing nothing.
-  #
-  # The id comes out of manifest.json rather than the attribute name. It is
-  # what the shell, the menu and every omarchy-plugin-* command key on, and a
-  # directory named anything else would be a plugin the user cannot enable,
-  # disable or remove by the name they see on screen.
+  # Why: modules/AGENTS.md#each-declared-plugin-checked-at-build-time-against
   validatedPlugins = lib.mapAttrs (
     name: plugin:
     pkgs.runCommand "nixarchy-plugin-${name}"
@@ -180,31 +154,7 @@ let
           exit 1
         fi
 
-        # A plugin that shells out to pacman fails the REBUILD, not the click.
-        #
-        # omarchy-plugin-validate above checks the manifest and the shape the
-        # shell requires. It does not read what the plugin RUNS, and the
-        # marketplace is written for Arch: a widget whose QML calls
-        # `pacman -S` or `yay -S` installs cleanly here, appears in the bar,
-        # and fails the first time somebody presses it -- on a machine where
-        # pacman does not exist and could not be allowed to.
-        #
-        # This is build.yml's "no bin touches pacman outside the allowlist"
-        # applied one layer out. That scan walks Omarchy's own bins in this
-        # repository; nothing looked at code a USER brings in.
-        #
-        # No allowlist here, deliberately. build.yml has one because upstream's
-        # own Arch-only plumbing legitimately calls pacman and has to keep
-        # working on Arch. A third-party plugin installed on a NixOS machine
-        # has no such case: there is nothing for it to be right about.
-        #
-        # COMMENT STRIPPING, and why it is not the shell scanner's `s/#.*//`:
-        # QML comments with // and stripping that naively eats `https://...`,
-        # which would hide anything after a URL on the same line. So only
-        # WHOLE-LINE comments are removed -- `//` or `#` at the start of a
-        # line, after optional whitespace. A trailing `// mentions pacman`
-        # after real code still trips this, which is the safe direction for a
-        # check about what a machine will execute.
+        # Why: modules/AGENTS.md#a-plugin-that-shells-out-to-pacman-fails-the-rebui
         hits=$(
           find "$src" -type f \( -name '*.qml' -o -name '*.js' -o -name '*.sh' -o -name '*.bash' \) -print0 |
             xargs -0 -r grep -nHE '\bpacman\b|\byay\b' |
@@ -287,18 +237,7 @@ in
       description = "Theme applied on first login only. Switchable at runtime afterwards.";
     };
 
-    # Declares which plugins are *present*, and deliberately not which are on.
-    #
-    # Upstream already splits the two: a plugin's code lives in
-    # ~/.config/omarchy/plugins/<id>/, while whether it is enabled, and where
-    # it sits in the bar, is recorded separately in ~/.config/omarchy/shell.json
-    # by the running shell. Content and state are already different files, so
-    # the content can come from the store without freezing the state.
-    #
-    # Enablement is therefore left alone on purpose. Managing shell.json here
-    # would mean a plugin you turned off in Setup > Plugins came back at the
-    # next rebuild, which is the sort of thing that makes people stop using the
-    # menu. Declare the plugin, enable it once, and your choice persists.
+    # Why: modules/AGENTS.md#declares-which-plugins-are-present-and-deliberatel
     plugins = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule {
@@ -341,38 +280,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Omarchy's desktop is its Hyprland config: hyprland.lua requires
-    # autostart.lua, which is what starts the bar, and bindings.lua, which is
-    # every keybinding the manual documents. The seed below is --no-clobber, so
-    # a hyprland.lua that Home Manager already owns is kept and the other seven
-    # files land beside it, loaded by nothing.
-    #
-    # That failure is silent and total: every Omarchy binary, menu and theme
-    # installs, `nixarchy` looks like it worked, and the session that comes up
-    # is the user's own with no bar and none of the keybindings. Worth a
-    # warning rather than leaving someone to work it out from an empty bar.
+    # Why: modules/AGENTS.md#omarchys-desktop-is-its-hyprland-config
     warnings =
       let
         ownsHyprConfig =
           (config.wayland.windowManager.hyprland.enable or false)
           || lib.any (n: lib.hasPrefix "hypr/" n) (lib.attrNames config.xdg.configFile);
 
-        # Whether there is an Omarchy session entry to log into.
-        #
-        # When there is, a home-manager-owned ~/.config/hypr is not a problem:
-        # it is the arrangement this module is built for, and the session runs
-        # Omarchy's config with --config regardless. Warning anyway meant every
-        # rebuild on a machine already doing the right thing printed twelve
-        # lines telling it to do the right thing.
-        #
-        # Only the case that actually loses the desktop is worth a warning: no
-        # session entry, and a hypr directory that will never load Omarchy. The
-        # informational half is one line from the seed instead, and the doctor
-        # says it before anyone installs at all.
-        #
-        # `or true` is the option's default; `or false` on enable because a
-        # standalone home-manager install has no NixOS module registering
-        # sessions at all.
+        # Why: modules/AGENTS.md#whether-there-is-an-omarchy-session-entry-to-log-i
         hasOmarchySession =
           (osConfig.programs.nixarchy.enable or false) && (osConfig.programs.nixarchy.session or true);
       in
@@ -493,21 +408,7 @@ in
 
                 run mkdir -p "${config.home.homeDirectory}/.local/state/omarchy/current"
 
-                # The Hyprland toggles tree, and deliberately only flags.lua out of it.
-                #
-                # These flags are state, not config: a flag is *on* because its file is
-                # there, so copying all of default/hypr/toggles would bring the session
-                # up with no window gaps and every single window forced square.
-                # omarchy-hyprland-toggle copies the other two out of $OMARCHY_PATH the
-                # moment you ask for one, so nothing is lost by leaving them there --
-                # upstream's own omarchy-refresh-hyprland seeds exactly this one file.
-                #
-                # flags.lua is what makes the directory exist, and it has to exist
-                # before the shell starts rather than before the first toggle: the bar
-                # watches ~/.local/state/omarchy/toggles with a FileView to notice
-                # bar-off appearing, and a watch on a directory that is not there never
-                # fires. Hiding the bar wrote the flag and changed nothing on screen
-                # until the shell was restarted.
+                # Why: modules/AGENTS.md#the-hyprland-toggles-tree-and-deliberately-only-fl
                 seed_file "${omarchyPath}/default/hypr/toggles/flags.lua" \
                   "${config.home.homeDirectory}/.local/state/omarchy/toggles/hypr/flags.lua"
 
@@ -525,36 +426,13 @@ in
                 # not ship it either.
                 run mkdir -p "${config.xdg.configHome}/omarchy/branding"
 
-                # And the two files that belong in it, which upstream seeds from
-                # /etc/skel. Without them the About window opens with an empty logo
-                # column -- fastfetch's config sources about.txt as its logo -- and the
-                # screensaver dies on the spot, because omarchy-screensaver hands
-                # screensaver.txt to ttfx as the art to animate.
-                #
-                # The same two sources `omarchy branding <about|screensaver> reset`
-                # copies back, so a reset returns to exactly what was seeded. logo.txt
-                # is this repo's NIXARCHY banner rather than upstream's, by the same
-                # reasoning as the menu's snowflake.
+                # Why: modules/AGENTS.md#and-the-two-files-that-belong-in-it-which-upstream
                 seed_file "${omarchyPath}/icon.txt" \
                   "${config.xdg.configHome}/omarchy/branding/about.txt"
                 seed_file "${omarchyPath}/logo.txt" \
                   "${config.xdg.configHome}/omarchy/branding/screensaver.txt"
 
-                # The extensions directory, and one thing to undo in it.
-                #
-                # This file is the user's: upstream documents it as theirs, and
-                # shell/plugins/README.md tells third-party plugins to write it.
-                # Nixarchy's rows are in the DEFAULTS this session reads (see
-                # omarchyPath), so nothing here writes it and nothing arbitrates.
-                #
-                # Except on a machine an older nixarchy already took it on, where
-                # it is a symlink into /etc and therefore into a read-only store
-                # path. Leaving that behind would keep the file unwritable forever
-                # on exactly the machines this is meant to fix, and nothing would
-                # ever say so -- which is the bug, not the symlink. So it is
-                # removed, once, and Omarchy's own commented example seeded in its
-                # place. Only a link into /etc/nixarchy is touched: a file, or a
-                # link somebody else made, is theirs. #210.
+                # Why: modules/AGENTS.md#the-extensions-directory-and-one-thing-to-undo-in-
                 run mkdir -p "${config.xdg.configHome}/omarchy/extensions"
                 case "$(readlink "${menuExtensionPath}" 2>/dev/null)" in
                   /etc/nixarchy/*)
@@ -565,25 +443,7 @@ in
                 seed_file "${omarchyPath}/config/omarchy/extensions/omarchy-menu.jsonc" \
                   "${menuExtensionPath}"
 
-                # Agent skills, relinked on every activation.
-                #
-                # Upstream does this in omarchy-provision-user, which is guarded by a
-                # `finalize-user` marker and therefore runs exactly once, ever. That is
-                # fine on Arch, where the skill directory is a fixed path that gets
-                # overwritten in place. Here every bump moves the package to a new store
-                # path, so a once-only link points at the previous one -- still resolving
-                # until it is garbage-collected, then dangling. Renaming the `omarchy`
-                # skill to `nixarchy` made it worse than stale: the machine kept serving
-                # the old Arch skill from a path nothing would update again.
-                #
-                # provision-user's own --force would fix the links and also replay
-                # /etc/skel over $HOME, which is not a thing to do for four symlinks.
-                # So: the same loop, declaratively, on every rebuild.
-                #
-                # Only symlinks whose target is itself a skills directory in the store
-                # are removed. That is what distinguishes a link this module or
-                # provision-user planted from a skill the user wrote by hand, which is a
-                # real directory and is never touched.
+                # Why: modules/AGENTS.md#agent-skills-relinked-on-every-activation
                 ${
                   let
                     skillsDir = "${omarchyPath}/default/agents/skills";
@@ -608,18 +468,7 @@ in
                   ''
                 }
 
-                # Declared plugins, linked in by the id their manifest claims.
-                #
-                # A symlink rather than a copy, and that is a supported shape rather
-                # than a trick: upstream's scan globs "$dir"/*/ , which matches a
-                # symlink to a directory, and omarchy-plugin-remove has an explicit
-                # branch for one -- it offers to "Unlink" and prints where it pointed.
-                # Its picker globs -type d -o -type l for the same reason.
-                #
-                # Only links this module planted are cleaned up, tracked in a
-                # .nixarchy-managed file beside them. A plugin you added yourself with
-                # `omarchy plugin add` is a real directory that this never touches, so
-                # the two ways of installing one live side by side.
+                # Why: modules/AGENTS.md#declared-plugins-linked-in-by-the-id-their-manifes
                 run mkdir -p "${config.xdg.configHome}/omarchy/plugins"
                 ${
                   let
@@ -698,17 +547,7 @@ in
       '';
     };
 
-    # The first-run theme above is applied headless, which by design skips every
-    # post-theme command -- including omarchy-theme-set-gnome, the one that
-    # tells GTK and the settings portal whether this theme is light or dark.
-    # Upstream never notices: on Arch that command runs during install with a
-    # live session, and dconf keeps the answer forever after. Here the first
-    # session would come up dark-themed with light GTK apps until the user
-    # switched themes by hand.
-    #
-    # Unlike the shell below, this needs only the session bus, not a running
-    # compositor, so a graphical-session unit is the right shape for it. It is
-    # a no-op on every later login, because it writes what dconf already holds.
+    # Why: modules/AGENTS.md#the-first-run-theme-above-is-applied-headless-whic
     systemd.user.services.omarchy-theme-gnome = {
       Unit = {
         Description = "Apply the current Omarchy theme's light/dark mode to GTK";
@@ -743,32 +582,7 @@ in
       '';
     };
 
-    # Provider files for the local model, when the system module turned it on.
-    #
-    # Written here rather than in modules/local-ai.nix because only the home
-    # module knows where a user's home is, and read back out of osConfig so the
-    # address the server binds and the address the agents dial cannot drift.
-    # Guarded by `or null` throughout: home.nix is usable on its own, without
-    # the NixOS module, and then there is no osConfig to read.
-    #
-    # Both agents get a file whether or not either is the current default. They
-    # are a few hundred bytes, and the alternative is that switching agent in
-    # the menu silently produces one that cannot reach the model.
-    # opencode's provider, merged into the file rather than owning it.
-    #
-    # ~/.config/opencode/opencode.json already exists on every Omarchy machine
-    # -- it is seeded with the theme and an autoupdate setting -- so declaring
-    # it as an xdg.configFile fails activation outright:
-    #
-    #   Existing file '~/.config/opencode/opencode.json' would be clobbered
-    #
-    # and takes the whole home-manager generation down with it, not just this
-    # file. `force = true` is worse: it would throw away the user's own opencode
-    # settings and Omarchy's theme wiring to install a provider block.
-    #
-    # So the provider is merged in with jq, on every activation, leaving every
-    # other key alone. Same reasoning as the pi settings below, arrived at the
-    # same way: both files already have an owner.
+    # Why: modules/AGENTS.md#provider-files-for-the-local-model-when-the-system
     home.activation.nixarchyOpencodeProvider =
       lib.mkIf (localAi.enable && builtins.elem "opencode" localAi.agents)
         (
@@ -807,16 +621,7 @@ in
           ''
         );
 
-    # pi keeps its configuration in ~/.pi/agent, not under XDG.
-    #
-    # supportsDeveloperRole is the field that has to be right. pi sends system
-    # instructions in the `developer` role to reasoning-capable models, and
-    # Ollama -- like vLLM and SGLang -- rejects a role it does not know. Every
-    # request then fails with an error that does not name the cause.
-    # pi's provider. Merged for the same reason, though less urgently: nothing
-    # in Omarchy writes models.json today. Doing it the same way means a future
-    # version that does cannot break activation, and means a user's own extra
-    # providers survive.
+    # Why: modules/AGENTS.md#pi-keeps-its-configuration-in-pi-agent-not-under-x
     home.activation.nixarchyPiProvider =
       lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
         (
@@ -886,27 +691,7 @@ in
           ''
         );
 
-    # Same extension point, on the other hook Omarchy already runs:
-    # default/hypr/autostart.lua ends its startup with `omarchy-hook post-boot`.
-    #
-    # A notification rather than a window. On a machine the installer built,
-    # /etc/nixos is a repository with one staged, never-committed tree -- so
-    # there is something real to say -- but a terminal that seizes the screen on
-    # a first-ever boot arrives before the user has signed in to anything, which
-    # makes the one answer they can give "dismiss". The nudge is a notification
-    # they can act on when they are ready, and the script's own --check decides
-    # whether there is any point showing it: already committed and pushed, no
-    # agent chosen yet, or already answered once, and it stays quiet.
-    #
-    # It stays quiet for one more reason now, and it is the important one. This
-    # module reaches every machine that imports it, including one where somebody
-    # added nixarchy to a configuration of their own -- and on that machine
-    # /etc/nixos is theirs. --check asks /etc/nixarchy/managed before anything
-    # else and answers "no nudge", so the hook exits 0 having said nothing.
-    #
-    # Two conditions, two messages. The first push is a different thing to say
-    # than the fortnight of changes that piled up after it, and a notification
-    # whose text does not match what clicking it will do is worse than none.
+    # Why: modules/AGENTS.md#same-extension-point-on-the-other-hook-omarchy-alr
     xdg.configFile."omarchy/hooks/post-boot.d/config-repo" = {
       executable = true;
       text = ''
@@ -968,21 +753,7 @@ in
       # /run/current-system/sw/bin, never a store path.
       package = lib.mkDefault null;
 
-      # Left at Home Manager's own default everywhere else, which is
-      # `cfg.containers != { } && cfg.package != null` -- true the instant
-      # `machines` is non-empty, so leaving this unset would turn it on.
-      # Refused outright: its ExecStart is
-      # `${cfg.package}/bin/distrobox-assemble create --file ...`, a literal
-      # /nix/store/... path baked straight into the unit file -- the exact
-      # GC-survival hazard (nixpkgs#478154) modules/services/boxes.nix's own
-      # comment documents distrobox itself must never be reached through.
-      # `nix-collect-garbage` can delete that path out from under this unit
-      # the same way it can out from under a running box. It also hardcodes
-      # uid 1000 in the cleanup it runs first
-      # (`rm -rf /tmp/storage-run-1000/...`), a second, independent reason to
-      # leave it off. `nixarchy box` (a later issue) is how a machine picks
-      # up a declared container -- by calling `distrobox-assemble` itself,
-      # by bare name, the way the module comment already requires.
+      # Why: modules/AGENTS.md#left-at-home-managers-own-default-everywhere-else-
       enableSystemdUnit = lib.mkDefault false;
     };
   };

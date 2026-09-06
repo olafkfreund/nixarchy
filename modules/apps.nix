@@ -16,29 +16,7 @@ let
   boxesEnabled = cfg.enable && cfg.services.boxes.enable;
   boxTemplates = import ../data/box-templates.nix;
 
-  # The command each app puts on PATH, so the menu can tell "you already have
-  # this" from "you have not installed it".
-  #
-  # meta.mainProgram rather than the attribute name: it is right where the two
-  # differ, and they differ often -- obs-studio puts `obs` on PATH, not
-  # `obs-studio`. It is metadata, so this reads it without building anything.
-  #
-  # tryEval because an unfree package throws at *evaluation* when allowUnfree
-  # is off, and spotify and obsidian are both unfree. Without it, adding this
-  # would have broken evaluation for everyone who has not opted into unfree --
-  # a far worse outcome than the dim row it is here to draw. Falling back to
-  # the app's own name is the same guess omarchy-pkg-present already makes.
-  #
-  # `ours` apps are answered by cfg.apps.<name>.package -- the very derivation
-  # the row would install, including any override the user put on it -- and
-  # NOT by a lookup in `pkgs`, which cannot see them: this module's pkgs
-  # carries no nixarchy overlay (modules/services/default.nix says why), so
-  # the lookup returned null for every app this repo packages and the
-  # fallback answered with the app id. That was `command -v zen` for a
-  # package whose only binary is zen-beta, so the row never dimmed on a
-  # machine that HAS Zen. nixarchy-doctor hit the same trap and fixed its
-  # copy first, by probing final.nixarchy-apps (flake.nix); this is the
-  # menu's half, asserted by tests/coverage.py against the flake's packages.
+  # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
   appBinary =
     name: app:
     let
@@ -180,19 +158,7 @@ let
     )
   );
 
-  # The curated list as search rows: id, label, category, note. Notes are
-  # flattened because the index this feeds is tab-separated and a note with a
-  # newline in it would silently become three broken rows -- the same reason
-  # templateRow collapses them.
-  # The NixOS option index, or "" when this system has no manual to take it
-  # from. `system.build.manual` is defined under documentation.nixos.enable,
-  # which is on by default but off in every NixOS test node -- so a hard
-  # reference here evaluates fine on a real machine and fails the session
-  # check, which is exactly how it got through review.
-  #
-  # Built rather than fetched, but built by nixpkgs: it substitutes from
-  # cache.nixos.org, so it costs a 2.6 MiB download rather than an evaluation
-  # of every option on the machine.
+  # Why: modules/AGENTS.md#the-curated-list-as-search-rows
   optionsJsonPath =
     let
       manual = config.system.build.manual.optionsJSON or null;
@@ -222,24 +188,7 @@ let
   serviceCatalogue = import ../data/services.nix;
   flatpakCatalogue = import ../data/flatpaks.nix;
 
-  # Flatpaks go in services.nix rather than a fourth file.
-  #
-  # They are applications, so apps.nix is the tempting home -- and the wrong
-  # one: that file's header promises "Applications available through the
-  # Omarchy menu, as NixOS configuration", meaning software from nixpkgs with
-  # everything that implies. A flatpak is a different tier with weaker
-  # promises, and mixing the two would make the file quietly dishonest.
-  #
-  # services.nix already holds things that are decisions about the machine
-  # rather than packages, which is what enabling a flatpak is: it turns on a
-  # daemon, adds a remote, and installs software the store does not hold.
-  # Curated flatpaks as picker rows, plus the one row that reaches the rest of
-  # Flathub. Written whole in Nix rather than transformed by awk at index time
-  # like the app rows: there are a handful of these and the preview text is
-  # prose, so a template is clearer than a transformation.
-  #
-  # Five tab-separated fields, matching every other source: kind, name,
-  # summary, option type (unused here), preview.
+  # Why: modules/AGENTS.md#flatpaks-go-in-services-nix-rather-than-a-fourth-f
   flatpakIndexRows = pkgs.writeText "nixarchy-flatpak-rows.tsv" (
     lib.concatStrings (
       lib.mapAttrsToList (name: fp: ''
@@ -309,32 +258,7 @@ let
     header + lib.concatStrings (lib.mapAttrsToList serviceRow rows) + "\n";
 
   servicesTemplate = pkgs.writeText "nixarchy-services.nix" ''
-    # Services and system settings, as NixOS configuration.
-    #
-    # The companion to apps.nix. An app is a package; a service is a decision
-    # about the machine. Uncomment what you want -- or pick it from the menu --
-    # then run
-    #
-    #     nixarchy-apply
-    #
-    # Two kinds of line appear below and the difference is deliberate:
-    #
-    #   programs.nixarchy.services.X   nixarchy bundles several options here,
-    #                                  because turning the thing on usefully
-    #                                  takes more than one.
-    #
-    #   services.X.enable              the real NixOS option, because there was
-    #                                  nothing for nixarchy to add. This is the
-    #                                  line every wiki page will show you, and
-    #                                  it is the same line here.
-    #
-    # This file is a NixOS module and nothing stops you writing any option in
-    # it. Upstream's own settings work alongside ours -- if you enable
-    # syncthing below, `services.syncthing.settings.folders` still does what
-    # its documentation says.
-    #
-    # This file is yours. Nothing regenerates or overwrites it once created;
-    # the current full list is always at /etc/nixarchy/services-template.nix.
+    # Why: modules/AGENTS.md#services-and-system-settings-as-nixos-configuratio
     { ... }:
     {
     ${lib.concatStrings (map serviceCategoryBlock serviceCategories)}${flatpakBlock}}
@@ -342,45 +266,14 @@ let
 
   # No catalogue, on purpose.
   advancedTemplate = pkgs.writeText "nixarchy-advanced.nix" ''
-    # Anything at all.
-    #
-    # apps.nix is a list nixarchy generated and services.nix is a catalogue it
-    # curated. This file has neither, because at some point the answer to "how
-    # do I do X on NixOS" is a NixOS option nobody put on a list, and a curated
-    # desktop that has no room for that is a cage.
-    #
-    # It is an ordinary NixOS module. Every option in nixpkgs is available:
-    #
-    #   services.openssh.settings.PermitRootLogin = "no";
-    #   boot.kernelParams = [ "quiet" ];
-    #   users.users.you.extraGroups = [ "dialout" ];
-    #
-    # `nixarchy-search` writes here when you pick an option from it. Nothing
-    # else touches this file.
-    #
-    # If you find yourself writing the same thing here on every machine, that
-    # is worth an issue -- it probably belongs in the catalogue.
+    # Why: modules/AGENTS.md#anything-at-all
     { ... }:
     {
     }
   '';
 
   appsTemplate = pkgs.writeText "nixarchy-apps.nix" ''
-    # Applications available through the Omarchy menu, as NixOS configuration.
-    #
-    # Every app is listed and every line is commented out. Uncomment what you
-    # want -- or pick it from the menu, which uncomments it for you -- then run
-    #
-    #     nixarchy-apply
-    #
-    # to copy this into your flake and `nixos-rebuild switch`. Enable as many as
-    # you like before applying; nothing is built until you do.
-    #
-    # This file is yours. Nothing regenerates or overwrites it once created;
-    # the current full list is always at /etc/nixarchy/apps-template.nix.
-    #
-    # The `#@ name` markers are how the menu finds a line to uncomment. Keep
-    # them and you can reformat, reorder and annotate this file freely.
+    # Why: modules/AGENTS.md#applications-available-through-the-omarchy-menu-as
     { ... }:
     {
       programs.nixarchy.apps = {
@@ -389,29 +282,7 @@ let
 
     # Offered by the Omarchy menu but with no nixpkgs equivalent:
     ${unavailableNote}'';
-  # ── The menu defaults ───────────────────────────────────────────────────
-  # Rewrites Omarchy's Install menu, in the DEFAULTS rather than in the user's
-  # extension. Menu.qml reads two files and merges the second over the first:
-  #
-  #   defaults   $OMARCHY_PATH/default/omarchy/omarchy-menu.jsonc
-  #   user       ~/.config/omarchy/extensions/omarchy-menu.jsonc
-  #
-  # Nixarchy used to generate the second one and symlink it into /etc, which
-  # put the port in the slot upstream documents as the user's -- and which
-  # shell/plugins/README.md tells third-party plugins to write. A plugin's row,
-  # or a row somebody typed, could not survive there, and nothing said so.
-  #
-  # But we build the package OMARCHY_PATH points at, so the defaults are ours
-  # to write: `omarchyTree` below is that tree with this one file replaced.
-  # Then the user's file is free, upstream's merge does the rest in the
-  # direction it was designed for, and there is nothing to arbitrate. See #210.
-  #
-  # A failing `when:` hides a row outright (MenuModel.js isVisible); a
-  # succeeding `disabled:` leaves it listed but dim and unselectable, which is
-  # what upstream already uses for "you have this installed".
-  # The override rows, as data. Deliberately WITHOUT label or icon: those are
-  # copied from upstream's own menu at build time by the script below, so a
-  # rename upstream follows through instead of being frozen into this repo.
+  # Why: modules/AGENTS.md#the-menu-defaults
   overrideSpec = pkgs.writeText "nixarchy-menu-overrides.json" (
     builtins.toJSON (
       {
@@ -449,20 +320,7 @@ let
           description = "Switch to an earlier system generation. Your home directory is not touched";
         };
 
-        # Beside Roll back, because they are the two halves of the same
-        # question: a generation brings this machine back on this disk, and a
-        # pushed configuration brings it back on any other one.
-        #
-        # Reachable deliberately rather than only by notification. The command
-        # existed for a while with no way to reach it except a nudge on a boot
-        # you happened to act on, or knowing its name -- which meant the answer
-        # to "I changed things, is that backed up?" was to remember a command.
-        #
-        # `when` rather than letting the row refuse when clicked: on a machine
-        # nixarchy did not write, nixarchy-config-repo declines and explains
-        # why, and a menu row whose only possible outcome is that explanation
-        # is not worth drawing. /etc/nixarchy/managed is the same predicate the
-        # command itself gates on -- see modules/nixos.nix.
+        # Why: modules/AGENTS.md#beside-roll-back-because-they-are-the-two-halves-o
         "system.backup" = {
           icon = "󰆔";
           label = "Back up configuration";
@@ -490,17 +348,7 @@ let
           description = "Open an earlier version of your home directory and copy back what you want";
         };
 
-        # The off-disk half, beside the on-disk one.
-        #
-        # A snapshot and a backup read as the same thing to someone who has
-        # not lost a disk yet, so the two pairs sit together deliberately:
-        # snapshots are instant and local, these two survive the hardware.
-        # The descriptions are where that difference is actually said.
-        #
-        # `when` hides both rows on a machine nixarchy did not install --
-        # the same gate the script itself enforces, so an imported
-        # nixosModules.nixarchy is not offered a thing that will refuse.
-        # A row that exists to say no is worse than no row.
+        # Why: modules/AGENTS.md#the-off-disk-half-beside-the-on-disk-one
         "trigger.home-backup" = {
           icon = "󰁯";
           label = "Back up desktop config";
@@ -639,29 +487,7 @@ let
         ) boxTemplates
       )
       // lib.optionalAttrs cfg.enable {
-        # The Sandboxes group (#226). A nested `trigger.vm`, not a new root
-        # section -- `trigger.ask` above is the same shape, a new parent
-        # under an upstream root, and there is no precedent here for a root
-        # of our own. `full = dict(upstream); full.update(out)` in
-        # menuDefaults above means a totally new id like this one is
-        # APPENDED, so it lands after System and About at the end of the
-        # list -- the ordering #226 documents, not something coded here.
-        #
-        # Two gates, both needed. This `lib.optionalAttrs cfg.enable` is the
-        # Nix-level one: belt-and-braces, since every row in this file
-        # already lives inside `config = lib.mkIf cfg.enable (...)` above --
-        # stated explicitly so a reader does not have to trace that back.
-        # The runtime one is the parent's own `when` below: whether *this
-        # login* can open /dev/kvm is only knowable now, not at rebuild
-        # time -- `nixarchy-vm --check` (pkgs/microvm.nix) always exits 0,
-        # so nothing here is actually gated on hardware; the fallback to a
-        # software CPU is what makes that true on every nixarchy machine.
-        #
-        # `nixarchy-vm` itself is installed unconditionally (this file,
-        # below -- same as `nixarchy dev init`), so there is no
-        # `programs.nixarchy.services.microvm.enable` to gate this on:
-        # #221 designed the disposable half to need no root and no rebuild,
-        # so nothing about it is opt-in.
+        # Why: modules/AGENTS.md#the-sandboxes-group-226
         "trigger.vm" = {
           icon = "󰦛";
           label = "Sandbox";
@@ -715,19 +541,7 @@ let
             else
               {
                 action = "nixarchy-app-enable ${name}";
-                # Dim when the app is in the selection *or* already on PATH.
-                #
-                # The second half is the case nixarchy could not see before: an
-                # app the user installed themselves, in their own
-                # systemPackages or home.packages, which the selection knows
-                # nothing about. The row offered to install something they
-                # already had, and taking it would have written a second
-                # declaration for it.
-                #
-                # Remove rows deliberately do NOT gain this. They stay bound to
-                # the selection, because deselecting is the only removal
-                # nixarchy is allowed to perform -- an app that arrived from
-                # the user's own configuration is not this menu's to take away.
+                # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
                 disabled =
                   "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
                   + " || command -v ${appBinary name app} >/dev/null 2>&1";
@@ -736,16 +550,7 @@ let
           )
         ) (lib.filterAttrs (_: a: a ? menuId) apps)
       )
-      # The services catalogue, as menu rows.
-      #
-      # Most of these are ids upstream does not ship -- Omarchy's menu has no
-      # "turn on SSH" row because on Arch that is not a menu's business. The
-      # generator takes a new id as long as the override names the row itself,
-      # which is why label and icon are here; install.search arrived the same
-      # way. Where upstream DOES have a row, the catalogue entry carries its
-      # menuId and this overrides it in place -- tailscale is that case, and
-      # carrying the id across is what keeps the generator from failing on a
-      # row nothing maps.
+      # Why: modules/AGENTS.md#the-services-catalogue-as-menu-rows
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: fp:
@@ -896,21 +701,7 @@ let
         PY
       '';
 
-  # The tree OMARCHY_PATH points at: the package's own share/omarchy, with
-  # exactly one file replaced.
-  #
-  # Built here rather than in pkgs/omarchy because the rewrites depend on the
-  # machine's app selection, which is per-configuration, not per-package. The
-  # idiom is flake.nix's nixarchy-plymouth: mirror a subtree out of the omarchy
-  # package rather than rebuild the package for one file.
-  #
-  # Symlinks at the shallowest level that works, and real files in the one
-  # directory being changed. That matters for more than size: upstream's own
-  # scripts copy out of $OMARCHY_PATH at runtime (omarchy refresh, the
-  # migrations, omarchy-plugin-clone), and a symlink FARM would hand them
-  # links into a read-only store path where they expect files. Symlinking whole
-  # directories instead keeps everything inside them a real file, which is what
-  # `cp -r $OMARCHY_PATH/config/.` copies.
+  # Why: modules/AGENTS.md#the-tree-omarchy-path-points-at
   omarchyTree = pkgs.runCommand "nixarchy-omarchy-tree" { } ''
     src=${cfg.package}/share/omarchy
     mkdir -p $out/default/omarchy
@@ -1013,37 +804,11 @@ in
         };
 
         environment.systemPackages = [
-          # The doctor and verify, which until now were flake apps only.
-          #
-          # `nixarchy doctor` has always been an advertised subcommand, and on
-          # every machine where you can type `nixarchy` it answered "The doctor
-          # is not installed". The dispatcher below already has
-          # `if command -v nixarchy-doctor` and routes to it -- a branch nothing
-          # could take, because nothing installed it.
-          #
-          # Running from the flake is unchanged: that entry point exists so the
-          # doctor can be run BEFORE nixarchy is an input anywhere, and
-          # installing it does not take that away.
-          #
-          # Through the overlay on the user's own pkgs, never
-          # inputs.self.packages -- see the note on programs.nixarchy.package in
-          # modules/nixos.nix for what mixing nixpkgs instances does to buildEnv.
+          # Why: modules/AGENTS.md#the-doctor-and-verify-which-until-now-were-flake-a
           (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
           (pkgs.extend inputs.self.overlays.default).nixarchy-verify
 
-          # Uncomments one app in ~/.config/nixarchy/apps.nix. Matching is on
-          # the `#@ <id>` marker, not a line number or a label, so the file
-          # survives being reformatted, reordered or annotated by hand.
-          # What the catalogue offers that your file has never heard of.
-          #
-          # The seeded files are written once and never touched again, which is
-          # correct -- they are the user's, and overwriting one would silently
-          # undo a selection. The consequence is that an entry added after a
-          # machine was installed never appears on it: no `#@` marker, so
-          # nixarchy-app-enable answers "no app 'x' in $file" and the menu row
-          # is dead. Until now the only way to find that out was to diff
-          # against /etc/nixarchy/apps-template.nix by hand, and nothing said
-          # so.
+          # Why: modules/AGENTS.md#uncomments-one-app-in-config-nixarchy-apps-nix
           (pkgs.writeShellApplication {
             name = "nixarchy-catalogue-diff";
             runtimeInputs = [
@@ -1372,16 +1137,7 @@ in
             '';
           })
 
-          # The answer to "I want a package the menu does not offer". Upstream's
-          # `omarchy pkg add` runs pacman; there is no imperative equivalent
-          # here, so this does the declarative thing instead -- appends the
-          # attribute to a list in the same file the menu already edits, so
-          # one `nixarchy-apply` builds curated apps and extras together.
-          #
-          # It deliberately does NOT touch the user's own NixOS configuration,
-          # which nixarchy does not own. ~/.config/nixarchy/apps.nix is already
-          # a full NixOS module, so a systemPackages list can sit beside the
-          # app selection with no new file and no new option.
+          # Why: modules/AGENTS.md#the-answer-to-i-want-a-package-the-menu-does-not-o
           (pkgs.writeShellApplication {
             name = "nixarchy-pkg-add";
             runtimeInputs = [
@@ -1559,21 +1315,7 @@ in
             '';
           })
 
-          # Search everything this machine could install, and route the choice
-          # to whichever writer is right for it.
-          #
-          # The three kinds are not interchangeable and the whole point of one
-          # picker over them is that you do not have to know which is which:
-          # an app becomes programs.<name>, a package becomes a systemPackages
-          # entry, an option becomes a line of its own. Picking Firefox from
-          # the app rows and picking `firefox` from the package rows are
-          # genuinely different configurations, and the rows say so.
-          #
-          # The index is built from this system's own nixpkgs and its own
-          # options, not from search.nixos.org. It is slower to build and it
-          # cannot go stale against the machine, which is the trade that
-          # matters: an index that offers a package nixarchy-pkg-add will then
-          # refuse is worse than no index.
+          # Why: modules/AGENTS.md#search-everything-this-machine-could-install-and-r
           (pkgs.writeShellApplication {
             name = "nixarchy-search";
             runtimeInputs = [
@@ -1758,17 +1500,7 @@ in
                 scaffolded=$((scaffolded + 1))
               }
 
-              # Ask flathub.org directly.
-              #
-              # NOT `flatpak search`, which is columnar with no JSON output and
-              # needs both a configured remote and a downloaded appstream cache
-              # -- so it answers nothing on a machine that has not set flatpak
-              # up yet, which is exactly the machine asking.
-              #
-              # This is the one thing in the picker that needs a network. The
-              # index itself is still built entirely from local sources, so the
-              # other three kinds keep working on a machine with none; only
-              # this row fails, and it says so.
+              # Why: modules/AGENTS.md#ask-flathub-org-directly
               flathub_search() {
                 local query hits picked id line
                 read -r -p "Search Flathub for: " query || return 0
@@ -1882,21 +1614,7 @@ in
           # a /nix/store path.
           (pkgs.callPackage ../pkgs/box.nix { })
 
-          # One name for the commands this repo adds, and a way through to
-          # the 431 it vendors.
-          #
-          # Not a rename of Omarchy. Upstream's commands keep upstream's name,
-          # because they are upstream's -- `omarchy theme set` is the same
-          # script here as on Arch, and a bug in it is a bug to report there.
-          # What this names is the other half: the commands nixarchy wrote,
-          # which until now were binaries on PATH with nothing tying them
-          # together and no way to discover them.
-          #
-          # Anything this does not own falls through to omarchy unchanged, so
-          # `nixarchy theme set catppuccin` works and does exactly what
-          # `omarchy theme set catppuccin` does. The fallthrough is the point:
-          # you should not have to know which half of the desktop you are
-          # talking to before you can type a command.
+          # Why: modules/AGENTS.md#one-name-for-the-commands-this-repo-adds-and-a-way
           (pkgs.writeShellApplication {
             name = "nixarchy";
             runtimeInputs = [
@@ -2006,19 +1724,7 @@ in
               file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
               flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
 
-              # Where the selection lands: this machine's directory when the
-              # flake has one, the flake root when it does not.
-              #
-              # That second case is every machine installed before the hosts/
-              # layout existed. Their flake is their own -- the README calls it
-              # "a flake you own" -- so nothing migrates it, and this one
-              # conditional is the entire cost of leaving them alone.
-              #
-              # Keyed on the directory existing rather than on the hostname
-              # matching anything: a repo that has hosts/ but not one for THIS
-              # machine is a repo being edited from somewhere else, and writing
-              # a stray directory into it would be worse than writing the file
-              # where it has always gone.
+              # Why: modules/AGENTS.md#where-the-selection-lands
               base="$flake"
               # uname -n, not hostname(1): writeShellApplication builds a
               # strict PATH from runtimeInputs, and hostname lives in a package
@@ -2041,21 +1747,7 @@ in
               grep -E "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || echo "  (none)"
               echo
 
-              # A flake cannot read a file outside its own tree, so the
-              # selection is copied in rather than imported from $HOME.
-              #
-              # Three files now, into $flake/nixarchy/, with nixarchy-apps.nix
-              # left as a module that imports them. That last part is the whole
-              # reason for the indirection: the README has been telling people
-              # to add `imports = [ ./nixarchy-apps.nix ];` since the beginning,
-              # and on a machine nixarchy does not own, asking them to add two
-              # more lines is not a thing this project gets to do. The name they
-              # already wrote keeps working and gains two files behind it.
-              #
-              # Safe to overwrite because nixarchy-apps.nix has always been a
-              # copy this script regenerates, never something the user wrote --
-              # and the copy it used to hold is written to nixarchy/apps.nix in
-              # the same run, before the stub replaces it.
+              # Why: modules/AGENTS.md#a-flake-cannot-read-a-file-outside-its-own-tree-so
               srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
               mkdir -p "$base/nixarchy"
 
@@ -2091,20 +1783,7 @@ in
                 echo "$base is already up to date."
               fi
 
-              # Stage what was written, or a flake in a git worktree cannot see
-              # it. This is not a nicety: git makes untracked files invisible to
-              # the evaluator, so a fresh nixarchy/services.nix fails with "path
-              # does not exist" -- the trap installer/mkFlake.nix documents and
-              # the installer works around by staging at install time.
-              #
-              # Guarded, and still guarded after #356 chowned /etc/nixos to the
-              # installed user. This no longer fires on a machine this
-              # installer wrote -- staging succeeds there now -- but it is not
-              # dead code: an own-flake adopter keeps whatever ownership their
-              # configuration already has, and `--from-repo` installs onto a
-              # tree somebody else created. A failure to stage should still
-              # print the fix rather than abort an apply that has already
-              # copied everything correctly.
+              # Why: modules/AGENTS.md#stage-what-was-written-or-a-flake-in-a-git-worktre
               if [ -e "$flake/.git" ]; then
                 git -C "$flake" add -A nixarchy nixarchy-apps.nix 2>/dev/null || {
                   echo
@@ -2116,19 +1795,7 @@ in
                 }
               fi
 
-              # Whether anything in the flake actually imports it.
-              #
-              # Copying the selection in is only half the job: a flake cannot
-              # read a file outside its own tree, so the copy is necessary, and
-              # importing it is the user's. Nothing checked that, so a machine
-              # that never added the import got the full ceremony -- the menu
-              # marking apps enabled, this script reporting a copy, a rebuild
-              # running to completion -- and installed nothing, every time. It
-              # took someone asking why `dictation.enable = true` never
-              # installed anything to notice.
-              #
-              # Excludes the copy itself, which of course contains its own name
-              # nowhere but is matched by the filename glob.
+              # Why: modules/AGENTS.md#whether-anything-in-the-flake-actually-imports-it
               importers=$(grep -rl 'nixarchy-apps\.nix' "$flake" \
                 --include='*.nix' 2>/dev/null |
                 grep -v '/nixarchy-apps\.nix$' || true)

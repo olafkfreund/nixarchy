@@ -17,22 +17,7 @@ let
   # write would be a way to hand root arbitrary git settings.
   safeDirInclude = "/var/lib/nixarchy/gitconfig-flake";
 
-  # Omarchy's session, launched from its own hyprland.lua in the store rather
-  # than from ~/.config/hypr/hyprland.lua. Hyprland's --config takes the entry
-  # point; the modules it requires still resolve through $HOME/.config, which
-  # is where the Home Manager seed puts them.
-  #
-  # Through start-hyprland rather than the Hyprland binary. Booting this on a
-  # real laptop logged
-  #
-  #   WARNING: Hyprland is being launched without start-hyprland.
-  #   This is highly advised against.
-  #
-  # start-hyprland is the watchdog Hyprland 0.56 wants supervising it, and it
-  # is what nixpkgs' own hyprland.desktop execs. Everything after its `--` is
-  # passed through to Hyprland, so --config still arrives where it was going.
-  # The VM never complained because a warning is not a failure -- it took
-  # somebody reading the journal on a machine that had actually logged in.
+  # Why: modules/AGENTS.md#omarchys-session-launched-from-its-own-hyprland-lu
   omarchySessionLauncher = pkgs.writeShellScript "omarchy-session" ''
     export OMARCHY_PATH=${cfg.tree}
     exec ${pkgs.uwsm}/bin/uwsm start -N Omarchy -D Hyprland -- \
@@ -95,26 +80,7 @@ in
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "Nixarchy, the Omarchy desktop vendored for NixOS";
 
-    # "Nixarchy wrote this machine", as a property of the configuration rather
-    # than of the install event.
-    #
-    # Set in exactly one place -- installer/host.nix, which is imported only by
-    # a hosts/<name>/default.nix the installer generated. That is what makes a
-    # machine nixarchy-shaped: snapper, nh, the registry pin, the seeded user.
-    # So the question "did nixarchy build this?" is answered by whether that
-    # module is in the evaluation, and re-answered at every rebuild.
-    #
-    # Not /etc/nixos/.nixarchy-url, which used to look like the same signal and
-    # is not one any more. `git add -A` tracks it, so it is committed, pushed,
-    # and cloned onto every machine enrolled with `nixarchy install --from` --
-    # including a machine the installer never touched. And an admin-authored
-    # repo of the shape `--from` accepts carries no such file while being a
-    # perfectly good nixarchy install. Presence stopped meaning "here", absence
-    # stopped meaning "hands off". It survives as provenance of the *repo*.
-    #
-    # Not a heuristic either. Sniffing flake.lock's root inputs or testing for
-    # hosts/$(hostname) reads state the user is invited to edit, and would one
-    # day refuse a machine to its own owner.
+    # Why: modules/AGENTS.md#nixarchy-wrote-this-machine-as-a-property-of-the-c
     installerManaged = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -147,20 +113,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      # Built from *your* nixpkgs through this flake's overlay, not from
-      # inputs.self.packages -- which is built from nixarchy's own nixpkgs.
-      #
-      # Those look identical and are not: every one of the ~80 runtime
-      # dependencies would come from a different nixpkgs instance than the
-      # rest of your system, and the first one you also install yourself makes
-      # buildEnv refuse the profile --
-      #
-      #   two given paths contain a conflicting subpath:
-      #     .../tesseract-5.5.3/bin/tesseract and .../tesseract-5.5.3/bin/tesseract
-      #
-      # -- two builds of the same version, which reads like a bug in nix until
-      # you notice the hashes differ. Found by building a real config that had
-      # tesseract of its own.
+      # Why: modules/AGENTS.md#built-from-your-nixpkgs-through-this-flakes-overla
       default = (pkgs.extend inputs.self.overlays.default).omarchy;
       defaultText = lib.literalExpression "pkgs.extend nixarchy.overlays.default).omarchy";
       description = "The vendored Omarchy tree providing OMARCHY_PATH.";
@@ -483,34 +436,7 @@ in
       }
     ];
 
-    # Most of what the Install menu offers is unfree: the browsers, the editors,
-    # Steam, the AI clients, several of the fonts. Leaving licence policy to the
-    # consumer sounded principled and in practice meant a new user picked an app,
-    # ran nixarchy-apply, and watched a rebuild die on a licence error partway
-    # through -- with nothing on screen explaining that the fix was a line in a
-    # file they had never opened.
-    #
-    # Behind an option rather than mkDefault, because mkDefault does not work
-    # here: nixpkgs.config is a free-form attribute set, so `mkDefault true` on
-    # one of its keys is stored as the override attrset itself and nixpkgs is
-    # handed { _type = "override"; ... } where it expects a bool. mkDefault on
-    # the whole set does resolve, but then any other nixpkgs.config key a user
-    # sets replaces our definition wholesale and unfree silently goes away.
-    #
-    # mkIf so that turning the option off removes the definition entirely rather
-    # than asserting false, and mkDefault so that ours is the one that yields
-    # wherever something else already owns nixpkgs.config. That is not
-    # hypothetical: a NixOS VM test takes its pkgs from outside and imports
-    # misc/nixpkgs/read-only.nix, which defines nixpkgs.config as a unique
-    # option -- so any definition of ours, at any priority above default, makes
-    # every runNixOSTest node fail to evaluate.
-    #
-    # The cost is that priorities filter before merging: a user who sets any
-    # other nixpkgs.config key, say permittedInsecurePackages, outranks this
-    # default and drops it, and unfree goes off again. That case is not silent,
-    # which is the only reason it is acceptable -- modules/apps.nix warns at
-    # evaluation time when an enabled app is unfree and allowUnfree is off, and
-    # names the fix.
+    # Why: modules/AGENTS.md#most-of-what-the-install-menu-offers-is-unfree
     nixpkgs.config = lib.mkIf cfg.allowUnfree (lib.mkDefault { allowUnfree = true; });
 
     nix.settings = {
@@ -543,64 +469,13 @@ in
     # flags a repeated top-level key, and it is right that they read better
     # together.
     programs = {
-      # /etc/nixos belongs to the installed user (installer/install.sh
-      # chown_flake_dir), and git refuses to open a repository owned by
-      # somebody else. So does nix: its flake fetcher goes through libgit2,
-      # which runs the same ownership check and fails the whole evaluation
-      # with
-      #
-      #   error: opening Git repository "/etc/nixos": repository path
-      #   '/etc/nixos' is not owned by current user (libgit2 error code = 7)
-      #   error: could not find a flake.nix file
-      #
-      # -- the second line being the one people actually read, which is why
-      # this was diagnosed three times before it was understood.
-      #
-      # NOT every root command needs this. git and libgit2 both exempt root
-      # when SUDO_UID names the repository's owner, so `sudo nixos-rebuild
-      # --flake /etc/nixos#...` -- the thing a user actually types -- was
-      # never broken by the chown. What needs the entry is root WITHOUT
-      # SUDO_UID: root systemd units, a root login shell, `nixos-install`
-      # from a live ISO during a rescue reinstall, and the VM test drivers,
-      # which are root by construction and never sudo.
-      #
-      # It has to be a real config file. Passing `-c safe.directory=...` on a
-      # git command line fixes that one git invocation and does not reach nix
-      # at all, and the environment variables are no use either: nix opens
-      # repositories with git_repository_open() rather than the _FROM_ENV
-      # variant, so libgit2 leaves use_env false and ignores
-      # GIT_CONFIG_SYSTEM and GIT_CONFIG_NOSYSTEM. libgit2 does read
-      # /etc/gitconfig -- verified by strace of a root `nix eval`, which
-      # opens exactly that one system path -- and that is what this writes.
-      #
-      # Via programs.git rather than environment.etc."gitconfig" because
-      # programs.git.config merges with a user's own git settings, where two
-      # environment.etc definitions of the same file collide.
-      #
-      # One limit worth knowing: the check runs against the RESOLVED path, so
-      # an adopter who points programs.nixarchy.flake at a symlink is not
-      # covered by this entry. Name the real directory instead. Machines this
-      # installer writes have a real /etc/nixos, so the default is fine.
+      # Why: modules/AGENTS.md#etc-nixos-belongs-to-the-installed-user-installer-
       git = {
         enable = lib.mkDefault true;
         config = {
           safe.directory = [ cfg.flake ];
 
-          # The literal path above is not always enough, because the ownership
-          # check runs against the RESOLVED directory: point
-          # programs.nixarchy.flake at a symlink -- /etc/nixos -> a repository
-          # in $HOME, which is how plenty of people arrange this -- and the
-          # entry never matches what libgit2 actually opened. Measured, not
-          # assumed: safe.directory naming the symlink is refused, naming the
-          # real directory is accepted.
-          #
-          # Resolving it needs the filesystem of the machine being configured,
-          # which evaluation cannot see (and reading it at eval time would mean
-          # IFD). So the resolved form is written at activation, and included
-          # from here. libgit2 does follow include.path when it collects
-          # safe.directory -- also measured -- and a missing include target is
-          # silently ignored, which is what makes the file safe to reference
-          # before the first activation has written it.
+          # Why: modules/AGENTS.md#the-literal-path-above-is-not-always-enough-becaus
           include.path = safeDirInclude;
         };
       };
@@ -622,17 +497,7 @@ in
         withUWSM = true;
       };
 
-      # mise is in Omarchy's base packages and its dev-env installers lean on
-      # it heavily. It downloads prebuilt runtimes, which cannot run against
-      # NixOS' non-standard loader, so it detects NixOS and falls back to
-      # compiling from source -- which then fails, because there is no compiler
-      # on the session PATH. mise's own message names the fix:
-      #
-      #   "The automatic all_compile=true default on NixOS caused python to
-      #    compile from source. Enable nix-ld to use precompiled binaries"
-      #
-      # This is what makes `omarchy install dev-env` work rather than print a
-      # wall of build errors.
+      # Why: modules/AGENTS.md#mise-is-in-omarchys-base-packages-and-its-dev-env-
       nix-ld.enable = lib.mkDefault true;
 
       # See programs.nixarchy.bashIntegration. This lands in /etc/bashrc, which
@@ -723,23 +588,7 @@ in
       systemPackages = [
         cfg.package
       ]
-      # Minus Hyprland itself.
-      #
-      # The package carries the compositor its Lua config is written against as
-      # a runtime dependency, and putting that in systemPackages made it the
-      # Hyprland on PATH -- so on a machine that already ran Hyprland, enabling
-      # nixarchy silently swapped the compositor behind the user's *existing*
-      # sessions. Its share/wayland-sessions/hyprland.desktop won the buildEnv
-      # collision too, so `hyprland.desktop` pointed at nixarchy's build rather
-      # than theirs. Found by building this against a real configuration; the
-      # doctor tells people to keep their own Hyprland, and this quietly did
-      # the opposite.
-      #
-      # programs.hyprland already puts the right one on PATH -- ours when
-      # nixarchy sets the option, theirs when they mkForce it -- so dropping it
-      # here changes nothing on a clean machine and stops overriding anyone
-      # else's. omarchy-session still runs the Lua config through
-      # config.programs.hyprland.package, which is the same binary either way.
+      # Why: modules/AGENTS.md#minus-hyprland-itself
       ++ builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
       # sessionPackages alone does not populate
       # /run/current-system/sw/share/wayland-sessions, and that is where greetd
@@ -767,27 +616,7 @@ in
         # Yaru inherits from Adwaita for anything it does not draw itself.
         adwaita-icon-theme
 
-        # config/hypr/xdph.conf, which the package seeds into
-        # ~/.config/hypr, sets
-        # `custom_picker_binary = hyprland-preview-share-picker`.
-        # xdg-desktop-portal-hyprland execs that name for every ScreenCast
-        # request, so with nothing providing it the exec fails, the backend
-        # reads selection -1 and destroys the session -- screen sharing dies
-        # in every application, with no dialog and no error anywhere a user
-        # looks. Upstream declares it in install/omarchy-base.packages, which
-        # pacman honours and nothing on NixOS reads. (#202)
-        #
-        # From nixpkgs rather than the hyprland input that supplies the portal
-        # at programs.hyprland.portalPackage: that flake publishes only
-        # hyprland and xdg-desktop-portal-hyprland, so there is no picker
-        # there to match. Nothing is mismatched by taking it from nixpkgs
-        # either -- the picker links no Hyprland library (gtk4,
-        # gtk4-layer-shell, cairo, pango and nothing else), and the portal
-        # reaches it by exec plus a selection line on stdout, not an ABI.
-        #
-        # Editing the seeded xdph.conf was the other option and is the wrong
-        # one: the file is upstream's, so the edit is undone by the next
-        # Omarchy bump.
+        # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
         hyprland-preview-share-picker
 
         # Omarchy sets a cursor size but never a cursor theme -- on Arch one
@@ -839,16 +668,7 @@ in
     # mkForce their way out one option at a time. Their setting wins now, and
     # they lose only the feature that depended on it.
     services = {
-      # Passed straight through: nix-flatpak's own option carries the
-      # behaviour, ours carries the decision and its reasoning. mkDefault so a
-      # user who sets services.flatpak.uninstallUnmanaged directly keeps their
-      # value -- this is a convenience over an upstream option, not a
-      # replacement for it.
-      #
-      # In this block rather than as its own `services.flatpak...` line
-      # because statix rejects a second `services` key in the same attribute
-      # set, and it is right to: two places setting services is two places to
-      # look.
+      # Why: modules/AGENTS.md#passed-straight-through
       flatpak.uninstallUnmanaged = lib.mkDefault cfg.flatpaks.uninstallUnmanaged;
 
       # See programs.nixarchy.displayManager for why this is an option of our
@@ -882,23 +702,7 @@ in
       # install/config/locate.sh
       locate.enable = lib.mkDefault true;
 
-      # cups, avahi and nss-mdns are all in base.packages. cups-browsed was
-      # too until 4.0.2 dropped it -- "Harden CUPS printer discovery and
-      # administration" -- along with the unit that started it, leaving only a
-      # hardened drop-in for machines that already had it. cups-pk-helper
-      # replaced it for the administration half, and NixOS' own cupsd module
-      # adds that wherever polkit is on, so nothing here has to name it.
-      #
-      # Turning it off is not just comment maintenance: NixOS defaults
-      # services.printing.browsed.enable to services.avahi.enable, which the
-      # lines below set, so `printing.enable` alone did leave cups-browsed
-      # running -- as root, with none of the User=/ProtectSystem= hardening
-      # upstream's drop-in adds, listening for mDNS printer announcements and
-      # creating queues from them. That is the daemon upstream deliberately
-      # removed, so it does not stay on here by inheritance.
-      #
-      # Only browsed goes: avahi stays on for driverless IPP discovery, which
-      # is how modern printers are found and is what cupsd does by itself.
+      # Why: modules/AGENTS.md#cups-avahi-and-nss-mdns-are-all-in-base-packages
       printing.enable = lib.mkDefault true;
       printing.browsed.enable = lib.mkDefault false;
       avahi = {
@@ -959,20 +763,7 @@ in
     # regenerated with the system and always points at the current package.
     environment.etc."omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
 
-    # The ownership marker, for the shell tools that cannot ask the module
-    # system anything.
-    #
-    # Declarative on purpose: it is in the closure, it is rewritten by every
-    # rebuild, and a machine that stops descending from installer/host.nix
-    # loses it in the same switch that made that true. A file the installer
-    # wrote once could not say that -- it would survive being wrong, and a
-    # `--from` rebuild that never created it would leave the machine looking
-    # unmanaged for the rest of its life.
-    #
-    # The contents are for the person who finds the file and wonders. Nothing
-    # reads them, and nothing should start: the predicate is the file's
-    # existence, which is the only part that is cheap to get right in every
-    # shell script that needs it.
+    # Why: modules/AGENTS.md#the-ownership-marker-for-the-shell-tools-that-cann
     environment.etc."nixarchy/managed" = lib.mkIf cfg.installerManaged {
       text = ''
         This machine's configuration descends from the host module the Nixarchy
@@ -1005,55 +796,14 @@ in
       firewall = {
         enable = lib.mkDefault true;
 
-        # The other half of that script, which this module left behind.
-        # Upstream's is not merely "turn the firewall on":
-        #
-        #     ufw default deny incoming
-        #     ufw allow 53317/udp
-        #     ufw allow 53317/tcp   # "Allow ports for LocalSend."
-        #
-        # Porting only the deny half enables a firewall that blocks the one
-        # service Omarchy's manual promises works out of the box: "Omarchy's
-        # firewall is closed by default except for LocalSend's port, so this
-        # works out of the box on a fresh install." On a machine taking this
-        # module's firewall default it did not -- Share > Receive listened on
-        # 53317 and nothing on the network could reach it.
-        #
-        # Discovery was never the missing part: services.avahi above already
-        # opens 5353. Only LocalSend's own transfer port was closed.
-        #
-        # Not mkDefault: these are list options, so they merge with whatever
-        # the user opens rather than replacing it. A mkDefault list would be
-        # dropped whole the moment they opened a port of their own.
+        # Why: modules/AGENTS.md#the-other-half-of-that-script-which-this-module-le
         allowedTCPPorts = [ 53317 ];
         allowedUDPPorts = [ 53317 ];
       };
       networkmanager.enable = lib.mkDefault true;
     };
 
-    # install/config/lockscreen-pam.sh, whose one line is `omarchy-apply-lock`
-    # -- and that writes /etc/pam.d/omarchy-lock-password. Omarchy 4's lock
-    # screen is the Quickshell one, which names that stack itself
-    # (shell/plugins/lock/Service.qml: `config: "omarchy-lock-password"`), and
-    # watches the file's existence to decide whether locking is possible at
-    # all. hyprlock appears nowhere in the tree except omarchy-upgrade-to-
-    # quattro, which *removes* it -- so what was declared here was PAM for a
-    # program the desktop no longer runs. On a live session:
-    #
-    #   /etc/pam.d/omarchy-lock-password  ->  No such file or directory
-    #   omarchy-shell lock lock           ->  missing-pam, screen stayed up
-    #
-    # Five paths reach that no-op: SUPER + CTRL + L, Menu > System > Lock, the
-    # idle timeout, lid close, and suspend.
-    #
-    # An empty attrset is the whole fix. NixOS' generated stack is pam_unix
-    # auth plus an account section, which is upstream's file with faillock and
-    # pam_systemd_home taken out. faillock is deliberately not reproduced:
-    # NixOS' only handle on it is `logFailures`, which emits pam_faillock with
-    # no preauth/authfail/authsucc arguments, so nothing ever resets the
-    # counter -- three bad unlocks would lock a user out of their own screen
-    # for good. Upstream's deny=10 needs the raw `rules` interface, and a
-    # lockout is a worse failure than the logging it would buy.
+    # Why: modules/AGENTS.md#install-config-lockscreen-pam-sh-whose-one-line-is
     security.pam.services = {
       omarchy-lock-password = { };
     }
@@ -1089,43 +839,7 @@ in
         ]
       );
 
-      # $OMARCHY_PATH/default/systemd/user/, which upstream installs into
-      # /usr/lib/systemd/user and nothing here installed anywhere -- that
-      # directory is not a systemd search path. `systemctl --user status
-      # bt-agent.service` answered "could not be found" on a live session, and
-      # with it went the pairing agent, the crash watcher, the input method, the
-      # internal-monitor recovery, and -- the one that matters -- the sleep lock,
-      # so suspend did not lock even once the PAM stack above exists.
-      #
-      # Declared here rather than linked out of the package, because every
-      # shipped ExecStart is a /usr/bin path that resolves to nothing on NixOS
-      # and the package is not this module's to patch. The bodies are upstream's:
-      # same conditions, same ordering, same restart policy, binaries named by
-      # store path.
-      #
-      # omarchy-migrate-notify and omarchy-tailscale-receive are deliberately
-      # absent. Their conditions (ConditionPathIsDirectory=/usr/share/omarchy/
-      # migrations, ConditionPathExists=/usr/bin/tailscale) can never hold here,
-      # and both jobs belong elsewhere on NixOS: migrations arrive with a
-      # rebuild, and Taildrop with services.tailscale.
-      #
-      # Each omarchy-* unit gets /run/current-system/sw on its PATH. NixOS gives
-      # every unit a stub PATH of coreutils, findutils, grep, sed and systemd,
-      # and unlike the copies upstream drops in ~/.config/systemd/user that stub
-      # *overrides* the session PATH uwsm imported -- omarchy-system-sleep-
-      # monitor would not find dbus-monitor, and none of them would find the
-      # other omarchy-* commands they call. The system profile is where the
-      # package's runtimeDeps already live, by the package's own design: bin/ is
-      # a symlink farm rather than wrapped programs, so the CLI can still read
-      # the `# omarchy:summary=` metadata out of each script.
-      #
-      # omarchy-speaker-tuning is absent for a different reason: omarchy-audio-
-      # tuning installs it itself, by copying the unit into
-      # ~/.config/systemd/user and running `systemctl --user enable`. Declaring
-      # it would not race that copy -- the user directory outranks /etc -- but
-      # `omarchy audio tuning off` disables and deletes it, and `disable` cannot
-      # remove an [Install] symlink that lives in a read-only /etc, so the
-      # tuning would come back at the next login with the config it needs gone.
+      # Why: modules/AGENTS.md#omarchy-path-default-systemd-user-which-upstream-i
       user.services = {
         bt-agent = {
           description = "Bluetooth pairing agent (auto-accept)";
@@ -1242,22 +956,7 @@ in
         };
       };
 
-      # default/systemd/user/app.slice.d/10-oomd.conf. systemd-oomd is on by
-      # default in NixOS, and with no slice marked as a candidate it has nothing
-      # it is allowed to kill. Marking app.slice -- where uwsm-app puts every
-      # launched application -- leaves the compositor structurally ineligible:
-      # Hyprland runs in session.slice, so oomd takes the browser or terminal
-      # that caused the pressure and the session survives to report it.
-      #
-      # Deliberately not systemd.oomd.enableUserSlices, which is the obvious
-      # switch and the wrong one: it sets the same properties on user.slice and
-      # on the user manager's own root slice, which puts the compositor back in
-      # the candidate pool. asDropin rather than a systemd.user.slices entry so
-      # systemd's own app.slice definition is extended, not replaced.
-      #
-      # Upstream's oomd.conf.d also lowers the global thresholds to 50% over 20s
-      # from systemd's 60% over 30s. Not carried over: those are a tuning
-      # preference, and the defaults still fire.
+      # Why: modules/AGENTS.md#default-systemd-user-app-slice-d-10-oomd-conf
       user.units."app.slice" = {
         overrideStrategy = "asDropin";
         text = ''
@@ -1271,56 +970,15 @@ in
     # bin/omarchy-brightness-display-ddc talks to monitors over i2c
     hardware.i2c.enable = lib.mkDefault true;
 
-    # bluez, bluez-tools and bluez-utils are all in
-    # install/omarchy-base.packages, the bar has a Bluetooth widget, and
-    # omarchy-bluetooth-device and omarchy-bluetooth-power are two of the
-    # commands the menu offers -- but none of it works without the service,
-    # and nothing here was starting it. Every session logged
-    #
-    #   quickshell.dbus.objectmanager: Failed to create
-    #   DBusObjectManagerInterface for "org.bluez" "/"
-    #
-    # which was written off as a VM artefact for as long as this was in the
-    # README's known gaps. It is the same shape as UPower: the tools were
-    # installed, the daemon was not.
+    # Why: modules/AGENTS.md#bluez-bluez-tools-and-bluez-utils-are-all-in
     hardware.bluetooth.enable = lib.mkDefault true;
 
-    # Our own splash, in the theme directory upstream's occupies -- upstream
-    # installs it by copying into /usr/share/plymouth/themes from
-    # omarchy-refresh-plymouth. Nothing was doing that here, so plymouth came
-    # up with NixOS' default theme -- the one screen every boot shows,
-    # unbranded. The artwork in it is nixarchy's; see the option's description
-    # and pkgs/omarchy/default.nix.
-    #
-    # Theme and themePackages always move together, at whatever priority
-    # bootSplash asks for. NixOS asserts the named theme exists in the package
-    # list, so setting one without the other fails the build -- which is what
-    # anyone reaching for `lib.mkForce boot.plymouth.theme = "omarchy"` on a
-    # stylix machine hits, because stylix sets themePackages at normal priority
-    # and wins it.
-    # The one thing upstream's installer does that needs a name.
-    #
-    # install/hardware/input-group.sh runs `usermod -aG input`, and without it
-    # the dictation tools and controllers Omarchy offers cannot read their
-    # devices. Skipped entirely when programs.nixarchy.user is unset, because
-    # the alternative is guessing which of a machine's users logs into the
-    # desktop.
+    # Why: modules/AGENTS.md#our-own-splash-in-the-theme-directory-upstreams-oc
     users.users = lib.optionalAttrs (cfg.user != null) {
       ${cfg.user}.extraGroups = [
         "input"
       ]
-      # Docker is enabled above, at mkDefault, for every machine. Enabled and
-      # unusable, until now: without this group every command wants sudo, and
-      # `docker ps` answers "permission denied while trying to connect to the
-      # Docker daemon socket" -- which reads like a broken install rather than
-      # a missing group.
-      #
-      # The installer has always put its user in `docker` directly
-      # (installer/host.nix), so this was only ever wrong for someone adding
-      # nixarchy to a machine they already run: they got the daemon and not
-      # the access. Conditioned on the option rather than set unconditionally,
-      # so turning Docker off does not leave a group behind that grants root
-      # to whatever installs a socket there later.
+      # Why: modules/AGENTS.md#docker-is-enabled-above-at-mkdefault-for-every-mac
       ++ lib.optional config.virtualisation.docker.enable "docker";
     };
 
@@ -1338,25 +996,7 @@ in
       })
     ];
 
-    # default/fontconfig/conf.avail/50-omarchy.conf, which upstream symlinks
-    # into /etc/fonts/conf.d. Without it `fc-match monospace` on a live
-    # session answered Adwaita Mono, so every application asking for the
-    # generic family got a font Omarchy never chose -- and half the file's
-    # rules had nothing to resolve to anyway, because Liberation was not
-    # installed (see fonts.packages below).
-    #
-    # The whole file rather than fonts.fontconfig.defaultFonts, which covers
-    # the three generic families and nothing else: this also carries the
-    # system-ui / -apple-system / BlinkMacSystemFont aliases that Electron and
-    # web apps ask for by name, the emoji and Nerd Font fallback chains, and
-    # the Arabic script rules.
-    #
-    # localConf, not a package in fontconfig's conf.d, for two reasons:
-    # fonts.conf includes local.conf last, so these rules win the ties they
-    # are meant to win, and it is one mkDefault a user can take back whole.
-    # Read from the flake input rather than from cfg.package, because
-    # readFile on a derivation output is import-from-derivation and would
-    # make this module unevaluatable without building Omarchy first.
+    # Why: modules/AGENTS.md#default-fontconfig-conf-avail-50-omarchy-conf-whic
     fonts.fontconfig.localConf = lib.mkDefault (
       builtins.readFile "${inputs.omarchy}/default/fontconfig/conf.avail/50-omarchy.conf"
     );
@@ -1381,40 +1021,13 @@ in
       liberation_ttf
     ]);
 
-    # default/environment.d/10-omarchy-fcitx.conf, plus the daemon that reads
-    # it -- fcitx5 was not installed at all. i18n.inputMethod rather than
-    # dropping fcitx5 into systemPackages: it is what builds fcitx5 with its
-    # addons, writes the Qt plugin path, and sets XMODIFIERS and the GTK/Qt IM
-    # modules. The unit that starts it is above.
-    # Priority 1250, which is neither of the two names lib gives you, because
-    # this option is squeezed between them. GNOME's desktop-manager module sets
-    # type to "ibus" at mkDefault (1000) and two mkDefaults tie rather than
-    # yield, so a host running GNOME beside this session failed to evaluate at
-    # all -- not the wrong input method, no evaluation. One step lower is not
-    # available either: nixpkgs' own module defines type as null at
-    # mkOptionDefault (1500) to carry the deprecated `enabled` across, and
-    # nullOr refuses to merge null with a value, so matching that ties in the
-    # other direction. Sitting between the two loses to anyone with a real
-    # opinion and still beats nixpkgs' placeholder, which is exactly the rule
-    # this module follows everywhere else: arrive beside what is installed.
+    # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
     i18n.inputMethod = {
       enable = lib.mkOverride 1250 true;
       type = lib.mkOverride 1250 "fcitx5";
     };
 
-    # fcitx5 says this itself, in a notification on every login:
-    #
-    #   Wayland Diagnose -- Detect GTK_IM_MODULE being set and Wayland Input
-    #   method frontend is working. It is recommended to unset GTK_IM_MODULE.
-    #
-    # nixpkgs sets GTK_IM_MODULE and QT_IM_MODULE only when waylandFrontend is
-    # off, which is its default (i18n/input-method/fcitx5.nix). Those two are
-    # the X11-era route: with them set, GTK sends input through the legacy
-    # module instead of the Wayland input-method protocol, which is both worse
-    # and, in GTK4 and Electron apps, sometimes nothing at all.
-    #
-    # Nixarchy is Wayland-only -- there is no session here where the X11
-    # default is the right one -- so this is set rather than left to the user.
+    # Why: modules/AGENTS.md#fcitx5-says-this-itself-in-a-notification-on-every
     i18n.inputMethod.fcitx5.waylandFrontend = lib.mkIf usingFcitx5 (lib.mkDefault true);
 
     # The two of upstream's four that the nixpkgs module does not set. It has

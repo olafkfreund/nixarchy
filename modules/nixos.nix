@@ -534,6 +534,49 @@ in
     # flags a repeated top-level key, and it is right that they read better
     # together.
     programs = {
+      # /etc/nixos belongs to the installed user (installer/install.sh
+      # chown_flake_dir), and git refuses to open a repository owned by
+      # somebody else. So does nix: its flake fetcher goes through libgit2,
+      # which runs the same ownership check and fails the whole evaluation
+      # with
+      #
+      #   error: opening Git repository "/etc/nixos": repository path
+      #   '/etc/nixos' is not owned by current user (libgit2 error code = 7)
+      #   error: could not find a flake.nix file
+      #
+      # -- the second line being the one people actually read, which is why
+      # this was diagnosed three times before it was understood.
+      #
+      # NOT every root command needs this. git and libgit2 both exempt root
+      # when SUDO_UID names the repository's owner, so `sudo nixos-rebuild
+      # --flake /etc/nixos#...` -- the thing a user actually types -- was
+      # never broken by the chown. What needs the entry is root WITHOUT
+      # SUDO_UID: root systemd units, a root login shell, `nixos-install`
+      # from a live ISO during a rescue reinstall, and the VM test drivers,
+      # which are root by construction and never sudo.
+      #
+      # It has to be a real config file. Passing `-c safe.directory=...` on a
+      # git command line fixes that one git invocation and does not reach nix
+      # at all, and the environment variables are no use either: nix opens
+      # repositories with git_repository_open() rather than the _FROM_ENV
+      # variant, so libgit2 leaves use_env false and ignores
+      # GIT_CONFIG_SYSTEM and GIT_CONFIG_NOSYSTEM. libgit2 does read
+      # /etc/gitconfig -- verified by strace of a root `nix eval`, which
+      # opens exactly that one system path -- and that is what this writes.
+      #
+      # Via programs.git rather than environment.etc."gitconfig" because
+      # programs.git.config merges with a user's own git settings, where two
+      # environment.etc definitions of the same file collide.
+      #
+      # One limit worth knowing: the check runs against the RESOLVED path, so
+      # an adopter who points programs.nixarchy.flake at a symlink is not
+      # covered by this entry. Name the real directory instead. Machines this
+      # installer writes have a real /etc/nixos, so the default is fine.
+      git = {
+        enable = lib.mkDefault true;
+        config.safe.directory = [ cfg.flake ];
+      };
+
       hyprland = {
         # This block is deliberately NOT mkDefault, unlike everything else
         # here. Omarchy *is* Hyprland, so enabling nixarchy while disabling it

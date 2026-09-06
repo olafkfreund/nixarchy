@@ -442,6 +442,63 @@ if [ -n "${BROWSER:-}" ]; then
 fi
 say ""
 
+# ---- can you actually update this machine? -------------------------------
+#
+# The single most likely thing to be wrong on a machine installed before this
+# was fixed, and the one the user meets first: `omarchy update` rewrites
+# flake.lock through `nh os switch --update`, unprivileged, so a root-owned
+# flake directory refuses the very first update (#356).
+#
+# Checked here because the refusal happens at the moment somebody wants to
+# update, which is the worst moment to start reading about ownership. The
+# doctor can say it in advance and name the one command that fixes it.
+say "${bold}Updates${off}"
+flake_dir="${NIXARCHY_FLAKE:-/etc/nixos}"
+if [ ! -d "$flake_dir" ]; then
+  finding "No flake directory at $flake_dir" "$warn" ""
+  say "     ${dim}Set programs.nixarchy.flake, or export NIXARCHY_FLAKE.${off}"
+elif [ -w "$flake_dir" ]; then
+  finding "$flake_dir is yours" "$ok" "omarchy update can write the lock"
+else
+  finding "$flake_dir is not writable by ${USER:-$(id -un)}" "$warn" ""
+  say "     Updating rewrites flake.lock, so the directory has to be yours."
+  say "     ${bold}omarchy update offers to fix this for you${off}, or:"
+  say ""
+  say "       sudo chown -R ${USER:-$(id -un)} $flake_dir"
+  say ""
+  say "     ${dim}Machines installed before this was fixed are all like this.${off}"
+fi
+
+# The other half of the same question, and the one nobody diagnoses correctly
+# on their own. nix opens the flake through libgit2, which refuses a
+# repository owned by somebody else -- and reports it as "could not find a
+# flake.nix file", which sends people looking for a missing file that is
+# right there. git and libgit2 exempt root when SUDO_UID names the owner, so
+# `sudo nixos-rebuild` is fine; root WITHOUT sudo is not, which is every root
+# systemd unit and any rescue nixos-install from a live ISO.
+#
+# Current nixarchy ships the safe.directory entry that settles this. A
+# machine that predates it has a user-owned flake and no entry, so this looks
+# for the entry rather than for the ownership.
+#
+# Read with grep rather than `git config --system`: writeShellApplication
+# builds a strict PATH and git is not among this script's runtimeInputs, so
+# calling it would fail as "command not found" and be reported as a missing
+# entry on a machine that has one. Adding git just to read one line is the
+# worse trade -- see the vainfo note on runtimeInputs for the same trap.
+if [ -d "$flake_dir/.git" ] && [ -O "$flake_dir" ] && [ "$(id -u)" -ne 0 ]; then
+  if grep -qs "directory *= *\"\?$flake_dir\"\?\$" /etc/gitconfig; then
+    finding "root can read $flake_dir" "$ok" "safe.directory is set system-wide"
+  else
+    finding "No system safe.directory for $flake_dir" "$warn" ""
+    say "     $flake_dir is yours, and root without sudo -- a systemd unit, or"
+    say "     nixos-install from a rescue ISO -- cannot open it. nix reports"
+    say "     that as \"could not find a flake.nix file\", which is misleading."
+    say "     ${dim}Rebuild on current nixarchy: it ships the entry itself.${off}"
+  fi
+fi
+say ""
+
 # ---- things nixarchy defers on -------------------------------------------
 say "${bold}Services${off}"
 if systemctl is-enabled tlp.service >/dev/null 2>&1; then

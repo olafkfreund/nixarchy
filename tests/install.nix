@@ -299,6 +299,17 @@ pkgs.testers.runNixOSTest {
         pkgs.git
       ];
 
+      # This node stands in for the installer ISO, so it carries the ISO's
+      # gitconfig -- installer/cd.nix has the same entry and the reasoning.
+      # Without it the second nixos-install below cannot open /mnt/etc/nixos
+      # at all: the install chowned it to the installed user, this driver is
+      # root and never sudo'd, and nix's libgit2 refuses a repository owned by
+      # somebody else.
+      environment.etc."gitconfig".text = ''
+        [safe]
+        	directory = /mnt/etc/nixos
+      '';
+
       nix.settings = {
         experimental-features = [
           "nix-command"
@@ -663,7 +674,7 @@ pkgs.testers.runNixOSTest {
     installer.succeed(
         "grep -q test-instrumentation"
         " /mnt/etc/nixos/hosts/installed/configuration.nix")
-    installer.succeed("git -c safe.directory=/mnt/etc/nixos -C /mnt/etc/nixos add -A")
+    installer.succeed("git -C /mnt/etc/nixos add -A")
     print(installer.succeed(
         "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"
         " --no-root-password"
@@ -729,6 +740,27 @@ pkgs.testers.runNixOSTest {
     print("the hash survived the boot, and the repo is still clean of it")
 
     # ---- the flake on disk is the user's -------------------------------
+    #
+    # Both directions on one machine, because the whole design claim is that
+    # a user-owned /etc/nixos serves BOTH the user and root.
+    #
+    # The user side is what #356 was about: `omarchy update` rewrites
+    # flake.lock through `nh os switch --update`, unprivileged.
+    #
+    # The root side is what the chown broke and what modules/nixos.nix's
+    # safe.directory entry restores. This driver is root and has never
+    # sudo'd, which is exactly the case git and libgit2 do NOT exempt --
+    # `sudo nixos-rebuild`, with SUDO_UID set, was passing all along and
+    # would not have caught the regression. The commands below deliberately
+    # carry no `-c safe.directory`: passing one would test the flag rather
+    # than the configuration this module ships.
+    target.succeed("test -s /etc/gitconfig")
+    print(target.succeed("git config --system --get-all safe.directory"))
+
+    target.succeed("runuser -u omarchy -- test -w /etc/nixos/flake.lock")
+    target.succeed("runuser -u omarchy -- git -C /etc/nixos status --porcelain")
+    print("the installed user can write the lock and read the repo")
+
     target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")
     for f in ["flake.nix", "flake.lock", "disk-config.nix"]:
         target.succeed(f"test -s /etc/nixos/{f}")

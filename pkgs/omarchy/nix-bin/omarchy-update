@@ -33,14 +33,65 @@ if [ ! -d "$flake" ]; then
   exit 1
 fi
 
+# Machines installed before this was fixed have a root-owned /etc/nixos and
+# meet this on their very first update (#356). The remedy is one chown and it
+# is known to work -- so offer to run it rather than printing it and exiting,
+# which left the user to retype a command this script could see was correct.
+#
+# Still a prompt, never automatic: chowning a directory the user did not ask
+# about is not something an updater should decide, and somebody who keeps
+# their configuration root-owned on purpose must be able to say no and be
+# told what to do instead.
 if [ ! -w "$flake" ]; then
   red "$flake is not writable by $USER."
   echo
   echo "Updating a flake rewrites its flake.lock, so the directory has to be"
-  echo "yours. Either move your configuration somewhere you own, or:"
+  echo "yours. Machines installed before this was fixed have a root-owned"
+  echo "$flake and meet this on their first update."
   echo
-  echo "  sudo chown -R $USER $flake"
-  exit 1
+
+  # -d, because a file the user cannot write inside a directory they can is a
+  # different problem and `chown -R` on the directory is not its answer.
+  if [ -d "$flake" ] && command -v sudo >/dev/null 2>&1; then
+    read -r -p "Run 'sudo chown -R $USER $flake' now? [y/N] " reply
+    case "$reply" in
+      [yY]*)
+        # -h so a symlinked flake directory has the symlink retargeted rather
+        # than whatever it points at silently changing owner.
+        sudo chown -Rh "$USER" "$flake" || {
+          red "The chown failed. $flake is unchanged."
+          exit 1
+        }
+        # Asked again rather than assumed: chown can report success and still
+        # leave the directory unwritable -- an immutable attribute, a
+        # read-only mount -- and "updated" is the one thing this must never
+        # say when nothing moved.
+        [ -w "$flake" ] || {
+          red "$flake is still not writable after the chown."
+          echo
+          echo "Check for a read-only mount or an immutable attribute:"
+          echo
+          echo "  findmnt -no OPTIONS -T $flake"
+          echo "  lsattr -d $flake"
+          exit 1
+        }
+        echo "$flake is yours now."
+        echo
+        ;;
+      *)
+        echo "Left as it is. To do it yourself:"
+        echo
+        echo "  sudo chown -R $USER $flake"
+        echo
+        echo "Or move your configuration somewhere you own and point"
+        echo "programs.nixarchy.flake at it."
+        exit 1
+        ;;
+    esac
+  else
+    echo "  sudo chown -R $USER $flake"
+    exit 1
+  fi
 fi
 
 # Machines installed before nixarchy-unfreeze existed carry a lock whose

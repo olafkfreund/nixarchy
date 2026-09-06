@@ -348,9 +348,10 @@ ensure_identity() {
 
   [[ -z $name || -z $email ]] && { fail "Both are needed to commit."; return 1; }
 
-  # --global, not on the repo: /etc/nixos is root-owned, so a repo-local
-  # identity would have to be written as root and would not follow the user to
-  # their own projects, which is where they will next want it.
+  # --global, not on the repo: an identity set here would not follow the user
+  # to their own projects, which is where they will next want it. (It would
+  # also have to be written as root on a flake that is still root-owned --
+  # machines installed before the installer chowned it.)
   command git config --global user.name "$name"
   command git config --global user.email "$email"
   ok "identity set globally"
@@ -653,8 +654,9 @@ if ! has_remote; then
           say "\n  Signing in to GitHub. This opens a browser."
           gh auth login -p ssh -h github.com -w || { fail "Sign-in failed."; exit 1; }
         fi
-        # -C over --source: --source insists on running inside the repo, and
-        # this one is root-owned.
+        # -C over --source: --source insists on running inside the repo,
+        # which is not somewhere this can assume it may cd into -- the flake
+        # is still root-owned on machines installed before it was chowned.
         gh repo create "$reponame" "$vis_flag" --disable-wiki || { fail "Could not create the repository."; exit 1; }
         owner=$(gh api user --jq .login)
         url="git@github.com:$owner/$reponame.git"

@@ -170,8 +170,15 @@
     #
     #   error: opening file "/etc/nixos/flake.lock": Permission denied
     #
-    # On a real host the flake usually lives in the user's home and is already
-    # theirs; /etc/nixos being root-owned is what makes this VM the odd one.
+    # The same thing installer/install.sh does on a real machine, so this VM
+    # is no longer the odd one -- it is just doing it here because there is no
+    # installer in this path to do it.
+    #
+    # Worth knowing if you are comparing the two: this /etc/nixos is NOT a git
+    # repository (nothing here runs `git init`), so the error above is a plain
+    # file write. None of the libgit2 ownership machinery that governs a real
+    # machine's flake -- the safe.directory entry in modules/nixos.nix, and why
+    # it has to exist -- is exercised here at all.
     chown -R omarchy:users /etc/nixos
   '';
 

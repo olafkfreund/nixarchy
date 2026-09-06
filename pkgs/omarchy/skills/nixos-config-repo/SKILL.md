@@ -68,14 +68,23 @@ sudo git -C /etc/nixos add -A          # before every rebuild, after adding a fi
 This is the single most common reason a NixOS change "does nothing", and it is
 worth checking first whenever someone says an edit had no effect.
 
-### 2. `/etc/nixos` is root-owned
+### 2. `/etc/nixos` is owned by somebody other than you
 
 ```
 fatal: detected dubious ownership in repository at '/etc/nixos'
 ```
 
-The installer leaves it root-owned deliberately, which splits every git command
-in two: reads need `safe.directory`, writes need `sudo`.
+The installer chowns `/etc/nixos` to the user it creates, so on a machine it
+wrote, plain `git` as that user just works. You will see this on a machine
+installed before that changed, or one whose owner chowned it back to root --
+where every git command splits in two: reads need `safe.directory`, writes
+need `sudo`.
+
+Note that nix hits the same check without saying so usefully. It opens the
+flake through libgit2 and reports the refusal as `could not find a flake.nix
+file`, which sends people looking for a missing file that is right there.
+Current nixarchy ships a `safe.directory` entry in `/etc/gitconfig` for
+exactly this; a machine that predates it has not got one.
 
 ```bash
 git -c safe.directory=/etc/nixos -C /etc/nixos log        # read

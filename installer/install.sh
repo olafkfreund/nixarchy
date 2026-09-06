@@ -1610,15 +1610,29 @@ install_flake_dir() {
   #                       user. Loud, with the fix printed, and still a wall in
   #                       front of step one.
   #
-  #   nixarchy-apply      its `git add` is already wrapped in a guard that
-  #                       prints "Fix with: sudo git -C $flake add -A" and warns
-  #                       the rebuild may fail (modules/apps.nix:1968). The COPY
-  #                       is elevated; the staging is not.
+  #   nixarchy-apply      dies at its unprivileged `cp` into $flake/nixarchy/,
+  #                       under `set -euo pipefail`, before it ever reaches the
+  #                       `git add` guard that prints "Fix with: sudo git -C
+  #                       $flake add -A" (modules/apps.nix).
   #
-  # And the reasoning it gave against chowning defeats itself: vm/configuration
-  # .nix chowns for precisely the reason that applies here -- `nix flake update`
-  # running unprivileged -- which is what `omarchy update` does on a real
-  # machine too.
+  # That second entry said "the COPY is elevated; the staging is not" when this
+  # was written, and it was wrong -- nothing in nixarchy-apply is elevated. The
+  # correction matters because it was half the argument for chowning, and an
+  # argument that survives its own evidence being wrong is worth re-checking:
+  # it does survive, on the omarchy-update half alone.
+  #
+  # The other half of the old reasoning defeated itself: vm/configuration.nix
+  # chowns for precisely the reason that applies here -- `nix flake update`
+  # running unprivileged. (Though not for the same MECHANISM: that VM's
+  # /etc/nixos is not a git repository, so it fails on a plain file write and
+  # never meets libgit2 at all.)
+  #
+  # What the chown costs, and what pays for it: git and nix both refuse a
+  # repository owned by somebody else. Not `sudo nixos-rebuild` -- git and
+  # libgit2 exempt root when SUDO_UID names the owner -- but root WITHOUT
+  # sudo, which is every root systemd unit and any rescue `nixos-install` from
+  # a live ISO. modules/nixos.nix and installer/cd.nix ship the safe.directory
+  # entry that settles it; without that this chown is not safe to make.
   #
   # No secret moves by doing this. The password hash and the initrd shadow are
   # written to /var/lib/nixarchy and explicitly `chown 0:0`'d above; nothing

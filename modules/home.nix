@@ -180,6 +180,51 @@ let
           exit 1
         fi
 
+        # A plugin that shells out to pacman fails the REBUILD, not the click.
+        #
+        # omarchy-plugin-validate above checks the manifest and the shape the
+        # shell requires. It does not read what the plugin RUNS, and the
+        # marketplace is written for Arch: a widget whose QML calls
+        # `pacman -S` or `yay -S` installs cleanly here, appears in the bar,
+        # and fails the first time somebody presses it -- on a machine where
+        # pacman does not exist and could not be allowed to.
+        #
+        # This is build.yml's "no bin touches pacman outside the allowlist"
+        # applied one layer out. That scan walks Omarchy's own bins in this
+        # repository; nothing looked at code a USER brings in.
+        #
+        # No allowlist here, deliberately. build.yml has one because upstream's
+        # own Arch-only plumbing legitimately calls pacman and has to keep
+        # working on Arch. A third-party plugin installed on a NixOS machine
+        # has no such case: there is nothing for it to be right about.
+        #
+        # COMMENT STRIPPING, and why it is not the shell scanner's `s/#.*//`:
+        # QML comments with // and stripping that naively eats `https://...`,
+        # which would hide anything after a URL on the same line. So only
+        # WHOLE-LINE comments are removed -- `//` or `#` at the start of a
+        # line, after optional whitespace. A trailing `// mentions pacman`
+        # after real code still trips this, which is the safe direction for a
+        # check about what a machine will execute.
+        hits=$(
+          find "$src" -type f \( -name '*.qml' -o -name '*.js' -o -name '*.sh' -o -name '*.bash' \) -print0 |
+            xargs -0 -r grep -nHE '\bpacman\b|\byay\b' |
+            grep -vE ':[0-9]+:[[:space:]]*(//|#)' || true
+        )
+        if [ -n "$hits" ]; then
+          echo "" >&2
+          echo "programs.nixarchy.plugins.${name} runs pacman or yay:" >&2
+          printf '%s\n' "$hits" | sed "s|^$src/|  |" >&2
+          echo "" >&2
+          echo "Neither exists on NixOS, so this plugin would install, appear in" >&2
+          echo "the bar, and fail the first time it is used. Packages come from" >&2
+          echo "the Install menu or your configuration here; a plugin cannot" >&2
+          echo "install its own." >&2
+          echo "" >&2
+          echo "If the plugin only MENTIONS them in prose, move that to a" >&2
+          echo "whole-line comment -- this ignores those." >&2
+          exit 1
+        fi
+
         id=$(jq -r '.id' "$src/manifest.json")
         mkdir -p $out
         echo -n "$id" > $out/id

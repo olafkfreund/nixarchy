@@ -80,6 +80,56 @@ jobs:
           # the tags with it.
           fetch-depth: 0
 
+      # A tag behind main ships a release missing fixes that are already
+      # merged, and nothing here noticed.
+      #
+      # v4.0.2-7 is the measurement. It was tagged at 2aa2076 while the fix for
+      # a bug that draws sed's usage text over the installer was merged four
+      # commits later, so the published ISO had the bug, a tester hit it, and
+      # the fix had been on main the whole time. Everything about that release
+      # was green: CI passed, the assets published, the checksums matched. The
+      # only thing wrong with it was its age, and age was the one property
+      # nothing measured.
+      #
+      # Refused rather than warned. A warning in a ninety-minute job is read
+      # after the ISO is published, which is exactly too late -- and the cost
+      # of being wrong here is a release that has to be superseded, deleted or
+      # explained.
+      #
+      # RELEASE_ALLOW_BEHIND_MAIN is the way out, for a deliberate release of
+      # an older commit. It has to be set on the run, so it cannot be the
+      # thing that happens by default.
+      - name: The tag is not behind main
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          git fetch -q --depth=200 origin main || git fetch -q origin main
+          tagged=$(git rev-parse HEAD)
+          main=$(git rev-parse FETCH_HEAD)
+
+          if [ "$tagged" = "$main" ]; then
+            echo "$tag is the tip of main"
+            exit 0
+          fi
+
+          # Not an ancestor: a hotfix branch or a tag off something else. Not
+          # what this guard is about, and refusing it would block a real case.
+          if ! git merge-base --is-ancestor "$tagged" "$main"; then
+            echo "::notice::$tag is not on main; not a staleness question, continuing"
+            exit 0
+          fi
+
+          echo "::error::$tag is BEHIND main and would ship without these:"
+          git --no-pager log --oneline "$tagged..$main" | sed 's/^/  /'
+          if [ "${RELEASE_ALLOW_BEHIND_MAIN:-}" = "1" ]; then
+            echo "::warning::RELEASE_ALLOW_BEHIND_MAIN=1, publishing anyway"
+            exit 0
+          fi
+          echo ""
+          echo "Re-tag at main, or set RELEASE_ALLOW_BEHIND_MAIN=1 if this"
+          echo "older commit is genuinely the one to publish."
+          exit 1
+
       - name: The tag names the Omarchy the flake vendors
         run: |
           # v4.0.1-2 -> 4.0.1. The suffix counts our packaging revisions

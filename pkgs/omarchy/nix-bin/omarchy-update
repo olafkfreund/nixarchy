@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 # omarchy:summary=Update Omarchy and system packages
+# omarchy:args=[--system] [--nixarchy]
 # omarchy:examples=omarchy update
+# omarchy:examples=omarchy update --system
 
 # Replaces upstream's updater, which drives pacman: it prunes packages, builds
 # a snapper snapshot, refreshes the pacman keyring and runs a system upgrade.
@@ -21,6 +23,33 @@
 set -euo pipefail
 
 flake="${NIXARCHY_FLAKE:-/etc/nixos}"
+
+# Which of the two things this machine follows should move.
+#
+# They are separate on purpose and always have been: the installer makes
+# nixpkgs a ROOT input of the machine's flake and has nixarchy follow it
+# (installer/mkFlake.nix), precisely so somebody can take the package set
+# without taking the desktop, or the other way round. Until now this script
+# gave that away in one flag -- `nh os switch --update` means "update all
+# flake inputs" -- so the only thing on offer was both at once.
+#
+# Default is still both. Somebody who types `omarchy update` wants their
+# machine updated, not a quiz.
+targets=all
+while (($#)); do
+  case "$1" in
+    --system | --nixpkgs) targets=nixpkgs; shift ;;
+    --nixarchy) targets=nixarchy; shift ;;
+    -h | --help)
+      echo "Usage: omarchy update [--system] [--nixarchy]"
+      echo "  (no flag)    move both: your package set and nixarchy"
+      echo "  --system     move nixpkgs only -- your packages, not the desktop"
+      echo "  --nixarchy   move nixarchy only -- the desktop, on the package set you have"
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; echo "Try: omarchy update --help" >&2; exit 1 ;;
+  esac
+done
 
 red() { printf '\033[0;31m%s\033[0m\n' "$1"; }
 dim() { printf '\033[0;90m%s\033[0m\n' "$1"; }
@@ -100,7 +129,35 @@ fi
 # script narrates progress. Saying "updated" there is the one thing this
 # script must never do, so the frozen shape is caught first and the fix
 # offered -- it is a two-line rewrite with its own confirmation.
-if jq -e '.nodes.nixarchy.original | has("rev")' "$flake/flake.lock" >/dev/null 2>&1; then
+# An input can only be updated by name if the machine's flake actually has it
+# at the root. That is not a formality: machines installed before the template
+# re-exposed nixpkgs at the root took their package set THROUGH nixarchy, so
+# `-U nixpkgs` there names an input that does not exist and nh fails with a
+# message about flake internals. Checked against the lock the machine has,
+# rather than assumed from the template it was probably written with.
+if [ "$targets" != all ]; then
+  if ! jq -e --arg i "$targets" '.nodes.root.inputs | has($i)' \
+    "$flake/flake.lock" >/dev/null 2>&1; then
+    red "$flake has no root input called '$targets'."
+    echo
+    echo "This machine's flake does not carry that input at the top level, so"
+    echo "it cannot be moved on its own. Machines installed before nixpkgs was"
+    echo "a root input take their package set through nixarchy, and the two"
+    echo "can only move together."
+    echo
+    echo "Run 'nixarchy-unfreeze' if this machine is still pinned at its"
+    echo "install day, or 'omarchy update' with no flag to move everything."
+    exit 1
+  fi
+fi
+
+# Only when nixarchy is one of the things being moved. A frozen lock pins
+# NIXARCHY by commit, so it is not an obstacle to moving nixpkgs alone -- and
+# on a machine that can do that, nixpkgs is a root input and is not frozen
+# with it. Prompting anyway would be asking somebody to fix something that is
+# not in the way of what they asked for.
+if [ "$targets" != nixpkgs ] &&
+  jq -e '.nodes.nixarchy.original | has("rev")' "$flake/flake.lock" >/dev/null 2>&1; then
   red "This machine's flake is frozen at its install day."
   echo
   echo "The installer pinned nixarchy by commit in the update target, so"
@@ -117,9 +174,26 @@ fi
 
 echo "Updating from $flake"
 echo
-dim "This moves your flake inputs forward -- nixpkgs, home-manager, and"
-dim "nixarchy to its latest release -- and then rebuilds. Your app"
-dim "selections are untouched."
+# Said in terms of what changes on the machine, not which flake input moves.
+# "nixpkgs" is not what somebody is choosing between -- their applications and
+# their desktop are.
+case "$targets" in
+  nixpkgs)
+    dim "This moves your PACKAGE SET forward -- nixpkgs, and home-manager"
+    dim "with it -- and then rebuilds. nixarchy stays exactly where it is,"
+    dim "so the desktop does not change. Your app selections are untouched."
+    ;;
+  nixarchy)
+    dim "This moves NIXARCHY forward to its latest release and then"
+    dim "rebuilds, on the package set you already have. Your applications"
+    dim "do not change version. Your app selections are untouched."
+    ;;
+  *)
+    dim "This moves your flake inputs forward -- nixpkgs, home-manager, and"
+    dim "nixarchy to its latest release -- and then rebuilds. Your app"
+    dim "selections are untouched."
+    ;;
+esac
 echo
 
 read -r -p "Update flake inputs and rebuild? [y/N] " reply
@@ -129,7 +203,16 @@ case "$reply" in
 esac
 
 echo
-echo "==> nh os switch --update $flake"
+# -u updates every input; -U names one. Both are nh's own flags (4.4.2), so
+# nothing here reimplements `nix flake update` or writes the lock itself --
+# which matters, because the lock write is the half that runs unprivileged
+# and the half #356 was about.
+if [ "$targets" = all ]; then
+  update_flags=(--update)
+else
+  update_flags=(--update-input "$targets")
+fi
+echo "==> nh os switch ${update_flags[*]} $flake"
 # No sudo: nh elevates itself, and wrapping it takes that decision away.
 #
 # The flake is named explicitly rather than left to nh's default, which reads
@@ -139,7 +222,7 @@ echo "==> nh os switch --update $flake"
 #
 # Not exec'd: upstream's presentation wrapper prints a completion banner after
 # this returns, and exec would take that away.
-nh os switch --update "$flake"
+nh os switch "${update_flags[@]}" "$flake"
 
 echo
 echo "Updated. The previous generation is still in the boot menu if you need it."

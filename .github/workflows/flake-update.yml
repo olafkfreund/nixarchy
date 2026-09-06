@@ -153,19 +153,50 @@ jobs:
       # pull request below, which is why this job does not build anything: a
       # bump that only this job has verified is a bump verified by the same job
       # that proposes it.
+      #
+      # A bump that does not evaluate is this job's NORMAL outcome, not its
+      # failure: upstream broke something, the canary caught it, and the right
+      # move is to propose nothing and try again tomorrow. So it records that
+      # and exits 0.
+      #
+      # It used to exit 1, which made a working refusal indistinguishable from
+      # a broken workflow -- both a red X on the same row of the nightly review
+      # (#195). One of those needs somebody to look and the other does not, and
+      # a signal that cannot tell them apart gets ignored for the commoner
+      # case, which is the one that does not matter. A genuinely broken step
+      # here still fails: `set -euo pipefail` covers everything except the two
+      # evals, which are the only commands whose failure means "upstream", not
+      # "us".
       - name: Both toplevels still evaluate
+        id: evaluates
         if: steps.bump.outputs.changed == 'true'
         run: |
           set -euo pipefail
-          nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath
-          echo
-          nix eval --raw .#checks.x86_64-linux.reference-toplevel.drvPath
-          echo
-          echo "both toplevels evaluate against the new pin"
+          ok=true
+          for attr in vm-toplevel reference-toplevel; do
+            if ! nix eval --raw ".#checks.x86_64-linux.$attr.drvPath"; then
+              echo
+              echo "::warning::$attr does not evaluate against the new pin; not proposing it"
+              ok=false
+            fi
+            echo
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          if [ "$ok" = true ]; then
+            echo "both toplevels evaluate against the new pin"
+          else
+            {
+              echo "### nixpkgs bump not proposed"
+              echo
+              echo "The new pin does not evaluate, so no pull request was opened."
+              echo "This is the check doing its job -- nothing here is broken."
+              echo "The next run tries the pin upstream has by then."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Open a pull request
         id: pr
-        if: steps.bump.outputs.changed == 'true'
+        if: steps.bump.outputs.changed == 'true' && steps.evaluates.outputs.ok == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
           # A PR opened with the default GITHUB_TOKEN triggers no workflows at

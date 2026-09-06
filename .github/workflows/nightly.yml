@@ -207,6 +207,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          # Honour this flake's own nixConfig instead of warning and
+          # discarding it. Without this every `nix build` here prints
+          #
+          #   warning: ignoring untrusted flake configuration setting
+          #   'extra-substituters'. Pass '--accept-flake-config' to trust it
+          #
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
+          #
+          # Scoped to the flake being invoked, which is this repository's
+          # own. It does not extend trust to inputs.
+          extra-conf: accept-flake-config = true
 
       - name: The cache holds what main last built
         run: |
@@ -292,6 +308,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          # Honour this flake's own nixConfig instead of warning and
+          # discarding it. Without this every `nix build` here prints
+          #
+          #   warning: ignoring untrusted flake configuration setting
+          #   'extra-substituters'. Pass '--accept-flake-config' to trust it
+          #
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
+          #
+          # Scoped to the flake being invoked, which is this repository's
+          # own. It does not extend trust to inputs.
+          extra-conf: accept-flake-config = true
 
       - name: Resolve every input the way a user would tomorrow
         run: nix flake update

@@ -1049,6 +1049,13 @@ jobs:
         # than no check, because it reads like coverage.
         run: nix build .#checks.x86_64-linux.installer-ui --print-build-logs
 
+      - name: The no-nix front door refuses in sentences
+        # installer/try-nixarchy.sh is for somebody on Ubuntu or Fedora with
+        # no nix, so almost all of it is refusals -- and a refusal nobody has
+        # watched fire is a refusal nobody knows works. Counterpart to
+        # try-preflight, which does this for the `nix run …#try` door.
+        run: nix build .#checks.x86_64-linux.try-nixarchy --print-build-logs
+
       - name: The install dashboard survives a rewound clock
         # The VM install checks cannot catch this: their clocks are stable, so
         # every duration they compute is positive. On a real machine the RTC is

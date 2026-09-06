@@ -1269,6 +1269,26 @@ and whether `/dev/kvm` is usable -- without it the VM still runs, with a
 loud warning, several times slower. On a machine with no display it serves
 the screen over VNC on `127.0.0.1:5900` instead of dying.
 
+### No Nix yet? Try it from any Linux
+
+`#try` above is a `nix run` app, so it needs Nix installed. If you are on
+Ubuntu, Fedora, Arch or anything else and would rather look first, there is a
+script that needs only `qemu` and `curl` from your own package manager:
+
+```sh
+curl -fLO https://raw.githubusercontent.com/olafkfreund/nixarchy/main/installer/try-nixarchy.sh
+less try-nixarchy.sh          # it is going to download an image and start a VM
+bash try-nixarchy.sh
+```
+
+It fetches the latest release's installer image, checks it against the
+release's own `SHA256SUMS`, and boots it in a UEFI VM. `--boot` starts the
+machine you installed, `--fresh` wipes it and starts again, `--help` lists the
+rest.
+
+It takes the latest release and cannot resolve a particular commit — if you
+have Nix, `#try` is the better door and knows it.
+
 The two apps below are different animals: `#vm` boots a prebuilt smoke-test
 *of the installed system* -- no installer, no disk -- and is mainly a
 development tool.

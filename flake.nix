@@ -1050,6 +1050,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: installer/AGENTS.md#try-nixarchy-sh
+          try-nixarchy = import ./tests/try-nixarchy.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The dashboard the installer draws while it works, against a clock
           # that goes backwards -- which is what NTP does to a machine whose
           # RTC was wrong, mid-install. Not covered by the VM checks: their

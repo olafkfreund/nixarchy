@@ -295,3 +295,24 @@ for Arch. For nixarchy-specific trouble, run
 `nix run github:olafkfreund/nixarchy#doctor`, read
 [troubleshooting](troubleshooting.md), and open an issue on the repository with
 the output of `omarchy debug --no-sudo --print`.
+
+## No Nix yet? Try it from any Linux
+
+`#try` above is a `nix run` app, so it needs Nix installed. If you are on
+Ubuntu, Fedora, Arch or anything else and would rather look first, there is a
+script that needs only `qemu` and `curl` from your own package manager:
+
+```sh
+curl -fLO https://raw.githubusercontent.com/olafkfreund/nixarchy/main/installer/try-nixarchy.sh
+less try-nixarchy.sh          # it is going to download an image and start a VM
+bash try-nixarchy.sh
+```
+
+It fetches the latest release's installer image, checks it against the
+release's own `SHA256SUMS`, and boots it in a UEFI VM. `--boot` starts the
+machine you installed, `--fresh` wipes it and starts again, `--help` lists the
+rest.
+
+It takes the latest release and cannot resolve a particular commit — if you
+have Nix, `#try` is the better door and knows it.
+

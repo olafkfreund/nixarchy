@@ -204,3 +204,29 @@ and an eval-only CI workflow.
 It is offered once as a notification after an agent is set up, and a
 configuration that is already committed and pushed marks itself done rather than
 asking again.
+
+## Pointing your own AI at nixarchy
+
+Ask any assistant about nixarchy cold and it answers from what it absorbed
+about Omarchy on Arch — which is wrong in exactly the way that matters here:
+apps are declarations, not `pacman -S`, and nothing installs until a rebuild.
+
+So this repository publishes a file written for language models:
+
+```
+https://olafkfreund.github.io/nixarchy/llms.txt
+```
+
+Hand it over and the answers change:
+
+| your assistant | what to do |
+|---|---|
+| Claude, ChatGPT, Gemini — anything with web access | Paste the URL: *"Read this and answer my nixarchy questions from it."* |
+| An assistant with no web access | Open the URL, copy the file, paste it in as reference |
+| Claude Code, Cursor, or another agent in a checkout | Point it at `docs/llms.txt` — it is a normal file in the tree |
+| The assistant on a running nixarchy machine | Nothing. It already reads the skills described above. |
+
+It carries the install model, the two ways in and which one is mature, the
+commands, and the manual's layout — deliberately including the caveat that
+the ISO installer is the least settled part, so an assistant does not
+recommend it to somebody who already runs NixOS.

@@ -10,6 +10,27 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 
 Tracking an upstream release is a source bump, not a re-port.
 
+> [!WARNING]
+> **This is in active development. Expect to hit problems.**
+>
+> **The ISO installer is the least settled part of it.** It writes partition
+> tables and bootloaders on real disks, it is the hardest thing here to test,
+> and it is where the bugs have been. Treat it as something to try on a spare
+> machine or a VM — not on a laptop you need working on Monday, and not on a
+> disk holding anything you have not backed up.
+>
+> **The flake route is the mature one.** Adding
+> `nixarchy.nixosModules.nixarchy` to a machine that already runs NixOS is the
+> path that has had the most use and the most testing, it changes nothing about
+> your disk or your bootloader, and a bad result is one `nixos-rebuild
+> --rollback` away. If you already run NixOS, start there — see
+> [Adding it to a machine you already run](#adding-it-to-a-machine-you-already-run).
+>
+> Everything is being worked on and tested continuously; the four VM install
+> checks in CI exist precisely because this is the part that needs proving.
+> Please [file what you hit](https://github.com/olafkfreund/nixarchy/issues) —
+> `omarchy bug-report` collects the useful details for you.
+
 What that buys you: the Install menu writes to a Nix config instead of running
 pacman, **60 applications** are selectable that way, **every other package and
 NixOS option is one `Install ▸ Search` away**, plugins and themes still install
@@ -185,6 +206,32 @@ so an Omarchy bump that rewords a line this depends on fails the build rather th
 quietly restoring Arch instructions. CI additionally asserts that no skill code
 block contains a pacman, yay, `/usr/share/omarchy` or Arch-debuginfod line, because
 prose may contrast with Arch on purpose but a fenced block is what an agent copies.
+
+### Pointing your own AI at nixarchy
+
+Ask any assistant about nixarchy cold and it answers from what it absorbed
+about Omarchy on Arch — which is wrong in exactly the way that matters here:
+apps are declarations, not `pacman -S`, and nothing installs until a rebuild.
+
+So this repository publishes a file written for language models:
+
+```
+https://olafkfreund.github.io/nixarchy/llms.txt
+```
+
+Hand it over and the answers change:
+
+| your assistant | what to do |
+|---|---|
+| Claude, ChatGPT, Gemini — anything with web access | Paste the URL: *"Read this and answer my nixarchy questions from it."* |
+| An assistant with no web access | Open the URL, copy the file, paste it in as reference |
+| Claude Code, Cursor, or another agent in a checkout | Point it at [`docs/llms.txt`](docs/llms.txt) — it is a normal file in the tree |
+| The assistant on a running nixarchy machine | Nothing. It already reads the skills above. |
+
+It carries the install model, the two ways in and which one is mature, the
+commands, and the manual's layout — deliberately including the caveat that
+the ISO installer is the least settled part, so an assistant does not
+recommend it to somebody who already runs NixOS.
 
 ## The agent room — opt-in
 
@@ -847,6 +894,20 @@ any conflict to warn you.
 
 There is an ISO now. Download it, write it to a stick, boot it, and answer nine
 questions.
+
+> [!CAUTION]
+> **This is the least mature part of nixarchy, and it partitions disks.**
+>
+> The installer is under active development and is where most of the recent
+> bugs have been. It is covered by four VM install checks in CI — blank disk,
+> free space beside an existing OS, encrypted, and a boot of the real ISO —
+> and those checks are the reason problems get found, not a promise there are
+> none left.
+>
+> Use a spare machine or a VM first. Back up anything on the target disk. If
+> the machine already runs NixOS, you do not need this at all — use
+> [the flake route](#adding-it-to-a-machine-you-already-run), which touches
+> neither your partitions nor your bootloader and rolls back in one command.
 
 **[Releases](https://github.com/olafkfreund/nixarchy/releases)** carry prebuilt
 images from `v4.0.1-3` onward, built and install-tested by CI on the machine

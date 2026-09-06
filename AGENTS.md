@@ -19,6 +19,7 @@ failure history for its own area, and they are where the long reasoning lives:
 | `modules/AGENTS.md` | the option surface, Mode A, and what each module owns |
 | `pkgs/AGENTS.md` | the vendored tree, the patch rules, and `runtimeInputs` |
 | `tests/AGENTS.md` | what each check covers, and what only a cheap one can reach |
+| `docs/internals/flake.md` | the flake's own reasoning — inputs, the overlay, the checks |
 
 `CLAUDE.md` is a symlink to this file, because Claude Code reads `CLAUDE.md`
 and not `AGENTS.md`. Without it none of this loads.

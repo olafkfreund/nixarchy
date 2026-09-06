@@ -73,9 +73,15 @@ ui_dashboard_draw() {
 
   # A tip every eight seconds, as upstream does. Long enough to read, short
   # enough that a slow install is not one sentence for ten minutes.
-  n=$(wc -l <"$UI_TIPS")
-  idx=$(((elapsed / 8) % n + 1))
-  tip=$(sed -n "${idx}p" "$UI_TIPS")
+  # A missing or empty tips file makes `% n` a division by zero, which takes
+  # the whole drawer down over a decoration. No tips is not a failure.
+  n=$(wc -l 2>/dev/null <"$UI_TIPS") || n=0
+  if [ "${n:-0}" -gt 0 ]; then
+    idx=$(((elapsed / 8) % n + 1))
+    tip=$(sed -n "${idx}p" "$UI_TIPS")
+  else
+    tip=""
+  fi
 
   ui_init
   ui_clear
@@ -123,7 +129,34 @@ ui_dashboard_tick() {
     # the same lie in the other direction.
     UI_DASH_CHANGED=$now
   fi
-  ui_dashboard_draw $((now - UI_DASH_START)) $((now - UI_DASH_CHANGED))
+  # Clamped, because the clock can go BACKWARDS in the middle of an install
+  # and both of these are differences against a time read earlier.
+  #
+  # It is not a rare case, it is the ordinary one: the machine being installed
+  # has an unset or wrong RTC, the installer asks for a timezone, and NTP
+  # corrects the clock while the dashboard is drawing. `now` then lands before
+  # UI_DASH_START and every duration derived from it goes negative.
+  #
+  # What that produced, and why this is clamped at the source rather than at
+  # the two places it happened to surface:
+  #
+  #   ui_dashboard_draw   idx=$(((elapsed / 8) % n + 1)) went negative, so the
+  #                       tip line ran `sed -n "-11p"` and the installer
+  #                       printed sed's usage over the dashboard. Reported by
+  #                       a user, with "sed: invalid option -- '1'" filling
+  #                       the screen.
+  #
+  #   ui_progress         by_time divides by (elapsed + 240). At elapsed=-240
+  #                       that is a division by zero, which kills the drawer
+  #                       outright rather than misprinting.
+  #
+  # Both are the same bug, and any future arithmetic on these numbers would
+  # have been the third. A clamp here means no caller has to know the clock
+  # is untrustworthy.
+  local since=$((now - UI_DASH_START)) quiet=$((now - UI_DASH_CHANGED))
+  [ "$since" -lt 0 ] && since=0
+  [ "$quiet" -lt 0 ] && quiet=0
+  ui_dashboard_draw "$since" "$quiet"
 }
 
 ui_dashboard_start() {

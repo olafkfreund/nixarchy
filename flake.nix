@@ -1531,6 +1531,15 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The dashboard the installer draws while it works, against a clock
+          # that goes backwards -- which is what NTP does to a machine whose
+          # RTC was wrong, mid-install. Not covered by the VM checks: their
+          # clocks are stable, so every duration there is positive.
+          dashboard-clock = import ./tests/dashboard-clock.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The other half of the installer: the questions themselves, answered
           # over a serial line. checks.installer-ui proves a widget can be drawn;
           # this proves the wizard can be answered, which no harness passing

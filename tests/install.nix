@@ -663,7 +663,7 @@ pkgs.testers.runNixOSTest {
     installer.succeed(
         "grep -q test-instrumentation"
         " /mnt/etc/nixos/hosts/installed/configuration.nix")
-    installer.succeed("git -C /mnt/etc/nixos add -A")
+    installer.succeed("git -c safe.directory=/mnt/etc/nixos -C /mnt/etc/nixos add -A")
     print(installer.succeed(
         "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"
         " --no-root-password"

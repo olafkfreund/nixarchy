@@ -1641,6 +1641,16 @@ install_flake_dir() {
 # failure.
 chown_flake_dir() {
   local uid gid
+  # ONE CONSEQUENCE, so nobody meets it as a mystery: git refuses to operate on
+  # a repository owned by somebody else, so `sudo git -C /etc/nixos ...` now
+  # says "detected dubious ownership" and prints a safe.directory incantation.
+  # That is git working as designed and it is the correct trade -- the commands
+  # this installer SHIPS run as the user and could not write there at all
+  # before -- but it is a new paper cut for anyone in the habit of sudo-ing
+  # git. Run it as yourself, or pass -c safe.directory=/etc/nixos for one
+  # command. checks.install, free-space, install-encrypted and install-iso all
+  # do the latter, because a test driver is root by construction.
+  #
   # Read /mnt/etc/passwd directly. `chroot /mnt getent passwd` was the first
   # attempt and it FAILED -- "chroot: failed to run command 'getent': No such
   # file or directory" -- because the target's PATH is not set up for a chroot

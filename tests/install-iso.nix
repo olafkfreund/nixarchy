@@ -197,7 +197,7 @@ let
         step SERIAL test $? -eq 0
 
         # A flake in a git worktree sees only tracked or staged files.
-        git -C /mnt/etc/nixos add -A
+        git -c safe.directory=/mnt/etc/nixos -C /mnt/etc/nixos add -A
 
         # Built HERE and installed by path, which is what run_install() in
         # installer/install.sh does and for the reason its comment gives:

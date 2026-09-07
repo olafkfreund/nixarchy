@@ -158,7 +158,7 @@ let
     {
       inherit (c) name;
       excused = c.excused or null;
-      packages = map (p: baseNameOf p) new;
+      packages = map baseNameOf new;
     };
 
   results = map added candidates;

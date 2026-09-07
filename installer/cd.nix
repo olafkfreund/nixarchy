@@ -551,7 +551,28 @@ in
     # It also means the image's completeness is tested by everyone who uses
     # it, rather than silently patched over on machines that happen to have a
     # network.
-    substituters = lib.mkForce [ ];
+    # NOT mkForce [ ]. This line is what turned "needs one derivation we did
+    # not bake" into "compile stdenv from source, offline, and die".
+    #
+    # Reported by two users on real hardware. Their machine needed one thing
+    # the image does not carry -- a real laptop's configuration can diverge
+    # from the baked reference in ways a qemu guest never does;
+    # `services.fwupd.enable` alone changes system-path, measured -- and with
+    # no substituter nix could not fetch it, so it tried to BUILD it, which
+    # needs build inputs that are also not baked, which walks back to stdenv
+    # and ends fetching acl's tarball from savannah with a one-second
+    # timeout. The install stops after the disk has been partitioned.
+    #
+    # A cache would have downloaded the difference in seconds.
+    #
+    # So `offline` now means what it should mean: the store is pre-populated,
+    # so a standard install needs no network. It does not mean the network is
+    # forbidden. This is also what NixOS itself does -- its installation ISO
+    # bakes no system closure at all and substitutes everything.
+    #
+    # The case this used to protect is still handled, by connect-timeout
+    # below: with no network the substituters fail fast and the local store
+    # answers, which is the behaviour the empty list was reaching for.
 
     # An indirect reference -- `nixpkgs#hello`, or any flake input that is not
     # already locked -- sends nix to channels.nixos.org for the global
@@ -585,10 +606,14 @@ in
     # Fail rather than hang, for anything that still tries. Five attempts at
     # fifteen seconds each is over a minute of silence per path on an image
     # that by construction has nothing to download.
-    connect-timeout = 1;
-    download-attempts = 0;
+    # Fail fast when there is no network, without failing a network that is
+    # merely slow. One second and zero retries was tuned for an image that
+    # could never download anything; now that it can, a laptop on hotel wifi
+    # has to be able to finish a TLS handshake.
+    connect-timeout = 5;
+    download-attempts = 1;
   }
-  // lib.optionalAttrs (!offline) {
+  // {
     # The same two caches install.sh already knows about and modules/nixos.nix
     # gives every installed machine. They are not a nicety here: CI builds
     # checks.reference-toplevel inside a cachix job, so the whole 15.3 GiB

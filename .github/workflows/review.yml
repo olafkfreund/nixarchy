@@ -44,12 +44,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.

@@ -672,23 +672,20 @@ in
     download-attempts = 1;
   }
   // {
-    # The same caches install.sh already knows about and modules/nixos.nix
+    # The same two caches install.sh already knows about and modules/nixos.nix
     # gives every installed machine. They are not a nicety here: CI builds
     # checks.reference-toplevel inside a cachix job, so the whole 15.3 GiB
     # desktop is on nixarchy.cachix.org. Without these the install still
-    # succeeds and takes hours.
-    #
-    # hyprland.cachix.org is gone with the flake input it existed for. It
-    # served hyprwm's own build of the compositor, which only substituted
-    # while this flake took their nixpkgs unmodified; Hyprland comes from
-    # nixpkgs now, so cache.nixos.org has it.
+    # succeeds and takes hours, because it compiles Hyprland.
     substituters = [
       "https://cache.nixos.org"
       "https://nixarchy.cachix.org"
+      "https://hyprland.cachix.org"
     ];
     trusted-public-keys = [
       "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
+      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
     ];
   };
 

@@ -876,11 +876,14 @@ added, so nixarchy lists what is actually installed and takes the labels from
 
 ## Binary cache
 
-Enabling nixarchy otherwise means building the whole vendored Omarchy tree.
-The module adds one cache for you:
+Enabling nixarchy otherwise means compiling a compositor: it takes Hyprland
+from hyprwm's own flake, tracking their branch rather than nixpkgs' packaging.
+The module adds both caches for you:
 
 ```
 https://nixarchy.cachix.org   the vendored tree and this flake's own packages
+https://hyprland.cachix.org   hyprwm's own builds -- the compositor and its
+                              portal, which is why nothing here compiles one
 ```
 
 `programs.nixarchy.binaryCaches = false` if you would rather trust neither and

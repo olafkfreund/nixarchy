@@ -11,7 +11,7 @@ it. This page is read when somebody follows a pointer.
 
 ## What the flake is for
 
-- **inputs** — nixpkgs is the package set; zen-browser, microvm and
+- **inputs** — nixpkgs is the package set; hyprland, zen-browser, microvm and
   the rest are pinned separately because they publish on their own schedule.
   Some pins are deliberate and must not be bumped by an automated job; the
   nightly review reports them and `flake-update.yml` names `nixpkgs` explicitly
@@ -61,14 +61,14 @@ themselves are not pushed to cachix -- they ship as release assets --
 so `#try` detects that case with a dry-run and falls back to the
 release download instead of leaning on these substituters.
 
-<a id="deliberately-unpinned-unlike-sops-nix-and-microvm-b"></a>
-### Deliberately UNPINNED, unlike sops-nix and microvm below, and
+<a id="deliberately-unpinned-unlike-hyprland-sops-nix-and"></a>
+### Deliberately UNPINNED, unlike hyprland, sops-nix and microvm below, and
 
 ```nix
 home-manager = {
 ```
 
-Deliberately UNPINNED, unlike sops-nix and microvm below, and
+Deliberately UNPINNED, unlike hyprland, sops-nix and microvm below, and
 not for lack of tags (home-manager has none; its releases are
 `release-XX.XX` branches that pair with STABLE nixpkgs, which is not
 what this flake tracks). master is co-developed against
@@ -79,51 +79,63 @@ skew -- a frozen home-manager evaluating renamed and removed nixpkgs
 attrs a few updates from now -- which is the exact failure pinning is
 supposed to prevent. Pin this the day nixpkgs is pinned, and not before.
 
-<a id="hyprland-comes-from-nixpkgs-because-nixpkgs-caught-up"></a>
-### Hyprland comes from nixpkgs, because nixpkgs caught up
+<a id="hyprland-from-hyprwm-tracking-their-branch-not-a"></a>
+### Hyprland from hyprwm, tracking their branch — not a pinned commit
 
-There is no `hyprland` input. `programs.hyprland.package` is left unset in
-modules/nixos.nix so nixpkgs' own module decides, and the overlay passes
-`final.hyprland` to pkgs/omarchy.
+```nix
+hyprland.url = "github:hyprwm/Hyprland";
+```
 
-It used to be a separate flake input pinned to a hyprwm commit:
+The compositor comes from upstream's own flake, and their binary cache serves
+it, so no machine compiles it. That is only true because
+`inputs.nixpkgs.follows` is deliberately NOT set on it: hyprwm ask consumers
+not to override their nixpkgs, and overriding it forfeits the cache and
+rebuilds the compositor from source.
+
+**A branch, not a revision, and that is the whole lesson here.** This input
+used to read
 
 ```nix
 hyprland.url = "github:hyprwm/Hyprland/0bd11c7a04a63d2785abd53363f09d552175d67d";
 ```
 
-with the reason that Omarchy 4.x configures Hyprland through the Lua API that
-landed in 0.55, while nixpkgs was still on 0.54.3. That reason expired.
-Measured 2026-09-07:
+with the revision *in the URL*. `nix flake update` cannot move that, so the
+nightly bump skipped it silently, and `nix run .#review` watched six pins with
+hyprland among none of them. It sat at 0.56.0 while nixpkgs reached 0.56.2 and
+Arch shipped 0.56.2-2 — the pin meant to keep us ahead of nixpkgs had put us
+behind it, and two weeks of drift looked exactly like none. It would have
+looked the same at two years.
 
-| | version |
-|---|---|
-| the pin | 0.56.0, dated 2026-08-24 |
-| nixpkgs | **0.56.2** |
-| Arch `extra` | **0.56.2-2** |
+A ref is visible to the tooling that exists to catch this: `nix flake update`
+moves it, and `pkgs/flake-pins.py` reports it as a `ref` rather than a frozen
+`rev`.
 
-Arch matters because it is what upstream Omarchy actually installs.
-`install/omarchy-base.packages` names `hyprland` with **no version at all** --
-zero version pins in the entire file -- so "the Hyprland Omarchy uses" is
-whatever Arch shipped on the day someone ran the installer. Tracking nixpkgs
-tracks the same thing.
+What this buys, and what it costs, measured rather than assumed:
 
-The pin was also invisible to every tool that exists to catch drift. The
-revision lived in the input URL, so `nix flake update` could not move it and
-the nightly bump silently skipped it; `nix run .#review` watches six pins and
-hyprland was not among them. Two weeks of drift looked exactly like none, and
-would have looked the same at two years.
+| | hyprwm's flake | nixpkgs |
+|---|---|---|
+| speed to a fix | their branch, same day | nixpkgs' packaging lag |
+| built or fetched | **fetched** — `hyprland.cachix.org` | fetched — `cache.nixos.org` |
+| inputs fetched at update | **~60**, including a second nixpkgs | none |
 
-`hyprland.cachix.org` went with it. That cache only ever substituted because
-this flake took hyprwm's nixpkgs unmodified -- their own request, and the
-reason `inputs.nixpkgs.follows` was deliberately not set. From nixpkgs the
-compositor comes from cache.nixos.org, so the second cache, its key, and the
-`Add hyprland binary cache` step CI wrote into /etc/nix/nix.conf are all gone.
+That last row is the real cost. Evaluating this input pulls hyprwm's whole
+build graph — aquamarine, hyprutils, hyprlang, hyprtoolkit, xdph and a
+`nixpkgs` and `systems` for each — from GitHub, every update. On 2026-09-07 a
+machine's update failed on exactly that: GitHub returned 504 for the
+aquamarine archive, reproducible from outside the VM, and nothing could
+proceed. nixpkgs' hyprland fetches none of it.
 
-The 0.55 floor is still asserted in modules/nixos.nix, because the Lua API is
-a real requirement rather than a preference. If nixpkgs ever goes backwards,
-that assertion fires with the reason rather than the desktop failing to
-configure itself.
+The trade was made deliberately: the compositor is what this desktop *is*, and
+getting its fixes on hyprwm's schedule is worth an occasional upstream outage
+during an update — which is retryable, where waiting on a nixpkgs bump is not.
+
+Omarchy itself pins nothing: `install/omarchy-base.packages` names `hyprland`
+with no version, so upstream gets whatever Arch shipped that day. Tracking
+hyprwm's branch is the closest a flake gets to that, and usually ahead of it.
+
+The `>= 0.55` assertion in modules/nixos.nix stays regardless. Omarchy 4.x
+configures Hyprland through the Lua API that landed in 0.55, and that is a
+requirement rather than a preference.
 
 <a id="declarative-flatpaks-for-the-software-nixpkgs-genu"></a>
 ### Declarative Flatpaks, for the software nixpkgs genuinely does not carry

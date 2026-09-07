@@ -5,9 +5,11 @@
   nixConfig = {
     extra-substituters = [
       "https://nixarchy.cachix.org"
+      "https://hyprland.cachix.org"
     ];
     extra-trusted-public-keys = [
       "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
+      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
     ];
   };
 
@@ -16,11 +18,14 @@
 
     systems.url = "github:nix-systems/default-linux";
 
-    # Why: docs/internals/flake.md#deliberately-unpinned-unlike-sops-nix-and-microvm-b
+    # Why: docs/internals/flake.md#deliberately-unpinned-unlike-hyprland-sops-nix-and
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Why: docs/internals/flake.md#hyprland-from-hyprwm-tracking-their-branch-not-a
+    hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
       url = "github:basecamp/omarchy/v4.0.2";
@@ -73,6 +78,7 @@
       nixpkgs,
       systems,
       home-manager,
+      hyprland,
       omarchy,
       zen-browser,
       ...
@@ -300,21 +306,8 @@
           src = omarchy;
           version = omarchyVersion;
           inherit nixarchyRev nixarchyDate;
-          # Why: docs/internals/flake.md#hyprland-comes-from-nixpkgs-because-nixpkgs-caught-up
-          # The compositor the Lua config is written against.
-          #
-          # nixpkgs', since it caught up: this was a separate flake input
-          # pinned to a hyprwm commit because nixpkgs sat on 0.54.3 while
-          # Omarchy 4.x needs the Lua API that landed in 0.55. nixpkgs now
-          # ships the same version Arch does -- and Arch is what upstream
-          # Omarchy actually installs, since install/omarchy-base.packages
-          # names `hyprland` with no version at all.
-          #
-          # The pin was also unreachable by tooling: the rev lived in the
-          # input URL, so `nix flake update` could not move it and the nightly
-          # bump silently skipped it. Two weeks of drift looked exactly like
-          # none.
-          inherit (final) hyprland;
+          # The compositor the Lua config is written against, not nixpkgs'.
+          inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
 
           # The desktop shell. nixpkgs' own, since #35: it was overridden to
           # 0.3.1 while nixpkgs sat on 0.3.0, whose session lock reaches

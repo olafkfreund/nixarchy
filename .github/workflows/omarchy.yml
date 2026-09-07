@@ -41,12 +41,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
@@ -326,6 +325,19 @@ jobs:
       # pure black while every other check here passed, because a wallpaper
       # wider than GL_MAX_TEXTURE_SIZE draws nothing at all and Qt still
       # reports the image Ready.
+      - name: Add hyprland binary cache
+        if: steps.rel.outputs.changed == 'true'
+        # Nixarchy pins Hyprland ahead of nixpkgs, so without this the runner
+        # compiles a compositor from source. build.yml has had this since it
+        # started building the same closure; this job never did, which is the
+        # other half of why it kept running out of its budget.
+        run: |
+          sudo tee -a /etc/nix/nix.conf >/dev/null <<'EOF'
+          extra-substituters = https://hyprland.cachix.org
+          extra-trusted-public-keys = hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
+          EOF
+          sudo systemctl restart nix-daemon || true
+
       - name: Boot a session and check the desktop renders
         if: steps.rel.outputs.changed == 'true'
         run: |

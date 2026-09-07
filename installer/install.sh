@@ -44,10 +44,10 @@ NIX_FLAGS=(--extra-experimental-features "nix-command flakes")
 
 # The live ISO's nix.conf knows only cache.nixos.org. programs.nixarchy.binaryCaches
 # applies to the installed system, not to the installer's own daemon, so without
-# this the first install builds the whole vendored tree from source. Key copied
-# from nix.settings in modules/nixos.nix -- do not retype it.
-SUBSTITUTERS="https://nixarchy.cachix.org"
-TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
+# these the first install compiles Hyprland from source. Keys copied from
+# nix.settings in modules/nixos.nix -- do not retype them.
+SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
+TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
 
 # ...unless we are the offline image, which carries the whole closure.
 #

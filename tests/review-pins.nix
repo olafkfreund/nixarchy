@@ -98,12 +98,17 @@ pkgs.runCommand "nixarchy-review-pins"
 
     # One of each shape, because the review asks a different question of each
     # and a classifier that has collapsed to one answer is the bug.
-    # sops-nix is the `rev` example rather than hyprland, which used to be
-    # pinned by commit and is now taken from nixpkgs. That swap is the whole
-    # reason this loop names three specific inputs instead of counting shapes:
-    # when one disappears the check fails loudly, rather than quietly testing
-    # two shapes and calling it three.
-    for want_line in "omarchy	tag" "sops-nix	rev" "nixpkgs	ref"; do
+    # One of each shape, and hyprland is named on purpose rather than as a
+    # convenient example: it used to be pinned by revision IN THE URL, which
+    # `nix flake update` cannot move and the nightly bump silently skipped. It
+    # sat at 0.56.0 while nixpkgs reached 0.56.2 -- a pin meant to keep the
+    # compositor AHEAD of nixpkgs had put it behind, and nothing said so,
+    # because a watcher that reports nothing looks exactly like a watcher with
+    # nothing to report.
+    #
+    # So `hyprland ref` is the assertion, not `hyprland rev`: if someone pins
+    # it back to a commit, this fails and says why.
+    for want_line in "omarchy	tag" "sops-nix	rev" "hyprland	ref" "nixpkgs	ref"; do
       name=''${want_line%%	*}
       kind=''${want_line##*	}
       got=$(grep -E "^$name	" pins-flake.txt | cut -f2)

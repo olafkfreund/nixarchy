@@ -46,12 +46,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
@@ -294,12 +293,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
@@ -349,12 +347,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
@@ -1042,12 +1039,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
@@ -1087,6 +1083,16 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           df -h /
+
+      - name: Add hyprland binary cache
+        # Nixarchy pins Hyprland ahead of nixpkgs, so without this the runner
+        # compiles a compositor from source and times out.
+        run: |
+          sudo tee -a /etc/nix/nix.conf >/dev/null <<'EOF'
+          extra-substituters = https://hyprland.cachix.org
+          extra-trusted-public-keys = hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
+          EOF
+          sudo systemctl restart nix-daemon || true
 
       - name: Build the VM system closure
         run: nix build .#checks.x86_64-linux.vm-toplevel --print-build-logs
@@ -1199,12 +1205,11 @@ jobs:
           #   warning: ignoring untrusted flake configuration setting
           #   'extra-substituters'. Pass '--accept-flake-config' to trust it
           #
-          # and the nixarchy cache flake.nix declares is simply not used.
-          # There used to be a second one, hyprland.cachix.org, re-added by
-          # hand in ONE job because "without this the runner compiles a
-          # compositor from source and times out" -- a workaround for a
-          # setting the flake already carried. Both the cache and the
-          # workaround are gone: Hyprland comes from nixpkgs now.
+          # and the nixarchy and hyprland caches flake.nix declares are
+          # simply not used. The hyprland one was then re-added by hand in
+          # ONE job, writing /etc/nix/nix.conf because "without this the
+          # runner compiles a compositor from source and times out" -- a
+          # workaround for a setting the flake already carried.
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.

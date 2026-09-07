@@ -289,6 +289,43 @@ in
       '';
     };
 
+    defaultAgent = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.enum [
+          "claude"
+          "codex"
+          "opencode"
+          "crush"
+          "gemini"
+          "copilot"
+          "grok"
+        ]
+      );
+      default = null;
+      example = "opencode";
+      description = ''
+        Which coding agent this machine's Omarchy menu treats as the default:
+        the one `omarchy-agent` launches, and the one the Ask menu's whole
+        group is gated on.
+
+        Setting this installs the agent and records the choice, so it survives
+        a rebuild and travels to the next machine installed from this flake.
+        Without it the choice exists only in
+        `~/.config/omarchy/defaults/agent`, written by the menu at runtime --
+        which is the one thing this project exists to replace.
+
+        The menu still works and still writes that file, so a machine can be
+        changed at a prompt. This option is authoritative on the next
+        activation: the configuration is the source of truth, and a menu click
+        that outlived a rebuild would be a second, invisible one.
+
+        The ids match `omarchy-default-agent`'s. Absent from the list are `pi`,
+        `omp` and `antigravity`, which nixpkgs has no package for -- that
+        command falls back to mise for those, and an imperative install is not
+        something an option should promise to reproduce.
+      '';
+    };
+
     bootSplash = lib.mkOption {
       type = lib.types.enum [
         "defer"

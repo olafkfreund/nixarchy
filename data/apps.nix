@@ -361,6 +361,18 @@
     # Apache-2.0. Not unfree, unlike the ChatGPT desktop app above, which is a
     # different piece of software from the same vendor.
   };
+
+  opencode = {
+    label = "OpenCode";
+    category = "AI";
+    attr = "opencode";
+    # Absent from this catalogue until now, which was an oversight rather than
+    # a decision: omarchy-default-agent already maps `opencode` to this exact
+    # attribute and installs it through nixarchy-pkg-add, and
+    # programs.nixarchy.localAi installs it too. It was reachable both ways and
+    # listed in neither menu -- the only agent in the tree that could not be
+    # browsed to, and the one modules/local-ai.nix calls "the better agent".
+  };
   gemini-cli = {
     label = "Gemini CLI";
     category = "AI";

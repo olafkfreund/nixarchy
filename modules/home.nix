@@ -36,6 +36,11 @@ let
   }
   // (osConfig.programs.nixarchy.localAi or { });
 
+  # The coding agent the menu treats as default, when the configuration names
+  # one. Null on a standalone home-manager user, exactly like localAi above:
+  # there is no NixOS module to have set it.
+  defaultAgent = osConfig.programs.nixarchy.defaultAgent or null;
+
   # Same shape as localAi just above: declared on the NixOS side
   # (modules/services/boxes.nix), because `machines` names containers that
   # should exist regardless of which user's home-manager config is reading
@@ -581,6 +586,38 @@ in
         exec ${cfg.package}/bin/omarchy-cursor-set
       '';
     };
+
+    # The default agent, recorded where omarchy-agent and the menu read it.
+    #
+    # ~/.config/omarchy/defaults/agent is upstream's file, written by
+    # omarchy-default-agent when someone picks an agent from the menu. That
+    # makes the choice imperative: it does not survive a reinstall and does not
+    # travel to the next machine, which is the one thing this project exists to
+    # replace.
+    #
+    # Written on every activation rather than seeded once, and the difference
+    # matters: the option is the configuration's answer to "which agent", and a
+    # menu click that outlived a rebuild would be a second answer with no
+    # record. The menu still works -- it writes this file and takes effect
+    # immediately -- it just does not outlive the next rebuild on a machine
+    # that has declared one. programs.nixarchy.defaultAgent says so.
+    #
+    # Not an xdg.configFile, for the same reason the opencode provider below is
+    # not: a read-only symlink here would make omarchy-default-agent fail at
+    # the moment someone clicks the menu, which is worse than being overwritten
+    # later.
+    home.activation.nixarchyDefaultAgent = lib.mkIf (defaultAgent != null) (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        agentfile="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/defaults/agent"
+        run mkdir -p "$(dirname "$agentfile")"
+
+        # Temp file and move, so an interrupted activation cannot leave the
+        # menu reading half an agent name and launching nothing.
+        tmp=$(${pkgs.coreutils}/bin/mktemp)
+        printf '%s\n' ${lib.escapeShellArg defaultAgent} > "$tmp"
+        run mv "$tmp" "$agentfile"
+      ''
+    );
 
     # Why: modules/AGENTS.md#provider-files-for-the-local-model-when-the-system
     home.activation.nixarchyOpencodeProvider =

@@ -808,6 +808,33 @@ in
           (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
           (pkgs.extend inputs.self.overlays.default).nixarchy-verify
 
+        ]
+        # The default agent's own package, when the configuration names one.
+        #
+        # ids and attributes are omarchy-default-agent's `attr_for`, kept in
+        # step by hand. That command installs an agent through nixarchy-pkg-add
+        # when someone picks one from the menu; this is the same decision made
+        # in the configuration instead, so it reproduces on the next machine.
+        #
+        # `claude-code` is unfree, so defaultAgent = "claude" without
+        # programs.nixarchy.allowUnfree fails to evaluate with nixpkgs' own
+        # message naming the package. That is the right failure: the
+        # alternative is a missing agent and an Ask menu that never appears.
+        ++
+          lib.optional (cfg.defaultAgent != null)
+            {
+              # Three of the seven are named after their own command, which is
+              # the whole reason omarchy-agent can look for `$agent` on PATH.
+              inherit (pkgs) codex opencode crush;
+
+              claude = pkgs.claude-code;
+              gemini = pkgs.gemini-cli;
+              copilot = pkgs.github-copilot-cli;
+              grok = pkgs.grok-cli;
+            }
+            .${cfg.defaultAgent}
+        ++ [
+
           # Why: modules/AGENTS.md#uncomments-one-app-in-config-nixarchy-apps-nix
           (pkgs.writeShellApplication {
             name = "nixarchy-catalogue-diff";

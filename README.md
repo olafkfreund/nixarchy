@@ -924,23 +924,37 @@ sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
 `--ignore-missing` because one `SHA256SUMS` covers both images and nobody
 downloads both.
 
-**From Windows**, take the network image instead — it is one file and needs no
-reassembly. If you want the offline one, join the parts with `copy /b`, and the
-`/b` is load-bearing: without it `copy` treats them as text and truncates at
-the first `0x1A` byte, leaving an image that looks complete and is not.
+### Writing the stick from Windows or macOS
+
+**Use [balenaEtcher](https://etcher.balena.io/), and take the network image.**
+That combination has no wrong answer in it: Etcher only ever writes an image
+byte-for-byte -- no filesystem to choose, no partition scheme, no mode prompt --
+and the network image is one file that needs no reassembly.
+
+If you want the offline image on Windows, join the parts first. The `/b` is
+load-bearing: without it `copy` treats them as text and stops at the first
+`0x1A` byte, leaving a file that looks complete and is not.
 
 ```
 copy /b PART-aa + PART-ab + PART-ac + PART-ad nixarchy.iso
 certutil -hashfile nixarchy.iso SHA256
 ```
 
-substituting the real names — they carry the version, so
-`nixarchy-v4.0.2-10.iso.part-aa` and so on — and comparing the hash against
-`SHA256SUMS` by eye, since `certutil` does not check a sums file for you.
+substituting the real names, and comparing that hash against `SHA256SUMS`
+yourself -- `certutil` will not read a sums file for you.
 
-Then write it with **Rufus in DD Image mode** — read the next caveat before
-you press START, because Rufus's *recommended* answer is the one that breaks
-this — or with balenaEtcher, which never asks.
+**If you use Rufus instead**, it will ask one question and its recommended
+answer is the wrong one here; the next caveat explains why. Choose **DD Image
+mode**.
+
+**Turn Secure Boot off** in your firmware before booting the stick. This
+project does not sign its bootloader, which is
+[a decision rather than an oversight](#status).
+
+**Keeping Windows on the same disk?** Free the space from inside Windows
+first, and read [the dual boot page](docs/manual/dual-boot-install.md) --
+it covers Shrink Volume, the 32 GiB floor the installer enforces, and why
+BitLocker has to come off before you start.
 
 Or build it yourself, which is the same image from the same commit:
 
@@ -1058,10 +1072,12 @@ default.** Rufus asks once:
 > This image is an ISOHybrid image … Write in ISO Image mode (Recommended)
 > / Write in DD Image mode
 
-**ISO Image mode is the default and it is the wrong answer here.** It copies
-the image's files onto a FAT32 partition and installs *Rufus's own* GRUB to
-boot them. That GRUB then tries to load this image's GRUB modules, cannot
-parse them, and stops with:
+**ISO Image mode is the default and it is the wrong answer here**, and the
+reason is a file size. The offline image contains one 5.8 GB file, the Nix
+store it installs from, which is larger than FAT32 can hold -- so ISO mode
+falls back to NTFS, and because UEFI firmware cannot boot NTFS, Rufus adds its
+own bootloader to chain-load from it. *That* bootloader then tries to load this
+image's GRUB modules, cannot parse them, and stops with:
 
 ```
 kern/x86_64/dl.c:grub_arch_dl_relocate_symbols:114:
@@ -1096,18 +1112,9 @@ it refuses rather than shrinking anything itself.
 Full-disk mode is one file, `installer/disk-config.nix`, run against the disk
 you name. Anything already there is gone.
 
-**Making that free space, from Windows**, before you boot the stick:
-
-1. **Disk Management** → right-click the Windows partition → **Shrink Volume**.
-2. Leave what it frees **unallocated**. Do not create a partition in it — the
-   installer looks for unallocated space, and a formatted partition is not it.
-3. Free at least **32 GiB contiguous**, or the first screen refuses with
-   `the largest free region on /dev/… is under 32 GiB`.
-4. Turn off **Fast Startup** (Control Panel → Power Options → *Choose what the
-   power buttons do*). With it on, shutting down hibernates instead, and the
-   partition table is not safely readable from another system.
-5. If the drive is **BitLocker**-encrypted, suspend protection before
-   repartitioning, or Windows asks for the recovery key on its next boot.
+Making that space is a Windows job and is done before you boot the stick:
+[the dual boot page](docs/manual/dual-boot-install.md) covers Shrink Volume,
+the 32 GiB floor, Fast Startup, and BitLocker.
 
 It is **UEFI only** — the layout is an ESP with systemd-boot, and there is no
 BIOS path.

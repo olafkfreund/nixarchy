@@ -59,7 +59,6 @@ let
 in
 {
   imports = [
-    inputs.hyprland.nixosModules.default
     (import ./apps.nix inputs)
     ./local-ai.nix
     ./fleet.nix
@@ -259,8 +258,9 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Add nixarchy.cachix.org and hyprland.cachix.org as substituters.
-        Without them, enabling nixarchy means compiling a compositor.
+        Add nixarchy.cachix.org as a substituter. It carries the vendored
+        Omarchy tree and the packages this flake builds itself; without it,
+        enabling nixarchy means building all of them locally.
 
         This is the one thing here that changes a machine without any chance
         of a conflict to warn you: substituters and trusted-public-keys are
@@ -431,7 +431,12 @@ in
         message = ''
           Nixarchy needs Hyprland >= 0.55 for the Lua config API that
           Omarchy 4.x is written against (hl.bind / hl.window_rule / hl.on).
-          Use inputs.hyprland's package, not nixpkgs'.
+
+          The compositor comes from nixpkgs. If this fires, the nixpkgs pin
+          has gone backwards or programs.hyprland.package has been overridden
+          with something older; check what upstream Omarchy installs, which is
+          whatever Arch ships -- install/omarchy-base.packages names
+          `hyprland` with no version.
         '';
       }
     ];
@@ -447,9 +452,11 @@ in
         "flakes"
       ];
 
-      # hyprland.cachix.org covers Hyprland when the pinned commit is one
-      # hyprwm built; nixarchy.cachix.org covers it when it is not, plus the
-      # vendored Omarchy tree and the packages this flake builds itself.
+      # nixarchy.cachix.org covers the vendored Omarchy tree and the packages
+      # this flake builds itself. Hyprland is not among them: it comes from
+      # nixpkgs now, so cache.nixos.org serves it and hyprland.cachix.org --
+      # which only ever helped because the compositor came from hyprwm's own
+      # flake, unmodified -- has nothing left to offer.
       #
       # Behind an option rather than mkForce: these are lists, so they merge
       # into a user's existing trust with no conflict and no warning, which
@@ -457,11 +464,9 @@ in
       # silently. See programs.nixarchy.binaryCaches.
       substituters = lib.mkIf cfg.binaryCaches [
         "https://nixarchy.cachix.org"
-        "https://hyprland.cachix.org"
       ];
       trusted-public-keys = lib.mkIf cfg.binaryCaches [
         "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
-        "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
       ];
     };
 
@@ -490,9 +495,13 @@ in
         # means lib.mkForce, which is the honest signal for replacing the
         # compositor an entire desktop is written against.
         enable = true;
-        package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
-        portalPackage =
-          inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
+        # `package` and `portalPackage` are deliberately NOT set. They used to
+        # point at a hyprland flake input pinned to a hyprwm commit, because
+        # nixpkgs sat on 0.54.3 and Omarchy 4.x needs the Lua API from 0.55.
+        # nixpkgs caught up and passed it, so the override became a way to
+        # ship something OLDER than the default -- and older than what Arch,
+        # and therefore upstream Omarchy, actually installs. The assertion
+        # above still holds the floor at 0.55.
         # Omarchy's session and its user units are started through uwsm.
         withUWSM = true;
       };

@@ -98,7 +98,12 @@ pkgs.runCommand "nixarchy-review-pins"
 
     # One of each shape, because the review asks a different question of each
     # and a classifier that has collapsed to one answer is the bug.
-    for want_line in "omarchy	tag" "hyprland	rev" "nixpkgs	ref"; do
+    # sops-nix is the `rev` example rather than hyprland, which used to be
+    # pinned by commit and is now taken from nixpkgs. That swap is the whole
+    # reason this loop names three specific inputs instead of counting shapes:
+    # when one disappears the check fails loudly, rather than quietly testing
+    # two shapes and calling it three.
+    for want_line in "omarchy	tag" "sops-nix	rev" "nixpkgs	ref"; do
       name=''${want_line%%	*}
       kind=''${want_line##*	}
       got=$(grep -E "^$name	" pins-flake.txt | cut -f2)

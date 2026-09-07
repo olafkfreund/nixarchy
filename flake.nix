@@ -1119,6 +1119,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: data/bin-ledger.nix
+          bin-ledger = import ./tests/bin-ledger.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Why: installer/AGENTS.md#generate-config-surface
           generate-config-surface = import ./tests/generate-config-surface.nix {
             inherit inputs;

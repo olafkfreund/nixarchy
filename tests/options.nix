@@ -1340,7 +1340,33 @@ pkgs.runCommand "nixarchy-options"
 
           splash_is_ours installed "$splashInstalledDir" \
             "$splashInstalledOn" "$splashInstalledTheme"
-          splash_is_ours iso "$splashIsoDir" "$splashIsoOn" "$splashIsoTheme"
+
+          # The ISO is asserted the other way round, and the reversal is the
+          # point of #383 rather than an exemption from this check.
+          #
+          # What the original issue was about is upstream Omarchy artwork
+          # appearing on a nixarchy boot. The live image now draws NO splash at
+          # all -- stock NixOS's installation image runs no plymouth either,
+          # and on real hardware plymouth takes over KMS before the root
+          # filesystem exists, which is where a ThinkPad E15 stopped with
+          # nothing on screen while every VM here booted fine.
+          #
+          # So the older promise is kept, more strongly than before: a splash
+          # that does not exist cannot draw somebody else's artwork. What has
+          # to be defended now is the opposite regression -- somebody turning
+          # plymouth back on for the boot medium, which is exactly the tidy-up
+          # that would undo #383 without anyone noticing.
+          [ "$splashIsoOn" = "false" ] || {
+            echo "iso: boot.plymouth.enable is $splashIsoOn on the BOOT MEDIUM" >&2
+            echo "  #383 turned it off there: plymouth grabs KMS before the" >&2
+            echo "  root filesystem exists, and on hardware that hand-off can" >&2
+            echo "  hang with nothing printed. Stock NixOS ships its installer" >&2
+            echo "  without plymouth for the same reason." >&2
+            echo "  The INSTALLED machine keeps its splash -- that is the" >&2
+            echo "  assertion above, and it is untouched." >&2
+            exit 1
+          }
+          echo "iso: the boot medium runs no plymouth, as NixOS's own does not"
 
           # ---- nixarchy only commits a configuration it wrote --------------
           #

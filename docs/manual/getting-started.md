@@ -28,10 +28,26 @@ want depends on whether the drive is blank.
 
 ## The ISO
 
+Two images are published with each
+[release](https://github.com/olafkfreund/nixarchy/releases): a **net** image of
+about 1.6 GB that downloads the desktop while it installs, and an **offline**
+image of about 6 GB that carries it. The offline one is split into `.part-*`
+files because GitHub refuses a single asset over 2 GiB; the release notes give
+the one command that joins them.
+
+Or build either yourself:
+
 ```
 nix build github:olafkfreund/nixarchy#iso
 sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
+
+**On Windows or macOS, how you write the stick matters**, and the way it fails
+is at boot with no explanation — the README's
+[USB section](https://github.com/olafkfreund/nixarchy#writing-the-stick-from-windows-or-macos)
+has the detail, including why Rufus' *recommended* answer to its ISOHybrid
+question is the wrong one for the offline image. On Linux, `dd` as above has no
+such trap.
 
 Boot it. There is no boot menu and no login prompt — the installer is what
 comes up, and it asks the same questions Omarchy asks, in the same order.

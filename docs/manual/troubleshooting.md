@@ -93,6 +93,64 @@ rebuild.
 Unchanged: *Update > Hardware* restarts the subsystem, and the
 `omarchy-restart-*` commands behind those rows are upstream's.
 
+### I can't see my Wi-Fi at all
+
+Different from the section above: that one is for a radio that worked and
+stopped. This is for one that never appeared.
+
+**Look for the right name first, because it is free and it is usually this.**
+There is no `wlan0` on a modern NixOS and there never will be — systemd renames
+every interface after the PCI slot it sits in, so an Intel card at `00:14.3`
+becomes `wlp0s20f3`. Someone searching nmtui for "wlan0" finds nothing on a
+machine whose Wi-Fi is working perfectly:
+
+```
+ip link
+```
+
+If a `wlp*` device is listed, the card is fine — connect with
+`nmcli device wifi list`, or pick it in nmtui.
+
+**If no wireless device is listed at all**, the kernel has no interface, and
+every wireless tool will show the same nothing, because they all ask the kernel.
+Reaching for a different client — iwctl instead of nmtui — is a second way to
+see the same absence. Ask what the driver did instead:
+
+```
+journalctl -b -k | grep -i firmware
+nixarchy doctor
+```
+
+The doctor's **Wireless** section names which of three cases you are in: no PCI
+device at all, a device with no driver bound, or a driver bound that registered
+no interface. Those have three different fixes, and nmtui cannot tell them
+apart.
+
+**On a machine installed before v4.0.2-11**, the likeliest answer is that it has
+no firmware at all. `hardware.enableRedistributableFirmware` was true on the ISO
+and false on the installed system, so `linux-firmware` — which carries every
+iwlwifi, ath, rtw and mt76 blob — was never installed. The symptom is
+distinctive: Wi-Fi works while you are installing and is gone once you reboot,
+and `lspci -nnk` still shows the driver bound, because a driver binds without
+firmware and only then fails to register a radio.
+
+Either update the machine, or add the line yourself to
+`/etc/nixos/hosts/<hostname>/configuration.nix` and rebuild:
+
+```nix
+hardware.enableRedistributableFirmware = true;
+```
+
+It needs no `allowUnfree`. From v4.0.2-11 it is the default and the line is
+redundant — harmless to keep, since it is only a default.
+
+If the kernel log names a firmware file still missing after that, it is outside
+the redistributable set: add `hardware.enableAllFirmware = true;` as well, which
+*does* need `nixpkgs.config.allowUnfree` (already set in that file). That covers
+Broadcom's `b43` and `brcm` blobs. Some Realtek cards — 8821CE, 8852BE — have no
+in-tree driver at all and need an out-of-tree module instead; the doctor names
+the right one for your device id.
+
 ### Why can't I login or sudo with my password?
 
 Upstream's answer is `faillock --reset`, and it applies here too: switch to a

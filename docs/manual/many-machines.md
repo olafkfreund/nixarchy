@@ -23,6 +23,7 @@ could rebuild your machine from somewhere else is off unless you turn it on.
     │   ├── default.nix                username, disk, encryption
     │   ├── configuration.nix          timezone, keymap, and whatever you add
     │   ├── hardware-configuration.nix generated on that machine
+    │   ├── nixarchy-hardware.nix      what that machine IS, detected
     │   └── nixarchy-apps.nix          this machine's app selection
     └── laptop/…
 ```
@@ -62,8 +63,50 @@ repository beside the others.
 **3. Commit its hardware back.**
 
 `hardware-configuration.nix` is generated on the machine, because hardware is
-the one thing a repository written elsewhere cannot know. Run
-`nixarchy config repo` on the new machine to push it.
+the one thing a repository written elsewhere cannot know. So is
+`nixarchy-hardware.nix` beside it — see below. Run `nixarchy config repo` on the
+new machine to push both.
+
+### `nixarchy-hardware.nix`, and why it is per-machine
+
+Written by the installer from what it found on the machine: CPU vendor, GPU
+vendor, whether there is a battery, whether the disk spins. Each line is a
+module from [nixos-hardware](https://github.com/NixOS/nixos-hardware), which
+carries 439 of them:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [
+    inputs.nixos-hardware.nixosModules.common-cpu-intel-cpu-only
+    inputs.nixos-hardware.nixosModules.common-gpu-intel
+    inputs.nixos-hardware.nixosModules.common-pc-laptop-ssd
+  ];
+}
+```
+
+That is CPU microcode, the Intel media stack, and `fstrim` — things you would
+otherwise have found out you needed one at a time. Everything they set is
+`lib.mkDefault`, so anything you write elsewhere wins, and the file is yours to
+edit: nothing regenerates it behind you.
+
+**Only the generic `common-*` modules are chosen for you**, and that is a
+deliberate line. The other 412 key on DMI product strings with no
+machine-readable table anywhere, so matching them automatically would mean
+guessing — and importing `dell-xps-13-9310` onto a 9315 is a machine that boots
+wrong in a way nobody traces back to us. `nixarchy doctor` prints what your
+machine calls itself so you can search for it; add any match to this file by
+hand. Plenty of machines have no module at all — there are thirteen ThinkPad T14
+modules and no T15 — and the generic ones are then the whole story.
+
+**NVIDIA is never chosen for you either.** The choice is between the open kernel
+modules and the `legacy_580` series, split at PCI device id `0x1e00`, and on a
+hybrid laptop it also needs both PRIME bus ids in decimal. Get any of that wrong
+and the machine has no screen, which is not a failure a first boot can explain.
+The doctor computes all of it and prints the lines for you to paste.
+
+Copying this file from another machine is the one thing not to do — it describes
+that machine's hardware, not this one's.
 
 **4. Let them keep themselves current.**
 

@@ -56,13 +56,104 @@ tmpfs here), MATRIX_OVMF (firmware, resolved from nixpkgs otherwise).
 
 Every VM is watchable on VNC throughout; the port is printed at startup.
 """
+import json
 import os
+import socket
 import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from qmp import Qmp, wait_for                                    # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Typing on a guest's virtual keyboard over QMP, and reading its serial log.
+#
+# Inlined rather than imported. The nixos test driver has send_chars and
+# wait_for_console_text built in; a plain qemu run has neither, and a helper
+# module beside this file is one more thing to be missing when somebody copies
+# the script to a machine that has the ISO on it.
+#
+# Typing is per-key by construction -- QMP send-key takes qcodes, not text --
+# which is why the guest is only ever asked to type SHORT commands. A long
+# line drops a character often enough to matter, and a dropped character is
+# not an error: it is an unterminated quote and a shell waiting forever.
+# ---------------------------------------------------------------------------
+SHIFTED = {
+    '_': 'minus', ':': 'semicolon', '?': 'slash', '~': 'grave_accent',
+    '|': 'backslash', '"': 'apostrophe', '<': 'comma', '>': 'dot',
+    '{': 'bracket_left', '}': 'bracket_right', '+': 'equal', '(': '9',
+    ')': '0', '!': '1', '@': '2', '#': '3', '$': '4', '%': '5', '^': '6',
+    '&': '7', '*': '8',
+}
+PLAIN = {
+    ' ': 'spc', '-': 'minus', '=': 'equal', '/': 'slash', '.': 'dot',
+    ',': 'comma', ';': 'semicolon', "'": 'apostrophe', '\n': 'ret',
+    '[': 'bracket_left', ']': 'bracket_right', '\\': 'backslash',
+    '`': 'grave_accent',
+}
+
+
+class Qmp:
+    def __init__(self, path, timeout=120):
+        deadline = time.time() + timeout
+        while True:
+            try:
+                self.s = socket.socket(socket.AF_UNIX)
+                self.s.connect(path)
+                break
+            except (FileNotFoundError, ConnectionRefusedError):
+                if time.time() > deadline:
+                    raise
+                time.sleep(0.5)
+        self.f = self.s.makefile('rw')
+        self.f.readline()                      # greeting
+        self.cmd('qmp_capabilities')
+
+    def cmd(self, execute, **args):
+        self.f.write(json.dumps({'execute': execute, 'arguments': args}) + '\n')
+        self.f.flush()
+        while True:
+            line = self.f.readline()
+            if not line:
+                raise RuntimeError('qmp closed')
+            msg = json.loads(line)
+            if 'event' in msg:
+                continue
+            return msg
+
+    def key(self, *qcodes):
+        keys = [{'type': 'qcode', 'data': q} for q in qcodes]
+        self.cmd('send-key', keys=keys)
+
+    def type(self, text, delay=0.02):
+        for ch in text:
+            if ch in SHIFTED:
+                self.key('shift', SHIFTED[ch])
+            elif ch in PLAIN:
+                self.key(PLAIN[ch])
+            elif ch.isupper():
+                self.key('shift', ch.lower())
+            else:
+                self.key(ch)
+            time.sleep(delay)
+
+
+def wait_for(path, needle, timeout, label=None):
+    """Wait for a marker in the serial log. Returns the log tail on failure."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            data = open(path, 'rb').read().decode('utf-8', 'replace')
+        except FileNotFoundError:
+            data = ''
+        if needle in data:
+            print(f"  [{int(time.time()%100000)}] saw {label or needle}", flush=True)
+            return True
+        time.sleep(2)
+    print(f"TIMEOUT waiting for {label or needle}", file=sys.stderr)
+    return False
+
+
+# ---------------------------------------------------------------------------
 
 ISOS = os.environ.get("MATRIX_ISO_DIR", "/mnt/data/vmtest/isos")
 WORK = os.environ.get("MATRIX_WORK", "/mnt/data/vmtest")
@@ -79,6 +170,35 @@ NET = os.environ.get("MATRIX_NET_ISO", f"{ISOS}/nixarchy-v4.0.2-8-net.iso")
 OVMF = os.environ.get("MATRIX_OVMF") or (
     subprocess.run(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#OVMF.fd"],
                    capture_output=True, text=True, check=True).stdout.strip() + "/FV")
+# NOT `omarchy` by default here would break the boot/manual modes' comparison
+# with the baked reference, so the default matches what every other check uses
+# -- and the whole point of the variable is that you are supposed to change it.
+# See the module docstring: `omarchy` is the one username that cannot diverge.
+USERNAME = os.environ.get("MATRIX_USERNAME", "omarchy")
+
+# No network at all, not merely no substituters. `offline` in installer/cd.nix
+# means the store is pre-populated; this asks the harder question -- can a
+# machine with no cable install from this image without needing to build
+# something it has no compiler for.
+NONET = os.environ.get("MATRIX_NONET") == "1"
+
+# An emulated NVMe controller instead of virtio-blk, and the target device name
+# that goes with it.
+#
+# Every install check in this repo targets /dev/vda. Real laptops are NVMe, and
+# on 2026-09-07 a bare-metal install died inside disko while mounting the ESP
+# it had just formatted:
+#
+#   mount: /mnt/boot: wrong fs type, bad option, bad superblock
+#          on /dev/nvme0n1p1
+#   disko exited 32: the disk may be partly formatted.
+#
+# The disk controller was the one variable no install test had ever varied --
+# the same shape of hole as every test installing as `omarchy`, the one
+# username that cannot diverge from the baked reference closure.
+NVME = os.environ.get("MATRIX_NVME") == "1"
+TARGET = "/dev/nvme0n1" if NVME else "/dev/vda"
+
 HASH = ("$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo."
         "yhxsVpM6bgkeTdCG9D91zOaGX9Bu/YsQTlWLwuQF1SrOL0DY8Bu/V/")
 
@@ -145,13 +265,13 @@ def make_answers(w, mode, encrypt):
     d = f"{w}/a"
     os.makedirs(d, exist_ok=True)
     lines = [
-        "device=/dev/vda",
+        f"device={TARGET}",
         f"disk_mode={mode}",
         f"encrypt={'yes' if encrypt else 'no'}",
     ]
     if encrypt:
         lines.append("luks_passphrase=omarchytest")
-    lines += ["hostname=nixarchy", "username=omarchy",
+    lines += ["hostname=nixarchy", f"username={USERNAME}",
               f"password_hash={HASH}", "timezone=UTC", "keymap=us"]
     open(f"{d}/answers", "w").write("\n".join(lines) + "\n")
     open(f"{d}/drive", "w").write(DRIVE)
@@ -191,7 +311,8 @@ def main():
     serial, sock, vars_fd = f"{w}/serial.log", f"{w}/qmp.sock", f"{w}/VARS.fd"
 
     print(f"== cell {name}: {os.path.basename(iso)}, disk_mode={mode}, "
-          f"encrypt={encrypt}")
+          f"encrypt={encrypt}, username={USERNAME}, "
+          f"network={'NONE' if NONET else 'user-mode NAT'}")
     disk = f"{w}/disk.qcow2" if boot_only else make_disk(w, mode)
     answers = None if (manual or boot_only) else make_answers(w, mode, encrypt)
     sh("cp", "-f", f"{OVMF}/OVMF_VARS.fd", vars_fd)
@@ -206,11 +327,22 @@ def main():
         "-machine", "q35,accel=kvm", "-cpu", "host", "-m", "8192", "-smp", "4",
         "-drive", f"if=pflash,format=raw,readonly=on,file={OVMF}/OVMF_CODE.fd",
         "-drive", f"if=pflash,format=raw,file={vars_fd}",
+    ] + ([
+        # if=none plus an explicit controller. There is no `if=nvme`, and
+        # letting qemu keep the disk on virtio while the answers file says
+        # /dev/nvme0n1 fails as a missing device rather than as the bug being
+        # looked for -- which would read like a reproduction.
+        "-drive", f"file={disk},if=none,format=qcow2,id=target",
+        "-device", "nvme,drive=target,serial=nixarchytest",
+    ] if NVME else [
         "-drive", f"file={disk},if=virtio,format=qcow2",
+    ]) + [
     ] + ([] if answers is None else [
         "-drive", f"file={answers},if=virtio,format=raw",
     ]) + [
+    ] + ([] if NONET else [
         "-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
+    ]) + [
         "-device", "virtio-vga", "-device", "qemu-xhci", "-device", "usb-tablet",
         "-vnc", f"127.0.0.1:{disp}",
         "-serial", f"file:{serial}",

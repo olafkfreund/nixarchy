@@ -1011,6 +1011,28 @@ in
       # Why: modules/AGENTS.md#bluez-bluez-tools-and-bluez-utils-are-all-in
       bluetooth.enable = lib.mkDefault true;
 
+      # The CPU microcode, for whichever vendor this machine has.
+      #
+      # Same argument as the firmware below, and the same trap:
+      # nixos-generate-config.pl:328-329 emits exactly these two lines, and
+      # emits them only inside `if ($virt eq "none")`. So a real machine asks
+      # for microcode and no VM ever does -- which meant the REFERENCE hosts
+      # baked onto the image did not have it and every installed machine did.
+      #
+      # That difference is the drift tests/install.nix warns about: the seeded
+      # system and the installed one must match, or the install has to build
+      # what the medium cannot supply. It surfaced as an offline install
+      # walking backwards into the texinfo bootstrap trying to compile
+      # microcode-intel with no compiler -- a bare-metal report we had and
+      # could not place.
+      #
+      # Setting it here rather than leaving it to the generated config is what
+      # makes them match: reference and installed now agree by construction,
+      # on metal and in a VM alike. nixpkgs ignores the vendor that is not
+      # present, so naming both costs nothing.
+      cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
+      cpu.amd.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
+
       # Wireless, Bluetooth and most graphics need a firmware blob, and this is
       # the option that puts one on the machine.
       #

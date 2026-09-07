@@ -143,6 +143,28 @@ let
       pkgs.kmod
       pkgs.nukeReferences
 
+      # The CPU microcode, both vendors, for exactly the reason the kmod note
+      # below gives: the installed machine has to build its own initrd, and
+      # hardware.cpu.*.updateMicrocode puts these in boot.initrd.prepend --
+      # a build input of that per-machine derivation, and a runtime reference
+      # of nothing. No closure carries them, so storeContents cannot.
+      #
+      # Every real machine asks for microcode: nixos-generate-config.pl:328-329
+      # emits updateMicrocode = mkDefault enableRedistributableFirmware, with
+      # not-detected.nix beside it making that true. Both sit inside
+      # `if ($virt eq "none")`, so no VM ever did -- which is why an image that
+      # carried none of it looked fine for as long as only VMs installed from
+      # it, and a bare-metal install died in the texinfo bootstrap trying to
+      # compile microcode-intel.
+      #
+      # This is the case tests/install.nix's note explicitly is NOT about. That
+      # warns against widening a seed list to paper over the seeded and
+      # installed systems drifting apart. These agree -- modules/nixos.nix sets
+      # the option for both -- and the microcode is still needed, because the
+      # initrd is rebuilt per machine no matter how well they agree.
+      pkgs.microcode-intel
+      pkgs.microcode-amd
+
       # kmod's `dev` output, and it is worth saying why one output of one
       # package gets its own entry.
       #

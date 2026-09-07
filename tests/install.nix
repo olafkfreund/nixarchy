@@ -378,6 +378,20 @@ pkgs.testers.runNixOSTest {
         # system.includeBuildDependencies would cover far more and is not
         # usable: on a desktop this size the evaluation alone passed 3.4 GB
         # resident with no end in sight.
+        # The microcode, both vendors. NOT an instance of the paragraph above:
+        # the seeded and installed systems agree on it -- modules/nixos.nix
+        # sets updateMicrocode for both -- and it is still needed, because
+        # hardware.cpu.*.updateMicrocode puts these in boot.initrd.prepend and
+        # the initrd is rebuilt per machine regardless (a systemd initrd embeds
+        # the hostname). So it is a build input of a derivation every install
+        # makes for itself, and a runtime reference of nothing: no closure
+        # carries it, and seeding reference.toplevel above cannot reach it.
+        #
+        # installer/cd.nix seeds the same two beside pkgs.kmod, for the same
+        # reason and with the longer version of this note.
+        pkgs.microcode-intel
+        pkgs.microcode-amd
+
         pkgs.stdenv
         pkgs.stdenvNoCC
         pkgs.stdenv.cc

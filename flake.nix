@@ -1131,6 +1131,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/firmware-guard.nix
+          firmware-guard = import ./tests/firmware-guard.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Why: installer/AGENTS.md#try-nixarchy-sh
           try-nixarchy = import ./tests/try-nixarchy.nix {
             inherit inputs;

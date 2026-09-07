@@ -1004,11 +1004,38 @@ in
       };
     };
 
-    # bin/omarchy-brightness-display-ddc talks to monitors over i2c
-    hardware.i2c.enable = lib.mkDefault true;
+    hardware = {
+      # bin/omarchy-brightness-display-ddc talks to monitors over i2c
+      i2c.enable = lib.mkDefault true;
 
-    # Why: modules/AGENTS.md#bluez-bluez-tools-and-bluez-utils-are-all-in
-    hardware.bluetooth.enable = lib.mkDefault true;
+      # Why: modules/AGENTS.md#bluez-bluez-tools-and-bluez-utils-are-all-in
+      bluetooth.enable = lib.mkDefault true;
+
+      # Wireless, Bluetooth and most graphics need a firmware blob, and this is
+      # the option that puts one on the machine.
+      #
+      # It reads as belonging in hardware-configuration.nix, and nominally it is:
+      # nixos-generate-config imports installer/scan/not-detected.nix, whose
+      # entire content is `enableRedistributableFirmware = lib.mkDefault true`.
+      # But it imports it only inside `if ($virt eq "none")` -- bare metal only,
+      # nixos-generate-config.pl:321. So the installed system's firmware depends
+      # on a generated import, and the generated import depends on a virt probe.
+      #
+      # That is untestable here by construction. Every guest we install into
+      # reports a virt type, so every VM check takes the branch where this is
+      # FALSE and no test can ever exercise the branch real users are on. The ISO
+      # sets it (installation-device.nix), which is worse rather than better: the
+      # installer has wifi and the machine it installs may not, and the report
+      # that arrives is "it worked during the install".
+      #
+      # Redistributable, not All: this needs no allowUnfree and is what a desktop
+      # wants. hardware.enableAllFirmware adds b43, brcm, facetimehd and the Xbox
+      # dongles for ~2 MB more and does need it, so the doctor's Wireless section
+      # names it per-card instead of it being turned on for everyone.
+      #
+      # mkDefault, so an adopter who has a reason to ship no blobs still wins.
+      enableRedistributableFirmware = lib.mkDefault true;
+    };
 
     # Why: modules/AGENTS.md#our-own-splash-in-the-theme-directory-upstreams-oc
     users.users = lib.optionalAttrs (cfg.user != null) {

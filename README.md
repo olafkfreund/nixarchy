@@ -922,8 +922,25 @@ sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 `--ignore-missing` because one `SHA256SUMS` covers both images and nobody
-downloads both. `dd` — or Rufus in **DD mode**, or Etcher — and not a
-multiboot tool; see the caveat below for why the difference is not cosmetic.
+downloads both.
+
+**From Windows**, take the network image instead — it is one file and needs no
+reassembly. If you want the offline one, join the parts with `copy /b`, and the
+`/b` is load-bearing: without it `copy` treats them as text and truncates at
+the first `0x1A` byte, leaving an image that looks complete and is not.
+
+```
+copy /b PART-aa + PART-ab + PART-ac + PART-ad nixarchy.iso
+certutil -hashfile nixarchy.iso SHA256
+```
+
+substituting the real names — they carry the version, so
+`nixarchy-v4.0.2-10.iso.part-aa` and so on — and comparing the hash against
+`SHA256SUMS` by eye, since `certutil` does not check a sums file for you.
+
+Then write it with **Rufus in DD Image mode** — read the next caveat before
+you press START, because Rufus's *recommended* answer is the one that breaks
+this — or with balenaEtcher, which never asks.
 
 Or build it yourself, which is the same image from the same commit:
 
@@ -1035,10 +1052,16 @@ themselves current, is [many machines, one repo](docs/manual/many-machines.md).
 
 **Five caveats worth knowing before you write the stick.**
 
-**Write the image literally.** Ventoy, unetbootin, and "boot an ISO from my
-existing GRUB" all work by loading the ISO with *their* bootloader rather than
-the one on it. This image carries its own GRUB, and an older GRUB core trying
-to load its modules fails like this:
+**In Rufus, answer the ISOHybrid question with DD — not the recommended
+default.** Rufus asks once:
+
+> This image is an ISOHybrid image … Write in ISO Image mode (Recommended)
+> / Write in DD Image mode
+
+**ISO Image mode is the default and it is the wrong answer here.** It copies
+the image's files onto a FAT32 partition and installs *Rufus's own* GRUB to
+boot them. That GRUB then tries to load this image's GRUB modules, cannot
+parse them, and stops with:
 
 ```
 kern/x86_64/dl.c:grub_arch_dl_relocate_symbols:114:
@@ -1046,11 +1069,21 @@ kern/x86_64/dl.c:grub_arch_dl_relocate_symbols:114:
 Aborted. Press any key to exit.
 ```
 
-That number is not a real relocation type — they are small integers — which is
-what tells you the loader is reading modules it does not understand, rather
-than that the download is corrupt. Nothing is wrong with the image: it boots
-under UEFI when the firmware runs its own bootloader. `dd`, Rufus in DD mode,
-or Etcher all do that. Ventoy does not.
+`0x18d570` is not a relocation type — real ones are small integers, and
+`R_X86_64_64` is 1 — which is how you know the loader is reading modules from
+a different build rather than that the download is corrupt. **Nothing is wrong
+with the image.** It boots under UEFI whenever the firmware runs the
+bootloader that is on it.
+
+So: **DD Image mode**. The stick then looks empty or unreadable to Windows,
+which is correct. [balenaEtcher](https://etcher.balena.io/) never asks — it
+only does raw writes — so it is the safer choice if you would rather not have
+to catch a dialog. On Linux, `dd` as above.
+
+Anything that boots the image with its own loader fails the same way, for the
+same reason: **Ventoy**, unetbootin, YUMI, multiboot sticks, and "loopback
+this ISO" entries in an existing GRUB. Windows' own *Burn disc image* is for
+optical media and will not make a bootable stick at all.
 
 **It asks how to use the disk, and one of the answers erases it.** The first
 screen offers a free-space install -- it keeps what is already on the drive and
@@ -1062,6 +1095,19 @@ it refuses rather than shrinking anything itself.
 
 Full-disk mode is one file, `installer/disk-config.nix`, run against the disk
 you name. Anything already there is gone.
+
+**Making that free space, from Windows**, before you boot the stick:
+
+1. **Disk Management** → right-click the Windows partition → **Shrink Volume**.
+2. Leave what it frees **unallocated**. Do not create a partition in it — the
+   installer looks for unallocated space, and a formatted partition is not it.
+3. Free at least **32 GiB contiguous**, or the first screen refuses with
+   `the largest free region on /dev/… is under 32 GiB`.
+4. Turn off **Fast Startup** (Control Panel → Power Options → *Choose what the
+   power buttons do*). With it on, shutting down hibernates instead, and the
+   partition table is not safely readable from another system.
+5. If the drive is **BitLocker**-encrypted, suspend protection before
+   repartitioning, or Windows asks for the recovery key on its next boot.
 
 It is **UEFI only** — the layout is an ESP with systemd-boot, and there is no
 BIOS path.

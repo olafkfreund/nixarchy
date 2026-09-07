@@ -1096,10 +1096,23 @@ which is correct. [balenaEtcher](https://etcher.balena.io/) never asks — it
 only does raw writes — so it is the safer choice if you would rather not have
 to catch a dialog. On Linux, `dd` as above.
 
-Anything that boots the image with its own loader fails the same way, for the
-same reason: **Ventoy**, unetbootin, YUMI, multiboot sticks, and "loopback
-this ISO" entries in an existing GRUB. Windows' own *Burn disc image* is for
-optical media and will not make a bootable stick at all.
+Tools that boot the image with their own loader are a different question, and
+the honest answer is "sometimes". **Ventoy** does boot the offline image: a
+tester's install log shows `NIXARCHY_4_0_2` mounted at `/iso` from Ventoy's
+exfat partition, with the installer running and disko partitioning the disk.
+So it is not in the same category as the NTFS shim above, and this text used to
+say it was.
+
+It is still not what to reach for first. Ventoy, unetbootin, YUMI, multiboot
+sticks and "loopback this ISO" entries in an existing GRUB all interpose their
+own loader between the firmware and ours, which is one more thing that can
+differ between your machine and the one this was tested on -- and when it does
+go wrong it goes wrong at boot, before there is anything to read a log from.
+A raw write has no such layer. If Ventoy is already how you keep your sticks,
+it is reasonable to try; if you are choosing now, choose the raw write.
+
+Windows' own *Burn disc image* is for optical media and will not make a
+bootable stick at all.
 
 **It asks how to use the disk, and one of the answers erases it.** The first
 screen offers a free-space install -- it keeps what is already on the drive and

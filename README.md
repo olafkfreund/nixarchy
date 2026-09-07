@@ -1787,10 +1787,15 @@ is the shape.
 
 | epic | what it is for | |
 | --- | --- | --- |
-| [#159](https://github.com/olafkfreund/nixarchy/issues/159) | **remote desktop** — reaching the Hyprland session from elsewhere | 4 of 5 done |
 | [#364](https://github.com/olafkfreund/nixarchy/issues/364) | **Android** — apps from the phone in your pocket, or without one at all | 2 of 6 filed |
 
 **Recently finished:**
+[remote desktop](https://github.com/olafkfreund/nixarchy/issues/159)
+— reaching the Hyprland session from elsewhere, all five children closed:
+the headless output, the RDP service and its firewall hole, the authentication
+that does not fall back to a shared secret, and the check that proves the
+session a client connects to is the same session sitting at the machine.
+Also
 [agent bus](https://github.com/olafkfreund/nixarchy/issues/268)
 — a public room outside agents can actually join, and the kit to join it in
 about ten minutes: `#nixarchy-agents` live and world-readable, `#agents` fenced

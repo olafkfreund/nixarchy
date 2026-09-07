@@ -251,13 +251,31 @@ in
   boot = {
     loader.timeout = lib.mkForce 0;
 
-    plymouth = {
-      enable = true;
-      theme = "omarchy";
-      themePackages = [
-        inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.nixarchy-plymouth
-      ];
-    };
+    # OFF on the installer image, and this is a reversal worth reading.
+    #
+    # Two users could not boot v4.0.2-8 on real hardware -- a ThinkPad E15 --
+    # while the same published file boots to a login prompt in a VM. The
+    # difference between this image and the one NixOS ships is almost entirely
+    # here: stock installation-cd-minimal runs NO plymouth, and its kernel is
+    # the same 6.18.49 we use, so the kernel was never the variable.
+    #
+    # plymouth takes over KMS before the root filesystem exists. On a machine
+    # with real graphics that hand-off is a thing that can hang, and when it
+    # does there is nothing to see -- because nixpkgs' plymouth module adds
+    # `splash` and `loglevel=0` to the command line, so not even a panic
+    # prints. An installer image whose failures are invisible cannot be
+    # debugged by the person holding the laptop, which is the only person who
+    # can debug it.
+    #
+    # The branding cost is smaller than it looks. What a user sees during the
+    # install -- the wordmark, the bar, the tips -- is the installer's own TUI
+    # in installer/lib/ui.sh, not plymouth. plymouth only covered the few
+    # seconds of kernel boot before that starts.
+    #
+    # The INSTALLED machine keeps its splash: programs.nixarchy.bootSplash is
+    # untouched, and modules/nixos.nix still sets it. This is the boot medium
+    # only.
+    plymouth.enable = false;
 
     # `quiet` alone is not enough. It lowers the console log level but leaves
     # anything at KERN_ERR and above going straight to tty1, which is where the
@@ -265,17 +283,29 @@ in
     # progress bar and the screen never recovers. loglevel=3 keeps the console
     # for the installer; everything still reaches the journal and dmesg.
     kernelParams = [
-      "quiet"
-      "loglevel=3"
-      "udev.log_level=3"
-      "rd.systemd.show_status=false"
+      # loglevel=4 is what stock installation-cd-minimal uses: warnings and
+      # worse on the console, the rest in the journal. `quiet`, loglevel=3,
+      # udev.log_level=3 and rd.systemd.show_status=false all used to be here,
+      # to keep the console clean for the installer's own screen -- and the
+      # cost of that was a boot failure nobody could see. Two users hit one on
+      # real hardware and could report nothing but "it crashes".
+      #
+      # The installer still owns the screen once it starts: it clears it
+      # (installer/lib/ui.sh) and systemd's status list has stopped by then.
+      # What changes is that everything BEFORE that is now visible, which is
+      # exactly the window where an unbootable machine fails.
+      "loglevel=4"
       # Kernel messages to the serial line as well. tty0 is listed LAST and so
       # stays the primary console -- the installer keeps the screen, and a
       # headless run or a support request still has somewhere to read from.
       "console=ttyS0,115200"
       "console=tty0"
     ];
-    consoleLogLevel = 0;
+    # 4, as stock installation-cd-minimal has it. This is rendered as a
+    # `loglevel=` parameter and appended AFTER the list above, so a 0 here
+    # silently overrode the loglevel set there -- which is how an image meant
+    # to be quiet became an image that could not report a panic.
+    consoleLogLevel = 4;
   };
 
   # And the flag without which the splash above is dead weight.

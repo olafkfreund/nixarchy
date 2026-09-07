@@ -922,7 +922,8 @@ sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 `--ignore-missing` because one `SHA256SUMS` covers both images and nobody
-downloads both.
+downloads both. `dd` — or Rufus in **DD mode**, or Etcher — and not a
+multiboot tool; see the caveat below for why the difference is not cosmetic.
 
 Or build it yourself, which is the same image from the same commit:
 
@@ -1032,13 +1033,35 @@ install builds nothing, because everything it did is described there.
 Installing a second machine from that same repository, and letting them keep
 themselves current, is [many machines, one repo](docs/manual/many-machines.md).
 
-**Four caveats worth knowing before you write the stick.**
+**Five caveats worth knowing before you write the stick.**
 
-It takes **the whole drive**. There is no partition picker and there is not
-going to be one: the layout is one file, `installer/disk-config.nix`, and the
-installer runs it against the disk you name. Anything already there is gone.
-Sharing a disk with Windows means editing that file and running `disko` by hand
-first, which is a thing you can do and not a thing this walks you through.
+**Write the image literally.** Ventoy, unetbootin, and "boot an ISO from my
+existing GRUB" all work by loading the ISO with *their* bootloader rather than
+the one on it. This image carries its own GRUB, and an older GRUB core trying
+to load its modules fails like this:
+
+```
+kern/x86_64/dl.c:grub_arch_dl_relocate_symbols:114:
+  relocation 0x18d570 is not implemented yet
+Aborted. Press any key to exit.
+```
+
+That number is not a real relocation type — they are small integers — which is
+what tells you the loader is reading modules it does not understand, rather
+than that the download is corrupt. Nothing is wrong with the image: it boots
+under UEFI when the firmware runs its own bootloader. `dd`, Rufus in DD mode,
+or Etcher all do that. Ventoy does not.
+
+**It asks how to use the disk, and one of the answers erases it.** The first
+screen offers a free-space install -- it keeps what is already on the drive and
+takes only unallocated space, which is how you put this beside Windows -- and a
+full-disk install, which does exactly what it says. There is still no partition
+*editor*: free-space mode needs at least 32 GiB of contiguous unallocated space
+that you made beforehand, with Windows' own Disk Management or `gparted`, and
+it refuses rather than shrinking anything itself.
+
+Full-disk mode is one file, `installer/disk-config.nix`, run against the disk
+you name. Anything already there is gone.
 
 It is **UEFI only** — the layout is an ESP with systemd-boot, and there is no
 BIOS path.

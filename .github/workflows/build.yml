@@ -119,6 +119,19 @@ jobs:
       - name: The installer refuses a build the live store cannot hold
         run: nix build .#checks.x86_64-linux.installer-store-space --print-build-logs
 
+      # Every attribute nixos-generate-config can emit, against what the ISO
+      # bakes. #382: an Intel NPU made the tool write
+      # hardware.cpu.intel.npu.enable, which added a package no reference
+      # closure carried, which the offline image then tried to BUILD -- into
+      # the stdenv source bootstrap, after partitioning the disk. qemu exposes
+      # no NPU, so every install check in this file passed while that shipped.
+      #
+      # Pure evaluation, seconds of wall clock, and it goes red on the nixpkgs
+      # bump that introduces the next such attribute rather than on the user
+      # who owns the hardware.
+      - name: Every generate-config attribute is one the image can satisfy
+        run: nix build .#checks.x86_64-linux.generate-config-surface --print-build-logs
+
       # The doctor's GPU rules, against fixture machines. checks.install's VM
       # has no PCI display controller, so nothing else can reach these branches.
       - name: The doctor reads a GPU correctly

@@ -96,9 +96,20 @@ let
   # offline image ends in the source bootstrap, this list is the place it is
   # wrong, and checks.free-space -- which seeds the free-mode toplevels the
   # way this would -- is the shape of the fix.
+  # Kept in step with tests/generate-config-surface.nix, which reads the same
+  # three and fails if a generate-config attribute adds a package none of them
+  # carries.
   referenceConfigs = map (c: c.config) [
     inputs.self.nixosConfigurations.reference
     inputs.self.nixosConfigurations.reference-unencrypted
+
+    # The hardware the reference machine does not have. #382: a real laptop's
+    # hardware-configuration.nix is not the reference's, and where the
+    # difference is a PACKAGE the argument above -- "a few dozen text
+    # derivations" -- stops holding, because building a package with no
+    # compiler on the image is the source bootstrap. This one exists so those
+    # packages are on the medium; it is not a machine anyone installs.
+    inputs.self.nixosConfigurations.reference-hardware
   ];
 
   references = map (c: c.system.build) referenceConfigs;

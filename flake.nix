@@ -875,6 +875,28 @@
         # present, and on an image with no network the difference between
         # having them and not is a source bootstrap.
         reference-unencrypted = self.lib.mkReference { encrypt = false; };
+
+        # The same machine again, with every hardware attribute
+        # nixos-generate-config can emit that ADDS A PACKAGE turned on. It is
+        # not a machine anyone installs; it exists so installer/cd.nix can put
+        # those packages on the image.
+        #
+        # #382: an Intel NPU made the tool write hardware.cpu.intel.npu.enable
+        # into hardware-configuration.nix, which put intel-npu-driver into
+        # environment.systemPackages, which no baked closure carried, so the
+        # target had to BUILD it -- and building a cmake package with no
+        # compiler on the image is the stdenv source bootstrap, which is where
+        # two users' installs died, after the disk was partitioned.
+        #
+        # boot.swraid.enable is the one that matters most and was found by
+        # tests/generate-config-surface.nix rather than by a user: a machine
+        # whose root is on mdraid gets it written, and it pulls mdadm. That
+        # one cannot be worked around by commenting it out either -- without
+        # it the installed machine does not boot at all.
+        reference-hardware = self.lib.mkReference {
+          encrypt = false;
+          hardware = true;
+        };
       };
 
       devShells = eachSystem (system: {
@@ -885,7 +907,10 @@
       # modes come from here so they cannot drift apart, and so installer/cd.nix
       # can bake each one onto the image without restating the host.
       lib.mkReference =
-        { encrypt }:
+        {
+          encrypt,
+          hardware ? false,
+        }:
         nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = { inherit inputs; };
@@ -907,7 +932,21 @@
                 })
               ];
             }
-          ];
+          ]
+          ++ nixpkgs.lib.optional hardware {
+            # Kept in step with tests/generate-config-surface.nix, which fails
+            # if this list stops covering what nixos-generate-config emits.
+            # Two of the tool's package-adding attributes are deliberately NOT
+            # here, and the check states why: hardware.parallels.enable pulls
+            # a proprietary Parallels disk image that cannot be redistributed
+            # on an ISO, and boot.isNspawnContainer is emitted only when the
+            # tool runs INSIDE an nspawn container, which an installer that
+            # partitions a physical disk never is.
+            hardware.cpu.intel.npu.enable = true;
+            boot.swraid.enable = true;
+            virtualisation.hypervGuest.enable = true;
+            virtualisation.virtualbox.guest.enable = true;
+          };
         };
 
       # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
@@ -1046,6 +1085,12 @@
           };
 
           installer-ui = import ./tests/installer-ui.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Why: installer/AGENTS.md#generate-config-surface
+          generate-config-surface = import ./tests/generate-config-surface.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
           };

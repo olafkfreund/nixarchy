@@ -178,6 +178,20 @@ jobs:
       # real users are on is the one nothing covers.
       - name: Installed systems carry firmware, and can still refuse it
         run: nix build .#checks.x86_64-linux.firmware-guard --print-build-logs
+      # Which nixos-hardware modules the installer picks, against four fixture
+      # machines. The install VM is one machine and these rules are about being
+      # on many -- and it is the one shape that reaches none of the interesting
+      # branches: virtio GPU, no battery, and a squashfs loop that a naive
+      # rotational test reads as an SSD.
+      - name: The installer picks the right hardware modules
+        run: nix build .#checks.x86_64-linux.hardware-modules --print-build-logs
+
+      # And that the offline image can satisfy them. common-gpu-intel pulls
+      # intel-media-driver, intel-compute-runtime and vpl-gpu-rt, and an
+      # offline Intel laptop selects it without asking -- #382's failure mode,
+      # made reachable again and wider.
+      - name: The offline image carries those modules' packages
+        run: nix build .#checks.x86_64-linux.offline-hardware-packages --print-build-logs
 
       # The `nix run #try` front door, on the machines it will actually meet:
       # no KVM, no kvm group, 1 GB of RAM, a tmpfs working directory, a

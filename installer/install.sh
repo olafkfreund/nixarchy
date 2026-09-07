@@ -1517,7 +1517,9 @@ reuse_baked_initrd() {
   # is concerned, and `boot.initrd.x = lib.mkForce [...]` reads to it as a
   # command called `boot.initrd.x` with a stray `=`. A quoted heredoc for the
   # prose and printf for the two generated lines keeps both readers happy.
-  local avail forced
+  local avail forced kernelversion
+  # The kernel the four lists above were captured from; see the guard below.
+  kernelversion="@initrdkernel@"
   # shellcheck disable=SC2086  # deliberate word splitting: a module per word
   avail=$(printf '"%s" ' $avail_src)
   # shellcheck disable=SC2086
@@ -1538,9 +1540,32 @@ reuse_baked_initrd() {
   #
   # Delete this block to use exactly what was detected on this machine. That
   # is a rebuild, and it needs a network the first time.
+  #
+  # Conditional on the kernel, and that guard is the whole reason this block
+  # is not a plain mkForce.
+  #
+  # nixpkgs gates entries in the default initrd module set on the kernel
+  # version: xhci_pci_prom21 is added only at 7.2 and later. A list captured
+  # from one kernel and forced onto a machine running another asks modprobe
+  # for a module that does not exist, and the initrd fails to build -- which
+  # is not a warning, it is `nixos-rebuild` refusing to produce a system.
+  #
+  # It happened: a machine installed from a 7.2 image, whose flake still
+  # resolved nixarchy to a revision with no kernel policy, dropped to 6.18 on
+  # its first `omarchy update` and could not build an initrd at all.
+  #
+  # When the kernel moves, this pin simply stops applying. nixpkgs then
+  # computes the list its own kernel warrants and the machine builds a fresh
+  # initrd -- which it had to do regardless, because a different kernel is a
+  # different initrd. The pin exists to skip a build that would produce an
+  # identical result; once the result would differ, there is nothing to skip.
 PIN
-    printf '  boot.initrd.availableKernelModules = lib.mkForce [ %s];\n' "$avail"
-    printf '  boot.initrd.kernelModules = lib.mkForce [ %s];\n' "$forced"
+    printf '  boot.initrd.availableKernelModules =\n'
+    printf '    lib.mkIf (config.boot.kernelPackages.kernel.version == "%s")\n' "$kernelversion"
+    printf '      (lib.mkForce [ %s]);\n' "$avail"
+    printf '  boot.initrd.kernelModules =\n'
+    printf '    lib.mkIf (config.boot.kernelPackages.kernel.version == "%s")\n' "$kernelversion"
+    printf '      (lib.mkForce [ %s]);\n' "$forced"
     tail -n 1 "$file"
   } >"$file.pinned" && mv "$file.pinned" "$file"
 }

@@ -419,6 +419,7 @@
                   "@initrdforced@"
                   "@initrdmodulesplain@"
                   "@initrdforcedplain@"
+                  "@initrdkernel@"
                 ]
                 [
                   "${self.packages.${system}.flake-template}"
@@ -446,6 +447,26 @@
                   # third.
                   (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.availableKernelModules)
                   (nixpkgs.lib.concatStringsSep " " self.nixosConfigurations.reference-unencrypted.config.boot.initrd.kernelModules)
+                  # The kernel those four lists were captured from.
+                  #
+                  # The pin install.sh writes is only VALID for this kernel.
+                  # nixpkgs gates entries in the default initrd module set on
+                  # the kernel version -- xhci_pci_prom21 appears only at 7.2
+                  # and later -- so a list captured here and forced onto a
+                  # machine running a different kernel asks modprobe for a
+                  # module that does not exist, and the initrd cannot build.
+                  #
+                  # That is not hypothetical: it is what `omarchy update`
+                  # produced on a machine installed from a 7.2 image whose
+                  # flake still resolved nixarchy to a revision with no kernel
+                  # policy, and the machine dropped back to 6.18.
+                  #
+                  # So the pin is conditional on this exact version. When the
+                  # kernel moves the pin evaporates, nixpkgs computes the list
+                  # its own kernel warrants, and the machine builds a new
+                  # initrd -- which it had to do anyway, because a different
+                  # kernel is a different initrd.
+                  self.nixosConfigurations.reference-unencrypted.config.boot.kernelPackages.kernel.version
                 ]
                 (builtins.readFile ./installer/install.sh);
           };

@@ -317,6 +317,23 @@ in
     # silently overrode the loglevel set there -- which is how an image meant
     # to be quiet became an image that could not report a panic.
     consoleLogLevel = 4;
+
+    # The newest kernel nixpkgs has, and on the boot medium it matters more
+    # than it does on the installed system.
+    #
+    # An installed machine that is a kernel behind is slow or missing a
+    # feature. A LIVE IMAGE that is a kernel behind cannot be used at all:
+    # there is no screen to read the error on and no network to fetch the fix
+    # with. omacom/omarchy#6551 is that exact deadlock -- a Dell XPS 13 whose
+    # Intel BE213 wifi had no driver on the install media, on a machine with
+    # no other way to reach a network.
+    #
+    # Stock NixOS keeps its installer conservative because it installs servers
+    # too. This image installs laptops bought this year, so it takes the other
+    # side of that trade. modules/nixos.nix carries the same line and the
+    # longer argument; this is set separately because the live image
+    # deliberately does not import nixosModules.nixarchy.
+    kernelPackages = pkgs.linuxPackages_latest;
   };
 
   # And the flag without which the splash above is dead weight.

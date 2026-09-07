@@ -982,6 +982,36 @@ in
       ++ lib.optional config.virtualisation.docker.enable "docker";
     };
 
+    # The newest kernel nixpkgs has, not the release default.
+    #
+    # This is a laptop distribution. NixOS defaults to an older, longer-lived
+    # kernel because it also has to serve machines that have been running for
+    # two years; nixarchy's problem is the opposite one, a machine bought last
+    # month whose graphics or wifi has no driver in a kernel from last spring.
+    #
+    # Concretely, and the reason this changed: Dell, Intel and Omarchy shipped
+    # `linux-ptl` for Panther Lake XPS machines -- roughly twenty backports
+    # taken from Linux 7.0 release candidates, carried on Omarchy's own mirror
+    # "until Linux 7.0 drops". nixarchy was shipping 6.18, older than the
+    # kernel they had to work around, on hardware that needed 7.0-rc.
+    #
+    # Porting those backports would be the wrong answer. Linux 7.0 dropped;
+    # nixpkgs carries 7.2 and will carry whatever is newest at the moment an
+    # image is built, so tracking `linuxPackages_latest` gets the same fixes
+    # from upstream with no patch set to maintain and nothing to forget to
+    # retire. That is the NixOS-shaped version of what linux-ptl did.
+    #
+    # mkDefault, so an adopter who needs an LTS -- an out-of-tree module that
+    # lags, a machine that is happy where it is -- sets boot.kernelPackages
+    # and wins without touching this file.
+    #
+    # The two known hazards were measured rather than assumed: nothing in this
+    # tree references ZFS, and the NVIDIA open driver evaluates against the
+    # newest kernel in the current pin. When a future pin breaks that, it
+    # breaks at evaluation with the package named, which is a better failure
+    # than a machine that cannot see its screen.
+    boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+
     boot.plymouth = lib.mkMerge [
       (lib.mkIf (cfg.bootSplash != "off") {
         enable = lib.mkDefault true;

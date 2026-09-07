@@ -132,6 +132,14 @@ jobs:
       - name: Every generate-config attribute is one the image can satisfy
         run: nix build .#checks.x86_64-linux.generate-config-surface --print-build-logs
 
+      # The initrd pin install.sh writes must stay conditional on the kernel
+      # its module lists came from. An unguarded pin makes `omarchy update`
+      # fail outright on any machine whose kernel has moved -- nixos-rebuild
+      # cannot build the initrd, so it produces no system at all. Seconds of
+      # wall clock; it greps the built installer.
+      - name: The initrd pin names the kernel it was captured from
+        run: nix build .#checks.x86_64-linux.initrd-pin-guard --print-build-logs
+
       # The doctor's GPU rules, against fixture machines. checks.install's VM
       # has no PCI display controller, so nothing else can reach these branches.
       - name: The doctor reads a GPU correctly

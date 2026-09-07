@@ -1116,6 +1116,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/initrd-pin-guard.nix
+          initrd-pin-guard = import ./tests/initrd-pin-guard.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Why: installer/AGENTS.md#try-nixarchy-sh
           try-nixarchy = import ./tests/try-nixarchy.nix {
             inherit inputs;

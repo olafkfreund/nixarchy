@@ -16,7 +16,10 @@
 set -uo pipefail
 
 REPO=${NIXARCHY_REPO:-olafkfreund/nixarchy}
-API=${NIXARCHY_API:-https://api.github.com/repos/$REPO/releases/latest}
+# /releases rather than /releases/latest: see installer/try.sh. Releases
+# are pre-releases until verified on hardware, and /releases/latest hides
+# those, so it would 404 on a repo whose only releases are experimental.
+API=${NIXARCHY_API:-https://api.github.com/repos/$REPO/releases?per_page=1}
 WORK=${NIXARCHY_TRY_DIR:-$PWD}
 DISK="$WORK/nixarchy-try.qcow2"
 DISK_GB=${NIXARCHY_TRY_DISK:-24}

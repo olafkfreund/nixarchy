@@ -31,7 +31,12 @@
 # them the same way tests/installer-store-space.nix lies to install.sh.
 
 REV="@rev@"
-GH_API="${TRY_GH_API:-https://api.github.com/repos/olafkfreund/nixarchy/releases/latest}"
+# /releases, not /releases/latest: releases ship as pre-releases until a
+# human has installed one on real hardware, and /releases/latest omits
+# those entirely -- it answered 404 for the whole repo. This list is
+# newest-first and includes them; read_tag/read_urls take the first match,
+# so the array costs no parsing change.
+GH_API="${TRY_GH_API:-https://api.github.com/repos/olafkfreund/nixarchy/releases?per_page=1}"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/nixarchy-try"
 QEMU="@qemu@"
 QEMU_IMG="@qemu_img@"

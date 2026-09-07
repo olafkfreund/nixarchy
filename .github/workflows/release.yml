@@ -252,6 +252,36 @@ jobs:
           # release would be a tag from the future.
           previous=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
           : > notes.md
+
+          # The banner goes in FIRST, above the changelog, because it is the
+          # thing a person needs before they decide to write the image to a
+          # stick -- not a footnote under a list of merged PRs.
+          #
+          # Why it is text and not only the --prerelease flag: v4.0.2-8 shipped
+          # with --prerelease and was later promoted to a full release, because
+          # /releases/latest omits pre-releases and the try scripts resolved
+          # their download through it. The flag was a single click away from
+          # gone and nothing recorded that it had been. Prose in the body
+          # cannot be un-clicked, and the try scripts now read /releases.
+          cat >> notes.md <<'BANNER'
+          > ## ⚠️ Experimental — not yet verified on hardware
+          >
+          > This release is **published untested on real machines**. CI installs
+          > it in a VM; a VM exposes no NPU, one graphics device and no firmware
+          > quirks, so a VM install passing says very little about a laptop.
+          > Real installs have failed where every check was green.
+          >
+          > The **flake route** (`nixos-rebuild` against this repo, see the
+          > README) is the mature one and is what to use on a machine you care
+          > about. The **ISO installer is the least mature part of the project**
+          > and it partitions the disk before it can fail.
+          >
+          > If you install from this image, please say how it went on the
+          > release discussion — success as much as failure. The experimental
+          > label comes off a release only once someone has reported a
+          > successful install on physical hardware.
+
+          BANNER
           if [ -z "$previous" ]; then
             echo "::warning::no tag before $TAG; publishing without notes"
           elif nix run .#release-notes -- "$previous" "$TAG" > derived.md; then
@@ -313,6 +343,17 @@ jobs:
       # Pre-release, deliberately, and it stays that way until there is a 1.0.
       # The README says there is not one yet; a release page should not imply
       # otherwise.
+      #
+      # It is also experimental in the stronger sense, marked in the title and
+      # in the body: nothing here has been installed on a physical machine at
+      # the moment it is published. Taking that off is a deliberate human act
+      # after someone reports a successful hardware install --
+      #
+      #   gh release edit "$TAG" --title "$TAG"     # and drop the banner
+      #
+      # -- and it does NOT mean --latest. Promoting a release to latest is what
+      # lost the pre-release flag on v4.0.2-8; the try scripts read /releases
+      # now, so nothing needs it.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -328,7 +369,7 @@ jobs:
           # reading "cups-browsed was running as root and is now off" belongs
           # under it rather than in a new issue.
           gh release create "$TAG" out/* \
-            --title "$TAG" \
+            --title "$TAG (experimental)" \
             --notes-file notes.md \
             --generate-notes \
             --discussion-category announcements \

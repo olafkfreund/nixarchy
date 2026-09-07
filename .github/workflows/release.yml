@@ -103,7 +103,30 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ inputs.tag || github.ref_name }}"
-          git fetch -q --depth=200 origin main || git fetch -q origin main
+          # No --depth here, and that is the whole point of this line.
+          #
+          # It used to read `git fetch -q --depth=200 origin main`, which looks
+          # like a harmless optimisation on a checkout that already asked for
+          # fetch-depth: 0. It is not: a depth-limited fetch WRITES
+          # .git/shallow, turning the full clone actions/checkout just made
+          # back into a shallow one. Two steps later `nix run .#release-notes`
+          # fetches this flake by rev and refuses:
+          #
+          #   error: '...' is a shallow Git repository, but shallow
+          #   repositories are only allowed when `shallow = true;`
+          #
+          # So v4.0.2-9 and v4.0.2-10 both published with "These notes could
+          # not be derived" instead of a changelog. The images were fine; the
+          # summary was gone, and the only reason anyone noticed is that the
+          # fallback says so out loud rather than printing nothing.
+          #
+          # Reproduced outside CI before changing this: clone, run the
+          # depth-limited fetch, watch .git/shallow appear, then evaluate the
+          # flake by rev and get that exact error.
+          #
+          # checkout already fetched every branch and tag, so there is nothing
+          # to save here anyway.
+          git fetch -q origin main
           tagged=$(git rev-parse HEAD)
           main=$(git rev-parse FETCH_HEAD)
 
@@ -129,6 +152,31 @@ jobs:
           echo "Re-tag at main, or set RELEASE_ALLOW_BEHIND_MAIN=1 if this"
           echo "older commit is genuinely the one to publish."
           exit 1
+
+      # The notes are derived by a nix build that fetches this flake BY REV,
+      # and nix refuses a shallow repository when asked for one. Nothing about
+      # that failure is visible until ninety minutes later, when the release
+      # publishes with "These notes could not be derived" where a changelog
+      # should be -- which is how two releases shipped without one.
+      #
+      # So it is checked here, before anything expensive runs, rather than
+      # discovered at the end. Any future step that re-shallows the clone --
+      # a --depth fetch, a --single-branch, a clone into the workspace --
+      # fails on this line with the reason, instead of quietly costing a
+      # changelog.
+      - name: The clone is not shallow, or the notes cannot be derived
+        run: |
+          set -euo pipefail
+          if [ -f .git/shallow ]; then
+            echo "::error::the checkout is shallow, so release-notes will refuse it"
+            echo ""
+            echo "actions/checkout asks for fetch-depth: 0, so something after"
+            echo "it re-shallowed the repository. A depth-limited git fetch is"
+            echo "the usual cause: it writes .git/shallow even when the clone"
+            echo "was complete."
+            exit 1
+          fi
+          echo "not shallow; release-notes can read the range"
 
       - name: The tag names the Omarchy the flake vendors
         run: |

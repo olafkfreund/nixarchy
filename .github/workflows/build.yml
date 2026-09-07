@@ -55,7 +55,28 @@ jobs:
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
-          extra-conf: accept-flake-config = true
+          # accept-flake-config alone is not enough, and the reason cost a
+          # day: the runner is not in the daemon's `trusted-users`, so every
+          # substituter and key the flake declares is DISCARDED with
+          #
+          #   warning: ignoring the client-specified setting
+          #   'trusted-public-keys', because it is a restricted setting and
+          #   you are not a trusted user
+          #
+          # and the job then BUILDS what it should have downloaded. On
+          # 2026-09-07 the `omarchy` and `box` jobs each compiled Hyprland to
+          # 55% and hit timeout-minutes, while `system` survived only because
+          # it had a hand-written `sudo tee -a /etc/nix/nix.conf` step nobody
+          # had copied to the others.
+          #
+          # extra-conf is written into the SYSTEM nix.conf as root, so what is
+          # set here is trusted and actually applies. The store path nixarchy
+          # uses is byte-identical to the one hyprwm publish -- verified, not
+          # assumed -- so with this the compositor is a download.
+          extra-conf: |
+            accept-flake-config = true
+            extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
+            extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
       - uses: cachix/cachix-action@v17
         # A failed cache upload must not fail a build that succeeded. #235: three
         # of four concurrent pull requests went red in `Post Run
@@ -282,7 +303,28 @@ jobs:
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
-          extra-conf: accept-flake-config = true
+          # accept-flake-config alone is not enough, and the reason cost a
+          # day: the runner is not in the daemon's `trusted-users`, so every
+          # substituter and key the flake declares is DISCARDED with
+          #
+          #   warning: ignoring the client-specified setting
+          #   'trusted-public-keys', because it is a restricted setting and
+          #   you are not a trusted user
+          #
+          # and the job then BUILDS what it should have downloaded. On
+          # 2026-09-07 the `omarchy` and `box` jobs each compiled Hyprland to
+          # 55% and hit timeout-minutes, while `system` survived only because
+          # it had a hand-written `sudo tee -a /etc/nix/nix.conf` step nobody
+          # had copied to the others.
+          #
+          # extra-conf is written into the SYSTEM nix.conf as root, so what is
+          # set here is trusted and actually applies. The store path nixarchy
+          # uses is byte-identical to the one hyprwm publish -- verified, not
+          # assumed -- so with this the compositor is a download.
+          extra-conf: |
+            accept-flake-config = true
+            extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
+            extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
       - uses: cachix/cachix-action@v17
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
@@ -316,7 +358,28 @@ jobs:
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
-          extra-conf: accept-flake-config = true
+          # accept-flake-config alone is not enough, and the reason cost a
+          # day: the runner is not in the daemon's `trusted-users`, so every
+          # substituter and key the flake declares is DISCARDED with
+          #
+          #   warning: ignoring the client-specified setting
+          #   'trusted-public-keys', because it is a restricted setting and
+          #   you are not a trusted user
+          #
+          # and the job then BUILDS what it should have downloaded. On
+          # 2026-09-07 the `omarchy` and `box` jobs each compiled Hyprland to
+          # 55% and hit timeout-minutes, while `system` survived only because
+          # it had a hand-written `sudo tee -a /etc/nix/nix.conf` step nobody
+          # had copied to the others.
+          #
+          # extra-conf is written into the SYSTEM nix.conf as root, so what is
+          # set here is trusted and actually applies. The store path nixarchy
+          # uses is byte-identical to the one hyprwm publish -- verified, not
+          # assumed -- so with this the compositor is a download.
+          extra-conf: |
+            accept-flake-config = true
+            extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
+            extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
       - uses: cachix/cachix-action@v17
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
@@ -988,7 +1051,28 @@ jobs:
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
-          extra-conf: accept-flake-config = true
+          # accept-flake-config alone is not enough, and the reason cost a
+          # day: the runner is not in the daemon's `trusted-users`, so every
+          # substituter and key the flake declares is DISCARDED with
+          #
+          #   warning: ignoring the client-specified setting
+          #   'trusted-public-keys', because it is a restricted setting and
+          #   you are not a trusted user
+          #
+          # and the job then BUILDS what it should have downloaded. On
+          # 2026-09-07 the `omarchy` and `box` jobs each compiled Hyprland to
+          # 55% and hit timeout-minutes, while `system` survived only because
+          # it had a hand-written `sudo tee -a /etc/nix/nix.conf` step nobody
+          # had copied to the others.
+          #
+          # extra-conf is written into the SYSTEM nix.conf as root, so what is
+          # set here is trusted and actually applies. The store path nixarchy
+          # uses is byte-identical to the one hyprwm publish -- verified, not
+          # assumed -- so with this the compositor is a download.
+          extra-conf: |
+            accept-flake-config = true
+            extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
+            extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
       - uses: cachix/cachix-action@v17
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
@@ -1124,7 +1208,28 @@ jobs:
           #
           # Scoped to the flake being invoked, which is this repository's
           # own. It does not extend trust to inputs.
-          extra-conf: accept-flake-config = true
+          # accept-flake-config alone is not enough, and the reason cost a
+          # day: the runner is not in the daemon's `trusted-users`, so every
+          # substituter and key the flake declares is DISCARDED with
+          #
+          #   warning: ignoring the client-specified setting
+          #   'trusted-public-keys', because it is a restricted setting and
+          #   you are not a trusted user
+          #
+          # and the job then BUILDS what it should have downloaded. On
+          # 2026-09-07 the `omarchy` and `box` jobs each compiled Hyprland to
+          # 55% and hit timeout-minutes, while `system` survived only because
+          # it had a hand-written `sudo tee -a /etc/nix/nix.conf` step nobody
+          # had copied to the others.
+          #
+          # extra-conf is written into the SYSTEM nix.conf as root, so what is
+          # set here is trusted and actually applies. The store path nixarchy
+          # uses is byte-identical to the one hyprwm publish -- verified, not
+          # assumed -- so with this the compositor is a download.
+          extra-conf: |
+            accept-flake-config = true
+            extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
+            extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
       - uses: cachix/cachix-action@v17
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true

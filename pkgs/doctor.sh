@@ -806,6 +806,64 @@ else
 fi
 say ""
 
+# ---- nixos-hardware ------------------------------------------------------
+# Omarchy's reputation for running on anything is ~35 scripts under
+# install/hardware/, gated on DMI strings and PCI ids. We do not write those:
+# nixos-hardware carries 439 machine modules maintained by people who own the
+# machines. The installer picks the generic ones automatically; this section
+# exists for the two things it deliberately will not pick.
+say "${bold}Hardware modules${off}"
+
+# The installer's own detector, verbatim -- not a second copy of the rules.
+hw_mods=$("@hardwaremodules@" 2>/dev/null) || true
+if [ -n "$hw_mods" ]; then
+  say "  ${dim}Detected: $(printf '%s' "$hw_mods" | tr '\n' ' ')${off}"
+fi
+
+# NVIDIA, which the installer will not choose for you.
+#
+# The split is a device-ID RANGE, not a name: 0x1e00 and up (Turing onward)
+# take the open driver, 0x1340..0x1e00 (Maxwell..Volta) need the legacy 580
+# series. Omarchy draws the same line in bin/omarchy-hw-nvidia-gsp, and reads
+# sysfs rather than lspci for a reason worth repeating: lspci reads PCI config
+# space and resumes a runtime-suspended GPU to do it.
+if [ -n "$dgpu_addr" ]; then
+  nv_id=$(cat "$NIXARCHY_SYSFS_PCI/$dgpu_addr/device" 2>/dev/null || echo 0)
+  if [ "$((nv_id))" -ge $((0x1e00)) ]; then
+    finding "NVIDIA $nv_id takes the open driver" "$ok" "Turing or newer"
+    snippet+=("  hardware.nvidia.open = true;")
+  elif [ "$((nv_id))" -ge $((0x1340)) ]; then
+    finding "NVIDIA $nv_id needs the legacy driver" "$warn" "Maxwell to Volta"
+    snippet+=("  hardware.nvidia.package =")
+    snippet+=("    config.boot.kernelPackages.nvidiaPackages.legacy_580;")
+    notes+=("This GPU predates the open kernel modules. nvidiaPackages.legacy_580 is the last series that supports it, and it pins you to whatever kernel that driver builds against -- which is the usual reason a machine cannot follow linuxPackages_latest.")
+  else
+    finding "NVIDIA $nv_id is older than the 580 series" "$warn" "nouveau only"
+    notes+=("Neither the open modules nor legacy_580 covers this card. nouveau is what is left, and Omarchy's own fix for it is to turn off hardware cursors -- cursor.no_hardware_cursors in the Hyprland config -- because the nouveau cursor plane corrupts under Wayland.")
+  fi
+  # The bus ids and the offload block are computed in the Graphics section
+  # above; this only adds the module that goes with them.
+  snippet+=("  # and in hosts/<name>/nixarchy-hardware.nix:")
+  snippet+=("  #   inputs.nixos-hardware.nixosModules.common-gpu-nvidia")
+fi
+
+# The honest limit, said out loud rather than left for someone to discover.
+#
+# 412 of the 439 modules are machine-specific and key on DMI product strings
+# with no machine-readable table anywhere, so nothing here matches them for
+# you: importing dell-xps-13-9310 onto a 9315 is a machine that boots wrong in
+# a way nobody traces back to us. And the database is not complete -- there are
+# thirteen ThinkPad T14 modules and NO T15, and no ThinkBook at all -- so
+# "find yours" and "there may not be one" are both true.
+if [ -r /sys/class/dmi/id/product_name ]; then
+  say "  ${dim}This machine reports itself as:${off}"
+  say "    $(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+  say "  ${dim}Search that at github.com/NixOS/nixos-hardware and add any match"
+  say "  to hosts/<name>/nixarchy-hardware.nix. Many machines have no module,"
+  say "  and the generic ones above are then the whole story.${off}"
+fi
+say ""
+
 # ---- what a laptop or a shared machine will want to know ----------------
 say "${bold}Worth turning on${off}"
 if [ -d /sys/class/bluetooth ] && [ -n "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]; then

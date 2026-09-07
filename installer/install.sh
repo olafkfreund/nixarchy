@@ -1145,8 +1145,11 @@ finish_clone() {
   fi
 
   # Always regenerated, never taken from the repository: hardware is the one
-  # thing a configuration written somewhere else cannot know.
+  # thing a configuration written somewhere else cannot know. Both files, for
+  # the same reason -- a nixarchy-hardware.nix carried in from another machine
+  # would import that machine's GPU.
   printf '{ ... }:\n{ }\n' >"$hostdir/hardware-configuration.nix"
+  printf '{ ... }:\n{ }\n' >"$hostdir/nixarchy-hardware.nix"
 
   git -C "$work" add -A
 }
@@ -1170,7 +1173,13 @@ write_flake() {
   # disk is evaluated *out of this flake* -- so the flake has to evaluate before
   # there is a mounted disk to generate a hardware config from. An empty module
   # is enough for that evaluation and is replaced by the real one at step 7.
+  #
+  # nixarchy-hardware.nix is a placeholder here for exactly the same ordering:
+  # hosts/<name>/default.nix imports it, so it has to parse before the disk it
+  # will be generated from is mounted. `{ ... }: { }` takes `inputs` in its
+  # ellipsis, so the real file's header is compatible with this one.
   printf '{ ... }:\n{ }\n' >"$hostdir/hardware-configuration.nix"
+  printf '{ ... }:\n{ }\n' >"$hostdir/nixarchy-hardware.nix"
 }
 
 # Cut our two partitions out of the free region, and nothing else.
@@ -1390,6 +1399,53 @@ generate_hardware_config() {
     >"$hostdir/hardware-configuration.nix"
 
   reuse_baked_initrd "$hostdir/hardware-configuration.nix"
+  write_hardware_modules "$hostdir/nixarchy-hardware.nix"
+}
+
+# The nixos-hardware modules this machine wants, as a file the host imports.
+#
+# This is nixarchy's version of Omarchy's install/hardware/ -- ~35 scripts that
+# detect the machine at install time and act on it. We do not write those:
+# nixos-hardware carries 439 machine modules maintained by people who own the
+# machines, so only the gating is ours, and that lives in hardware-modules.sh
+# where it can be tested against fixtures.
+#
+# Written as a file rather than lines in configuration.nix because it is
+# GENERATED. The same argument as nixarchy-apps.nix beside it: a file the
+# installer owns can be regenerated after a hardware change without a merge,
+# and a user who disagrees with a line can delete it and keep their own edits.
+write_hardware_modules() {
+  local out=$1 m
+  {
+    printf '# What this machine is, as nixos-hardware modules.\n'
+    printf '#\n'
+    printf '# GENERATED at install time by detecting this hardware. Safe to edit:\n'
+    printf '# nothing regenerates it behind you. Everything these modules set is\n'
+    printf '# lib.mkDefault, so anything you write elsewhere wins.\n'
+    printf '#\n'
+    printf '# NVIDIA is deliberately absent even on a machine that has one: the\n'
+    printf '# driver choice (open vs legacy_580) and the PRIME bus ids are not\n'
+    printf '# things to guess, and getting them wrong is a machine with no screen.\n'
+    printf '# Run: nixarchy doctor -- it computes both and prints the lines.\n'
+    printf '#\n'
+    printf '# The 412 machine-specific modules (dell-xps-13-9310, framework-13-\n'
+    printf '# 7040-amd, ...) are not chosen automatically either: they key on DMI\n'
+    printf '# product strings with no machine-readable table, so a fuzzy match\n'
+    printf '# risks importing the quirks of the model next to yours. Browse\n'
+    printf '# https://github.com/NixOS/nixos-hardware and add yours here.\n'
+    printf '{ inputs, ... }:\n'
+    printf '{\n'
+    printf '  imports = [\n'
+    # Failure here must not be fatal. A machine whose sysfs this cannot read
+    # still installs -- it gets no hardware modules, which is exactly what
+    # every nixarchy install before this one got. Dying at minute 40 of an
+    # install over a microcode default would be the wrong trade.
+    for m in $("@hardwaremodules@" 2>/dev/null || true); do
+      printf '    inputs.nixos-hardware.nixosModules.%s\n' "$m"
+    done
+    printf '  ];\n'
+    printf '}\n'
+  } >"$out"
 }
 
 # Use the initrd we already have, when it fits.

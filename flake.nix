@@ -47,6 +47,25 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # 439 per-machine modules, and the reason nixarchy does not need its own
+    # install/hardware/ directory.
+    #
+    # Omarchy's hardware reputation is ~35 scripts under install/hardware/,
+    # gated at runtime on DMI strings, PCI ids, /proc/cpuinfo model numbers,
+    # ACPI HIDs -- omarchy-hw-dell-xps-oled parses EDID bytes. Every family
+    # they hand-quirk (framework, surface, asus-rog, dell-xps, apple-t2,
+    # thinkpad) is already in here, along with 400 more machines, maintained
+    # by people who own them.
+    #
+    # It carries a nixpkgs of its own for its tests. Without the follows the
+    # lock grows a SECOND nixpkgs node -- measured: adding this input pulled
+    # in nixos-26.05pre924538 alongside ours -- and every one of those is a
+    # tarball the offline image copies into inputSources for nothing.
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake/ec2c94c95846";
@@ -152,7 +171,7 @@
           # evaluation when allowUnfree is off.
           text =
             builtins.replaceStrings
-              [ "@apps@" "@nixpkgstested@" ]
+              [ "@apps@" "@nixpkgstested@" "@hardwaremodules@" ]
               [
                 (
                   let
@@ -191,6 +210,13 @@
                   in
                   toString node.locked.lastModified
                 )
+
+                # The same detector the installer runs, so the doctor's
+                # suggestion and the file the installer writes cannot disagree.
+                # A second copy of these rules would be a second copy that
+                # drifts, and the drift would show up as the doctor telling a
+                # user to add a module they already have.
+                "${./installer/hardware-modules.sh}"
               ]
               (builtins.readFile ./pkgs/doctor.sh);
         };
@@ -420,6 +446,7 @@
                   "@initrdmodulesplain@"
                   "@initrdforcedplain@"
                   "@initrdkernel@"
+                  "@hardwaremodules@"
                 ]
                 [
                   "${self.packages.${system}.flake-template}"
@@ -467,6 +494,14 @@
                   # initrd -- which it had to do anyway, because a different
                   # kernel is a different initrd.
                   self.nixosConfigurations.reference-unencrypted.config.boot.kernelPackages.kernel.version
+
+                  # Which nixos-hardware modules this machine wants. A separate
+                  # script rather than a function in install.sh because it takes
+                  # its whole world from four environment variables and can
+                  # therefore be driven against fixture machines --
+                  # checks.hardware-modules does, and the install VM is one
+                  # machine where these rules are about being on many.
+                  "${./installer/hardware-modules.sh}"
                 ]
                 (builtins.readFile ./installer/install.sh);
           };
@@ -967,6 +1002,33 @@
             boot.swraid.enable = true;
             virtualisation.hypervGuest.enable = true;
             virtualisation.virtualbox.guest.enable = true;
+
+            # Every nixos-hardware module installer/hardware-modules.sh can
+            # select, so the packages behind them are on the offline image.
+            #
+            # This is the same argument as the attributes above, and the same
+            # one #382 made the hard way: a real machine's generated config is
+            # not the reference's, and where the difference is a PACKAGE, an
+            # offline install has to build it from parts with no compiler.
+            # common-gpu-intel alone pulls intel-media-driver, the compute
+            # runtime and vpl-gpu-rt.
+            #
+            # The UNION, not a machine: no real machine has an Intel and an
+            # AMD GPU and both microcode sets. Every entry is mkDefault config
+            # and this host is never installed -- it exists so the medium
+            # carries the parts, which is exactly what the header above says.
+            #
+            # checks.hardware-modules asserts these names exist; the ISO budget
+            # check is what says whether they FIT.
+            imports = with inputs.nixos-hardware.nixosModules; [
+              common-cpu-intel-cpu-only
+              common-cpu-amd
+              common-gpu-intel
+              common-gpu-amd
+              # Imports common-pc and common-pc-laptop too, so it covers all
+              # four of the chassis/disk outcomes.
+              common-pc-laptop-ssd
+            ];
           };
         };
 
@@ -1133,6 +1195,18 @@
 
           # Why: tests/firmware-guard.nix
           firmware-guard = import ./tests/firmware-guard.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Why: tests/hardware-modules.nix
+          hardware-modules = import ./tests/hardware-modules.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Why: tests/offline-hardware-packages.nix
+          offline-hardware-packages = import ./tests/offline-hardware-packages.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
           };

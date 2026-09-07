@@ -129,6 +129,8 @@ pkgs.testers.runNixOSTest {
     #   "could not start entrypoint"  init aborted, and enter reports it
     #   "Error: An error occurred"    init died earlier, inside its
     #                                 "Installing basic packages" step
+    #   "Container Setup Failure!"    the container stopped while enter was
+    #                                 waiting for setup to finish
     #
     # Pinning only the first made this check flaky. On 2026-09-05 it went red
     # on a pull request that touched nothing but a workflow file, while
@@ -145,9 +147,24 @@ pkgs.testers.runNixOSTest {
     # failure mode -- or a silent one -- still goes red and gets read by a
     # person, which is what the original assertion was for.
     out = machine.fail(alice("distrobox enter scratch -- true 2>&1"), timeout=600)
+    # The third arrived on 2026-09-07, on main, with nothing in this repo
+    # touching distrobox. distrobox-enter:729 prints it from the poll loop it
+    # runs after "Starting container...": if the container is not `running`
+    # when it looks, it says so and exits 1. Which of the three you get is the
+    # same race the comment above describes -- how far init got before it
+    # needed a network -- so this is a third correct outcome, not a new bug.
+    #
+    # Verified as distrobox's own words rather than assumed:
+    #   distrobox-1.8.2.5/bin/distrobox-enter:729
+    #     printf >&2 "\nContainer Setup Failure!\n"
+    #
+    # The allowlist earned itself here. A truthiness check would have passed
+    # silently on a message nobody had ever seen; instead this went red on
+    # main and got read.
     aborts = [
         "could not start entrypoint",
         "Error: An error occurred",
+        "Container Setup Failure!",
     ]
     assert any(a in out for a in aborts), (
         "offline first enter failed in a way this check does not recognise.\n"

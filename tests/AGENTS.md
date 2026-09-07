@@ -26,6 +26,43 @@ it fail.** A check that has never failed is a check nobody knows works.
 VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
+## The one nothing here can prove: a username that is not `omarchy`
+
+`tests/install-matrix.py` is not a check. It boots a **published** `.iso` in
+real qemu and installs it every way a person can — scripted, driven by hand
+through the greeter, and then re-booted from its own disk to prove the result
+starts.
+
+It exists because of a hole every check above shares. All of them install as
+username **`omarchy`**, which is the name the ISO's reference closure is baked
+for — the one username that cannot diverge from it. On 2026-09-07 the full
+matrix ran 6/6 green against the published `v4.0.2-8` offline image; the same
+file, driven by hand with the username `olaf`, died in the source bootstrap:
+
+```
+hm_hmfontconfigfonts.xml -> libxml2+py -> doxygen -> cmake
+  -> libarchive -> attr -> download.savannah.gnu.org
+```
+
+home-manager's per-user fontconfig file is in no baked closure, and the offline
+image had `substituters = lib.mkForce [ ]`, so it could not fetch that path and
+had to build it — and building anything with no compiler on the medium is the
+stdenv bootstrap. Two users hit the same bootstrap by a different route, an
+Intel NPU. #384 gave both images substituters; the same cells against an image
+built from that fix installed and booted clean.
+
+`installer/cd.nix` bakes `inputDerivation` for `toplevel`, `initialRamdisk` and
+`etc`. home-manager is a fourth per-machine thing and is not in that list.
+
+So, when changing what the ISO carries or how the installer writes a machine:
+
+```
+MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py off-free manual
+```
+
+and **type a username that is not `omarchy`**. The scripted cells cannot see
+this class of bug, and adding more of them will not help.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

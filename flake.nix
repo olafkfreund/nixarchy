@@ -1052,6 +1052,15 @@
             inherit (self.packages.${system}) doctor;
           };
 
+          # The same argument for the Wireless section, and a sharper one: the
+          # install VM has a virtio NIC and no radio, so none of the three
+          # no-wlan0 cases can occur there at all. Two users hit them in one
+          # week and neither could tell which they had.
+          doctor-wireless = import ./tests/doctor-wireless.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+          };
+
           # The `try` front door's refusals, each driven with a stubbed
           # environment that lies about KVM, RAM, disk and the build plan.
           # Building tryApp is itself half the assertion: the app evaluates

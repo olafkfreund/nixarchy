@@ -710,6 +710,102 @@ elif [ -n "$igpu" ]; then
   finding "Single $igpu GPU" "$ok" "no hybrid setup needed"
 fi
 
+# ---- wireless ------------------------------------------------------------
+# Two users in one week could not see wlan0 at all -- not in nmtui, not after
+# rfkill unblock, not after restarting NetworkManager. One asked whether we
+# should ship iwctl. We should not, and that is the point of this section: if
+# there is no netdev, every wireless UI shows the same nothing, because they
+# all ask the kernel and the kernel has no interface to give. iwctl would have
+# been a second way to see the same absence, and the hour spent installing it
+# is an hour not spent on the driver.
+#
+# So the question worth answering is not "which tool" but "which of the three
+# is it": no PCI device, a device with no driver bound, or a driver bound with
+# no interface. Those have three different fixes and the user cannot tell them
+# apart from nmtui. sysfs can, and it is the same walk the Graphics section
+# above already does.
+say "${bold}Wireless${off}"
+
+# A wireless netdev is any interface with a `wireless` directory -- cfg80211
+# creates it for every driver that registers a wiphy, so this is the one test
+# that does not need a vendor table.
+: "${NIXARCHY_SYSFS_NET:=/sys/class/net}"
+wlan=""
+for n in "$NIXARCHY_SYSFS_NET"/*/; do
+  [ -d "$n/wireless" ] || [ -e "$n/phy80211" ] || continue
+  wlan="$(basename "$n")"
+  break
+done
+
+# PCI class 0x0280 is "network controller, other", which is where wifi lives.
+# 0x0200 is ethernet and is not this section's problem. The driver symlink is
+# the load-bearing part: present means a module claimed the card, absent means
+# this kernel has nothing for it.
+wifi_vendor="" wifi_id="" wifi_bound=""
+for d in "$NIXARCHY_SYSFS_PCI"/*/; do
+  [ -r "$d/class" ] && [ -r "$d/vendor" ] || continue
+  case "$(cat "$d/class")" in 0x0280*) ;; *) continue ;; esac
+  wifi_vendor="$(cat "$d/vendor")"
+  [ -r "$d/device" ] && wifi_id="$(cat "$d/device")"
+  [ -e "$d/driver" ] && wifi_bound="$(basename "$(readlink -f "$d/driver")")"
+  break
+done
+
+# Only the vendors whose fix DIFFERS. Intel, MediaTek and Atheros ship their
+# firmware in the redistributable set the ISO already enables, so naming them
+# is how the user learns their card is not the problem. Broadcom and Realtek
+# are the two that need something the default does not give, and they need
+# different somethings -- which is the whole reason this is a table and not a
+# sentence.
+case "$wifi_vendor" in
+  0x8086) wifi_make="Intel" ;;
+  0x14e4) wifi_make="Broadcom" ;;
+  0x10ec) wifi_make="Realtek" ;;
+  0x14c3) wifi_make="MediaTek" ;;
+  0x168c | 0x1969 | 0x17cb) wifi_make="Qualcomm/Atheros" ;;
+  0x1814) wifi_make="Ralink" ;;
+  "") wifi_make="" ;;
+  *) wifi_make="PCI vendor $wifi_vendor" ;;
+esac
+
+if [ -n "$wlan" ]; then
+  finding "Wireless interface $wlan is up" "$ok" "${wifi_make:+$wifi_make, }driver ${wifi_bound:-in-kernel}"
+elif [ -z "$wifi_vendor" ]; then
+  # Says nothing about USB dongles on purpose. This walks PCI, so a USB card
+  # is invisible here, and "you have no wifi card" would be a confident wrong
+  # answer on a machine that has one on the other bus.
+  say "  ${dim}No PCI wireless card here. A desktop, a VM, or a USB adapter --"
+  say "  which this check does not see, because it reads the PCI bus.${off}"
+elif [ -z "$wifi_bound" ]; then
+  finding "A $wifi_make wireless card with no driver" "$warn" "device $wifi_id"
+  say "     Nothing in this kernel claimed it, so no interface exists and every"
+  say "     wireless tool -- nmtui, iwctl, wpa_cli -- will show the same nothing."
+  case "$wifi_make" in
+    Broadcom)
+      notes+=("Broadcom wireless needs firmware outside the redistributable set. hardware.enableAllFirmware pulls in b43 and brcm, and needs nixpkgs.config.allowUnfree. Older BCM43xx cards want boot.extraModulePackages = [ config.boot.kernelPackages.broadcom_sta ] instead, and that one conflicts with b43 -- pick one.")
+      snippet+=("  hardware.enableAllFirmware = true; # Broadcom wireless; needs allowUnfree")
+      ;;
+    Realtek)
+      notes+=("Several Realtek cards (8821CE, 8852BE, 8852BU) have no in-tree driver and need an out-of-tree module. nixpkgs packages them under config.boot.kernelPackages -- rtl8821ce, rtl8852bu, rtw88 -- and which one is right depends on device $wifi_id, not on the vendor.")
+      snippet+=("  # boot.extraModulePackages = [ config.boot.kernelPackages.rtl8821ce ]; # match to $wifi_id")
+      ;;
+    *)
+      notes+=("A $wifi_make card with no driver bound usually means the module is newer than this kernel. boot.kernelPackages is already linuxPackages_latest here, so the next nixpkgs bump is the fix, and journalctl -b -k will name the module it wanted.")
+      ;;
+  esac
+else
+  # Driver bound, no interface: the module loaded and then failed, and on
+  # wireless that is almost always the firmware blob it asked for and did not
+  # get. dmesg says exactly which file, which beats any guess this can make.
+  finding "$wifi_make driver $wifi_bound loaded, but no interface" "$warn" "device $wifi_id"
+  say "     The module claimed the card and then did not register an interface."
+  say "     That is nearly always a missing firmware file, and the kernel log"
+  say "     names it:"
+  say "       journalctl -b -k | grep -i firmware"
+  notes+=("$wifi_bound bound but registered no wiphy. If the log names a file the redistributable firmware set does not carry, hardware.enableAllFirmware = true (with nixpkgs.config.allowUnfree) is the next thing to try; if it names a file NEWER than nixpkgs' linux-firmware, only a nixpkgs bump fixes it.")
+fi
+say ""
+
 # ---- what a laptop or a shared machine will want to know ----------------
 say "${bold}Worth turning on${off}"
 if [ -d /sys/class/bluetooth ] && [ -n "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]; then

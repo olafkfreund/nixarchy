@@ -166,6 +166,19 @@ jobs:
       - name: The doctor reads a GPU correctly
         run: nix build .#checks.x86_64-linux.doctor-graphics --print-build-logs
 
+      # The doctor's wireless rules. The install VM has a virtio NIC and no
+      # radio, so not one of the three no-wlan0 cases can occur there -- the
+      # same gap that let the no-VAAPI-driver branch ship unreachable (#352).
+      - name: The doctor tells the three no-wlan0 cases apart
+        run: nix build .#checks.x86_64-linux.doctor-wireless --print-build-logs
+
+      # That an installed machine carries firmware without depending on a virt
+      # probe, and can still refuse it. Every guest reports a virt type, so
+      # every install check takes the branch where this is false and the branch
+      # real users are on is the one nothing covers.
+      - name: Installed systems carry firmware, and can still refuse it
+        run: nix build .#checks.x86_64-linux.firmware-guard --print-build-logs
+
       # The `nix run #try` front door, on the machines it will actually meet:
       # no KVM, no kvm group, 1 GB of RAM, a tmpfs working directory, a
       # declined binary cache, a disk left by a ctrl-C'd install. Each must

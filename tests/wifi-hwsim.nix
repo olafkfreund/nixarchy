@@ -1,4 +1,4 @@
-{ inputs, pkgs }:
+{ pkgs }:
 # The ISO's wireless configuration, against a radio.
 #
 # The hole this fills, said plainly: no VM in this repo has ever had a

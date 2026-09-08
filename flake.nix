@@ -1100,7 +1100,6 @@
           # --answers, which is exactly how #133 shipped.
           # Why: tests/wifi-hwsim.nix
           wifi-hwsim = import ./tests/wifi-hwsim.nix {
-            inherit inputs;
             pkgs = pkgsFor.${system};
           };
 

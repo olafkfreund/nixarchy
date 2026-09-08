@@ -323,15 +323,6 @@ jobs:
           # it ever executing. checks.installer-ui shipped that way -- written
           # for #133, wired into the flake, run by nothing, green.
           #
-          # Two are covered by a path this grep cannot see, and are listed here
-          # rather than left to look accidental:
-          #   omarchy                        built as `nix build .#omarchy`
-          #   reference-unencrypted-toplevel pulled in by checks.install
-          #   omarchy-runtime                built as `nix build .#omarchy-runtime`
-          # (omarchy-runtime is the same derivation either way -- the checks
-          # entry is an `inherit` of the package, so building the package IS
-          # building the check. The old awk-based extraction could never see it
-          # at all, which is why it was not listed here before.)
           # WHO claims each check, rather than "is it named anywhere".
           #
           # This list is the opt-OUT. Everything not on it is built by the next
@@ -503,7 +494,14 @@ jobs:
           fi
           printf 'building %s checks:\n' "${#targets[@]}"
           printf '  %s\n' "${targets[@]}"
-          nix build --keep-going --print-build-logs "${targets[@]}"
+          # --no-link, and it is load-bearing rather than tidy. This step runs
+          # in the same job that builds .#omarchy into `result`, and later
+          # steps read result/share/omarchy/bin. Without it, `nix build`
+          # repoints `result` at the first of these checks and "Verify
+          # shebangs were patched" inspects a completely different tree --
+          # which is exactly how it failed. Nothing here wants an out-link;
+          # the build IS the assertion.
+          nix build --keep-going --no-link --print-build-logs "${targets[@]}"
 
       - name: The README's roadmap still matches the open epics
         env:

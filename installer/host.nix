@@ -153,7 +153,64 @@
     # configuration.nix; the VM sets a plaintext one as its own definition.
   };
 
-  networking.hostName = hostname;
+  # The machine's name, kept OUT of the derivation on purpose.
+  #
+  # Stage 1 of making an offline install build nothing. `networking.hostName`
+  # reaches further than it looks: nixos/modules/system/boot/systemd/initrd.nix
+  # line 597 writes it into the INITRD unconditionally
+  # (`"/etc/hostname".text = config.networking.hostName`), so two machines
+  # whose only difference is their name have two different initrds. A
+  # different initrd is a build, and on an image with no network a build is
+  # the stage0 source bootstrap -- which is the whole of #404.
+  #
+  # Empty is a supported value, not a trick: the option's type is
+  # `strMatching "^$|..."` and its own documentation says "Leave it empty if
+  # you want to obtain it from a DHCP server". /etc/hostname is then not
+  # written at all (network-interfaces.nix:1812 gates it on `!= ""`), which is
+  # what leaves the closure identical across machines.
+  #
+  # The name is not lost -- nixarchy-set-hostname below applies it on first
+  # boot, from a file the installer writes. What changes is WHEN: a fact about
+  # the running machine rather than an input to its derivation.
+  #
+  # system.name is pinned for the same reason and is NOT cosmetic: the
+  # toplevel derivation is named "nixos-system-''${system.name}-''${label}"
+  # (top-level.nix:60) and system.name defaults to the hostname, so leaving it
+  # would put the machine's name in the store path of every system it ever
+  # builds.
+  networking.hostName = "";
+  system.name = "nixarchy";
+
+  # The name, applied once, from what the installer collected.
+  #
+  # A file rather than a Nix value, because the point of the exercise is that
+  # this string never enters an evaluation. /etc/nixarchy/hostname is written
+  # by the installer and read here; a machine without one keeps the default,
+  # which is what an unattended or re-imaged machine should do.
+  #
+  # `ConditionPathExists` rather than a flag file: the unit is idempotent, and
+  # hostnamectl on every boot costs nothing and survives someone deleting the
+  # marker. Ordered before network-online so anything that cares about the
+  # name sees it set.
+  systemd.services.nixarchy-set-hostname = {
+    description = "Apply the hostname chosen at install time";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "network-pre.target" ];
+    unitConfig.ConditionPathExists = "/etc/nixarchy/hostname";
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      name=$(tr -d '[:space:]' < /etc/nixarchy/hostname)
+      [ -n "$name" ] || exit 0
+      current=$(cat /proc/sys/kernel/hostname)
+      [ "$current" = "$name" ] && exit 0
+      echo "nixarchy: setting hostname to $name"
+      ${pkgs.systemd}/bin/hostnamectl set-hostname "$name" \
+        || echo "$name" > /proc/sys/kernel/hostname
+    '';
+  };
 
   # Snapshots, for the half of the machine generations do not cover.
   #

@@ -1885,6 +1885,22 @@ PIN
 #
 # Root-owned and 0600. It is not a password, but a crypt hash is worth exactly
 # as much as the time somebody is willing to spend on it offline.
+# The machine's name, as a file rather than as a Nix value.
+#
+# installer/host.nix sets networking.hostName = "" on purpose -- the name in
+# an evaluation puts it in the initrd and in the toplevel's store path, so two
+# machines differing only by name have two different systems, and a system the
+# image does not carry has to be BUILT, which offline is the source bootstrap.
+# See the note there.
+#
+# So the name lands here, and nixarchy-set-hostname applies it on first boot.
+# Written before nixos-install so the very first boot already has it.
+write_hostname() {
+  mkdir -p /mnt/etc/nixarchy
+  printf '%s\n' "$hostname" >/mnt/etc/nixarchy/hostname
+  chmod 0644 /mnt/etc/nixarchy/hostname
+}
+
 write_password_hash() {
   ( umask 077
     mkdir -p /mnt/var/lib/nixarchy
@@ -2737,6 +2753,7 @@ main() {
       generate_hardware_config &&
       install_flake_dir &&
       write_password_hash &&
+      write_hostname &&
       run_install &&
       chown_flake_dir &&
       carry_network_profiles &&

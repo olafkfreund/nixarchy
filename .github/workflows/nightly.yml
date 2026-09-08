@@ -264,6 +264,50 @@ jobs:
             exit 1
           fi
 
+      - name: The cache holds the proof that the installs passed
+        # The third probe, and it guards a push that CANNOT report its own
+        # failure. install-check.yml pushes the three vm-test-run outputs so
+        # that "has this exact check already passed?" is answerable from a
+        # hosted runner -- which is what lets build.yml skip a check the cache
+        # can already vouch for instead of downloading it.
+        #
+        # That push is `continue-on-error` (a cache upload must not fail a
+        # build that succeeded, #235) AND cachix exits 0 on a rejected token,
+        # which is the failure mode the omarchy probe above exists for. So a
+        # push that silently stops landing shows up as nothing at all: the
+        # gate quietly never hits, every check is rebuilt exactly as before,
+        # and CI just gets slower with no red anywhere. Probe it, or the
+        # optimisation decays invisibly.
+        #
+        # These are ~4 KB of logs each, not images.
+        run: |
+          fail=0
+          for c in install free-space installer-refusal; do
+            # An eval that fails leaves $path empty, and an empty hash makes
+            # the query below return 404 -- which would report "missing from
+            # the cache" for a check that could not be evaluated at all. Two
+            # very different problems, one message. Say which.
+            if ! path=$(nix eval --raw ".#checks.x86_64-linux.$c.outPath"); then
+              echo "::error::checks.$c does not evaluate; this probe cannot"
+              echo "say anything about the cache until that is fixed."
+              exit 1
+            fi
+            hash=$(basename "$path" | cut -d- -f1)
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              "https://nixarchy.cachix.org/$hash.narinfo")
+            echo "$c: $path -> HTTP $code"
+            [ "$code" = 200 ] || fail=1
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::an install proof is missing from nixarchy.cachix.org."
+            echo "install-check.yml's push step is what puts them there, and it"
+            echo "cannot fail loudly by design. Nothing is broken for users --"
+            echo "the effect is that build.yml rebuilds checks it could have"
+            echo "skipped. Check install-check.yml's last run on main, then the"
+            echo "CACHIX_AUTH_TOKEN, in that order."
+            exit 1
+          fi
+
   # Tomorrow's user. build.yml's weekly cron re-runs the checks against the
   # COMMITTED lock, so on the flake inputs it proves nothing a merged PR did
   # not already prove -- the break that reaches people arrives through their

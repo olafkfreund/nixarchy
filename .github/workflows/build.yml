@@ -913,6 +913,51 @@ jobs:
           nix-instantiate --parse result-sys/etc/nixarchy/apps-template.nix >/dev/null
           echo "app template parses"
 
+  # The opt-in applications, built so nobody else has to.
+  #
+  # Every other job here builds a system or a check, and an app nobody enables
+  # by default is in neither -- so programs.nixarchy.apps.aether meant a Go
+  # toolchain, an npm tree and a webkit link on the user's own laptop, every
+  # time. Nothing was wrong; nothing had ever pushed them.
+  #
+  # The list is read from data/apps.nix rather than written here, because a
+  # hand-copied list of nine names is a list that silently stops covering the
+  # tenth. `ours = true` is the same flag the Install menu uses to decide an
+  # app comes from this flake instead of nixpkgs, which is exactly the set that
+  # has no cache anywhere else.
+  #
+  # The nixpkgs-derived ones in that set (retroarch, zen-browser) cost close to
+  # nothing: they substitute from cache.nixos.org rather than build.
+  apps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-nix
+      - uses: cachix/cachix-action@v17
+        # A cache upload failing must not fail a build that succeeded (#235).
+        continue-on-error: true
+        with:
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build every app the flake ships itself
+        run: |
+          mapfile -t attrs < <(nix eval --raw --impure --expr '
+            let
+              cat = import ./data/apps.nix;
+              ours = builtins.filter (n: (cat.${n}.ours or false)) (builtins.attrNames cat);
+            in builtins.concatStringsSep "\n" (map (n: cat.${n}.attr or n) ours)
+          ')
+
+          # A floor, because `nix build` over an empty list exits 0 and would
+          # turn "the catalogue stopped parsing" into a green job.
+          echo "apps to build: ${#attrs[@]}"
+          test "${#attrs[@]}" -ge 8
+
+          nix build --keep-going --no-link --print-build-logs \
+            "${attrs[@]/#/.#}"
+
   system:
     runs-on: ubuntu-latest
     # 45, not 30. The job's own work is ~20 minutes (see below), so 30 looked

@@ -444,6 +444,20 @@
     attr = "omacut";
     ours = true;
   };
+  aether = {
+    # The fourth of the four in the note on omawrite, and the only one that is
+    # not a script or a small Qt program: a Wails app, a Go backend and a Svelte
+    # frontend in one binary rendered through webkitgtk. Same reasoning, same
+    # opt-in form -- programs.nixarchy.apps.aether.
+    #
+    # Utility rather than a theming category, because there is no theming
+    # category: it sits beside Omacalc and Omacut, which is where someone
+    # looking for the Omarchy applications will look.
+    label = "Aether";
+    category = "Utility";
+    attr = "aether";
+    ours = true;
+  };
   hey-cli = {
     # No menuId: Omarchy v4.0.1 ships no HEY row at all -- hey.com/agents asks
     # for "Omarchy 4.1 or later", which is unreleased, and v4.0.1's AI group is

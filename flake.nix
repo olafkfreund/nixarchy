@@ -285,12 +285,16 @@
           # Why: docs/internals/flake.md#not-built-here-upstreams-own-flake-re-exported-int
           zen-browser = zen-browser.packages.${final.stdenv.hostPlatform.system}.default;
 
-          # Two of the four applications Omarchy writes itself. nixpkgs has
-          # none of them, which is why modules/nixos.nix cannot reproduce
-          # upstream's preinstall set; these two close half that gap.
+          # The four applications Omarchy writes itself. nixpkgs has none of
+          # them, which is why modules/nixos.nix cannot reproduce upstream's
+          # preinstall set; these close that gap.
           omawrite = final.callPackage ./pkgs/apps/omawrite.nix { };
           omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
+
+          # The fourth, and the only one that is not a small script or a Qt
+          # program: a Wails app, so a Go module set AND an npm tree to pin.
+          aether = final.callPackage ./pkgs/apps/aether.nix { };
 
           # Not one of Omarchy's preinstalls -- a terminal-effects toy from the
           # same authors, packaged because it was asked for.
@@ -670,6 +674,7 @@
             omawrite
             omacalc
             omacut
+            aether
             ttfx
             ;
 

@@ -185,6 +185,13 @@ jobs:
       - name: Wi-Fi joined during the install is carried over
         run: nix build .#checks.x86_64-linux.installer-network-profiles --print-build-logs
 
+      # That a failed install says what KIND of failure it was, not only that
+      # something failed. checks.install-iso asserts installs that SUCCEED, so
+      # a passing install renders no failure screen at all and can never reach
+      # any of this.
+      - name: The failure screen names the failure
+        run: nix build .#checks.x86_64-linux.installer-failure-hints --print-build-logs
+
       # And that the configuration iso-wifi asserts actually carries an
       # association, against a real radio: mac80211_hwsim gives the VM two
       # wiphys, hostapd serves one, NetworkManager and wpa_supplicant drive the

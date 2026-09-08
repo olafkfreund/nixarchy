@@ -1110,6 +1110,13 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/installer-failure-hints.nix
+          installer-failure-hints = import ./tests/installer-failure-hints.nix {
+            pkgs = pkgsFor.${system};
+            dashboardScript = ./installer/lib/dashboard.sh;
+            installScript = ./installer/install.sh;
+          };
+
           # Why: tests/installer-network-profiles.nix
           installer-network-profiles = import ./tests/installer-network-profiles.nix {
             pkgs = pkgsFor.${system};

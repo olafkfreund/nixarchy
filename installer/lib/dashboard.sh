@@ -229,6 +229,38 @@ ui_finished() {
 # When it goes wrong, the log is the only thing worth showing, and it is the
 # thing the dashboard has been hiding. Put the tail of it on screen rather than
 # leaving a person with a cleared terminal and a failure they cannot describe.
+# What KIND of failure this is, in one line, or nothing.
+#
+# Its own function so a check can call THIS rather than a copy of it. The first
+# test of this logic re-implemented it in the test script, and passed happily
+# with the real classifier broken -- AGENTS.md 1, by the person who had just
+# written it down.
+#
+# Matched on the whole log, not the tail: the bootstrap announces itself
+# hundreds of lines before it dies, and by the last twenty-five it is
+# downloading a perl tarball with nothing on screen connecting that to the
+# machine in front of you.
+#
+# Order matters. A bootstrap log almost always contains "unable to download"
+# too -- nix says it about the source it then tries to build -- so the download
+# arm comes first and means only what it says: a plain fetch failure. The
+# bootstrap arm is the one that must not be reported as "no network", because
+# the network is not the problem, the missing path is.
+ui_failure_hint() {
+  local log=$1
+  if grep -q "unable to download" "$log" 2>/dev/null; then
+    printf '%s' "This install needed something over the network and could not reach it."
+  elif grep -qE "texinfo|savannah|CPAN|hex0-seed" "$log" 2>/dev/null; then
+    # The stdenv bootstrap: a derivation was not on the medium and not
+    # substitutable, so nix set about building it from source -- with no
+    # compiler here that walks back to a seed. The tail names texinfo or perl,
+    # several layers below anything the reader did.
+    printf '%s' "Something your hardware needs is missing from this image, so the install tried to compile it. That is a bug in nixarchy -- please report it. The net image, or a network cable, will finish this install today."
+  elif grep -qE "No space left on device|out of disk" "$log" 2>/dev/null; then
+    printf '%s' "The live medium ran out of space. A machine with more RAM, or the net image, will get further."
+  fi
+}
+
 ui_failed() {
   local log=$1 rc=$2 target_log=${3:-}
   ui_init
@@ -237,6 +269,25 @@ ui_failed() {
   ui_logo
   ui_centre "\e[1;31mnixarchy installation stopped\e[0m" 28
   echo
+  # One line saying what this failure IS, above the tail rather than instead
+  # of it.
+  #
+  # The tail is the right thing to show and the wrong thing to read: three
+  # signatures account for most real failures here, each of them a wall of
+  # store paths whose meaning is nowhere in the text. Every one cost a tester
+  # most of a day.
+  #
+  # Matched on the whole log, not the tail: the bootstrap in particular
+  # announces itself hundreds of lines before it dies, and by the last
+  # twenty-five it is downloading a perl tarball with nothing on screen to
+  # connect that to the machine in front of you.
+  local hint
+  hint=$(ui_failure_hint "$log")
+  if [ -n "$hint" ]; then
+    ui_left "\e[33m$hint\e[0m"
+    echo
+  fi
+
   ui_left "\e[90mexit $rc -- the last of $log:\e[0m"
   echo
   tail -25 "$log" 2>/dev/null | sed "s/^/$(printf '%*s' "${UI_PAD:-0}" '')/"

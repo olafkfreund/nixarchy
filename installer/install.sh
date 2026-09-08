@@ -384,14 +384,66 @@ connect_wifi() {
   # Asked for every network, including open ones, where an empty answer is
   # correct and is passed as no password at all. One prompt that handles both
   # beats detecting the security column and being wrong about WEP.
-  ui_left "\e[90mLeave blank if the network is open.\e[0m"
-  pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
+  # Three attempts at the password, and the reason is the failure it replaces.
+  #
+  # `|| return 1` sent every failure back to the outer menu with nothing but
+  # nmcli's own stderr, so a mistyped password, a network that has gone out of
+  # range, and a NetworkManager that is not running all looked identical and
+  # all cost a full round trip through "No network yet" to try again. The one
+  # that is nearly always the answer -- the password -- is the one that should
+  # be one keystroke away.
+  #
+  # nmcli's exit statuses are documented (nmcli(1) EXIT STATUS) and specific
+  # enough to act on:
+  #
+  #   3   timeout
+  #   4   connection activation failed
+  #   8   NetworkManager is not running
+  #   10  connection, device or access point does not exist
+  local attempt rc
+  for attempt in 1 2 3; do
+    ui_left "\e[90mLeave blank if the network is open.\e[0m"
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
 
-  if [ -z "$pw" ]; then
-    nmcli device wifi connect "$ssid" || return 1
-  else
-    nmcli device wifi connect "$ssid" password "$pw" || return 1
-  fi
+    rc=0
+    if [ -z "$pw" ]; then
+      nmcli device wifi connect "$ssid" || rc=$?
+    else
+      nmcli device wifi connect "$ssid" password "$pw" || rc=$?
+    fi
+    [ "$rc" -eq 0 ] && return 0
+
+    case $rc in
+      4)
+        # "Usually", not "the password is wrong": activation also fails on a
+        # network that hands out no address, and telling someone their correct
+        # password is wrong is worse than being vague.
+        ui_left "\e[31mCould not connect -- usually that is the password.\e[0m"
+        [ "$attempt" -lt 3 ] && continue
+        ui_left "\e[90mThree tries is enough; back to the network list.\e[0m"
+        ;;
+      10)
+        ui_left "\e[31m$ssid is not there any more.\e[0m"
+        ui_left "\e[90mIt was in the scan a moment ago, so it has gone out of range or\e[0m"
+        ui_left "\e[90mstopped advertising. Pick another, or move closer and rescan.\e[0m"
+        ;;
+      3)
+        ui_left "\e[31mThe connection timed out.\e[0m"
+        ui_left "\e[90mThe network answered and then stopped. A weak signal does this.\e[0m"
+        ;;
+      8)
+        # Not the user's problem and not fixable from this screen.
+        ui_left "\e[31mNetworkManager is not running on this image.\e[0m"
+        ui_left "\e[90mThat is a bug in nixarchy, not something you can work around\e[0m"
+        ui_left "\e[90mhere -- please report it. A cable will still install.\e[0m"
+        ;;
+      *)
+        ui_left "\e[31mnmcli failed with status $rc.\e[0m"
+        ;;
+    esac
+    sleep 3
+    return 1
+  done
 }
 
 # Wi-Fi on an image that does not need it, for the machine that will.

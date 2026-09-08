@@ -94,6 +94,15 @@ jobs:
       relevant: ${{ steps.filter.outputs.relevant }}
       runner: ${{ steps.filter.outputs.runner }}
     steps:
+      # This job used to need no checkout at all -- it asked the API for the
+      # file list and decided from that. It needs one now only because the
+      # denylist is a script in the repo rather than inline YAML. Sparse and
+      # depth 1: the one file, not the history.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
       - name: Decide whether this change can affect an install
         id: filter
         env:
@@ -104,45 +113,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Anything that is not a pull request is not filtered. main and
-          # workflow_dispatch always ran the real thing and still do.
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            relevant=true
-          else
-            # The API, not `git diff`: actions/checkout gives this job a single
-            # commit by default, so a diff against the base needs a deepened
-            # fetch whose depth is a guess. The PR's file list is the same
-            # answer without one, and without a checkout at all.
-            files=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
-              --paginate --jq '.[].filename')
-
-            # Order matters and this loop is where it is expressed: the
-            # re-include is tested before the exclusions, so a change to this
-            # very file is relevant even though it lives under .github/.
-            # `case` globs are not path-aware -- `*` crosses `/` -- which is
-            # what makes `docs/*` and `.github/*` cover nested files.
-            relevant=false
-            while IFS= read -r f; do
-              [ -n "$f" ] || continue
-              case "$f" in
-                .github/workflows/install-check.yml) relevant=true; break ;;
-                # Provably cannot change what an install produces.
-                docs/*|README.md|AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
-                  continue ;;
-                *) relevant=true; break ;;
-              esac
-            done <<EOF
-          $files
-          EOF
-          fi
+          # The denylist moved to .github/scripts/pr-touches-build.sh, because
+          # build.yml now asks the same question and two copies of a filter is
+          # how one of them goes stale while both are still trusted. The
+          # reasoning that was here is there, next to the list.
+          relevant=$(.github/scripts/pr-touches-build.sh)
 
           echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
 
           # And which machine `install` should ask for. A run with nothing to
-          # do must not queue for the one self-hosted box -- seven concurrent
-          # PRs queue there for about three hours, and a docs PR waiting in
-          # that line for a check it is not going to run is the old bug wearing
-          # a different hat.
+          # do must not take a slot in the self-hosted pool -- four runners
+          # now (p510-nixarchy, p510-nixarchy-2, p620-nixarchy,
+          # p620-nixarchy-2), all carrying the same labels, so a job lands on
+          # whichever is free. This comment said "the one self-hosted box" and
+          # sized the queue for one; the fleet has since quadrupled and the
+          # number was left behind. The argument survives the correction, it
+          # is just four times less dire: a docs PR occupying a KVM runner for
+          # a check it is not going to run still delays every PR that needs
+          # one.
           if [ "$relevant" = true ]; then
             echo 'runner=["self-hosted","nixos","kvm","big"]' >> "$GITHUB_OUTPUT"
           else
@@ -236,6 +224,41 @@ jobs:
             .#checks.x86_64-linux.install \
             .#checks.x86_64-linux.free-space \
             .#checks.x86_64-linux.installer-refusal
+
+      # The proof that this passed, made durable and queryable.
+      #
+      # These outputs are `vm-test-run-*` store paths: 4 KB of logs each, not
+      # images. Until now they existed only in this runner's local store,
+      # which means (a) a garbage collection erases the evidence that a given
+      # derivation ever passed, and (b) nothing anywhere else can ask. A
+      # hosted job cannot cheaply find out whether this exact check has
+      # already been proven, so it cannot decide to skip it.
+      #
+      # With them in the cache, `nix path-info --store https://nixarchy...`
+      # answers that in one HTTP metadata round-trip, no download. That is a
+      # stronger signal than comparing derivation hashes between two commits:
+      # an unchanged hash only says "the inputs are identical", which on a red
+      # main would skip a still-failing check forever. A cached OUTPUT says
+      # the thing actually built and passed.
+      #
+      # cachix push rather than the action, because the action wraps the whole
+      # job in a post-step and this job's other work must not be tied to it.
+      # continue-on-error for #235's reason: a cache upload failing must not
+      # fail a build that succeeded.
+      - name: Push the proof, so nobody has to prove it twice
+        if: needs.gate.outputs.relevant == 'true'
+        continue-on-error: true
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          [ -n "$CACHIX_AUTH_TOKEN" ] || { echo "no cachix token; skipping"; exit 0; }
+          for c in install free-space installer-refusal; do
+            out=$(nix eval --raw ".#checks.x86_64-linux.$c" 2>/dev/null) || continue
+            [ -e "$out" ] || continue
+            echo "pushing $c ($(du -sh "$out" | cut -f1))"
+            nix run --inputs-from . nixpkgs#cachix -- \
+              push nixarchy "$out" || echo "push of $c failed; not fatal"
+          done
 
       - name: Report what it cost
         if: always() && needs.gate.outputs.relevant == 'true'

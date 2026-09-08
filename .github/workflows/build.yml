@@ -58,6 +58,38 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Can this change affect anything Nix builds?
+  #
+  # Same question install-check.yml has asked since #183, same script, and
+  # that sharing is the point: a denylist that is right in one workflow and
+  # stale in the other is worse than none, because the stale one is still
+  # trusted. See .github/scripts/pr-touches-build.sh for the list and for why
+  # it is a denylist rather than an allowlist.
+  #
+  # Cheap and hosted. It decides; the jobs below report.
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+      - name: Decide whether this change can affect a build
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          relevant=$(.github/scripts/pr-touches-build.sh)
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
+          echo "relevant=$relevant" >> "$GITHUB_STEP_SUMMARY"
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -150,12 +182,28 @@ jobs:
   # without that substituter every preset compiles a toolchain from source and
   # the run stops being a CI job and starts being an afternoon.
   devenv-presets:
+    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # A step-level `if:`, never a job-level one, and the difference was
+      # measured rather than assumed: a job skipped by a job-level `if:`
+      # reports conclusion `skipped`, which is not `success`, so a required
+      # check blocks the merge exactly as a missing context does.
+      # install-check.yml records the probe. So the job always runs and
+      # completes green; its steps are what the gate turns off.
+      - name: Nothing here can affect a build
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "Only paths the gate excludes changed; not building." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
       - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
       - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
@@ -164,6 +212,7 @@ jobs:
           extraPullNames: devenv
 
       - name: Every preset still evaluates
+        if: needs.gate.outputs.relevant == 'true'
         run: nix run .#devenv-presets
 
   omarchy:
@@ -337,6 +386,72 @@ jobs:
             echo "$named" | xargs grep -lE '^  pull_request:' >/dev/null 2>&1 ||
               ungated="$ungated $c"
           done
+
+          # ---- and that a conditional job is conditional on the GATE ----
+          #
+          # The three assertions above read `on:` triggers and grep for check
+          # names. None of them looks at `if:`. So the moment a job that runs
+          # claimed checks became conditional -- which is exactly what this
+          # commit does to system, box, devenv-presets and apps -- the gate
+          # kept reporting full coverage for checks that no longer run on
+          # every pull request. A coverage gate that cannot see a skip is a
+          # rubber stamp, and it would have been one silently.
+          #
+          # Rather than parse YAML in shell to work out which job owns which
+          # check, this asserts the property that actually matters and is
+          # cheap to state: EVERY condition in these two workflows must be one
+          # of a known set. The set is the shared gate, its negation, and the
+          # two deliberate exceptions. A new condition -- `github.actor ==`,
+          # a label check, a hand-written path filter -- fails here and has to
+          # be added on purpose, in a diff someone reviews, next to this
+          # reasoning.
+          #
+          # That is the safety property for the whole skip scheme: every skip
+          # in this repository is decided by one script
+          # (.github/scripts/pr-touches-build.sh), so there is one denylist to
+          # audit rather than a condition per job.
+          allowed_ifs="needs.gate.outputs.relevant == 'true'
+          needs.gate.outputs.relevant != 'true'
+          always() && needs.gate.outputs.relevant == 'true'
+          github.event_name != 'pull_request'"
+
+          rogue=""
+          # Process substitution, NOT a heredoc. The first version of this
+          # used <<'CONDS' with a $(grep ...) inside it -- quoted, so the
+          # command substitution never ran and the loop compared the literal
+          # text of its own grep against the allowlist. It "failed" on every
+          # run, describing its own source as a rogue condition. A pipe would
+          # be just as wrong in the other direction: the loop would run in a
+          # subshell and `rogue` would be empty afterwards, so it would pass
+          # no matter what it read.
+          while IFS= read -r cond; do
+            [ -n "$cond" ] || continue
+            printf '%s\n' "$allowed_ifs" | sed 's/^ *//' | grep -qxF "$cond" ||
+              rogue="$rogue|$cond"
+          done < <(grep -h "^[[:space:]]*if:" .github/workflows/build.yml \
+                     .github/workflows/install-check.yml \
+                   | sed 's/^[[:space:]]*if: //')
+
+          # A floor. If the grep stops matching -- the key is renamed, the
+          # files move -- this loop runs zero times and passes having checked
+          # nothing, which is the failure it exists to prevent.
+          conds_seen=$(grep -hc "^[[:space:]]*if:" .github/workflows/build.yml \
+            .github/workflows/install-check.yml | paste -sd+ | bc)
+          echo "conditions checked: $conds_seen"
+          if [ "$conds_seen" -lt 5 ]; then
+            echo "::error::found $conds_seen conditions in the workflows; expected at least 5." \
+                 "The skip scheme is gated by if: expressions, so failing to see them" \
+                 "means this assertion is checking nothing."
+            exit 1
+          fi
+
+          if [ -n "$rogue" ]; then
+            echo "::error::a workflow condition is not the shared gate:" \
+                 "$(printf '%s' "$rogue" | tr '|' ' ')"
+            echo "::error::every skip must be decided by .github/scripts/pr-touches-build.sh," \
+                 "so there is one denylist to audit rather than one per job."
+            exit 1
+          fi
 
           if [ -n "$bad$ungated" ]; then
             for c in $bad; do
@@ -929,12 +1044,28 @@ jobs:
   # The nixpkgs-derived ones in that set (retroarch, zen-browser) cost close to
   # nothing: they substitute from cache.nixos.org rather than build.
   apps:
+    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # A step-level `if:`, never a job-level one, and the difference was
+      # measured rather than assumed: a job skipped by a job-level `if:`
+      # reports conclusion `skipped`, which is not `success`, so a required
+      # check blocks the merge exactly as a missing context does.
+      # install-check.yml records the probe. So the job always runs and
+      # completes green; its steps are what the gate turns off.
+      - name: Nothing here can affect a build
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "Only paths the gate excludes changed; not building." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
       - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
       - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
@@ -942,6 +1073,7 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Build every app the flake ships itself
+        if: needs.gate.outputs.relevant == 'true'
         env:
           # grok-bot is unfree, and a bare `nix build` refuses to evaluate it.
           # The same pair the menu-mapping job above uses, for the same
@@ -969,6 +1101,7 @@ jobs:
             "${attrs[@]/#/.#}"
 
   system:
+    needs: gate
     runs-on: ubuntu-latest
     # 45, not 30. The job's own work is ~20 minutes (see below), so 30 looked
     # like ample headroom until 2026-09-04, when a cache.nixos.org stall of
@@ -997,9 +1130,24 @@ jobs:
           github.ref == 'refs/heads/main' && github.sha || 'shared' }}
       cancel-in-progress: false
     steps:
+      # A step-level `if:`, never a job-level one, and the difference was
+      # measured rather than assumed: a job skipped by a job-level `if:`
+      # reports conclusion `skipped`, which is not `success`, so a required
+      # check blocks the merge exactly as a missing context does.
+      # install-check.yml records the probe. So the job always runs and
+      # completes green; its steps are what the gate turns off.
+      - name: Nothing here can affect a build
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "Only paths the gate excludes changed; not building." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
       - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
       - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
@@ -1007,6 +1155,7 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Free disk space
+        if: needs.gate.outputs.relevant == 'true'
         # Hyprland plus a full desktop closure does not fit in the default
         # runner alongside the preinstalled toolchains.
         run: |
@@ -1016,15 +1165,18 @@ jobs:
 
 
       - name: Build the VM system closure
+        if: needs.gate.outputs.relevant == 'true'
         run: nix build .#checks.x86_64-linux.vm-toplevel --print-build-logs
 
       - name: Build the installed-machine closure
+        if: needs.gate.outputs.relevant == 'true'
         # The reference host: what the installer produces, with a real
         # bootloader and disko filesystems. Built here so the install path
         # cannot rot unnoticed between releases.
         run: nix build .#checks.x86_64-linux.reference-toplevel --print-build-logs
 
       - name: Read a MicroVM runner without booting it
+        if: needs.gate.outputs.relevant == 'true'
         # checks.microvm-template: what hypervisor, whether the store is
         # shared or imaged, whether the network needs root -- read off the
         # built package and qemu command line, plus nixarchy-vm's launch and
@@ -1034,6 +1186,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.microvm-template --print-build-logs
 
       - name: Read a box template without pulling it online
+        if: needs.gate.outputs.relevant == 'true'
         # checks.box-template: the catalogue INI names a real, pinned image
         # (pulled as a fixed-output derivation, network allowed because the
         # hash -- not the sandbox -- makes it reproducible), and nixarchy
@@ -1041,6 +1194,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.box-template --print-build-logs
 
       - name: Drive a session and the app-selection loop
+        if: needs.gate.outputs.relevant == 'true'
         # Boots a machine, picks two apps through nixarchy-app-enable, checks
         # the file still parses, and checks nixarchy-apply copies the
         # selection into the flake. Nothing else here proves that the Install
@@ -1051,11 +1205,13 @@ jobs:
       # check here was blind to -- and then nothing ran them, which is how the
       # gap they exist to close stayed open a second time.
       - name: Check every option both ways
+        if: needs.gate.outputs.relevant == 'true'
         # Cheap: evaluated, not booted. Each option here does its work by
         # putting a package in a list, so evaluation is where the answer is.
         run: nix build .#checks.x86_64-linux.options --print-build-logs
 
       - name: Build onto a config that already exists
+        if: needs.gate.outputs.relevant == 'true'
         # An overridden package, its own Hyprland, greetd already greeting.
         # Built rather than evaluated: a desktop file colliding with a real
         # package, two nixpkgs instances, and runtime dependencies in two
@@ -1063,12 +1219,14 @@ jobs:
         run: nix build .#checks.x86_64-linux.integration --print-build-logs
 
       - name: Boot the Omarchy session beside another Hyprland
+        if: needs.gate.outputs.relevant == 'true'
         # A foreign hyprland.lua in place, the session started from its own
         # .desktop, and the desktop asserted to render -- the arrangement the
         # README tells people with an existing Hyprland to use.
         run: nix build .#checks.x86_64-linux.coexist --print-build-logs
 
       - name: The installer's screens draw at every width
+        if: needs.gate.outputs.relevant == 'true'
         # checks.installer-ui was added with #133 and then run by nothing: it
         # went into `checks` and into no workflow, so the PR that introduced it
         # went green without it ever executing. A check nobody runs is worse
@@ -1076,6 +1234,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.installer-ui --print-build-logs
 
       - name: The no-nix front door refuses in sentences
+        if: needs.gate.outputs.relevant == 'true'
         # installer/try-nixarchy.sh is for somebody on Ubuntu or Fedora with
         # no nix, so almost all of it is refusals -- and a refusal nobody has
         # watched fire is a refusal nobody knows works. Counterpart to
@@ -1083,6 +1242,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.try-nixarchy --print-build-logs
 
       - name: The install dashboard survives a rewound clock
+        if: needs.gate.outputs.relevant == 'true'
         # The VM install checks cannot catch this: their clocks are stable, so
         # every duration they compute is positive. On a real machine the RTC is
         # wrong, the installer asks for a timezone, NTP corrects it mid-install
@@ -1091,6 +1251,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.dashboard-clock --print-build-logs
 
       - name: Answer the installer's questions
+        if: needs.gate.outputs.relevant == 'true'
         # The interactive path, which every other harness skips by passing
         # --answers: the greeter, the six questions, the two validators and the
         # summary, typed at over a serial line. --dry-run, so it costs about
@@ -1099,6 +1260,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.installer-wizard --print-build-logs
 
       - name: Add third-party plugins from real repos
+        if: needs.gate.outputs.relevant == 'true'
         # `omarchy plugin add <url> --enable` for two published plugins, then
         # disable and remove. The plugin system is the one deliberately
         # imperative corner of Omarchy -- it clones into ~/.config at runtime
@@ -1114,12 +1276,28 @@ jobs:
   # job's 30-minute budget is already mostly spent, and this needs /dev/kvm
   # arranged first, which no step there does.
   box:
+    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # A step-level `if:`, never a job-level one, and the difference was
+      # measured rather than assumed: a job skipped by a job-level `if:`
+      # reports conclusion `skipped`, which is not `success`, so a required
+      # check blocks the merge exactly as a missing context does.
+      # install-check.yml records the probe. So the job always runs and
+      # completes green; its steps are what the gate turns off.
+      - name: Nothing here can affect a build
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "Only paths the gate excludes changed; not building." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
       - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
       - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
@@ -1127,6 +1305,7 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: /dev/kvm is real and writable, or fail here
+        if: needs.gate.outputs.relevant == 'true'
         # ubuntu-latest runners have /dev/kvm, but root:kvm 0660 and the nix
         # build users are not in `kvm`; the udev rule is GitHub's own
         # documented fix. Loud rather than falling back: without a usable
@@ -1148,9 +1327,11 @@ jobs:
       # KVM, so a VM test landed in a job that cannot boot one -- a bespoke
       # need, which is exactly what the claimed list is for.
       - name: A VM with a radio can associate to a network
+        if: needs.gate.outputs.relevant == 'true'
         run: nix build .#checks.x86_64-linux.wifi-hwsim --print-build-logs
 
       - name: Create a box offline, and pin what enter does without a network
+        if: needs.gate.outputs.relevant == 'true'
         # checks.box-boot: the pinned image is preloaded from the store
         # (dockerTools.pullImage is fixed-output), `nixarchy box create` runs
         # end to end as a rootless user, the recorded distrobox-init mount is

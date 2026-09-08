@@ -521,7 +521,18 @@ jobs:
           # shebangs were patched" inspects a completely different tree --
           # which is exactly how it failed. Nothing here wants an out-link;
           # the build IS the assertion.
-          nix build --keep-going --no-link --print-build-logs "${targets[@]}"
+          # Anything the cache can already vouch for is dropped first. This
+          # step is the one that still runs on a docs-only pull request --
+          # `omarchy` stays unconditional because it greps README.md for the
+          # app and command counts -- so it is where the remaining minutes of
+          # such a run are spent, on 26 checks a documentation edit cannot
+          # change. A miss degrades safely: it builds.
+          #
+          # The targets go through as they are: the script accepts the
+          # fully-qualified attr as well as a bare name, and every caller uses
+          # the qualified form so the coverage gate above can still grep the
+          # workflows for `checks.x86_64-linux.<name>`.
+          .github/scripts/build-unless-proven.sh "${targets[@]}"
 
       # Not on pull requests, and this is the file's own doctrine finally
       # applied: the schedule comment at the top says a scheduled run is what
@@ -1166,14 +1177,14 @@ jobs:
 
       - name: Build the VM system closure
         if: needs.gate.outputs.relevant == 'true'
-        run: nix build .#checks.x86_64-linux.vm-toplevel --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.vm-toplevel
 
       - name: Build the installed-machine closure
         if: needs.gate.outputs.relevant == 'true'
         # The reference host: what the installer produces, with a real
         # bootloader and disko filesystems. Built here so the install path
         # cannot rot unnoticed between releases.
-        run: nix build .#checks.x86_64-linux.reference-toplevel --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.reference-toplevel
 
       - name: Read a MicroVM runner without booting it
         if: needs.gate.outputs.relevant == 'true'
@@ -1183,7 +1194,7 @@ jobs:
         # locking behaviour against a stub `nix`. Also how the templates
         # reach nixarchy.cachix.org: cachix-action above pushes what this
         # job builds.
-        run: nix build .#checks.x86_64-linux.microvm-template --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.microvm-template
 
       - name: Read a box template without pulling it online
         if: needs.gate.outputs.relevant == 'true'
@@ -1191,7 +1202,7 @@ jobs:
         # (pulled as a fixed-output derivation, network allowed because the
         # hash -- not the sandbox -- makes it reproducible), and nixarchy
         # box never resolves distrobox through a /nix/store path.
-        run: nix build .#checks.x86_64-linux.box-template --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.box-template
 
       - name: Drive a session and the app-selection loop
         if: needs.gate.outputs.relevant == 'true'
@@ -1199,7 +1210,7 @@ jobs:
         # the file still parses, and checks nixarchy-apply copies the
         # selection into the flake. Nothing else here proves that the Install
         # menu actually installs anything.
-        run: nix build .#checks.x86_64-linux.session --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.session
 
       # Both of these were written after three bugs shipped that every other
       # check here was blind to -- and then nothing ran them, which is how the
@@ -1208,7 +1219,7 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         # Cheap: evaluated, not booted. Each option here does its work by
         # putting a package in a list, so evaluation is where the answer is.
-        run: nix build .#checks.x86_64-linux.options --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options
 
       - name: Build onto a config that already exists
         if: needs.gate.outputs.relevant == 'true'
@@ -1216,14 +1227,14 @@ jobs:
         # Built rather than evaluated: a desktop file colliding with a real
         # package, two nixpkgs instances, and runtime dependencies in two
         # profiles at once are none of them evaluation errors.
-        run: nix build .#checks.x86_64-linux.integration --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.integration
 
       - name: Boot the Omarchy session beside another Hyprland
         if: needs.gate.outputs.relevant == 'true'
         # A foreign hyprland.lua in place, the session started from its own
         # .desktop, and the desktop asserted to render -- the arrangement the
         # README tells people with an existing Hyprland to use.
-        run: nix build .#checks.x86_64-linux.coexist --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.coexist
 
       - name: The installer's screens draw at every width
         if: needs.gate.outputs.relevant == 'true'
@@ -1231,7 +1242,7 @@ jobs:
         # went into `checks` and into no workflow, so the PR that introduced it
         # went green without it ever executing. A check nobody runs is worse
         # than no check, because it reads like coverage.
-        run: nix build .#checks.x86_64-linux.installer-ui --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.installer-ui
 
       - name: The no-nix front door refuses in sentences
         if: needs.gate.outputs.relevant == 'true'
@@ -1239,7 +1250,7 @@ jobs:
         # no nix, so almost all of it is refusals -- and a refusal nobody has
         # watched fire is a refusal nobody knows works. Counterpart to
         # try-preflight, which does this for the `nix run …#try` door.
-        run: nix build .#checks.x86_64-linux.try-nixarchy --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.try-nixarchy
 
       - name: The install dashboard survives a rewound clock
         if: needs.gate.outputs.relevant == 'true'
@@ -1248,7 +1259,7 @@ jobs:
         # wrong, the installer asks for a timezone, NTP corrects it mid-install
         # and `now - UI_DASH_START` goes negative -- which fed sed a negative
         # line number and drew its usage text over the installer.
-        run: nix build .#checks.x86_64-linux.dashboard-clock --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.dashboard-clock
 
       - name: Answer the installer's questions
         if: needs.gate.outputs.relevant == 'true'
@@ -1257,7 +1268,7 @@ jobs:
         # summary, typed at over a serial line. --dry-run, so it costs about
         # half a minute of test script rather than the install checks.install
         # already covers.
-        run: nix build .#checks.x86_64-linux.installer-wizard --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.installer-wizard
 
       - name: Add third-party plugins from real repos
         if: needs.gate.outputs.relevant == 'true'
@@ -1266,7 +1277,7 @@ jobs:
         # imperative corner of Omarchy -- it clones into ~/.config at runtime
         # -- so what this proves is that the seed leaves that directory
         # writable and the shell's IPC is reachable.
-        run: nix build .#checks.x86_64-linux.plugin --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.plugin
 
   # PROPOSED CI-GATE CHANGE (AGENTS.md 4 and 11): this job is new gate wiring,
   # merged by a human, not an agent.
@@ -1328,7 +1339,7 @@ jobs:
       # need, which is exactly what the claimed list is for.
       - name: A VM with a radio can associate to a network
         if: needs.gate.outputs.relevant == 'true'
-        run: nix build .#checks.x86_64-linux.wifi-hwsim --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.wifi-hwsim
 
       - name: Create a box offline, and pin what enter does without a network
         if: needs.gate.outputs.relevant == 'true'
@@ -1339,4 +1350,4 @@ jobs:
         # `distrobox enter` fails loudly at the entrypoint -- the measured
         # answer to the epic's open first-start question, asserted as
         # observed. See tests/box-boot.nix.
-        run: nix build .#checks.x86_64-linux.box-boot --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.box-boot

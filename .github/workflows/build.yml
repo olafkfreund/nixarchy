@@ -179,6 +179,12 @@ jobs:
       - name: The ISO can associate to a network
         run: nix build .#checks.x86_64-linux.iso-wifi --print-build-logs
 
+      # That the Wi-Fi someone joins during the install is carried onto the
+      # machine, and that the file holding their PSK never lands in the git
+      # repository nixarchy-config-repo pushes to GitHub.
+      - name: Wi-Fi joined during the install is carried over
+        run: nix build .#checks.x86_64-linux.installer-network-profiles --print-build-logs
+
       # And that the configuration iso-wifi asserts actually carries an
       # association, against a real radio: mac80211_hwsim gives the VM two
       # wiphys, hostapd serves one, NetworkManager and wpa_supplicant drive the

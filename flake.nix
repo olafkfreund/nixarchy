@@ -1110,6 +1110,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/installer-network-profiles.nix
+          installer-network-profiles = import ./tests/installer-network-profiles.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # Why: tests/installer-network.nix
           installer-network = import ./tests/installer-network.nix {
             pkgs = pkgsFor.${system};

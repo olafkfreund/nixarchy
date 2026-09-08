@@ -87,6 +87,21 @@ pkgs.runCommand "nixarchy-installer-network" { } ''
 
   ${pkgs.bash}/bin/bash t.sh
 
+  # The offline image offers Wi-Fi and never demands it. Asserted on the source
+  # because the branch is a gum screen: what matters is that it cannot block an
+  # install needing no network, and cannot fire unattended.
+  #
+  # The old early return left the offline image with no way to configure Wi-Fi
+  # at all -- correct for the install, wrong for the machine it produces, whose
+  # first boot then has neither a network nor the credentials for one.
+  grep -q 'offer_optional_wifi' ${installScript} || {
+    echo "the offline image can no longer offer Wi-Fi at all" >&2; exit 1; }
+  sed -n '/^ask_network()/,/^}/p' ${installScript} | grep -q 'answers_file' || {
+    echo "the offline Wi-Fi screen is no longer skipped under --answers;" >&2
+    echo "an unattended install would hang on a prompt nobody answers" >&2
+    exit 1; }
+  echo "  ok      the offline image offers Wi-Fi, and skips it unattended"
+
   # And the sentence that misled the tester: it may only be said when there is
   # genuinely no wireless interface. Asserted on the source, because the branch
   # lives inside connect_wifi's scan path and reaching it needs a whole nmcli.

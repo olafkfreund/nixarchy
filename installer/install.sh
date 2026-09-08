@@ -394,6 +394,33 @@ connect_wifi() {
   fi
 }
 
+# Wi-Fi on an image that does not need it, for the machine that will.
+#
+# Split from ask_network because the two are different questions wearing the
+# same screen: the net image cannot proceed without a network, and this one can
+# and simply produces a better machine with one. Conflating them is how the
+# offline image ended up with no way to configure Wi-Fi at all.
+offer_optional_wifi() {
+  ui_screen "Wi-Fi, if you want it..."
+  ui_left "This image installs without a network, so this is optional."
+  ui_left "\e[90mA network you join here is carried onto the installed machine, so it\e[0m"
+  ui_left "\e[90mis already online at the first boot rather than asking again.\e[0m"
+  echo
+
+  local choice
+  choice=$(printf '%s\n' "Skip" "Connect to Wi-Fi" |
+    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" \
+      --header "Set up Wi-Fi now?") || choice=""
+
+  # Skip on anything that is not an explicit yes, INCLUDING an interrupt. The
+  # net image's screen calls ui_abort there because it cannot go on; this one
+  # can, and treating Escape as "get out of my way" is what the person means.
+  case $choice in
+    "Connect to Wi-Fi") connect_wifi || true ;;
+    *) return 0 ;;
+  esac
+}
+
 ask_network() {
   # Only the network image asks. Keyed on that image's own marker rather than
   # on the absence of the offline one, and the difference is not cosmetic:
@@ -403,6 +430,24 @@ ask_network() {
   # this screen is for is the one image that genuinely cannot proceed without
   # one, and that image says so itself.
   if [ ! -f /etc/nixarchy-iso-net ]; then
+    # The OFFLINE image, which needs nothing from a network to install -- and
+    # produces a machine that does. Every profile the user joins here is
+    # carried onto the target by carry_network_profiles, so this screen is the
+    # difference between a first boot that is already online and one where
+    # they type their Wi-Fi password again at a desktop that cannot reach
+    # anything to look up how.
+    #
+    # Offered, never demanded, and that asymmetry is the whole design. The
+    # image installs perfectly without it, so a prompt that BLOCKED would be
+    # inventing a requirement -- which is what the old early return was
+    # rightly avoiding. Skipping is one keypress and the default.
+    #
+    # Not under --answers: unattended means nobody is there to pick a network,
+    # and the check that installs offline in a sandbox must not grow a screen.
+    if [ -n "$answers_file" ] || network_ready; then
+      return 0
+    fi
+    offer_optional_wifi
     return 0
   fi
 
@@ -2187,6 +2232,42 @@ run_install() {
 # behaviour every machine had before this existed. What stops the absence
 # going unnoticed is checks.install, which asserts both subvolumes exist and
 # are read-only after a real install.
+# The Wi-Fi the user just joined, carried onto the machine they are building.
+#
+# Nothing did this, and the cost was a report that read as a firmware bug and
+# was two bugs: "Wi-Fi worked while installing and was gone after the reboot".
+# Firmware was half of it. The other half is that NetworkManager writes the
+# profile -- SSID, PSK, everything -- to /etc/NetworkManager/system-connections
+# on the LIVE medium, which is a tmpfs that ceases to exist at reboot. Someone
+# who typed their password into the installer typed it into a RAM disk.
+#
+# Deliberately NOT into /etc/nixos. That directory is a git repository
+# nixarchy-config-repo exists to push to GitHub, and a .nmconnection file holds
+# the pre-shared key in the clear -- the same argument
+# installer/template/host/configuration.nix makes for keeping the crypt hash
+# out of it. /etc/NetworkManager is where NM looks anyway, and 0600 root:root
+# is what it refuses to read the file without.
+#
+# Best effort by design: a machine installed over ethernet has no profiles to
+# carry, and an install must not fail because a copy of a convenience did.
+carry_network_profiles() {
+  local src=/etc/NetworkManager/system-connections
+  local dst=/mnt/etc/NetworkManager/system-connections
+  local n
+
+  [ -d "$src" ] || return 0
+  # `find`, not a glob: an unmatched glob under `set -u` expands to itself and
+  # the copy below would try to read a file called '*.nmconnection'.
+  n=$(find "$src" -maxdepth 1 -name '*.nmconnection' 2>/dev/null | grep -c . || true)
+  [ "${n:-0}" -gt 0 ] || return 0
+
+  install -d -m 0700 -o 0 -g 0 "$dst" 2>/dev/null || return 0
+  find "$src" -maxdepth 1 -name '*.nmconnection' -exec \
+    install -m 0600 -o 0 -g 0 {} "$dst/" \; 2>/dev/null || true
+
+  echo "nixarchy-install: carried $n network profile(s) onto the new system."
+}
+
 take_factory_snapshot() {
   local device top rc=0
 
@@ -2451,6 +2532,7 @@ main() {
       write_password_hash &&
       run_install &&
       chown_flake_dir &&
+      carry_network_profiles &&
       take_factory_snapshot
   } >>"$log" 2>&1 || rc=$?
   ui_dashboard_stop

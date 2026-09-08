@@ -4,6 +4,10 @@ title: Troubleshooting
 
 # Troubleshooting
 
+Before any of this: if you are wondering whether a problem is *yours* or
+*ours*, [how this is tested](how-this-is-tested) says what CI proves about
+each release and — more usefully — what it deliberately does not.
+
 ### Start with the doctor
 
 ```sh

@@ -77,6 +77,7 @@ the documentation as much as the code.
 | **Making your own theme** | **differs on NixOS** — [read here](making-your-own-theme) |
 | Mac support | same as Omarchy — [read there](https://omarchy.org/manual/mac-support/) |
 | **Troubleshooting** | **differs on NixOS** — [read here](troubleshooting) |
+| **How this is tested** | **nixarchy only** — [read here](how-this-is-tested) |
 | Faq | same as Omarchy — [read there](https://omarchy.org/manual/faq/) |
 | **System snapshots** | **differs on NixOS** — [read here](system-snapshots) |
 | **Security** | **differs on NixOS** — [read here](security) |

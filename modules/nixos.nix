@@ -506,6 +506,33 @@ in
     # flags a repeated top-level key, and it is right that they read better
     # together.
     programs = {
+      # Omarchy's screen recording, which could not work as shipped.
+      #
+      # gpu-screen-recorder is in the omarchy wrapper's runtime PATH, and that
+      # installs the PACKAGE. Recording needs more than the package:
+      # gsr-kms-server opens the DRM device and needs cap_sys_admin, which on
+      # NixOS comes only from this module's setcap wrapper. Without it the
+      # capture backend exits before it starts --
+      #
+      #   kms server died or never started, exit code: 127
+      #
+      # -- and there is no fallback, because gpu-screen-recorder then tries
+      # pkexec, which wants a setuid helper that NixOS' polkit does not ship.
+      # A tester hit exactly this.
+      #
+      # Enabling the module is enough, and it is worth writing down why the
+      # package in our wrapper picks the privileged binary up rather than the
+      # unprivileged one beside it: gpu-screen-recorder's own wrapper does
+      # `--prefix PATH : ${wrapperDir}` and `--suffix PATH : $out/bin`, and
+      # wrapperDir already defaults to /run/wrappers/bin. Wrapper first, store
+      # second. The module's `.override { inherit wrapperDir; }` only matters
+      # on a non-default security.wrapperDir, which is why plain
+      # `pkgs.gpu-screen-recorder` in runtimeDeps is not a second bug.
+      #
+      # ui.enable stays off: that is GPU Screen Recorder's own overlay, and
+      # Omarchy drives recording from its own keybindings.
+      gpu-screen-recorder.enable = lib.mkDefault true;
+
       # Why: modules/AGENTS.md#etc-nixos-belongs-to-the-installed-user-installer-
       git = {
         enable = lib.mkDefault true;

@@ -2042,6 +2042,43 @@ pkgs.runCommand "nixarchy-options"
 
         python3 ${./home-backup-menu.py} "$vm/etc/nixarchy/omarchy-menu.jsonc"
 
+        # ---- screen recording has the capability it cannot work without ----
+        #
+        # gpu-screen-recorder is in omarchy's runtime PATH, which installs the
+        # package; recording additionally needs gsr-kms-server to hold
+        # cap_sys_admin, and on NixOS only programs.gpu-screen-recorder.enable
+        # produces that setcap wrapper. Without it recording dies with "kms
+        # server died or never started, exit code: 127", and pkexec cannot
+        # rescue it because NixOS ships no setuid pkexec. A tester hit this.
+        #
+        # Asserted on the built system rather than on the option being set,
+        # because the option is a means: what has to be true is that a wrapper
+        # for gsr-kms-server, carrying that capability, exists in the unit that
+        # creates the wrappers. Setting the option and having the capability
+        # not arrive is a distinct failure, and the one that would actually
+        # reach a user.
+        wrapperUnit="$vm/etc/systemd/system/suid-sgid-wrappers.service"
+        test -e "$wrapperUnit" || {
+          echo "no suid-sgid-wrappers unit: security.wrappers produced nothing" >&2
+          exit 1
+        }
+        wrapperScript=$(grep -oE 'ExecStart=[^ ]+' "$wrapperUnit" | head -1 | cut -d= -f2-)
+        test -n "$wrapperScript" && test -e "$wrapperScript" || {
+          echo "could not follow the wrappers unit to its script" >&2
+          exit 1
+        }
+        grep -q 'gsr-kms-server' "$wrapperScript" || {
+          echo "gsr-kms-server has no setcap wrapper: screen recording will fail with" >&2
+          echo "  kms server died or never started, exit code: 127" >&2
+          echo "set programs.gpu-screen-recorder.enable -- the package alone is not enough" >&2
+          exit 1
+        }
+        grep -q 'cap_sys_admin' "$wrapperScript" || {
+          echo "the gsr-kms-server wrapper exists but grants no cap_sys_admin" >&2
+          exit 1
+        }
+        echo "gsr-kms-server has its cap_sys_admin wrapper, so recording can start"
+
           touch $out
       ''
     else

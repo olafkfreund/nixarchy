@@ -501,7 +501,13 @@ let
         "trigger.vm.new" = {
           icon = "󰕍";
           label = "New sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm new";
+          # `create`, not `new`. The menu KEY is trigger.vm.new and the action
+          # was written to match the key instead of the CLI, so every click
+          # printed "nixarchy-vm: unknown subcommand 'new'" and closed. The
+          # sibling rows only work because run/stop/rm happen to be spelled the
+          # same on both sides; checks.menu-verbs now asserts that rather than
+          # leaving it to coincidence.
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm create";
           description = "Name one, pick a template, and open it";
         };
         "trigger.vm.open" = {

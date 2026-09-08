@@ -1321,6 +1321,14 @@
             pkgs = pkgsFor.${system};
           };
 
+          # And the same idea aimed at the menu: every action string checked
+          # against the subcommands the CLI it invokes actually has. See
+          # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
+          menu-verbs = import ./tests/menu-verbs.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The other half of that: every option path the README and the manual
           # quote, checked against the option set they claim to describe. See
           # tests/doc-options.nix and #214.

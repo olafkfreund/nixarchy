@@ -1212,6 +1212,12 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # Why: tests/theme-set-zed.nix
+          theme-set-zed = import ./tests/theme-set-zed.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           installer-ui = import ./tests/installer-ui.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

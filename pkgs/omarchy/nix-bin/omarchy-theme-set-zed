@@ -1,0 +1,212 @@
+#!/bin/bash
+
+# nixarchy:new
+# omarchy:summary=Sync Omarchy theme to Zed
+# omarchy:hidden=true
+
+# Zed is the one editor in the Install menu whose theme never followed the
+# system, and upstream does not fix it here: omarchy ships
+# omarchy-theme-set-{vscode,obsidian,claude,foot,tmux,...} and no -zed.
+# Its own installer reaches for a third-party AUR package instead:
+#
+#   omarchy-pkg-add zed omazed
+#   omazed setup
+#
+# That tool cannot work on v4 as published. It defaults to the v3 theme path
+# ($HOME/.config/omarchy/current/theme), installs itself into a hook named
+# `theme-set` when v4 runs `theme-set.d/`, and hardcodes /usr/bin/omazed-*.
+# Packaging it would have produced a command that silently did nothing.
+#
+# So this is the missing upstream setter, in upstream's own shape: same
+# naming, same state path, called from the same place, and superseded cleanly
+# if omarchy ever ships its own.
+#
+# The source is colors.toml, not vscode.json. vscode.json only names a
+# marketplace extension ({"name": "Tokyo Night", "extension": "enkia..."}),
+# which is nothing Zed can use. colors.toml is the canonical palette every
+# theme carries -- 26 keys in the base set, checked across all of them.
+
+set -uo pipefail
+
+THEME_DIR="$HOME/.local/state/omarchy/current/theme"
+COLORS="$THEME_DIR/colors.toml"
+ZED_DIR="$HOME/.config/zed"
+ZED_THEMES="$ZED_DIR/themes"
+ZED_SETTINGS="$ZED_DIR/settings.json"
+THEME_NAME="Omarchy"
+
+# Nothing to do rather than an error, on both counts. Every per-app setter
+# upstream ships runs on every theme change whether or not that app is
+# installed, so a missing Zed must be silent -- and a theme with no
+# colors.toml is a theme this cannot render, not a failure of the switch.
+[ -f "$COLORS" ] || exit 0
+command -v zed >/dev/null 2>&1 || command -v zeditor >/dev/null 2>&1 || exit 0
+
+# colors.toml is flat `key = "value"`, so this reads it without a TOML parser.
+# Deliberately not `source`: the file is data from a theme directory a user can
+# write, and sourcing it would execute it.
+c() {
+  local v
+  v=$(sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$COLORS" | head -1)
+  # Second argument is the fallback, for the handful of keys that vary between
+  # themes (hackerman has 27 keys, last-horizon and lumon 28, most have 26).
+  printf '%s' "${v:-$2}"
+}
+
+bg=$(c background "#1a1b26")
+fg=$(c foreground "#a9b1d6")
+accent=$(c accent "$fg")
+selection=$(c selection "$accent")
+muted=$(c muted "$fg")
+dark_bg=$(c dark_background "$bg")
+darker_bg=$(c darker_background "$dark_bg")
+lighter_bg=$(c lighter_background "$bg")
+dark_fg=$(c dark_foreground "$muted")
+bright_fg=$(c bright_foreground "$fg")
+
+red=$(c red "#f7768e")
+green=$(c green "#9ece6a")
+yellow=$(c yellow "#e0af68")
+blue=$(c blue "$accent")
+magenta=$(c magenta "#ad8ee6")
+cyan=$(c cyan "#449dab")
+orange=$(c orange "$yellow")
+
+mode=$(c mode dark)
+case $mode in
+  light) appearance=light ;;
+  *) appearance=dark ;;
+esac
+
+# Zed wants 8-digit hex for anything it composites, and accepts 6 elsewhere.
+# Alpha is appended rather than assumed: a bare #rrggbb in a field Zed expects
+# to blend renders as opaque and the selection swallows the text under it.
+a() { printf '%s%s' "$1" "${2:-ff}"; }
+
+mkdir -p "$ZED_THEMES"
+
+cat >"$ZED_THEMES/omarchy.json" <<EOF
+{
+  "\$schema": "https://zed.dev/schema/themes/v0.2.0.json",
+  "name": "$THEME_NAME",
+  "author": "nixarchy, from the Omarchy palette",
+  "themes": [
+    {
+      "name": "$THEME_NAME",
+      "appearance": "$appearance",
+      "style": {
+        "background": "$(a "$bg")",
+        "surface.background": "$(a "$dark_bg")",
+        "elevated_surface.background": "$(a "$lighter_bg")",
+        "border": "$(a "$muted")",
+        "border.variant": "$(a "$lighter_bg")",
+        "border.focused": "$(a "$accent")",
+        "text": "$(a "$fg")",
+        "text.muted": "$(a "$dark_fg")",
+        "text.placeholder": "$(a "$dark_fg")",
+        "text.accent": "$(a "$accent")",
+        "icon": "$(a "$fg")",
+        "icon.muted": "$(a "$dark_fg")",
+        "icon.accent": "$(a "$accent")",
+        "status_bar.background": "$(a "$dark_bg")",
+        "title_bar.background": "$(a "$dark_bg")",
+        "toolbar.background": "$(a "$bg")",
+        "tab_bar.background": "$(a "$darker_bg")",
+        "tab.inactive_background": "$(a "$dark_bg")",
+        "tab.active_background": "$(a "$bg")",
+        "panel.background": "$(a "$dark_bg")",
+        "editor.background": "$(a "$bg")",
+        "editor.gutter.background": "$(a "$bg")",
+        "editor.foreground": "$(a "$fg")",
+        "editor.line_number": "$(a "$dark_fg")",
+        "editor.active_line_number": "$(a "$bright_fg")",
+        "editor.active_line.background": "$(a "$lighter_bg" 66)",
+        "editor.highlighted_line.background": "$(a "$lighter_bg" 88)",
+        "editor.document_highlight.read_background": "$(a "$selection" 88)",
+        "element.background": "$(a "$lighter_bg")",
+        "element.hover": "$(a "$selection")",
+        "element.selected": "$(a "$selection")",
+        "ghost_element.hover": "$(a "$selection" 66)",
+        "scrollbar.thumb.background": "$(a "$muted" 66)",
+        "scrollbar.track.background": "$(a "$bg")",
+        "terminal.background": "$(a "$bg")",
+        "terminal.foreground": "$(a "$fg")",
+        "terminal.ansi.black": "$(a "$darker_bg")",
+        "terminal.ansi.red": "$(a "$red")",
+        "terminal.ansi.green": "$(a "$green")",
+        "terminal.ansi.yellow": "$(a "$yellow")",
+        "terminal.ansi.blue": "$(a "$blue")",
+        "terminal.ansi.magenta": "$(a "$magenta")",
+        "terminal.ansi.cyan": "$(a "$cyan")",
+        "terminal.ansi.white": "$(a "$fg")",
+        "error": "$(a "$red")",
+        "warning": "$(a "$yellow")",
+        "info": "$(a "$blue")",
+        "success": "$(a "$green")",
+        "created": "$(a "$green")",
+        "modified": "$(a "$yellow")",
+        "deleted": "$(a "$red")",
+        "players": [
+          {
+            "cursor": "$(a "$accent")",
+            "selection": "$(a "$selection" cc)",
+            "background": "$(a "$accent")"
+          }
+        ],
+        "syntax": {
+          "comment": { "color": "$(a "$dark_fg")", "font_style": "italic" },
+          "comment.doc": { "color": "$(a "$dark_fg")", "font_style": "italic" },
+          "keyword": { "color": "$(a "$magenta")" },
+          "operator": { "color": "$(a "$cyan")" },
+          "punctuation": { "color": "$(a "$fg")" },
+          "punctuation.bracket": { "color": "$(a "$fg")" },
+          "punctuation.delimiter": { "color": "$(a "$dark_fg")" },
+          "string": { "color": "$(a "$green")" },
+          "string.escape": { "color": "$(a "$orange")" },
+          "string.special": { "color": "$(a "$orange")" },
+          "number": { "color": "$(a "$orange")" },
+          "boolean": { "color": "$(a "$orange")" },
+          "constant": { "color": "$(a "$orange")" },
+          "function": { "color": "$(a "$blue")" },
+          "function.method": { "color": "$(a "$blue")" },
+          "type": { "color": "$(a "$yellow")" },
+          "variable": { "color": "$(a "$fg")" },
+          "variable.special": { "color": "$(a "$red")" },
+          "property": { "color": "$(a "$cyan")" },
+          "attribute": { "color": "$(a "$accent")" },
+          "tag": { "color": "$(a "$red")" },
+          "emphasis": { "color": "$(a "$accent")" },
+          "emphasis.strong": { "color": "$(a "$accent")", "font_weight": 700 },
+          "link_uri": { "color": "$(a "$cyan")" },
+          "link_text": { "color": "$(a "$accent")", "font_style": "italic" },
+          "title": { "color": "$(a "$accent")", "font_weight": 700 }
+        }
+      }
+    }
+  ]
+}
+EOF
+
+# And select it, without touching anything else in settings.json.
+#
+# jq with a merge rather than a rewrite: settings.json is the user's file and
+# usually the only one they have edited by hand. Writing a fresh document with
+# just `theme` in it would silently discard their keymap, font and language
+# settings -- which is the failure mode that makes people distrust theme
+# switchers.
+#
+# Zed tolerates comments and trailing commas in settings.json (it is JSONC), and
+# jq does not. So a file jq cannot parse is left ALONE and reported, rather than
+# being replaced with something jq could produce: a user who has commented their
+# settings should not lose them to a theme change.
+if [ -s "$ZED_SETTINGS" ]; then
+  if tmp=$(jq --arg t "$THEME_NAME" '.theme = $t' "$ZED_SETTINGS" 2>/dev/null); then
+    printf '%s\n' "$tmp" >"$ZED_SETTINGS"
+  else
+    echo "omarchy-theme-set-zed: $ZED_SETTINGS is not plain JSON, so the theme" >&2
+    echo "  was generated but not selected. Set \"theme\": \"$THEME_NAME\" by hand." >&2
+  fi
+else
+  mkdir -p "$ZED_DIR"
+  printf '{\n  "theme": "%s"\n}\n' "$THEME_NAME" >"$ZED_SETTINGS"
+fi

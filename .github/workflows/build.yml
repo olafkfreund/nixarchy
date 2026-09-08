@@ -166,6 +166,12 @@ jobs:
       - name: The doctor reads a GPU correctly
         run: nix build .#checks.x86_64-linux.doctor-graphics --print-build-logs
 
+      # Three network failures told apart, and a blocked radio from a missing
+      # one. checks.install-iso runs -nic none against a machine with no radio,
+      # which is the one shape where every branch of both is unreachable.
+      - name: The installer can tell three network failures apart
+        run: nix build .#checks.x86_64-linux.installer-network --print-build-logs
+
       # The doctor's wireless rules. The install VM has a virtio NIC and no
       # radio, so not one of the three no-wlan0 cases can occur there -- the
       # same gap that let the no-VAAPI-driver branch ship unreachable (#352).

@@ -386,7 +386,14 @@ jobs:
   report:
     name: report a failure
     runs-on: ubuntu-latest
-    needs: [install, install-iso, microvm, cache, canary]
+    # install-encrypted was missing here, and the omission is the same class
+    # of bug as the cancelled() note below: a watchdog that cannot see one of
+    # its subjects. `if: failure()` observes only the jobs in `needs`, so on
+    # 2026-09-08 install-encrypted failed, this job ran, saw five green
+    # dependencies, and reported SUCCESS. The encrypted install is the DEFAULT
+    # answer to the installer's own question, and it was the one failure that
+    # filed no issue.
+    needs: [install, install-encrypted, install-iso, microvm, cache, canary]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -423,6 +430,16 @@ jobs:
             # themselves are green, though; a night where both broke is an
             # install problem first.
             title="nightly: tomorrow's flake update breaks a user's eval"
+          elif [ "${{ needs.microvm.result }}" != "success" ] &&
+            [ "${{ needs.install.result }}" = "success" ] &&
+            [ "${{ needs.install-encrypted.result }}" = "success" ] &&
+            [ "${{ needs.install-iso.result }}" = "success" ]; then
+            # microvm was in `needs` and in no branch of this ladder, so a
+            # MicroVM boot failure was titled "the install checks are failing"
+            # -- the #236 shape the comment above warns about, committed two
+            # jobs later. It also collides with the dedupe search, appending a
+            # sandbox failure to the install issue.
+            title="nightly: a sandbox will not boot"
           else
             title="nightly: the install checks are failing"
           fi

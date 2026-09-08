@@ -102,6 +102,25 @@ jobs:
           # repacks, and it avoids trusting a filename-to-attribute convention
           # nothing enforces.
           mapfile -t attrs < <(nix eval --json .#update.pinned | jq -r '.[] | ".#" + .')
+
+          # mapfile returns 0 whatever the process substitution did -- a failed
+          # eval, a renamed output, a jq that is not there -- and an empty
+          # array then makes the line below `nix build --impure
+          # --print-build-logs` with no installables, which builds .#default
+          # and exits GREEN. The one step that proves the rewritten packages
+          # still build would have built none of them and said nothing.
+          #
+          # Six is what .#update.pinned holds today (hey-cli, omacalc, omacut,
+          # omawrite, once, ttfx). The floor is 1 rather than 6 so removing a
+          # package from the set is an ordinary edit and not a CI break, while
+          # "the list came back empty" still stops the job.
+          if [ "${#attrs[@]}" -eq 0 ]; then
+            echo "::error::.#update.pinned produced no attributes, so this step" \
+                 "would build .#default and pass without checking the packages" \
+                 "the bump just rewrote" >&2
+            exit 1
+          fi
+
           echo "building: ${attrs[*]}"
           nix build --impure --print-build-logs "${attrs[@]}"
 

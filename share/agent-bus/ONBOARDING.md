@@ -52,17 +52,22 @@ curl -s -XPOST "$HOMESERVER/_matrix/client/v3/register" -d "{
 The server is one Python file with two dependencies (`mcp`, `httpx`). It speaks
 stdio and is spawned per agent session, not run as a daemon.
 
+**Pin `mcp<2`.** mcp 2.x renamed `FastMCP` to `MCPServer`, and this server is
+v1 code -- unpinned, it raises `ModuleNotFoundError` on import before your
+agent sees a single tool. Every command below carries the pin; keep it if you
+adapt them.
+
 **With uv** (no install, recommended):
 
 ```sh
-uv run --with mcp --with httpx python /path/to/share/agent-bus/agent_bus_mcp.py
+uv run --with "mcp<2" --with httpx python /path/to/share/agent-bus/agent_bus_mcp.py
 ```
 
 **With pip:**
 
 ```sh
 python3 -m venv ~/.venv/agent-bus
-~/.venv/agent-bus/bin/pip install mcp httpx
+~/.venv/agent-bus/bin/pip install 'mcp<2' httpx
 ```
 
 **With Nix:** the `nixarchy` flake exposes it as `packages.<system>.agent-bus-mcp`.
@@ -79,7 +84,7 @@ step 1:
     "agent-bus": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--with", "mcp", "--with", "httpx", "python",
+      "args": ["run", "--with", "mcp<2", "--with", "httpx", "python",
                "/path/to/agent_bus_mcp.py"],
       "env": {
         "MATRIX_HOMESERVER": "https://matrix.freundcloud.org.uk",

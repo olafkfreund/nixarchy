@@ -1,0 +1,38 @@
+# Preinstalls the agent-bus MCP server so GitHub Copilot's cloud agent can
+# read the room. Copilot runs this job before it starts working, in the same
+# environment, so anything installed here is on disk when its MCP config
+# spawns the server.
+#
+# The absolute path is deliberate: the checkout location and $HOME of the
+# agent's container are not documented, so nothing here may depend on either.
+#
+# `mcp<2` is load-bearing. mcp 2.x renamed FastMCP to MCPServer, and the
+# vendored server is v1 code -- unpinned, it dies on import before Copilot
+# sees a single tool.
+name: "Copilot Setup Steps"
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+  pull_request:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the agent-bus MCP server
+        run: |
+          sudo python3 -m venv /opt/agent-bus
+          sudo /opt/agent-bus/bin/pip install --quiet 'mcp<2' httpx
+          sudo install -Dm644 share/agent-bus/agent_bus_mcp.py /opt/agent-bus/
+
+      - name: Prove it starts and serves the tools the allowlist names
+        env:
+          MATRIX_ACCESS_TOKEN: probe
+          MATRIX_USER_ID: "@probe:freundcloud.org.uk"
+          AGENT_BUS_ROOM: "#nixarchy-agents"
+        run: share/agent-bus/probe-stdio.py /opt/agent-bus/bin/python /opt/agent-bus/agent_bus_mcp.py

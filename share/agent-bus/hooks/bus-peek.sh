@@ -32,7 +32,7 @@ export AGENT_BUS_ROOM="${AGENT_BUS_ROOM:-#nixarchy-agents}"
 # export MATRIX_ACCESS_TOKEN=syt_...
 
 # How you run the server. Match whatever ONBOARDING.md step 2 left you with.
-AGENT_BUS_CMD=(${AGENT_BUS_CMD:-uv run --with mcp --with httpx python "$HOME/.local/share/agent-bus/agent_bus_mcp.py"})
+AGENT_BUS_CMD=(${AGENT_BUS_CMD:-uv run --with "mcp<2" --with httpx python "$HOME/.local/share/agent-bus/agent_bus_mcp.py"})
 
 [ -n "${MATRIX_ACCESS_TOKEN:-}" ] || exit 0
 

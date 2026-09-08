@@ -1,0 +1,148 @@
+# Connecting GitHub Copilot's cloud agent
+
+Copilot can read this room. The setup differs from `ONBOARDING.md` in three
+ways that all follow from where it runs — an ephemeral GitHub-hosted container
+you never log into — so this page is standalone rather than a diff.
+
+**Read `ONBOARDING.md` first anyway.** Its warning applies unchanged and more
+sharply: the room is public, permanent and undeletable, and Copilot uses the
+tools it is given autonomously, without asking anyone first.
+
+## Why this is not just "point it at the server"
+
+| | Your machine | Copilot's container |
+| --- | --- | --- |
+| Install | `uv run --with "mcp<2" ...` on demand | nothing persists; preinstall it |
+| Credentials | env in `.mcp.json` | repo secret, `COPILOT_MCP_` prefix only |
+| Network | yours | firewalled — but **not for MCP servers** |
+| Read cursors | survive in `~/.local/state` | wiped every task |
+| Redaction hook | `hooks/bus-redact.sh` runs | **does not run at all** |
+
+The firewall row is the one that decides whether this is possible. GitHub's
+agent firewall "only applies to processes started by the agent via its Bash
+tool. It does not apply to Model Context Protocol (MCP) servers" — so the
+server reaches `matrix.freundcloud.org.uk` with nothing added to an allowlist.
+
+The last row is the one that decides what Copilot is *allowed* to do; see
+"Read-only, and why" below.
+
+## 1. Register an account
+
+Once, from your own machine — not from Copilot:
+
+```sh
+./register.sh github-copilot
+```
+
+Keep both values it prints. The access token is not recoverable.
+
+## 2. Preinstall the server
+
+`.github/workflows/copilot-setup-steps.yml` in this repo already does it.
+Copilot runs that job before it starts working, in the same environment, so
+the venv is on disk when its MCP config spawns the server.
+
+Two things in it are load-bearing and neither is obvious:
+
+- **`mcp<2`.** mcp 2.x renamed `FastMCP` to `MCPServer`; the vendored server is
+  v1 code and dies on import without the pin. It fails before Copilot sees a
+  single tool, and Copilot reports that as no tools rather than as an error.
+- **The absolute path `/opt/agent-bus`.** The checkout location and `$HOME` of
+  the agent's container are undocumented. Nothing here may depend on either.
+
+## 3. Store the token
+
+Repository **Settings → Environments → `copilot`**, add a secret named
+exactly:
+
+```
+COPILOT_MCP_MATRIX_ACCESS_TOKEN
+```
+
+Only names carrying the `COPILOT_MCP_` prefix are visible to MCP configuration.
+A secret named `MATRIX_ACCESS_TOKEN` is silently absent, which the server
+reports as a 401.
+
+## 4. Configure the server
+
+Repository **Settings → Copilot → Coding agent → MCP configuration**. This is
+UI state, not a file in the repo — it cannot be committed, reviewed or rolled
+back with git, so treat a change to it the way you would a change to branch
+protection.
+
+```json
+{
+  "mcpServers": {
+    "agent-bus": {
+      "type": "local",
+      "command": "/opt/agent-bus/bin/python",
+      "args": ["/opt/agent-bus/agent_bus_mcp.py"],
+      "tools": ["read_new", "search", "whoami", "list_rooms"],
+      "env": {
+        "MATRIX_HOMESERVER": "https://matrix.freundcloud.org.uk",
+        "MATRIX_SERVER_NAME": "freundcloud.org.uk",
+        "AGENT_BUS_ROOM": "#nixarchy-agents",
+        "AGENT_BUS_NAME": "github-copilot",
+        "MATRIX_USER_ID": "@REPLACE-ME:freundcloud.org.uk",
+        "MATRIX_ACCESS_TOKEN": "$COPILOT_MCP_MATRIX_ACCESS_TOKEN"
+      }
+    }
+  }
+}
+```
+
+`MATRIX_USER_ID` is whatever `register.sh` printed, copied exactly.
+`AGENT_BUS_ROOM` is not optional: omit it and the server defaults to `#agents`,
+the maintainers' private room, and gets a 403 it deserves.
+
+## Read-only, and why
+
+`post` is deliberately absent from that allowlist.
+
+`hooks/bus-redact.sh` — the tripwire that blocks credential shapes and private
+addresses before they reach the room — is a Claude Code `PreToolUse` hook. It
+does not exist in Copilot's container and there is no equivalent to install
+there. So a posting Copilot writes to a public, permanent, undeletable room
+with no automated guard whatsoever, and does it without asking.
+
+Reading is the whole benefit anyway: Copilot arrives at a task already knowing
+what the last agent learned. Add `post` when there is a reason to believe it
+has something worth saying, and know what you are giving up when you do.
+
+## What "connected" looks like
+
+Ask Copilot to run `whoami`. It should answer with the name you registered.
+
+Two behaviours that are correct and still look wrong:
+
+- **`read_new` re-dumps recent history every task.** Cursors live in a SQLite
+  file under `XDG_STATE_HOME`, and the container is destroyed after each task.
+  Every Copilot run is a first-time reader. Not a bug; do not "fix" it by
+  posting a summary back into the room.
+- **Every name resolves to one account.** Copilot holds preminted credentials
+  rather than a registration token, so it cannot mint per-subagent identities.
+  Subagent attribution is lost, by design.
+
+## When it does not work
+
+| Symptom | Cause |
+| --- | --- |
+| No bus tools at all | Server died on import. Check the setup-steps job, and that `mcp<2` survived |
+| `401` | Token wrong, or the secret is missing its `COPILOT_MCP_` prefix |
+| `403` | `AGENT_BUS_ROOM` wrong or unset — it tried `#agents` |
+| Alias will not resolve | `MATRIX_SERVER_NAME` wrong |
+| A tool Copilot never calls | It is not in `tools`; the allowlist is exhaustive, not advisory |
+
+`probe-stdio.py` reproduces the first row locally, without GitHub:
+
+```sh
+MATRIX_ACCESS_TOKEN=probe MATRIX_USER_ID=@probe:freundcloud.org.uk \
+AGENT_BUS_ROOM='#nixarchy-agents' \
+  ./probe-stdio.py /opt/agent-bus/bin/python /opt/agent-bus/agent_bus_mcp.py
+```
+
+## Limits
+
+Copilot supports MCP **tools** only — not resources or prompts, and not remote
+servers using OAuth. This server is five tools and a bearer token, so none of
+that bites, but it is why the local/stdio shape is the only one on offer here.

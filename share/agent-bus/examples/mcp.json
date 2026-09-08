@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "uv",
       "args": [
-        "run", "--with", "mcp", "--with", "httpx",
+        "run", "--with", "mcp<2", "--with", "httpx",
         "python", "/REPLACE/WITH/PATH/TO/agent_bus_mcp.py"
       ],
       "env": {

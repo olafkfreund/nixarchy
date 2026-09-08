@@ -497,12 +497,31 @@ pkgs.testers.runNixOSTest {
         "grep -q test-instrumentation"
         " /mnt/etc/nixos/hosts/installed/configuration.nix")
     installer.succeed("git -C /mnt/etc/nixos add -A")
+    # The whole log to a file, the tail to the console.
+    #
+    # `| tail -20` alone threw away the only evidence that matters when the
+    # secret append below fails: systemd-boot's bootloader installer prints
+    # "failed to create initrd secrets!" or "warning: failed to update initrd
+    # secrets ..." in the middle of the install, thousands of lines above the
+    # end. So the assertion could say the hash was missing and nothing could
+    # say why -- which is how this was diagnosed twice from the same 50 lines.
     print(installer.succeed(
         "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"
         " --no-root-password"
         " --option extra-experimental-features 'nix-command flakes'"
-        " --option always-allow-substitutes true 2>&1 | tail -20",
+        " --option always-allow-substitutes true"
+        " >/tmp/nixos-install.log 2>&1; rc=$?;"
+        " tail -20 /tmp/nixos-install.log; exit $rc",
         timeout=1800))
+
+    # And surfaced immediately, because a non-critical append failure lets the
+    # install SUCCEED with a pristine initrd -- the exact case where the next
+    # assertion fails and the reason is 3000 lines back.
+    secret_trouble = installer.succeed(
+        "grep -n -i 'initrd secrets' /tmp/nixos-install.log || true").strip()
+    if secret_trouble:
+        print("BOOTLOADER SAID, about initrd secrets:")
+        print(secret_trouble)
 
     # ---- the recovery credential is in the initrd on the ESP -----------
     #

@@ -1623,6 +1623,32 @@ generate_hardware_config() {
 
   reuse_baked_initrd "$hostdir/hardware-configuration.nix"
   write_hardware_modules "$hostdir/nixarchy-hardware.nix"
+
+  # Both files, into the log, before anything uses them.
+  #
+  # These two are the ONLY inputs to the installed system that this machine
+  # invents -- everything else comes from the template or the answers. So when
+  # an offline install has to build something the image should have carried,
+  # the difference is here, and there was no way to see it: the files live on
+  # the target disk, the failure happens minutes later, and what the log kept
+  # was the consequence -- a list of 681 derivations walking down to the
+  # source bootstrap, which names the toolchain and never names the cause.
+  #
+  # That is exactly how #382 was found the hard way (an Intel NPU attribute
+  # pulling a cmake package no closure carried) and how the 2026-09-07
+  # regression stayed unexplained: the evidence was written to the disk and
+  # thrown away.
+  #
+  # `>&2` so it lands in /var/log/nixarchy-install.log with everything else,
+  # which is the file the failure screen already asks people to attach. Two
+  # small files, no secrets: a module list and a set of imports.
+  {
+    echo "--- generated hardware-configuration.nix ---"
+    cat "$hostdir/hardware-configuration.nix"
+    echo "--- generated nixarchy-hardware.nix ---"
+    cat "$hostdir/nixarchy-hardware.nix"
+    echo "--- end generated hardware files ---"
+  } >&2
 }
 
 # The nixos-hardware modules this machine wants, as a file the host imports.

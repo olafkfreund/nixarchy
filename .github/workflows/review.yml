@@ -36,44 +36,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          # Honour this flake's own nixConfig instead of warning and
-          # discarding it. Without this every `nix build` here prints
-          #
-          #   warning: ignoring untrusted flake configuration setting
-          #   'extra-substituters'. Pass '--accept-flake-config' to trust it
-          #
-          # and the nixarchy and hyprland caches flake.nix declares are
-          # simply not used. The hyprland one was then re-added by hand in
-          # ONE job, writing /etc/nix/nix.conf because "without this the
-          # runner compiles a compositor from source and times out" -- a
-          # workaround for a setting the flake already carried.
-          #
-          # Scoped to the flake being invoked, which is this repository's
-          # own. It does not extend trust to inputs.
-          # accept-flake-config alone is not enough, and the reason cost a
-          # day: the runner is not in the daemon's `trusted-users`, so every
-          # substituter and key the flake declares is DISCARDED with
-          #
-          #   warning: ignoring the client-specified setting
-          #   'trusted-public-keys', because it is a restricted setting and
-          #   you are not a trusted user
-          #
-          # and the job then BUILDS what it should have downloaded. On
-          # 2026-09-07 the `omarchy` and `box` jobs each compiled Hyprland to
-          # 55% and hit timeout-minutes, while `system` survived only because
-          # it had a hand-written `sudo tee -a /etc/nix/nix.conf` step nobody
-          # had copied to the others.
-          #
-          # extra-conf is written into the SYSTEM nix.conf as root, so what is
-          # set here is trusted and actually applies. The store path nixarchy
-          # uses is byte-identical to the one hyprwm publish -- verified, not
-          # assumed -- so with this the compositor is a download.
-          extra-conf: |
-            accept-flake-config = true
-            extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
-            extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
+      - uses: ./.github/actions/setup-nix
 
       - name: Review, and say so
         # always(), because a review that only reports when it feels like it is

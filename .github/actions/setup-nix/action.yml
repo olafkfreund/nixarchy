@@ -1,0 +1,46 @@
+name: Set up nix
+description: >-
+  nix-installer with this flake's own binary caches, written where the daemon
+  will actually honour them.
+
+# Why this exists: the block below was copied into eleven places, and they are
+# byte-identical today by luck rather than by design. build.yml:66-69 records
+# what a divergence already cost -- the `system` job survived an outage only
+# because it had a hand-written `sudo tee` step nobody had copied to the
+# others. Eleven copies of a security-relevant setting is eleven places to
+# forget when a key rotates.
+#
+# NOT included here: the cachix push step. It relies on `continue-on-error:
+# true` (#235 -- a cache upload that fails must not fail a build that
+# succeeded), and whether a composite action's `uses:` step honours that is not
+# something to find out from a broken pipeline. It stays in the workflows,
+# where it demonstrably works. This action covers the duplication that is
+# actually identical.
+
+runs:
+  using: composite
+  steps:
+    - uses: DeterminateSystems/nix-installer-action@main
+      with:
+        # extra-conf, not the flake's own nixConfig, and the difference is the
+        # whole reason this is written down.
+        #
+        # `accept-flake-config` promotes a flake's nixConfig to CLIENT-specified
+        # settings, and the daemon discards those for anyone not in
+        # trusted-users. The runner is not, so every `nix build` printed
+        #
+        #   warning: ignoring the client-specified setting
+        #   'trusted-public-keys', because it is a restricted setting and you
+        #   are not a trusted user
+        #
+        # and then compiled Hyprland from source. extra-conf is written into
+        # the SYSTEM nix.conf as root, so what is set here is trusted and
+        # actually applies.
+        #
+        # The store path nixarchy uses is byte-identical to the one hyprwm
+        # publish -- verified, not assumed -- so with this the compositor is a
+        # download.
+        extra-conf: |
+          accept-flake-config = true
+          extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
+          extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=

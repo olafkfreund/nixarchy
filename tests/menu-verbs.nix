@@ -23,7 +23,6 @@
 # all (they are produced by a mapAttrs' and have no source line of their own),
 # and a bug in the generator is as capable of breaking a row as a typo is.
 let
-  inherit (pkgs) lib;
   system = pkgs.stdenv.hostPlatform.system;
 
   # reference, plus boxes -- the box group is gated on services.boxes.enable

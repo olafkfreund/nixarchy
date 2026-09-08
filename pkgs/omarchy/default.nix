@@ -1039,7 +1039,23 @@ stdenvNoCC.mkDerivation {
                     # JSON -- which parses as an invalid control character, not as a shell
                     # `&&`. The jsonc is re-parsed at the end of this phase for that reason.
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
-                    for a in claude codex copilot crush gemini grok omp opencode pi; do
+                    # 4.0.3 added four: cursor-agent, hermes, muse, openclaw. The
+                    # assertion at the end of this phase is what found them -- it
+                    # failed the build of the bump rather than letting four rows
+                    # ship that tick for an agent the machine does not have.
+                    #
+                    # All four use their id as their command, checked against
+                    # upstream's own bin/omarchy-default-agent: muse says so
+                    # outright (`bin=muse` in its package spec) and the other three
+                    # set `agent=<id>` with no separate binary. antigravity below is
+                    # still the only one that differs, and it is written out for
+                    # exactly that reason.
+                    #
+                    # Getting a command name wrong here fails SAFE: the row simply
+                    # never ticks, which reads as "that agent is not installed".
+                    # The direction that would matter -- ticking for an agent that
+                    # is absent -- is the one this loop exists to prevent.
+                    for a in claude codex copilot crush cursor-agent gemini grok hermes muse omp openclaw opencode pi; do
                       substituteInPlace $menu \
                         --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
                     done

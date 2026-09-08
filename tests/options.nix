@@ -441,32 +441,20 @@ let
   # Rows that are actions rather than applications, plus the gaps the README
   # names. Fonts go through omarchy-install-font and the Arch-name map; the
   # four gaming rows and three frameworks are documented as needing a hand.
-  notApps = [
-    "install.aur"
-    "install.package"
-    "install.preinstalls"
-    "install.style.background"
-    "install.style.theme"
-    "install.tui"
-    "install.webapp"
-    "install.windows"
-    "install.service.chromium-account"
-    "install.style.font.bitstream"
-    "install.style.font.cascadia"
-    "install.style.font.fira"
-    "install.style.font.iosevka"
-    "install.style.font.meslo"
-    "install.style.font.victor"
-    "install.ai.ollama"
-    "install.gaming.battlenet"
-    "install.gaming.geforce-now"
-    "install.gaming.retro-launcher"
-    "install.gaming.xbox-cloud"
-    "install.development.docker-dbs"
-    "install.development.elixir.phoenix"
-    "install.development.php.laravel"
-    "install.development.rails"
-  ];
+  # Rows that are actions rather than applications, and the gaps the README
+  # names.
+  #
+  # data/menu-exceptions.nix, not a list here, because
+  # .github/scripts/check-menu-mapping.py asks the same question and this file
+  # used to carry its own copy of the answer. Recording a decision then
+  # satisfied one gate and left the other red on the same row -- which is what
+  # the Omarchy 4.0.3 bump ran into, and it read as two problems when it was
+  # one. One file, two readers.
+  #
+  # The reason strings are not used here; this check only needs the set. They
+  # are read by a human at review time, and the mapping script refuses an
+  # exception that carries none.
+  notApps = builtins.attrNames (import ../data/menu-exceptions.nix);
 
   # The built reference machine, for the things that are facts about a system
   # rather than about an option.

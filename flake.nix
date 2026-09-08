@@ -28,7 +28,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/v4.0.2";
+      url = "github:basecamp/omarchy/v4.0.3";
       flake = false;
     };
 
@@ -137,7 +137,7 @@
         }
       );
 
-      omarchyVersion = "4.0.2";
+      omarchyVersion = "4.0.3";
 
       # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
       nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";

@@ -28,6 +28,7 @@ here would turn a real break into a green light.
 Usage: check-menu-mapping.py <omarchy-menu.jsonc> <catalogue.nix>...
 """
 
+import os
 import re
 import sys
 
@@ -59,14 +60,53 @@ def main(argv):
             "this check stopped being able to read it, which is worse"
         )
 
-    missing = sorted((r, a) for r, a in wanted if a not in known)
+    # Rows this port has DECIDED not to map, with the reason.
+    #
+    # data/menu-exceptions.nix, not a list in this file, because
+    # tests/options.nix asks the same question and used to carry its own copy
+    # -- so recording a decision satisfied one gate and left the other red on
+    # the same row. One file, two readers.
+    #
+    # Parsed with a regex rather than by evaluating Nix: this script is
+    # stdlib-only and runs where nix may not, and the file is a flat attrset
+    # of string values by construction. A shape it cannot read is reported,
+    # never assumed empty -- an unreadable exceptions file that silently
+    # excepted nothing would fail every row, and one that silently excepted
+    # everything would be worse.
+    exceptions = {}
+    exc_path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))), "data", "menu-exceptions.nix")
+    if os.path.exists(exc_path):
+        text = open(exc_path).read()
+        for rid, reason in re.findall(
+            r'"(install\.[a-z0-9.\-]+)"\s*=\s*(.+?);\s*$', text, flags=re.M | re.S
+        ):
+            exceptions[rid] = " ".join(reason.split())
+        if not exceptions:
+            sys.exit(
+                f"{exc_path} exists and yielded no entries -- this check cannot "
+                "tell a deliberate exception from an unmapped row, so it refuses "
+                "to report either"
+            )
+
+    # An exception with no reason is not a decision.
+    blank = sorted(r for r, why in exceptions.items() if not why.strip(' "'))
+    if blank:
+        for r in blank:
+            print(f"::error::{r} is in data/menu-exceptions.nix with no reason")
+        sys.exit(f"{len(blank)} exceptions carry no reason")
+
+    missing = sorted((r, a) for r, a in wanted if a not in known and r not in exceptions)
     for rid, arch in missing:
         names = " or ".join(catalogues)
         print(f"::error::{rid} installs '{arch}', which {names} does not map")
+        print(f"::error::  map it there, or record the decision in data/menu-exceptions.nix")
     if missing:
         sys.exit(f"{len(missing)} unmapped Install rows")
 
-    print(f"all {len(wanted)} Install rows are mapped")
+    excepted = sorted(r for r, _ in wanted if r in exceptions)
+    print(f"all {len(wanted)} Install rows are mapped "
+          f"({len(excepted)} by a recorded exception)")
 
 
 if __name__ == "__main__":

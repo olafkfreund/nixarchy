@@ -264,6 +264,24 @@ jobs:
 
       - name: Check nothing became unmapped or unwired
         if: steps.rel.outputs.changed == 'true'
+        # continue-on-error, and this is the difference between a bump that
+        # blocks and a bump that asks.
+        #
+        # A new Omarchy release adding an Install row this port has not seen
+        # is NORMAL -- it is most of what a release does. Failing the bump on
+        # it stops the whole adoption, including the security fixes, behind a
+        # question nobody has been asked yet: v4.0.2 sat unadopted for three
+        # days behind exactly this step, over a row services.nix had already
+        # mapped.
+        #
+        # So the answer is not to weaken the check but to move WHEN it blocks.
+        # Here it reports, and the step below turns what it found into a
+        # decision list in the pull request body. On that pull request
+        # build.yml runs the same script as a normal gate, where it is fatal
+        # -- so the row still cannot reach main unmapped, it just cannot stop
+        # the bump from being proposed.
+        continue-on-error: true
+        id: mapping
         run: |
           # The same script build.yml runs on every pull request, against the
           # newest Omarchy instead of the pinned one. It was an inline copy
@@ -273,7 +291,51 @@ jobs:
           # along. A security release sat unadopted for three days behind it.
           python3 .github/scripts/check-menu-mapping.py \
             result/share/omarchy/default/omarchy/omarchy-menu.jsonc \
-            data/apps.nix data/services.nix
+            data/apps.nix data/services.nix 2>&1 | tee /tmp/mapping.txt
+
+      - name: Turn what it found into a decision list
+        if: steps.rel.outputs.changed == 'true'
+        id: decisions
+        run: |
+          # The bump PR's fifth section. Every unmapped row, what it installs,
+          # and the two ways to answer it -- so adopting a release is reading a
+          # checklist rather than rediscovering the mechanism each time.
+          {
+            echo "## Install rows that need a decision"
+            echo
+          } > /tmp/decisions.md
+
+          if grep -q "does not map" /tmp/mapping.txt 2>/dev/null; then
+            {
+              echo "This release adds rows this port has not seen. Neither"
+              echo "outcome blocks the bump; both are one line:"
+              echo
+              echo "- **it is an app** -> add it to \`data/apps.nix\` with its"
+              echo "  \`menuId\` and the nixpkgs attribute"
+              echo "- **it is not** -> record why in \`data/menu-exceptions.nix\`"
+              echo
+              echo "Check the package is the right one before mapping it:"
+              echo "nixpkgs' \`openclaw\` is an AI agent AND a platformer, and"
+              echo "\`hey\` is an HTTP load generator. See the notes in"
+              echo "data/apps.nix."
+              echo
+              grep "does not map" /tmp/mapping.txt | sed 's/::error:://; s/^/- [ ] /'
+            } >> /tmp/decisions.md
+          else
+            echo "None: every Install row in this release is mapped or has a" >> /tmp/decisions.md
+            echo "recorded exception." >> /tmp/decisions.md
+          fi
+
+          cat /tmp/decisions.md >> "$GITHUB_STEP_SUMMARY"
+
+          # Into the PR body as the fifth interpolated section, the same way
+          # the release notes, package delta, config delta and patched-files
+          # sections already travel.
+          {
+            echo "decisions<<DECISIONS_EOF"
+            cat /tmp/decisions.md
+            echo "DECISIONS_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # Booting the session builds the closure on the way, so there is no
       # separate closure step: it would double an hour-long Hyprland compile
@@ -332,8 +394,12 @@ jobs:
             - every bin this port replaces is still present
             - every `substituteInPlace` anchor still matches
             - every menu row it overrides still exists
-            - all Install rows are still mapped in `data/apps.nix`
             - **a booted session renders its wallpaper**
+
+            Install rows are NOT claimed as mapped here, deliberately: a new
+            release adding one this port has not seen is normal, and the
+            section below is where that gets decided rather than a reason the
+            bump could not be opened.
 
             ${{ steps.notes.outputs.notes }}
 
@@ -342,6 +408,8 @@ jobs:
             ${{ steps.config.outputs.config }}
 
             ${{ steps.patched.outputs.patched }}
+
+            ${{ steps.decisions.outputs.decisions }}
 
             If something is wrong anyway, roll back with
             `nixos-rebuild --rollback` or the boot menu, and open an issue.

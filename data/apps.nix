@@ -408,15 +408,32 @@
     arch = "grok-bot";
   };
   t3-code = {
-    # No menuId: Omarchy v4.0.1 has no install.ai.t3-code row -- it was added
-    # upstream after the tag this flake pins. The package is still available
-    # as programs.nixarchy.apps.t3-code; the menu row returns when the omarchy
-    # input is bumped. The generator fails on a menuId upstream does not
-    # ship, which is how this was caught.
+    # The row arrived in Omarchy 4.0.3, exactly as the note that stood here
+    # predicted: "the menu row returns when the omarchy input is bumped". It
+    # did, and the bump's own gate is what noticed.
+    menuId = "install.ai.t3-code";
     label = "T3 Code";
     category = "AI";
     attr = "t3code";
     arch = "t3code-bin";
+  };
+  openclaw = {
+    # New in Omarchy 4.0.3.
+    #
+    # nixpkgs' `openclaw` is the right package and that was checked rather
+    # than assumed, because the name is shared: there is a well-known
+    # Captain Claw reimplementation by that name, and mapping it would have
+    # installed a platformer to someone asking for an AI agent. nixpkgs
+    # describes this one as "Self-hosted, open-source AI assistant/agent"
+    # with homepage openclaw.ai, which is what upstream's
+    # omarchy-install-ai-openclaw fetches with `omarchy-pkg-add openclaw`.
+    #
+    # This is the `hey` trap in the hey-cli entry below, one release later.
+    menuId = "install.ai.openclaw";
+    label = "OpenClaw";
+    category = "AI";
+    attr = "openclaw";
+    arch = "openclaw";
   };
   omawrite = {
     # No menuId: Omarchy has no install row for its own applications -- upstream

@@ -10,6 +10,17 @@
 # already sets all three at mkDefault, and a second definition here would be
 # dead config that reads like a decision.
 {
+  # Still accepted, deliberately unused, and that is the point of stage 1.
+  #
+  # Every caller passes it -- the generated host, flake.nix's reference
+  # machines, tests/machine-name-free.nix -- and the interface is strict (no
+  # `...`), so dropping it would break all three for no gain. What changed is
+  # that nothing HERE may consume it: the moment this file uses the machine's
+  # name, the name is back in the derivation, and two machines that differ
+  # only by name have two different systems again. See the note on
+  # networking.hostName below.
+  #
+  # deadnix: skip
   hostname,
   username,
 }:

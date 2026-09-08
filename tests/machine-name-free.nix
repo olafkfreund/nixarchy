@@ -47,10 +47,22 @@ let
   b = machine "omega-two";
 
   # The three that decide whether an offline install has to build anything.
+  # unsafeDiscardStringContext, and it is the difference between a check that
+  # answers in seconds and one that builds two entire NixOS systems.
+  #
+  # A drvPath is a string WITH CONTEXT: using it inside another derivation
+  # tells nix "realise this first". So comparing two drvPaths the obvious way
+  # made this check depend on both machines being BUILT -- a multi-gigabyte
+  # download and the better part of an hour, to answer a question that is pure
+  # evaluation. The paths are wanted here as text, not as things to build.
+  #
+  # Safe precisely because nothing here consumes them: they are compared and
+  # printed. If this file ever needs to build one, the context must come back.
+  drv = p: builtins.unsafeDiscardStringContext p;
   parts = {
-    initrd = c: c.config.system.build.initialRamdisk.drvPath;
-    toplevel = c: c.config.system.build.toplevel.drvPath;
-    etc = c: c.config.system.build.etc.drvPath;
+    initrd = c: drv c.config.system.build.initialRamdisk.drvPath;
+    toplevel = c: drv c.config.system.build.toplevel.drvPath;
+    etc = c: drv c.config.system.build.etc.drvPath;
   };
 
   compare = lib.mapAttrsToList (n: f: {

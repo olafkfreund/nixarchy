@@ -173,6 +173,41 @@ jobs:
       # rescues.
       - name: The offline rescue fires only where it should, and never quietly
         run: nix build .#checks.x86_64-linux.installer-offline-rescue --print-build-logs
+      # Three network failures told apart, and a blocked radio from a missing
+      # one. checks.install-iso runs -nic none against a machine with no radio,
+      # which is the one shape where every branch of both is unreachable.
+      - name: The installer can tell three network failures apart
+        run: nix build .#checks.x86_64-linux.installer-network --print-build-logs
+
+      # That the ISO can associate at all. No VM in this repo has a radio --
+      # install-iso boots -nic none and every other install test uses a virtio
+      # NIC -- so there is nowhere in the suite this can be caught by running
+      # something. Only by asking the configuration what it says.
+      - name: The ISO can associate to a network
+        run: nix build .#checks.x86_64-linux.iso-wifi --print-build-logs
+
+      # That the Wi-Fi someone joins during the install is carried onto the
+      # machine, and that the file holding their PSK never lands in the git
+      # repository nixarchy-config-repo pushes to GitHub.
+      - name: Wi-Fi joined during the install is carried over
+        run: nix build .#checks.x86_64-linux.installer-network-profiles --print-build-logs
+
+      # That a failed install says what KIND of failure it was, not only that
+      # something failed. checks.install-iso asserts installs that SUCCEED, so
+      # a passing install renders no failure screen at all and can never reach
+      # any of this.
+      - name: The failure screen names the failure
+        run: nix build .#checks.x86_64-linux.installer-failure-hints --print-build-logs
+
+      # And that the configuration iso-wifi asserts actually carries an
+      # association, against a real radio: mac80211_hwsim gives the VM two
+      # wiphys, hostapd serves one, NetworkManager and wpa_supplicant drive the
+      # other, and the handshake is asserted from both ends. Nothing else in
+      # this repo has ever had a wireless card -- install-iso boots -nic none
+      # and every other install test uses a virtio NIC -- which is why five
+      # wireless bugs reached testers before any check could see one.
+      - name: A VM with a radio can associate to a network
+        run: nix build .#checks.x86_64-linux.wifi-hwsim --print-build-logs
 
       # The doctor's wireless rules. The install VM has a virtio NIC and no
       # radio, so not one of the three no-wlan0 cases can occur there -- the

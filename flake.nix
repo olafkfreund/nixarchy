@@ -1098,6 +1098,37 @@
           # The installer's interactive screens, at every width worth caring
           # about. Nothing else draws them: every other harness passes
           # --answers, which is exactly how #133 shipped.
+          # Why: tests/wifi-hwsim.nix
+          wifi-hwsim = import ./tests/wifi-hwsim.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Why: tests/iso-wifi.nix
+          iso-wifi = import ./tests/iso-wifi.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Why: tests/installer-failure-hints.nix
+          installer-failure-hints = import ./tests/installer-failure-hints.nix {
+            pkgs = pkgsFor.${system};
+            dashboardScript = ./installer/lib/dashboard.sh;
+            installScript = ./installer/install.sh;
+          };
+
+          # Why: tests/installer-network-profiles.nix
+          installer-network-profiles = import ./tests/installer-network-profiles.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
+          # Why: tests/installer-network.nix
+          installer-network = import ./tests/installer-network.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           installer-store-space = import ./tests/installer-store-space.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;

@@ -265,6 +265,38 @@ network_ready() {
   curl -sfI --max-time 8 https://cache.nixos.org/nix-cache-info >/dev/null 2>&1
 }
 
+# WHICH half of "no network" it is, in one word on stdout.
+#
+# network_ready is the right test -- the install needs that cache and nothing
+# less proves it -- but it collapses three situations into one screen saying
+# "No network yet", and they want three different actions:
+#
+#   nolink  no carrier and no address; plug something in or join a network
+#   nodns   associated, but nothing resolves -- a captive portal does this,
+#           and no amount of retrying fixes it from here
+#   nocache resolves and routes, but cache.nixos.org will not answer; a proxy,
+#           a filtered network, or the cache genuinely being down
+#
+# A tester sat on "No network yet" with working Wi-Fi and nothing to act on.
+# The screen said the same thing for a cable that was not plugged in.
+network_fault() {
+  # Any non-loopback interface with a global address. `ip` is on the medium
+  # (iproute2 is in the base system) and this asks the kernel rather than
+  # NetworkManager, which reports "connected" for an association that has not
+  # got as far as an address.
+  ip -o -4 addr show scope global 2>/dev/null | grep -qv ' lo ' ||
+    ip -o -6 addr show scope global 2>/dev/null | grep -q . ||
+    { echo nolink; return; }
+
+  # Resolution, against the host the install actually needs rather than a
+  # well-known one: a captive portal that answers for example.com and not for
+  # cache.nixos.org is still a portal, and DNS that works for one name and not
+  # the other is the same problem to the person in front of it.
+  getent hosts cache.nixos.org >/dev/null 2>&1 || { echo nodns; return; }
+
+  echo nocache
+}
+
 # The way out of any question, said out loud.
 #
 # Every prompt in the flow is a `var=$(... gum ...)` assignment, and the flow
@@ -283,9 +315,49 @@ ui_abort() {
   exit 1
 }
 
+# Is the radio blocked, and by what? Echoes hard, soft or none.
+#
+# `nmcli radio wifi on` clears NetworkManager's own idea of the radio and
+# nothing else, so a machine rfkill'd at the kernel scans, finds nothing, and
+# is told the driver may be missing. On a ThinkPad that is a Fn+F8 away, and
+# the message sends the reader after a driver that is present and bound.
+#
+# rfkill is on the medium: util-linux is in the ISO's package set, verified
+# rather than assumed.
+wifi_block() {
+  local out
+  out=$(rfkill list wifi 2>/dev/null) || { echo none; return; }
+  case $out in
+    *"Hard blocked: yes"*) echo hard ;;
+    *"Soft blocked: yes"*) echo soft ;;
+    *) echo none ;;
+  esac
+}
+
 connect_wifi() {
   ui_screen "Let's get you on Wi-Fi..."
   nmcli radio wifi on >/dev/null 2>&1 || true
+
+  # A soft block is ours to clear, and clearing it is the whole fix on a
+  # machine that has been suspended with the radio off or booted after a
+  # different OS turned it down.
+  if [ "$(wifi_block)" = soft ]; then
+    rfkill unblock wifi >/dev/null 2>&1 || true
+    # The radio needs a moment to come up before a scan means anything.
+    sleep 1
+  fi
+
+  # A hard block is not, and saying so is the point. No software clears a
+  # physical switch or a BIOS setting, so a scan here would find nothing and
+  # the "No networks found" text below would blame the image.
+  if [ "$(wifi_block)" = hard ]; then
+    ui_left "\e[31mThe wireless radio is blocked by hardware.\e[0m"
+    ui_left "\e[90mA physical switch or a BIOS setting is holding it off -- on many\e[0m"
+    ui_left "\e[90mThinkPads that is Fn+F8, and in BIOS setup it is \"Wireless LAN\".\e[0m"
+    ui_left "\e[90mNothing here can override it. A cable works in the meantime.\e[0m"
+    sleep 5
+    return 1
+  fi
 
   # --rescan yes because the cached list is empty on a radio that came up
   # seconds ago, which is every boot of a live image. Deduplicated on SSID:
@@ -298,7 +370,18 @@ connect_wifi() {
 
   if [ -z "$list" ]; then
     ui_left "\e[31mNo networks found.\e[0m"
-    ui_left "\e[90mA USB adapter may need a moment, or the driver may not be on this image.\e[0m"
+    # Only where it can be true. This line used to be unconditional, and on a
+    # machine whose driver was bound and whose radio was merely blocked it sent
+    # the reader after a missing driver that was not missing. cfg80211 creates
+    # a phy80211 link for every driver that registers, so its absence is the
+    # honest test for "no wireless device at all".
+    if ! ls -d /sys/class/net/*/phy80211 >/dev/null 2>&1; then
+      ui_left "\e[90mThis machine has no wireless interface: no driver claimed the card,\e[0m"
+      ui_left "\e[90mor there is no card. A USB adapter may need a moment.\e[0m"
+    else
+      ui_left "\e[90mThe adapter is working but saw nothing. Move closer, or check the\e[0m"
+      ui_left "\e[90mnetwork is on 2.4/5 GHz this card supports.\e[0m"
+    fi
     sleep 3
     return 1
   fi
@@ -311,14 +394,93 @@ connect_wifi() {
   # Asked for every network, including open ones, where an empty answer is
   # correct and is passed as no password at all. One prompt that handles both
   # beats detecting the security column and being wrong about WEP.
-  ui_left "\e[90mLeave blank if the network is open.\e[0m"
-  pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
+  # Three attempts at the password, and the reason is the failure it replaces.
+  #
+  # `|| return 1` sent every failure back to the outer menu with nothing but
+  # nmcli's own stderr, so a mistyped password, a network that has gone out of
+  # range, and a NetworkManager that is not running all looked identical and
+  # all cost a full round trip through "No network yet" to try again. The one
+  # that is nearly always the answer -- the password -- is the one that should
+  # be one keystroke away.
+  #
+  # nmcli's exit statuses are documented (nmcli(1) EXIT STATUS) and specific
+  # enough to act on:
+  #
+  #   3   timeout
+  #   4   connection activation failed
+  #   8   NetworkManager is not running
+  #   10  connection, device or access point does not exist
+  local attempt rc
+  for attempt in 1 2 3; do
+    ui_left "\e[90mLeave blank if the network is open.\e[0m"
+    pw=$(gum input --padding "$(ui_gum_pad)" --password --prompt "Password> ")
 
-  if [ -z "$pw" ]; then
-    nmcli device wifi connect "$ssid" || return 1
-  else
-    nmcli device wifi connect "$ssid" password "$pw" || return 1
-  fi
+    rc=0
+    if [ -z "$pw" ]; then
+      nmcli device wifi connect "$ssid" || rc=$?
+    else
+      nmcli device wifi connect "$ssid" password "$pw" || rc=$?
+    fi
+    [ "$rc" -eq 0 ] && return 0
+
+    case $rc in
+      4)
+        # "Usually", not "the password is wrong": activation also fails on a
+        # network that hands out no address, and telling someone their correct
+        # password is wrong is worse than being vague.
+        ui_left "\e[31mCould not connect -- usually that is the password.\e[0m"
+        [ "$attempt" -lt 3 ] && continue
+        ui_left "\e[90mThree tries is enough; back to the network list.\e[0m"
+        ;;
+      10)
+        ui_left "\e[31m$ssid is not there any more.\e[0m"
+        ui_left "\e[90mIt was in the scan a moment ago, so it has gone out of range or\e[0m"
+        ui_left "\e[90mstopped advertising. Pick another, or move closer and rescan.\e[0m"
+        ;;
+      3)
+        ui_left "\e[31mThe connection timed out.\e[0m"
+        ui_left "\e[90mThe network answered and then stopped. A weak signal does this.\e[0m"
+        ;;
+      8)
+        # Not the user's problem and not fixable from this screen.
+        ui_left "\e[31mNetworkManager is not running on this image.\e[0m"
+        ui_left "\e[90mThat is a bug in nixarchy, not something you can work around\e[0m"
+        ui_left "\e[90mhere -- please report it. A cable will still install.\e[0m"
+        ;;
+      *)
+        ui_left "\e[31mnmcli failed with status $rc.\e[0m"
+        ;;
+    esac
+    sleep 3
+    return 1
+  done
+}
+
+# Wi-Fi on an image that does not need it, for the machine that will.
+#
+# Split from ask_network because the two are different questions wearing the
+# same screen: the net image cannot proceed without a network, and this one can
+# and simply produces a better machine with one. Conflating them is how the
+# offline image ended up with no way to configure Wi-Fi at all.
+offer_optional_wifi() {
+  ui_screen "Wi-Fi, if you want it..."
+  ui_left "This image installs without a network, so this is optional."
+  ui_left "\e[90mA network you join here is carried onto the installed machine, so it\e[0m"
+  ui_left "\e[90mis already online at the first boot rather than asking again.\e[0m"
+  echo
+
+  local choice
+  choice=$(printf '%s\n' "Skip" "Connect to Wi-Fi" |
+    gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" \
+      --header "Set up Wi-Fi now?") || choice=""
+
+  # Skip on anything that is not an explicit yes, INCLUDING an interrupt. The
+  # net image's screen calls ui_abort there because it cannot go on; this one
+  # can, and treating Escape as "get out of my way" is what the person means.
+  case $choice in
+    "Connect to Wi-Fi") connect_wifi || true ;;
+    *) return 0 ;;
+  esac
 }
 
 ask_network() {
@@ -330,6 +492,24 @@ ask_network() {
   # this screen is for is the one image that genuinely cannot proceed without
   # one, and that image says so itself.
   if [ ! -f /etc/nixarchy-iso-net ]; then
+    # The OFFLINE image, which needs nothing from a network to install -- and
+    # produces a machine that does. Every profile the user joins here is
+    # carried onto the target by carry_network_profiles, so this screen is the
+    # difference between a first boot that is already online and one where
+    # they type their Wi-Fi password again at a desktop that cannot reach
+    # anything to look up how.
+    #
+    # Offered, never demanded, and that asymmetry is the whole design. The
+    # image installs perfectly without it, so a prompt that BLOCKED would be
+    # inventing a requirement -- which is what the old early return was
+    # rightly avoiding. Skipping is one keypress and the default.
+    #
+    # Not under --answers: unattended means nobody is there to pick a network,
+    # and the check that installs offline in a sandbox must not grow a screen.
+    if [ -n "$answers_file" ] || network_ready; then
+      return 0
+    fi
+    offer_optional_wifi
     return 0
   fi
 
@@ -349,7 +529,29 @@ ask_network() {
   while true; do
     ui_screen "Let's get you online..."
     ui_left "This image downloads the desktop as it installs, so it needs a network."
-    ui_left "\e[90mA wired connection is picked up on its own -- plug it in and try again.\e[0m"
+
+    # WHICH failure, not just that there is one. The same screen used to greet
+    # a cable that was not plugged in and a laptop associated to a captive
+    # portal, and only one of those is fixed by trying again -- a tester sat on
+    # it with working Wi-Fi and nothing to act on.
+    case $(network_fault) in
+      nolink)
+        ui_left "\e[90mNothing is connected yet. A wired connection is picked up on its\e[0m"
+        ui_left "\e[90mown -- plug it in and choose Try again.\e[0m"
+        ;;
+      nodns)
+        ui_left "\e[33mConnected, but names are not resolving.\e[0m"
+        ui_left "\e[90mThat is what a captive portal looks like: a hotel or guest network\e[0m"
+        ui_left "\e[90mwanting a login page first. Sign in from another device on the same\e[0m"
+        ui_left "\e[90mnetwork, then Try again -- or use the offline image, which needs no\e[0m"
+        ui_left "\e[90mnetwork at all.\e[0m"
+        ;;
+      nocache)
+        ui_left "\e[33mConnected and resolving, but cache.nixos.org will not answer.\e[0m"
+        ui_left "\e[90mA proxy or a filtered network does this. The offline image installs\e[0m"
+        ui_left "\e[90mwithout reaching any cache.\e[0m"
+        ;;
+    esac
     echo
 
     local choice
@@ -2200,6 +2402,42 @@ run_install() {
 # behaviour every machine had before this existed. What stops the absence
 # going unnoticed is checks.install, which asserts both subvolumes exist and
 # are read-only after a real install.
+# The Wi-Fi the user just joined, carried onto the machine they are building.
+#
+# Nothing did this, and the cost was a report that read as a firmware bug and
+# was two bugs: "Wi-Fi worked while installing and was gone after the reboot".
+# Firmware was half of it. The other half is that NetworkManager writes the
+# profile -- SSID, PSK, everything -- to /etc/NetworkManager/system-connections
+# on the LIVE medium, which is a tmpfs that ceases to exist at reboot. Someone
+# who typed their password into the installer typed it into a RAM disk.
+#
+# Deliberately NOT into /etc/nixos. That directory is a git repository
+# nixarchy-config-repo exists to push to GitHub, and a .nmconnection file holds
+# the pre-shared key in the clear -- the same argument
+# installer/template/host/configuration.nix makes for keeping the crypt hash
+# out of it. /etc/NetworkManager is where NM looks anyway, and 0600 root:root
+# is what it refuses to read the file without.
+#
+# Best effort by design: a machine installed over ethernet has no profiles to
+# carry, and an install must not fail because a copy of a convenience did.
+carry_network_profiles() {
+  local src=/etc/NetworkManager/system-connections
+  local dst=/mnt/etc/NetworkManager/system-connections
+  local n
+
+  [ -d "$src" ] || return 0
+  # `find`, not a glob: an unmatched glob under `set -u` expands to itself and
+  # the copy below would try to read a file called '*.nmconnection'.
+  n=$(find "$src" -maxdepth 1 -name '*.nmconnection' 2>/dev/null | grep -c . || true)
+  [ "${n:-0}" -gt 0 ] || return 0
+
+  install -d -m 0700 -o 0 -g 0 "$dst" 2>/dev/null || return 0
+  find "$src" -maxdepth 1 -name '*.nmconnection' -exec \
+    install -m 0600 -o 0 -g 0 {} "$dst/" \; 2>/dev/null || true
+
+  echo "nixarchy-install: carried $n network profile(s) onto the new system."
+}
+
 take_factory_snapshot() {
   local device top rc=0
 
@@ -2464,6 +2702,7 @@ main() {
       write_password_hash &&
       run_install &&
       chown_flake_dir &&
+      carry_network_profiles &&
       take_factory_snapshot
   } >>"$log" 2>&1 || rc=$?
   ui_dashboard_stop

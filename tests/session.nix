@@ -1095,7 +1095,33 @@ pkgs.testers.runNixOSTest {
                # fwupd's EFI capsule lives wherever the fwupd package puts it;
                # on NixOS that is services.fwupd's business, not a path this
                # repo should pin.
-               "omarchy-update-firmware"]
+               "omarchy-update-firmware",
+               # New in Omarchy 4.0.3. The only /usr in it is an ICON path,
+               # /usr/lib/node_modules/openclaw/.../apple-touch-icon.png,
+               # handed to omarchy-webapp-install as its icon reference.
+               #
+               # Harmless because that script tests it with `elif [[ -f
+               # $ICON_REF ]]` (omarchy-webapp-install:194) and falls through
+               # to its bundled-icon branch when the file is absent. The web
+               # app still installs; it gets the fallback icon. Pinning the
+               # path into the nixpkgs openclaw package instead would tie this
+               # port to that package's internal layout, which is a worse
+               # trade for an icon.
+               "omarchy-install-ai-openclaw",
+               # Also new in 4.0.3, and unusable here by construction: the
+               # whole script is a wrapper around /usr/share/hermes-desktop/
+               # install.sh and runtime.patch, files that come from the Arch
+               # `hermes-desktop` package. nixpkgs has no hermes and no
+               # hermes-cli, which is why install.ai.hermes is recorded in
+               # data/menu-exceptions.nix as well.
+               #
+               # It refuses cleanly rather than half-running: line 16 tests
+               # both files with -r and exits 1 with "The installed Hermes
+               # package cannot prepare in-app updates", and its first line is
+               # `omarchy-pkg-add hermes-desktop`, which reaches this port's
+               # pacman shim and says so. Patching the paths would point at
+               # files that do not exist either.
+               "omarchy-install-ai-hermes"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

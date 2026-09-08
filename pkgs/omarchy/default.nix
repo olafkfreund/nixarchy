@@ -751,6 +751,42 @@ stdenvNoCC.mkDerivation {
                   --replace-fail 'ExecStart=/usr/bin/pipewire' \
                   'ExecStart=/run/current-system/sw/bin/pipewire'
 
+                # omarchy-apply-lock resets PATH when it runs as root, and the
+                # value it resets to is empty on NixOS.
+                #
+                # Upstream's reasoning is sound and worth keeping: an install
+                # or upgrade may start this helper as root, and it does not
+                # want optional commands resolving out of a user-writable
+                # directory. On Arch the answer is /usr/bin and friends. Here
+                # those hold nothing, so the script would lose `tee`, `getent`
+                # and everything else it shells out to -- it writes PAM files
+                # for the lock screen, so the failure would be a lock screen
+                # that cannot authenticate, discovered at the worst moment.
+                #
+                # /run/wrappers/bin first, then the system profile: the same
+                # two directories a root login gets here, both root-owned,
+                # which is exactly the property upstream is reaching for.
+                #
+                # New in 4.0.3, and checks.session caught it -- that check
+                # scans every shipped command for /usr and is the reason this
+                # is a patch rather than a surprise on somebody's laptop.
+                substituteInPlace $out/share/omarchy/bin/omarchy-apply-lock \
+                  --replace-fail \
+                  'export PATH=/usr/share/omarchy/bin:/usr/local/bin:/usr/bin:/bin' \
+                  'export PATH=/run/wrappers/bin:/run/current-system/sw/bin'
+
+                # And its fingerprint probe, in the same file.
+                #
+                # `[[ -x /usr/bin/fprintd-list ]]` is false here whatever the
+                # machine has, so the branch that writes the fingerprint PAM
+                # stack never ran -- a laptop with a working reader got a lock
+                # screen that only takes a password, silently. Pointed at the
+                # system profile it now fires exactly when fprintd is actually
+                # installed, which is what the guard was always asking.
+                substituteInPlace $out/share/omarchy/bin/omarchy-apply-lock \
+                  --replace-fail '/usr/bin/fprintd-list' \
+                  '/run/current-system/sw/bin/fprintd-list'
+
                 # The two image-editor call sites that hardcode tensaku-edit, which
                 # is not packaged anywhere here -- see the satty-edit wrapper in the
                 # runtime dependencies above for why a wrapper and not satty itself.

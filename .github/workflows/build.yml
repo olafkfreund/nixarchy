@@ -942,6 +942,14 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Build every app the flake ships itself
+        env:
+          # grok-bot is unfree, and a bare `nix build` refuses to evaluate it.
+          # The same pair the menu-mapping job above uses, for the same
+          # reasons: unfree is allowed because the app selection offers unfree
+          # apps, and broken is NOT, because a package nixpkgs marks broken
+          # aborts the user's whole rebuild rather than just its own install.
+          NIXPKGS_ALLOW_UNFREE: "1"
+          NIXPKGS_ALLOW_BROKEN: "0"
         run: |
           mapfile -t attrs < <(nix eval --raw --impure --expr '
             let
@@ -955,7 +963,9 @@ jobs:
           echo "apps to build: ${#attrs[@]}"
           test "${#attrs[@]}" -ge 8
 
-          nix build --keep-going --no-link --print-build-logs \
+          # --impure because NIXPKGS_ALLOW_UNFREE is an environment variable,
+          # and a pure evaluation cannot see it.
+          nix build --impure --keep-going --no-link --print-build-logs \
             "${attrs[@]/#/.#}"
 
   system:

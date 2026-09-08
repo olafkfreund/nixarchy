@@ -166,6 +166,14 @@ jobs:
       - name: The doctor reads a GPU correctly
         run: nix build .#checks.x86_64-linux.doctor-graphics --print-build-logs
 
+      # The offline image's network fallback: that it fires when the medium is
+      # incomplete and a network is there, that it refuses everywhere else, and
+      # that it is impossible to miss when it does. checks.install-iso runs
+      # -nic none against a complete image, which is the one shape that never
+      # rescues.
+      - name: The offline rescue fires only where it should, and never quietly
+        run: nix build .#checks.x86_64-linux.installer-offline-rescue --print-build-logs
+
       # The doctor's wireless rules. The install VM has a virtio NIC and no
       # radio, so not one of the three no-wlan0 cases can occur there -- the
       # same gap that let the no-VAAPI-driver branch ship unreachable (#352).

@@ -63,6 +63,16 @@ TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM=
 # not.
 #
 # installer/cd.nix writes the marker.
+#
+# Kept, not discarded. The offline image clears these so the store answers
+# first, and that stays true for the build it is expected to do -- but an image
+# that turns out to be missing a path has, until now, had nowhere to go: the
+# install dies on a machine with a perfectly good network, because the only
+# copy of the answer was on a cache the installer had just told itself to
+# forget. rescue_build below spends them, once, loudly.
+RESCUE_SUBSTITUTERS="$SUBSTITUTERS"
+RESCUE_TRUSTED_KEYS="$TRUSTED_KEYS"
+
 if [ -f /etc/nixarchy-iso ]; then
   SUBSTITUTERS=""
   TRUSTED_KEYS=""
@@ -1856,6 +1866,105 @@ check_store_space() {
 # it to say "network image" without an /etc to write a marker into.
 on_net_image() { [ -f /etc/nixarchy-iso-net ]; }
 
+# The OFFLINE image specifically -- the one that carries the closure and has
+# cleared its substituters. Not `! on_net_image`: checks.install runs with no
+# marker of either kind and a seeded store, so a negation would call that an
+# offline image and change what a passing check is testing.
+on_offline_image() { [ -f /etc/nixarchy-iso ] && [ ! -f /etc/nixarchy-iso-net ]; }
+
+# Where the rescue records what the image could not supply, for
+# `omarchy bug-report` and for a person reading the installed machine later.
+RESCUE_REPORT=/var/log/nixarchy-image-incomplete.log
+
+# The offline image was missing something. Say so, at length, and fetch it.
+#
+# The offline image clears its substituters on purpose (see the comment where
+# that happens): the store answers first, no per-path connection timeouts, and
+# -- the load-bearing half -- "the image's completeness is tested by everyone
+# who boots it", because a missing path cannot be quietly downloaded by whoever
+# happens to have a network and left for the one person who does not.
+#
+# That argument is right and this does not discard it. What it does is stop the
+# failure being TOTAL. Today an image missing one path produces neither an
+# installed machine nor a diagnosis: the build works backwards to the source
+# bootstrap, dies fetching a perl tarball, and the screen names texinfo. That
+# happened on real hardware -- the microcode was on no image, every real
+# machine asks for it, and no VM ever does.
+#
+# So: the fast path is unchanged and still proves completeness. Only when it
+# has already FAILED, and only on the offline image, and only with a network,
+# is the cache spent -- and then the paths that were missing are named on the
+# screen and written to $RESCUE_REPORT, which is a stronger signal than the
+# silent download the original comment was guarding against. The bug becomes a
+# list somebody can paste into an issue instead of a machine that will not
+# install.
+rescue_build() {
+  local flakeref=$1 plan fetch
+
+  on_offline_image || return 1
+
+  echo >&2
+  echo "nixarchy-install: the build failed, and this is the offline image." >&2
+  echo "  Checking whether a network can supply what the image could not." >&2
+
+  if ! network_ready; then
+    echo "  No network, so there is nothing to fall back to. The image is" >&2
+    echo "  missing something it should carry -- please report this with" >&2
+    echo "  /var/log/nixarchy-install.log." >&2
+    return 1
+  fi
+
+  # WHAT was missing, before fetching it. --dry-run with the caches restored
+  # lists exactly the paths this image should have carried and did not, which
+  # is the report; without it the rescue would be the silent download the
+  # offline design exists to prevent.
+  plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
+    --extra-substituters "$RESCUE_SUBSTITUTERS" \
+    --extra-trusted-public-keys "$RESCUE_TRUSTED_KEYS" \
+    "$flakeref" 2>&1) || true
+
+  # Paths only. `nix build --dry-run` prints its headings on stderr and the
+  # store paths indented beneath them, so the indent is the selector.
+  fetch=$(printf '%s\n' "$plan" | sed -n 's|^ *\(/nix/store/[^ ]*\)$|\1|p' | sort -u)
+
+  {
+    echo "nixarchy image incomplete"
+    echo "image:  $(cat /etc/nixarchy-iso 2>/dev/null || echo unknown)"
+    echo "date:   $(date -Is)"
+    echo "flake:  $flakeref"
+    echo
+    echo "These paths were not on the medium and were downloaded instead:"
+    printf '%s\n' "${fetch:-  (nix named none -- see the plan below)}"
+    echo
+    printf '%s\n' "$plan"
+  } > "$RESCUE_REPORT" 2>/dev/null || true
+
+  echo >&2
+  echo "  ============================================================" >&2
+  echo "  THIS IMAGE IS INCOMPLETE. That is a bug in nixarchy, not in" >&2
+  echo "  your machine, and the install is continuing over the network" >&2
+  echo "  so you get a working system anyway." >&2
+  echo >&2
+  echo "  Missing from the medium:" >&2
+  printf '%s\n' "${fetch:-  (none named; the plan is in the log)}" |
+    head -20 | sed 's|^|    |' >&2
+  if [ "$(printf '%s\n' "$fetch" | grep -c .)" -gt 20 ]; then
+    echo "    ... and more, all of them in $RESCUE_REPORT" >&2
+  fi
+  echo >&2
+  echo "  Please report this with $RESCUE_REPORT --" >&2
+  echo "  it is copied onto the installed system, and omarchy bug-report" >&2
+  echo "  collects it. An offline image that needs the network is exactly" >&2
+  echo "  the thing we cannot find without you telling us." >&2
+  echo "  ============================================================" >&2
+  echo >&2
+
+  nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
+    --extra-substituters "$RESCUE_SUBSTITUTERS" \
+    --extra-trusted-public-keys "$RESCUE_TRUSTED_KEYS" \
+    "$flakeref"
+}
+
 # Prove the build could start BEFORE the disk is wiped (#300).
 #
 # main() chains format_disk five phases ahead of the build, and that order is
@@ -2035,6 +2144,15 @@ run_install() {
   #   error: could not find a flake.nix file
   #
   # naming nothing that has anything to do with what actually went wrong.
+  # One retry, over the network, on the offline image only -- see rescue_build.
+  # Placed here rather than inside the assignment above so the fast path keeps
+  # its exact shape: no substituters, no timeouts, and a store that answers
+  # first. This runs only once that has already failed.
+  if [ -z "$system" ]; then
+    system=$(rescue_build \
+      "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
+  fi
+
   if [ -z "$system" ]; then
     echo "nixarchy-install: the system did not build; nothing was installed." >&2
     echo "The build output is above, in /var/log/nixarchy-install.log." >&2
@@ -2403,6 +2521,17 @@ main() {
     ( umask 077 && cat "$log" >/mnt/var/log/nixarchy-install.log ) 2>/dev/null \
       && chown 0:0 /mnt/var/log/nixarchy-install.log 2>/dev/null \
       && target_log=/var/log/nixarchy-install.log
+
+    # And the incompleteness report, if the offline image had to fall back to
+    # the network. It goes onto the INSTALLED machine deliberately: the live
+    # medium is gone after the reboot, and this is the one artefact that says
+    # the image was missing something. Same umask as the log above, for the
+    # same reason -- it quotes a build plan and nothing should assume a build
+    # plan is free of anything sensitive.
+    if [ -f "$RESCUE_REPORT" ]; then
+      ( umask 077 && cat "$RESCUE_REPORT" >/mnt"$RESCUE_REPORT" ) 2>/dev/null \
+        && chown 0:0 /mnt"$RESCUE_REPORT" 2>/dev/null || true
+    fi
   fi
 
   if [ "$rc" -ne 0 ]; then

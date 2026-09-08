@@ -1127,11 +1127,25 @@ jobs:
     # This cap exists to fail a hung job in half an hour rather than six
     # (411c6a4); 45 still does that, while surviving a substituter blip.
     timeout-minutes: 45
-    # Its own concurrency group, and NOT cancel-in-progress. This job builds
-    # Hyprland from source and takes ~20 minutes, so under the workflow-level
-    # cancel-in-progress it is killed by any push landing within that window
-    # -- which meant the most valuable check in this workflow routinely never
-    # completed. Queue it behind the previous one instead of discarding it.
+    # Its own concurrency group, and NOT cancel-in-progress. This job takes
+    # ~19 minutes, so under the workflow-level cancel-in-progress it is killed
+    # by any push landing within that window -- which meant the most valuable
+    # check in this workflow routinely never completed. Queue it behind the
+    # previous one instead of discarding it.
+    #
+    # The reason used to read "builds Hyprland from source". It has not for a
+    # while: the Hyprland this ships is in hyprland.cachix.org and in ours,
+    # and setup-nix pulls both, so it substitutes. Measured on run
+    # 34248007661, the time is VM test runs and closure downloads --
+    #
+    #   270s  checks.session          199s  vm-toplevel
+    #   142s  checks.options          137s  plugin
+    #   106s  coexist                  71s  installer-wizard
+    #
+    # -- which changes nothing about the conclusion (still ~20 minutes, still
+    # worth queueing rather than discarding) and everything about where to
+    # look when it gets slower. A stale reason sends the next person to
+    # profile a compile that is not happening.
     #
     # Per commit on main, for the same reason the workflow-level group above
     # is: cancel-in-progress: false stops a RUNNING job being killed and does

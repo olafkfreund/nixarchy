@@ -93,11 +93,32 @@ let
         # installer catches it ("not a crypt(3) hash"), which is the only
         # reason this was a one-line fix rather than a mystery about why the
         # greeter rejects the password.
+        # NOT `omarchy`, and that is the whole point of this line.
+        #
+        # Every automated install in this repository used `omarchy` -- the one
+        # username the image's baked reference closure cannot diverge from, so
+        # every per-user derivation matched a seeded one and nothing ever
+        # tested what happens when they do not. Five bugs in one day were
+        # variables held constant like this; see AGENTS.md.
+        #
+        # This is the check that can afford to vary it: offline, nightly, and
+        # already paying for a full image build, so a per-user rebuild here
+        # costs wall clock nobody is waiting on. checks.install keeps `omarchy`
+        # deliberately -- it is PR-gated and its seeded store is the thing
+        # under test there.
+        #
+        # `password_hash` is unaffected: the hash below is of the PASSWORD
+        # "omarchy", which has nothing to do with the account name.
+        #
+        # One variable, not two: a name with a hyphen or a digit would also
+        # stress systemd unit naming (home-manager-<user>.service) and
+        # home-manager's paths, and a failure could not be attributed. That is
+        # the next cell, not this one.
         cat > answers <<'EOF'
         device=/dev/vda
         encrypt=no
         hostname=isotest
-        username=omarchy
+        username=lovelace
         password_hash=${passwordHash}
         timezone=UTC
         keymap=us

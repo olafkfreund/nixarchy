@@ -1390,6 +1390,13 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Two machines differing only by name must build the same parts, or
+          # an offline install has to build the difference. See #404.
+          machine-name-free = import ./tests/machine-name-free.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # And the same idea aimed at the menu: every action string checked
           # against the subcommands the CLI it invokes actually has. See
           # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.

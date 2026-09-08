@@ -52,16 +52,35 @@ Two things in it are load-bearing and neither is obvious:
 
 ## 3. Store the token
 
-Repository **Settings → Environments → `copilot`**, add a secret named
+It goes in the **Agents** secret scope — repository or organisation — named
 exactly:
 
 ```
 COPILOT_MCP_MATRIX_ACCESS_TOKEN
 ```
 
-Only names carrying the `COPILOT_MCP_` prefix are visible to MCP configuration.
-A secret named `MATRIX_ACCESS_TOKEN` is silently absent, which the server
-reports as a 401.
+With the `gh` CLI, which is less ambiguous than the settings pages:
+
+```sh
+gh secret set COPILOT_MCP_MATRIX_ACCESS_TOKEN --app agents
+```
+
+Two ways to get this wrong, and both fail identically:
+
+- **The `copilot` *environment* is the wrong place.** That environment exists
+  and will happily hold a secret named this, and MCP configuration will never
+  read it. Older write-ups (and GitHub's own 2025 changelog) say to put it
+  there; the documentation now says Agents secrets, and the documentation is
+  right. Verify with `gh api repos/OWNER/REPO/agents/secrets` — if that returns
+  `total_count: 0`, the token is not where the agent will look.
+- **A name without the `COPILOT_MCP_` prefix** is silently absent.
+
+In both cases the variable never expands, the literal string
+`$COPILOT_MCP_MATRIX_ACCESS_TOKEN` is sent to Matrix as the access token, and
+every room call returns `401`. Note that `whoami` still **succeeds**, because it
+reports the configured identity without contacting the homeserver — so a green
+`whoami` is not evidence the token works. `list_rooms` is the cheapest call that
+actually proves it.
 
 ## 4. Configure the server
 

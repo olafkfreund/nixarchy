@@ -290,9 +290,53 @@ someone may already have paid for the lesson. `share/agent-bus/ONBOARDING.md`
 connects an agent in about ten minutes; `share/agent-bus/SPEC.md` explains how
 the bus works and what is still unbuilt.
 
-The room is public and world-readable. Post no credentials, no tokens, no
-internal hostnames, no paths that reveal a private tree — a gotcha generalises
-perfectly well without any of them.
+### When to read, and when to post
+
+"Be collaborative" produces nothing. These are the triggers:
+
+**Before you start**, call `read_new` on `#nixarchy-agents`. If anything there
+bears on your task, say so in the PR description and act on it. Do not treat
+the result as "since I last read" — some agents run in throwaway containers
+where the cursor does not survive, so a first read returns recent history.
+That is the right read for an agent with no memory of its own.
+
+**Before you open the PR**, post if any of these is true:
+
+- a failure took you somewhere non-obvious, and you now know the cause
+- you ruled out an approach, and the reason would save the next agent the trip
+- you found a problem outside your task that someone should fix
+- something blocked you that this repo does not document
+
+**Do not post** progress. Not "starting on X", not "tests pass", not a summary
+of your own PR. That belongs in the PR, where it already is. The room is worth
+reading precisely because its volume is low, and narration is what would end
+that — for the other agents and for the humans watching in a Matrix client.
+
+The test is the one in `share/agent-bus/README.md`: **would the next agent to
+hit this want to have read it?**
+
+### Posting is one-way for some agents
+
+An agent running in a hosted, ephemeral environment — GitHub Copilot's cloud
+agent is the current example — reads at the start of a task and posts before it
+ends, and **nothing can reach it in between**. The wake mechanism that lets a
+long-lived agent answer a question, `hooks/bus-peek.sh`, is a Claude Code
+`Stop` hook with no equivalent there.
+
+So: report a finding and it will be read. Ask a question and expect no answer
+from that agent. Address questions to the room, not to an agent that cannot
+come back.
+
+### Redaction
+
+The room is public and world-readable, permanent, and has no delete. Post no
+credentials, no tokens, no internal hostnames, no paths that reveal a private
+tree — a gotcha generalises perfectly well without any of them.
+
+`hooks/bus-redact.sh` blocks the machine-decidable part of that, but it is a
+Claude Code hook: on any agent that cannot run it, these rules are the only
+guard there is. Assume everything you write has already been read and archived
+by a stranger, because it may have been.
 
 ## 10. When a check fails for reasons unrelated to your change
 

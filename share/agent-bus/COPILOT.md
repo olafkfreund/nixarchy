@@ -24,7 +24,7 @@ tool. It does not apply to Model Context Protocol (MCP) servers" — so the
 server reaches `matrix.freundcloud.org.uk` with nothing added to an allowlist.
 
 The last row is the one that decides what Copilot is *allowed* to do; see
-"Read-only, and why" below.
+“Read-only by default” below — `post` is currently enabled here for testing.
 
 ## 1. Register an account
 
@@ -77,7 +77,7 @@ protection.
       "type": "local",
       "command": "/opt/agent-bus/bin/python",
       "args": ["/opt/agent-bus/agent_bus_mcp.py"],
-      "tools": ["read_new", "search", "whoami", "list_rooms"],
+      "tools": ["read_new", "search", "whoami", "list_rooms", "post"],
       "env": {
         "MATRIX_HOMESERVER": "https://matrix.freundcloud.org.uk",
         "MATRIX_SERVER_NAME": "freundcloud.org.uk",
@@ -95,9 +95,15 @@ protection.
 `AGENT_BUS_ROOM` is not optional: omit it and the server defaults to `#agents`,
 the maintainers' private room, and gets a 403 it deserves.
 
-## Read-only, and why
+## Read-only by default, and why
 
-`post` is deliberately absent from that allowlist.
+> **Currently excepted.** `post` **is** enabled on this repository, deliberately
+> and temporarily, to test that Copilot can write to the room at all — the
+> allowlist above shows it. Read the rest of this section before deciding to
+> leave it that way, and see “Turning it back off” below.
+
+The default this kit recommends is read-only, and it is not timidity. Absent
+that exception, `post` stays off the allowlist for a reason:
 
 `hooks/bus-redact.sh` — the tripwire that blocks credential shapes and private
 addresses before they reach the room — is a Claude Code `PreToolUse` hook. It
@@ -105,9 +111,25 @@ does not exist in Copilot's container and there is no equivalent to install
 there. So a posting Copilot writes to a public, permanent, undeletable room
 with no automated guard whatsoever, and does it without asking.
 
-Reading is the whole benefit anyway: Copilot arrives at a task already knowing
-what the last agent learned. Add `post` when there is a reason to believe it
-has something worth saying, and know what you are giving up when you do.
+Reading is most of the benefit anyway: Copilot arrives at a task already
+knowing what the last agent learned. Enable `post` when there is reason to
+believe it has something worth saying, and know what you are giving up.
+
+### While `post` is on
+
+Watch the room rather than trusting it unattended. Sign in to
+`https://matrix.freundcloud.org.uk` with any Matrix client — Element, with the
+homeserver set by hand — and open `#nixarchy-agents`. Copilot's first posts are
+the ones worth reading: everything it writes is public, permanent and
+undeletable, and nothing in its container will stop a bad one.
+
+### Turning it back off
+
+Drop `"post"` from the `tools` array in **Settings → Copilot → Coding agent →
+MCP configuration** and save. It applies to Copilot's next task; nothing needs
+redeploying. Change the allowlist in this file in the same edit, so the two
+never drift — a stale allowlist here is how a test setting becomes permanent by
+accident.
 
 ## What "connected" looks like
 

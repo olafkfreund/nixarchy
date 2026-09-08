@@ -203,11 +203,18 @@ jobs:
       # other step in the job totalled four. Two independent derivations, run
       # serially, on a machine with forty cores.
       #
-      # The envelope fits with room: each is memorySize 6144, cores 4,
-      # diskSize 32768, so two at once asks 12 GB and 8 cores of a 40-core,
-      # 94 GB box. Each also carries its own globalTimeout of 85 minutes, so
-      # the driver still loses the race against this job's 90 and fails with a
-      # log instead of being recorded as cancelled.
+      # THREE now, and --max-jobs matches. installer-refusal was added as a
+      # third derivation and the cap stayed at 2, so it queued behind one of
+      # the installs and its wall clock ADDED to theirs instead of overlapping
+      # -- in a 90-minute job that the pair alone already grazed under load on
+      # 2026-09-03. It is a VM too (memorySize 2048, cores 2), not a
+      # runCommand, so the wait is minutes rather than seconds.
+      #
+      # The envelope still fits with room: 6144 + 6144 + 2048 is 14.3 GB and
+      # ten cores of a 40-core, 94 GB box. Each install also carries its own
+      # globalTimeout of 85 minutes, so the driver still loses the race against
+      # this job's 90 and fails with a log instead of being recorded as
+      # cancelled.
       #
       # What this gives up, stated because it was deliberate: free-space used
       # to run second, so that an installer broken in a way that has nothing to
@@ -225,7 +232,7 @@ jobs:
       - name: Install onto a blank disk, and into free space beside a neighbour
         if: needs.gate.outputs.relevant == 'true'
         run: |
-          nix build --print-build-logs --max-jobs 2 \
+          nix build --print-build-logs --max-jobs 3 \
             .#checks.x86_64-linux.install \
             .#checks.x86_64-linux.free-space \
             .#checks.x86_64-linux.installer-refusal

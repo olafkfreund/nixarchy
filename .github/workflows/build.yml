@@ -23,13 +23,32 @@ on:
     - cron: "0 6 * * 1"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # On a PR branch, a newer push supersedes the older one and cancelling is
-  # right. On main it is data loss: every push here is a DIFFERENT merged
-  # commit, and cancelling discards the only verdict that commit will ever
-  # get -- nothing re-tests it. Five consecutive merges this morning left
-  # main with no `box` result at all, each run killed by the next merge.
-  # Same argument the `system` job already makes below, one scope up.
+  # Per COMMIT on main, per branch everywhere else.
+  #
+  # `cancel-in-progress: false` was not enough, and the reason is a separate
+  # GitHub rule the flag does not touch: only one run per group may be
+  # PENDING, and "any previously pending job or workflow in the concurrency
+  # group will be canceled" when a newer one queues. So with one run building
+  # and merges arriving behind it, run 2 is cancelled by run 3, run 3 by run
+  # 4, and only the first and last of a burst ever report.
+  #
+  # That is the data loss the note below describes, still happening after the
+  # fix written for it: five consecutive merges left main with no `box` result
+  # at all. A shared group cannot express "keep every one of these" -- so on
+  # main the SHA joins the group and each merged commit gets a group of its
+  # own, which nothing can supersede.
+  #
+  # On a PR branch the old behaviour is right and is kept: a newer push really
+  # does supersede the older one, and cancelling saves a runner.
+  #
+  # The cost, stated: a burst of merges to main now runs concurrently rather
+  # than serially, so the self-hosted queue can grow. That is the trade being
+  # made deliberately -- a verdict nobody gets is worth less than a runner
+  # minute, and every push to main is a different merged commit that nothing
+  # will ever re-test.
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}-${{
+      github.ref == 'refs/heads/main' && github.sha || 'shared' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -124,11 +143,6 @@ jobs:
 
 
 
-      # Where a crash report goes. The prose said Nixarchy and every `gh`
-      # command said Basecamp, so an agent read the rule, concluded correctly,
-      # and then copied a command that filed into somebody else's tracker --
-      # people who cannot act on a NixOS store or rebuild problem. Cheap enough
-      # to sit here: a runCommand over the already-built package, no VM.
       # The workflow files themselves, against GitHub's own schema.
       #
       # Added because build.yml shipped BROKEN and nothing caught it: a bad
@@ -153,14 +167,6 @@ jobs:
         run: |
           nix shell nixpkgs#actionlint -c \
             actionlint -ignore 'SC[0-9]+:(info|style):'
-
-
-
-
-
-
-
-
 
   # Every preset in data/devenv-presets.nix, scaffolded with the real
   # `nixarchy dev init` and handed to a real devenv to evaluate.
@@ -1001,8 +1007,17 @@ jobs:
     # cancel-in-progress it is killed by any push landing within that window
     # -- which meant the most valuable check in this workflow routinely never
     # completed. Queue it behind the previous one instead of discarding it.
+    #
+    # Per commit on main, for the same reason the workflow-level group above
+    # is: cancel-in-progress: false stops a RUNNING job being killed and does
+    # nothing about a PENDING one, which GitHub cancels as soon as a newer run
+    # queues into the group. Under a burst of merges this job -- the most
+    # expensive and most valuable in the workflow -- reported for the first
+    # and last commit and nothing between.
     concurrency:
-      group: ${{ github.workflow }}-system-${{ github.ref }}
+      group: >-
+        ${{ github.workflow }}-system-${{ github.ref }}-${{
+          github.ref == 'refs/heads/main' && github.sha || 'shared' }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5

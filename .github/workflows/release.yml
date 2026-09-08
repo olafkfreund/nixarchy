@@ -501,11 +501,52 @@ jobs:
       # deliberately, when a human cuts a tag, not with every bot merge that
       # moves main. Plain push, not force: a release branch that moved
       # backwards would downgrade the next machine to update, so a non
-      # fast-forward here should fail loudly and be looked at.
+      # fast-forward must never happen silently.
+      #
+      # It is now DETECTED rather than discovered by the push failing, and the
+      # difference is what the job reports. The workflow_dispatch entry point
+      # at the top of this file exists to re-publish an already-existing tag
+      # after a run died -- and re-running an OLDER tag makes this push a non
+      # fast-forward, so the assets uploaded correctly and then the job went
+      # red on its last step. That is the "published but red" state everything
+      # else here is careful to avoid: it reads as a failed release when the
+      # release succeeded, and the next person re-runs it again.
+      #
+      # So: fast-forward, push. Not a fast-forward, say so loudly in the log
+      # and the summary and leave the branch alone -- which is the right
+      # outcome anyway, since moving it backwards is the thing the old comment
+      # was protecting against. Nobody has to guess whether the release
+      # shipped.
       - name: Move the release branch to this tag
         env:
           TAG: ${{ steps.version.outputs.tag }}
-        run: git push origin "refs/tags/$TAG^{}:refs/heads/release"
+        run: |
+          git fetch -q origin refs/heads/release:refs/remotes/origin/release || true
+          commit=$(git rev-parse "refs/tags/$TAG^{}")
+
+          # No release branch yet is the first release, and pushing is right.
+          if ! git rev-parse -q --verify refs/remotes/origin/release >/dev/null; then
+            git push origin "$commit:refs/heads/release"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor refs/remotes/origin/release "$commit"; then
+            git push origin "$commit:refs/heads/release"
+            echo "release branch moved to $TAG" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::warning::$TAG is not a descendant of the release branch, so it" \
+               "was NOT moved -- moving it backwards would downgrade the next" \
+               "machine to update. The release itself published fine."
+          {
+            echo "**The release branch was not moved.**"
+            echo
+            echo "\`$TAG\` is behind \`origin/release\` "
+            echo "(\`$(git rev-parse --short refs/remotes/origin/release)\`), which is what a"
+            echo "workflow_dispatch re-run of an older tag looks like. The assets"
+            echo "published; only the pointer users update against was left alone."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # 5.6 GB of parts on the runner's root filesystem, which is the small
       # one. The workspace is cleaned at the start of the next run, but a

@@ -56,9 +56,26 @@ total=0
   while IFS= read -r attr; do
     [ -n "$attr" ] || continue
     total=$((total + 1))
-    # --impure so NIXPKGS_ALLOW_UNFREE from the caller is honoured; several
-    # catalogue entries are unfree and would otherwise all be "skipped".
-    if v=$(nix eval --impure --raw "github:NixOS/nixpkgs/${rev}#${attr}.version" 2>/dev/null); then
+    # PURE, and the comment that used to sit here was wrong twice over.
+    #
+    # It said --impure was needed so NIXPKGS_ALLOW_UNFREE "from the caller"
+    # would be honoured, or every unfree catalogue entry would be skipped.
+    # flake-update.yml is the only caller and never sets it -- build.yml and
+    # update.yml do, this workflow does not -- so the justification described
+    # something that was not happening.
+    #
+    # And it was unnecessary anyway. nixpkgs defers the unfree throw to
+    # outPath/drvPath, so `.version` on an unfree package never fails.
+    # Measured with NIXPKGS_ALLOW_UNFREE and NIXPKGS_CONFIG both unset:
+    # vscode 1.136.1, obsidian 1.13.4, steam 1.0.0.87.
+    #
+    # What --impure actually cost was the flake eval cache, for all 53 attrs
+    # twice per run -- before and after the bump -- so 106 evaluations of
+    # nixpkgs from scratch to answer a question the cache already had.
+    #
+    # The eval above keeps --impure and needs it: `import ./data/apps.nix` is
+    # a relative path, which pure mode forbids outright.
+    if v=$(nix eval --raw "github:NixOS/nixpkgs/${rev}#${attr}.version" 2>/dev/null); then
       [ "$first" = 1 ] || echo ","
       first=0
       printf '  "%s": "%s"' "$attr" "$v"

@@ -1104,6 +1104,12 @@
             dashboardScript = ./installer/lib/dashboard.sh;
           };
 
+          # Why: tests/installer-offline-rescue.nix
+          installer-offline-rescue = import ./tests/installer-offline-rescue.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # The doctor's GPU rules, against fixture machines. checks.install's
           # VM runs llvmpipe and has no PCI display controller, so this is the
           # only place these branches are ever exercised -- and one of them was

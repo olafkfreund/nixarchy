@@ -68,7 +68,11 @@ jobs:
   #
   # Cheap and hosted. It decides; the jobs below report.
   gate:
-    name: gate
+    # `build gate`, not `gate`: install-check.yml already publishes a context
+    # called `gate`, and two check runs with one name are ambiguous in the UI
+    # and worse in a branch protection rule, where "require gate" would no
+    # longer name one thing. Caught on this PR's own first run.
+    name: build gate
     runs-on: ubuntu-latest
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}

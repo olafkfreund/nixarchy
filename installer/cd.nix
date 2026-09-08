@@ -249,11 +249,35 @@ in
     pkgs.git
   ];
 
-  # installation-cd-minimal brings wpa_supplicant; the installed machine uses
-  # NetworkManager, and so does anyone reaching for nmtui when the wireless
-  # does not come up on its own. The two conflict, so one has to go, and it
-  # should be the one the finished system does not use.
-  networking.wireless.enable = lib.mkForce false;
+  # NetworkManager, for the same reason the installed machine uses it and for
+  # anyone reaching for nmtui when the wireless does not come up on its own.
+  #
+  # `networking.wireless.enable` is deliberately NOT forced off here, and the
+  # line that used to do it made every Wi-Fi install impossible:
+  #
+  #   device (wlp0s20f3): Couldn't initialize supplicant interface:
+  #     Failed to D-Bus activate wpa_supplicant service
+  #
+  # repeating every thirteen seconds, forever, on a card whose driver was bound
+  # and whose radio rfkill reported unblocked.
+  #
+  # NetworkManager does not avoid wpa_supplicant -- it DRIVES it. Its own
+  # module says so and sets it up (networkmanager.nix:694-698):
+  #
+  #   # Enable wpa_supplicant but fully control it over DBus
+  #   wireless.enable = true;
+  #   wireless.autoDetectInterfaces = false;
+  #   wireless.dbusControlled = true;
+  #
+  # A mkForce here overrode that and left NM with a backend it was told to use
+  # and had no way to start. The conflict the old comment described -- a
+  # STANDALONE supplicant grabbing interfaces behind NM's back -- is exactly
+  # what those other two settings prevent, so the answer was already in the
+  # module and forcing the switch off threw it away.
+  #
+  # The premise was also stale: nothing in nixpkgs' installation media enables
+  # networking.wireless any more. installation-device.nix's only mention is the
+  # login banner telling you to run nmtui.
   networking.networkmanager.enable = true;
 
   # Straight into the installer, with no boot menu -- upstream shows none and

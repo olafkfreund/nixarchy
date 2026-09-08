@@ -1098,6 +1098,12 @@
           # The installer's interactive screens, at every width worth caring
           # about. Nothing else draws them: every other harness passes
           # --answers, which is exactly how #133 shipped.
+          # Why: tests/iso-wifi.nix
+          iso-wifi = import ./tests/iso-wifi.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Why: tests/installer-network.nix
           installer-network = import ./tests/installer-network.nix {
             pkgs = pkgsFor.${system};

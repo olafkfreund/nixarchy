@@ -172,6 +172,13 @@ jobs:
       - name: The installer can tell three network failures apart
         run: nix build .#checks.x86_64-linux.installer-network --print-build-logs
 
+      # That the ISO can associate at all. No VM in this repo has a radio --
+      # install-iso boots -nic none and every other install test uses a virtio
+      # NIC -- so there is nowhere in the suite this can be caught by running
+      # something. Only by asking the configuration what it says.
+      - name: The ISO can associate to a network
+        run: nix build .#checks.x86_64-linux.iso-wifi --print-build-logs
+
       # The doctor's wireless rules. The install VM has a virtio NIC and no
       # radio, so not one of the three no-wlan0 cases can occur there -- the
       # same gap that let the no-VAAPI-driver branch ship unreachable (#352).

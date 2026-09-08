@@ -116,6 +116,25 @@ pkgs.testers.runNixOSTest {
         programs.nixarchy.enable = true;
         home.stateVersion = "25.05";
 
+        # Nixi off, and this is the one machine in the repo where that is
+        # right. Nixi ships enabled on every nixarchy desktop and it IS a bar
+        # widget, so it installs a plugin folder -- which makes "no plugins
+        # installed" unreachable, and the negative half of this file's guard
+        # is exactly that state: after `plugin remove` takes the test's own
+        # plugins away, the Remove Plugin row must hide itself again.
+        #
+        # Turning it off here is not hiding the interaction, it is naming the
+        # precondition. This file tests the plugin SYSTEM, and an empty
+        # plugin directory is a state it has to be able to reach; a machine
+        # that always has one plugin cannot tell "the row hides when empty"
+        # from "the row never hides".
+        #
+        # It found this itself: the assertion below failed the moment nixi
+        # was defaulted on, which is the guard working rather than a
+        # regression. tests/options.nix covers the other direction -- that
+        # nixi installed leaves the row visible.
+        services.nixi.enable = false;
+
         # The declarative half. Same plugin the imperative flow adds below,
         # so the two paths can be compared directly -- except this one is
         # never cloned, never touched by `plugin add`, and is a read-only

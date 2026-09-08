@@ -85,7 +85,7 @@ jobs:
         # five-minute window, pushed fine. That reads as a ceiling on cachix's
         # side rather than anything in the change, and a red check that means
         # "the cache was busy" teaches everyone to re-run without reading --
-        # the habit AGENTS.md 9 exists to prevent.
+        # the habit AGENTS.md 10 exists to prevent.
         #
         # `continue-on-error` on the step, not `skipPush`, because pushing
         # from pull requests is what fills the cache before main needs it. A
@@ -1212,7 +1212,7 @@ jobs:
         # writable and the shell's IPC is reachable.
         run: nix build .#checks.x86_64-linux.plugin --print-build-logs
 
-  # PROPOSED CI-GATE CHANGE (AGENTS.md 3 and 10): this job is new gate wiring,
+  # PROPOSED CI-GATE CHANGE (AGENTS.md 4 and 11): this job is new gate wiring,
   # merged by a human, not an agent.
   #
   # Creates and enters a real box inside a NixOS test VM -- see

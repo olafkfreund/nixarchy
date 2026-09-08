@@ -397,7 +397,7 @@ jobs:
           labels: dependencies
           delete-branch: true
 
-      # PROPOSED CI-GATE CHANGE (AGENTS.md 10): --admin becomes --auto, so
+      # PROPOSED CI-GATE CHANGE (AGENTS.md 11): --admin becomes --auto, so
       # the required checks gate this PR like every other.
       #
       # The comment that stood here said "Reaching this step already means

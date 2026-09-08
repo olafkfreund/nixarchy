@@ -110,7 +110,45 @@ an assertion; the config side had neither. #202 lived exactly in that gap, and
 #204 is the same defect in mirror image: `satty` ships as a runtime dependency
 and no config names it.
 
-## 3. A check that nothing runs is worse than no check
+## 3. Vary the variable that matters
+
+§1 is about a check that cannot fail. This is its wider form: **a check that
+cannot vary proves nothing about the variable it holds constant** — and it will
+pass, at every priority, with the bug fully present.
+
+Five bugs in one day, every one found by a tester on real hardware, every one
+invisible to a green suite. Not one of them was a missing check.
+
+Every automated install used the username `omarchy` — the one name the image's
+baked reference closure cannot diverge from, so every per-user derivation
+matched a seeded one. Every disk was `/dev/vda`, never an NVMe with its `p1`
+partition names. Every NIC was virtio: no VM in this repository had ever had a
+radio, so NetworkManager's entire wireless path had no coverage of any kind.
+And every guest reports a virt type, so `nixos-generate-config`'s
+`if ($virt eq "none")` branch — where firmware and microcode live — had never
+once executed anywhere in CI. Installed machines shipped with no firmware and
+no microcode, and the suite was green throughout.
+
+So when a bug arrives from real hardware, the first sentence of the fix is not
+the fix. It is: **name the variable that separated that machine from every
+machine the suite boots.**
+
+Then vary *that* variable, at the cheapest layer that can reach it:
+
+- an **evaluation** check that enumerates the branch no VM can take —
+  `generate-config-surface` reads out everything the virt gate can emit,
+  precisely because no VM will ever take it;
+- a **stubbed `runCommand`** — `installer-network` fakes rfkill states no guest
+  produces;
+- a **VM handed the hardware** — `wifi-hwsim` gives one a radio via
+  `mac80211_hwsim`.
+
+If no layer can reach it, **say so**. A row in `tests/install-matrix.py` and a
+sentence in `tests/AGENTS.md` naming the hole is worth more than a check that
+closes it on paper. A documented hole gets tested by a human; an undocumented
+one gets tested by a user.
+
+## 4. A check that nothing runs is worse than no check
 
 `checks.installer-ui` was written, wired into `checks` in `flake.nix`, and
 named by **no workflow**. The PR adding it went green without the check ever
@@ -123,7 +161,7 @@ So: adding a `checks.<name>` entry means also naming
 `pull_request` — and that workflow edit is a CI-gate change, which needs a
 human (see §10). Raise it in the PR rather than wiring it yourself.
 
-## 4. Git and flake mechanics that bite
+## 5. Git and flake mechanics that bite
 
 - **A flake in a worktree sees only tracked or staged files.** A new file you
   have not `git add`ed fails evaluation with `path '…' does not exist` — not
@@ -133,13 +171,13 @@ human (see §10). Raise it in the PR rather than wiring it yourself.
 - **`installer/mkFlake.nix` requires a committed tree.** `git add` is not
   enough — it reads `self.rev`, which a dirty tree does not have, and throws:
   `flake-template: build from a committed tree; the generated flake pins
-  nixarchy by commit`. Commit (the subject can be temporary; see §7) before
+  nixarchy by commit`. Commit (the subject can be temporary; see §8) before
   building anything that pulls it in, which includes the installer checks.
 - **Work in a worktree under `/mnt/data/vmtest/`, never `/tmp`.** `/tmp` is a
   32 GB tmpfs. A VM disk image or an ISO build there is competing with the
   machine's RAM, and loses quietly.
 
-## 5. How to run the checks, and what each one costs
+## 6. How to run the checks, and what each one costs
 
 Checks are built one at a time by name — `nix flake check` is not how this
 repo works:
@@ -177,7 +215,7 @@ to your branch cancels and restarts your own run (that is deliberate — a PR
 only needs an answer about its current head), but the queue is shared:
 batching your pushes is a courtesy to everyone else's merge latency.
 
-## 6. Code rules the repo has already written down
+## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the
 files carry the full reasoning and the failure history.
@@ -215,7 +253,7 @@ files carry the full reasoning and the failure history.
   command your script calls and does not declare is a runtime failure that no
   build catches.
 
-## 7. Commits and pull requests
+## 8. Commits and pull requests
 
 - The final commit subject is a full sentence describing the change — read
   `git log --oneline -10` for the register. No `conventional-commits`
@@ -228,7 +266,7 @@ files carry the full reasoning and the failure history.
 - Fill in the PR template, including the section that asks for your check's
   failing output. That section is §1 in form-field shape.
 
-## 8. Territory, and the failure no single PR can see
+## 9. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it
 touches, and stay inside them. But the sharper lesson is this: two PRs, each
@@ -256,7 +294,7 @@ The room is public and world-readable. Post no credentials, no tokens, no
 internal hostnames, no paths that reveal a private tree — a gotcha generalises
 perfectly well without any of them.
 
-## 9. When a check fails for reasons unrelated to your change
+## 10. When a check fails for reasons unrelated to your change
 
 First establish that it *is* unrelated: is `main` red too? One standing trap —
 opening an issue with the `epic` label without adding a row to README's
@@ -273,7 +311,7 @@ editing README from a PR about something else.
 
 Do not retry-until-green. A flaky pass is a bug report you deleted.
 
-## 10. What not to do without asking a human
+## 11. What not to do without asking a human
 
 - **Destructive git**: `push --force` to any shared branch, deleting branches
   you did not create, rewriting published history, `git reset --hard` on work

@@ -60,8 +60,45 @@ So, when changing what the ISO carries or how the installer writes a machine:
 MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso python3 tests/install-matrix.py off-free manual
 ```
 
-and **type a username that is not `omarchy`**. The scripted cells cannot see
-this class of bug, and adding more of them will not help.
+and **type a username that is not `omarchy`**.
+
+**Partly closed since.** `checks.install-iso` now installs as `lovelace`, so
+one automated cell finally varies this — offline, nightly, already paying for a
+full image build, so a per-user rebuild costs wall clock nobody waits on.
+`checks.install` keeps `omarchy` deliberately: it is PR-gated and its seeded
+store is the thing under test there.
+
+What is still uncovered, and worth typing by hand: a name with a **hyphen or a
+digit**, which also stresses systemd unit naming (`home-manager-<user>.service`)
+and home-manager's own paths. `install-iso` varies one variable on purpose —
+a compound change makes a failure unattributable.
+
+## The other one nothing here can prove: a disk that is not virtio
+
+Every check installs to `/dev/vda`. Real machines are NVMe, where partitions are
+`nvme0n1p1` rather than `vda1` — a different naming rule in every path that
+builds a partition name.
+
+This is not an omission that can be fixed by writing a check, and the reason is
+worth knowing before you try: **qemu-vm.nix cannot make one.** `driveCmdline`
+hardcodes `-device virtio-blk-pci` or `scsi-hd`, and `virtualisation.qemu.diskInterface`
+is an enum of exactly `virtio | scsi | ide`. `emptyDiskImages` entries take a
+`driveConfig`, but it reaches `driveExtraOpts`/`deviceExtraOpts` on those
+devices — not a different device. Attaching an NVMe controller means bypassing
+the framework with raw `qemu.options` and creating the image yourself, inside a
+90-minute test.
+
+So it lives in the harness instead, which drives real qemu directly:
+
+```
+MATRIX_NVME=1 MATRIX_OFFLINE_ISO=result/iso/nixarchy-*.iso \
+  python3 tests/install-matrix.py off-whole-plain
+```
+
+Run it when changing anything that builds a partition name, mounts by path, or
+touches `installer/disk-config.nix`. Both an online and an offline whole-disk
+install through it passed on 2026-09-08, which is what "no check covers this"
+is allowed to mean here: measured by a person, written down, and repeatable.
 
 ## The cheap ones, which is where new checks usually belong
 
@@ -90,6 +127,17 @@ Two branches only these can reach, as illustration:
 - Assert the outcome, not the mechanism. `stat -c %U` asks the wrong machine
   when the test driver's passwd is not the target's; compare numeric ids
   against the target's own `/etc/passwd`.
+- **The harness is a module too, and it outranks you.** `qemu-vm.nix` is merged
+  into every nixosTest node and does not only add virtio devices — it CHANGES
+  config at priority 10, above any plain assignment.
+  `networking.wireless.enable = mkVMOverride false` (`qemu-vm.nix:1504`)
+  silently re-created the exact production misconfiguration a test existed to
+  prove fixed, with the identical journal line — and that line was read as "the
+  fix does not work" for most of a day. It was the test that did not work.
+  Before concluding a node reproduces a production failure, evaluate the
+  **node's merged config**, not the module you wrote and not the production
+  system it copies from. And treat an identical error message as a hypothesis
+  about the cause, never as an identification of it.
 - A forbid-pattern matches prose too. Forbidding a bare package name failed
   against correctly-gated code because the surrounding comment mentioned it —
   match the call, not the string.

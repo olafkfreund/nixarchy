@@ -2185,21 +2185,6 @@ rescue_build() {
     # function was handed rather than from a variable a caller might forget:
     #   /mnt/etc/nixos#nixosConfigurations.<host>.config.system.build.toplevel
     #                 \________________ this half ________/
-    local base attr sysattr a p
-    base=${flakeref%%#*}
-    attr=${flakeref#*#}
-    sysattr=${attr%%.config.*}
-    echo >&2
-    echo "  What the build needs, and whether this machine has it:" >&2
-    for a in stdenv stdenvNoCC bash coreutils perl; do
-      p=$(nix "${NIX_FLAGS[@]}" eval --raw "$base#$sysattr.pkgs.$a" 2>/dev/null) || {
-        echo "    $a: could not evaluate" >&2; continue; }
-      if nix "${NIX_FLAGS[@]}" path-info "$p" >/dev/null 2>&1; then
-        echo "    $a: present" >&2
-      else
-        echo "    $a: MISSING -- $p" >&2
-      fi
-    done
 
     local plan builds drv
     plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "$flakeref" 2>&1) || true
@@ -2210,6 +2195,33 @@ rescue_build() {
       echo "  It would have to build $(printf '%s\n' "$builds" | wc -l) derivations." >&2
       echo "  The first few:" >&2
       printf '%s\n' "$builds" | head -15 | sed 's|^|    |' >&2
+
+      # WHICH INPUT IS MISSING, asked of nix rather than guessed.
+      #
+      # The build list is read top-down here on purpose: its last entries are
+      # the machine's own targets -- its initrd, its boot.json, its units --
+      # and those are EXPECTED to be built. What is not expected is that one
+      # of their inputs is absent, because that single absence is what sends
+      # nix down to the source bootstrap for everything underneath.
+      #
+      # A first version of this check named five packages it thought were the
+      # likely ones (stdenv, stdenvNoCC, bash, coreutils, perl) and reported
+      # all five present, which was true and useless. Nix knows the answer
+      # exactly; it only has to be asked.
+      for drv in $(printf '%s\n' "$builds" | grep -vE -- '-(bootstrap-|stage[0-9]|hex[0-9]|M[0-9]|mescc|catm|cc_arch|blood-elf|kaem|stage0)' | tail -3); do
+        echo >&2
+        echo "  Inputs of $(basename "$drv") that are NOT on this machine:" >&2
+        nix "${NIX_FLAGS[@]}" derivation show "$drv" 2>/dev/null \
+          | jq -r '.[].inputDrvs | keys[]' 2>/dev/null \
+          | while read -r d; do
+              nix "${NIX_FLAGS[@]}" derivation show "$d" 2>/dev/null \
+                | jq -r '.[].outputs[].path' 2>/dev/null \
+                | while read -r o; do
+                    nix "${NIX_FLAGS[@]}" path-info "$o" >/dev/null 2>&1 \
+                      || echo "    $o"
+                  done
+            done | sort -u | head -12 >&2
+      done
 
       # The ones worth explaining are the packages, not this machine's own
       # etc fragments and units -- those are expected to be built and are

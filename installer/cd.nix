@@ -123,15 +123,53 @@ let
   # differ -- measured, not guessed -- and every one of them has to be built on
   # the target, from parts, with no network.
   #
-  # inputDerivation is nixpkgs' own answer to "realise everything this
-  # derivation is built FROM". Seeding it for the toplevel, the initrd and etc
-  # puts their build inputs on the image, so building a differently-configured
-  # one is a matter of assembling parts rather than of finding a compiler.
+  # inputDerivation is nixpkgs' answer to "realise everything this derivation
+  # is built FROM", and seeding it here helps -- but READ THE NEXT PARAGRAPH
+  # before trusting it, because the sentence that used to stand here was wrong
+  # and cost a day.
   #
-  # Without it the install gets a long way -- partitions the disk, evaluates
-  # the flake offline, starts copying -- and then tries to build the initrd,
-  # finds no stdenv to build it with, works backwards to the source bootstrap
-  # and dies fetching a perl tarball from CPAN.
+  # What was claimed: that this "puts their build inputs on the image, so
+  # building a differently-configured one is a matter of assembling parts
+  # rather than of finding a compiler."
+  #
+  # What is true: these are handed to system.extraDependencies, whose type is
+  # `types.listOf types.pathInStore` (nixos/modules/system/activation/
+  # top-level.nix:212). A derivation coerces to its OUTPUT path. So this seeds
+  # the outputs of the input-derivations -- runtime paths -- and NOT the build
+  # graph: no .drv files, no sources, no intermediate outputs. It is a partial
+  # measure that happens to cover many cases, not the guarantee it read as.
+  #
+  # The option that makes the real guarantee is a different one, and NixOS
+  # ships it: system.includeBuildDependencies (same file, line 302) --
+  # "includes all sources, patches, and intermediate outputs required to build
+  # all the derivations that the system depends on" -- implemented as
+  # closureInfo rooted at the system's drvPath, not its outPath. The ISO-level
+  # spelling is isoImage.includeSystemBuildDependencies, which appends
+  # toplevel.drvPath to storeContents (iso-image.nix:951). The reason neither
+  # is used here is size: the option's own documentation puts a minimal
+  # configuration at 670 MiB -> 13.5 GiB, and this image is already 5.6 GB
+  # against a budget check.
+  #
+  # The consequence, measured on 2026-09-08 and reproduced locally: an offline
+  # install of a machine whose config differs from the reference at all --
+  # hostname and username are enough -- rebuilds its initrd, boot.json and
+  # units, cannot find the build graph for them, walks back to the stage0
+  # source bootstrap (hex0, mescc-tools) and dies. 677 derivations, of which
+  # the top three are this machine's own initrd and boot config.
+  #
+  # This is why the offline image is not published at the moment; see
+  # .github/workflows/release.yml. The NET image is unaffected and is what
+  # people install from: it fetches whatever it lacks, so the same divergence
+  # costs a download instead of the install.
+  #
+  # Worth knowing before anyone tries to finish this: an official offline
+  # install of a CUSTOM configuration is not a thing NixOS supports. Its own
+  # ISO bakes no system closure (the comment further down already says so),
+  # Calamares BUILDS rather than copying, and every project that does this
+  # seriously -- nixos-anywhere, tfc/nixos-offline-installer -- ships a
+  # prebuilt toplevel and runs `nixos-install --system <path>`, which skips
+  # evaluation and building entirely (nixos-install.sh:266). That is the shape
+  # this would have to take; seeding more parts is the other road.
   buildInputsOfWhatChanges =
     map (c: c.system.build.toplevel.inputDerivation) referenceConfigs
     ++ map (c: c.system.build.initialRamdisk.inputDerivation) referenceConfigs
@@ -581,8 +619,13 @@ in
   # derivations that are genuinely per-machine.
   #
   # extraDependencies rather than storeContents for these: the option's stated
-  # purpose is "paths that must be in the store for this system to be usable",
-  # which is exactly the claim being made.
+  # purpose is "paths that should be included in the system closure", which is
+  # the claim being made for the plain packages below.
+  #
+  # NOT the claim being made for buildInputsOfWhatChanges at the end of this
+  # list -- see the long note beside it. This option carries runtime output
+  # paths and cannot carry a build graph, whatever the name of the thing
+  # handed to it suggests.
   #
   # inputSources stays on BOTH images. It is the flake sources rather than the
   # desktop, it costs little, and it means evaluation starts immediately

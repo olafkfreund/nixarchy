@@ -3,7 +3,7 @@
 [Omarchy](https://omarchy.org) vendored for NixOS — the whole desktop, with its
 menus rewired to Nix instead of pacman.
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **431 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **444 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -60,10 +60,10 @@ More in [`docs/screenshots/`](docs/screenshots).
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 431 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 444 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 431 |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 444 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 61 apps in the selection | 46 from nixpkgs, 4 as NixOS modules, 9 built here, 2 with no equivalent |
@@ -102,7 +102,7 @@ nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
 work and the exit status, terminal and signals stay the command's own.
 
-**Upstream's 431 commands keep upstream's name, deliberately.** `omarchy theme
+**Upstream's 444 commands keep upstream's name, deliberately.** `omarchy theme
 set` is the same script here as on Arch — a bug in it is a bug to report there,
 and renaming it would say otherwise. It would also cost the property this repo
 is built on: tracking a release is a source bump because nixarchy replaces 19
@@ -128,10 +128,10 @@ package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
 ```
 
 Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
-the Lua defaults all follow. Only **24 of 431 scripts** actually run
+the Lua defaults all follow. Only **32 of 444 scripts** actually run
 `pacman`/`yay` — that's the entire distro-coupling surface.
 
-Ten of those are replaced outright, in `pkgs/omarchy/nix-bin/`: the ones the
+Six of those are replaced outright, in `pkgs/omarchy/nix-bin/`: the ones the
 menus drive. The rest manage Arch release channels, keyrings and orphan
 pruning, none of which have a Nix meaning worth reimplementing — your flake
 input *is* the release channel, and the store has no orphans. Those fail either

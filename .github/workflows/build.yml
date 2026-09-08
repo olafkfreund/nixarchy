@@ -266,6 +266,49 @@ jobs:
             fi
           done
 
+          # The other two numbers in that paragraph, which were NOT checked and
+          # both went stale.
+          #
+          # Omarchy 4.0.3 moved the command count from 431 to 444 and this
+          # check caught it. It did not catch "24 of 431 scripts actually run
+          # pacman/yay" (really 32) or "Ten of those are replaced outright"
+          # (really 6), because nothing derived them -- they were prose next to
+          # a gated number, which is the most convincing place for a wrong
+          # number to sit. Found only because updating 431 meant reading the
+          # sentence around it.
+          #
+          # Both are one grep. The whole argument of that paragraph is the SIZE
+          # of the distro-coupling surface, so a stale count there is not a
+          # typo, it is the claim being wrong.
+          pac=$(grep -rlE '\b(pacman|yay)\b' result/share/omarchy/bin | wc -l)
+          claim_pac=$(grep -oE '\*\*[0-9]+ of [0-9]+ scripts\*\*' README.md |
+            grep -oE '^\*\*[0-9]+' | grep -oE '[0-9]+')
+          echo "scripts touching pacman/yay: $pac (README says ${claim_pac:-none})"
+          if [ "${claim_pac:-}" != "$pac" ]; then
+            echo "README says $claim_pac scripts run pacman/yay; there are $pac" >&2
+            exit 1
+          fi
+
+          # Of those, the ones this port replaces outright: an exact filename
+          # match against pkgs/omarchy/nix-bin, which is what "replaced" means
+          # here -- a nix-bin file whose name is an upstream bin's name.
+          ls pkgs/omarchy/nix-bin | sort > /tmp/nixbin.txt
+          grep -rlE '\b(pacman|yay)\b' result/share/omarchy/bin |
+            xargs -n1 basename | sort > /tmp/pac.txt
+          repl=$(comm -12 /tmp/pac.txt /tmp/nixbin.txt | wc -l)
+          word=$(grep -oE '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced' README.md |
+            awk '{print $1}')
+          case "$word" in
+            Six) n=6 ;; Seven) n=7 ;; Eight) n=8 ;; Nine) n=9 ;;
+            Ten) n=10 ;; Eleven) n=11 ;; Twelve) n=12 ;; *) n="" ;;
+          esac
+          echo "pacman scripts replaced in nix-bin: $repl (README says ${word:-none})"
+          if [ "${n:-}" != "$repl" ]; then
+            echo "README says $word ($n) of them are replaced; it is $repl" >&2
+            echo "The number is spelled as a word in that sentence; update both." >&2
+            exit 1
+          fi
+
       # The README quotes app counts in four places. They are derivable from
       # data/apps.nix, and they silently went stale twice -- once when an app
       # was added, once when RetroArch moved to being built here -- so derive

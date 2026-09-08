@@ -509,6 +509,17 @@ ask_network() {
     if [ -n "$answers_file" ] || network_ready; then
       return 0
     fi
+    # And only where there is a radio to use. cfg80211 creates a phy80211 link
+    # for every driver that registers a wiphy, so its absence means this
+    # machine has no wireless interface -- a desktop on ethernet, or the VM
+    # every wizard check runs in.
+    #
+    # Without this the screen appeared on machines that cannot act on it, and
+    # checks.installer-wizard sat on it for 180 seconds waiting for a keyboard
+    # screen that was one un-answerable prompt away. An optional step is still
+    # a step: offering one to somebody who has no way to take it is the same
+    # cost as requiring it.
+    ls -d /sys/class/net/*/phy80211 >/dev/null 2>&1 || return 0
     offer_optional_wifi
     return 0
   fi

@@ -102,6 +102,17 @@ pkgs.runCommand "nixarchy-installer-network" { } ''
     exit 1; }
   echo "  ok      the offline image offers Wi-Fi, and skips it unattended"
 
+  # And only where there is a radio. Without this the screen appeared on every
+  # machine with no wireless card -- a desktop on ethernet, and the VM every
+  # wizard check runs in, where checks.installer-wizard sat on it for 180
+  # seconds waiting for the keyboard screen behind it. An optional step is
+  # still a step.
+  sed -n '/^ask_network()/,/^}/p' ${installScript} | grep -q 'phy80211' || {
+    echo "the offline Wi-Fi screen is no longer gated on a wireless interface;" >&2
+    echo "it will be offered to machines that have no radio to use it" >&2
+    exit 1; }
+  echo "  ok      and only where there is a radio to use"
+
   # And the sentence that misled the tester: it may only be said when there is
   # genuinely no wireless interface. Asserted on the source, because the branch
   # lives inside connect_wifi's scan path and reaching it needs a whole nmcli.

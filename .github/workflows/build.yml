@@ -16,10 +16,16 @@ on:
     # user's update would.
     #
     # What this run DOES watch is everything the checks reach past the lock
-    # for: the live issue list the roadmap check reads, the registry nixpkgs
-    # that "every mapped app still evaluates" asks, the fetched upstream
-    # artefacts. Those move on their own schedule, so a scheduled run is
-    # what notices.
+    # for: the live issue list the roadmap check reads, and the fetched
+    # upstream artefacts. Those move on their own schedule, so a scheduled run
+    # is what notices -- and the roadmap check now runs ONLY here and on
+    # pushes to main, because a pull request cannot be responsible for an issue
+    # somebody closed while it was open.
+    #
+    # "the registry nixpkgs that every mapped app still evaluates asks" used to
+    # be on this list and is not any more: that check resolves `nixpkgs#`
+    # through --inputs-from . now, so it reads this repository's pin and moves
+    # only when the lock does.
     - cron: "0 6 * * 1"
 
 concurrency:
@@ -127,10 +133,10 @@ jobs:
         run: nix fmt -- --ci
 
       - name: statix
-        run: nix run nixpkgs#statix -- check .
+        run: nix run --inputs-from . nixpkgs#statix -- check .
 
       - name: deadnix
-        run: nix run nixpkgs#deadnix -- --fail .
+        run: nix run --inputs-from . nixpkgs#deadnix -- --fail .
 
 
 
@@ -165,7 +171,7 @@ jobs:
       # would fail a workflow file that is fine.
       - name: The workflow files are valid GitHub Actions
         run: |
-          nix shell nixpkgs#actionlint -c \
+          nix shell --inputs-from . nixpkgs#actionlint -c \
             actionlint -ignore 'SC[0-9]+:(info|style):'
 
   # Every preset in data/devenv-presets.nix, scaffolded with the real
@@ -513,7 +519,22 @@ jobs:
           # the build IS the assertion.
           nix build --keep-going --no-link --print-build-logs "${targets[@]}"
 
+      # Not on pull requests, and this is the file's own doctrine finally
+      # applied: the schedule comment at the top says a scheduled run is what
+      # notices "the live issue list the roadmap check reads".
+      #
+      # It reads state no diff contains. Closing #159 -- correct, and with all
+      # five children done -- turned every open pull request red at once, none
+      # of which had touched the README. The author of an unrelated change
+      # cannot fix that and should not be blocked by it.
+      #
+      # Still gated where it can act: every push to main, so a merge that
+      # staled the roadmap is caught immediately, and weekly, so an issue
+      # closed in the web UI is caught within seven days. What is given up is
+      # catching it on the PR that closes the epic -- which is not where it
+      # gets noticed anyway, because closing happens after the merge.
       - name: The README's roadmap still matches the open epics
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -866,9 +887,21 @@ jobs:
                 want = builtins.filter (v: (v ? attr) && !(v.ours or false))
                          (builtins.attrValues a);
             in builtins.concatStringsSep " " (map (v: v.attr) want)')
+          # --inputs-from ., so `nixpkgs#` means THIS repository's pinned
+          # nixpkgs and not the runner's flake registry.
+          #
+          # The registry resolves to a channel that moves daily, so this step
+          # was answering a different question from the one it asks: whether
+          # an app evaluates against some nixpkgs nobody here uses. Two costs,
+          # and the second is the worse one. A package going broken upstream
+          # reddened every open pull request, for a reason present in none of
+          # their diffs. And a package broken in OUR pin -- the one users
+          # actually rebuild against -- would pass here as long as the channel
+          # had already fixed it.
           bad=""
           for a in $attrs; do
-            nix eval --impure --raw "nixpkgs#$a.name" >/dev/null 2>&1 || bad="$bad $a"
+            nix eval --inputs-from . --impure --raw "nixpkgs#$a.name" \
+              >/dev/null 2>&1 || bad="$bad $a"
           done
           if [ -n "$bad" ]; then
             echo "::error::these mapped packages do not evaluate:$bad"

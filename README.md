@@ -973,6 +973,14 @@ the `nix-users` group on Arch. If `/nix/store` is missing, the Nix install did
 not finish; do not create it by hand, because a multi-user store wants
 `root:nixbld` and mode `1775` rather than whatever `mkdir` leaves behind.
 
+> **The offline image is temporarily not published.** The machine it produces
+> evaluates a closure the image does not carry, so an install with no network
+> tries to build the world and cannot; the installer refuses rather than
+> leaving a half-installed disk. The **net image is unaffected** and is what
+> people have been installing from. Everything below about the offline image
+> still describes how it works and will apply again when it returns -- it is
+> withdrawn from releases, not removed from the project. Tracking: #404.
+
 There are two images, and the difference is what they carry:
 
 | | Size | Needs a network | |

@@ -28,6 +28,14 @@ want depends on whether the drive is blank.
 
 ## The ISO
 
+> **The offline image is temporarily not published.** The machine it produces
+> evaluates a closure the image does not carry, so an install with no network
+> tries to build the world and cannot; the installer refuses rather than
+> leaving a half-installed disk. The **net image is unaffected** and is what
+> people have been installing from. Everything below about the offline image
+> still describes how it works and will apply again when it returns -- it is
+> withdrawn from releases, not removed from the project. Tracking: #404.
+
 Two images are published with each
 [release](https://github.com/olafkfreund/nixarchy/releases): a **net** image of
 about 1.6 GB that downloads the desktop while it installs, and an **offline**

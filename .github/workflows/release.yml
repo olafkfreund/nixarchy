@@ -201,8 +201,28 @@ jobs:
       # --out-link, not --no-link: the result is a GC root for the rest of the
       # job. An ISO collected between building it and uploading it would fail
       # in a way that took an afternoon to understand.
-      - name: Build the ISO
-        run: nix build .#iso --out-link result --print-build-logs
+      # The offline image is NOT built or published here, deliberately, and
+      # this is a temporary state with a specific exit condition.
+      #
+      # checks.install-iso -- the check that installs from it with the network
+      # off -- has failed in every nightly since 2026-09-07, and it was
+      # reproduced by hand on 2026-09-08: the installed machine evaluates a
+      # closure the image does not carry, so it tries to BUILD 681
+      # derivations, walks down to the stage0 source bootstrap, and dies. The
+      # installer's own rescue path catches it and reports honestly, so nobody
+      # gets a half-installed machine -- but nobody gets an installed machine
+      # either.
+      #
+      # The network image is unaffected and is what testers have been using:
+      # it fetches whatever it lacks, so the same divergence costs a download
+      # instead of the install. That is why this was invisible until the
+      # offline check was read.
+      #
+      # Shipping an image whose whole promise is "needs no network at all"
+      # while it cannot install without one is worse than shipping one image.
+      # It comes back when checks.install-iso is green -- see #404. Do not
+      # restore this by deleting the comment; restore it by making the check
+      # pass.
 
       # The smaller image, for people who would rather download 1.5 GB and let
       # the install fetch the rest. Not separately install-tested: it shares
@@ -245,15 +265,14 @@ jobs:
           # GitHub caps a single release asset at 2 GiB and there is no limit
           # on a release's total size, so the image ships in parts. 1900 MiB
           # leaves room under the cap without making a fourth part likely.
-          iso=$(echo result/iso/*.iso)
           net=$(echo result-net/iso/*.iso)
-          base="nixarchy-${TAG}.iso"
           netbase="nixarchy-${TAG}-net.iso"
           rm -rf out && mkdir out
-          split -b 1900M -- "$iso" "out/$base.part-"
 
-          # The network image is 1.5 GiB and ships whole. Only the image that
-          # cannot fit gets taken apart.
+          # One image while the offline one is withdrawn (see the build step).
+          # It is 1.5 GiB and ships whole -- the splitting existed only for the
+          # offline image, which GitHub's 2 GiB asset cap could not take, and
+          # it comes back with it.
           cp -- "$net" "out/$netbase"
 
           # One SHA256SUMS covering the parts *and* the assembled image, so a
@@ -262,31 +281,23 @@ jobs:
           # the image does not exist until the user makes it.
           (
             cd out
-            sha256sum "$base".part-* > SHA256SUMS
             # Hashed from stdin so the store path never reaches the file, and
             # the name is printed rather than edited in. Rewriting the path out
             # of sha256sum's own output with sed is greedy and eats the hash
             # too, which produces a line `sha256sum -c` calls "improperly
             # formatted", skips, and still exits 0 -- a checksum file that
             # reports PASS without having checked the image.
-            printf '%s  %s\n' \
-              "$(sha256sum < "$OLDPWD/$iso" | cut -d' ' -f1)" "$base" >> SHA256SUMS
-            sha256sum "$netbase" >> SHA256SUMS
+            sha256sum "$netbase" > SHA256SUMS
           )
 
           {
-            echo "iso=$base"
             echo "netiso=$netbase"
-            echo "size=$(du -h "$iso" | cut -f1)"
             echo "netsize=$(du -h "$net" | cut -f1)"
-            echo "parts=$(find out -name "$base.part-*" | wc -l)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Write the release notes
         env:
           OMARCHY: ${{ steps.version.outputs.omarchy }}
-          ISO: ${{ steps.split.outputs.iso }}
-          SIZE: ${{ steps.split.outputs.size }}
           NETISO: ${{ steps.split.outputs.netiso }}
           NETSIZE: ${{ steps.split.outputs.netsize }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -357,24 +368,22 @@ jobs:
           cat >> notes.md <<EOF
           ## Getting it
 
-          Omarchy $OMARCHY, packaged for NixOS. Two images, and the difference
-          is what they carry.
-
-          **\`$ISO\`** — $SIZE, carries the whole system closure. The install
-          copies rather than downloads and needs no network at all. Take this
-          one unless the download is what you mind.
-
-          GitHub will not accept a file that size, so it is split. Put it back
-          together and check it:
-
-          \`\`\`
-          cat $ISO.part-* > $ISO
-          sha256sum -c --ignore-missing SHA256SUMS
-          \`\`\`
+          Omarchy $OMARCHY, packaged for NixOS. One image this time.
 
           **\`$NETISO\`** — $NETSIZE, downloads the desktop as it installs.
           One file, no reassembly, and it needs a working network: its first
-          screen offers Wi-Fi if there is no cable.
+          screen offers Wi-Fi if there is no cable. This is the image people
+          have been installing from, and it works.
+
+          **The offline image is not in this release.** It carried the whole
+          system closure and promised an install with no network at all, and
+          it stopped keeping that promise: the machine it produces evaluates a
+          closure the image does not carry, so it tries to build the world and
+          cannot, with no network to fall back on. The installer notices and
+          refuses rather than leaving a half-installed disk, but an image whose
+          only reason to exist is "no network needed" is not worth shipping
+          while it needs one. It returns when the check that installs from it
+          offline is green again.
 
           \`\`\`
           sha256sum -c --ignore-missing SHA256SUMS
@@ -444,14 +453,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
-          # The ASSEMBLED image, which SHA256SUMS names on purpose and which is
-          # never an asset: the parts ship, the user cats them back together,
-          # and that line is what `sha256sum -c` checks afterwards. Exempted by
-          # name rather than by a pattern, because "the one file in SHA256SUMS
-          # that is deliberately absent" is a fact about this release's shape,
-          # not something to infer. Written down after a first draft of this
-          # check flagged it and would have failed every release.
-          ASSEMBLED: ${{ steps.split.outputs.iso }}
+          # No ASSEMBLED exemption while the offline image is withdrawn.
+          # It existed for exactly one file: the reassembled offline image,
+          # which SHA256SUMS names on purpose and which was never an asset --
+          # the parts shipped and the user cat them back together. With one
+          # whole image and no parts, everything SHA256SUMS promises is also
+          # attached, so the exemption has nothing to exempt. Leaving it
+          # wired to a now-empty output would feed `grep -vxF ""` a pattern
+          # that means something else entirely; it comes back with the parts.
         run: |
           set -euo pipefail
 
@@ -460,7 +469,7 @@ jobs:
           # Two lists, because they can disagree in both directions: a file
           # built but not promised, and a file promised but not built.
           built=$(cd out && ls -1)
-          promised=$(awk '{ print $2 }' out/SHA256SUMS | grep -vxF "$ASSEMBLED")
+          promised=$(awk '{ print $2 }' out/SHA256SUMS)
 
           missing=""
           for want in $built $promised; do

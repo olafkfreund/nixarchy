@@ -384,9 +384,21 @@ pkgs.testers.runNixOSTest {
     hw_rc, hw_text = installer.execute(f"cat {hw}")
     if hw_rc == 0:
         print(hw_text)
+        # Anything between the attribute and its mkForce, because since #388
+        # there IS something: the pin is wrapped in a kernel guard, written
+        # across three lines,
+        #
+        #   boot.initrd.availableKernelModules =
+        #     lib.mkIf (config.boot.kernelPackages.kernel.version == "7.2.3")
+        #       (lib.mkForce [ ... ]);
+        #
+        # and the previous pattern required `= lib.mkForce [` adjacent, with
+        # no re.S. It stopped matching a pin that was there and correct, and
+        # reported "no mkForce pin at all" -- the branch whose message says the
+        # refusal path changed. It had not; this regex had gone stale.
         pinned = re.search(
-            r"^\s*boot\.initrd\.availableKernelModules\s*=\s*lib\.mkForce\s*\[([^]]*)\]",
-            hw_text, re.M)
+            r"boot\.initrd\.availableKernelModules\s*=.*?lib\.mkForce\s*\[([^]]*)\]",
+            hw_text, re.S)
         if pinned:
             missing = [m for m in "${toString encryptedOnlyModules}".split()
                        if f'"{m}"' not in pinned.group(1)]
@@ -398,6 +410,26 @@ pkgs.testers.runNixOSTest {
                 "cannot unlock its root on first boot. The install itself "
                 "may well have 'succeeded'.")
             print("the pin carries every LUKS-only module")
+
+            # And that it is still CONDITIONAL on the kernel. Loosening the
+            # pattern above to see past the guard also made it blind to the
+            # guard's absence -- a plain mkForce would now match happily, and
+            # that is exactly the shape #388 shipped: a list captured at 7.2
+            # forced onto a machine that later moved kernels, asking modprobe
+            # for xhci_pci_prom21 on a kernel that has no such module, so
+            # nixos-rebuild refuses to produce a system at all.
+            #
+            # checks.initrd-pin-guard asserts this on the installer's source.
+            # This asserts it on what the installer actually wrote, which is
+            # the thing the machine will read.
+            assert re.search(
+                r"boot\.initrd\.availableKernelModules\s*=\s*\n?\s*lib\.mkIf\s*\(",
+                hw_text), (
+                "the pin is not conditional on the kernel version: the "
+                "installer wrote a bare mkForce. A machine whose kernel later "
+                "moves will be handed a module list captured from a different "
+                "one, and cannot build an initrd at all.")
+            print("and it is conditional on the kernel it came from")
         else:
             # No pin at all is the legitimate other branch: something detected
             # was not on the medium and the install builds its own initrd. On

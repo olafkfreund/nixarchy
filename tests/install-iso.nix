@@ -157,8 +157,24 @@ let
         # And nothing was fetched. The image carries no substituter and the
         # machine has no interface, so a download here would mean every
         # assertion above is measuring something other than what it claims.
-        grep -q "unable to download" /var/log/nixarchy-install.log
-        step OFFLINE test $? -ne 0
+        #
+        # The scan runs INSIDE step, which is not a tidiness change.
+        #
+        # As two statements, the grep ran while the driver was already waiting
+        # for the marker -- and the marker cannot be printed until the grep
+        # returns. `grep -q` exits early only on a MATCH, so the passing case
+        # is the slow one: no match means reading the whole log, and that log
+        # carries a `copying path` line for every store path in a 6 GB image,
+        # on an emulated CPU. The driver timed out at 120s with the script
+        # still running, which reads as "the install downloaded something"
+        # when it means the opposite. FLAKE and ESP resolving in 0.00s while
+        # OFFLINE never appeared is the tell: the script was alive, not dead.
+        #
+        # Inside step, the wait covers the work, so the timeout is a real
+        # budget rather than a race. `! grep` also drops the `$?`-on-the-next-
+        # line idiom, where anything inserted between the two statements
+        # silently changes what is being tested.
+        step OFFLINE sh -c '! grep -q "unable to download" /var/log/nixarchy-install.log'
 
         # The removable fallback, asserted rather than taken on trust.
         #
@@ -405,7 +421,11 @@ pkgs.testers.runNixOSTest {
         step("INSTALLED", 3600, "the install completed")
         step("FLAKE", 120)
         step("ESP", 120, "it wrote a flake and an ESP")
-        step("OFFLINE", 120, "and downloaded nothing")
+        # 600, not 120: this step now includes the scan of the install log
+        # rather than racing it, and the passing case is the slow one -- no
+        # match means grep reads the whole file, which on a 6 GB offline
+        # install is every `copying path` line it printed.
+        step("OFFLINE", 600, "and downloaded nothing")
         step("FALLBACK", 120,
              "the ESP carries the removable fallback loader bootctl promises")
         step("SERIAL", 120)

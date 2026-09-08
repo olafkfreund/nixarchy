@@ -338,7 +338,11 @@ jobs:
           # disk-free step, or a Hyprland closure that wants its own concurrency
           # group. Naming them here is a claim that is CHECKED below in both
           # directions, so the list cannot rot into fiction.
-          claimed="install free-space installer-refusal
+          # wifi-hwsim is a nixosTest and needs /dev/kvm. The generated step
+          # runs in THIS job, which has no KVM setup -- the udev rule lives in
+          # `box` -- so leaving it generated put a VM test in a job that cannot
+          # boot one. The integration that added the check is what surfaced it.
+          claimed="wifi-hwsim install free-space installer-refusal
             install-encrypted install-iso install-iso-net iso-budget microvm-boot
             box-boot box-template coexist dashboard-clock installer-ui
             installer-wizard integration microvm-template options plugin
@@ -1228,6 +1232,14 @@ jobs:
           grep -Eq 'vmx|svm' /proc/cpuinfo || { echo "::error::no vmx/svm in /proc/cpuinfo"; exit 1; }
           test -w /dev/kvm || { echo "::error::/dev/kvm is not writable"; exit 1; }
           ls -l /dev/kvm
+
+      # Here rather than in the generated batch, and the integration is what
+      # showed why: it is a nixosTest and needs the /dev/kvm the step above
+      # sets up. The generated step runs in the `omarchy` job, which has no
+      # KVM, so a VM test landed in a job that cannot boot one -- a bespoke
+      # need, which is exactly what the claimed list is for.
+      - name: A VM with a radio can associate to a network
+        run: nix build .#checks.x86_64-linux.wifi-hwsim --print-build-logs
 
       - name: Create a box offline, and pin what enter does without a network
         # checks.box-boot: the pinned image is preloaded from the store

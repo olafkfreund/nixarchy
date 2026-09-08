@@ -1229,6 +1229,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/swap-guard.nix
+          swap-guard = import ./tests/swap-guard.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Why: tests/firmware-guard.nix
           firmware-guard = import ./tests/firmware-guard.nix {
             inherit inputs;

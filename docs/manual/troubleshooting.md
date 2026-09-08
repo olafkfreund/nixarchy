@@ -151,6 +151,56 @@ Broadcom's `b43` and `brcm` blobs. Some Realtek cards — 8821CE, 8852BE — hav
 in-tree driver at all and need an out-of-tree module instead; the doctor names
 the right one for your device id.
 
+### Why is there no swap partition, and can I hibernate?
+
+There is no swap **partition** and there never was: `disk-config.nix` lays down
+`@`, `@home`, `@nix`, `@log` and the snapshot subvolumes, and nothing else.
+
+But an installed machine is not swapless. It runs **zram** — compressed swap in
+RAM, capped at half of it — so `free -h` shows a swap device backed by
+`/dev/zram0` rather than by the disk:
+
+```sh
+swapon --show
+zramctl
+```
+
+zram is used instead of a swap file because a swap file on btrfs is a trap: it
+needs its own `nodatacow` subvolume with the right attributes set *before* a
+single byte is written, and getting it wrong means the kernel refuses to
+`swapon` — usually on somebody else's machine. zram needs no disk layout at
+all, so it behaves identically on a machine nixarchy partitioned and one it
+did not.
+
+**It is not hibernation.** Suspend-to-disk writes RAM to swap and then powers
+off, so it needs *real* swap at least the size of RAM. zram lives in RAM, so
+it cannot hold a copy of RAM. If you want to hibernate you need a swap file on
+disk, and on btrfs it must be made this way:
+
+```sh
+sudo btrfs subvolume create /swap
+sudo chattr +C /swap                  # nodatacow, BEFORE the file exists
+sudo btrfs filesystem mkswapfile --size 32g /swap/swapfile
+```
+
+then in `/etc/nixos/hosts/<hostname>/configuration.nix`:
+
+```nix
+swapDevices = [ { device = "/swap/swapfile"; } ];
+boot.resumeDevice = "/dev/disk/by-uuid/<the root filesystem's UUID>";
+```
+
+Size it at least your RAM. `boot.resumeDevice` is the *partition* holding the
+file, not the file — and hibernation on an encrypted disk also needs the
+initrd to unlock that device, which it already does for the root filesystem.
+
+To turn zram off — because you added real swap, or you would rather not spend
+the CPU on compression:
+
+```nix
+zramSwap.enable = false;
+```
+
 ### Why can't I login or sudo with my password?
 
 Upstream's answer is `faillock --reset`, and it applies here too: switch to a

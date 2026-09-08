@@ -1004,6 +1004,42 @@ in
       };
     };
 
+    # Compressed swap in RAM, because there is otherwise none at all.
+    #
+    # installer/disk-config.nix lays down @, @home, @nix, @log and the snapshot
+    # subvolumes and no swap of any kind -- no partition, no file, no zram. A
+    # tester asked why, which is the right question: a machine with no swap has
+    # no headroom, and the first thing that notices is a big rebuild.
+    #
+    # What it costs today, on a machine with none:
+    #
+    #   systemd-oomd is enabled here and its per-slice policy is
+    #   ManagedOOMSwap=kill -- a rule about swap pressure, on a system where
+    #   swap pressure cannot happen. It falls back to memory pressure, which
+    #   fires later and kills more.
+    #
+    #   A `nixos-rebuild` that evaluates a large closure is exactly the
+    #   workload that wants to page out something idle, and cannot.
+    #
+    # zram rather than a swap file, and the reason is btrfs. A file on btrfs
+    # needs its own nodatacow subvolume and the right attributes set before a
+    # single byte is written; get it wrong and the kernel refuses to swapon,
+    # usually on somebody else's machine. zram needs no disk layout at all, so
+    # it works identically on an existing install and a fresh one -- and this
+    # module is imported by machines whose partitioning nixarchy never chose.
+    #
+    # What it deliberately does NOT buy: hibernation. Suspend-to-disk needs
+    # real swap at least the size of RAM, and zram cannot provide it -- see
+    # docs/manual/troubleshooting.md for the swap file that can.
+    #
+    # 50% of RAM is the NixOS default and stays. It is a ceiling on the
+    # COMPRESSED size, so at a typical 2-3x ratio it buys more than it reserves,
+    # and the pages it holds are ones the machine was not touching.
+    #
+    # mkDefault, so an adopter who has real swap, or who hibernates, turns it
+    # off in one line.
+    zramSwap.enable = lib.mkDefault true;
+
     hardware = {
       # bin/omarchy-brightness-display-ddc talks to monitors over i2c
       i2c.enable = lib.mkDefault true;

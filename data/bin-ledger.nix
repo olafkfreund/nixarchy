@@ -44,6 +44,11 @@
     class = "new";
     reason = "Not in upstream. Wraps omarchy-agent-prompt with prompts that name the skill and insist on measure-then-propose, so routing is fixed here rather than re-guessed on every invocation.";
   };
+  "nixarchy-channel" = {
+    class = "new";
+    reason = "Not in upstream. The generated flake documents following stable as prose telling you to hand-edit nixpkgs AND home-manager; this does both or neither, because moving one without the other is the pairing that breaks.";
+  };
+
   "nixarchy-config-repo" = {
     class = "new";
     reason = "Not in upstream. The installer leaves /etc/nixos as a git repository with a staged tree and no commit; this commits it, adds a remote and CI, and is idempotent on a re-run.";

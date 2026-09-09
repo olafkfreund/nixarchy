@@ -94,92 +94,94 @@ in
       }
     ];
 
-    systemd.services.nixarchy-auto-update = {
-      description = "Move nixpkgs forward and rebuild this machine";
-      # Not wantedBy anything: the timer is the only thing that starts it. A
-      # boot-time trigger would rebuild a machine somebody just booted because
-      # they needed it.
-      serviceConfig = {
-        Type = "oneshot";
-        StateDirectory = "nixarchy";
-      };
-      unitConfig.OnFailure = "nixarchy-upgrade-failed.service";
+    systemd = {
+      services.nixarchy-auto-update = {
+        description = "Move nixpkgs forward and rebuild this machine";
+        # Not wantedBy anything: the timer is the only thing that starts it. A
+        # boot-time trigger would rebuild a machine somebody just booted because
+        # they needed it.
+        serviceConfig = {
+          Type = "oneshot";
+          StateDirectory = "nixarchy";
+        };
+        unitConfig.OnFailure = "nixarchy-upgrade-failed.service";
 
-      path = with pkgs; [
-        nix
-        git
-        config.system.build.nixos-rebuild
-        coreutils
-        gnutar
-        gzip
-        openssh
-      ];
+        path = with pkgs; [
+          nix
+          git
+          config.system.build.nixos-rebuild
+          coreutils
+          gnutar
+          gzip
+          openssh
+        ];
 
-      script = ''
-        set -euo pipefail
-        flake=${lib.escapeShellArg cfg.flake}
+        script = ''
+          set -euo pipefail
+          flake=${lib.escapeShellArg cfg.flake}
 
-        note() {
-          printf '%s %s\n' "$(date -Is)" "$1" >> /var/lib/nixarchy/upgrade-failed
-        }
+          note() {
+            printf '%s %s\n' "$(date -Is)" "$1" >> /var/lib/nixarchy/upgrade-failed
+          }
 
-        if [ ! -d "$flake" ]; then
-          note "auto-update: $flake does not exist"
-          echo "no flake at $flake" >&2
-          exit 1
-        fi
-
-        ${lib.optionalString (!cfg.allowDirty) ''
-          # The whole reason this is off by default. A dirty tree is somebody's
-          # unfinished edit, and rebuilding it unattended deploys that edit.
-          # Reported rather than ignored: an unattended job that stops working
-          # and says nothing looks exactly like one that is up to date.
-          if [ -d "$flake/.git" ] && ! git -C "$flake" diff --quiet HEAD 2>/dev/null; then
-            note "auto-update: $flake has uncommitted changes; not rebuilding"
-            echo "$flake is dirty; commit it or set autoUpdate.allowDirty" >&2
+          if [ ! -d "$flake" ]; then
+            note "auto-update: $flake does not exist"
+            echo "no flake at $flake" >&2
             exit 1
           fi
-        ''}
 
-        # ONE input. A bare flake update moves nixarchy too, which is the
-        # decision this module deliberately does not make.
-        nix flake update nixpkgs --flake "$flake"
+          ${lib.optionalString (!cfg.allowDirty) ''
+            # The whole reason this is off by default. A dirty tree is somebody's
+            # unfinished edit, and rebuilding it unattended deploys that edit.
+            # Reported rather than ignored: an unattended job that stops working
+            # and says nothing looks exactly like one that is up to date.
+            if [ -d "$flake/.git" ] && ! git -C "$flake" diff --quiet HEAD 2>/dev/null; then
+              note "auto-update: $flake has uncommitted changes; not rebuilding"
+              echo "$flake is dirty; commit it or set autoUpdate.allowDirty" >&2
+              exit 1
+            fi
+          ''}
 
-        # switch, not boot: a package-set update that needs a reboot to take
-        # effect is one the user never notices they received.
-        nixos-rebuild switch --flake "$flake"
-      '';
-    };
+          # ONE input. A bare flake update moves nixarchy too, which is the
+          # decision this module deliberately does not make.
+          nix flake update nixpkgs --flake "$flake"
 
-    # Same failure the sibling exists to survive, for the same reason: an
-    # unattended job that starts failing stops delivering security updates and
-    # says nothing, and a machine that has quietly stopped updating is
-    # indistinguishable from one that is current. A file rather than only a log
-    # line, because journald rotates and "when did this last work" should
-    # outlive that. See nixpkgs#349734.
-    systemd.services.nixarchy-upgrade-failed = {
-      description = "Record that the unattended update failed";
-      serviceConfig = {
-        Type = "oneshot";
-        StateDirectory = "nixarchy";
+          # switch, not boot: a package-set update that needs a reboot to take
+          # effect is one the user never notices they received.
+          nixos-rebuild switch --flake "$flake"
+        '';
       };
-      script = ''
-        printf '%s unattended update failed\n' "$(${pkgs.coreutils}/bin/date -Is)" \
-          >> /var/lib/nixarchy/upgrade-failed
-      '';
-    };
 
-    systemd.timers.nixarchy-auto-update = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = cfg.dates;
-        # A laptop asleep at the hour is the machine that most needs to catch
-        # up and the one a non-persistent timer never reaches.
-        Persistent = true;
-        # Not about server load, since this is not a fleet -- about not
-        # starting a multi-gigabyte download the same second every machine in
-        # the house wakes.
-        RandomizedDelaySec = "45min";
+      # Same failure the sibling exists to survive, for the same reason: an
+      # unattended job that starts failing stops delivering security updates and
+      # says nothing, and a machine that has quietly stopped updating is
+      # indistinguishable from one that is current. A file rather than only a log
+      # line, because journald rotates and "when did this last work" should
+      # outlive that. See nixpkgs#349734.
+      services.nixarchy-upgrade-failed = {
+        description = "Record that the unattended update failed";
+        serviceConfig = {
+          Type = "oneshot";
+          StateDirectory = "nixarchy";
+        };
+        script = ''
+          printf '%s unattended update failed\n' "$(${pkgs.coreutils}/bin/date -Is)" \
+            >> /var/lib/nixarchy/upgrade-failed
+        '';
+      };
+
+      timers.nixarchy-auto-update = {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnCalendar = cfg.dates;
+          # A laptop asleep at the hour is the machine that most needs to catch
+          # up and the one a non-persistent timer never reaches.
+          Persistent = true;
+          # Not about server load, since this is not a fleet -- about not
+          # starting a multi-gigabyte download the same second every machine in
+          # the house wakes.
+          RandomizedDelaySec = "45min";
+        };
       };
     };
   };

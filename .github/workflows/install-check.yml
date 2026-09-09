@@ -143,6 +143,43 @@ jobs:
     name: install
     needs: gate
 
+    # One install VM at a time, machine-wide.
+    #
+    # This job boots a nested QEMU VM and runs an installer inside it against a
+    # THIRTY MINUTE budget -- tests/install.nix:495, `timeout=1800`. That budget
+    # is wall-clock INSIDE THE GUEST, and a guest gets slower when the host is
+    # contended. So concurrency here does not merely slow installs down, it
+    # converts them into failures, and the failure names the installer rather
+    # than the contention:
+    #
+    #   AssertionError: nixarchy-install exited 124
+    #
+    # Measured on 2026-09-09, when the runner pool went from two to four on one
+    # machine:
+    #
+    #   2 concurrent install jobs   both SUCCEEDED, ~36 min wall
+    #   3-4 concurrent              every one FAILED at the in-VM timeout
+    #
+    # One of those failures was on `main` rather than a pull request, so no
+    # change under test could explain it, and one was on an established runner
+    # rather than a new one, so it was not a cold store either.
+    #
+    # cancel-in-progress is FALSE here on purpose, unlike the workflow-level
+    # group above. That one cancels superseded runs of the SAME branch, which
+    # is right. This one queues DIFFERENT branches behind each other, and
+    # cancelling would throw away a run that was going to pass.
+    #
+    # The other three runners keep working: this caps the one job that boots a
+    # VM, not the build, system, box or omarchy jobs that run beside it. Adding
+    # runners still helps everything except this.
+    #
+    # Raising the in-VM timeout was the obvious alternative and is worse: it
+    # would hide a real slowdown, and the number it hid would be the one that
+    # tells you the host is oversubscribed.
+    concurrency:
+      group: nixarchy-install-vm
+      cancel-in-progress: false
+
     # No `if:` on this job, and that is the whole fix -- measured, not assumed.
     # A probe run with three jobs reported: a job skipped by a job-level `if:`
     # appears as a check-run with conclusion `skipped`, and `skipped` is not

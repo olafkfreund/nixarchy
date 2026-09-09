@@ -114,6 +114,31 @@
     note = "Permanent NixOS sandboxes from a template, booted with no image build and no bootloader -- the host's own /nix/store, shared read-only. Bundled because declaring a machine is what turns on the system user, the kvm group grant, the kernel modules and the microvm CLI; a machine you never declare gets none of them.";
   };
 
+  waydroid = {
+    label = "Waydroid (Android apps)";
+    # Development, as microvm and devenv: the categories in use are Desktop,
+    # Development, Hardware and Network, and a container runtime for another
+    # OS sits with the other virtualisation row rather than inventing a
+    # fifth category for one entry.
+    category = "Development";
+    # Plain, and this file's own bar decides it: "if the answer is one line,
+    # it is plain". NixOS's virtualisation.waydroid module already does the
+    # integration -- the LXC container, the binder module, the systemd
+    # service -- so there is nothing for nixarchy to add and therefore no
+    # nixarchy option. The user gets the line every wiki page will show them.
+    kind = "plain";
+    option = [
+      "virtualisation"
+      "waydroid"
+    ];
+    # The note teaches what turning it on COSTS, and the first sentence is
+    # the one that stops "it installed and the app crashes": Waydroid runs
+    # Android on your own kernel with no CPU emulation, which is why it is
+    # fast and why ARM-only apps -- a large share of the popular ones --
+    # need a translation layer it does not ship and nixpkgs does not carry.
+    note = "Android apps in a container on your own kernel. No CPU emulation, so it is fast -- and ARM-only apps will not run without a translation layer (libhoudini/libndk) that Waydroid does not ship and nixpkgs does not package. Needs the binder kernel module, which mainline has and a custom kernel may not, and ships without the Play Store. For apps that refuse to run in a container at all, scrcpy mirrors a real phone instead.";
+  };
+
   devenv = {
     label = "devenv";
     category = "Development";

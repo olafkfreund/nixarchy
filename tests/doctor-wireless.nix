@@ -54,6 +54,13 @@ pkgs.runCommand "nixarchy-doctor-wireless" { nativeBuildInputs = [ pkgs.gnugrep 
 
   run() { # run <pci fixture> <net fixture>
     ( export NIXARCHY_SYSFS_PCI="$PWD/fix/$1" NIXARCHY_SYSFS_NET="$PWD/net/$2"
+      # A kernel version this build can never accidentally have. The Broadcom
+      # advice interpolates the running kernel into a permittedInsecurePackages
+      # string, and asserting on the BUILDER's kernel would be asserting on
+      # whatever the runner booted -- green on one machine, red on another, and
+      # the assertion would pass equally if the interpolation were dropped and
+      # the two versions happened to match.
+      export NIXARCHY_KERNEL_RELEASE=9.9.9-test
       ${doctor}/bin/nixarchy-doctor 2>&1 ) || true
   }
 
@@ -104,9 +111,34 @@ pkgs.runCommand "nixarchy-doctor-wireless" { nativeBuildInputs = [ pkgs.gnugrep 
   want    "its device id is printed"   "$b" '0x43a0'
   want    "the fix is pasteable"       "$b" 'hardware.enableAllFirmware = true'
   want    "allowUnfree is mentioned"   "$b" 'allowUnfree'
-  # broadcom_sta and b43 cannot both load. Advice that omits the conflict is
-  # advice that produces a machine which builds and still has no wifi.
-  want    "the conflict is named"      "$b" 'pick one'
+  # Firmware is offered BEFORE the out-of-tree driver, and that order is the
+  # advice: every recent Broadcom card is FullMAC and served by in-tree
+  # brcmfmac, so leading with broadcom_sta would send someone after an
+  # unmaintained module for hardware the kernel already handles.
+  want    "the last resort is marked"  "$b" 'Last resort'
+  want    "the driver is named"        "$b" 'broadcom_sta'
+
+  # The three things about broadcom_sta that a user cannot work out alone, and
+  # each of which produces a different silent failure if omitted.
+  #
+  # 1. It is an unmaintained driver with remote code execution CVEs, on the
+  #    interface that faces untrusted networks. Recommending it without
+  #    saying so is the part that would be indefensible.
+  want    "the CVEs are stated"        "$b" 'CVE-2019-9501'
+  want    "and what they mean"         "$b" 'remote code execution'
+  # 2. nixpkgs refuses to build it until it is named in permittedInsecurePackages,
+  #    and THAT STRING CONTAINS THE KERNEL VERSION -- so it goes stale on every
+  #    kernel bump and the rebuild then fails talking about an insecure
+  #    package, never mentioning wireless. Pinned kernel, exact string.
+  want    "the allowlist is named"     "$b" 'permittedInsecurePackages'
+  want    "with THIS kernel in it"     "$b" 'broadcom-sta-6.30.223.271-63-9.9.9-test'
+  want    "and the staleness warned"   "$b" 'stale on every kernel bump'
+  # 3. wl binds by PCI CLASS, not device id -- its only modalias is
+  #    pci:v*d*sv*sd*bc02sc80i* -- so it claims the card out from under the
+  #    in-tree drivers. Advice without the blacklist builds a machine that
+  #    still has no wifi, which is the failure that looks like the fix.
+  want    "the blacklist is given"     "$b" 'blacklistedKernelModules'
+  want    "and why it is needed"       "$b" 'binds by PCI CLASS'
 
   r=$(run realtek empty)
   want    "realtek named as unbound"   "$r" 'Realtek wireless card with no driver'

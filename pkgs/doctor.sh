@@ -730,6 +730,12 @@ say "${bold}Wireless${off}"
 # creates it for every driver that registers a wiphy, so this is the one test
 # that does not need a vendor table.
 : "${NIXARCHY_SYSFS_NET:=/sys/class/net}"
+
+# The Broadcom advice below has to print the RUNNING kernel's version, because
+# the permittedInsecurePackages entry it recommends contains it. Overridable
+# for the same reason the sysfs roots above are: the test pins it rather than
+# asserting on whatever kernel the VM happens to boot.
+: "${NIXARCHY_KERNEL_RELEASE:=$(uname -r)}"
 wlan=""
 for n in "$NIXARCHY_SYSFS_NET"/*/; do
   [ -d "$n/wireless" ] || [ -e "$n/phy80211" ] || continue
@@ -782,8 +788,27 @@ elif [ -z "$wifi_bound" ]; then
   say "     wireless tool -- nmtui, iwctl, wpa_cli -- will show the same nothing."
   case "$wifi_make" in
     Broadcom)
-      notes+=("Broadcom wireless needs firmware outside the redistributable set. hardware.enableAllFirmware pulls in b43 and brcm, and needs nixpkgs.config.allowUnfree. Older BCM43xx cards want boot.extraModulePackages = [ config.boot.kernelPackages.broadcom_sta ] instead, and that one conflicts with b43 -- pick one.")
+      # Firmware first, and it is genuinely first: every recent Broadcom card
+      # is FullMAC and served by the in-tree brcmfmac, which needs only the
+      # blob. Leading with the out-of-tree driver would send someone after an
+      # unmaintained module for a card the kernel already supports.
+      notes+=("Broadcom wireless needs firmware outside the redistributable set. hardware.enableAllFirmware pulls in b43 and brcm, and needs nixpkgs.config.allowUnfree. TRY THIS FIRST -- it is in-tree, maintained, and it is the answer for every recent Broadcom card.")
       snippet+=("  hardware.enableAllFirmware = true; # Broadcom wireless; needs allowUnfree")
+
+      # And only then the old chips. Upstream Omarchy ships broadcom-wl-dkms
+      # for exactly these; this port does not, and #446 is where that decision
+      # lives. What the doctor can do is name the driver, the security cost,
+      # and the one string nobody can guess.
+      notes+=("If firmware leaves it dead, this is one of the old chips -- BCM4360, BCM4352, BCM43142, BCM4331 -- that only Broadcom's out-of-tree wl driver supports. nixpkgs has it as config.boot.kernelPackages.broadcom_sta. Treat it as a LAST RESORT: it is unmaintained, and it carries CVE-2019-9501 and CVE-2019-9502 -- heap overflows a crafted wifi packet can turn into remote code execution, on the one interface that faces networks you do not control.")
+      # The maintenance trap, which is the part that actually bites people: the
+      # allowlist entry names the kernel, so it is correct until the next
+      # kernel bump and then fails the rebuild with an error about an insecure
+      # package, saying nothing about wifi.
+      notes+=("Two things about broadcom_sta that are not guessable. nixpkgs refuses to build it until you name it in permittedInsecurePackages, and THAT STRING CONTAINS THE KERNEL VERSION -- so it goes stale on every kernel bump and your next rebuild fails complaining about an insecure package rather than about wireless. On this machine today it is broadcom-sta-6.30.223.271-63-$NIXARCHY_KERNEL_RELEASE; when a rebuild refuses, the error names the string it wants, so paste that one rather than editing this by hand. And wl binds by PCI CLASS, not by device id -- its only modalias is pci:v*d*sv*sd*bc02sc80i* -- so it takes the card from b43 and brcmsmac whether or not you meant it to, which is why they have to be blacklisted rather than merely left alone.")
+      snippet+=("  # Last resort, and only if enableAllFirmware left it dead -- read the notes.")
+      snippet+=("  # boot.extraModulePackages = [ config.boot.kernelPackages.broadcom_sta ];")
+      snippet+=("  # boot.blacklistedKernelModules = [ \"b43\" \"bcma\" \"brcmsmac\" \"ssb\" ];")
+      snippet+=("  # nixpkgs.config.permittedInsecurePackages = [ \"broadcom-sta-6.30.223.271-63-$NIXARCHY_KERNEL_RELEASE\" ];")
       ;;
     Realtek)
       notes+=("Several Realtek cards (8821CE, 8852BE, 8852BU) have no in-tree driver and need an out-of-tree module. nixpkgs packages them under config.boot.kernelPackages -- rtl8821ce, rtl8852bu, rtw88 -- and which one is right depends on device $wifi_id, not on the vendor.")

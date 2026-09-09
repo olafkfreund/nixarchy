@@ -79,6 +79,112 @@ journalctl --user -b -u hyprland --no-pager | tail -40
 journalctl -b | grep -iE 'drm|amdgpu|nvidia|gpu hang'
 ```
 
+## Wireless: Firmware, Drivers, and the Out-of-Tree Trap
+
+`nixarchy doctor` has a **Wireless** section that separates the three cases a
+user cannot tell apart from nmtui, because they have three different fixes:
+
+| doctor says | meaning | fix |
+|---|---|---|
+| "interface `wlpXsY` is up" | working | nothing — if they cannot see networks, that is NetworkManager, not the driver |
+| "No PCI wireless card here" | nothing on the PCI bus | a USB adapter, which the doctor does not see — check `lsusb` |
+| "a card with no driver" | no module claimed it | firmware or an out-of-tree driver, below |
+| "driver loaded, but no interface" | module bound then failed | almost always a missing firmware blob — `journalctl -b -k \| grep -i firmware` names the file |
+
+Run the doctor first. It prints the vendor, the device id, and a pasteable
+snippet, and those three facts decide everything below.
+
+### There is no `wlan0`
+
+Before anything else, rule this out — it is free and it is usually the answer.
+systemd renames interfaces after the PCI slot, so an Intel card at `00:14.3`
+becomes `wlp0s20f3`. Someone searching for "wlan0" finds nothing on a machine
+whose Wi-Fi is perfect. `ip link` settles it.
+
+### Firmware first
+
+Most "no driver" cases are a missing blob, not a missing driver:
+
+```nix
+hardware.enableRedistributableFirmware = true;   # default since v4.0.2-11
+hardware.enableAllFirmware = true;               # adds b43, brcm; needs allowUnfree
+```
+
+`enableAllFirmware` requires `nixpkgs.config.allowUnfree = true`, which the
+installer-generated configuration already sets.
+
+### Broadcom, and why it is a special case
+
+Upstream Omarchy ships `broadcom-wl-dkms`. This port does not, and the doctor
+names the equivalent instead. **Try `enableAllFirmware` first** — every recent
+Broadcom card is FullMAC and served by the in-tree `brcmfmac`, so the blob is
+the whole fix.
+
+Only if that leaves the card dead is it one of the old chips — BCM4360,
+BCM4352, BCM43142, BCM4331 — that need Broadcom's out-of-tree `wl` driver.
+nixpkgs has it:
+
+```nix
+boot.extraModulePackages = [ config.boot.kernelPackages.broadcom_sta ];
+boot.blacklistedKernelModules = [ "b43" "bcma" "brcmsmac" "ssb" ];
+nixpkgs.config.permittedInsecurePackages = [
+  "broadcom-sta-6.30.223.271-63-<KERNEL>"   # <KERNEL> is `uname -r`
+];
+```
+
+**Say the cost out loud before recommending it.** It is unmaintained and
+carries CVE-2019-9501 and CVE-2019-9502 — heap overflows a crafted Wi-Fi packet
+can turn into remote code execution, on the one interface facing networks the
+user does not control. It is a last resort for hardware that otherwise has no
+Wi-Fi at all, not a default.
+
+Three things about it that are not guessable, and each produces a different
+confusing failure if you omit it:
+
+1. **The blacklist is mandatory, not tidiness.** `wl` binds by PCI *class*, not
+   by device id — its only modalias is `pci:v*d*sv*sd*bc02sc80i*` — so it takes
+   the card from `b43` and `brcmsmac` whether or not that was intended. Without
+   the blacklist the machine builds fine and still has no Wi-Fi, which is the
+   failure that looks like the fix.
+2. **The allowlist string contains the kernel version**, so it is correct today
+   and stale after the next kernel bump.
+3. **The package version can move too.** `6.30.223.271-63` is what nixpkgs
+   carries now; when it changes, the string changes with it.
+
+### Maintaining it across kernel updates — the part that actually bites
+
+This is the follow-up question, and it arrives weeks later looking like an
+unrelated bug. After `omarchy update` moves nixpkgs, the kernel moves, and the
+rebuild fails like this:
+
+```
+Package 'broadcom-sta-6.30.223.271-63-6.18.50' ... has known security issues
+```
+
+It says nothing about Wi-Fi. The user's mental model is "my update broke", and
+the string in their config names a kernel they no longer run.
+
+**The fix is always the same, and the error hands it over:** the message names
+the exact string it wants. Paste *that* into `permittedInsecurePackages`,
+replacing the old one, and rebuild. Never hand-edit the version guessing —
+both halves can move.
+
+Two ways to stop it recurring, and the honest recommendation is the first:
+
+- **Replace the card.** A £10 Intel AX200 removes an unmaintained RCE-prone
+  driver from a machine permanently and needs no configuration at all. nixpkgs'
+  own metadata says "heavily recommended to replace the hardware".
+- **Pin the kernel** so the string stops moving —
+  `boot.kernelPackages = pkgs.linuxPackages_6_12;` — at the cost of not getting
+  kernel security updates, which for a driver with remote code execution is a
+  poor trade. Say so if suggesting it.
+
+If the user asks "why does Arch handle this and NixOS does not": Arch's DKMS
+rebuilds the module on kernel change without a version string in the config,
+and Arch does not gate insecure packages. NixOS makes the same driver
+available and makes its cost explicit. The driver is identical — same Broadcom
+tarball, same rpmfusion patch set.
+
 ## Reading the Journal Properly
 
 The journal is the whole logging story on NixOS — there are no per-service files

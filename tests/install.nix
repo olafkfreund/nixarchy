@@ -819,11 +819,46 @@ pkgs.testers.runNixOSTest {
         f"adding a host directory gave {names!r}, not 'installed spare' -- "
         "flake.nix is not finding machines by reading ./hosts")
 
-    # And it is a different machine, not the same one twice.
-    spare = target.succeed(
-        "cd /etc/nixos && nix --extra-experimental-features 'nix-command flakes'"
-        " eval --raw .#nixosConfigurations.spare.config.networking.hostName").strip()
-    assert spare == "spare", f"the second host is called {spare!r}"
+    # And the second machine is REAL -- it evaluates to a system of its own.
+    #
+    # This used to assert `networking.hostName == "spare"`, and that assertion
+    # is now unsatisfiable BY DESIGN. Offline-install stage 1 took the hostname
+    # out of evaluation entirely (installer/host.nix): it is "" for every
+    # machine and applied at first boot by nixarchy-set-hostname from
+    # /etc/nixarchy/hostname. hosts/<name>/default.nix still passes
+    # `hostname = "@hostname@"` and host.nix deliberately ignores it -- the
+    # `# deadnix: skip` on that parameter is the note saying so.
+    #
+    # It failed on main, not on the pull request, because #434 was merged with
+    # --admin while its install job was still running. The one check that would
+    # have caught this is the one that was skipped.
+    #
+    # So assert what stage 1 actually promises, which is the OPPOSITE of the
+    # old claim and a stronger thing to know: two machines differing only by
+    # name build the SAME system. That is what makes an offline install
+    # possible at all -- a per-machine closure would have to be built on a
+    # machine with no network.
+    spare_top, installed_top = (
+        target.succeed(
+            "cd /etc/nixos && nix --extra-experimental-features"
+            " 'nix-command flakes' eval --raw"
+            f" .#nixosConfigurations.{h}.config.system.build.toplevel.drvPath"
+        ).strip()
+        for h in ("spare", "installed")
+    )
+    assert spare_top == installed_top, (
+        "two machines differing only by directory name evaluate to DIFFERENT "
+        f"systems:\n  spare     {spare_top}\n  installed {installed_top}\n"
+        "The name has re-entered the closure, so an offline install of the "
+        "second machine would have to BUILD it, with no network. See #404.")
+
+    # The name is not lost, it moved to runtime -- so check it is actually
+    # applied, which is the half a caller notices.
+    running = target.succeed("hostname").strip()
+    assert running == "installed", (
+        f"the machine calls itself {running!r}; nixarchy-set-hostname did not "
+        "apply /etc/nixarchy/hostname")
+    target.succeed("test -s /etc/nixarchy/hostname")
     target.succeed("git -C /etc/nixos rm -r --cached -q hosts/spare")
     target.succeed("rm -rf /etc/nixos/hosts/spare")
     print("a second machine is a second directory")

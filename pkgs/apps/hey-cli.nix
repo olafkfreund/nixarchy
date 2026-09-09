@@ -11,15 +11,15 @@
   gnugrep,
 }:
 let
-  version = "1.4.1";
+  version = "1.4.3";
 
   # Straight from the release's own checksums.txt, which upstream signs with a
   # keyless Sigstore bundle -- not from a local download. Same reasoning as
   # pkgs/apps/once.nix: these should be the artefacts basecamp published, not
   # whatever a machine here happened to fetch.
   hashes = {
-    "x86_64-linux" = "18c4a5eb86dc98a7416fd6c452537a0968df7080cda6c20bd9192f06d95e58b1";
-    "aarch64-linux" = "2a7e3124e8b09313f013dee9f72bef7d302cff27e5e2d7f36571c30b5289ab58";
+    "x86_64-linux" = "4363f74400e5bb1403c41fd82139ad11e592a72c379aa170b2dbc9bb1fd7bada";
+    "aarch64-linux" = "e569bff7b7de497c1ad0e3c4e5c14ffc03467a760fb22cc203ce0c0662ee8ad5";
   };
   arches = {
     "x86_64-linux" = "amd64";

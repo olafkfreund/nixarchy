@@ -8,6 +8,59 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
+  # Every storage driver nixpkgs would put in a "supports most hardware"
+  # initrd, taken from nixpkgs rather than copied out of it.
+  #
+  # Offline install stage 3 (#436) installs the REFERENCE closure rather than
+  # one built from the machine's own detected hardware-configuration.nix. So
+  # the installed machine boots the reference's initrd, and whatever is not in
+  # it cannot be mounted. Measured before this existed: the ISO carried 103
+  # initrd modules and the reference 63, the 61 missing including md_mod and
+  # raid0/1/10/456, hpsa, arcmsr, aic79xx, hv_storvsc, vmxnet3 and thirty-odd
+  # pata_/sata_ controllers.
+  #
+  # ## Why not `hardware.enableAllHardware = true`
+  #
+  # Because it also sets `hardware.enableRedistributableFirmware = true` at
+  # NORMAL priority (nixos/modules/hardware/all-hardware.nix:175), and this
+  # module sets that same option at mkDefault so an adopter can turn blobs off
+  # with a plain `false`. tests/firmware-guard.nix asserts exactly that, and
+  # says why: "a guard that only checked the value would pass on an mkForce
+  # that takes their choice away".
+  #
+  # Two normal-priority definitions cannot be reconciled by adding a third at
+  # any priority -- anything that wins over all-hardware wins over the adopter
+  # too. So enabling the option is incompatible with the guarantee, and it was
+  # tried: it failed evaluation with "hardware.enableRedistributableFirmware
+  # has conflicting definition values".
+  #
+  # ## So the list is asked for instead of the option
+  #
+  # A minimal machine, evaluated only to be asked what all-hardware adds, and
+  # its answer used here. The list stays nixpkgs-maintained -- it rises when
+  # they raise it -- while the firmware decision stays ours.
+  #
+  # It deliberately does NOT import nixarchy's own module: this is evaluated
+  # from inside it, and importing it would recurse. It needs no packages
+  # either, so it is cheap -- measured at 0.9s, against a flake evaluation
+  # that already builds several systems.
+  allHardwareInitrdModules =
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit (pkgs.stdenv.hostPlatform) system;
+      modules = [
+        {
+          nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
+          boot.loader.grub.device = "nodev";
+          fileSystems."/" = {
+            device = "/dev/null";
+            fsType = "ext4";
+          };
+          system.stateVersion = config.system.stateVersion;
+          hardware.enableAllHardware = true;
+        }
+      ];
+    }).config.boot.initrd.availableKernelModules;
+
   # Where the resolved-path half of the flake's safe.directory entry lives.
   #
   # Under /var/lib rather than /etc: /etc/gitconfig is a store symlink that
@@ -1160,21 +1213,27 @@ in
     # newest kernel in the current pin. When a future pin breaks that, it
     # breaks at evaluation with the package named, which is a better failure
     # than a machine that cannot see its screen.
-    boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+    boot = {
+      # See allHardwareInitrdModules above: the drivers, without the firmware
+      # decision that hardware.enableAllHardware would take away.
+      initrd.availableKernelModules = allHardwareInitrdModules;
 
-    boot.plymouth = lib.mkMerge [
-      (lib.mkIf (cfg.bootSplash != "off") {
-        enable = lib.mkDefault true;
-      })
-      (lib.mkIf (cfg.bootSplash == "defer") {
-        themePackages = lib.mkDefault [ cfg.package ];
-        theme = lib.mkDefault "omarchy";
-      })
-      (lib.mkIf (cfg.bootSplash == "force") {
-        themePackages = lib.mkForce [ cfg.package ];
-        theme = lib.mkForce "omarchy";
-      })
-    ];
+      kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+
+      plymouth = lib.mkMerge [
+        (lib.mkIf (cfg.bootSplash != "off") {
+          enable = lib.mkDefault true;
+        })
+        (lib.mkIf (cfg.bootSplash == "defer") {
+          themePackages = lib.mkDefault [ cfg.package ];
+          theme = lib.mkDefault "omarchy";
+        })
+        (lib.mkIf (cfg.bootSplash == "force") {
+          themePackages = lib.mkForce [ cfg.package ];
+          theme = lib.mkForce "omarchy";
+        })
+      ];
+    };
 
     # Why: modules/AGENTS.md#default-fontconfig-conf-avail-50-omarchy-conf-whic
     fonts.fontconfig.localConf = lib.mkDefault (

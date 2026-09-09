@@ -245,7 +245,14 @@ pkgs.testers.runNixOSTest {
         # For reading the appended initrd secret back out of the ESP: the
         # initrd and its secrets are compressed, and the assertion decompresses
         # rather than trusting that the append happened.
+        #
+        # python3 with it, because finding the compressed part means locating a
+        # zstd frame magic at a byte offset inside a 100M binary -- and the
+        # assertion is named explicitly here rather than left to arrive
+        # incidentally through the nixarchy module, which is what it would
+        # otherwise be depending on.
         pkgs.zstd
+        pkgs.python3
       ];
 
       nix.settings = {
@@ -560,15 +567,58 @@ pkgs.testers.runNixOSTest {
         "ls /mnt/boot/EFI/nixos/*initrd*").split()
     assert initrds, "no initrd on the ESP at all"
     for f in initrds:
-        streams = (f"{{ zstdcat {f} 2>/dev/null; zcat {f} 2>/dev/null; "
-                   f"cat {f}; }}")
-        installer.succeed(
-            f"{streams} | grep -a -F -c -- '{recovery_hash}' >/dev/null || "
-            f"{{ echo 'the recovery hash is NOT in {f}: the secret append "
-            f"failed and the emergency shell on this machine is locked'; "
-            f"exit 1; }}")
-        installer.fail(
-            f"{streams} | grep -a -F -c -- '{login_hash}' >/dev/null")
+        # The search has to decompress, and the previous one could not.
+        #
+        # The ESP initrd is a PLAIN cpio archive -- magic 0707 -- and
+        # append-initrd-secrets writes a ZSTD-COMPRESSED cpio onto the end of
+        # it (stage-1.nix:468). So the file is [plain cpio][zstd frame], and
+        # the old pipeline could see neither half of the answer:
+        #
+        #   zstdcat FILE   fails, the file does not begin as zstd
+        #   zcat FILE      fails, it is not gzip
+        #   cat FILE       shows the cpio, and the appended frame as
+        #                  compressed bytes the hash is not visible in
+        #
+        # Which made the assertion UNSATISFIABLE: it could not pass however
+        # correctly the installer behaved. Reproduced outside the VM by
+        # appending a properly-formed compressed cpio to a copy of the real
+        # initrd and running the old pipeline against it -- not found -- and
+        # then decompressing the trailing frame, where the hash is plainly
+        # there.
+        #
+        # So this walks the zstd frames instead. It checks the raw bytes
+        # first, because a hash that appears UNCOMPRESSED is the failure the
+        # second assertion below is about and must still be caught.
+        # `<<'PROBE'` sits on the command line, BEFORE the `||`: a heredoc
+        # delimiter line has to be exactly PROBE, so a `|| { ...; }` glued
+        # after it would leave the body unterminated and the shell would die
+        # on EOF rather than run anything.
+        def probe(needle, tail=""):
+            return (f"python3 - {f} '{needle}' <<'PROBE'{tail}\n"
+                    "import subprocess, sys\n"
+                    "data = open(sys.argv[1], \"rb\").read()\n"
+                    "needle = sys.argv[2].encode()\n"
+                    "if needle in data:\n"
+                    "    print(\"plain\"); sys.exit(0)\n"
+                    "magic, i = b\"\\x28\\xb5\\x2f\\xfd\", 0\n"
+                    "while True:\n"
+                    "    i = data.find(magic, i)\n"
+                    "    if i < 0:\n"
+                    "        break\n"
+                    "    out = subprocess.run([\"zstd\", \"-dc\"], input=data[i:],\n"
+                    "                         capture_output=True).stdout\n"
+                    "    if needle in out:\n"
+                    "        print(\"compressed\"); sys.exit(0)\n"
+                    "    i += 4\n"
+                    "sys.exit(1)\n"
+                    "PROBE")
+
+        installer.succeed(probe(
+            recovery_hash,
+            f" || {{ echo 'the recovery hash is NOT in {f}: the secret "
+            f"append failed and the emergency shell on this machine is "
+            f"locked'; exit 1; }}"))
+        installer.fail(probe(login_hash))
     print(f"the recovery hash is in {len(initrds)} ESP initrd(s); "
           "the login hash is in none")
 

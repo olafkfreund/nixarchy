@@ -258,6 +258,40 @@ jobs:
             echo "pushing $c ($(du -sh "$out" | cut -f1))"
             nix run --inputs-from . nixpkgs#cachix -- \
               push nixarchy "$out" || echo "push of $c failed; not fatal"
+
+            # And ask the cache whether it took it -- here, on this commit,
+            # seconds later.
+            #
+            # The first version of this verification lived in the nightly, as
+            # a probe that evaluated main and checked those paths were
+            # present. It could not work: these checks embed the flake source,
+            # so ANY commit gives them new store paths, and the probe was
+            # comparing what main evaluates now against what was pushed a
+            # commit ago. It reported the cache broken on the first nightly
+            # after a merge, and the cache was fine.
+            #
+            # Here there is no cross-commit problem to get wrong. The path was
+            # just built and just pushed; if the cache does not have it a
+            # moment later, the push genuinely did not work -- which is the
+            # only thing worth knowing, and the thing cachix will not tell us
+            # because it exits 0 on a rejected token.
+            #
+            # Not fatal, for the same reason the push is not: a cache upload
+            # must not fail a build that succeeded (#235). It is loud instead,
+            # and the summary carries it.
+            hash=$(basename "$out" | cut -d- -f1)
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              "https://nixarchy.cachix.org/$hash.narinfo")
+            if [ "$code" = 200 ]; then
+              echo "  $c: in the cache"
+            else
+              echo "::warning::$c was pushed but the cache does not have it (HTTP $code)"
+              echo "cachix exits 0 on a rejected token, so this is the only" >&2
+              echo "signal that the push did not work. Check CACHIX_AUTH_TOKEN." >&2
+              {
+                echo "- \`$c\` pushed but not in the cache (HTTP $code)"
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
           done
 
       - name: Report what it cost

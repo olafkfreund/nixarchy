@@ -56,6 +56,25 @@ let
             fsType = "ext4";
           };
           system.stateVersion = config.system.stateVersion;
+
+          # THE SAME KERNEL this machine runs, and it is load-bearing.
+          #
+          # all-hardware.nix gates part of its list on the kernel version --
+          # `pata_qdi` only for versions older than 7.0, at line 108. A probe
+          # on nixpkgs' default kernel therefore asked for a module that does
+          # not exist in 7.2.4, and the failure surfaced three derivations
+          # away, in modules-shrunk:
+          #
+          #   root module: pata_qdi
+          #   modprobe: FATAL: Module pata_qdi not found in directory
+          #             .../linux-7.2.4-modules/lib/modules/7.2.4
+          #
+          # config.boot.kernelPackages rather than a literal, so an adopter who
+          # pins a different kernel gets a list computed for THEIR kernel. No
+          # cycle: the probe produces initrd module names and reads only the
+          # kernel, which does not depend on them.
+          boot.kernelPackages = config.boot.kernelPackages;
+
           hardware.enableAllHardware = true;
         }
       ];

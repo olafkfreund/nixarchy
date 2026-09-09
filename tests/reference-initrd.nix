@@ -70,6 +70,23 @@ pkgs.runCommand "nixarchy-reference-initrd"
     refCount = toString (builtins.length reference);
     unexplained = builtins.concatStringsSep " " unexplained;
     stale = builtins.concatStringsSep " " stale;
+
+    # The initrd itself, BUILT.
+    #
+    # Comparing names is not enough and this check learned that the hard way:
+    # it passed while the machine could not build, because all-hardware gates
+    # part of its list on the kernel version -- `pata_qdi` only below 7.0 --
+    # and a list computed for the wrong kernel names a module that does not
+    # exist. modprobe said so three derivations away, in modules-shrunk:
+    #
+    #   root module: pata_qdi
+    #   modprobe: FATAL: Module pata_qdi not found in directory
+    #             .../linux-7.2.4-modules/lib/modules/7.2.4
+    #
+    # So this depends on the real initrd. A name that no kernel module backs
+    # now fails HERE, naming the initrd, instead of in whichever job happened
+    # to build a toplevel first.
+    initrd = inputs.self.nixosConfigurations.reference.config.system.build.initialRamdisk;
     reasons = lib.concatStringsSep "\n" (lib.mapAttrsToList (m: why: "  ${m}: ${why}") excluded);
   }
   ''
@@ -103,6 +120,9 @@ pkgs.runCommand "nixarchy-reference-initrd"
       echo "  real gap behind a list that looks considered." >&2
       exit 1
     fi
+
+    # Named so a reader sees WHY the check depends on a 60 MB build.
+    echo "the reference initrd builds: $initrd"
 
     echo "every ISO module is in the reference, or excluded with a reason:"
     printf '%s\n' "$reasons"

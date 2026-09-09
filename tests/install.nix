@@ -215,7 +215,17 @@ let
                 enable = false;
                 user = "omarchy";
               };
-              users.users.omarchy.hashedPassword = passwordHash;
+              # hashedPasswordFile, as installer/template/host/configuration.nix
+              # sets it -- this block mirrors that file and the comment above
+              # says to keep them in step. It had drifted to `hashedPassword`,
+              # which nixpkgs now warns about: with both set, and mutableUsers
+              # true, the FILE wins, so the literal here was already dead and
+              # the machine was already logging in with what install.sh wrote.
+              #
+              # The warning appeared when installer/host.nix started setting
+              # the file too (#457), which is what made the drift visible
+              # rather than what caused it.
+              users.users.omarchy.hashedPasswordFile = "/var/lib/nixarchy/password.hash";
             }
           ];
         }

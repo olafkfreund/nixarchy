@@ -822,6 +822,28 @@ in
         "nixarchy-iso".text = ''
           ${inputs.self.shortRev or "dirty"}
         '';
+
+        # The systems this image CARRIES, so an offline install can copy one
+        # instead of building it. Stage 3 of #436.
+        #
+        # Only on the offline image, and that is the whole point: the network
+        # image has somewhere to fetch from, and checks.install runs with
+        # neither marker in a seeded sandbox where building is free. A file
+        # that exists only here keys all three cases correctly, where "no
+        # network marker" would have made the check demand a network.
+        #
+        # Two files rather than one with a flag, because the installer reads
+        # them from shell and `encrypt` is already true or false there.
+        #
+        # These are the SAME configurations seeded into the store above --
+        # referenceConfigs -- so naming their toplevels here adds no closure.
+        # It records a path the image already contains.
+        "nixarchy-reference-true".text = ''
+          ${inputs.self.nixosConfigurations.reference.config.system.build.toplevel}
+        '';
+        "nixarchy-reference-false".text = ''
+          ${inputs.self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel}
+        '';
       }
     else
       {

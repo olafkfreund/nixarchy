@@ -60,7 +60,19 @@ pkgs.runCommand "nixarchy-doctor-wireless" { nativeBuildInputs = [ pkgs.gnugrep 
   fails=0
   want() {
     if printf '%s' "$2" | grep -q "$3"; then echo "  ok      $1"
-    else echo "  FAILED  $1: no /$3/ in the output"; fails=$((fails + 1)); fi
+    else
+      echo "  FAILED  $1: no /$3/ in the output"
+      # And WHAT it printed instead.
+      #
+      # Without this the failure names the string it wanted and nothing else,
+      # so a case that fails in CI and passes locally -- which this file did
+      # on 2026-09-09, same derivation hash, opposite results -- leaves
+      # nothing to reason from. The Wireless section is a dozen lines; print
+      # it, indented, and the next occurrence is an answer rather than a
+      # rerun.
+      printf '%s\n' "$2" | sed -n '/Wireless/,/^$/p' | sed 's/^/          | /'
+      fails=$((fails + 1))
+    fi
   }
   wantnot() {
     if printf '%s' "$2" | grep -q "$3"; then

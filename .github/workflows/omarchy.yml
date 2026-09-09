@@ -357,6 +357,55 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "$AGENT_TOOLSDIRECTORY"
           nix build .#checks.x86_64-linux.session --print-build-logs
 
+      # The derived numbers, applied rather than asserted.
+      #
+      # Adopting 4.0.3 hit three count drifts in one bump -- 431 -> 444
+      # commands, and two numbers in the same paragraph that nothing checked
+      # and had been wrong for some time. Each one failed the build, and not
+      # one of them needed a person to decide anything: a count has exactly
+      # one correct value, derivable from this repository.
+      #
+      # So the bump rewrites them and the diff carries the change, the same
+      # way the decision list above carries the questions that DO need
+      # answering. This runs before create-pull-request, which commits
+      # whatever is in the working tree.
+      #
+      # --fix refuses rather than guesses: a pattern that matches nothing, or
+      # a quantity that computes empty, fails this step instead of rewriting
+      # the README to agree with a broken derivation. Which is why a failure
+      # here should stop the bump -- the numbers being unverifiable is the
+      # same class of news as an anchor that no longer matches.
+      - name: Apply the README's derived numbers
+        if: steps.rel.outputs.changed == 'true'
+        id: counts
+        run: |
+          {
+            echo "counts<<COUNTS_EOF"
+            echo "### Derived numbers"
+            echo
+            if .github/scripts/readme-counts.sh --fix > /tmp/counts.txt 2>&1; then
+              if grep -q '(fixed)' /tmp/counts.txt; then
+                echo "Applied automatically -- no decision needed:"
+                echo
+                echo '```'
+                grep '(fixed)' /tmp/counts.txt
+                echo '```'
+              else
+                echo "Every derived number in the README was already correct."
+              fi
+            else
+              echo "**The derived numbers could not be applied.** Read the job log."
+              echo
+              echo '```'
+              cat /tmp/counts.txt
+              echo '```'
+              FAILED=1
+            fi
+            echo "COUNTS_EOF"
+          } >> "$GITHUB_OUTPUT"
+          cat /tmp/counts.txt
+          [ -z "${FAILED:-}" ]
+
       - name: Open a pull request
         if: steps.rel.outputs.changed == 'true'
         id: pr
@@ -410,6 +459,8 @@ jobs:
             ${{ steps.patched.outputs.patched }}
 
             ${{ steps.decisions.outputs.decisions }}
+
+            ${{ steps.counts.outputs.counts }}
 
             If something is wrong anyway, roll back with
             `nixos-rebuild --rollback` or the boot menu, and open an issue.

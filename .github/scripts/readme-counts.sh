@@ -147,9 +147,13 @@ if [ -n "$a_total" ] && [ -n "$a_mod" ] && [ -n "$a_ours" ] && [ -n "$a_un" ]; t
   # "never touch this repo" is the nixpkgs ones plus the module-backed ones:
   # both come from upstream nixpkgs, neither is built here.
   a_untouched=$((a_nixpkgs + a_mod))
+  # Everything with a nixpkgs equivalent -- the search index cannot carry the
+  # ones that have none, which is what the sentence itself says.
+  a_indexed=$((a_total - a_un))
 else
   a_nixpkgs=""
   a_untouched=""
+  a_indexed=""
 fi
 
 pac=$(grep -rlE '\b(pacman|yay)\b' "$omarchy/share/omarchy/bin" 2>/dev/null | wc -l)
@@ -197,16 +201,33 @@ quantity "apps-total" "$a_total" \
 quantity "apps-untouched" "$a_untouched" \
   '.*\*\*([0-9]+) of the [0-9]+ apps never touch this repo\.\*\*.*' \
   "s/\*\*[0-9]+ of the [0-9]+ apps never touch this repo\.\*\*/**$a_untouched of the $a_total apps never touch this repo.**/"
+# The two figures #363 warned about: derived numbers sitting in PROSE, which
+# nothing asserted and which therefore went stale silently. That is the exact
+# trap this script exists for -- prose beside a checked number is the most
+# convincing place for a wrong number to live -- so they become quantities
+# rather than being hand-patched and left to rot again.
+#
+# "N applications are selectable that way" is the whole catalogue, not the
+# menu-mapped subset: git history has it moving 56 -> 60 when #337 added four
+# apps, in step with the total.
+quantity "apps-selectable" "$a_total" \
+  '.*\*\*([0-9]+) applications\*\* are selectable.*' \
+  "s/\*\*[0-9]+ applications\*\* are selectable/**$a_total applications** are selectable/"
+# "N of the M apps" in the search-index sentence, whose own parenthetical
+# states the rule: the ones with no nixpkgs equivalent cannot be indexed.
+quantity "apps-indexed" "$a_indexed" \
+  '.*and ([0-9]+) of the [0-9]+ apps.*' \
+  "s/and [0-9]+ of the [0-9]+ apps/and $a_indexed of the $a_total apps/"
 quantity "apps-nixpkgs-row" "$a_untouched" \
   '.*\| nixpkgs \(([0-9]+) of [0-9]+ apps\) \|.*' \
   "s/\| nixpkgs \([0-9]+ of [0-9]+ apps\) \|/| nixpkgs ($a_untouched of $a_total apps) |/"
 
-# A floor. Nine quantities are declared above; a run that checked fewer means
+# A floor. Eleven quantities are declared above; a run that checked fewer means
 # something stopped matching and this reported calm about numbers it never
 # looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 9 ]; then
-  echo "::error::only $checked of 9 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 11 ]; then
+  echo "::error::only $checked of 11 quantities were accounted for" >&2
   fail=1
 fi
 

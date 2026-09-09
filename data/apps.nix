@@ -453,6 +453,28 @@
     attr = "omacalc";
     ours = true;
   };
+  scrcpy = {
+    # Android apps from the phone you already own, and NOT emulation: it
+    # mirrors and controls a device over USB or Wi-Fi, so everything works --
+    # including apps with hardware attestation, which refuse to run in a
+    # container and are exactly the class Waydroid (#362) cannot help with.
+    #
+    # No menuId, and that is not an oversight. The row generator FAILS on a
+    # menuId upstream does not ship, and the vendored omarchy-menu.jsonc has no
+    # install row for scrcpy, android or phone. So it is reachable as
+    # programs.nixarchy.apps.scrcpy and through nixarchy-app-enable, and gains
+    # a menu row for free if upstream ever adds one.
+    #
+    # No arch either. That field maps an Arch package name onto our id so the
+    # generator can rewrite upstream's remove.* rows, which name their target
+    # with `omarchy-pkg-present <arch>`. With no upstream row there is nothing
+    # to match, and a plausible-looking name would not be inert -- it would
+    # fire on somebody else's package.
+    label = "scrcpy";
+    category = "Utility";
+    attr = "scrcpy";
+  };
+
   omacut = {
     # As omawrite and omacalc. Needs ffmpeg at runtime, which the package wraps
     # in rather than adding to systemPackages -- see pkgs/apps/omacut.nix.

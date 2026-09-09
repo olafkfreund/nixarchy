@@ -165,8 +165,22 @@ let
         # input is resolved over the network instead of from the store.
         step EVALUATED nix eval --offline --raw "$work#nixosConfigurations.isotest.config.system.build.toplevel.drvPath"
 
-        grep -q -- -nixos-system-isotest /tmp/out
-        step RESOLVED test $? -eq 0
+        # Copied, because step truncates /tmp/out before it runs anything --
+        # a grep placed inside step would read the file step is about to write.
+        cp /tmp/out /tmp/eval
+
+        # The toplevel is "nixos-system-nixarchy-<label>" on EVERY machine, and
+        # the absence of the hostname is the property rather than a detail of
+        # naming: installer/host.nix pins system.name and empties
+        # networking.hostName so that two machines differing only in name do
+        # not have two different initrds. A different initrd is a build, and
+        # offline a build is the stage0 source bootstrap -- #404.
+        #
+        # This asserted `-nixos-system-isotest` until stage 1 landed, so it
+        # failed for exactly the reason the work succeeded. Both directions are
+        # checked now: the pinned name present, and the hostname absent. Only
+        # the first would still pass if the hostname crept back in as a suffix.
+        step RESOLVED sh -c '! grep -q -- -nixos-system-isotest /tmp/eval && grep -q -- -nixos-system-nixarchy /tmp/eval'
 
         step INSTALLED nixarchy-install --answers /a/answers
 
@@ -319,6 +333,7 @@ pkgs.testers.runNixOSTest {
     import os
     import shutil
     import subprocess
+    import re
     import time
 
     # The EFI variable store: writable, and the SAME FILE for both machines.
@@ -429,7 +444,26 @@ pkgs.testers.runNixOSTest {
         installer.send_chars("sudo sh /a/drive\n")
 
         def step(tag, timeout, note=None):
-            installer.wait_for_console_text(rf"{tag}-0-X", timeout=timeout)
+            # Wait for the marker whatever its exit code, then read the code
+            # out of the log.
+            #
+            # Waiting for `-0-X` alone meant a FAILING step printed `-1-X`,
+            # which scrolled past unmatched, and the driver then blocked until
+            # timeout on a marker that could never appear. Every failure was
+            # therefore reported as "action timed out after 120s" with a
+            # traceback into the driver -- 120 seconds after the guest had
+            # already printed the reason. That is how a one-line stale grep
+            # read as an install hang.
+            #
+            # get_console_log() is guaranteed by wait_for_console_text's own
+            # docstring to contain the matching output once it returns, so the
+            # code is there to be read rather than raced for.
+            installer.wait_for_console_text(rf"{tag}-\d+-X", timeout=timeout)
+            codes = re.findall(rf"{tag}-(\d+)-X", installer.get_console_log())
+            if codes and codes[-1] != "0":
+                raise Exception(
+                    f"step {tag} exited {codes[-1]}; its output is above this line"
+                )
             if note:
                 print(note)
 

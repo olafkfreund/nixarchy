@@ -27,7 +27,18 @@
 {
   lib,
   stdenvNoCC,
-  omarchyVersion ? "4.0.2",
+  # No default, deliberately.
+  #
+  # It was `? "4.0.2"`, and by 4.0.3 that was a version literal two releases
+  # stale -- the nightly review flagged it as "one of the three copies is
+  # stale". It never actually applied, because flake.nix passes the real
+  # version, so it was inert AND wrong: the worst combination, since nothing
+  # could ever catch it drifting.
+  #
+  # Required instead. A caller that forgets now fails at evaluation rather than
+  # silently producing a package labelled with whatever release happened to be
+  # current when this line was written.
+  omarchyVersion,
 }:
 stdenvNoCC.mkDerivation {
   pname = "omarchy-nvim-config";

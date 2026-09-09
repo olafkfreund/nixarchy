@@ -60,17 +60,32 @@ jobs:
           sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/${{ steps.rel.outputs.latest }}|" flake.nix
           nix flake update omarchy
 
-          # The tag is written in three places, and this used to move one of
-          # them. omarchyVersion is what the package calls itself and what
-          # omarchy-nvim defaults to, so an auto-merged bump left both naming
-          # the version before it -- the store path said 4.0.1 while the tree
-          # was 4.0.2. Rewritten here rather than reported later, because the
-          # place to fix a stale copy is the thing that made it stale.
+          # The tag was written in three places and this used to move one of
+          # them, so an auto-merged bump left the others naming the version
+          # before it -- the store path said 4.0.1 while the tree was 4.0.2.
+          #
+          # It is TWO places now. pkgs/omarchy-nvim/default.nix had
+          # `omarchyVersion ? "4.0.2"`, a default this sed also had to chase;
+          # the default is gone and the argument is required, so a caller that
+          # forgets fails at evaluation instead of producing a package labelled
+          # with whatever release was current when the line was written. One
+          # fewer copy to keep in step beats one more sed keeping it there.
           ver="${{ steps.rel.outputs.latest }}"
           ver="${ver#v}"
           sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$ver\"|" flake.nix
-          sed -i "s|omarchyVersion ? \"[^\"]*\"|omarchyVersion ? \"$ver\"|" \
-            pkgs/omarchy-nvim/default.nix
+
+          # And prove the two that remain agree, rather than trusting two seds
+          # to have both matched. A sed that matches nothing exits 0.
+          url_ver=$(sed -nE 's|.*github:basecamp/omarchy/v([^"]*)".*|\1|p' flake.nix | head -1)
+          lit_ver=$(sed -nE 's|.*omarchyVersion = "([^"]*)".*|\1|p' flake.nix | head -1)
+          if [ "$url_ver" != "$lit_ver" ] || [ "$lit_ver" != "$ver" ]; then
+            echo "::error::version copies disagree after the bump:" >&2
+            echo "::error::  input url  $url_ver" >&2
+            echo "::error::  literal    $lit_ver" >&2
+            echo "::error::  wanted     $ver" >&2
+            exit 1
+          fi
+          echo "omarchy $ver, and both copies in flake.nix agree"
 
       # Everything below is the same set of assertions build.yml makes, run
       # against the new Omarchy rather than the pinned one. Each answers a

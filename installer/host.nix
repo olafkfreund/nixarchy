@@ -160,8 +160,25 @@
       "docker"
       "i2c"
     ];
-    # No password here. The installer writes hashedPassword into the generated
-    # configuration.nix; the VM sets a plaintext one as its own definition.
+    # The password is a FILE, not an evaluation input, and that is what makes
+    # the account usable on a machine installed offline.
+    #
+    # It used to say "no password here -- the installer writes hashedPassword
+    # into the generated configuration.nix". True, and it left the REFERENCE
+    # account with no password of any kind: hashedPassword, hashedPasswordFile
+    # and initialPassword all null. That is fine while every install evaluates
+    # the user's own configuration.nix, and a LOCKOUT the moment one installs
+    # the reference closure instead -- which is the whole point of #436.
+    #
+    # Same shape as the hostname below: the installer writes a file
+    # (install.sh:1907, mode 0600, root-owned) and the system reads it at
+    # runtime, so the value never enters a derivation and two machines with
+    # different passwords are still the same closure.
+    #
+    # The generated configuration.nix sets the identical line for the user's
+    # own account. Both may define it because they name the same file, and
+    # hashedPasswordFile merges by equality.
+    hashedPasswordFile = "/var/lib/nixarchy/password.hash";
   };
 
   # The machine's name, kept OUT of the derivation on purpose.

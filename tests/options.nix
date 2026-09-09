@@ -514,6 +514,20 @@ let
       (configWith { flatpaks.uninstallUnmanaged = true; }).services.flatpak.uninstallUnmanaged;
   };
 
+  # ---- the reference account can actually be logged into ----------------
+  #
+  # nixosConfigurations.reference is the machine the ISO seeds and the one an
+  # offline install copies (#436). Its account had NO password of any kind --
+  # hashedPassword, hashedPasswordFile and initialPassword all null -- which is
+  # harmless while every install evaluates the user's own configuration.nix,
+  # and a LOCKOUT the moment one installs the reference closure instead.
+  #
+  # A machine that boots to a login prompt nobody can answer is the worst
+  # outcome an installer has, so it is asserted rather than remembered.
+  referencePassword = (
+    inputs.self.nixosConfigurations.reference.config.users.users.omarchy.hashedPasswordFile or null
+  );
+
   # ---- the fleet option, both ways --------------------------------------
   #
   # Both ends again. What a person sets is programs.nixarchy.fleet; what
@@ -1113,6 +1127,7 @@ pkgs.runCommand "nixarchy-options"
     fleetUrl = fleet.url;
     fleetPersistent = pkgs.lib.boolToString fleet.persistent;
     fleetOnFailure = fleet.onFailure;
+    referencePassword = if referencePassword == null then "" else referencePassword;
     autoUpdateOff = pkgs.lib.boolToString autoUpdate.offByDefault;
     autoUpdateOn = pkgs.lib.boolToString autoUpdate.onWhenAsked;
     autoUpdateDates = autoUpdate.dates;
@@ -1905,6 +1920,25 @@ pkgs.runCommand "nixarchy-options"
             echo "nixos-upgrade has no OnFailure hook (got '$fleetOnFailure')" >&2
             echo "  an upgrade that starts failing stops delivering configuration and" >&2
             echo "  says nothing -- which is what this option exists to survive" >&2
+            exit 1
+            ;;
+        esac
+
+        # ---- and the reference account is not locked out -------------------
+        test -n "$referencePassword" || {
+          echo "the reference machine's account has no password at all" >&2
+          echo "  installer/host.nix must set hashedPasswordFile: the installer" >&2
+          echo "  writes /var/lib/nixarchy/password.hash and the system reads it" >&2
+          echo "  at runtime, so the value never enters a derivation. Without it" >&2
+          echo "  an offline install of the reference closure (#436) boots to a" >&2
+          echo "  login prompt nobody can answer." >&2
+          exit 1
+        }
+        case "$referencePassword" in
+          /var/lib/nixarchy/*) ;;
+          *)
+            echo "the reference password comes from '$referencePassword'," >&2
+            echo "  not the file the installer writes" >&2
             exit 1
             ;;
         esac

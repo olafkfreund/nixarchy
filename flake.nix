@@ -1405,6 +1405,14 @@
             pkgs = pkgsFor.${system};
           };
 
+          # data/bin-ledger.nix, held to its own claim. Also the home of the
+          # pacman allowlist that used to live inline in build.yml. See
+          # tests/bin-ledger.nix and #447.
+          bin-ledger = import ./tests/bin-ledger.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The other half of that: every option path the README and the manual
           # quote, checked against the option set they claim to describe. See
           # tests/doc-options.nix and #214.

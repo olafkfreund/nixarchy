@@ -31,7 +31,6 @@ nothing -- same discipline as check-menu-mapping.py's "no install rows found".
 """
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -301,13 +300,35 @@ def main():
     parser.add_argument("--upstream", required=True, help="omarchy source tree")
     parser.add_argument("--shipped", required=True, help="built share/omarchy")
     parser.add_argument("--nix-bin", required=True, help="pkgs/omarchy/nix-bin")
-    parser.add_argument("--ledger", required=True, help="ledger, as JSON")
+    parser.add_argument("--ledger", required=True, help="data/bin-ledger.nix")
     parser.add_argument("--report", action="store_true", help="one line each")
     parser.add_argument("--seed", action="store_true", help="skeleton rows")
     args = parser.parse_args()
 
-    with open(args.ledger, encoding="utf-8") as handle:
-        ledger = json.load(handle)
+    # Nix, read by regex, and not JSON.
+    #
+    # The ledger belongs in data/ beside apps.nix, services.nix and
+    # menu-exceptions.nix, because the load-bearing part of it is the prose --
+    # a per-row reason and the header stating the rule that keeps the file
+    # honest, neither of which survives JSON. This script stays stdlib-only for
+    # the same reason check-menu-mapping.py does, and reads the file the same
+    # way that one reads data/apps.nix: a regex over the text rather than an
+    # evaluation of Nix.
+    #
+    # --seed is exempt. It exists to produce a ledger for a repository that has
+    # none, and requiring the file it is about to write made it unusable for
+    # its only purpose -- it died on the empty file with a JSONDecodeError.
+    ledger = {}
+    if os.path.exists(args.ledger):
+        text = open(args.ledger, encoding="utf-8").read()
+        for name, body in re.findall(
+            r'"([^"]+)"\s*=\s*\{(.*?)\};', text, re.S
+        ):
+            row = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', body))
+            if row:
+                ledger[name] = row
+    elif not args.seed:
+        die(f"no ledger at {args.ledger}")
 
     for name, row in ledger.items():
         if row.get("class") not in CLASSES:

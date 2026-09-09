@@ -214,7 +214,19 @@
                           if p == null then null else (p.meta.mainProgram or null)
                         );
                       in
-                      if probe.success && probe.value != null then probe.value else name;
+                      # An explicit `binary` on the row wins, because the
+                      # fallback below is right by luck and wrong in a way that
+                      # is invisible: it answers with the ATTRIBUTE name when a
+                      # package states no mainProgram, which was `zen` for one
+                      # installing zen-beta and `hey-cli` for one installing
+                      # hey -- both reported absent on machines that had them.
+                      #
+                      # android-tools is the case that made a field necessary
+                      # rather than another special case: it ships adb,
+                      # fastboot and a dozen others, so no single mainProgram
+                      # is correct upstream, and the attribute is not a command
+                      # at all.
+                      app.binary or (if probe.success && probe.value != null then probe.value else name);
                   in
                   final.lib.concatStringsSep "\n" (
                     final.lib.mapAttrsToList (n: a: "${binaryOf n a}\t${a.label or n}") usable

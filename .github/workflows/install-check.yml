@@ -181,9 +181,27 @@ jobs:
       - uses: actions/checkout@v5
         if: needs.gate.outputs.relevant == 'true'
 
-      # No installer action, no cachix. The runner is a NixOS machine with a
-      # warm store, which is most of why this is ten minutes rather than an
-      # hour.
+      # No installer action, and cachix to PULL from only. The runner is a
+      # NixOS machine with a warm store, which is most of why this is ten
+      # minutes rather than an hour -- when the work happens to land on the
+      # machine that did it last time.
+      #
+      # It often does not. There are FOUR self-hosted runners (p510-nixarchy,
+      # p510-nixarchy-2, p620-nixarchy, p620-nixarchy-2), they carry identical
+      # labels so a job takes whichever is free, and they do not share a
+      # store. "Warm store" is therefore a one-in-four proposition, and this
+      # comment used to say "the one self-hosted box" from when it was true.
+      #
+      # What that cost, measured: #434 changes networking.hostName, which
+      # gives every system closure a new path. Its hosted `system` job had
+      # already built and PUSHED those closures to cachix -- and this job
+      # could not pull them, so it rebuilt three reference systems and two
+      # full installs from scratch, three times, timing out at the 90-minute
+      # cap on three different machines.
+      #
+      # Pull only, deliberately. This job pushes its three proofs by hand
+      # below; it has no business uploading the rest, and a push here would
+      # race the hosted jobs that own those paths.
       #
       # Both installs in ONE nix invocation, so nix runs them at the same time
       # rather than one after the other. Measured on run 33798891329, which is
@@ -220,7 +238,14 @@ jobs:
       - name: Install onto a blank disk, and into free space beside a neighbour
         if: needs.gate.outputs.relevant == 'true'
         run: |
+          # --extra-substituters rather than the cachix action: the action
+          # installs a post-job push step, and this job must not push what it
+          # did not build. The key is public; pulling needs no token, which is
+          # also why this works on a runner whose secrets we would rather not
+          # widen.
           nix build --print-build-logs --max-jobs 3 \
+            --extra-substituters https://nixarchy.cachix.org \
+            --extra-trusted-public-keys nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= \
             .#checks.x86_64-linux.install \
             .#checks.x86_64-linux.free-space \
             .#checks.x86_64-linux.installer-refusal

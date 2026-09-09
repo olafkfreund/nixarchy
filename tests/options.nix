@@ -524,9 +524,8 @@ let
   #
   # A machine that boots to a login prompt nobody can answer is the worst
   # outcome an installer has, so it is asserted rather than remembered.
-  referencePassword = (
-    inputs.self.nixosConfigurations.reference.config.users.users.omarchy.hashedPasswordFile or null
-  );
+  referencePassword =
+    inputs.self.nixosConfigurations.reference.config.users.users.omarchy.hashedPasswordFile or null;
 
   # ---- the fleet option, both ways --------------------------------------
   #

@@ -209,7 +209,35 @@ let
         # budget rather than a race. `! grep` also drops the `$?`-on-the-next-
         # line idiom, where anything inserted between the two statements
         # silently changes what is being tested.
-        step OFFLINE sh -c '! grep -q "unable to download" /var/log/nixarchy-install.log'
+        # "unable to download" was the old proxy and it is the wrong one --
+        # inverted, in fact. That string means a download was ATTEMPTED and
+        # FAILED, which on a machine with no interface is evidence the machine
+        # is offline, not evidence anything was fetched. It only ever passed
+        # because the install died before reaching this step; the first run
+        # that got here failed on eight lines that all read
+        #
+        #   warning: unable to download
+        #   'https://cache.nixos.org/nix-cache-info': Could not resolve
+        #   hostname (6)
+        #
+        # nix pinging each substituter once for its cache-info. The ISO's own
+        # nix.conf lists them -- install.sh already empties SUBSTITUTERS when
+        # /etc/nixarchy-iso exists -- so the probe is unavoidable, costs one
+        # failed DNS lookup, and fetches nothing.
+        #
+        # So assert the property directly instead: no store path arrived from
+        # a remote. A substituted path logs `copying path '...' from
+        # 'https://...'`; a local one says 'local'. That run copied 2221 paths
+        # from local and zero from https, which is exactly what stage 3 means.
+        #
+        # The second clause keeps the old check's intent without its blind
+        # spot: any download failure that is NOT a cache-info probe is still a
+        # failure, and still fails here.
+        step OFFLINE sh -c '
+          log=/var/log/nixarchy-install.log
+          ! grep -qE "copying path .* from .https://" "$log" &&
+          ! grep "unable to download" "$log" | grep -qv nix-cache-info
+        '
 
         # The removable fallback, asserted rather than taken on trust.
         #

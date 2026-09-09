@@ -1222,6 +1222,13 @@
             inherit (self.packages.${system}) doctor;
           };
 
+          # nixarchy-channel edits a file the user owns, so the check is mostly
+          # about what it refuses. See tests/channel.nix.
+          channel = import ./tests/channel.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # The `try` front door's refusals, each driven with a stubbed
           # environment that lies about KVM, RAM, disk and the build plan.
           # Building tryApp is itself half the assertion: the app evaluates

@@ -356,6 +356,123 @@ omarchy system reboot           # Reboot
 **IMPORTANT:** Always run `omarchy debug` with `--no-sudo --print` flags to avoid
 interactive sudo prompts that will hang the terminal.
 
+## What Version Am I On, and What Changed?
+
+This is the most common question reaching the **Ask** menu entry, and it has a
+precise answer that guessing gets wrong.
+
+### Step 1 — what this machine actually is
+
+```bash
+nixarchy-version
+```
+
+```
+Omarchy   4.0.3
+nixarchy  8053b82a1f...  2026-09-09
+```
+
+Two separate facts, and conflating them is the usual mistake:
+
+- **Omarchy** is the upstream desktop version this build vendors.
+- **nixarchy** is the revision of *this port*, plus the date it was built.
+
+Two machines can both report Omarchy `4.0.3` and differ by every commit in this
+port. `omarchy --version` answers only the first, which is why
+`nixarchy-version` exists.
+
+**It prints a revision, not a tag, and that is deliberate** — a flake cannot
+know its own tag, and most machines are not on one. Do not invent a version
+number from the rev.
+
+### Step 2 — what shipped since then
+
+Releases carry the notes. Match on the **date**, since the machine reports a
+rev rather than a tag:
+
+```bash
+# Every release, newest first: tag, date, and notes
+curl -fsSL https://api.github.com/repos/olafkfreund/nixarchy/releases \
+  | jq -r '.[] | "\(.tag_name)  \(.published_at[0:10])\n\(.body)\n---"'
+
+# Just the newest tag
+curl -fsSL 'https://api.github.com/repos/olafkfreund/nixarchy/releases?per_page=1' \
+  | jq -r '.[0].tag_name'
+```
+
+**Use the list endpoint, never `/releases/latest`.** Every nixarchy release is
+published with `--prerelease` and a human promotes it once it has been proven
+on real hardware — and GitHub's `/latest` *skips prereleases*. So `/latest`
+answers with an older tag than the newest release, and a user on the current
+release would be told they are behind something they already have. Verified on
+2026-09-09: `/latest` returned `v4.0.2-12` while `v4.0.3-1` was published.
+`installer/try.sh` uses the list endpoint for this same reason.
+
+A release still carrying the prerelease flag has not yet been confirmed on
+physical hardware. That is worth saying when recommending an upgrade — it is
+not a reason to avoid it, it is what "(experimental)" in the title means.
+
+Anything published **after** the date `nixarchy-version` printed is a change
+this machine does not have yet. Summarise those release bodies — they are
+written to be read by users and already say what was added, changed and fixed.
+
+Tags read `v4.0.3-1`: the first component is the **Omarchy** version vendored,
+and the `-1` counts this port's packaging revisions against an unchanged
+upstream. So `v4.0.2-12` → `v4.0.3-1` is an upstream desktop bump, while
+`v4.0.2-11` → `v4.0.2-12` is this port changing alone.
+
+If the network is unavailable, say so rather than guessing — the machine's own
+rev is still answerable offline, the release notes are not.
+
+### Step 3 — what an update would actually move
+
+Installed machines follow the `release` branch, which moves only when a release
+is cut. So a user is never "behind main" in a way that matters; they are behind
+the newest **release**.
+
+```bash
+omarchy update              # both: package set and desktop
+omarchy update --system     # nixpkgs only -- your packages, not the desktop
+omarchy update --nixarchy   # nixarchy only -- the desktop, on the packages you have
+```
+
+Those two axes are independent by design. `--system` is the one that moves the
+**kernel**, which matters for anything hardware-related (see below).
+
+### Answering "is my problem already fixed?"
+
+The useful shape of the answer, in order:
+
+1. `nixarchy-version` — what they have
+2. Release notes newer than that date — what they would get
+3. Whether any of those notes names their symptom
+4. If yes: `omarchy update` (or `--nixarchy` to move only the desktop)
+5. If no: it is unreported — `omarchy debug --no-sudo --print` produces the
+   report to attach to an issue
+
+Never claim a fix landed without finding it in a release body. "It may have
+been fixed" sends someone through a rebuild for nothing.
+
+## Hardware and Drivers
+
+Driver and hardware questions are **not** this skill — they are system
+configuration. Use `nixos-doctor`, which has the wireless and out-of-tree
+driver material, including the Broadcom `broadcom_sta` case and how to keep it
+working across kernel updates.
+
+Start every hardware question the same way regardless:
+
+```bash
+nixarchy doctor
+```
+
+It reports graphics, wireless, Bluetooth and audio from sysfs and names which
+of several similar-looking situations the machine is actually in. One thing
+worth knowing here: **kernel updates arrive through `omarchy update --system`**,
+not through the desktop half, so "my Wi-Fi broke after an update" is almost
+always a nixpkgs move rather than a nixarchy one — and
+`nixos-rebuild --rollback` puts the previous kernel back immediately.
+
 ## Troubleshooting
 
 ```bash

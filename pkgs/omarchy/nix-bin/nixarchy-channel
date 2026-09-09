@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Follow stable or unstable nixpkgs
+# omarchy:args=[stable [RELEASE] | unstable]
+# omarchy:examples=nixarchy channel
+# omarchy:examples=nixarchy channel stable
+# omarchy:examples=nixarchy channel stable 25.05
+
+# The generated flake already documents how to follow stable nixpkgs -- as
+# PROSE telling you to hand-edit two inputs. The second one is the half people
+# get wrong: nixpkgs and home-manager are developed as a PAIR, and a machine on
+# stable nixpkgs with a master home-manager is a combination neither project
+# supports. So this does both edits or neither.
+#
+# Precedent for touching a file the user owns is nixarchy-unfreeze, and its
+# rule applies here: only lines this project wrote get rewritten. A flake.nix
+# somebody has reshaped is theirs, and this prints the edit rather than
+# guessing at it.
+#
+# ## The uncomfortable part, said out loud
+#
+# "Stable" sounds safer and here it is LESS TESTED. Nixarchy is developed
+# against unstable -- flake.nix pins nixos-unstable and every check runs
+# against whatever that locks to. Stable is a real answer, not a supported one.
+
+set -euo pipefail
+
+flake="${NIXARCHY_FLAKE:-/etc/nixos}"
+nixfile="$flake/flake.nix"
+
+red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
+dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
+bold() { printf "\033[1m%s\033[0m\n" "$1"; }
+
+usage() {
+  echo "Usage: nixarchy channel [stable [RELEASE] | unstable]"
+  echo "  (no argument)  report which one this machine follows"
+  echo "  stable         nixos-<latest release>, home-manager release-<same>"
+  echo "  unstable       nixos-unstable, home-manager as nixarchy pins it"
+}
+
+target="${1:-}"
+# An explicit release is allowed and is not only a test seam: following a
+# release OTHER than the newest is a real thing to want -- staying on 25.11
+# while 26.05 settles, or matching a machine you already run. Given one, the
+# lookup below is skipped entirely, which also means `stable` works with no
+# network when you already know the answer.
+want_release="${2:-}"
+case "$target" in
+  "" | stable | unstable) ;;
+  -h | --help) usage; exit 0 ;;
+  *) usage >&2; exit 1 ;;
+esac
+case "$want_release" in
+  "" | [0-9][0-9].[0-9][0-9]) ;;
+  *) red "A release looks like 25.05, not '$want_release'."; exit 1 ;;
+esac
+if [ -n "$want_release" ] && [ "$target" != stable ]; then
+  red "A release only means something with 'stable'."; exit 1
+fi
+
+[ -f "$nixfile" ] || { red "No $nixfile."; exit 1; }
+
+# Read the INTENT, not the lock: the URL is what an update will resolve, and
+# the lock is only where it last landed. A machine mid-edit should report what
+# it is about to become.
+current_url=$(sed -nE "s/^[[:space:]]*nixpkgs\.url[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p" "$nixfile" | head -1)
+if [ -z "$current_url" ]; then
+  red "Cannot find the nixpkgs.url line in $nixfile."
+  echo
+  echo "This flake has been reshaped, so it is not mine to rewrite."
+  usage
+  exit 1
+fi
+
+case "$current_url" in
+  *nixos-unstable*) current=unstable ;;
+  *nixos-[0-9][0-9].[0-9][0-9]*) current=stable ;;
+  *) current=custom ;;
+esac
+
+# Anchored, because the template carries a COMMENTED example of this very
+# line as the prose telling you to add it by hand. An unanchored match finds
+# that comment, and the consequence is not cosmetic: it makes the rewrite
+# below edit the comment instead of adding a real override, leaving a machine
+# on stable nixpkgs with a master home-manager -- the exact pairing this
+# command exists to prevent, arrived at silently.
+hm_line=$(grep -nE "^[[:space:]]*inputs\.home-manager\.url[[:space:]]*=" "$nixfile" | head -1 || true)
+
+if [ -z "$target" ]; then
+  bold "This machine follows: $current"
+  echo "  nixpkgs        $current_url"
+  if [ -n "$hm_line" ]; then
+    echo "  home-manager   $(printf "%s" "$hm_line" | sed -E "s/.*\"([^\"]+)\".*/\1/")"
+  else
+    echo "  home-manager   whatever nixarchy pins (no override here)"
+  fi
+  echo
+  case "$current" in
+    unstable) dim "This is what nixarchy is developed and tested against." ;;
+    stable) dim "Nixarchy is tested against UNSTABLE. This is a real answer, not a supported one." ;;
+    custom) dim "Neither channel -- nixpkgs points somewhere of your own." ;;
+  esac
+  exit 0
+fi
+
+[ "$target" != "$current" ] || { echo "Already following $target. Nothing to do."; exit 0; }
+
+if [ "$current" = custom ]; then
+  red "nixpkgs.url is neither channel:"
+  echo "  $current_url"
+  echo
+  echo "Switching would discard a choice made deliberately, so it is not done"
+  echo "for you. Edit that line yourself if you want a channel back."
+  exit 1
+fi
+
+[ -w "$nixfile" ] || { red "$nixfile is not writable by $USER."; echo; echo "  chown it to yourself, or run omarchy update which offers to."; exit 1; }
+
+# Ask which release is current rather than guessing.
+#
+# Hardcoding one goes stale within six months, and deriving it from the running
+# version is wrong exactly when it matters -- a machine already on stable would
+# compute its own release and call that the newest. So ask nixpkgs, and REFUSE
+# if that cannot be answered: a wrong release points the whole machine at a
+# branch that does not exist, and offline convenience is not worth that.
+if [ "$target" = stable ]; then
+  # matching-refs, not the branches API and not git ls-remote.
+  #
+  # `?per_page=100` on /branches is wrong: nixpkgs has more than 100 branches,
+  # so page one comes back full and contains no nixos-XX.YY at all -- measured,
+  # exactly 100 names and not one release among them. Paging to find them is
+  # several requests to answer what one filtered request answers.
+  #
+  # git ls-remote does answer it in one, and was the first fix here, but git is
+  # not in the omarchy runtimeDeps -- so on a real machine it would fail as
+  # "command not found", be swallowed, and this would report a NETWORK problem
+  # that is really a missing binary. curl is a runtimeDep; this uses curl.
+  #
+  # `|| true` because set -e with pipefail turns "no matches" into a silent
+  # exit before the refusal below can explain anything. The first version died
+  # with no output at all, which is the worst way to fail.
+  release="$want_release"
+  [ -n "$release" ] || release=$(curl -fsSL "https://api.github.com/repos/NixOS/nixpkgs/git/matching-refs/heads/nixos-2" 2>/dev/null |
+    grep -oE "refs/heads/nixos-[0-9]{2}\.[0-9]{2}\"" |
+    grep -oE "[0-9]{2}\.[0-9]{2}" | sort -V | tail -1 || true)
+  if [ -z "$release" ]; then
+    red "Cannot reach github.com to learn which nixpkgs release is current."
+    echo
+    echo "Not guessing. Try again with a network, or set both by hand:"
+    echo
+    dim "  nixpkgs.url = \"github:NixOS/nixpkgs/nixos-<RELEASE>\";"
+    dim "  inputs.home-manager.url = \"github:nix-community/home-manager/release-<RELEASE>\";"
+    exit 1
+  fi
+  new_nixpkgs="github:NixOS/nixpkgs/nixos-$release"
+  new_hm="github:nix-community/home-manager/release-$release"
+else
+  new_nixpkgs="github:NixOS/nixpkgs/nixos-unstable"
+  new_hm=""
+fi
+
+bold "Switching this machine from $current to $target."
+echo "  nixpkgs        $current_url"
+echo "              -> $new_nixpkgs"
+if [ -n "$new_hm" ]; then
+  echo "  home-manager -> $new_hm"
+  echo
+  dim "Both, because nixpkgs and home-manager move as a pair. Moving one"
+  dim "without the other is the mistake this command exists to prevent."
+else
+  echo "  home-manager -> back to whatever nixarchy pins"
+fi
+echo
+if [ "$target" = stable ]; then
+  red "Nixarchy is developed and tested against UNSTABLE."
+  echo "This combination is not what CI builds. A failed rebuild changes"
+  echo "nothing and a bad activation is one rollback away -- but know it first."
+  echo
+fi
+
+printf "Rewrite %s? [y/N] " "$nixfile"
+read -r reply
+case "$reply" in [yY]*) ;; *) echo "Nothing changed."; exit 0 ;; esac
+
+cp "$nixfile" "$nixfile.pre-channel"
+
+# Checksummed, not trusted: sed exits 0 for a pattern that matched nothing, so
+# an unverified rewrite reports success having changed nothing -- and the
+# re-lock below would then run against a file nobody edited.
+before=$(cksum < "$nixfile")
+
+sed -i -E "s|^([[:space:]]*nixpkgs\.url[[:space:]]*=[[:space:]]*\")[^\"]+(\".*)|\1$new_nixpkgs\2|" "$nixfile"
+
+if [ -n "$new_hm" ]; then
+  if [ -n "$hm_line" ]; then
+    sed -i -E "s|^([[:space:]]*inputs\.home-manager\.url[[:space:]]*=[[:space:]]*\")[^\"]+(\".*)|\1$new_hm\2|" "$nixfile"
+  else
+    # Beside the follows, which is where the template prose says to put it --
+    # so a file edited by this and one edited by hand come out the same shape.
+    sed -i -E "s|^([[:space:]]*)(inputs\.nixpkgs\.follows[[:space:]]*=[[:space:]]*\"nixpkgs\";)|\1\2\n\1inputs.home-manager.url = \"$new_hm\";|" "$nixfile"
+  fi
+elif [ -n "$hm_line" ]; then
+  sed -i -E "/^[[:space:]]*inputs\.home-manager\.url[[:space:]]*=/d" "$nixfile"
+fi
+
+if [ "$before" = "$(cksum < "$nixfile")" ]; then
+  red "Nothing in $nixfile changed."
+  echo "The lines are not the shape this expected, so it has not guessed."
+  mv "$nixfile.pre-channel" "$nixfile"
+  exit 1
+fi
+
+echo
+echo "Rewrote $nixfile (previous copy: $nixfile.pre-channel)"
+echo
+
+# Re-lock only what moved. A bare flake update would move nixarchy too, which
+# is a second decision nobody asked this command to make.
+inputs=(nixpkgs)
+[ -n "$new_hm" ] && inputs+=(home-manager)
+
+echo "Re-locking: ${inputs[*]}"
+if ! nix flake update "${inputs[@]}" --flake "$flake"; then
+  red "Re-locking failed. $nixfile is rewritten; the lock is not."
+  echo "Restore with:  mv $nixfile.pre-channel $nixfile"
+  exit 1
+fi
+
+echo
+bold "Locked. Now rebuild:"
+dim "  nh os switch"

@@ -222,7 +222,23 @@ buildGoModule {
   passthru.updateScript = writeShellApplication {
     name = "update-aether";
     runtimeInputs = [ nix-update ];
-    text = "nix-update aether";
+    # --flake, and the guard, both of which its siblings have and this one was
+    # written without.
+    #
+    # Without --flake, nix-update assumes a classic nixpkgs tree and imports
+    # default.nix from the repository root. There is none here, so the nightly
+    # update run died with "path '.../nixarchy/default.nix' does not exist" --
+    # and the failure named default.nix, not aether, which is why it took
+    # reading the invocation to see that this attribute alone was evaluated
+    # with `isFlake false` while every sibling had `isFlake true`.
+    #
+    # The `-f flake.nix` line is the same guard omacalc, omacut, omawrite and
+    # ttfx carry: run from anywhere else, nix-update's own error is about a
+    # missing file rather than about where it was started.
+    text = ''
+      [ -f flake.nix ] || { echo "aether: run from the repo root" >&2; exit 1; }
+      nix-update --flake aether
+    '';
   };
 
   meta = {

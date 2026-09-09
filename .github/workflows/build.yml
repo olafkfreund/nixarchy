@@ -237,6 +237,19 @@ jobs:
       - name: Build the vendored Omarchy tree
         run: nix build .#omarchy --print-build-logs
 
+      # cachix-action pushes the store DIFF, and these runners have warm
+      # stores -- so a path built by any earlier run is skipped, forever, and
+      # the cache users pull from never receives it. Measured on 8053b82a:
+      # 23684 skipped, 32 pushed, omarchy itself not even a candidate, and its
+      # narinfo answering 404 while every step reported success (#439).
+      #
+      # So name what to push rather than inferring it.
+      - name: Push the Omarchy closure to cachix
+        continue-on-error: true
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: .github/scripts/cachix-push.sh .#omarchy
+
       - name: Verify the CLI sees its subcommands
         run: |
           # bin/omarchy discovers subcommands by grepping sibling scripts for
@@ -1178,6 +1191,19 @@ jobs:
         # bootloader and disko filesystems. Built here so the install path
         # cannot rot unnoticed between releases.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.reference-toplevel
+
+      # The two closures that decide whether somebody's rebuild downloads or
+      # compiles. Same reason as the omarchy push above (#439); this is the
+      # half users feel.
+      - name: Push the system closures to cachix
+        if: needs.gate.outputs.relevant == 'true'
+        continue-on-error: true
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          .github/scripts/cachix-push.sh \
+            .#checks.x86_64-linux.vm-toplevel \
+            .#checks.x86_64-linux.reference-toplevel
 
       - name: Read a MicroVM runner without booting it
         if: needs.gate.outputs.relevant == 'true'

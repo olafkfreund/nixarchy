@@ -165,8 +165,22 @@ let
         # input is resolved over the network instead of from the store.
         step EVALUATED nix eval --offline --raw "$work#nixosConfigurations.isotest.config.system.build.toplevel.drvPath"
 
-        grep -q -- -nixos-system-isotest /tmp/out
-        step RESOLVED test $? -eq 0
+        # Copied, because step truncates /tmp/out before it runs anything --
+        # a grep placed inside step would read the file step is about to write.
+        cp /tmp/out /tmp/eval
+
+        # The toplevel is "nixos-system-nixarchy-<label>" on EVERY machine, and
+        # the absence of the hostname is the property rather than a detail of
+        # naming: installer/host.nix pins system.name and empties
+        # networking.hostName so that two machines differing only in name do
+        # not have two different initrds. A different initrd is a build, and
+        # offline a build is the stage0 source bootstrap -- #404.
+        #
+        # This asserted `-nixos-system-isotest` until stage 1 landed, so it
+        # failed for exactly the reason the work succeeded. Both directions are
+        # checked now: the pinned name present, and the hostname absent. Only
+        # the first would still pass if the hostname crept back in as a suffix.
+        step RESOLVED sh -c '! grep -q -- -nixos-system-isotest /tmp/eval && grep -q -- -nixos-system-nixarchy /tmp/eval'
 
         step INSTALLED nixarchy-install --answers /a/answers
 
@@ -195,7 +209,35 @@ let
         # budget rather than a race. `! grep` also drops the `$?`-on-the-next-
         # line idiom, where anything inserted between the two statements
         # silently changes what is being tested.
-        step OFFLINE sh -c '! grep -q "unable to download" /var/log/nixarchy-install.log'
+        # "unable to download" was the old proxy and it is the wrong one --
+        # inverted, in fact. That string means a download was ATTEMPTED and
+        # FAILED, which on a machine with no interface is evidence the machine
+        # is offline, not evidence anything was fetched. It only ever passed
+        # because the install died before reaching this step; the first run
+        # that got here failed on eight lines that all read
+        #
+        #   warning: unable to download
+        #   'https://cache.nixos.org/nix-cache-info': Could not resolve
+        #   hostname (6)
+        #
+        # nix pinging each substituter once for its cache-info. The ISO's own
+        # nix.conf lists them -- install.sh already empties SUBSTITUTERS when
+        # /etc/nixarchy-iso exists -- so the probe is unavoidable, costs one
+        # failed DNS lookup, and fetches nothing.
+        #
+        # So assert the property directly instead: no store path arrived from
+        # a remote. A substituted path logs `copying path '...' from
+        # 'https://...'`; a local one says 'local'. That run copied 2221 paths
+        # from local and zero from https, which is exactly what stage 3 means.
+        #
+        # The second clause keeps the old check's intent without its blind
+        # spot: any download failure that is NOT a cache-info probe is still a
+        # failure, and still fails here.
+        step OFFLINE sh -c '
+          log=/var/log/nixarchy-install.log
+          ! grep -qE "copying path .* from .https://" "$log" &&
+          ! grep "unable to download" "$log" | grep -qv nix-cache-info
+        '
 
         # The removable fallback, asserted rather than taken on trust.
         #
@@ -209,63 +251,35 @@ let
         step FALLBACK test -f /mnt/boot/EFI/BOOT/BOOTX64.EFI
 
         # ---- make the result observable ---------------------------------
-        # Everything above is the product, installed and untouched. What
-        # follows adds a serial console to it and nothing else.
+        # Everything above is the product, installed and untouched -- and it
+        # now STAYS untouched, which is the point of this change.
         #
-        # It has to be added, because the installed machine has none:
-        # installer/cd.nix puts console=ttyS0 on the ISO's command line, which
-        # is why every step above could be read off the serial line, and
-        # installer/host.nix deliberately does not -- an installed desktop
-        # logs to its screen. So `isotest login:` was being waited for on a
-        # line nothing would ever write it to, and this check timed out at
-        # 900s for three nightly runs while the machine under it booted
-        # perfectly.
+        # The installed machine has no serial console: installer/cd.nix puts
+        # console=ttyS0 on the ISO's command line, which is why every step
+        # above could be read off the serial line, and installer/host.nix
+        # deliberately does not -- an installed desktop logs to its screen.
+        #
+        # This used to be done by editing configuration.nix and REBUILDING the
+        # system, then installing that. Stage 3 (#436) makes it both
+        # impossible and pointless. Impossible: a modified config is a
+        # DIFFERENT closure, a different closure has to be built, and offline
+        # there is no stdenv -- the rebuild ended in coreutils-full, libxml2
+        # and the source bootstrap, which is the exact failure this check
+        # exists to prevent. Pointless: it meant the machine that booted was
+        # not the machine the image installed, so the one thing this check is
+        # for was the one thing it did not test.
+        #
+        # The kernel command line is where boot.kernelParams ends up anyway,
+        # so write it there. systemd's getty generator reads /proc/consoles
+        # and starts serial-getty@ttyS0 by itself, which is what produces the
+        # banner the driver waits for -- no rebuild, and nothing built at all.
         #
         # NOT OCR (enableOCR + wait_for_text), which was the other candidate:
         # it answers the same question less reliably, and #197 is putting an
         # animated plymouth splash on that screen -- frames drawn by ttfx --
         # which is precisely what an OCR pass would have to see past.
-        #
-        # The last line of the generated configuration.nix is its closing
-        # brace; this puts one option in front of it.
-        sed -i '$s|^}|  boot.kernelParams = [ "console=ttyS0,115200" ];\n}|' \
-          /mnt/etc/nixos/hosts/isotest/configuration.nix
-        grep -q 'console=ttyS0' /mnt/etc/nixos/hosts/isotest/configuration.nix
-        step SERIAL test $? -eq 0
-
-        # A flake in a git worktree sees only tracked or staged files.
-        git -C /mnt/etc/nixos add -A
-
-        # Built HERE and installed by path, which is what run_install() in
-        # installer/install.sh does and for the reason its comment gives:
-        # `nixos-install --flake` sets the EVALUATION store to /mnt, resolves
-        # the flake's locked inputs against a store that has just been created,
-        # and goes to the network for sources sitting in the store one
-        # directory up. checks.install can use --flake because its store was
-        # seeded by the test driver; an ISO is in the other position.
-        #
-        # --offline so that if this ever does reach for the network it says so
-        # instead of hanging: no network is the whole point of this check.
-        #
-        # This is the case installer/cd.nix bakes the reference
-        # inputDerivations for -- a toplevel that differs from the one on the
-        # image has to be BUILT here, from parts, with no stdenv to fetch. If
-        # this step ever ends in the source bootstrap, that list is where the
-        # answer is.
-        step REBUILT nix --extra-experimental-features "nix-command flakes" \
-          build --offline --no-link --print-out-paths \
-          --option always-allow-substitutes true \
-          /mnt/etc/nixos#nixosConfigurations.isotest.config.system.build.toplevel
-        system=$(tail -1 /tmp/out)
-
-        # Because `tail -1` is a guess about what nix printed last, and a bad
-        # guess would otherwise surface as nixos-install reporting something
-        # unrelated about a flake it cannot find.
-        step SYSTEM test -x "$system/init"
-
-        step REINSTALLED nixos-install --root /mnt --system "$system" \
-          --no-root-password \
-          --option extra-experimental-features "nix-command flakes"
+        sed -i '/^options /s|$| console=ttyS0,115200|' /mnt/boot/loader/entries/*.conf
+        step SERIAL sh -c 'grep -q "console=ttyS0" /mnt/boot/loader/entries/*.conf'
         EOF
 
         truncate -s 1M $out
@@ -319,6 +333,7 @@ pkgs.testers.runNixOSTest {
     import os
     import shutil
     import subprocess
+    import re
     import time
 
     # The EFI variable store: writable, and the SAME FILE for both machines.
@@ -429,7 +444,26 @@ pkgs.testers.runNixOSTest {
         installer.send_chars("sudo sh /a/drive\n")
 
         def step(tag, timeout, note=None):
-            installer.wait_for_console_text(rf"{tag}-0-X", timeout=timeout)
+            # Wait for the marker whatever its exit code, then read the code
+            # out of the log.
+            #
+            # Waiting for `-0-X` alone meant a FAILING step printed `-1-X`,
+            # which scrolled past unmatched, and the driver then blocked until
+            # timeout on a marker that could never appear. Every failure was
+            # therefore reported as "action timed out after 120s" with a
+            # traceback into the driver -- 120 seconds after the guest had
+            # already printed the reason. That is how a one-line stale grep
+            # read as an install hang.
+            #
+            # get_console_log() is guaranteed by wait_for_console_text's own
+            # docstring to contain the matching output once it returns, so the
+            # code is there to be read rather than raced for.
+            installer.wait_for_console_text(rf"{tag}-\d+-X", timeout=timeout)
+            codes = re.findall(rf"{tag}-(\d+)-X", installer.get_console_log())
+            if codes and codes[-1] != "0":
+                raise Exception(
+                    f"step {tag} exited {codes[-1]}; its output is above this line"
+                )
             if note:
                 print(note)
 
@@ -449,11 +483,8 @@ pkgs.testers.runNixOSTest {
         step("OFFLINE", 600, "and downloaded nothing")
         step("FALLBACK", 120,
              "the ESP carries the removable fallback loader bootctl promises")
-        step("SERIAL", 120)
-        step("REBUILT", 1800)
-        step("SYSTEM", 120)
-        step("REINSTALLED", 1800,
-             "the installed flake now carries a serial console, built offline")
+        step("SERIAL", 120,
+             "the installed machine's own boot entry now names a serial console")
 
         # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
         # backdoor shell, which this image does not have, so it waits for a reply

@@ -627,8 +627,16 @@ jobs:
       # The ledger checks more than the old scan did: it also derives every
       # command's class by comparing the shipped file with upstream below the
       # shebang, so a bin that quietly stopped being vendored is caught too.
+      # --no-link, and it is load-bearing rather than tidiness: `nix build`
+      # writes its out-link to `result` by DEFAULT, and `result` in this job is
+      # the vendored Omarchy tree that every step below reads as
+      # result/share/omarchy. Without this the check passes and then silently
+      # replaces that symlink with its own empty output, and the NEXT step
+      # fails on a path that has nothing to do with it -- which is exactly how
+      # this was found: "Verify the browser lookup ignores $BROWSER" went red
+      # for a change that never touched it.
       - name: Every command this port changes, classified
-        run: nix build .#checks.x86_64-linux.bin-ledger --print-build-logs
+        run: nix build .#checks.x86_64-linux.bin-ledger --no-link --print-build-logs
 
       - name: Verify the browser lookup ignores $BROWSER
         run: |

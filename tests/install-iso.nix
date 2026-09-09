@@ -251,63 +251,35 @@ let
         step FALLBACK test -f /mnt/boot/EFI/BOOT/BOOTX64.EFI
 
         # ---- make the result observable ---------------------------------
-        # Everything above is the product, installed and untouched. What
-        # follows adds a serial console to it and nothing else.
+        # Everything above is the product, installed and untouched -- and it
+        # now STAYS untouched, which is the point of this change.
         #
-        # It has to be added, because the installed machine has none:
-        # installer/cd.nix puts console=ttyS0 on the ISO's command line, which
-        # is why every step above could be read off the serial line, and
-        # installer/host.nix deliberately does not -- an installed desktop
-        # logs to its screen. So `isotest login:` was being waited for on a
-        # line nothing would ever write it to, and this check timed out at
-        # 900s for three nightly runs while the machine under it booted
-        # perfectly.
+        # The installed machine has no serial console: installer/cd.nix puts
+        # console=ttyS0 on the ISO's command line, which is why every step
+        # above could be read off the serial line, and installer/host.nix
+        # deliberately does not -- an installed desktop logs to its screen.
+        #
+        # This used to be done by editing configuration.nix and REBUILDING the
+        # system, then installing that. Stage 3 (#436) makes it both
+        # impossible and pointless. Impossible: a modified config is a
+        # DIFFERENT closure, a different closure has to be built, and offline
+        # there is no stdenv -- the rebuild ended in coreutils-full, libxml2
+        # and the source bootstrap, which is the exact failure this check
+        # exists to prevent. Pointless: it meant the machine that booted was
+        # not the machine the image installed, so the one thing this check is
+        # for was the one thing it did not test.
+        #
+        # The kernel command line is where boot.kernelParams ends up anyway,
+        # so write it there. systemd's getty generator reads /proc/consoles
+        # and starts serial-getty@ttyS0 by itself, which is what produces the
+        # banner the driver waits for -- no rebuild, and nothing built at all.
         #
         # NOT OCR (enableOCR + wait_for_text), which was the other candidate:
         # it answers the same question less reliably, and #197 is putting an
         # animated plymouth splash on that screen -- frames drawn by ttfx --
         # which is precisely what an OCR pass would have to see past.
-        #
-        # The last line of the generated configuration.nix is its closing
-        # brace; this puts one option in front of it.
-        sed -i '$s|^}|  boot.kernelParams = [ "console=ttyS0,115200" ];\n}|' \
-          /mnt/etc/nixos/hosts/isotest/configuration.nix
-        grep -q 'console=ttyS0' /mnt/etc/nixos/hosts/isotest/configuration.nix
-        step SERIAL test $? -eq 0
-
-        # A flake in a git worktree sees only tracked or staged files.
-        git -C /mnt/etc/nixos add -A
-
-        # Built HERE and installed by path, which is what run_install() in
-        # installer/install.sh does and for the reason its comment gives:
-        # `nixos-install --flake` sets the EVALUATION store to /mnt, resolves
-        # the flake's locked inputs against a store that has just been created,
-        # and goes to the network for sources sitting in the store one
-        # directory up. checks.install can use --flake because its store was
-        # seeded by the test driver; an ISO is in the other position.
-        #
-        # --offline so that if this ever does reach for the network it says so
-        # instead of hanging: no network is the whole point of this check.
-        #
-        # This is the case installer/cd.nix bakes the reference
-        # inputDerivations for -- a toplevel that differs from the one on the
-        # image has to be BUILT here, from parts, with no stdenv to fetch. If
-        # this step ever ends in the source bootstrap, that list is where the
-        # answer is.
-        step REBUILT nix --extra-experimental-features "nix-command flakes" \
-          build --offline --no-link --print-out-paths \
-          --option always-allow-substitutes true \
-          /mnt/etc/nixos#nixosConfigurations.isotest.config.system.build.toplevel
-        system=$(tail -1 /tmp/out)
-
-        # Because `tail -1` is a guess about what nix printed last, and a bad
-        # guess would otherwise surface as nixos-install reporting something
-        # unrelated about a flake it cannot find.
-        step SYSTEM test -x "$system/init"
-
-        step REINSTALLED nixos-install --root /mnt --system "$system" \
-          --no-root-password \
-          --option extra-experimental-features "nix-command flakes"
+        sed -i '/^options /s|$| console=ttyS0,115200|' /mnt/boot/loader/entries/*.conf
+        step SERIAL sh -c 'grep -q "console=ttyS0" /mnt/boot/loader/entries/*.conf'
         EOF
 
         truncate -s 1M $out
@@ -511,11 +483,8 @@ pkgs.testers.runNixOSTest {
         step("OFFLINE", 600, "and downloaded nothing")
         step("FALLBACK", 120,
              "the ESP carries the removable fallback loader bootctl promises")
-        step("SERIAL", 120)
-        step("REBUILT", 1800)
-        step("SYSTEM", 120)
-        step("REINSTALLED", 1800,
-             "the installed flake now carries a serial console, built offline")
+        step("SERIAL", 120,
+             "the installed machine's own boot entry now names a serial console")
 
         # Typed, not shutdown(). Machine.shutdown() sends poweroff through the
         # backdoor shell, which this image does not have, so it waits for a reply

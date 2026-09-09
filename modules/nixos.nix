@@ -1121,6 +1121,37 @@ in
       #
       # mkDefault, so an adopter who has a reason to ship no blobs still wins.
       enableRedistributableFirmware = lib.mkDefault true;
+
+      # Every storage driver in the initrd, not the handful this machine needs.
+      #
+      # The same "agree by construction" argument as the microcode above, and
+      # for a sharper reason: offline install stage 3 (#436) installs the
+      # REFERENCE closure rather than one built from the machine's own detected
+      # hardware-configuration.nix. So the machine boots the reference's
+      # initrd, and whatever is not in it cannot be mounted.
+      #
+      # Measured before adding this. The ISO carries 103 initrd modules --
+      # installation-cd-minimal.nix pulls them in -- and the reference carried
+      # 63. The 61 missing were not obscure:
+      #
+      #   md_mod raid0 raid1 raid10 raid456     software RAID
+      #   hpsa 3w-9xxx arcmsr aic79xx aic7xxx   HP Smart Array, SCSI RAID
+      #   hv_storvsc                            Hyper-V
+      #   vmw_* vmxnet3                         VMware
+      #   pata_* sata_* (30-odd)                legacy controllers
+      #
+      # A machine on any of those, installed from an image that copies the
+      # reference, would come up in an initrd that cannot find its root. That
+      # the ISO has them is no help: an installed machine boots its own initrd,
+      # not the installer's.
+      #
+      # It costs modules in the initrd and nothing else -- it pulls no unfree
+      # firmware, so allowUnfree is not needed and enableAllFirmware stays off
+      # (see the paragraph above about naming blobs per-card instead).
+      #
+      # profiles/all-hardware.nix is only a shim for this option now; its
+      # entire content is `hardware.enableAllHardware = true`.
+      enableAllHardware = lib.mkDefault true;
     };
 
     # Why: modules/AGENTS.md#our-own-splash-in-the-theme-directory-upstreams-oc

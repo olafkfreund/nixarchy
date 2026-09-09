@@ -1420,6 +1420,14 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The reference initrd can mount a disk it was not built on, which is
+          # a precondition for offline install stage 3. See
+          # tests/reference-initrd.nix and #436.
+          reference-initrd = import ./tests/reference-initrd.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The other half of that: every option path the README and the manual
           # quote, checked against the option set they claim to describe. See
           # tests/doc-options.nix and #214.

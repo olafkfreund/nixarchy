@@ -541,6 +541,32 @@ let
     onFailure = on.systemd.services.nixos-upgrade.unitConfig.OnFailure or "";
   };
 
+  # ---- the single-machine unattended update, both ways -------------------
+  #
+  # fleet's sibling and the mirror of its risk. fleet reverts unpushed work;
+  # this one DEPLOYS it -- /etc/nixos is a git repository somebody edits by
+  # hand, so an unattended rebuild of a dirty tree ships whatever was
+  # half-finished when they walked away, at 03:00, with nobody watching.
+  #
+  # So the off case is again the one that matters, and the dirty guard is
+  # asserted by its presence in the script: a refactor that dropped it would
+  # leave a module that still works, still updates, and quietly acquires the
+  # one behaviour it was written to prevent.
+  autoUpdate = rec {
+    offByDefault = (configWith { }).systemd.timers ? nixarchy-auto-update;
+    on = configWith {
+      autoUpdate = {
+        enable = true;
+        dates = "Sun 04:00";
+      };
+    };
+    onWhenAsked = on.systemd.timers ? nixarchy-auto-update;
+    dates = on.systemd.timers.nixarchy-auto-update.timerConfig.OnCalendar or "";
+    persistent = on.systemd.timers.nixarchy-auto-update.timerConfig.Persistent or false;
+    script = on.systemd.services.nixarchy-auto-update.script or "";
+    onFailure = on.systemd.services.nixarchy-auto-update.unitConfig.OnFailure or "";
+  };
+
   # ---- devenv, both halves --------------------------------------------
   #
   # The half that breaks quietly is "off". devenv is a package plus a line in
@@ -1087,6 +1113,12 @@ pkgs.runCommand "nixarchy-options"
     fleetUrl = fleet.url;
     fleetPersistent = pkgs.lib.boolToString fleet.persistent;
     fleetOnFailure = fleet.onFailure;
+    autoUpdateOff = pkgs.lib.boolToString autoUpdate.offByDefault;
+    autoUpdateOn = pkgs.lib.boolToString autoUpdate.onWhenAsked;
+    autoUpdateDates = autoUpdate.dates;
+    autoUpdatePersistent = pkgs.lib.boolToString autoUpdate.persistent;
+    autoUpdateScript = autoUpdate.script;
+    autoUpdateOnFailure = autoUpdate.onFailure;
     flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
     flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
     flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
@@ -1873,6 +1905,51 @@ pkgs.runCommand "nixarchy-options"
             echo "nixos-upgrade has no OnFailure hook (got '$fleetOnFailure')" >&2
             echo "  an upgrade that starts failing stops delivering configuration and" >&2
             echo "  says nothing -- which is what this option exists to survive" >&2
+            exit 1
+            ;;
+        esac
+
+        # ---- and a single machine updates only when asked ------------------
+        test "$autoUpdateOff" = false || {
+          echo "an unattended update timer exists without autoUpdate.enable" >&2
+          echo "  a machine nobody asked must not rebuild itself at 03:00" >&2
+          exit 1
+        }
+        test "$autoUpdateOn" = true || {
+          echo "autoUpdate.enable produced no timer; nothing would ever run" >&2; exit 1; }
+        test "$autoUpdateDates" = "Sun 04:00" || {
+          echo "autoUpdate.dates did not reach the timer: got '$autoUpdateDates'" >&2; exit 1; }
+        test "$autoUpdatePersistent" = true || {
+          echo "the update timer is not persistent; a laptop asleep at the hour never catches up" >&2
+          exit 1
+        }
+        # ONE input. A bare `nix flake update` moves nixarchy too, which would
+        # change somebody's desktop overnight -- the decision this module
+        # deliberately does not make, and a one-word regression away.
+        case "$autoUpdateScript" in
+          *"flake update nixpkgs"*) ;;
+          *)
+            echo "the unattended update does not move nixpkgs specifically" >&2
+            echo "  a bare 'nix flake update' moves nixarchy too and changes the" >&2
+            echo "  desktop under someone who asked only for security updates" >&2
+            exit 1
+            ;;
+        esac
+        case "$autoUpdateScript" in
+          *"uncommitted changes"*) ;;
+          *)
+            echo "the dirty-tree guard is gone from the unattended update" >&2
+            echo "  /etc/nixos is edited by hand; rebuilding it unattended would" >&2
+            echo "  deploy whatever was half-finished, unwatched, at 03:00" >&2
+            exit 1
+            ;;
+        esac
+        case "$autoUpdateOnFailure" in
+          *nixarchy-upgrade-failed*) ;;
+          *)
+            echo "the unattended update has no OnFailure hook" >&2
+            echo "  one that starts failing stops delivering security updates and" >&2
+            echo "  looks exactly like a machine that is up to date" >&2
             exit 1
             ;;
         esac

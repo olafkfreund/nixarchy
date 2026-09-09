@@ -453,6 +453,28 @@
     attr = "omacalc";
     ours = true;
   };
+  android-tools = {
+    # adb, for the wireless pairing dance scrcpy needs over Wi-Fi (#364).
+    #
+    # scrcpy over USB needs nothing else: it is a wrapper that puts adb on the
+    # path of ITS OWN process. That is also why this row exists -- `adb` is
+    # then not on the user's PATH, so `adb pair` is command-not-found on a
+    # machine where scrcpy works perfectly.
+    #
+    # `binary`, because the attribute is not a command. This package ships adb,
+    # fastboot, mkbootimg and a dozen more, so nixpkgs states no mainProgram --
+    # correctly -- and without this the catalogue would answer "android-tools"
+    # and report the app missing on a machine that has it.
+    #
+    # No menuId: upstream ships no Install row for it. No arch: with no
+    # upstream row there is nothing for `omarchy-pkg-present` to match, and a
+    # plausible name would fire on somebody else's package.
+    label = "Android platform tools (adb)";
+    category = "Utility";
+    attr = "android-tools";
+    binary = "adb";
+  };
+
   scrcpy = {
     # Android apps from the phone you already own, and NOT emulation: it
     # mirrors and controls a device over USB or Wi-Fi, so everything works --

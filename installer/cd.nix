@@ -346,6 +346,32 @@ in
   boot = {
     loader.timeout = lib.mkForce 0;
 
+    # Both of these silence an evaluation warning by ANSWERING it, which is
+    # the only reason they are here -- nixpkgs asks a question the installer
+    # profile leaves unanswered, and an unanswered question that prints on
+    # every eval trains everyone to read past warnings.
+    #
+    # zfs: nixpkgs is changing this default to false in 26.11 and warns while
+    # nobody has stated an opinion (zfs.nix:710 tests whether the only
+    # definition is its own). false is the recommended value and the safer
+    # one -- it stops a pool being force-imported when it may still be in use
+    # elsewhere. Nothing is lost here in any case: ZFS is on this image so the
+    # installer can reach an existing pool, and this image's own root is a
+    # squashfs, so there is no root pool to import at all.
+    zfs.forceImportRoot = false;
+
+    # mdadm: swraid.nix:62 warns that mdmon crashes with neither MAILADDR nor
+    # PROGRAM set, and the installer profile enables swraid without setting
+    # either. Answered rather than disabled: turning boot.swraid.enable off
+    # would silence it too, but it would also take mdadm and the md/raid
+    # initrd modules off the image, and a user with an existing array would
+    # then have an installer that cannot see their disks.
+    #
+    # root is where NixOS mail goes with no MTA configured, and on a live
+    # image that is the point -- this exists so mdmon starts, not so anyone
+    # reads it.
+    swraid.mdadmConf = "MAILADDR root";
+
     # OFF on the installer image, and this is a reversal worth reading.
     #
     # Two users could not boot v4.0.2-8 on real hardware -- a ThinkPad E15 --

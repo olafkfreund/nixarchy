@@ -2470,10 +2470,57 @@ run_install() {
   # way it happens once, in the store that already holds every dependency,
   # instead of inside a target store that has to have each one copied to it
   # before it can be used.
-  local system
-  system=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
-    "${build_store[@]}" \
-    "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
+  local system=""
+
+  # The offline image CARRIES the system, so copy it rather than build it.
+  #
+  # Stage 3 of #436, and the reason the two stages before it existed. Building
+  # the machine's own configuration offline means building whatever differs
+  # from what the image holds, and with no network that ends at the source
+  # bootstrap -- 677 derivations, measured, dying on a Debian patch.
+  #
+  # What makes copying CORRECT rather than merely faster:
+  #
+  #   the hostname   is not in the closure any more (stage 1). The name is
+  #                  applied at first boot from /etc/nixarchy/hostname.
+  #   the password   is a file the installer already wrote, read at activation
+  #                  (#457), so the account is usable.
+  #   the disk       does not matter: disk-config.nix names filesystems
+  #                  by-partlabel, so a toplevel built against /dev/vda is
+  #                  byte-identical to one built against /dev/nvme0n1 --
+  #                  measured, same drvPath.
+  #
+  # What is DELIBERATELY not the same is the username and the detected
+  # hardware-configuration.nix. Both are written to /mnt/etc/nixos and arrive
+  # with the first online rebuild; that is option A on #435, chosen knowing
+  # the machine boots as the reference's account until then.
+  #
+  # Keyed on a file that exists only on the offline image, never on "no
+  # network marker": checks.install runs with neither marker in a seeded
+  # sandbox where building is free and correct.
+  local baked="/etc/nixarchy-reference-$encrypt"
+  local baked_system=""
+  if [ -r "$baked" ]; then
+    local candidate
+    candidate=$(tr -d '[:space:]' <"$baked")
+    # Valid in THIS store, not merely a plausible path. An image that lost the
+    # closure would otherwise hand nixos-install a name it cannot copy, and
+    # the failure would land in nixos-install rather than here.
+    if [ -n "$candidate" ] && nix "${NIX_FLAGS[@]}" path-info "$candidate" >/dev/null 2>&1; then
+      system="$candidate"
+      baked_system="$candidate"
+      echo "nixarchy-install: installing the system this image carries: $system"
+    else
+      echo "nixarchy-install: $baked names $candidate, which is not in this" >&2
+      echo "store. Falling back to building, which offline will be slow." >&2
+    fi
+  fi
+
+  if [ -z "$system" ]; then
+    system=$(nix "${NIX_FLAGS[@]}" build --no-link --print-out-paths "${SUBSTITUTE_FLAGS[@]}" \
+      "${build_store[@]}" \
+      "/mnt/etc/nixos#nixosConfigurations.$hostname.config.system.build.toplevel") || true
+  fi
 
   # Checked, because set -e will not check it here. The whole install runs as
   # `{ ...; } || rc=$?` so the dashboard can report a failure, and inside a
@@ -2502,10 +2549,30 @@ run_install() {
 
   # nixos-install takes --option, not --extra-experimental-features: it is not
   # a nix subcommand and rejects the flag outright.
+  # --max-jobs 0 when the system was COPIED rather than built, and it is the
+  # assertion rather than an optimisation.
+  #
+  # With --system, nixos-install runs no build of its own (nixos-install.sh:266
+  # gates the whole build block on the system being empty). What remains is
+  # `nix-env --store /mnt --set`, which CAN fall back to building a path it
+  # cannot substitute. --max-jobs 0 makes nix refuse to start any build and say
+  # so, instead of quietly compiling for an hour on a machine with no network.
+  #
+  # So an offline install that would have had to build now FAILS LOUDLY, which
+  # is the property #436 asked for: not "the install succeeded" but "nothing
+  # was built". Counting `building '` lines was the alternative and is fragile
+  # -- --log-format is user-overridable -- and `--offline` is not a flag
+  # nixos-install accepts at all; it hits the catch-all and exits 1.
+  #
+  # Only on the copied path. A network install builds on purpose.
+  local no_build=()
+  [ "$system" = "${baked_system:-}" ] && no_build=(--max-jobs 0)
+
   nixos-install --root /mnt --system "$system" --no-root-password \
     --option extra-experimental-features "nix-command flakes" \
     --option extra-substituters "$SUBSTITUTERS" \
     --option extra-trusted-public-keys "$TRUSTED_KEYS" \
+    "${no_build[@]}" \
     "${SUBSTITUTE_FLAGS[@]}"
 }
 

@@ -88,6 +88,7 @@ the documentation as much as the code.
 | Omarchy on | same as Omarchy — [read there](https://omarchy.org/manual/omarchy-on/) |
 | **Dual boot install** | **differs on NixOS** — [read here](dual-boot-install) |
 | **Many machines, one repo** | **nixarchy only** — [read here](many-machines) |
+| **A reinstall image of this machine** | **nixarchy only** — [read here](reinstall-image) |
 | **Unattended installs** | **differs on NixOS** — [read here](unattended-installs) |
 
 ## The short version of the difference

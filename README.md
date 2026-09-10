@@ -1886,6 +1886,12 @@ is the same work with its state attached -- what is in flight, what is waiting,
 and what each feature has left. It is public, and the *Shipped* view is the
 honest answer to "is this thing alive".
 
+When something lands, it is announced in
+[Discussions](https://github.com/olafkfreund/nixarchy/discussions/categories/announcements)
+with a changelog: what was added, what changed, and what is coming. This
+section says what is PLANNED; a merged pull request announces nothing to
+somebody who only uses nixarchy, and that is the gap those posts fill.
+
 | epic | what it is for | |
 | --- | --- | --- |
 | [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |

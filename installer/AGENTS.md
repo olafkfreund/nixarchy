@@ -52,6 +52,47 @@ before that resolves against the ISO's passwd, not the target's.
   stages everything and deliberately makes no commit: git needs an identity, and
   choosing the user's is not the installer's business.
 
+## An offline install COPIES a system; it does not evaluate one
+
+This changed in #436 and the file described the old model until #507. If you
+are reading `installer/` to understand how an install works, this is the part
+that surprises people.
+
+The image bakes the reference toplevel through **`isoImage.storeContents`**
+(`cd.nix:657`) — outputs, not a build graph — and writes
+`/etc/nixarchy-reference-$encrypt` naming it (`cd.nix:897`). `install.sh:2501`
+reads that marker, validates the path with `nix path-info`, and hands it to
+`nixos-install --system`, which **copies and never evaluates**
+(`nixos-install.sh:266` skips the build entirely).
+
+And it is asserted rather than hoped: when the system was copied rather than
+built, `install.sh:2569` adds `--max-jobs 0`, so a single attempted build
+fails loudly instead of quietly reaching for a compiler.
+
+**`system.extraDependencies` cannot do this job**, and the file used to imply
+it could. Its type is `listOf pathInStore` — it carries runtime OUTPUT paths
+and cannot carry a build graph, which is why every probe said "present" while
+nix still rebuilt the world.
+
+Three things follow, and each is load-bearing:
+
+- **The toplevel must be identical across machines**, or the copy has nothing
+  to copy. `networking.hostName = ""` and a pinned `system.name`
+  (`host.nix:209`) are what make that true — `systemd/initrd.nix:597` writes
+  the hostname into the initrd unconditionally, so two machines differing only
+  in name have two different initrds, and offline a different initrd is a
+  build that ends in the stage0 source bootstrap.
+- **The installed machine boots the REFERENCE's initrd**, so a storage driver
+  the reference lacks is a machine that cannot find its root.
+  `checks.reference-initrd` compares the two lists and fails on a gap.
+- **The detected `hardware-configuration.nix` is still written** to
+  `/etc/nixos` for the first ONLINE rebuild to pick up. It simply stops being
+  an install-time input.
+
+The password follows the same rule for the same reason: it is a **file**
+(`/var/lib/nixarchy/password.hash`, `host.nix:181`), not an evaluation input,
+so two machines with different passwords are still the same closure.
+
 ## Tests
 
 | check | covers |

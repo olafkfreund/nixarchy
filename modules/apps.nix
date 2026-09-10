@@ -1462,10 +1462,30 @@ in
               file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
               table=${appAttrTable}
               nixpkgs=${pkgs.path}
+              # This generation's licence policy, baked in at build time: the
+              # script and the system it can queue packages for are the same
+              # generation, so this cannot go stale without the script itself
+              # being replaced.
+              allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
+
+              # The picker is reachable through the session PATH rather than
+              # runtimeInputs (same route nixarchy-apply takes to
+              # nixarchy-preview), so its absence must degrade to the usage
+              # text, not break the command.
+              can_pick() {
+                [ -z "''${NIXARCHY_IN_PICKER:-}" ] && [ -t 0 ] && [ -t 1 ] &&
+                  command -v nixarchy-search >/dev/null 2>&1
+              }
 
               if [ $# -eq 0 ]; then
+                # No arguments is not a mistake to scold, it is "show me what
+                # there is" -- which is exactly what the picker answers (#492).
+                if can_pick; then
+                  exec nixarchy-search
+                fi
                 echo "usage: nixarchy-pkg-add <nixpkgs-attribute>..." >&2
                 echo "  e.g. nixarchy-pkg-add ripgrep fd" >&2
+                echo "  or run 'nixarchy-search' to browse everything" >&2
                 exit 1
               fi
 
@@ -1525,6 +1545,8 @@ in
               }
 
               added=()
+              missed=()
+              unfree_hits=()
 
               for attr in "$@"; do
                 case "$attr" in
@@ -1567,15 +1589,25 @@ in
                          else [ ];
                   in {
                     inherit (q) name;
+                    pname = q.pname or \"\";
                     description = q.meta.description or \"\";
                     unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
                     broken = q.meta.broken or false;
                   }" 2>/dev/null); then
+                  # A name that does not resolve is a typo more often than a
+                  # missing package, and the fuzzy index exists for typos: open
+                  # the picker on the query instead of handing back homework
+                  # (#492). Not when this run IS the picker's writer -- its rows
+                  # come from the index, so a miss there is an index bug and
+                  # recursing into a fresh picker would loop.
+                  if can_pick; then
+                    missed+=("$attr")
+                    continue
+                  fi
                   echo "nixpkgs has no package '$attr'." >&2
                   echo >&2
                   echo "Search for the right name:" >&2
-                  echo "  nix search nixpkgs $attr" >&2
-                  echo "  https://search.nixos.org/packages" >&2
+                  echo "  nixarchy-search $attr" >&2
                   exit 1
                 fi
 
@@ -1593,14 +1625,101 @@ in
 
                 echo "added $attr ($(jq -r .name <<<"$info")) -- $(jq -r '.description // ""' <<<"$info")"
                 if [ "$(jq -r .unfree <<<"$info")" = true ]; then
-                  echo "  unfree: needs nixpkgs.config.allowUnfree in your configuration, or the build fails."
+                  if [ "$allowunfree" = true ]; then
+                    echo "  unfree: fine here -- this machine allows unfree packages."
+                  else
+                    # The minority case (#497): allowUnfree defaults on, so
+                    # reaching this line means somebody turned it off on
+                    # purpose. Collect the pname (what allowUnfreePredicate
+                    # matches on), and offer the narrow grant after the loop.
+                    echo "  unfree, and this machine sets allowUnfree = false: the rebuild will refuse it."
+                    pn=$(jq -r '.pname // ""' <<<"$info")
+                    unfree_hits+=("''${pn:-$attr}")
+                  fi
                 fi
                 if [ "$(jq -r .broken <<<"$info")" = true ]; then
                   echo "  marked broken in nixpkgs: expect the build to fail."
                 fi
               done
 
-              [ ''${#added[@]} -gt 0 ] || exit 0
+              # Names that resolved nowhere, with a picker available: hand them
+              # to it, pre-filtered, so a typo becomes a fuzzy match. exec, so
+              # this only runs once everything above is committed or reverted.
+              open_missed() {
+                [ ''${#missed[@]} -gt 0 ] || return 0
+                echo "no exact match for ''${missed[*]} -- opening the picker on it"
+                exec nixarchy-search "''${missed[@]}"
+              }
+
+              if [ ''${#added[@]} -eq 0 ]; then
+                open_missed
+                exit 0
+              fi
+
+              # The narrow grant (#497): a commented allowUnfreePredicate
+              # naming just these packages, in the user's own file, rather
+              # than advice to flip the global flag. Commented, because
+              # changing licence policy is the user's line to uncomment.
+              # Runs before the parse check so one validation covers it.
+              offer_unfree_grant() {
+                [ ''${#unfree_hits[@]} -gt 0 ] || return 0
+
+                if grep -q '#@unfree-allow' "$file"; then
+                  # A grant already exists (ours, by its marker): grow its
+                  # list in place rather than scaffold a second predicate --
+                  # nixpkgs.config is a plain attrset, and two definitions of
+                  # one key do not merge.
+                  for pn in "''${unfree_hits[@]}"; do
+                    grep -q "\"$pn\"" "$file" ||
+                      sed -i "/#@unfree-allow/s/ \];/ \"$pn\" ];/" "$file"
+                    if ! grep -q "\"$pn\"" "$file"; then
+                      echo "  add \"$pn\" to the allowUnfreePredicate list already in $file"
+                    fi
+                  done
+                  return 0
+                fi
+
+                if [ -t 0 ]; then
+                  printf 'Scaffold a commented allowUnfreePredicate for %s into %s? [Y/n] ' \
+                    "''${unfree_hits[*]}" "$file"
+                  read -r reply || reply=n
+                  case "$reply" in
+                    [nN]*)
+                      echo "  then allow it yourself, or set programs.nixarchy.allowUnfree = true"
+                      return 0
+                      ;;
+                  esac
+                fi
+
+                names=""
+                for pn in "''${unfree_hits[@]}"; do names="$names\"$pn\" "; done
+                # printf rather than a multi-line literal: a raw
+                # newline-in-string here would lower the whole nix
+                # indented string's common indent and shift every
+                # line of the built script.
+                payload=$(printf '%s\n' \
+                  "" \
+                  "  # ''${unfree_hits[*]}: unfree, and this machine sets programs.nixarchy.allowUnfree" \
+                  "  # = false. Uncomment the line below to allow JUST the packages named -- the" \
+                  "  # narrow grant -- rather than flipping the global switch:" \
+                  "  # nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ $names];  #@unfree-allow")
+
+                tmp=$(mktemp)
+                awk -v payload="$payload" '
+                  { print }
+                  !done && /#@pkgs-end/ { print payload; done = 1 }
+                ' "$file" > "$tmp"
+                mv "$tmp" "$file"
+
+                if grep -q '#@unfree-allow' "$file"; then
+                  echo "  scaffolded a commented allowUnfreePredicate in $file -- uncomment it to allow just ''${unfree_hits[*]}"
+                else
+                  restore
+                  echo "nixarchy: failed to write the allowUnfreePredicate scaffold. Nothing was changed." >&2
+                  exit 1
+                fi
+              }
+              offer_unfree_grant
 
               if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
                 restore
@@ -1621,6 +1740,11 @@ in
 
               echo
               echo "run 'nixarchy-apply' when you have picked everything you want"
+
+              # Last, because exec does not come back: anything that
+              # resolved is committed above before a typo's picker
+              # takes over the terminal.
+              open_missed
             '';
           })
 
@@ -1644,18 +1768,32 @@ in
               stamp="$cache/stamp"
 
               appindex=${appIndexTable}
+              apptable=${appAttrTable}
               flatpakrows=${flatpakIndexRows}
               optionsjson=${optionsJsonPath}
               nixpkgs=${pkgs.path}
+              walk=${./pkg-index.nix}
+              flakedir="''${NIXARCHY_FLAKE:-${cfg.flake}}"
+              # This generation's licence policy, baked in like the index is:
+              # both are replaced together with the system generation.
+              allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
+
+              # The writers this picker calls fall back TO the picker on a miss
+              # (#492). A row that then misses would recurse into a second
+              # picker; this says "you are already inside one", so they error
+              # instead -- an index row that does not resolve is an index bug.
+              export NIXARCHY_IN_PICKER=1
 
               reindex=0
               [ "''${1:-}" = "--reindex" ] && { reindex=1; shift; }
 
-              # One index, four tab-separated fields: kind, name, one-line summary, option
-              # type, and the preview text with its newlines escaped. The preview is carried
-              # in the line rather than looked up on selection because fzf runs the preview
-              # command on every keystroke, and a jq pass over 19 MB of package metadata is
-              # not something to do sixty times a second.
+              # One index, five tab-separated fields: kind, name, one-line summary,
+              # a kind-specific fourth (an option's type; a package's flags, e.g.
+              # "unfree broken curated:firefox"; empty otherwise), and the preview
+              # text with its newlines escaped. The preview is carried in the line
+              # rather than looked up on selection because fzf runs the preview
+              # command on every keystroke, and a jq pass over 19 MB of package
+              # metadata is not something to do sixty times a second.
               build_index() {
                 mkdir -p "$cache"
                 tmp=$(mktemp)
@@ -1700,22 +1838,52 @@ in
                 # The system's own nixpkgs, not the flake registry: an index that offers a
                 # package this machine cannot build is worse than no index. Slow enough to
                 # be worth saying so -- about a minute, once per system generation.
+                #
+                # Our own walk (modules/pkg-index.nix) rather than `nix search`:
+                # verified to produce the identical row set, and it carries the
+                # meta `nix search --json` does not -- homepage, licence, unfree,
+                # broken (#493).
                 echo "  indexing nixpkgs (this takes about a minute)..." >&2
-                nix search --json --extra-experimental-features 'nix-command flakes' \
-                  "path:$nixpkgs" ^ 2>/dev/null |
+                nix-instantiate --eval --strict --json \
+                  --arg nixpkgs "$nixpkgs" "$walk" 2>/dev/null |
                   jq -r '
-                    to_entries[] | (.key | sub("^legacyPackages\\.[^.]+\\."; "")) as $a | .value as $v |
-                    [ "pkg", $a,
-                      (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
-                      "",
-                      ( "NIXPKGS PACKAGE  " + $a
-                        + "\n\nversion:  " + ($v.version // "?")
-                        + "\n\n" + ($v.description // "(no description)")
+                    .[] |
+                    [ "pkg", .attr,
+                      ( ((.description // "") | gsub("[\n\t ]+"; " ") | .[0:100])
+                        + (if .unfree then "  [unfree]" else "" end)
+                        + (if .broken then "  [broken]" else "" end)
+                      ),
+                      ( (if .unfree then "unfree " else "" end)
+                        + (if .broken then "broken" else "" end)
+                        | sub(" $"; "")
+                      ),
+                      ( "NIXPKGS PACKAGE  " + .attr
+                        + "\n\nversion:  " + (if .version == "" then "?" else .version end)
+                        + "\nlicence:  " + (if .license == "" then "unknown" else .license end)
+                        + (if .homepage == "" then "" else "\nhomepage: " + .homepage end)
+                        + (if .broken then "\n\nMarked BROKEN in nixpkgs: expect the build to fail." else "" end)
+                        + "\n\n" + (if .description == "" then "(no description)" else .description end)
                         + "\n\nAdding this writes it into your app selection:\n  "
-                        + "environment.systemPackages = with pkgs; [ " + $a + " ];"
+                        + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
                         + "\n\nctrl-t tries it now, without installing."
                       )
                     ] | @tsv' >> "$tmp"
+
+                # A raw attribute that the curated list already covers deserves a
+                # warning on its row: picking the APP gets the module, policies
+                # and defaults; picking the package gets a bare binary. Baked in
+                # at build time -- the curated list is as per-generation as the
+                # index (#493).
+                tmp2=$(mktemp)
+                awk -F'\t' -v OFS='\t' '
+                  NR == FNR { curated[$1] = $2; next }
+                  $1 == "pkg" && ($2 in curated) {
+                    $4 = ($4 == "" ? "" : $4 " ") "curated:" curated[$2]
+                    $5 = $5 "\\n\\nCURATED: this name is on the app list as \047" curated[$2] "\047.\\nThe app row above sets programs." curated[$2] " -- the module, with policies\\nand defaults -- where this row would add only a bare package."
+                  }
+                  { print }
+                ' "$apptable" "$tmp" > "$tmp2"
+                mv "$tmp2" "$tmp"
 
                 # Curated flatpaks and the Flathub entry point. A plain cat:
                 # these rows are already in the index's five-field shape, and
@@ -1732,6 +1900,63 @@ in
                 build_index
               fi
 
+              # Status, at picker start rather than in the cached index (#493):
+              # what is selected changes with every pick, the index once per
+              # generation. Two greps and one awk pass over the index -- no
+              # evaluation, and nothing per keystroke.
+              #
+              # "enabled" vs "queued" comes from the copy nixarchy-apply makes
+              # into the flake before rebuilding: a selection that has not
+              # reached the copy has not been built. Same host-dir logic as
+              # nixarchy-apply. An unreadable flake dir marks everything
+              # selected as queued, which is the honest claim for a machine
+              # that has never applied.
+              appsbase="$flakedir"
+              [ -d "$flakedir/hosts/$(uname -n)" ] && appsbase="$flakedir/hosts/$(uname -n)"
+
+              # Live (uncommented) marked lines only: kind<TAB>name per line.
+              mark_live() {
+                [ -r "$1" ] || return 0
+                sed -nE "s/^[[:space:]]*[^#[:space:]].*#@pkg ([A-Za-z0-9_.-]+)[[:space:]]*$/pkg\t\1/p" "$1"
+                sed -nE "s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
+              }
+
+              selected=$(mktemp)
+              applied=$(mktemp)
+              shown=$(mktemp)
+              trap 'rm -f "$selected" "$applied" "$shown"' EXIT
+
+              {
+                mark_live "$file" app
+                mark_live "''${file%/apps.nix}/services.nix" flatpak
+              } > "$selected" || true
+              {
+                mark_live "$appsbase/nixarchy/apps.nix" app
+                mark_live "$appsbase/nixarchy/services.nix" flatpak
+              } > "$applied" || true
+
+              awk -F'\t' -v OFS='\t' -v unfreeok="$allowunfree" '
+                FILENAME == ARGV[1] { sel[$0] = 1; next }
+                FILENAME == ARGV[2] { app[$0] = 1; next }
+                {
+                  key = $1 "\t" $2
+                  if (key in sel) {
+                    st = (key in app) ? "enabled" : "queued"
+                    note = (st == "enabled") \
+                      ? "enabled -- selected, and nixarchy-apply has copied it into the flake" \
+                      : "queued -- selected but not rebuilt; nixarchy-apply will install it"
+                    $3 = "[" st "] " $3
+                    $5 = $5 "\\n\\nstatus: " note
+                  }
+                  if ($1 == "pkg" && index($4, "unfree") && unfreeok != "true") {
+                    $3 = $3 "  [disallowed]"
+                    $5 = $5 "\\n\\nUNFREE, and this machine sets programs.nixarchy.allowUnfree = false:\\nthe rebuild will refuse it as it stands. nixarchy-pkg-add offers the\\nnarrow grant -- an allowUnfreePredicate naming just this package."
+                  }
+                  print
+                }
+              ' "$selected" "$applied" "$index" > "$shown"
+
+
               # --expect makes fzf accept on ctrl-t as well as enter, and say which
               # was pressed on the first output line. The previews on pkg and app
               # rows document the key; the other two kinds have nothing to run.
@@ -1742,7 +1967,7 @@ in
                 --preview-window='right,58%,wrap' \
                 --prompt='nixarchy > ' \
                 --header='enter to select · ctrl-t to try · tab for several · esc to cancel' \
-                --query="''${*:-}" < "$index") || exit 0
+                --query="''${*:-}" < "$shown") || exit 0
               key=$(printf '%s\n' "$picked" | head -n 1)
               selection=$(printf '%s\n' "$picked" | tail -n +2)
               [ -n "$selection" ] || exit 0
@@ -1768,7 +1993,7 @@ in
 
               backup=$(mktemp)
               cp "$file" "$backup"
-              trap 'rm -f "$backup"' EXIT
+              trap 'rm -f "$backup" "$selected" "$applied" "$shown"' EXIT
 
               changed=0
               scaffolded=0

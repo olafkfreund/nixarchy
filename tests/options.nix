@@ -1094,6 +1094,22 @@ let
     ) services
   );
 
+  # #497 both ways: nixarchy-pkg-add bakes this generation's licence policy
+  # in as a constant (`allowunfree=...`), because the script and the system
+  # it queues packages for are the same generation. The on state (the
+  # default) is asserted against $vm's built script below; this is the off
+  # half, which no built VM covers -- exactly the half a refactor breaks
+  # quietly.
+  pkgAddTextWith =
+    settings:
+    (pkgs.lib.findFirst (
+      p: (p.name or "") == "nixarchy-pkg-add"
+    ) (throw "no nixarchy-pkg-add in systemPackages") (configWith settings).environment.systemPackages)
+    .text;
+  pkgAddUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (pkgAddTextWith {
+    allowUnfree = false;
+  });
+
   broken = pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) cases;
 
   report = pkgs.lib.concatStringsSep "\n" (
@@ -1121,6 +1137,7 @@ pkgs.runCommand "nixarchy-options"
     microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
+    pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
     fleetUrl = fleet.url;
@@ -1940,6 +1957,77 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "every advertised nixarchy subcommand has a route"
+
+        # ---- a package miss opens the picker, not a URL (#492) --------------
+        #
+        # Grepped from the built script text, like the flatpak rows above:
+        # these names are load-bearing, and renaming one is a deliberate CI
+        # trip-wire rather than an accident.
+        pkgadd="$vm/sw/bin/nixarchy-pkg-add"
+        search="$vm/sw/bin/nixarchy-search"
+        grep -q 'nixarchy-search' "$pkgadd" || {
+          echo "nixarchy-pkg-add never reaches for the picker: a miss is a dead end again" >&2
+          exit 1
+        }
+        if grep -q 'search\.nixos\.org' "$pkgadd"; then
+          echo "nixarchy-pkg-add answers a miss with a URL again -- that is the homework #492 removed" >&2
+          exit 1
+        fi
+        # Both halves of the recursion guard: the picker declares itself, and
+        # the writer checks. Lose either and a bad index row opens pickers
+        # inside pickers forever.
+        grep -q 'NIXARCHY_IN_PICKER' "$pkgadd" || {
+          echo "nixarchy-pkg-add lost the in-picker guard: a miss inside the picker recurses" >&2
+          exit 1
+        }
+        grep -q 'export NIXARCHY_IN_PICKER=1' "$search" || {
+          echo "nixarchy-search no longer declares itself to its writers (NIXARCHY_IN_PICKER)" >&2
+          exit 1
+        }
+        echo "a package miss opens the picker, with the recursion guard in place"
+
+        # ---- the index carries meta, and the picker carries status (#493) ---
+        walkfile=$(sed -n 's/.*walk=\(\/nix\/store[^ ]*\).*/\1/p' "$search" | head -1)
+        test -n "$walkfile" || {
+          echo "nixarchy-search names no meta-walk file: the indexer lost its package source" >&2
+          exit 1
+        }
+        for field in homepage license unfree broken recurseForDerivations; do
+          grep -q "$field" "$walkfile" || {
+            echo "the index walk ($walkfile) no longer carries '$field'" >&2
+            echo "  nix search --json has only pname/version/description; the walk exists" >&2
+            echo "  precisely to carry the rest (#493)" >&2
+            exit 1
+          }
+        done
+        grep -q 'mark_live' "$search" || {
+          echo "nixarchy-search lost its status pass: rows no longer say enabled/queued" >&2
+          exit 1
+        }
+        # The baked licence-policy constant, in its default (allow) state.
+        grep -q 'allowunfree=true' "$search" || {
+          echo "nixarchy-search does not carry allowunfree=true on a default config" >&2
+          exit 1
+        }
+        echo "the picker's index carries meta and its rows carry status"
+
+        # ---- unfree help is the narrow grant (#497) --------------------------
+        grep -q 'allowUnfreePredicate' "$pkgadd" || {
+          echo "nixarchy-pkg-add no longer offers allowUnfreePredicate for a disallowed unfree package" >&2
+          exit 1
+        }
+        grep -q '#@unfree-allow' "$pkgadd" || {
+          echo "the unfree grant lost its #@unfree-allow marker, so a second add would scaffold a" >&2
+          echo "  second predicate -- and nixpkgs.config keys do not merge" >&2
+          exit 1
+        }
+        test "$pkgAddUnfreeOff" = true || {
+          echo "with allowUnfree = false the built nixarchy-pkg-add does not carry allowunfree=false:" >&2
+          echo "  the baked policy constant no longer follows the option, so the unfree help" >&2
+          echo "  fires never or always" >&2
+          exit 1
+        }
+        echo "unfree help scaffolds the narrow grant, and the baked policy follows the option"
 
         # ---- machines pull only when asked ---------------------------------
         test "$fleetOff" = false || {

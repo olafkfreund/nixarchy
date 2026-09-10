@@ -375,14 +375,41 @@
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
 
-          # The desktop shell. nixpkgs' own, since #35: it was overridden to
-          # 0.3.1 while nixpkgs sat on 0.3.0, whose session lock reaches
-          # qFatal when screens sleep and wake while locked -- and the
-          # Wayland protocol keeps the compositor locked when its lock client
-          # dies, so the machine is left blank with nowhere to type a
-          # password. nixpkgs now ships 0.3.1 from the same tag and the same
-          # URL the override fetched, so the override had become a no-op.
-          inherit (final) quickshell;
+          # The desktop shell, and the one package here pinned to a FLOOR
+          # rather than left to the machine's own nixpkgs (#528).
+          #
+          # quickshell 0.3.0's session lock reaches qFatal when screens sleep
+          # and wake while locked, and the Wayland session-lock protocol
+          # deliberately keeps the compositor locked when its lock client
+          # disappears -- so the machine is left blank with nowhere to type a
+          # password, and power-cycling is the only way back in. #35 records
+          # it happening three times in one night on a real machine.
+          #
+          # The override that fixed it was dropped in #380 because nixpkgs
+          # had reached 0.3.1 "from the same tag and the same URL the
+          # override fetched", which made it a no-op. That was true of the
+          # nixpkgs this repo is developed against and of no other: measured
+          # 2026-09-10, nixos-26.05 ships 0.3.0 and unstable ships 0.3.1. So
+          # a user following stable -- the channel that SOUNDS safer -- would
+          # get the session lock that can strand them out of their laptop,
+          # and would not find out until their screens next slept.
+          #
+          # Hence a floor rather than a no-op or a warning. A warning is the
+          # wrong instrument for this one: what it costs to ignore is access
+          # to your own machine, and it would be read months before it is
+          # paid. On unstable the branch is not taken and nothing about the
+          # package changes.
+          quickshell =
+            if lib.versionAtLeast final.quickshell.version "0.3.1" then
+              final.quickshell
+            else
+              final.quickshell.overrideAttrs (_: rec {
+                version = "0.3.1";
+                src = final.fetchzip {
+                  url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v${version}.tar.gz";
+                  hash = "sha256-CLX2Zp5i5BuLbOxNOkwRd9YY84IOrACNxBV79o9/F9Y=";
+                };
+              });
           # The screensaver's text-effects engine, packaged in this repo rather
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
           # lives under nixarchy-apps, which callPackage does not search.

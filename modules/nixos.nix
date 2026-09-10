@@ -753,10 +753,36 @@ in
         yaru-theme
         # Yaru inherits from Adwaita for anything it does not draw itself.
         adwaita-icon-theme
-
+      ])
+      ++ (
         # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
-        hyprland-preview-share-picker
-
+        #
+        # Conditional, and loud when it is absent. nixos-26.05 carries no
+        # such attribute at all -- not an older one, none -- so on stable
+        # this was an `undefined variable` that stopped the whole
+        # configuration from evaluating (#526). Guarding it is what lets
+        # stable evaluate.
+        #
+        # Not a bare `optional`, which would trade a loud eval error for
+        # precisely the failure #202 took a day to find: the portal execs a
+        # name that is not there, reads selection -1 and destroys the
+        # session, so screen sharing dies in every application with no dialog
+        # and no error anywhere a user would look. A missing package that
+        # announces itself is a different thing from one that does not.
+        #
+        # Spliced in here rather than appended to the end of the list because
+        # `environment.systemPackages` order reaches buildEnv: keeping the
+        # position keeps the package list byte-identical, in order as well as
+        # in content, for every user whose nixpkgs has the picker -- which is
+        # everyone on unstable. A fix for stable should cost them nothing,
+        # and "nothing" is checkable rather than asserted.
+        lib.warnIf (!(pkgs ? hyprland-preview-share-picker)) ''
+          nixarchy: this nixpkgs has no hyprland-preview-share-picker, so
+          screen sharing will fail in every application -- silently, with no
+          dialog (#202). nixos-26.05 is the known case; unstable has it.
+        '' (lib.optional (pkgs ? hyprland-preview-share-picker) pkgs.hyprland-preview-share-picker)
+      )
+      ++ (with pkgs; [
         # Omarchy sets a cursor size but never a cursor theme -- on Arch one
         # comes with the desktop packages. NixOS ships none, so Hyprland used
         # its own built-in pointer. Bibata is here rather than Yaru or Adwaita

@@ -19,10 +19,56 @@ on:
     paths: [.github/workflows/copilot-setup-steps.yml]
 
 jobs:
+  # The name is not a choice: Copilot looks for a job called exactly
+  # `copilot-setup-steps` and ignores everything else in the file.
   copilot-setup-steps:
     runs-on: ubuntu-latest
+    # Copilot caps its whole session at 59 minutes, and that budget covers the
+    # agent reading, editing and iterating as well as this job. Ten minutes is
+    # generous for a cached nix install and leaves the session for work.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      # nix, so the agent can RUN a check rather than reason about one.
+      #
+      # AGENTS.md 1 asks for a check proven able to fail, and an agent with no
+      # nix cannot honour it -- it can only write something plausible and hope.
+      # With this it can run the cheap tier itself: nix fmt --ci, statix,
+      # deadnix, checks.options, and the fixture checks that finish in seconds
+      # (bin-ledger, package-delta, config-delta, patched-files). That is
+      # exactly the tier covering the data-row and docs work Copilot is
+      # actually suited to.
+      #
+      # The composite, not a hand-rolled install: it writes this flake's caches
+      # into the SYSTEM nix.conf, and the reason that matters is written in the
+      # action itself -- accept-flake-config makes them client-specified
+      # settings, which the daemon discards for anyone not in trusted-users,
+      # and the last time that happened every build compiled Hyprland from
+      # source.
+      #
+      # Copilot's firewall must allow cache.nixos.org, channels.nixos.org,
+      # install.determinate.systems and nixarchy.cachix.org, or nix quietly
+      # falls back to building everything and this job times out instead of
+      # failing with a reason. That allowlist is a repository setting and is
+      # NOT set here.
+      #
+      # What this does NOT buy: the VM checks. checks.session and its siblings
+      # need KVM and minutes this session does not have, and checks.install and
+      # install-iso run on self-hosted runners Copilot cannot reach at all --
+      # it supports self-hosted only through ARC, and ours are bare NixOS. A
+      # Copilot PR touching anything VM-verified is unverified by construction
+      # and must say so.
+      - uses: ./.github/actions/setup-nix
+
+      - name: Prove nix works here, rather than assuming it
+        run: |
+          nix --version
+          # Cheap and real: it evaluates the flake and touches the caches, so a
+          # firewall that is starving nix fails HERE with a reason, rather than
+          # forty minutes later inside the agent's session.
+          nix flake metadata --json > /dev/null
+          echo "nix can evaluate this flake"
 
       - name: Install the agent-bus MCP server
         run: |

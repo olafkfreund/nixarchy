@@ -48,6 +48,30 @@ Computes whether the diff can possibly change a build output. A
 documentation-only change skips the expensive jobs, and each skipped job still
 reports success so required checks are satisfied.
 
+It is a **denylist**, never an allowlist, and
+`.github/scripts/pr-touches-build.sh` states why: Nix closures are computed by
+evaluation, not by directory, so an allowlist silently stops covering the next
+directory somebody adds. A denylist can only be wrong about the paths it names.
+
+**It answers two questions, not one.** `build.yml` asks *"can this change
+anything Nix builds?"* — a new `tests/foo.nix` is a new derivation, so yes.
+`install-check.yml` asks the narrower *"can this change an INSTALL?"*, and
+`--install` adds a second, tighter list for it.
+
+`README.md` is the case worth knowing, because it sits on opposite sides of
+those two questions:
+
+| | `README.md` |
+|---|---|
+| can it change a build? | **yes** — `build.yml` derives the app and command counts from `data/` and greps README for them, and that guard caught a real mismatch |
+| can it change an install? | **no** — nothing an install builds reads it |
+
+So a one-line edit to the README's roadmap table runs the count guard and
+**skips the 55-minute install**. Before that split it did both, twice in one
+day, queued behind every other pull request on the single slot.
+`tests/install-gate.nix` asserts both halves, because one without the other is
+the bug.
+
 ### `lint` — four linters, because they catch different things
 1. **Check formatting** — `nix fmt -- --ci`
 2. **statix** — repeated keys, useless parens; things `nix fmt` is happy with
@@ -106,6 +130,23 @@ contention. Two concurrent jobs is what demonstrably passes.
 
 **If your install check sits queued for twenty minutes, the cap is working.**
 
+### What that cap costs, and what is done instead
+
+One slot for the whole repository means every minute spent there is a minute
+every other pull request waits. Two rules follow from it, and both are visible
+in the checks:
+
+- **A check that does not need a VM must not take one.** `stable-eval` proves
+  this flake still evaluates against stable nixpkgs in about **twenty
+  seconds**, by forcing the system's derivation to be computed rather than
+  built. It exists because stable stopped evaluating on an `undefined
+  variable` — the cheapest class of failure there is — and nothing looked for
+  months.
+- **A cheap check must say what it does not prove.** `stable-eval` prints it
+  in its own output: *"NOT PROVEN: that it boots, or that the desktop comes
+  up. Nothing here starts a VM."* A green tick that gets read as a guarantee
+  it never made is worse than no check.
+
 ---
 
 ## `nightly.yml` — 03:00 UTC, the expensive checks
@@ -125,6 +166,24 @@ contention. Two concurrent jobs is what demonstrably passes.
 `install-iso` is the one that proves the offline image: it installs with **no
 network device at all** and asserts not that the install succeeded but that
 **nothing was built and nothing was fetched**.
+
+---
+
+### Pinned inputs on pull requests, moving ones only here
+
+`nixpkgs-stable` is an input in `flake.lock`, not a ref resolved fresh. A
+moving ref would turn **every open pull request red** the moment upstream
+moved, for a reason none of their authors could fix — the same failure that
+took the roadmap check off pull requests (see `omarchy` above).
+
+Upstream drift is this workflow's `canary` job instead: it runs a bare `nix
+flake update` and resolves every input the repository leaves mobile. Its
+failure has its own identity — *a canary failure means UPSTREAM moved under
+us* — and it files an issue saying so.
+
+**Two questions, two places, neither pretending to be the other.** If you are
+adding a check that depends on something outside the lock, this is the split
+to follow.
 
 ---
 
@@ -279,3 +338,27 @@ The second works while other jobs in the run are still going, when
 - README's Roadmap — the shape, CI-enforced
 
 `AGENTS.md` §12 has the filing rules.
+
+### File the Roadmap row *before* the epic, not after
+
+The roadmap check reads the **live issue list**, not the diff. So an epic that
+exists without a Roadmap row turns `main` red on **whatever commit pushes
+next** — someone else's merge, with nothing in it about your epic and nothing
+its author can do.
+
+It does not run on pull requests, deliberately: closing an epic correctly once
+turned every open pull request red at the same time, none of which had touched
+the README. So it runs on pushes to `main` and weekly, and the red always
+lands somewhere other than the change that caused it.
+
+The order that avoids it:
+
+1. open the pull request that adds the Roadmap row
+2. **let it merge**
+3. then file the epic
+
+Doing it the other way round costs a red `main` and a re-run. Getting the row
+merged first is not always possible — if another pull request is already armed
+with auto-merge it will land ahead of yours — in which case the red is
+expected, harmless, and clears on a re-run once the row exists. No new commit
+is needed, because the check reads live state.

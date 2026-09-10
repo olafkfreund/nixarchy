@@ -924,6 +924,21 @@
                 # those packages are on the medium; nobody installs it.
                 reference-hardware
               ];
+
+              # What an install actually WRITES, keyed on the encryption
+              # answer -- the two markers installer/cd.nix puts on the image
+              # and install.sh reads. Separate from `configs` because the
+              # image carries more than it installs: reference-hardware is
+              # seeded so its packages are on the medium (#382) and is not a
+              # machine anyone installs.
+              #
+              # A user's image (#478) points both at their one machine; this
+              # repository ships two because the reference exists in both
+              # encryption shapes.
+              installed = {
+                encrypted = reference;
+                unencrypted = reference-unencrypted;
+              };
             };
 
             # The live image. See installer/cd.nix.
@@ -1058,112 +1073,169 @@
       devShells = eachSystem (system: {
         default = pkgsFor.${system}.callPackage ./shell.nix { };
       });
+      # One attrset, not three `lib.x =` assignments: statix's repeated-keys
+      # lint fails the build at three, and adding mkUserIso was the third.
+      lib = {
 
-      # The installed machine, as the installer would produce it. Both disk
-      # modes come from here so they cannot drift apart, and so installer/cd.nix
-      # can bake each one onto the image without restating the host.
-      lib.mkReference =
-        {
-          encrypt,
-          hardware ? false,
-        }:
-        nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = { inherit inputs; };
-          modules = [
-            self.nixosModules.nixarchy
-            home-manager.nixosModules.home-manager
-            inputs.disko.nixosModules.disko
+        # The installed machine, as the installer would produce it. Both disk
+        # modes come from here so they cannot drift apart, and so installer/cd.nix
+        # can bake each one onto the image without restating the host.
+        mkReference =
+          {
+            encrypt,
+            hardware ? false,
+          }:
+          nixpkgs.lib.nixosSystem {
+            system = "x86_64-linux";
+            specialArgs = { inherit inputs; };
+            modules = [
+              self.nixosModules.nixarchy
+              home-manager.nixosModules.home-manager
+              inputs.disko.nixosModules.disko
 
-            # Why: docs/internals/flake.md#one-module-that-imports-the-machines-own-two-rathe
-            {
-              imports = [
-                (import ./installer/host.nix {
-                  hostname = "nixarchy";
-                  username = "omarchy";
-                })
-                (import ./installer/disk-config.nix {
-                  device = "/dev/vda";
-                  inherit encrypt;
-                })
+              # Why: docs/internals/flake.md#one-module-that-imports-the-machines-own-two-rathe
+              {
+                imports = [
+                  (import ./installer/host.nix {
+                    hostname = "nixarchy";
+                    username = "omarchy";
+                  })
+                  (import ./installer/disk-config.nix {
+                    device = "/dev/vda";
+                    inherit encrypt;
+                  })
+                ];
+              }
+            ]
+            ++ nixpkgs.lib.optional hardware {
+              # Kept in step with tests/generate-config-surface.nix, which fails
+              # if this list stops covering what nixos-generate-config emits.
+              # Two of the tool's package-adding attributes are deliberately NOT
+              # here, and the check states why: hardware.parallels.enable pulls
+              # a proprietary Parallels disk image that cannot be redistributed
+              # on an ISO, and boot.isNspawnContainer is emitted only when the
+              # tool runs INSIDE an nspawn container, which an installer that
+              # partitions a physical disk never is.
+              hardware.cpu.intel.npu.enable = true;
+              boot.swraid.enable = true;
+
+              # Answered, not muted. swraid.nix:16 accepts any mdadm.conf
+              # matching MAILADDR|PROGRAM, and without one it warns that mdmon
+              # will crash -- on every evaluation of this configuration, which
+              # is every ISO build and every run of checks.iso-source.
+              #
+              # #472 answered the same question for the `iso` configuration and
+              # verified ITS warnings were empty; this one was never checked and
+              # went on warning. Hence checks.config-warnings below, so the next
+              # one fails instead of accumulating.
+              #
+              # root is where NixOS mail goes with no MTA configured, which on a
+              # configuration that exists only to put mdadm's packages on an
+              # image is exactly right: the point is that mdmon starts, not that
+              # anyone reads it.
+              boot.swraid.mdadmConf = "MAILADDR root";
+              virtualisation.hypervGuest.enable = true;
+              virtualisation.virtualbox.guest.enable = true;
+
+              # Every nixos-hardware module installer/hardware-modules.sh can
+              # select, so the packages behind them are on the offline image.
+              #
+              # This is the same argument as the attributes above, and the same
+              # one #382 made the hard way: a real machine's generated config is
+              # not the reference's, and where the difference is a PACKAGE, an
+              # offline install has to build it from parts with no compiler.
+              # common-gpu-intel alone pulls intel-media-driver, the compute
+              # runtime and vpl-gpu-rt.
+              #
+              # The UNION, not a machine: no real machine has an Intel and an
+              # AMD GPU and both microcode sets. Every entry is mkDefault config
+              # and this host is never installed -- it exists so the medium
+              # carries the parts, which is exactly what the header above says.
+              #
+              # checks.hardware-modules asserts these names exist; the ISO budget
+              # check is what says whether they FIT.
+              imports = with inputs.nixos-hardware.nixosModules; [
+                common-cpu-intel-cpu-only
+                common-cpu-amd
+                common-gpu-intel
+                common-gpu-amd
+                # Imports common-pc and common-pc-laptop too, so it covers all
+                # four of the chassis/disk outcomes.
+                common-pc-laptop-ssd
               ];
-            }
-          ]
-          ++ nixpkgs.lib.optional hardware {
-            # Kept in step with tests/generate-config-surface.nix, which fails
-            # if this list stops covering what nixos-generate-config emits.
-            # Two of the tool's package-adding attributes are deliberately NOT
-            # here, and the check states why: hardware.parallels.enable pulls
-            # a proprietary Parallels disk image that cannot be redistributed
-            # on an ISO, and boot.isNspawnContainer is emitted only when the
-            # tool runs INSIDE an nspawn container, which an installer that
-            # partitions a physical disk never is.
-            hardware.cpu.intel.npu.enable = true;
-            boot.swraid.enable = true;
-
-            # Answered, not muted. swraid.nix:16 accepts any mdadm.conf
-            # matching MAILADDR|PROGRAM, and without one it warns that mdmon
-            # will crash -- on every evaluation of this configuration, which
-            # is every ISO build and every run of checks.iso-source.
-            #
-            # #472 answered the same question for the `iso` configuration and
-            # verified ITS warnings were empty; this one was never checked and
-            # went on warning. Hence checks.config-warnings below, so the next
-            # one fails instead of accumulating.
-            #
-            # root is where NixOS mail goes with no MTA configured, which on a
-            # configuration that exists only to put mdadm's packages on an
-            # image is exactly right: the point is that mdmon starts, not that
-            # anyone reads it.
-            boot.swraid.mdadmConf = "MAILADDR root";
-            virtualisation.hypervGuest.enable = true;
-            virtualisation.virtualbox.guest.enable = true;
-
-            # Every nixos-hardware module installer/hardware-modules.sh can
-            # select, so the packages behind them are on the offline image.
-            #
-            # This is the same argument as the attributes above, and the same
-            # one #382 made the hard way: a real machine's generated config is
-            # not the reference's, and where the difference is a PACKAGE, an
-            # offline install has to build it from parts with no compiler.
-            # common-gpu-intel alone pulls intel-media-driver, the compute
-            # runtime and vpl-gpu-rt.
-            #
-            # The UNION, not a machine: no real machine has an Intel and an
-            # AMD GPU and both microcode sets. Every entry is mkDefault config
-            # and this host is never installed -- it exists so the medium
-            # carries the parts, which is exactly what the header above says.
-            #
-            # checks.hardware-modules asserts these names exist; the ISO budget
-            # check is what says whether they FIT.
-            imports = with inputs.nixos-hardware.nixosModules; [
-              common-cpu-intel-cpu-only
-              common-cpu-amd
-              common-gpu-intel
-              common-gpu-amd
-              # Imports common-pc and common-pc-laptop too, so it covers all
-              # four of the chassis/disk outcomes.
-              common-pc-laptop-ssd
-            ];
+            };
           };
-        };
 
-      # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
-      lib.mkMicrovm =
-        {
-          template,
-          system,
-          modules ? [ ],
-        }:
-        (nixpkgs.lib.nixosSystem {
-          inherit system;
-          modules = [
-            inputs.microvm.nixosModules.microvm
-            ./modules/microvm/guest.nix
-            template
-          ]
-          ++ modules;
-        }).config.microvm.declaredRunner;
+        # Why: docs/internals/flake.md#one-closure-per-template-shared-by-every-vm-a-user
+        # An installable image carrying somebody else's machine (#478).
+        #
+        # The same installer/cd.nix the reference images use, with `source`
+        # pointing at the caller's flake instead of this one -- so a user's
+        # reinstall image is one function call rather than a copy of a
+        # 900-line module that goes stale on the next bump.
+        #
+        # Called from the generated flake (installer/template/flake.nix), which
+        # is why it takes `flake` and `host` rather than reading anything here:
+        # at that point `self` is the USER's repository and this repository is
+        # one of its inputs.
+        #
+        # It is a reinstaller, not a backup. What it carries is the system
+        # closure and the configuration; what it does not carry is /home,
+        # service state or secrets, and booting it erases the target disk. The
+        # command that builds it says so; this is the machinery underneath.
+        mkUserIso =
+          {
+            flake,
+            host,
+            # Offline by default, because the whole point is a machine that can
+            # be rebuilt when there is nothing to fetch from. The network
+            # variant is #483.
+            offline ? true,
+          }:
+          let
+            machine =
+              flake.nixosConfigurations.${host} or (throw ''
+                mkUserIso: this flake has no machine called "${host}".
+                It has: ${lib.concatStringsSep ", " (lib.attrNames flake.nixosConfigurations)}
+              '');
+          in
+          (nixpkgs.lib.nixosSystem {
+            system = "x86_64-linux";
+            specialArgs = {
+              inherit inputs offline;
+              source = {
+                inherit flake;
+                # One machine, seeded and installed. The reference images carry
+                # three because the reference exists in two encryption shapes
+                # plus a hardware superset; a user has the machine they have,
+                # and its own configuration already decided whether it is
+                # encrypted.
+                configs = [ machine ];
+                installed = {
+                  encrypted = machine;
+                  unencrypted = machine;
+                };
+              };
+            };
+            modules = [ ./installer/cd.nix ];
+          }).config.system.build.isoImage;
+
+        mkMicrovm =
+          {
+            template,
+            system,
+            modules ? [ ],
+          }:
+          (nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              inputs.microvm.nixosModules.microvm
+              ./modules/microvm/guest.nix
+              template
+            ]
+            ++ modules;
+          }).config.microvm.declaredRunner;
+      };
 
       formatter = eachSystem (system: pkgsFor.${system}.nixfmt-tree);
 

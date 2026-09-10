@@ -1569,6 +1569,18 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The reinstall image (#478): installer/cd.nix over a USER machine
+          # instead of the reference set, installed offline and booted. Asserts
+          # copy-never-build and that the machine that boots is the closure the
+          # image carried. CANNOT PASS until cd.nix writes the reference
+          # markers from `source.configs` (#480) -- the file header names the
+          # gap and the CARRIED step asserts it. Nightly-class cost: a full
+          # image build plus an offline install, ~3h on the big runner.
+          reinstall-vm = import ./tests/reinstall-vm.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
 
           # The installed machine, as opposed to the smoke-test guest: a real

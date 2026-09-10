@@ -18,11 +18,31 @@
 # allowlist silently stops covering the next directory somebody adds. A
 # denylist can only be wrong about the few paths it names.
 #
+# TWO questions, one denylist, plus a narrower second list.
+#
+# build.yml asks "can this change anything Nix builds?" -- a new tests/foo.nix
+# is a new derivation, so yes. install-check.yml asks the narrower "can this
+# change an INSTALL?", and for that a new check that the install job does not
+# build is a 30-minute VM for nothing. Measured: 26 to 46 minutes per run,
+# serialised behind one slot.
+#
+# `--install` adds the second list. It stays a denylist for the reason the
+# header gives, and every entry names why that path cannot reach the install
+# closure -- an entry without one is a guess, and a wrong guess here merges a
+# broken installer.
+#
 # Usage:  pr-touches-build.sh            # reads $EVENT_NAME/$GH_REPO/$PR_NUMBER
+#         pr-touches-build.sh --install  # the narrower question
 #         echo "$files" | pr-touches-build.sh -   # a file list on stdin
 #
 # Prints `true` or `false` on stdout. Nothing else goes to stdout.
 set -euo pipefail
+
+install_only=false
+if [ "${1:-}" = "--install" ]; then
+  install_only=true
+  shift
+fi
 
 if [ "${1:-}" = "-" ]; then
   files=$(cat)
@@ -72,6 +92,25 @@ while IFS= read -r f; do
     # guard into one that only runs when something else changed too.
     docs/*|AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
       continue ;;
+
+    # Only for the install question, and only files the install job cannot
+    # reach. install-check.yml builds exactly three checks -- install,
+    # free-space and installer-refusal -- and those three import only
+    # ./hardware-configuration.nix and ./test-instrumentation.nix from this
+    # directory. Verified by reading them, not assumed; the five names below
+    # are re-included above this arm so they keep triggering it.
+    #
+    # Everything else under tests/ is a SEPARATE derivation that build.yml
+    # builds and this job never touches. tests/substitutable.nix cost a
+    # 37-minute VM install on the day it was added, and could not have
+    # changed one byte of an install.
+    tests/install.nix|tests/free-space.nix|tests/installer-refusal.nix)
+      relevant=true; break ;;
+    tests/hardware-configuration.nix|tests/test-instrumentation.nix)
+      relevant=true; break ;;
+    tests/*)
+      if [ "$install_only" = true ]; then continue; fi
+      relevant=true; break ;;
 
     *) relevant=true; break ;;
   esac

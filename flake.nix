@@ -24,6 +24,25 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Stable nixpkgs, carried so CI can prove this flake still evaluates
+    # against it (#527).
+    #
+    # PINNED in the lock rather than resolved fresh, and the split is
+    # deliberate. A moving ref would turn every open pull request red the
+    # moment upstream moved, for a reason none of their authors could fix --
+    # which is the failure that took the roadmap check off pull requests
+    # earlier in this file's history. nightly.yml's canary already owns
+    # upstream drift: it runs a bare `nix flake update` and its failure has
+    # its own identity, "a canary failure means UPSTREAM moved under us".
+    #
+    # So: pull requests get a fixed answer, and the canary is what notices
+    # 26.05 moving. Two questions, two places, neither pretending to be the
+    # other.
+    #
+    # Nothing on a user's machine reads this. It is a check input, and the
+    # only thing that evaluates it is tests/stable-eval.nix.
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
+
     # The same, on the release branch, for a machine whose nixpkgs is a
     # release rather than unstable (#525).
     #
@@ -145,6 +164,7 @@
       systems,
       home-manager,
       home-manager-stable,
+      nixpkgs-stable,
       hyprland,
       omarchy,
       zen-browser,
@@ -188,11 +208,46 @@
       # warning. That is honest -- this project carries one release branch,
       # not every one -- and the warning names the real situation.
       stableRelease = "26.05";
-      homeManagerModule =
-        if lib.trivial.release == stableRelease then
+      homeManagerFor =
+        release:
+        if release == stableRelease then
           home-manager-stable.nixosModules.home-manager
         else
           home-manager.nixosModules.home-manager;
+      homeManagerModule = homeManagerFor lib.trivial.release;
+
+      # The smoke VM's module list, shared by the real configuration and by
+      # the stable evaluation in tests/stable-eval.nix (#527).
+      #
+      # Shared rather than copied, because a check that proves "this
+      # evaluates on stable" while evaluating a DIFFERENT set of modules
+      # proves nothing about the thing it names -- and a copied list is one
+      # somebody extends in exactly one of the two places. Same failure mode
+      # config-warnings.nix avoids by deriving its configuration list instead
+      # of writing one down.
+      #
+      # A function of the home-manager module rather than a plain list: the
+      # two systems need different ones, and the ORDER has to stay exactly as
+      # it was. environment.systemPackages order reaches buildEnv, so moving
+      # a module is not free even when the resulting set is identical.
+      vmModulesWith = hm: [
+        self.nixosModules.nixarchy
+        hm
+        ./vm/configuration.nix
+      ];
+
+      # This flake, evaluated against stable nixpkgs. NOT a
+      # nixosConfigurations entry, deliberately: config-warnings.nix maps over
+      # every entry there, so adding one would pull a full stable evaluation
+      # into an unrelated check -- and that check asserts on warnings, while
+      # this configuration emits one on purpose (the screen-sharing note in
+      # modules/nixos.nix). It would have gone red on arrival, for a reason
+      # that is correct behaviour.
+      stableVm = nixpkgs-stable.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inherit inputs; };
+        modules = vmModulesWith (homeManagerFor nixpkgs-stable.lib.trivial.release);
+      };
 
       # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
       nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
@@ -1055,11 +1110,7 @@
             vm = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
               specialArgs = { inherit inputs; };
-              modules = [
-                self.nixosModules.nixarchy
-                homeManagerModule
-                ./vm/configuration.nix
-              ];
+              modules = vmModulesWith homeManagerModule;
             };
 
             # Why: docs/internals/flake.md#the-same-vm-with-room-to-run-a-model
@@ -1485,6 +1536,14 @@
           # and not a preference.
           config-warnings = import ./tests/config-warnings.nix {
             inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Evaluation against stable, ~20s and no VM (#527). `stableVm` is
+          # passed in rather than reached through `inputs.self`, because it is
+          # deliberately not a nixosConfigurations entry -- see its definition.
+          stable-eval = import ./tests/stable-eval.nix {
+            inherit inputs stableVm;
             pkgs = pkgsFor.${system};
           };
 

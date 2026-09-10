@@ -1841,6 +1841,19 @@ stdenvNoCC.mkDerivation {
 
   passthru = {
     inherit runtimeDeps;
+
+    # The desktop shell this build actually uses, so it can be asserted on
+    # (#528). flake.nix pins it to a FLOOR: on a nixpkgs shipping quickshell
+    # below 0.3.1 the argument is overridden, because 0.3.0's session lock
+    # reaches qFatal when screens sleep while locked and leaves the machine
+    # with nowhere to type a password.
+    #
+    # Exposed because `pkgs.quickshell` is the wrong place to look and would
+    # give the wrong answer: the floor is deliberately scoped to this package
+    # rather than applied as an overlay, so that a user's own quickshell is
+    # left exactly as their nixpkgs has it. The version the SESSION launches
+    # is this one, and until now nothing could see it.
+    inherit quickshell;
   };
 
   meta = {

@@ -1886,14 +1886,37 @@ is the same work with its state attached -- what is in flight, what is waiting,
 and what each feature has left. It is public, and the *Shipped* view is the
 honest answer to "is this thing alive".
 
+When something lands, it is announced in
+[Discussions](https://github.com/olafkfreund/nixarchy/discussions/categories/announcements)
+with a changelog: what was added, what changed, and what is coming. This
+section says what is PLANNED; a merged pull request announces nothing to
+somebody who only uses nixarchy, and that is the gap those posts fill.
+
 | epic | what it is for | |
 | --- | --- | --- |
 | [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
 | [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
-| [#498](https://github.com/olafkfreund/nixarchy/issues/498) | **Try without installing** — run something once to see whether you want it, from the catalogue's own idea of which binary that is | 5 filed |
-| [#525](https://github.com/olafkfreund/nixarchy/issues/525) | **Choose a channel** — stable or unstable, chosen from the menu the way Omarchy offers it, and a way to take a single package from the other one. Sequenced so the lockscreen that ships on stable is fixed *before* the choice is offered | 7 filed |
 
 **Recently finished:**
+[choose a channel](https://github.com/olafkfreund/nixarchy/issues/525)
+— stable or unstable, from *Update ▸ Channel*, moving nixpkgs and
+home-manager together because neither project supports the mismatch. All seven
+children closed. The order was the point: `nixos-26.05` ships quickshell
+0.3.0, whose session lock reaches `qFatal` when screens sleep while locked and
+leaves the machine blank with nowhere to type a password — so the shell is
+pinned to a floor of 0.3.1 **before** anyone is offered the choice that would
+hand it to them. Stable is checked by a 23-second evaluation rather than a VM,
+and says so in its own output: it proves the expression is valid, never that
+the machine boots. Plus a per-package escape whose cost is stated wherever it
+is paid — the two channels share **zero** store paths even at identical
+versions, measured at 51 MB for `btop` and 1.5 GB for `vlc`.
+Also
+[try without installing](https://github.com/olafkfreund/nixarchy/issues/498)
+— `nixarchy try <name>` runs something once to see whether you want it, from
+the catalogue's own idea of which binary a package puts on PATH, with a key in
+the Search picker and an offer to keep it when you exit. All five children
+closed.
+Also
 [preview changes](https://github.com/olafkfreund/nixarchy/issues/485)
 — boot a config change in a VM and look at it before switching the machine to
 it. `nixarchy-preview`, a menu row beside Apply, and a disk that is refused

@@ -179,16 +179,25 @@ supported by this version of adb"*.
 firewall hole, and authentication that does not quietly fall back to a shared
 secret.
 
+**Stable or unstable, your choice.** *Update ▸ Channel* offers it the way
+Omarchy does, and moves nixpkgs and home-manager together — the two are
+developed as a pair and a mismatch is a combination neither project supports.
+You can also take a single package from the other channel without moving the
+machine.
+
+It was sequenced deliberately, and the reason is worth stating: nixos-26.05
+ships a version of the desktop shell whose lockscreen can leave a machine blank
+with nowhere to type a password. That is fixed *before* anyone is offered the
+choice that would hand it to them. And the page says the uncomfortable part
+plainly — "stable" sounds safer and here it is **less tested**, because nixarchy
+is developed against unstable.
+
+See **[stable or unstable](manual/channels)**.
+
 ### What is being worked on now
 
-A **choice of channel** — stable or unstable — offered the way Omarchy offers
-it, plus a way to take a single package from the other one. It is sequenced
-deliberately: nixos-26.05 ships a version of the desktop shell whose lockscreen
-can leave a machine blank with nowhere to type a password, so that is fixed
-*before* anyone is offered the choice that would hand it to them. Also in
-flight: the package picker remade, running an application once without
-installing it, and building a reinstall image from a machine's own
-configuration.
+The package picker remade, running an application once without installing it,
+and a network variant of the reinstall image.
 
 The [board](https://github.com/users/olafkfreund/projects/9) is public, and its
 *Shipped* view is the honest answer to "is this thing alive".

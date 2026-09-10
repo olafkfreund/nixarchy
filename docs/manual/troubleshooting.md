@@ -48,6 +48,31 @@ Always pass both flags to `omarchy debug`: `--no-sudo` skips `dmesg`, and
 `--print` writes to the terminal instead of trying to upload. The pacman
 lines in its output read `unknown`, which is expected.
 
+### `omarchy update` says it updated, but nothing ever moves
+
+If this machine was installed before the fix, its flake **can never move**, and
+the update said so is the worst part of it: inputs were reported as going
+forward while nothing did. No nixpkgs updates, no security fixes.
+
+The cause is exact. The old installer wrote a *commit* into both the nixarchy
+URL in `flake.nix` and the lock's `original` field — and `nix flake update`
+re-resolves `original`. Re-resolving a commit returns that commit, forever.
+
+```
+nixarchy unfreeze
+```
+
+rewrites the two things the installer got wrong, in place: the nixarchy input
+moves from a commit to the release branch, and nixpkgs becomes an input of your
+own that nixarchy follows.
+
+It only ever rewrites the installer's own line. If you have edited that URL
+into some other shape, the flake has an owner with opinions and the command
+refuses rather than editing around you.
+
+Nothing to do if you installed recently — new machines are not written this
+way. `nixarchy doctor` is the quick way to tell.
+
 ### My change rebuilt fine but the keybinding still runs the old thing
 
 `OMARCHY_PATH` and `PATH` are set at login. A rebuild produces a new store

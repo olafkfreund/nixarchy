@@ -1330,6 +1330,13 @@
             installScript = ./installer/install.sh;
           };
 
+          # nixarchy-reinstall-iso's preflights, with a df, git and eval that
+          # lie -- plus the #478 honesty strings. See tests/reinstall-iso.nix.
+          reinstall-iso = import ./tests/reinstall-iso.nix {
+            pkgs = pkgsFor.${system};
+            reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
+          };
+
           installer-store-space = import ./tests/installer-store-space.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;

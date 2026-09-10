@@ -108,6 +108,16 @@ let
       source = {
         flake = inputs.self;
         configs = [ userMachine ];
+
+        # Added after this check was written: #480 made `installed` required,
+        # because the markers install.sh reads have to name a machine the
+        # image carries. A user's image points both slots at their one
+        # machine -- its own configuration already decided whether it is
+        # encrypted, so there is no second shape to choose between.
+        installed = {
+          encrypted = userMachine;
+          unencrypted = userMachine;
+        };
       };
     };
     modules = [ ../installer/cd.nix ];

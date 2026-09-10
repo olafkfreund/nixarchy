@@ -1399,6 +1399,25 @@ which nixarchy does not own. ~/.config/nixarchy/apps.nix is already
 a full NixOS module, so a systemPackages list can sit beside the
 app selection with no new file and no new option.
 
+A name that does not resolve opens the picker on the query instead
+of printing a search URL (#492): a miss is a typo more often than a
+missing package, and the fuzzy index exists for typos. Two guards
+keep that sane. NIXARCHY_IN_PICKER stops the fallback when the
+caller IS the picker's own writer -- an index row that misses is an
+index bug, and recursing into a second picker would loop. And the
+picker is exec'd only after everything that DID resolve is
+committed and validated, because exec does not come back.
+
+When the chosen package is unfree and this generation sets
+allowUnfree = false, the script offers the narrow grant (#497): a
+commented nixpkgs.config.allowUnfreePredicate naming just that
+package's pname, in the user's own file, marked `#@unfree-allow`.
+Marked, because nixpkgs.config is a plain attrset whose keys do not
+merge -- a second add must grow the one list, never scaffold a
+second predicate. The policy itself is baked into the script as a
+constant at build time: script and system are the same generation,
+so the constant cannot go stale without the script being replaced.
+
 <a id="search-everything-this-machine-could-install-and-r"></a>
 ### Search everything this machine could install, and route the choice
 
@@ -1421,6 +1440,26 @@ options, not from search.nixos.org. It is slower to build and it
 cannot go stale against the machine, which is the trade that
 matters: an index that offers a package nixarchy-pkg-add will then
 refuse is worse than no index.
+
+The package rows come from our own walk (modules/pkg-index.nix),
+not `nix search`. That is not taste: `nix search --json` emits only
+pname, version and description -- verified on Nix 2.34, not read --
+so homepage, licence, unfree and broken (#493) had to come from an
+eval of our own. The walk follows the same recurseForDerivations
+rule nix search does and was verified to produce the identical row
+set (112,755 attrs, both ways) at the same ~30s cost, once per
+generation.
+
+Status -- [enabled], [queued], nothing -- is stamped at picker
+START, not into the cached index: the selection changes with every
+pick, the index once per generation. It is one sed over the user's
+apps.nix/services.nix (live `#@` marker lines only), one over the
+copies nixarchy-apply made into the flake, and one awk join over
+the index. No evaluation, and nothing per keystroke. "enabled"
+means the flake copy has the line too -- nixarchy-apply copies
+before rebuilding, so a selection absent there has not been built;
+an unreadable flake directory therefore reads as "queued", which is
+the honest claim for a machine that has never applied.
 
 <a id="ask-flathub-org-directly"></a>
 ### Ask flathub.org directly

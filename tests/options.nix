@@ -1094,6 +1094,22 @@ let
     ) services
   );
 
+  # #497 both ways: nixarchy-pkg-add bakes this generation's licence policy
+  # in as a constant (`allowunfree=...`), because the script and the system
+  # it queues packages for are the same generation. The on state (the
+  # default) is asserted against $vm's built script below; this is the off
+  # half, which no built VM covers -- exactly the half a refactor breaks
+  # quietly.
+  pkgAddTextWith =
+    settings:
+    (pkgs.lib.findFirst (
+      p: (p.name or "") == "nixarchy-pkg-add"
+    ) (throw "no nixarchy-pkg-add in systemPackages") (configWith settings).environment.systemPackages)
+    .text;
+  pkgAddUnfreeOffBaked = pkgs.lib.hasInfix "allowunfree=false" (pkgAddTextWith {
+    allowUnfree = false;
+  });
+
   broken = pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) cases;
 
   report = pkgs.lib.concatStringsSep "\n" (
@@ -1121,6 +1137,7 @@ pkgs.runCommand "nixarchy-options"
     microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
+    pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
     fleetUrl = fleet.url;
@@ -1941,6 +1958,77 @@ pkgs.runCommand "nixarchy-options"
         done
         echo "every advertised nixarchy subcommand has a route"
 
+        # ---- a package miss opens the picker, not a URL (#492) --------------
+        #
+        # Grepped from the built script text, like the flatpak rows above:
+        # these names are load-bearing, and renaming one is a deliberate CI
+        # trip-wire rather than an accident.
+        pkgadd="$vm/sw/bin/nixarchy-pkg-add"
+        search="$vm/sw/bin/nixarchy-search"
+        grep -q 'nixarchy-search' "$pkgadd" || {
+          echo "nixarchy-pkg-add never reaches for the picker: a miss is a dead end again" >&2
+          exit 1
+        }
+        if grep -q 'search\.nixos\.org' "$pkgadd"; then
+          echo "nixarchy-pkg-add answers a miss with a URL again -- that is the homework #492 removed" >&2
+          exit 1
+        fi
+        # Both halves of the recursion guard: the picker declares itself, and
+        # the writer checks. Lose either and a bad index row opens pickers
+        # inside pickers forever.
+        grep -q 'NIXARCHY_IN_PICKER' "$pkgadd" || {
+          echo "nixarchy-pkg-add lost the in-picker guard: a miss inside the picker recurses" >&2
+          exit 1
+        }
+        grep -q 'export NIXARCHY_IN_PICKER=1' "$search" || {
+          echo "nixarchy-search no longer declares itself to its writers (NIXARCHY_IN_PICKER)" >&2
+          exit 1
+        }
+        echo "a package miss opens the picker, with the recursion guard in place"
+
+        # ---- the index carries meta, and the picker carries status (#493) ---
+        walkfile=$(sed -n 's/.*walk=\(\/nix\/store[^ ]*\).*/\1/p' "$search" | head -1)
+        test -n "$walkfile" || {
+          echo "nixarchy-search names no meta-walk file: the indexer lost its package source" >&2
+          exit 1
+        }
+        for field in homepage license unfree broken recurseForDerivations; do
+          grep -q "$field" "$walkfile" || {
+            echo "the index walk ($walkfile) no longer carries '$field'" >&2
+            echo "  nix search --json has only pname/version/description; the walk exists" >&2
+            echo "  precisely to carry the rest (#493)" >&2
+            exit 1
+          }
+        done
+        grep -q 'mark_live' "$search" || {
+          echo "nixarchy-search lost its status pass: rows no longer say enabled/queued" >&2
+          exit 1
+        }
+        # The baked licence-policy constant, in its default (allow) state.
+        grep -q 'allowunfree=true' "$search" || {
+          echo "nixarchy-search does not carry allowunfree=true on a default config" >&2
+          exit 1
+        }
+        echo "the picker's index carries meta and its rows carry status"
+
+        # ---- unfree help is the narrow grant (#497) --------------------------
+        grep -q 'allowUnfreePredicate' "$pkgadd" || {
+          echo "nixarchy-pkg-add no longer offers allowUnfreePredicate for a disallowed unfree package" >&2
+          exit 1
+        }
+        grep -q '#@unfree-allow' "$pkgadd" || {
+          echo "the unfree grant lost its #@unfree-allow marker, so a second add would scaffold a" >&2
+          echo "  second predicate -- and nixpkgs.config keys do not merge" >&2
+          exit 1
+        }
+        test "$pkgAddUnfreeOff" = true || {
+          echo "with allowUnfree = false the built nixarchy-pkg-add does not carry allowunfree=false:" >&2
+          echo "  the baked policy constant no longer follows the option, so the unfree help" >&2
+          echo "  fires never or always" >&2
+          exit 1
+        }
+        echo "unfree help scaffolds the narrow grant, and the baked policy follows the option"
+
         # ---- machines pull only when asked ---------------------------------
         test "$fleetOff" = false || {
           echo "system.autoUpgrade is on without programs.nixarchy.fleet.enable" >&2
@@ -2329,6 +2417,154 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "gsr-kms-server has its cap_sys_admin wrapper, so recording can start"
+
+        # ---- Remove can un-write everything Install writes (#494, #522) ----
+        #
+        # The Install picker writes three kinds of thing: `id.enable` lines
+        # (nixarchy-app-enable), `#@pkg` markers (nixarchy-pkg-add) and
+        # `#@opt` markers (add_option in nixarchy-search). For months only the
+        # first could be un-written -- nixarchy-app-remove greps `.enable`
+        # lines, so the other two were invisible to it, not merely unrouted.
+        #
+        # SYMMETRY, not existence: each kind is added by the real writer and
+        # removed by the real remover, and the file must come back
+        # byte-for-byte. A check that only asserts "remove deleted a line"
+        # passes while the other two kinds stay stuck, which was exactly the
+        # shipped state.
+        export NIX_STATE_DIR=$PWD/nix-state NIX_LOG_DIR=$PWD/nix-state
+        mkdir -p nix-state
+        rmhome=$PWD/remove-home
+        mkdir -p "$rmhome/.config/nixarchy"
+        cp "$vm/etc/nixarchy/apps-template.nix" "$rmhome/.config/nixarchy/apps.nix"
+        appfile=$rmhome/.config/nixarchy/apps.nix
+        chmod u+w "$appfile"
+        run() { HOME=$rmhome XDG_CONFIG_HOME=$rmhome/.config PATH="$vm/sw/bin:$PATH" "$@"; }
+
+        # An app: enable uncomments the marked row, disable re-comments it.
+        appid=$(grep -oE '#@ [a-z0-9_-]+$' "$appfile" | head -1 | cut -d' ' -f2)
+        test -n "$appid" || { echo "the apps template has no plain #@ marker to test with" >&2; exit 1; }
+        before=$(cksum < "$appfile")
+        run nixarchy-app-enable "$appid" >/dev/null
+        grep -q "^[[:space:]]*$appid\.enable" "$appfile" || {
+          echo "nixarchy-app-enable $appid wrote no .enable line" >&2; exit 1; }
+        run nixarchy-app-disable "$appid" >/dev/null
+        [ "$before" = "$(cksum < "$appfile")" ] || {
+          echo "app add/remove is not symmetric: enable then disable changed the file" >&2
+          exit 1
+        }
+        echo "an enabled app can be un-enabled, byte for byte"
+
+        # A package. The first add also creates the systemPackages block,
+        # which remove deliberately leaves in place (the user may keep their
+        # own unmarked lines in it) -- so the baseline is taken after the
+        # block exists, and remove must be the exact inverse of add from
+        # there.
+        run nixarchy-pkg-add hello >/dev/null
+        grep -q '#@pkg hello$' "$appfile" || {
+          echo "nixarchy-pkg-add hello wrote no marked line" >&2; exit 1; }
+        withblock=$(cksum < "$appfile")
+        run nixarchy-pkg-add cowsay >/dev/null
+        grep -q '#@pkg cowsay$' "$appfile" || {
+          echo "nixarchy-pkg-add cowsay wrote no marked line" >&2; exit 1; }
+        run nixarchy-pkg-remove cowsay >/dev/null
+        [ "$withblock" = "$(cksum < "$appfile")" ] || {
+          echo "pkg add/remove is not symmetric: adding then removing cowsay changed the file" >&2
+          exit 1
+        }
+        run nixarchy-pkg-remove hello >/dev/null
+        if grep -q '#@pkg ' "$appfile"; then
+          echo "removing the last package left a #@pkg marker behind" >&2; exit 1
+        fi
+        echo "an added package can be removed, byte for byte"
+
+        # An option. add_option lives inside nixarchy-search's fzf loop and
+        # cannot be driven without a tty, so the add is simulated with the
+        # writer's own byte shapes -- and those two greps below pin the
+        # WRITER's format strings, so if add_option changes what it writes,
+        # this goes red here rather than drifting apart silently. Match the
+        # call, not prose: these are the printf/insert_line arguments.
+        grep -qF ' = $value;  #@opt $path' "$vm/sw/bin/nixarchy-search" || {
+          echo "add_option no longer writes '\$path = \$value;  #@opt \$path'" >&2
+          echo "  update the simulated add below to the new shape" >&2
+          exit 1
+        }
+        grep -qF "printf '  # %s = ;  #@opt %s" "$vm/sw/bin/nixarchy-search" || {
+          echo "add_option no longer scaffolds '  # <path> = ;  #@opt <path>'" >&2
+          echo "  update the simulated scaffold below to the new shape" >&2
+          exit 1
+        }
+        # insert_line, byte for byte: payload before the closing brace, with
+        # awk -v doing the \n expansion, exactly as nixarchy-search does it.
+        simulate_add() {
+          tmp2=$(mktemp)
+          awk -v payload="$1" '
+            !ins && /^}[[:space:]]*$/ { printf "%s", payload; ins = 1 }
+            { print }
+          ' "$appfile" > "$tmp2"
+          mv "$tmp2" "$appfile"
+        }
+
+        optbase=$(cksum < "$appfile")
+        simulate_add '\n  services.demo.enable = true;  #@opt services.demo.enable\n'
+        run nixarchy-opt-remove services.demo.enable >/dev/null
+        [ "$optbase" = "$(cksum < "$appfile")" ] || {
+          echo "opt add/remove is not symmetric for a value the picker set" >&2
+          exit 1
+        }
+        # And the scaffold shape: blank line, doc comments, marked line --
+        # one unit in, one unit out.
+        simulate_add '\n  # NIXOS OPTION  services.demo.port\n  # \n  # type:     int\n  # services.demo.port = ;  #@opt services.demo.port\n'
+        run nixarchy-opt-remove services.demo.port >/dev/null
+        [ "$optbase" = "$(cksum < "$appfile")" ] || {
+          echo "opt add/remove is not symmetric for a commented scaffold" >&2
+          exit 1
+        }
+        # A path that is not there must change nothing and say so.
+        if run nixarchy-opt-remove no.such.option >/dev/null 2>&1; then
+          echo "nixarchy-opt-remove succeeded on an option that is not in the file" >&2
+          exit 1
+        fi
+        [ "$optbase" = "$(cksum < "$appfile")" ] || {
+          echo "a refused opt removal still changed the file" >&2; exit 1; }
+        echo "a picker-written option can be removed, byte for byte, scaffold included"
+
+        # The Remove picker must SEE all three kinds -- being removable from
+        # the command line while invisible in the menu is the bug in a
+        # different coat. Comments stripped first; match the greps and the
+        # dispatch, not prose.
+        appremove=$(grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-app-remove")
+        for needle in '#@pkg ' '#@opt ' nixarchy-pkg-remove nixarchy-opt-remove; do
+          printf '%s' "$appremove" | grep -qF -- "$needle" || {
+            echo "nixarchy-app-remove does not handle $needle:" >&2
+            echo "  the Remove menu is then blind to a kind the Install picker writes" >&2
+            exit 1
+          }
+        done
+        echo "the Remove picker lists apps, packages and options"
+
+        # And the ROUTE, not just the call site: #498 shipped `nixarchy try`
+        # advertised and unreachable, because nothing asserted the dispatcher
+        # had a row for it. Run the dispatcher itself; a missing route falls
+        # through to `exec omarchy ...` and dies as an unknown Omarchy
+        # command instead of reaching nixarchy-pkg-remove's own refusal.
+        grep -q 'nixarchy pkg remove' "$vm/sw/bin/nixarchy" || {
+          echo "the dispatcher's usage does not advertise 'nixarchy pkg remove'" >&2
+          exit 1
+        }
+        if r=$(run "$vm/sw/bin/nixarchy" pkg remove nosuchattr 2>&1); then
+          echo "nixarchy pkg remove succeeded on a package that is not in the file:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"no package 'nosuchattr'"*) ;;
+          *)
+            echo "nixarchy pkg remove did not reach nixarchy-pkg-remove; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy pkg remove routes to nixarchy-pkg-remove"
 
           touch $out
       ''

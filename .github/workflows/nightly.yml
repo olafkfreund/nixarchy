@@ -209,6 +209,18 @@ jobs:
       - uses: ./.github/actions/setup-nix
 
       - name: The cache holds what main last built
+        # main only, because the question is only meaningful there. The
+        # comment above says a path evaluated from any other tree is a
+        # DIFFERENT path -- the omarchy derivation depends on the flake's own
+        # rev -- so on a branch this probes a path nothing ever pushed and
+        # 404s by construction. That happened on 2026-09-09: two
+        # workflow_dispatch runs against a branch filed #473 against a cache
+        # that was serving main's omarchy with HTTP 200 the whole time, and
+        # the failure text below sent the reader to check the token.
+        #
+        # Skipped rather than made to pass, since there is no branch-shaped
+        # version of "what main last built".
+        if: github.ref == 'refs/heads/main'
         run: |
           path=$(nix eval --raw ".#omarchy.outPath")
           hash=$(basename "$path" | cut -d- -f1)
@@ -229,6 +241,13 @@ jobs:
           echo "likely cause is CACHIX_AUTH_TOKEN: cachix exits 0 when a token"
           echo "is rejected, so no job has failed and none will. Check the"
           echo "token before looking anywhere else."
+          echo
+          echo "Before that: confirm this ran on main. The omarchy derivation"
+          echo "depends on the flake's rev, so a path evaluated from any other"
+          echo "tree is a path nobody ever pushed, and 404s for a reason that"
+          echo "has nothing to do with the cache. The step is gated on main"
+          echo "for that reason; if you are reading this from somewhere else,"
+          echo "the gate is what broke, not the token."
           exit 1
 
       - name: The cache holds the MicroVM template runners

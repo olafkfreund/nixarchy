@@ -311,51 +311,64 @@ let
           description = "Every package, NixOS option and Omarchy app, in one picker";
         };
 
-        # Every rebuild leaves the last one bootable and nothing said so.
-        #
-        # Under System because it is the system this restores. Upstream's
-        # nearest equivalent is a snapper snapshot picked from the boot menu,
-        # which is a different thing on NixOS: `@` here holds almost no
-        # operating system, so a generation is what carries one. The snapshot
-        # rows under Trigger cover the other half -- home, and service state
-        # -- which no generation touches.
-        "system.rollback" = {
+        # Why: modules/AGENTS.md#backup-and-recovery-one-menu-542
+        "system.recovery" = {
+          icon = "󰁯";
+          label = "Backup and recovery";
+          aliases = [
+            "recovery"
+            "restore"
+            "backup"
+          ];
+        };
+
+        # Restores before backups, in source order: #542 wants an emergency
+        # read left-to-right as "what to try first", and Menu.qml lists a
+        # parent's children in the order this file declares their ids in.
+        "system.recovery.rollback" = {
           icon = "󰕍";
           label = "Roll back";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-rollback";
           description = "Switch to an earlier system generation. Your home directory is not touched";
         };
 
-        # Why: modules/AGENTS.md#beside-roll-back-because-they-are-the-two-halves-o
-        "system.backup" = {
-          icon = "󰆔";
-          label = "Back up configuration";
-          when = "test -e /etc/nixarchy/managed";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-config-repo";
-          description = "Commit and push this machine's NixOS configuration, so a reinstall can bring it back";
+        # Explicit `parent`: MenuModel.js's default parent for this id is
+        # "system.recovery.snapshot" (its own id with the last segment
+        # dropped) -- the PEER row below, not this menu. Left to the
+        # default, this row would render one level too deep: invisible when
+        # browsing System > Backup and recovery, reachable only by search --
+        # the same trap trigger.snapshot.restore was already in under
+        # Trigger, and the reason system.recovery.home-backup.restore below
+        # needs the same override.
+        "system.recovery.snapshot.restore" = {
+          icon = "󰦛";
+          label = "Restore from snapshot";
+          parent = "system.recovery";
+          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot restore";
+          description = "Open an earlier version of your home directory and copy back what you want";
         };
 
-        # Snapshots under Trigger, beside the other "do a thing now" rows.
-        #
-        # Upstream's are taken by its updater and restored from the boot menu,
-        # and neither happens here. These are new rows, so they carry their
-        # own label and icon.
-        "trigger.snapshot" = {
+        # Why: modules/AGENTS.md#the-off-disk-half-beside-the-on-disk-one
+        "system.recovery.home-backup.restore" = {
+          icon = "󰇚";
+          label = "Restore desktop config";
+          parent = "system.recovery";
+          when = "nixarchy-home-backup --check";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-home-backup restore";
+          description = "Copy your bar, keybindings and themes back out of the backup. Works on a new machine";
+        };
+
+        # Upstream's snapshots are taken by its updater and restored from
+        # the boot menu, and neither happens here. This is a new row, so it
+        # carries its own label and icon.
+        "system.recovery.snapshot" = {
           icon = "󰆓";
           label = "Snapshot home";
           action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot create";
           description = "Save your home directory as it is now. Instant, and costs nothing until files change";
         };
 
-        "trigger.snapshot.restore" = {
-          icon = "󰦛";
-          label = "Restore from snapshot";
-          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot restore";
-          description = "Open an earlier version of your home directory and copy back what you want";
-        };
-
-        # Why: modules/AGENTS.md#the-off-disk-half-beside-the-on-disk-one
-        "trigger.home-backup" = {
+        "system.recovery.home-backup" = {
           icon = "󰁯";
           label = "Back up desktop config";
           when = "nixarchy-home-backup --check";
@@ -363,19 +376,20 @@ let
           description = "Push your bar, keybindings and themes to a private git repository. Survives the disk";
         };
 
-        "trigger.home-backup.restore" = {
-          icon = "󰇚";
-          label = "Restore desktop config";
-          when = "nixarchy-home-backup --check";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-home-backup restore";
-          description = "Copy your bar, keybindings and themes back out of the backup. Works on a new machine";
+        # Why: modules/AGENTS.md#beside-roll-back-because-they-are-the-two-halves-o
+        "system.recovery.backup" = {
+          icon = "󰆔";
+          label = "Back up configuration";
+          when = "test -e /etc/nixarchy/managed";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-config-repo";
+          description = "Commit and push this machine's NixOS configuration, so a reinstall can bring it back";
         };
 
         # Deliberately not called "backup" -- #478 names the trap: someone
         # loses a disk, boots the "backup", and gets a clean machine with
         # none of their files. The image reinstalls the SYSTEM; files come
-        # back from the two rows above.
-        "trigger.reinstall-iso" = {
+        # back from the rows above.
+        "system.recovery.reinstall-iso" = {
           icon = "󰗮";
           label = "Build reinstall image";
           when = "nixarchy-reinstall-iso --check";
@@ -498,8 +512,8 @@ let
       // lib.optionalAttrs boxesEnabled (
         {
           # A new parent under Trigger, appended after upstream's own rows --
-          # the same precedent trigger.snapshot and trigger.home-backup above
-          # already set for this file, and the one #226 set for sandboxes.
+          # the same precedent system.recovery above already set for this
+          # file (#542), and the one #226 set for sandboxes.
           # `when` is the runtime half of the gate: whether podman is
           # actually usable THIS login is only knowable now, not at rebuild
           # time -- the Nix-level half is `boxesEnabled` just above, which
@@ -1577,6 +1591,7 @@ in
                 pkgs.gnused
                 pkgs.gawk
                 pkgs.jq
+                pkgs.diffutils
                 config.nix.package
                 cfg.package # omarchy-notification-send
               ];
@@ -1629,10 +1644,16 @@ in
                 # package that was already there.
                 other=false
                 want_channel=""
+                # --dry-run answers #495: show the diff before touching the
+                # user's file. It costs nothing extra -- everything below
+                # already edits $file with $backup as the pre-edit copy, so
+                # dry-run's whole job is to diff those two and put $file back.
+                dry_run=false
                 while [ $# -gt 0 ]; do
                   case "$1" in
                     --stable)   other=true; want_channel=stable;   shift ;;
                     --unstable) other=true; want_channel=unstable; shift ;;
+                    --dry-run)  dry_run=true; shift ;;
                     --) shift; break ;;
                     -*) echo "nixarchy-pkg-add: unknown option '$1'" >&2; exit 1 ;;
                     *) break ;;
@@ -1691,13 +1712,15 @@ in
                   if can_pick; then
                     exec nixarchy-search
                   fi
-                  echo "usage: nixarchy-pkg-add [--stable|--unstable] <nixpkgs-attribute>..." >&2
+                  echo "usage: nixarchy-pkg-add [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
                   echo "  e.g. nixarchy-pkg-add ripgrep fd" >&2
                   echo "  or run 'nixarchy-search' to browse everything" >&2
                   echo >&2
                   echo "  --stable / --unstable take ONE package from the other" >&2
                   echo "  channel. The two share no store paths even at the same" >&2
                   echo "  version, so each one costs its whole closure." >&2
+                  echo >&2
+                  echo "  --dry-run shows the diff to $file without writing it." >&2
                   exit 1
                 fi
 
@@ -1959,6 +1982,44 @@ in
                   restore
                   echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
                   exit 1
+                fi
+
+                # $file has been edited in place all along, with $backup as
+                # the pre-edit copy every restore above already relies on --
+                # so the diff nobody has seen yet is just the two of them,
+                # compared now that the result is known to parse.
+                #
+                # NIXARCHY_IN_PICKER means fzf already collected a yes a
+                # moment ago; asking again here would be a second prompt for
+                # the same choice. can_pick's own guard is why: a menu pick
+                # runs with no terminal attached at all, where a prompt would
+                # not double-ask, it would hang.
+                interactive() {
+                  [ -z "''${NIXARCHY_IN_PICKER:-}" ] && [ -t 0 ] && [ -t 1 ]
+                }
+
+                if [ "$dry_run" = true ] || interactive; then
+                  echo "-- $file --"
+                  diff -u --label "$file (before)" --label "$file (after)" "$backup" "$file" || true
+                  echo
+                fi
+
+                if [ "$dry_run" = true ]; then
+                  restore
+                  echo "dry run: nothing written to $file"
+                  exit 0
+                fi
+
+                if interactive; then
+                  printf 'Write this to %s? [Y/n] ' "$file"
+                  read -r reply || reply=n
+                  case "$reply" in
+                    [nN]*)
+                      restore
+                      echo "Nothing changed."
+                      exit 0
+                      ;;
+                  esac
                 fi
 
                 count=$(grep -c '#@pkg ' "$file" || true)

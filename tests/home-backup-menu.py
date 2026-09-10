@@ -20,8 +20,8 @@ menu = json.loads(re.sub(r",(\s*[}\]])", r"\1", raw))
 GATE = "nixarchy-home-backup --check"
 
 for row_id, want_action in (
-    ("trigger.home-backup", "nixarchy-home-backup"),
-    ("trigger.home-backup.restore", "nixarchy-home-backup restore"),
+    ("system.recovery.home-backup", "nixarchy-home-backup"),
+    ("system.recovery.home-backup.restore", "nixarchy-home-backup restore"),
 ):
     row = menu.get(row_id)
     if row is None:
@@ -34,8 +34,8 @@ for row_id, want_action in (
             "It would be offered on a machine where the command refuses."
         )
     # MenuModel.js falls back to the raw id for a missing label and to "" for
-    # everything else, so an omitted key renders as "trigger.home-backup"
-    # rather than inheriting anything.
+    # everything else, so an omitted key renders as
+    # "system.recovery.home-backup" rather than inheriting anything.
     for key in ("label", "icon", "description"):
         if not row.get(key):
             sys.exit(f"{row_id} has no {key}; the menu renders the raw id")

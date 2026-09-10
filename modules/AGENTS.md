@@ -1203,16 +1203,89 @@ The override rows, as data. Deliberately WITHOUT label or icon: those are
 copied from upstream's own menu at build time by the script below, so a
 rename upstream follows through instead of being frozen into this repo.
 
+<a id="backup-and-recovery-one-menu-542"></a>
+### Backup and recovery, one menu (#542)
+
+```nix
+"system.recovery" = {
+```
+
+"How do I get back?" used to be answered in two menus: Roll back and
+Back up configuration under System, the other five -- the two
+snapshot rows, the two home-backup rows, and the reinstall image --
+under Trigger, the catch-all upstream uses for one-off actions and a
+poor fit for "my disk died". The moment somebody needs one of these
+seven is the moment they are least willing to hunt through two menus
+for it, so all seven now live under one parent, `system.recovery`,
+Backup and recovery.
+
+A new parent under an existing top-level menu is precedented:
+trigger.box (#226) and trigger.vm both nest a group under Trigger the
+same way this nests one under System -- see "The Sandboxes group"
+below for the shape.
+
+Restores come before backups: the proposal in #542 puts Roll back,
+Restore from snapshot and Restore desktop config first, then Snapshot
+home, Back up desktop config, Back up configuration and Build
+reinstall image, on the reasoning that somebody opening this menu in
+an emergency wants the first half and somebody doing housekeeping can
+scroll. Menu.qml lists a parent's children in the order this file
+declares their ids, so getting that order right is a matter of
+writing the seven rows in that order and nothing else.
+
+No `when` on the parent. Rollback and the two snapshot rows carry no
+gate at all -- they work on every nixarchy machine -- and the other
+four keep the gates they had (`test -e /etc/nixarchy/managed` for
+Back up configuration, `nixarchy-home-backup --check` for the
+home-backup pair, `nixarchy-reinstall-iso --check` for the image).
+Gating the parent as well would hide the whole group, including the
+three rows that always work, on a machine where only one of the four
+gated rows fails its check. "Hidden children are hidden individually"
+below is the general form of the same rule.
+
+Two of the seven -- Restore from snapshot and Restore desktop
+config -- need an explicit `parent = "system.recovery";`.
+MenuModel.js's default parent for an id is that id with its last
+dot-segment dropped, which for `system.recovery.snapshot.restore` is
+`system.recovery.snapshot` -- the sibling "Snapshot home" row, not
+this menu. Left to the default, both restore rows would render one
+level too deep: invisible when browsing System > Backup and recovery
+(a screen only lists a child whose `parent` field equals the screen's
+own id), reachable only by typing into search. That was already true
+of `trigger.snapshot.restore` under Trigger before this change, and
+is the reason the fragmentation in #542 was worth fixing rather than
+just relabelling.
+
+Ids renamed, not aliased. All seven were already ids nixarchy
+invented -- `system.rollback`, `system.backup`,
+`trigger.snapshot(.restore)`, `trigger.home-backup(.restore)`,
+`trigger.reinstall-iso` -- not ids upstream ships, so nothing outside
+this repo has a contract with their spelling: no upstream row
+references them, and `programs.nixarchy.menu.extraEntries` (the one
+place a user's own configuration could name one) is new enough that
+nothing in this repo's history uses the old spellings. Keeping the
+old ids alive as silent redirects would be permanent complexity
+bought for hypothetical muscle memory, on a project with no released
+version and no stated compatibility promise for menu ids.
+`omarchy menu summon trigger.snapshot` after this change returns
+nothing, the same as summoning any id that was never real -- not a
+crash, not a stale row, just not found. If that turns out to matter
+in practice, `menu.extraEntries."trigger.snapshot".target =
+"system.recovery.snapshot"` is the same one-line fix a user reaching
+for the old name would need.
+
 <a id="beside-roll-back-because-they-are-the-two-halves-o"></a>
 ### Beside Roll back, because they are the two halves of the same
 
 ```nix
-"system.backup" = {
+"system.recovery.backup" = {
 ```
 
 Beside Roll back, because they are the two halves of the same
 question: a generation brings this machine back on this disk, and a
-pushed configuration brings it back on any other one.
+pushed configuration brings it back on any other one. Both now live
+under `system.recovery` -- see "Backup and recovery, one menu"
+above -- but the pairing this paragraph describes is unchanged.
 
 Reachable deliberately rather than only by notification. The command
 existed for a while with no way to reach it except a nudge on a boot
@@ -1229,7 +1302,7 @@ command itself gates on -- see modules/nixos.nix.
 ### The off-disk half, beside the on-disk one
 
 ```nix
-"trigger.home-backup" = {
+"system.recovery.home-backup.restore" = {
 ```
 
 The off-disk half, beside the on-disk one.
@@ -1237,7 +1310,9 @@ The off-disk half, beside the on-disk one.
 A snapshot and a backup read as the same thing to someone who has
 not lost a disk yet, so the two pairs sit together deliberately:
 snapshots are instant and local, these two survive the hardware.
-The descriptions are where that difference is actually said.
+The descriptions are where that difference is actually said. Both
+pairs now live under `system.recovery` -- see "Backup and recovery,
+one menu" above -- alongside Roll back and the reinstall image.
 
 `when` hides both rows on a machine nixarchy did not install --
 the same gate the script itself enforces, so an imported

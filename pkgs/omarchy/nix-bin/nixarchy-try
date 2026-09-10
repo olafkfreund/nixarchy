@@ -1,0 +1,342 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Run an app once, without installing it. No isolation; it stays in the store until collected.
+# omarchy:args=<app-or-attr> [-- args...]
+# omarchy:examples=nixarchy try helix
+# omarchy:examples=nixarchy try chrome
+# omarchy:examples=nixarchy try ripgrep -- --version
+
+# Run an application once, to see whether you want it, without adding it to
+# the configuration (#499). The repo already recommends exactly this --
+# skills/nixos/SKILL.md's "Try out helix quickly" row -- and offered no
+# command for it.
+#
+# ## The three findings that shaped the invocation (#498)
+#
+# `nix shell -f <pinned nixpkgs> <attr> -c <binary>`, never `nix run
+# nixpkgs#<attr>`, because each half of the obvious spelling is wrong:
+#
+# - `nix run` guesses the binary from the attribute name when a package
+#   declares no mainProgram, and the guess fails outright on android-tools
+#   (ships adb, not android-tools). data/apps.nix grew a `binary` field for
+#   precisely this (#468); the catalogue names the command, so use it.
+# - A bare `nixpkgs#` resolves the global registry to unstable HEAD -- a
+#   nixpkgs this machine has never seen, and a DIFFERENT version than
+#   `nixarchy-apply` would install. `-f` on the system's own nixpkgs makes a
+#   try preview what an install would deliver, which is the entire point.
+#   (Pinning the registry globally is #502, a separate decision.)
+# - Unfree is backwards from installing: nixarchy defaults allowUnfree on
+#   for the system, but that never reaches an ad-hoc evaluation -- so Chrome
+#   installs fine and refuses to be tried unless this sets
+#   NIXPKGS_ALLOW_UNFREE itself. Classic `-f` evaluation reads the variable
+#   without --impure.
+#
+# `option`-only rows (firefox, docker) are NixOS modules with no package
+# attribute to run; they are refused with the enable path, not guessed at.
+#
+# ## What this is not, said out loud every time
+#
+# No isolation: the app runs the same code installing would, with your full
+# user privileges. For code you do not trust, that is `nixarchy vm`. And
+# nothing is installed, which cuts both ways: no launcher entry, and the
+# store paths stay until garbage-collected -- nixarchy schedules no GC.
+#
+# When the try exits, the next step is printed (#503): the same app, kept,
+# is one command -- nixarchy-app-enable for a catalogue row, nixarchy-pkg-add
+# for a raw attribute. tests/try.nix drives the lookup against the real
+# catalogue, the fallback ladder, and the hand-off table, and asserts main
+# still calls each piece before `nix shell` runs.
+
+set -euo pipefail
+
+FLAKE="${NIXARCHY_FLAKE:-/etc/nixos}"
+
+red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
+dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
+bold() { printf "\033[1m%s\033[0m\n" "$1"; }
+
+usage() {
+  echo "Usage: nixarchy-try <app-or-attr> [-- args...]"
+  echo "  <app-or-attr>  a curated app id (chrome) or a nixpkgs attribute (ripgrep)"
+  echo "  -- args...     handed to the program"
+}
+
+# ---------------------------------------------------------------------------
+# The two nix expressions, in quoted heredocs so tests/try.nix can extract
+# each verbatim (splitting on the delimiter) and run it at evaluation time
+# against the real data/apps.nix and the real nixpkgs. Change one and the
+# check re-runs the truth table on the changed code, not on a copy.
+# ---------------------------------------------------------------------------
+
+# apps -> name -> one line:
+#   raw                                   not in the catalogue
+#   unavailable<TAB><why>                 catalogued as not installable here
+#   module<TAB><option.path>              a NixOS module; nothing to run
+#   app<TAB><attr><TAB><binary><TAB>0|1   a package row (binary may be empty)
+read -r -d '' LOOKUP_EXPR <<'NIX_LOOKUP_EOF' || :
+apps: name:
+if !(builtins.hasAttr name apps) then
+  "raw"
+else
+  let
+    a = apps.${name};
+  in
+  if a ? unavailable then
+    "unavailable\t" + a.unavailable
+  else if a ? option then
+    "module\t" + builtins.concatStringsSep "." a.option
+  else
+    "app\t" + (a.attr or name) + "\t" + (a.binary or "") + "\t" + (if a.unfree or false then "1" else "0")
+NIX_LOOKUP_EOF
+
+# imported pkgs -> attr -> one line:
+#   missing                               no such attribute in that tree
+#   found<TAB><mainProgram><TAB>0|1       mainProgram may be empty; 1 = unfree
+# Takes pkgs already imported (the import sits at the call site) so
+# tests/try.nix can apply it to its own pkgs under pure evaluation, where
+# `import nixpkgs { }` cannot read currentSystem. tryEval, because a package
+# marked broken or unfree can throw on meta access, and a throw here would
+# be an unreadable refusal for a question the run itself answers better.
+read -r -d '' PROBE_EXPR <<'NIX_PROBE_EOF' || :
+pkgs: attr:
+let
+  v = pkgs.lib.attrByPath (pkgs.lib.splitString "." attr) null pkgs;
+  main =
+    let
+      t = builtins.tryEval (v.meta.mainProgram or "");
+    in
+    if t.success then t.value else "";
+  unfree =
+    let
+      t = builtins.tryEval (v.meta.unfree or false);
+    in
+    if t.success && t.value then "1" else "0";
+in
+if v == null then "missing" else "found\t" + main + "\t" + unfree
+NIX_PROBE_EOF
+
+# ---------------------------------------------------------------------------
+# Pure helpers. Each takes plain arguments and touches nothing, so
+# tests/try.nix drives the truth tables directly.
+# ---------------------------------------------------------------------------
+
+# The fallback ladder for the command to exec: the catalogue's `binary`
+# field (the human answer, #468), else nixpkgs' own mainProgram, else the
+# last dot-segment of the attribute -- the same guess `nix run` would make,
+# kept only as the final rung because for most single-binary packages it is
+# right, and when it is wrong the error names the command it tried.
+resolve_binary() {
+  local row_binary=$1 main=$2 attr=$3
+  if [ -n "$row_binary" ]; then
+    echo "$row_binary"
+  elif [ -n "$main" ]; then
+    echo "$main"
+  else
+    echo "${attr##*.}"
+  fi
+}
+
+# The #503 hand-off: someone who has just decided they like the thing must
+# not have to look up how to keep it. A catalogue row is kept as the app
+# (the route that knows about modules and settings); a raw attribute as a
+# package line.
+next_step() {
+  local kind=$1 id=$2
+  echo
+  bold "To keep it:"
+  case "$kind" in
+    app)
+      echo "  nixarchy-app-enable $id    # then: nixarchy-apply"
+      ;;
+    raw)
+      echo "  nixarchy-pkg-add $id    # then: nixarchy-apply"
+      ;;
+  esac
+}
+
+# Every word of the uncomfortable part, before anything runs. Asserted by
+# tests/try.nix, so the honesty cannot be edited away quietly.
+print_footer() {
+  dim "Nothing is installed: no launcher entry, no configuration change."
+  dim "The download stays in /nix/store until it is garbage-collected, and"
+  dim "nixarchy schedules no GC -- nix-collect-garbage clears it by hand."
+  red "It runs with your full user privileges. This is NOT a sandbox --"
+  red "for code you do not trust, that is 'nixarchy vm'."
+}
+
+# The launch, isolated so the unfree seasoning is testable: NIXPKGS_ALLOW_UNFREE
+# only on the runs that need it, because exporting it unconditionally would
+# teach every child process that unfree is fine.
+run_try() {
+  local nixpkgs=$1 attr=$2 binary=$3 unfree=$4
+  shift 4
+  if [ "$unfree" = 1 ]; then
+    NIXPKGS_ALLOW_UNFREE=1 nix shell -f "$nixpkgs" "$attr" -c "$binary" "$@"
+  else
+    nix shell -f "$nixpkgs" "$attr" -c "$binary" "$@"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Arguments
+# ---------------------------------------------------------------------------
+
+if [ $# -eq 0 ]; then
+  usage >&2
+  exit 1
+fi
+case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+esac
+
+name=$1
+shift
+if [ "${1:-}" = "--" ]; then shift; fi
+
+# The same charset gate nixarchy-pkg-add applies, and here it also keeps the
+# name safe to splice into the nix expressions below.
+case "$name" in
+  -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+    red "'$name' is not an app id or a nixpkgs attribute name."
+    exit 1
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# The pinned tree. pkgs.path of this machine's own configuration -- the
+# nixpkgs an install would come from -- with a seam for the tests and for a
+# machine whose flake this cannot read.
+# ---------------------------------------------------------------------------
+
+host=$(uname -n)
+nixpkgs="${NIXARCHY_TRY_NIXPKGS:-}"
+if [ -z "$nixpkgs" ]; then
+  nixpkgs=$(nix eval --raw \
+    "$FLAKE#nixosConfigurations.$host.pkgs.path" 2>/dev/null || :)
+fi
+if [ -z "$nixpkgs" ]; then
+  red "Could not read this machine's pinned nixpkgs from $FLAKE."
+  echo "  A try must run the version an install would deliver; falling back"
+  echo "  to whatever 'nixpkgs' resolves to today would try a DIFFERENT one."
+  echo "  Set NIXARCHY_FLAKE at the machine's flake, or NIXARCHY_TRY_NIXPKGS"
+  echo "  at a nixpkgs tree."
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# The catalogue. data/apps.nix from the nixarchy this flake pins -- the
+# generated flake hands the module `inputs` with nixarchy standing in as
+# self (installer/template/flake.nix), so specialArgs is where its source
+# is reachable. A flake where that path does not answer (Mode A, hand-rolled
+# specialArgs) degrades to raw-attribute mode rather than refusing: the
+# catalogue improves a try, it is not a precondition for one.
+# ---------------------------------------------------------------------------
+
+catalogue="${NIXARCHY_TRY_CATALOGUE:-}"
+if [ -z "$catalogue" ]; then
+  src=$(nix eval --raw \
+    "$FLAKE#nixosConfigurations.$host._module.specialArgs.inputs.self.outPath" \
+    2>/dev/null || :)
+  [ -n "$src" ] && [ -f "$src/data/apps.nix" ] && catalogue="$src/data/apps.nix"
+fi
+
+row="raw"
+if [ -n "$catalogue" ]; then
+  row=$(nix eval --raw --impure \
+    --expr "($LOOKUP_EXPR) (import $catalogue) \"$name\"" 2>/dev/null || echo raw)
+else
+  dim "No app catalogue readable through $FLAKE; treating '$name' as a raw"
+  dim "nixpkgs attribute."
+fi
+
+kind=${row%%$'\t'*}
+case "$kind" in
+  unavailable)
+    red "'$name' is in the catalogue as not installable here:"
+    echo "  ${row#*$'\t'}"
+    exit 1
+    ;;
+  module)
+    optpath=${row#*$'\t'}
+    red "'$name' is a NixOS module ($optpath), not a package -- there is no"
+    echo "  binary to run without enabling it. A module brings its"
+    echo "  configuration with it, which is why it is not a bare package:"
+    echo
+    bold "    nixarchy-app-enable $name    # then: nixarchy-apply"
+    exit 1
+    ;;
+  app)
+    rest=${row#*$'\t'}
+    attr=${rest%%$'\t'*}
+    rest=${rest#*$'\t'}
+    row_binary=${rest%%$'\t'*}
+    row_unfree=${rest##*$'\t'}
+    ;;
+  *)
+    kind=raw
+    attr=$name
+    row_binary=""
+    row_unfree=0
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Probe the pinned tree: does the attribute exist, what does it call its
+# program, and is it unfree. Metadata only; nothing is built yet.
+# ---------------------------------------------------------------------------
+
+# allowUnfree at the import: reading metadata is not running anything, and
+# without it the probe could throw on the exact rows the unfree handling
+# below exists for.
+probe=$(nix eval --raw --impure \
+  --expr "($PROBE_EXPR) (import $nixpkgs { config.allowUnfree = true; }) \"$attr\"" \
+  2>/dev/null || :)
+
+if [ "${probe%%$'\t'*}" != found ]; then
+  red "'$attr' is not in this machine's pinned nixpkgs."
+  if [ "$kind" = raw ]; then
+    echo "  nixarchy-search finds the attribute if the name is close;"
+    echo "  the tree probed was $nixpkgs"
+  else
+    echo "  The catalogue row names an attribute the pinned tree does not"
+    echo "  carry -- that is a nixarchy bug worth reporting, not a typo."
+  fi
+  exit 1
+fi
+
+rest=${probe#*$'\t'}
+main=${rest%%$'\t'*}
+probe_unfree=${rest##*$'\t'}
+
+# The row's word OR the tree's word: the catalogue marks what a human
+# curated, the probe catches a raw attribute nobody curated. Either alone
+# would refuse a try that installing would have allowed.
+unfree=0
+if [ "$row_unfree" = 1 ] || [ "$probe_unfree" = 1 ]; then
+  unfree=1
+fi
+
+binary=$(resolve_binary "$row_binary" "$main" "$attr")
+
+# ---------------------------------------------------------------------------
+# Say what is about to happen and what it is not, then run.
+# ---------------------------------------------------------------------------
+
+bold "Trying $name ($attr from this machine's own nixpkgs, running '$binary')"
+print_footer
+echo
+
+rc=0
+run_try "$nixpkgs" "$attr" "$binary" "$unfree" "$@" || rc=$?
+
+# ---------------------------------------------------------------------------
+# From try to keep (#503). Printed whatever the program exited with: a tool
+# that returns nonzero on --help was still worth keeping.
+# ---------------------------------------------------------------------------
+
+next_step "$kind" "$name"
+exit "$rc"

@@ -1345,6 +1345,15 @@
             reinstallScript = ./pkgs/omarchy/nix-bin/nixarchy-reinstall-iso;
           };
 
+          # nixarchy-try's lookup and probe expressions run against the REAL
+          # data/apps.nix and nixpkgs, plus the binary fallback ladder, the
+          # unfree seasoning, the honest footer and the try-to-keep hand-off
+          # (#499, #503). See tests/try.nix.
+          try = import ./tests/try.nix {
+            pkgs = pkgsFor.${system};
+            tryScript = ./pkgs/omarchy/nix-bin/nixarchy-try;
+          };
+
           installer-store-space = import ./tests/installer-store-space.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;

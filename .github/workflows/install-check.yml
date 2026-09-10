@@ -341,8 +341,27 @@ jobs:
             # Not fatal, for the same reason the push is not: a cache upload
             # must not fail a build that succeeded (#235). It is loud instead,
             # and the summary carries it.
+            #
+            # curl through nix, not bare, and this step has never once run
+            # past this line without it. The runner is self-hosted NixOS,
+            # where a step's shell has only what the environment carries --
+            # GitHub's own images ship curl, ours does not -- so every run
+            # ended here with
+            #
+            #   line 31: curl: command not found
+            #   Error: Process completed with exit code 127
+            #
+            # after pushing successfully. continue-on-error meant the job
+            # stayed green and nobody looked, so the verification below has
+            # never checked anything, for any of the three checks, on any
+            # commit. A check that cannot run is worse than no check: it reads
+            # as a passing one.
+            #
+            # --inputs-from . is the idiom two lines up, and pins curl to the
+            # same nixpkgs as everything else.
             hash=$(basename "$out" | cut -d- -f1)
-            code=$(curl -s -o /dev/null -w '%{http_code}' \
+            code=$(nix run --inputs-from . nixpkgs#curl -- \
+              -s -o /dev/null -w '%{http_code}' \
               "https://nixarchy.cachix.org/$hash.narinfo")
             if [ "$code" = 200 ]; then
               echo "  $c: in the cache"

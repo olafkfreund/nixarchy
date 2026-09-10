@@ -156,13 +156,18 @@ NixOS and `systemPackages` would be the wrong answer.
 
 ## Removing
 
-_Remove > App_ runs `nixarchy-app-remove`, a picker over whatever is
-currently enabled in `apps.nix`. It only ever deselects; then
-`nixarchy-apply` rebuilds without the app. Its files go away when the old
-generation is garbage-collected, and its config under `~/.config` stays, as on
-any system.
+_Remove > App / package_ runs `nixarchy-app-remove`, a picker over everything
+the Install picker has written into `apps.nix`: enabled apps, packages added
+with `nixarchy pkg add`, and options the Search picker set or scaffolded. It
+only ever deselects; then `nixarchy-apply` rebuilds without them. Files go
+away when the old generation is garbage-collected, and config under
+`~/.config` stays, as on any system.
+
+`nixarchy pkg remove <attr>` does the package half from a terminal, and with
+no argument opens the same fuzzy picker over just the added packages.
 
 Two things it deliberately will not do. It will not remove something you added
-in your own `systemPackages` — that is not this menu's to take away; delete the
-line yourself. And it will not run `omarchy pkg drop`, which still calls
-pacman and cannot work here.
+in your own `systemPackages` — the tools delete only lines carrying their own
+`#@pkg`/`#@opt` markers, so a line you wrote (or a marker you stripped) is not
+theirs to take away; delete it yourself. And it will not run
+`omarchy pkg drop`, which still calls pacman and cannot work here.

@@ -1889,11 +1889,21 @@ honest answer to "is this thing alive".
 | epic | what it is for | |
 | --- | --- | --- |
 | [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
-| [#485](https://github.com/olafkfreund/nixarchy/issues/485) | **Preview changes** — boot a config change in a VM and look at it before switching the machine to it | 5 filed |
 | [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
 | [#498](https://github.com/olafkfreund/nixarchy/issues/498) | **Try without installing** — run something once to see whether you want it, from the catalogue's own idea of which binary that is | 5 filed |
 
 **Recently finished:**
+[preview changes](https://github.com/olafkfreund/nixarchy/issues/485)
+— boot a config change in a VM and look at it before switching the machine to
+it. `nixarchy-preview`, a menu row beside Apply, and a disk that is refused
+when stale rather than silently reused. The work was not `build-vm`, which is
+one command: a user's configuration booted verbatim shows a **black screen**,
+because qemu's virgl path hands out no usable EGLConfig — so the feature is a
+`virtualisation.vmVariant` module carrying the software-GL fallbacks, applied
+only in the preview and never to the real machine. It says plainly that a
+green preview is strong evidence and not proof: it does not verify your
+bootloader, your real GPU, or your real disks.
+Also
 [Android](https://github.com/olafkfreund/nixarchy/issues/364)
 — apps from the phone in your pocket, or without one at all: scrcpy and
 Waydroid in the catalogues, `android-tools` beside them, a manual page that

@@ -79,10 +79,11 @@ More in [`docs/screenshots/`](docs/screenshots).
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
 | Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
 | **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a hands-on tour, an offline manual search and a tutor grounded in your machine, offered in the bar — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
-| **Agent skills** | `nixarchy`, `nixos` and `diagnose-crash` — rewritten for NixOS, not Omarchy's Arch originals |
+| **Agent skills** | from `nixarchy` and `nixos` to `nixos-gpu` and `nixos-android` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
 | **Fresh-machine install** | a bootable ISO, seven questions, and the machine is a flake you own — with no network |
+| **Android** | `scrcpy` mirrors the phone you own, `nixarchy android` gets it paired over Wi-Fi, and Waydroid runs Android without one — [the page](docs/manual/android.md). Off by default |
 | Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
 
 ## Two names, on purpose
@@ -153,7 +154,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So twelve skills ship here instead:
+So thirteen skills ship here instead:
 
 | skill | owns |
 |---|---|
@@ -167,6 +168,7 @@ So twelve skills ship here instead:
 | **`nixos-security`** | Firewall and nftables, SSH, sudo and the groups that are root in a costume, systemd sandboxing, kernel hardening |
 | **`nixos-doctor`** | The sweep to run *before* you have a theory: failed units, `-p err`, disk, memory, and what changed between generations |
 | **`nixos-config-repo`** | Getting the configuration into git and keeping it there, and the two things that bite: untracked files are invisible to the build, and git refuses a repository owned by somebody else |
+| **`nixos-android`** | scrcpy over USB and over Wi-Fi, Waydroid and what it will not run, and the two traps: `programs.adb.enable` is inert on current nixpkgs, and `adb mdns services` cannot work because android-tools is built without an mDNS backend |
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 
@@ -1752,7 +1754,8 @@ the last run in CI on each push; the last is two machines that boot it.
 | | proven by |
 | --- | --- |
 | The session, bar, themes and wallpaper | `checks.session` logs in through SDDM's greeter and asserts the desktop *renders* -- it compares the screen against the wallpaper, because every other check passed once while it was black |
-| Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. By hand, not in CI -- `checks.install` installs onto a blank disk in CI and boots the result, asserting that a rebuild immediately afterwards builds nothing |
+| Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. `checks.install` does the same in CI and boots the result, asserting that a rebuild immediately afterwards builds nothing |
+| Installing with **no network at all** | `checks.install-iso` boots the offline image in a VM with no network device, installs from it, and boots what it installed to a login prompt. The assertion that matters is not that the install succeeded but that **nothing was built and nothing was fetched** -- 2,221 store paths copied locally, zero from a substituter, and `--max-jobs 0` on the copied path so a single attempted build fails loudly instead of quietly reaching for a compiler |
 | Adding it to a machine you already run | `checks.integration` **builds** the module onto a config that overrides a package Omarchy also uses, pins its own Hyprland and already greets with greetd |
 | Sitting beside an existing Hyprland | `checks.coexist` boots the Omarchy session with a foreign `hyprland.lua` in place and asserts the bar comes up anyway |
 | The CLI | `omarchy commands --check`, plus a count the build refuses to let drift |
@@ -1788,11 +1791,12 @@ Nothing on the list below is waiting on a decision -- each is either
 impossible, or a tradeoff taken deliberately. In rough order of how much
 someone would miss it:
 
-1. **Upstream is pinned to v4.0.2, which is the latest release.** There is no
+1. **Upstream is pinned to v4.0.3, which is the latest release.** There is no
    bump to take: the tag is current, and Omarchy's default branch (`quattro`)
-   has *diverged* from it -- 270 commits ahead, 63 behind, with its own `version`
-   file still reading `4.0.0.alpha`. Moving to it would drop 63 commits of
-   release work, so the pin stays on the tag until a newer one exists.
+   has *diverged* from it -- 351 commits ahead, 103 behind, with its own
+   `version` file still reading `4.0.0.alpha`. Moving to it would drop 103
+   commits of release work, so the pin stays on the tag until a newer one
+   exists.
 
    The bump machinery has been exercised against that branch rather than left
    untried. Every `--replace-fail` still matched across 98 commits and 300
@@ -1838,8 +1842,12 @@ Known gaps in detail:
   starts being built rather than copied turns a test red instead of quietly
   costing everyone ten minutes.
 
-  What is missing is the rest of the product around it: a nightly image, release
-  automation, and installing alongside an existing OS. All tracked on the epic.
+  The rest of the product around it has since been built: release automation
+  publishes both images from a tag, `checks.free-space` installs alongside an
+  existing OS, and `checks.install-iso` runs nightly against the offline image
+  -- booting it with no network device, installing, and booting the result.
+  What is *not* finished is the same list as above: no partition resize, no
+  Secure Boot, no graphical installer, each for a stated reason.
 
 - `brave-origin` has no published source; use `apps.brave` with policies in
   `/etc/brave/policies/managed`
@@ -1872,14 +1880,27 @@ Known gaps in detail:
 
 ## Roadmap
 
-What is being worked on, and what is planned. The issues are the detail; this
-is the shape.
+What has been built at epic scale, and what is not going to be. The issues are
+the detail; this is the shape.
 
-| epic | what it is for | |
-| --- | --- | --- |
-| [#364](https://github.com/olafkfreund/nixarchy/issues/364) | **Android** — apps from the phone in your pocket, or without one at all | 2 of 6 filed |
+**No epic is open.** Every one that has been opened is finished, and the list
+below is what they were. That is a statement about scope rather than about
+ambition: the next one gets written when something is worth doing at that
+size, and [the open issues](https://github.com/olafkfreund/nixarchy/issues)
+are where the smaller work lives in the meantime.
 
 **Recently finished:**
+[Android](https://github.com/olafkfreund/nixarchy/issues/364)
+— apps from the phone in your pocket, or without one at all: scrcpy and
+Waydroid in the catalogues, `android-tools` beside them, a manual page that
+goes from a phone in a pocket to an app on screen, and `nixarchy android` for
+the part that actually defeats people — pairing over Wi-Fi, where Android
+wants two different ports, regenerates one of them every time you open the
+dialog, and gives you a code that expires in seconds. Discovery goes through
+avahi rather than `adb mdns services`, because nixpkgs builds android-tools
+without an mDNS backend and the command every tutorial names answers
+`mdns is not supported by this version of adb`.
+Also
 [remote desktop](https://github.com/olafkfreund/nixarchy/issues/159)
 — reaching the Hyprland session from elsewhere, all five children closed:
 the headless output, the RDP service and its firewall hole, the authentication
@@ -1948,8 +1969,9 @@ and the backup and reset work in
 there rather than warning about it.
 
 [Every open issue](https://github.com/olafkfreund/nixarchy/issues) is the
-authoritative list; this table is the summary and CI keeps it honest — an epic
-opened or closed without touching this section fails the build.
+authoritative list; this section is the summary and CI keeps it honest — an
+epic opened or closed without updating it fails the build, which is why the
+line above can say no epic is open and be believed.
 
 ## Contributing
 

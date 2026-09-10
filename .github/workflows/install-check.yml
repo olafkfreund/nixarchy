@@ -117,7 +117,7 @@ jobs:
           # build.yml now asks the same question and two copies of a filter is
           # how one of them goes stale while both are still trusted. The
           # reasoning that was here is there, next to the list.
-          relevant=$(.github/scripts/pr-touches-build.sh)
+          relevant=$(.github/scripts/pr-touches-build.sh --install)
 
           echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
 

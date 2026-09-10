@@ -1304,6 +1304,10 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The gate that decides whether a PR runs the install VM. Both
+          # questions it answers, and both directions. See tests/install-gate.nix.
+          install-gate = import ./tests/install-gate.nix { pkgs = pkgsFor.${system}; };
+
           # The shipped images carry the reference machines, and the network
           # image carries none of them. Guards the `source` argument #479
           # added to installer/cd.nix. See tests/iso-source.nix.

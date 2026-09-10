@@ -69,7 +69,7 @@ fi
 # verbatim copy in its own repo, and disko only ever ran at install time.
 #
 # The failure mode this exists for is not an error. It is the absence of one:
-# somebody sees `trigger.snapshot` in the menu, believes they have an undo,
+# somebody sees `system.recovery.snapshot` in the menu, believes they have an undo,
 # and finds out they never did at the moment they reach for it. So every
 # subcommand refuses here rather than letting snapper succeed into a plain
 # directory that no `list` will ever show anything from.

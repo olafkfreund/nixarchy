@@ -1610,7 +1610,7 @@ pkgs.runCommand "nixarchy-options"
           # answer in the interface. The row is also the drift path's front
           # door: running it on an armed repository is what commits and pushes
           # what has piled up since.
-          row=$(sed -n '/"system.backup"/,/^  }/p' "$vm/etc/nixarchy/omarchy-menu.jsonc")
+          row=$(sed -n '/"system.recovery.backup"/,/^  }/p' "$vm/etc/nixarchy/omarchy-menu.jsonc")
           test -n "$row" || {
             echo "the menu has no System > Back up configuration row" >&2
             echo "  nixarchy-config-repo is then reachable only by acting on a" >&2

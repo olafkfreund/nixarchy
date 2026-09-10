@@ -34,7 +34,8 @@ they go on.
 
 ## Making one
 
-From the menu: **Trigger ▸ Build reinstall image**. Or in a terminal:
+From the menu: **System ▸ Backup and recovery ▸ Build reinstall image**. Or in
+a terminal:
 
 ```
 nixarchy reinstall iso

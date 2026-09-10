@@ -123,7 +123,25 @@
   # unreproducible from the flake it was installed from, which is Invariant 1,
   # and it is why checks.install went red the moment this was added. nixpkgs is
   # safe because both sides resolve the same lock entry to the same store path.
-  nix.registry.nixpkgs.flake = inputs.nixpkgs;
+  #
+  # NOT set here any more (#527). NixOS's own
+  # nixos/modules/misc/nixpkgs-flake.nix already pins the registry, to
+  # `nixpkgs.flake.source` -- the nixpkgs actually being evaluated -- which is
+  # the same store path this line used to name whenever the machine follows
+  # this flake's nixpkgs, and the RIGHT one when it does not.
+  #
+  # Evaluating against nixos-26.05 is what showed the difference:
+  #
+  #   error: The option `nix.registry.nixpkgs.to.path' has conflicting
+  #   definition values:
+  #   - In `nixos/modules/config/nix-flakes.nix':  <this flake's nixpkgs>
+  #   - In `nixos/modules/misc/nixpkgs-flake.nix': <the machine's nixpkgs>
+  #
+  # A tie, because both sides are mkDefault -- so it could not be resolved by
+  # lowering ours, and lowering it would have been wrong anyway: on a stable
+  # machine, `nixpkgs#foo` pointed at this flake's UNSTABLE nixpkgs is exactly
+  # the "binary built against a different glibc" the paragraph above exists to
+  # prevent. The requirement stands; NixOS is now what meets it.
   nix.settings.flake-registry = "";
 
   # `nh os switch` is the loop the user lives in, and it only works with no

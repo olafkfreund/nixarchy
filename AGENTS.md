@@ -291,6 +291,27 @@ to your branch cancels and restarts your own run (that is deliberate — a PR
 only needs an answer about its current head), but the queue is shared:
 batching your pushes is a courtesy to everyone else's merge latency.
 
+**Do not build a VM check locally while CI has an install job in flight.**
+The concurrency group in `install-check.yml` serialises GitHub *jobs*; it
+knows nothing about a `nix build .#checks.x86_64-linux.session` you start by
+hand on the same machine. The runners are on p620 and so is your shell.
+
+What it looks like when you do is not "your build was slow" — it is somebody
+else's check failing, on a line that has nothing to do with their change:
+
+    installer # Startup finished in ... 6min 34.738s (userspace)
+    installer # systemd-udevd: Worker [441] ... is taking a long time
+    installer # systemd-udevd: Worker [441] ... killed
+    installer # dhcpcd.service: start operation timed out
+    RequestedAssertionFailed: command `udevadm settle` failed (exit code 1)
+
+Six and a half minutes for a userspace boot that normally takes seconds.
+`udevadm settle` did not break; it was starved. This is §6's own lesson from
+the other side — **a guest-side timeout is a hidden concurrency limit**, and
+host-side timeouts scale with the box while guest-side ones do not.
+
+Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
+
 ## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the

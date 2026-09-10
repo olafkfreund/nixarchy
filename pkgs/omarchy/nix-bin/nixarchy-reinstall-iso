@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Build a bootable image that reinstalls this machine's system. Not a backup.
+# omarchy:args=[--check]
+# omarchy:examples=nixarchy reinstall iso
+
+# The fifth leg of getting back (#478): generations cover a bad change,
+# snapshots cover files on the same disk, the two git repos cover dotfiles and
+# /etc/nixos off-disk -- and none of them survives losing the disk entirely.
+# This builds a bootable image from THIS machine's own configuration, so the
+# machine can be rebuilt on new hardware.
+#
+# ## It is NOT a backup, and every string here says so
+#
+# The image carries the system closure and /etc/nixos. It carries no /home,
+# no service state, no secrets, no browser profiles -- and booting it ERASES
+# the target disk. A menu row called "Backup" would be a trap: someone loses
+# a disk, boots the "backup", and gets a clean machine with none of their
+# files. Your files come back from your backups, not from this.
+#
+# ## The preflights (#482), each refusing with a sentence
+#
+# Space: the image is 6-10+ GB and the build wants roughly 2x the closure in
+# transient disk. This repo has had ENOSPC deaths that surfaced three levels
+# from the cause; check before starting.
+#
+# Committed: the embedded flake pins by commit, and installer/mkFlake.nix
+# refuses a tree without self.rev -- `git add` is not enough. Refuse here,
+# where the sentence can say what to do, rather than minutes in.
+#
+# Drift: /run/current-system can differ from what /etc/nixos evaluates to --
+# uncommitted edits, un-switched changes. Baking a system that differs from
+# the flake embedded beside it is silently wrong: warn and ask, never
+# silently proceed. Warn rather than refuse, because building the image of
+# what the CONFIG says (not what happens to be running) is a legitimate
+# thing to want -- it just must not happen without being said.
+
+set -euo pipefail
+
+FLAKE="${NIXARCHY_FLAKE:-/etc/nixos}"
+
+# The flake output that builds the image. #480 parameterises installer/cd.nix
+# over a foreign flake's machines and the generated flake grows an output
+# exposing it; until that lands this attribute does not exist, and the build
+# step fails with nix's own "does not provide attribute" -- after every
+# preflight above it has had its say. Overridable for the day the output is
+# named differently, and for the tests.
+REINSTALL_ATTR="${NIXARCHY_REINSTALL_ATTR:-$FLAKE#reinstall-iso}"
+
+red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
+dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
+bold() { printf "\033[1m%s\033[0m\n" "$1"; }
+
+usage() {
+  echo "Usage: nixarchy-reinstall-iso [--check]"
+  echo "  (no argument)  build the image, after the preflights"
+  echo "  --check        exit 0 if this machine is one nixarchy installed. Prints nothing."
+}
+
+# ---------------------------------------------------------------------------
+# The ownership gate, verbatim from nixarchy-home-backup and for the same
+# reason: mkFlake.nix writes .nixarchy-url into the flake it generates, and
+# nothing else creates that file. A configuration somebody owns is not ours
+# to build images from the shape of.
+# ---------------------------------------------------------------------------
+
+installed_by_nixarchy() { [ -f "$FLAKE/.nixarchy-url" ]; }
+
+# ---------------------------------------------------------------------------
+# Preflight probes. Each returns a word or a verdict, takes its inputs as
+# arguments or stubbable commands, and touches neither nix nor the terminal
+# -- tests/reinstall-iso.nix drives every one with an environment that lies.
+# ---------------------------------------------------------------------------
+
+# The same probe installer/try.sh runs, for the same reason: running out of
+# disk mid-build dies several levels from the cause, under errors that name
+# none of this. And on a tmpfs the number df prints is RAM, not disk -- which
+# is exactly what a live ISO's store is, and a 12 GB build into RAM takes the
+# machine down with it.
+check_disk() {
+  local dir=$1 need_mb=$2 what=$3 fstype avail
+  read -r fstype avail < <(df --output=fstype,avail -BM "$dir" 2>/dev/null | tail -n1) || :
+  # A probe that cannot read must not invent a refusal (the tolerance rule
+  # tests/installer-store-space.nix states): no df answer, no verdict.
+  [ -n "${avail:-}" ] || return 0
+  avail=${avail%M}
+  case "$fstype" in
+    tmpfs | ramfs)
+      red "$dir is on $fstype -- RAM, not disk."
+      echo "  $what would be written there, and df's 'free' figure is memory."
+      echo "  Build this from an installed machine, not a live session."
+      return 1
+      ;;
+  esac
+  if [ "$avail" -lt "$need_mb" ]; then
+    red "Not enough disk space for $what."
+    echo "  It needs roughly ${need_mb} MB and $dir has ${avail} MB free."
+    echo "  Free some space (nix-collect-garbage reclaims old generations)"
+    echo "  and run this again. Nothing was started."
+    return 1
+  fi
+}
+
+# repo-missing | no-commit | dirty | clean. A word, not a refusal, so the
+# caller owns the sentences and a test owns the truth table.
+committed_verdict() {
+  local flake=$1
+  git -C "$flake" rev-parse --git-dir >/dev/null 2>&1 || { echo repo-missing; return; }
+  git -C "$flake" rev-parse HEAD >/dev/null 2>&1 || { echo no-commit; return; }
+  if [ -n "$(git -C "$flake" status --porcelain 2>/dev/null)" ]; then
+    echo dirty
+  else
+    echo clean
+  fi
+}
+
+# clean | drift | unknown. $2 empty means the evaluation could not answer.
+drift_verdict() {
+  local running=$1 evaluated=$2
+  if [ -z "$evaluated" ]; then
+    echo unknown
+  elif [ "$running" = "$evaluated" ]; then
+    echo clean
+  else
+    echo drift
+  fi
+}
+
+# Closure size of the running system in MB, empty when it cannot be read.
+closure_mb() {
+  local bytes
+  bytes=$(nix path-info -S /run/current-system 2>/dev/null | awk '{ print $2 }' | head -1 || :)
+  case "$bytes" in
+    '' | *[!0-9]*) echo "" ;;
+    *) echo $((bytes / 1048576)) ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Flags
+# ---------------------------------------------------------------------------
+
+case "${1:-}" in
+  "") ;;
+  --check)
+    installed_by_nixarchy || exit 1
+    exit 0
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
+
+if ! installed_by_nixarchy; then
+  red "This machine was not installed by nixarchy."
+  echo
+  echo "  no $FLAKE/.nixarchy-url"
+  echo
+  echo "The image embeds $FLAKE and reinstalls from it. On a configuration"
+  echo "nixarchy did not generate, that shape is not one this can promise to"
+  echo "rebuild -- so it does not guess."
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# What this is, before any question. Every word of the uncomfortable part.
+# ---------------------------------------------------------------------------
+
+bold "A reinstall image for this machine"
+echo
+echo "A bootable image carrying this machine's system and its /etc/nixos,"
+echo "so the machine can be reinstalled exactly -- on this hardware or on a"
+echo "replacement -- after a total disk loss."
+echo
+red "It is NOT a backup."
+echo "  It carries no /home, no service state, no secrets, no browser"
+echo "  profiles. Booting it ERASES the disk it installs to. Your files"
+echo "  come back from your backups -- omarchy-snapshot, nixarchy-home-backup"
+echo "  -- not from this."
+echo
+dim "It also goes stale: rebuild it after meaningful configuration changes."
+echo
+
+# ---------------------------------------------------------------------------
+# Preflight 1: space. ~1x the closure for the image, ~2x transient in /nix.
+# ---------------------------------------------------------------------------
+
+closure=$(closure_mb)
+if [ -n "$closure" ]; then
+  need=$((closure * 2))
+  dim "The running system's closure is ${closure} MB; the build wants roughly"
+  dim "twice that in transient disk, and the image itself lands in /nix/store."
+  echo
+  check_disk /nix/store "$need" "building the image" || exit 1
+else
+  # Cannot measure, so no invented refusal -- but say so, because a silent
+  # skip reads as a check that passed.
+  dim "Could not read the running system's closure size, so free space was"
+  dim "not checked. The build needs 12 GB or more; ENOSPC mid-build fails"
+  dim "with errors that name none of this."
+  echo
+fi
+
+# ---------------------------------------------------------------------------
+# Preflight 2: a committed tree. The generated flake pins by commit and
+# installer/mkFlake.nix refuses a tree without self.rev.
+# ---------------------------------------------------------------------------
+
+case "$(committed_verdict "$FLAKE")" in
+  repo-missing)
+    red "$FLAKE is not a git repository."
+    echo "  The image embeds the configuration and pins it by commit, so it"
+    echo "  cannot be built from a tree with no history. Run:"
+    echo
+    bold "    nixarchy config repo"
+    echo
+    echo "  which sets the repository up (and pushes it somewhere that"
+    echo "  survives the disk, which you want anyway)."
+    exit 1
+    ;;
+  no-commit)
+    red "$FLAKE has no commit yet."
+    echo "  The installer leaves it staged but uncommitted, and the image"
+    echo "  pins the configuration by commit -- git add is not enough."
+    echo "  nixarchy config repo makes the first commit, or:"
+    echo
+    dim "    git -C $FLAKE commit -m 'This machine'"
+    exit 1
+    ;;
+  dirty)
+    red "$FLAKE has uncommitted changes."
+    echo "  The image pins the configuration by commit, so what you have"
+    echo "  edited would not be what it carries. Commit first:"
+    echo
+    dim "    git -C $FLAKE add -A && git -C $FLAKE commit -m 'Before the reinstall image'"
+    exit 1
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Preflight 3: drift. Warn and ask; never silently bake a system that
+# differs from the flake embedded beside it.
+# ---------------------------------------------------------------------------
+
+host=$(uname -n)
+running=$(readlink -f /run/current-system 2>/dev/null || :)
+evaluated=$(nix eval --raw \
+  "$FLAKE#nixosConfigurations.$host.config.system.build.toplevel.outPath" \
+  2>/dev/null || :)
+
+case "$(drift_verdict "$running" "$evaluated")" in
+  clean)
+    dim "The running system matches what $FLAKE evaluates to."
+    ;;
+  drift)
+    red "WARNING: the running system is not what $FLAKE evaluates to."
+    echo
+    echo "  running    $running"
+    echo "  configured $evaluated"
+    echo
+    echo "  Un-switched changes, or a rebuild since edits -- either way the"
+    echo "  image would carry what the CONFIGURATION says, not what is"
+    echo "  running right now. If that surprises you:"
+    echo
+    dim "    nh os switch    # make the machine match the config first"
+    echo
+    printf "Build from the configuration as committed anyway? [y/N] "
+    read -r reply
+    case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
+    ;;
+  unknown)
+    dim "Could not evaluate $FLAKE#nixosConfigurations.$host to compare it"
+    dim "with the running system. If the configuration is broken, the build"
+    dim "below will say exactly where."
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Confirm, build, report.
+# ---------------------------------------------------------------------------
+
+echo
+printf "Build the image? It takes tens of minutes. [y/N] "
+read -r reply
+case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
+
+outlink="$HOME/.local/share/nixarchy/reinstall-iso"
+mkdir -p "$(dirname "$outlink")"
+
+echo
+bold "Building. Compression is the long part; this is normal."
+if ! nix build "$REINSTALL_ATTR" -o "$outlink" --print-build-logs; then
+  echo
+  red "The build failed. Nothing was produced; the messages above say why."
+  echo "  Nothing on this machine was changed."
+  exit 1
+fi
+
+# find -L, because find does not follow the result symlink (AGENTS.md §5).
+iso=$(find -L "$outlink" -name '*.iso' | head -1 || :)
+if [ -z "$iso" ]; then
+  red "The build succeeded but produced no .iso under $outlink."
+  echo "  That is a bug in the image output, not in your configuration."
+  exit 1
+fi
+
+echo
+bold "Done: $(du -h "$iso" | cut -f1) at"
+echo "  $iso"
+echo
+echo "Write it to a USB stick (this ERASES the stick):"
+dim "  sudo dd if=$iso of=/dev/sdX bs=4M status=progress oflag=sync"
+echo
+echo "Keep it OFF this machine -- an image on the disk it exists to replace"
+echo "protects nothing. And keep it private: it contains your /etc/nixos and"
+echo "any unfree packages your system uses, which are yours to keep and not"
+echo "yours to publish."
+echo
+red "Remember what it is not: booting it erases the target disk and brings"
+red "back the system, not your files. Files come back from your backups."

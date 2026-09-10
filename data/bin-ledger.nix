@@ -66,6 +66,10 @@
     class = "new";
     reason = "Not in upstream. programs.nixarchy.localAi enables the service but deliberately downloads no weights; this pulls a model at runtime and sizes it against VRAM, which Nix cannot read.";
   };
+  "nixarchy-reinstall-iso" = {
+    class = "new";
+    reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a bootable image from this machine's own configuration -- the system closure and /etc/nixos, never /home or secrets -- after refusing on low disk, an uncommitted tree, or a running system that drifted from the flake.";
+  };
   "nixarchy-rollback" = {
     class = "new";
     reason = "Not in upstream, whose undo is omarchy-snapshot via snapper and limine. Lists and switches NixOS system generations, which are the bootable snapshot every rebuild already leaves behind.";

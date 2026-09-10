@@ -365,6 +365,18 @@ let
           description = "Copy your bar, keybindings and themes back out of the backup. Works on a new machine";
         };
 
+        # Deliberately not called "backup" -- #478 names the trap: someone
+        # loses a disk, boots the "backup", and gets a clean machine with
+        # none of their files. The image reinstalls the SYSTEM; files come
+        # back from the two rows above.
+        "trigger.reinstall-iso" = {
+          icon = "󰗮";
+          label = "Build reinstall image";
+          when = "nixarchy-reinstall-iso --check";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-reinstall-iso";
+          description = "A bootable image that reinstalls this machine's system on new hardware. Not a backup: it carries none of your files";
+        };
+
         "install.aur" = {
           when = "false";
         };

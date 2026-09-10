@@ -1898,6 +1898,26 @@ pkgs.runCommand "nixarchy-options"
         }
         echo "the picker's flatpak rows are $(wc -l < "$rows") well-formed lines"
 
+        # ---- the picker's try key is real, and routed -----------------------
+        #
+        # The pkg and app previews advertise ctrl-t. A footer that names a key
+        # fzf does not intercept is a promise the picker cannot keep, and a key
+        # fzf intercepts but nothing routes is a silent no-op -- both read as
+        # "try is broken" to the person in the picker. So the built script must
+        # carry both halves: the --expect that intercepts the key, and the
+        # `nixarchy try` call the footer is selling.
+        grep -q -- '--expect=ctrl-t' "$vm/sw/bin/nixarchy-search" || {
+          echo "nixarchy-search advertises ctrl-t but fzf does not intercept it" >&2
+          echo "  the preview footers promise a try key; --expect=ctrl-t is what honours it" >&2
+          exit 1
+        }
+        grep -q 'nixarchy try ' "$vm/sw/bin/nixarchy-search" || {
+          echo "nixarchy-search intercepts ctrl-t but routes it to nothing:" >&2
+          echo "  no 'nixarchy try' call in the built script" >&2
+          exit 1
+        }
+        echo "the picker's try key is intercepted and routes to nixarchy try"
+
         # ---- machines pull only when asked ---------------------------------
         test "$fleetOff" = false || {
           echo "system.autoUpgrade is on without programs.nixarchy.fleet.enable" >&2

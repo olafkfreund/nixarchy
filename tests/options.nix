@@ -1947,6 +1947,11 @@ pkgs.runCommand "nixarchy-options"
         # usage line promising a command that routes nowhere is the same
         # defect, and this is the file that would otherwise let the next one
         # through.
+        #
+        # These five have no file of their own -- nixarchy-search and
+        # nixarchy-apply are built by writeShellApplication in
+        # modules/apps.nix rather than shipped in nix-bin -- so they cannot be
+        # derived below and are named here.
         for verb in try search apply vm box; do
           grep -qE "^ *$verb\)" "$vm/sw/bin/nixarchy" || {
             echo "the nixarchy dispatcher has no route for '$verb':" >&2
@@ -1956,7 +1961,91 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
         done
-        echo "every advertised nixarchy subcommand has a route"
+
+        # ---- and every command that SAYS it is a verb (#538) ---------------
+        #
+        # The list above is hand-written, under a comment promising it was
+        # "the file that would otherwise let the next one through". It let ten
+        # through: `try` was found by hand and fixed alone, nothing
+        # generalised the fix, and android, ask, channel, config repo, home
+        # backup, local-ai, preview, reinstall iso, rollback and unfreeze were
+        # all shipped, documented, and dead on arrival.
+        #
+        # So this half is DERIVED. Each command's header names the verb it
+        # answers to:
+        #
+        #   # omarchy:examples=nixarchy channel stable
+        #
+        # and the FILE NAME says where the verb ends: the shortest run of
+        # leading words whose `-`-join equals the file's stem is the verb
+        # path, and whatever follows is arguments. `nixarchy config repo` is
+        # two words because the file is nixarchy-config-repo; `nixarchy
+        # channel stable` is one because the file is nixarchy-channel.
+        #
+        # That distinction is precisely what a `^ *$verb\)` grep cannot make,
+        # and why the two-word commands were invisible to the loop above.
+        binDir=$omarchyPath/bin
+        derived=0
+        for f in "$binDir"/nixarchy-*; do
+          [ -f "$f" ] || continue
+          stem=$(basename "$f"); stem=''${stem#nixarchy-}
+
+          ex=$(grep -m1 '^# omarchy:examples=nixarchy ' "$f" || true)
+          # A command that never claims to be a verb is not one. Several are
+          # reached only from the menu or by another script, and this check
+          # has no opinion about those -- it checks the promise, not the file.
+          [ -n "$ex" ] || continue
+
+          joined=""; verbpath=""
+          for w in ''${ex#\# omarchy:examples=nixarchy }; do
+            if [ -z "$joined" ]; then joined="$w"; verbpath="$w";
+            else joined="$joined-$w"; verbpath="$verbpath $w"; fi
+            [ "$joined" = "$stem" ] && break
+          done
+
+          [ "$joined" = "$stem" ] || {
+            echo "::error::nixarchy-$stem's example does not name a verb path" >&2
+            echo "  matching its file name:" >&2
+            echo "    $ex" >&2
+            echo "  Either the example or the file name is wrong; this check" >&2
+            echo "  cannot tell which and will not guess." >&2
+            exit 1
+          }
+          derived=$((derived + 1))
+
+          first=''${verbpath%% *}
+          second=""
+          case "$verbpath" in *" "*) second=''${verbpath#* } ;; esac
+
+          grep -qE "^ *$first\)" "$vm/sw/bin/nixarchy" || {
+            echo "::error::nixarchy-$stem says it answers to '$verbpath'," >&2
+            echo "  and the dispatcher has no '$first)' row. It falls through" >&2
+            echo "  to \`exec omarchy $verbpath\`, and omarchy builds" >&2
+            echo "  omarchy-<words> and globs omarchy-* only -- so it dies as" >&2
+            echo "  'Unknown Omarchy command'. Shipped, documented, dead." >&2
+            exit 1
+          }
+
+          if [ -n "$second" ]; then
+            grep -qE "^ *$second\) *shift 2; exec nixarchy-$stem" "$vm/sw/bin/nixarchy" || {
+              echo "::error::nixarchy-$stem says it answers to '$verbpath'." >&2
+              echo "  The outer '$first)' row exists and nothing inside it" >&2
+              echo "  routes '$second' to nixarchy-$stem." >&2
+              exit 1
+            }
+          fi
+        done
+
+        # The floor this repository keeps arriving at: a loop that iterated
+        # nothing satisfies every assertion above while proving nothing -- and
+        # this check exists because that exact silence shipped ten broken
+        # commands.
+        if [ "$derived" -lt 8 ]; then
+          echo "::error::only $derived commands declared a verb, which is too" >&2
+          echo "  few to be real -- this check is not reading the headers." >&2
+          exit 1
+        fi
+        echo "every advertised nixarchy subcommand has a route ($derived derived)"
 
         # ---- a package miss opens the picker, not a URL (#492) --------------
         #

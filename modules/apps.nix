@@ -409,25 +409,46 @@ let
           description = "nh os switch --update: move every flake input forward, then rebuild";
         };
 
-        # Omarchy's release channels are a pacman repository choice. Here the
-        # version is whatever the flake's omarchy input is pinned to, so there
-        # is nothing to switch. Switching nixpkgs between stable and unstable
-        # would mean editing the user's own system flake, which nixarchy does
-        # not own -- it owns the Omarchy installation and its applications.
+        # Omarchy's release channels are a pacman repository choice, and two
+        # of its four have a meaning here (#529).
         #
-        # The children are hidden individually: hiding a parent keeps its rows
-        # out of the menu tree, but they stay reachable through search and
-        # `omarchy menu summon`.
+        # This block used to hide all five rows, with a reason that has since
+        # stopped being true in both halves: "there is nothing to switch", and
+        # "switching nixpkgs would mean editing the user's own system flake,
+        # which nixarchy does not own". There is something to switch --
+        # nixos-26.05 or unstable -- and `nixarchy-channel` does that edit
+        # consensually, under the rule nixarchy-unfreeze set: only lines this
+        # project wrote get rewritten, a flake somebody has reshaped is theirs
+        # and gets the edit printed instead of guessed at, and nixpkgs and
+        # home-manager move together because neither project supports the
+        # mismatch.
+        #
+        # `rc` and `dev` stay hidden. They are pacman repositories with no
+        # NixOS equivalent, and inventing a meaning for them would be worse
+        # than leaving them out -- a row that does something other than what
+        # its name says is the failure this menu has the most guards against.
+        #
+        # The children are still hidden individually: hiding a parent keeps
+        # its rows out of the menu tree, but they stay reachable through
+        # search and `omarchy menu summon`.
         "update.channel" = {
-          when = "false";
+          icon = "󰓾";
+          label = "Channel";
+          description = "Follow stable or unstable nixpkgs. Nixarchy is developed against unstable";
         };
         "update.channel.stable" = {
-          when = "false";
-        };
-        "update.channel.rc" = {
-          when = "false";
+          icon = "󰋼";
+          label = "Stable";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel stable";
+          description = "nixos-26.05 and the matching home-manager. Less tested here, not more";
         };
         "update.channel.edge" = {
+          icon = "󰇾";
+          label = "Unstable";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel unstable";
+          description = "nixos-unstable, what nixarchy is developed and tested against";
+        };
+        "update.channel.rc" = {
           when = "false";
         };
         "update.channel.dev" = {
@@ -2236,6 +2257,54 @@ in
                 try) shift; exec nixarchy-try "$@" ;;
                 vm) shift; exec nixarchy-vm "$@" ;;
                 box) shift; exec nixarchy-box "$@" ;;
+
+                # The rest of them (#538). Every one of these was shipped,
+                # documented, and unreachable: without a row here the command
+                # reaches `exec omarchy "$@"`, and Omarchy's own dispatcher
+                # builds `omarchy-$(join_words ...)` and globs `omarchy-*`
+                # only -- so `nixarchy channel stable` died as "Unknown
+                # Omarchy command: omarchy channel stable".
+                #
+                # `try` was found by hand and fixed alone. Nothing generalised
+                # it, and the same bug was sitting in ten siblings. What makes
+                # that not happen again is not this list -- it is
+                # checks.options deriving the list from the commands' own
+                # `# omarchy:examples=nixarchy <verb>` headers and asserting
+                # every one of them routes. A command declares the verb it
+                # answers to; the check makes the dispatcher agree.
+                android) shift; exec nixarchy-android "$@" ;;
+                ask) shift; exec nixarchy-ask "$@" ;;
+                channel) shift; exec nixarchy-channel "$@" ;;
+                local-ai) shift; exec nixarchy-local-ai "$@" ;;
+                preview) shift; exec nixarchy-preview "$@" ;;
+                rollback) shift; exec nixarchy-rollback "$@" ;;
+                unfreeze) shift; exec nixarchy-unfreeze "$@" ;;
+
+                # Two-word verbs, in the shape `pkg`, `app` and `dev` already
+                # use. These are the ones a route check that matches
+                # `^ *<verb>)` cannot see, which is why the first version of
+                # that check passed over them.
+                #
+                # No bare fallthrough on the inner case: `nixarchy config`
+                # with no second word drops out of the inner `case` and
+                # reaches `exec omarchy "$@"`, which is the right answer --
+                # Omarchy has its own `config` and this port does not take the
+                # word from it.
+                config)
+                  case "''${2:-}" in
+                    repo) shift 2; exec nixarchy-config-repo "$@" ;;
+                  esac
+                  ;;
+                home)
+                  case "''${2:-}" in
+                    backup) shift 2; exec nixarchy-home-backup "$@" ;;
+                  esac
+                  ;;
+                reinstall)
+                  case "''${2:-}" in
+                    iso) shift 2; exec nixarchy-reinstall-iso "$@" ;;
+                  esac
+                  ;;
                 ""|--help|-h|help)
                   cat <<'USAGE'
               nixarchy -- the Omarchy desktop, vendored for NixOS.
@@ -2254,6 +2323,19 @@ in
                 nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                 nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                 nixarchy doctor             What this machine needs to run nixarchy
+
+              This machine:
+
+                nixarchy channel [stable|unstable]  Which nixpkgs this machine follows
+                nixarchy preview            Boot this configuration in a VM before switching
+                nixarchy rollback           Go back to an earlier system generation
+                nixarchy unfreeze           Let this machine receive updates again
+                nixarchy config repo        Put /etc/nixos in git, with a remote and CI
+                nixarchy home backup        Back up the desktop configuration in your home
+                nixarchy reinstall iso      Build an image that reinstalls this machine
+                nixarchy android            Connect an Android phone over Wi-Fi, for scrcpy
+                nixarchy ask                Ask the default agent, with the right skill chosen
+                nixarchy local-ai           Set up the local language model
 
               Everything else is Omarchy's own, and reaches it unchanged:
 

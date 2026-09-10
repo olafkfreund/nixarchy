@@ -35,6 +35,10 @@ let
 
   vmcli = inputs.self.packages.${system}.nixarchy-vm;
   boxcli = inputs.self.packages.${system}.nixarchy-box;
+
+  # nixarchy-channel ships in the omarchy tree rather than as its own package,
+  # so it is reached through the built tree the same way the menu reaches it.
+  omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
 in
 pkgs.runCommand "nixarchy-menu-verbs"
   {
@@ -49,9 +53,19 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # The verbs each CLI accepts, read out of the shipped script's own case
     # block -- the built artifact, not the repo source, so a build that mangles
     # the dispatch is caught too.
+    # Two `case` shapes, because both are in use: most of these scripts
+    # dispatch on "$1" directly, and nixarchy-channel assigns it to $target
+    # first. Verified that adding the second address leaves nixarchy-vm and
+    # nixarchy-box's verb lists byte-identical (10 each) -- a helper that
+    # claims to read "the shipped script's own case block" should not be
+    # silently blind to a script that writes it the other way.
+    #
+    # The character class allows spaces so `"" | stable | unstable)` parses;
+    # the `tr -d ' '` below already removes them.
     verbs_of() {
-      sed -n '/case "''${1:-}" in/,/^ *esac/p' "$1" \
-        | grep -oE '^[[:space:]]*[-a-z|"]+\)' \
+      sed -n -e '/case "''${1:-}" in/,/^ *esac/p' \
+             -e '/case "$target" in/,/^ *esac/p' "$1" \
+        | grep -oE '^[[:space:]]*[-a-z|"[:space:]]+\)' \
         | tr -d ' )"' \
         | tr '|' '\n' \
         | grep -vE '^\*?$' \
@@ -60,15 +74,20 @@ pkgs.runCommand "nixarchy-menu-verbs"
 
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
     verbs_of ${boxcli}/bin/nixarchy-box > box-verbs
+    verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
 
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
     echo "nixarchy-box accepts: $(tr '\n' ' ' < box-verbs)"
+    echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
 
     # A floor. An empty verb list makes every row below pass, turning "the
     # dispatch stopped parsing" into a green check -- the exact shape of failure
     # this file exists to reject.
     test "$(wc -l < vm-verbs)"  -ge 5
     test "$(wc -l < box-verbs)" -ge 5
+    # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
+    # NixOS meaning and stay out of the menu, so this floor is 2 and not 4.
+    test "$(wc -l < channel-verbs)" -ge 2
 
     fail=0
     checked=0
@@ -92,6 +111,13 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy +vm +[-a-z]+'     3 nixarchy-vm  vm-verbs
     scan '\bnixarchy-box +[-a-z]+'     2 nixarchy-box box-verbs
     scan '\bnixarchy +box +[-a-z]+'    3 nixarchy-box box-verbs
+
+    # The channel rows (#529). Added with the rows themselves rather than
+    # after the first one breaks, because the row this file was written about
+    # -- `nixarchy-vm new`, a verb that does not exist -- shipped and was
+    # found by a tester.
+    scan '\bnixarchy-channel +[-a-z]+'  2 nixarchy-channel channel-verbs
+    scan '\bnixarchy +channel +[-a-z]+' 3 nixarchy-channel channel-verbs
 
     # The second floor: if the menu stopped carrying these rows, every scan
     # above would run zero times and the check would pass having read nothing.

@@ -1296,6 +1296,12 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # What a network install would have to build, before it formats
+          # anything. See tests/substitutable.nix.
+          substitutable = import ./tests/substitutable.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # Every configuration this repository ships evaluates without
           # warnings. See tests/config-warnings.nix for why that is a check
           # and not a preference.

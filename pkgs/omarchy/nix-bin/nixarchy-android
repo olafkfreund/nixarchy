@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Connect an Android phone over Wi-Fi, for scrcpy
+# omarchy:args=[find | pair [HOST:PORT] | connect [HOST:PORT] | list | forget HOST:PORT]
+# omarchy:examples=nixarchy android find
+# omarchy:examples=nixarchy android pair
+# omarchy:examples=nixarchy android connect
+# omarchy:examples=nixarchy android list
+# omarchy:examples=nixarchy android forget 192.168.1.74:33811
+
+# scrcpy over USB needs nothing. Over Wi-Fi it needs a sequence that is easy
+# to describe and easy to get wrong, and Wi-Fi is what people want -- a phone
+# on the desk, not tethered. From #364:
+#
+#   two ports, one of them ephemeral, a code on a timer, and a distinction
+#   between pairing and connecting that is not obvious from either side
+#
+# The pairing port and the connect port are DIFFERENT, both are assigned by
+# the phone, and the pairing one changes every time the dialog is opened. So
+# the numbers cannot be written down anywhere; they have to be discovered at
+# the moment they are used, which is what this does.
+#
+# ---------------------------------------------------------------------------
+# Why avahi and not `adb mdns services`
+#
+# Because `adb mdns services` does not work here, and this is worth writing
+# down because every guide on the internet says to use it:
+#
+#   $ adb mdns check
+#   adb: mdns is not supported by this version of adb.
+#
+# nixpkgs builds android-tools from nmeum/android-tools, which carries no mDNS
+# backend -- there is no openscreen or mdnsresponder in its buildInputs, so
+# adb has no way to browse the network at all. Enabling avahi does not fix it;
+# the gap is inside adb.
+#
+# It does not need to be fixed. The phone advertises ordinary DNS-SD services
+# and avahi is already running on every nixarchy machine -- services.avahi and
+# nssmdns4 came in with printing (modules/nixos.nix), and the avahi package is
+# in systemPackages -- so avahi-browse can see exactly what adb cannot.
+#
+# The three service types are read out of adb's own binary rather than a blog
+# post:
+#
+#   _adb-tls-pairing._tcp   advertised only while the pairing dialog is open
+#   _adb-tls-connect._tcp   advertised while wireless debugging is on
+#   _adb._tcp               pre-Android-11
+# ---------------------------------------------------------------------------
+
+set -euo pipefail
+
+PAIRING_SERVICE=_adb-tls-pairing._tcp
+CONNECT_SERVICE=_adb-tls-connect._tcp
+
+red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
+dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
+bold() { printf "\033[1m%s\033[0m\n" "$1"; }
+
+usage() {
+  echo "Usage: nixarchy android [command]"
+  echo "  find                 phones advertising wireless debugging"
+  echo "  pair [HOST:PORT]     pair with a phone, once, using its six-digit code"
+  echo "  connect [HOST:PORT]  connect to a phone already paired"
+  echo "  list                 what adb can see right now"
+  echo "  forget HOST:PORT     disconnect and stop reconnecting"
+  echo
+  echo "With no HOST:PORT, pair and connect look for the phone themselves."
+}
+
+# adb is an opt-in app, not part of the base system, so say how to get it
+# rather than dying with "command not found" from three lines deeper.
+need_adb() {
+  command -v adb >/dev/null && return 0
+  red "adb is not installed."
+  echo
+  echo "It is in the catalogue as android-tools:"
+  echo "  omarchy-pkg-add android-tools"
+  echo
+  dim "scrcpy alone is enough over USB; adb is what Wi-Fi needs."
+  exit 1
+}
+
+need_avahi() {
+  command -v avahi-browse >/dev/null && return 0
+  red "avahi-browse is missing, which should not happen on nixarchy."
+  dim "services.avahi is enabled by the module that sets up printing."
+  exit 1
+}
+
+# One DNS-SD service type -> lines of "host:port<TAB>name".
+#
+# -t stops after the first sweep instead of watching forever, -r resolves each
+# result to an address and port, and -p is the stable parse format: a resolved
+# record is a `=` line of semicolon-separated fields. Verified against real
+# output rather than the man page -- 3 is the protocol, 4 the name, 8 the
+# address, 9 the port:
+#
+#   =;wlan0;IPv4;Pixel;_adb-tls-connect._tcp;local;pixel.local;192.168.1.74;33811;
+#
+# IPv4 only, deliberately. The AAAA records a phone advertises are link-local
+# (fe80::/10), and a link-local address without a %interface scope is not
+# routable -- adb takes the string, fails to connect, and says nothing useful
+# about why. Anyone genuinely on an IPv6-only network can pass HOST:PORT by
+# hand, which every command here accepts.
+#
+# sort -u because a machine with containers advertises the same service once
+# per veth: the LAN sees one phone, avahi reports it a dozen times.
+browse() {
+  local service=$1
+  avahi-browse -trp "$service" 2>/dev/null |
+    awk -F';' '$1 == "=" && $3 == "IPv4" && $8 != "" && $9 != "" \
+               { print $8 ":" $9 "\t" $4 }' |
+    sort -u
+}
+
+# The phone is not on the network the instant the dialog opens -- the
+# advertisement takes a moment to propagate, and a single sweep that finds
+# nothing reads as "no phone" when it means "not yet".
+browse_until_found() {
+  local service=$1 tries=${2:-1} found
+  for _ in $(seq 1 "$tries"); do
+    found=$(browse "$service")
+    [ -n "$found" ] && { printf '%s\n' "$found"; return 0; }
+  done
+  return 1
+}
+
+# One result -> use it. Several -> ask, because guessing which of two phones
+# someone meant is the kind of helpfulness that pairs the wrong device.
+choose() {
+  local found=$1 prompt=$2 count
+  count=$(printf '%s\n' "$found" | wc -l)
+  if [ "$count" -eq 1 ]; then
+    printf '%s\n' "$found" | cut -f1
+    return 0
+  fi
+  echo "$prompt" >&2
+  printf '%s\n' "$found" | nl -w2 -s') ' | sed 's/\t/  /' >&2
+  local pick
+  read -r -p "Which one? " pick </dev/tty
+  printf '%s\n' "$found" | sed -n "${pick}p" | cut -f1
+}
+
+cmd_find() {
+  need_avahi
+  local pairing connect
+  pairing=$(browse "$PAIRING_SERVICE" || true)
+  connect=$(browse "$CONNECT_SERVICE" || true)
+
+  if [ -z "$pairing$connect" ]; then
+    echo "No phone is advertising wireless debugging."
+    echo
+    echo "On the phone: Settings > Developer options > Wireless debugging, on."
+    dim "Developer options appear after tapping Build number seven times."
+    return 0
+  fi
+
+  if [ -n "$connect" ]; then
+    bold "Ready to connect"
+    printf '%s\n' "$connect" | sed 's/^/  /'
+  fi
+  if [ -n "$pairing" ]; then
+    bold "Waiting to pair"
+    printf '%s\n' "$pairing" | sed 's/^/  /'
+    dim "  A pairing dialog is open on the phone. Its port changes each time."
+  fi
+}
+
+cmd_pair() {
+  need_adb
+  local target=${1:-}
+  if [ -z "$target" ]; then
+    need_avahi
+    echo "On the phone: Wireless debugging > Pair device with pairing code."
+    echo "Looking for it..."
+    local found
+    # Ten sweeps rather than one: this runs while someone is walking through
+    # the phone's menus, and the dialog is what starts the advertisement.
+    if ! found=$(browse_until_found "$PAIRING_SERVICE" 10); then
+      red "Nothing is advertising a pairing service."
+      echo
+      echo "The pairing dialog has to be OPEN -- not just wireless debugging"
+      echo "on. It is the one showing a six-digit code and a port."
+      exit 1
+    fi
+    target=$(choose "$found" "More than one phone is waiting to pair:")
+  fi
+
+  [ -n "$target" ] || { red "No phone chosen."; exit 1; }
+  echo "Pairing with $target"
+  local code
+  read -r -p "Six-digit code from the phone: " code </dev/tty
+
+  # adb pair's own exit code is not trustworthy on every version, so the
+  # output is what decides -- and the two failures worth telling apart say the
+  # same thing today, which #364 called out by name.
+  local out
+  if out=$(adb pair "$target" "$code" 2>&1) && [[ $out == *"Successfully paired"* ]]; then
+    echo "$out"
+    bold "Paired. This phone will not need pairing again."
+    echo
+    echo "Now: nixarchy android connect"
+    return 0
+  fi
+
+  printf '%s\n' "$out"
+  red "Pairing failed."
+  echo
+  echo "The two usual reasons look identical from here:"
+  echo "  - the code was mistyped"
+  echo "  - the code expired; it is valid for well under a minute"
+  echo
+  echo "Reopen the pairing dialog on the phone and try again -- it will show"
+  echo "a NEW code and a new port."
+  exit 1
+}
+
+cmd_connect() {
+  need_adb
+  local target=${1:-}
+  if [ -z "$target" ]; then
+    need_avahi
+    local found
+    if ! found=$(browse_until_found "$CONNECT_SERVICE" 5); then
+      red "No phone is advertising wireless debugging."
+      echo
+      echo "Turn Wireless debugging on, then try again."
+      dim "Never paired this phone? Run: nixarchy android pair"
+      exit 1
+    fi
+    target=$(choose "$found" "More than one phone is available:")
+  fi
+
+  [ -n "$target" ] || { red "No phone chosen."; exit 1; }
+  local out
+  # Same reasoning as pair: adb connect prints "failed to connect" and exits 0.
+  if out=$(adb connect "$target" 2>&1) && [[ $out != *"failed to connect"* ]]; then
+    printf '%s\n' "$out"
+    bold "Connected."
+    echo
+    echo "Mirror the screen with: scrcpy"
+    dim "scrcpy is in the catalogue: omarchy-pkg-add scrcpy"
+    return 0
+  fi
+
+  printf '%s\n' "$out"
+  red "Could not connect to $target."
+  echo
+  echo "If this phone has never been paired with this machine, connecting"
+  echo "cannot work -- pairing is a separate step on a separate port:"
+  echo "  nixarchy android pair"
+  exit 1
+}
+
+cmd_list() {
+  need_adb
+  bold "Connected now"
+  # `adb devices` prints a header line and a trailing blank one.
+  local devices
+  devices=$(adb devices | tail -n +2 | grep -v '^[[:space:]]*$' || true)
+  if [ -n "$devices" ]; then
+    printf '%s\n' "$devices" | sed 's/^/  /'
+  else
+    dim "  nothing"
+  fi
+
+  if command -v avahi-browse >/dev/null; then
+    local connect
+    connect=$(browse "$CONNECT_SERVICE" || true)
+    if [ -n "$connect" ]; then
+      echo
+      bold "Advertising, not connected"
+      printf '%s\n' "$connect" | sed 's/^/  /'
+    fi
+  fi
+}
+
+cmd_forget() {
+  need_adb
+  local target=${1:-}
+  if [ -z "$target" ]; then
+    red "Which phone? nixarchy android forget HOST:PORT"
+    dim "See them with: nixarchy android list"
+    exit 1
+  fi
+  adb disconnect "$target" || true
+  echo "Disconnected $target."
+  echo
+  # Being honest about what this does NOT do. adb keeps its pairing keys in
+  # ~/.android, and there is no per-device way to drop one: the phone holds
+  # the other half of the trust, and revoking it there is what actually
+  # revokes it.
+  dim "This ends the session. The pairing itself lives on the phone --"
+  dim "revoke it under Wireless debugging > Paired devices."
+}
+
+case "${1:-find}" in
+  find | search) shift || true; cmd_find ;;
+  pair) shift; cmd_pair "${1:-}" ;;
+  connect) shift; cmd_connect "${1:-}" ;;
+  list | devices) shift || true; cmd_list ;;
+  forget | disconnect) shift; cmd_forget "${1:-}" ;;
+  -h | --help | help) usage ;;
+  *) usage >&2; exit 1 ;;
+esac

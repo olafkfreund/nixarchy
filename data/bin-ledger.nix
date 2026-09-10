@@ -44,6 +44,11 @@
     class = "new";
     reason = "Not in upstream. Wraps omarchy-agent-prompt with prompts that name the skill and insist on measure-then-propose, so routing is fixed here rather than re-guessed on every invocation.";
   };
+  "nixarchy-android" = {
+    class = "new";
+    reason = "Not in upstream. scrcpy over Wi-Fi needs adb pair and adb connect on two different ports, one of them regenerated every time the pairing dialog opens, with a code valid for seconds; and `adb mdns services` cannot find them because nixpkgs' android-tools is built without an mDNS backend. This discovers both through avahi, which nixarchy already runs.";
+  };
+
   "nixarchy-channel" = {
     class = "new";
     reason = "Not in upstream. The generated flake documents following stable as prose telling you to hand-edit nixpkgs AND home-manager; this does both or neither, because moving one without the other is the pairing that breaks.";

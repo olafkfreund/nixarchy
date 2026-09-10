@@ -58,6 +58,7 @@ the documentation as much as the code.
 | Commercial apps services | same as Omarchy — [read there](https://omarchy.org/manual/commercial-apps-services/) |
 | Web apps | same as Omarchy — [read there](https://omarchy.org/manual/web-apps/) |
 | **Gaming** | **differs on NixOS** — [read here](gaming) |
+| **Android** | **nixarchy only** — [read here](android) |
 | Filling out pdfs | same as Omarchy — [read there](https://omarchy.org/manual/filling-out-pdfs/) |
 | Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |
 | **Other packages** | **differs on NixOS** — [read here](other-packages) |

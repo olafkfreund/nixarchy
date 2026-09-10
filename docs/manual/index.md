@@ -65,6 +65,7 @@ the documentation as much as the code.
 | **Preview changes** | **nixarchy only** — [read here](preview) |
 | **Try it first** | **nixarchy only** — [read here](try-it-first) |
 | **Updates** | **differs on NixOS** — [read here](updates) |
+| **Stable or unstable** | **nixarchy only** — [read here](channels) |
 | **Dotfiles** | **differs on NixOS** — [read here](dotfiles) |
 | Shell plugins | same as Omarchy — [read there](https://omarchy.org/manual/shell-plugins/) |
 | Monitors | same as Omarchy — [read there](https://omarchy.org/manual/monitors/) |

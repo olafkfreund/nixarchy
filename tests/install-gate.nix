@@ -45,9 +45,12 @@ pkgs.runCommand "nixarchy-install-gate"
     t "a module does"                          --install "modules/nixos.nix" true
     t "installer code does"                    --install "installer/install.sh" true
     t "a data row does"                        --install "data/apps.nix" true
-    # README is deliberately NOT excluded: build.yml derives counts from data/
-    # and greps README for them, so a README-only edit can legitimately fail.
-    t "README does"                            --install "README.md" true
+    # README does not run the VM, and the pair below is the claim: exempt
+    # from the INSTALL question, still relevant to the BUILD one. The guard
+    # that matters -- build.yml deriving the app and command counts from
+    # data/ and grepping README for them, which caught #424 -- lives in the
+    # omarchy job, which the install gate never covered.
+    t "README does not run the VM"             --install "README.md" false
 
     # `AGENTS.md` matched at the ROOT only, so installer/AGENTS.md ran a
     # 26-46 minute VM install for a markdown file. Every depth, because
@@ -58,6 +61,10 @@ pkgs.runCommand "nixarchy-install-gate"
 
     echo "the build question, unchanged:"
     t "an unrelated check still builds"        "" "tests/substitutable.nix" true
+    # The half of the README pair that keeps #424's guard honest. If this
+    # ever flips to false, a README whose counts disagree with data/ merges
+    # without the omarchy job ever looking at it.
+    t "README still builds"                    "" "README.md" true
     t "docs still do not"                      "" "docs/manual/android.md" false
     t "the gate itself always does"            "" ".github/scripts/pr-touches-build.sh" true
     t "a nested AGENTS.md builds nothing"      "" "modules/AGENTS.md" false

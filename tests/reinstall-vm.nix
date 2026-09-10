@@ -13,24 +13,31 @@
 # rather than compiling for an hour on a machine with no network device.
 #
 # ---------------------------------------------------------------------------
-# THE MISSING PIECE, stated once, here (#480, child of #478)
+# The gap this check exists to close (#480, child of #478) is shut
 #
-# installer/cd.nix takes `source` (#479, landed), so the image below already
-# bakes the user machine's closure. What cd.nix does NOT yet do is write the
-# /etc/nixarchy-reference-{true,false} markers from `source.configs` -- they
-# hardcode inputs.self.nixosConfigurations.reference{,-unencrypted}. Until
-# that is parameterised:
+# installer/cd.nix took `source` in #479, so the image below already bakes
+# the user machine's closure. Until #514, the /etc/nixarchy-reference-{true,
+# false} markers still hardcoded inputs.self.nixosConfigurations.reference{,
+# -unencrypted} -- so a user's image would name the reference toplevel, not
+# their own, and install.sh's `nix path-info` on it would miss, fall back to
+# building, and on an offline image that means the source bootstrap. #436,
+# again, three days.
 #
-#   - the CARRIED step fails: the marker names the reference toplevel, not
-#     the user's, so this check has NOT passed and must not be wired as if
-#     it had;
-#   - the hardcoded marker also drags the reference closure onto every user
-#     image through the /etc text's store references, which is its own bug.
+# #514 (found by the first run of THIS file, not read off cd.nix by eye)
+# made the markers name `source.installed.encrypted` / `.unencrypted`, and
+# gives every caller -- this test's `userMachine` included -- its own
+# toplevel in both slots. The CARRIED step below is the assertion that
+# interface holds: read the marker cd.nix wrote and compare it to the
+# toplevel this file built, not to a name borrowed from either side.
 #
-# This file codes against the intended interface -- the marker names the
-# toplevel of the machine in `source.configs` -- and the CARRIED step is the
-# single place the gap is asserted. When the cd.nix change lands, nothing
-# here should need to move.
+# What is still owed, so the next reader does not have to work it out: this
+# check is written, wired, and scheduled, and has not yet been watched through
+# a green end-to-end run -- boot, CARRIED, INSTALLED, OFFLINE, and back up into
+# the reinstalled closure. It is in `nightly_only` because it builds a SECOND
+# full image, so the run that can answer is the nightly, not a pull request.
+# #478's remaining child stays open until one is green; a check that has never
+# completed is a claim, and this file's whole argument is that a claim is not
+# evidence.
 # ---------------------------------------------------------------------------
 #
 # Everything about DRIVING the machine -- no test instrumentation, send_chars
@@ -180,13 +187,12 @@ let
         step STOPPED systemctl stop nixarchy-installer.service
         step MARKER test -f /etc/nixarchy-iso
 
-        # The image names the USER'S toplevel as the system it carries.
-        #
-        # This is the interface assertion for the MISSING PIECE named in the
-        # file header: today cd.nix hardcodes the reference toplevels here,
-        # so this step FAILS -- deliberately, because everything after it is
-        # only a reinstall check if the path the installer copies is the
-        # user's machine. `-false` because answers say encrypt=no.
+        # The image names the USER'S toplevel as the system it carries --
+        # the #480/#514 interface the file header describes, exercised for
+        # real: everything after this step is only a reinstall check if the
+        # path the installer copies is the user's machine, not a reference
+        # one that happens to be on the medium too. `-false` because answers
+        # say encrypt=no.
         step CARRIED sh -c '[ "$(tr -d "[:space:]" </etc/nixarchy-reference-false)" = "${userToplevel}" ]'
 
         step INSTALLED nixarchy-install --answers /a/answers

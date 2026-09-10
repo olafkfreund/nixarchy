@@ -40,6 +40,37 @@ let
   ];
 
   missingFrom = sc: builtins.filter (t: !(builtins.elem t sc)) expected;
+
+  # What the markers name, which is what an offline install actually WRITES.
+  #
+  # This is the half of the parameter that a storeContents check cannot see,
+  # and #479 shipped it wrong: `source` changed what was seeded and the
+  # markers still read `inputs.self.nixosConfigurations.reference`. On this
+  # repository's own images the two coincide, so nothing was visibly broken --
+  # a user's image would have carried their closures and then installed a
+  # system that was not on the medium.
+  #
+  # install.sh:2513 validates the marker with `nix path-info` and falls back
+  # to BUILDING when it does not resolve, which offline is the source
+  # bootstrap. So "the marker names something the image carries" is exactly
+  # the invariant, checked here at evaluation instead of discovered there.
+  markers = {
+    "nixarchy-reference-true" = iso.environment.etc."nixarchy-reference-true".text;
+    "nixarchy-reference-false" = iso.environment.etc."nixarchy-reference-false".text;
+  };
+
+  # The file has a trailing newline; the store path does not.
+  marked = lib.mapAttrs (_: t: lib.head (lib.splitString "\n" (lib.removeSuffix "\n" t))) markers;
+
+  # toString on both sides. storeContents holds DERIVATIONS and the marker is
+  # the plain string that was written into a file, so `builtins.elem` compares
+  # a string against a list of attrsets and is false for every entry -- the
+  # check reported all markers stray while both were demonstrably present.
+  # A comparison that cannot succeed is the same failure as one that cannot
+  # fail, seen from the other side (AGENTS.md 1).
+  carried = map toString iso.isoImage.storeContents;
+
+  strayMarkers = lib.filterAttrs (_: t: !(builtins.elem t carried)) marked;
 in
 pkgs.runCommand "nixarchy-iso-source"
   {
@@ -51,6 +82,8 @@ pkgs.runCommand "nixarchy-iso-source"
     # silently emptied the offline image and a `source` that silently filled
     # the network one are the same mistake seen from two sides.
     netCount = toString (builtins.length isoNet.isoImage.storeContents);
+    strayMarkers = lib.concatStringsSep " " (lib.mapAttrsToList (n: t: "${n} -> ${t}") strayMarkers);
+
     netHasToplevels = lib.concatStringsSep " " (
       builtins.filter (t: builtins.elem t isoNet.isoImage.storeContents) expected
     );
@@ -89,7 +122,19 @@ pkgs.runCommand "nixarchy-iso-source"
       exit 1
     fi
 
+    if [ -n "$strayMarkers" ]; then
+      echo "::error::a marker names a system the image does not carry:" >&2
+      for m in $strayMarkers; do echo "  $m" >&2; done
+      echo >&2
+      echo "  installer/cd.nix writes these, install.sh reads them and hands" >&2
+      echo "  the path to nixos-install --system. A path the image does not" >&2
+      echo "  have makes the installer fall back to BUILDING it, and with no" >&2
+      echo "  network that is the source bootstrap -- #436, three days." >&2
+      exit 1
+    fi
+
     echo "the offline image carries all three reference machines"
+    echo "both markers name systems it carries"
     echo "the network image carries none of them"
     touch $out
   ''

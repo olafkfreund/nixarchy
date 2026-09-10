@@ -47,7 +47,7 @@
   };
 
   outputs =
-    { nixarchy, ... }:
+    { self, nixarchy, ... }:
     let
       inherit (nixarchy.inputs.nixpkgs) lib;
 
@@ -77,5 +77,42 @@
           ];
         }
       );
+
+      # `nixarchy reinstall-iso` builds this: a bootable image carrying THIS
+      # machine, so it can be rebuilt on new hardware after a disk is lost.
+      #
+      # Read the honesty in the command before you rely on it. The image
+      # carries the system closure and this repository; it carries no /home,
+      # no service state and no secrets, and booting it ERASES the target
+      # disk. Files come back from your backups, not from here.
+      #
+      # One per machine, named for it, because `hosts/` can hold several and
+      # an image is of one of them. `self` rather than a path so the image
+      # embeds the flake as git sees it -- which is also why the command
+      # refuses on an uncommitted tree.
+      packages.x86_64-linux =
+        lib.genAttrs hosts (
+          name:
+          nixarchy.lib.mkUserIso {
+            flake = self;
+            host = name;
+          }
+        )
+        // {
+          # The bare name, for the common case of one machine. With several,
+          # the command names the one it means.
+          reinstall-iso =
+            if lib.length hosts == 1 then
+              nixarchy.lib.mkUserIso {
+                flake = self;
+                host = lib.head hosts;
+              }
+            else
+              throw ''
+                This repository has ${toString (lib.length hosts)} machines, so
+                "reinstall-iso" does not say which one. Name it:
+                ${lib.concatStringsSep "\n" (map (h: "  nix build .#${h}") hosts)}
+              '';
+        };
     };
 }

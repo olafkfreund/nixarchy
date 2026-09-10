@@ -20,6 +20,13 @@
   # user's machines are called whatever they called them; the reference set is
   # three configurations that happen to have fixed names, which is a fact
   # about this repository and not about the shape of an image.
+  #
+  # `installed` is which of them the installer actually writes, keyed by
+  # whether the user asked for encryption -- the two markers install.sh reads.
+  # Separate from `configs` because the image carries more than it installs:
+  # reference-hardware is seeded so its PACKAGES are on the medium and is not
+  # a machine anyone installs (#382). Both must be in `configs`, and
+  # checks.iso-source fails if they are not.
   # Passed through specialArgs, NOT defaulted here with `?`. A module argument
   # missing from specialArgs is resolved through `_module.args` rather than by
   # the function default, so `source ? {...}` evaluates to
@@ -878,11 +885,20 @@ in
         # These are the SAME configurations seeded into the store above --
         # referenceConfigs -- so naming their toplevels here adds no closure.
         # It records a path the image already contains.
+        #
+        # From `source`, not from inputs.self. #479 parameterised what gets
+        # SEEDED and left these naming nixarchy's own machines, which is a
+        # half-refactor that reads fine and is fatal: a user's image would
+        # carry their closures and then tell the installer to install the
+        # reference system, which is not on the medium at all. Harmless for
+        # this repository's own images, where the two are the same
+        # configurations, and checks.iso-source now asserts the pairing rather
+        # than trusting it.
         "nixarchy-reference-true".text = ''
-          ${inputs.self.nixosConfigurations.reference.config.system.build.toplevel}
+          ${source.installed.encrypted.config.system.build.toplevel}
         '';
         "nixarchy-reference-false".text = ''
-          ${inputs.self.nixosConfigurations.reference-unencrypted.config.system.build.toplevel}
+          ${source.installed.unencrypted.config.system.build.toplevel}
         '';
       }
     else

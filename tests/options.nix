@@ -1918,6 +1918,29 @@ pkgs.runCommand "nixarchy-options"
         }
         echo "the picker's try key is intercepted and routes to nixarchy try"
 
+        # And that `nixarchy try` REACHES something. The assertion above is
+        # about the call site; this is about the route, and the difference is
+        # not academic -- both halves of #498 shipped green with no `try` row
+        # in the dispatcher, so ctrl-t ran `nixarchy try foo`, fell through to
+        # `exec omarchy try foo`, and died as "Unknown Omarchy command".
+        # omarchy's dispatcher discovers only omarchy-* siblings, and
+        # nixarchy-try is not one.
+        #
+        # Every subcommand the dispatcher advertises, checked the same way: a
+        # usage line promising a command that routes nowhere is the same
+        # defect, and this is the file that would otherwise let the next one
+        # through.
+        for verb in try search apply vm box; do
+          grep -qE "^ *$verb\)" "$vm/sw/bin/nixarchy" || {
+            echo "the nixarchy dispatcher has no route for '$verb':" >&2
+            echo "  it falls through to \`exec omarchy $verb\`, which knows only" >&2
+            echo "  omarchy-* siblings, so the command dies as 'Unknown Omarchy" >&2
+            echo "  command' -- with nothing naming the real cause." >&2
+            exit 1
+          }
+        done
+        echo "every advertised nixarchy subcommand has a route"
+
         # ---- machines pull only when asked ---------------------------------
         test "$fleetOff" = false || {
           echo "system.autoUpgrade is on without programs.nixarchy.fleet.enable" >&2

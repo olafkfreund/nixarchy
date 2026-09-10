@@ -1750,6 +1750,17 @@ in
                     init) shift 2; exec nixarchy-dev-init "$@" ;;
                   esac
                   ;;
+                # Without this row `nixarchy try foo` falls through to
+                # `exec omarchy try ...` and dies as "Unknown Omarchy command"
+                # -- omarchy's own dispatcher discovers only omarchy-*
+                # siblings, and nixarchy-try is not one.
+                #
+                # It is the Search picker's ctrl-t path too, so the whole
+                # feature is unreachable without it. Both halves shipped
+                # green: the picker's check greps that nixarchy-search SAYS
+                # `nixarchy try `, which is the call site, not the route.
+                # checks.options now asserts the route.
+                try) shift; exec nixarchy-try "$@" ;;
                 vm) shift; exec nixarchy-vm "$@" ;;
                 box) shift; exec nixarchy-box "$@" ;;
                 ""|--help|-h|help)
@@ -1765,6 +1776,7 @@ in
                 nixarchy app remove         Pick what to deselect, interactively
                 nixarchy apply              Copy the selection into your flake and rebuild
                 nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
+                nixarchy try <app|attr>     Run something once without installing it
                 nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                 nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                 nixarchy doctor             What this machine needs to run nixarchy

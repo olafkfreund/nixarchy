@@ -39,6 +39,7 @@ leave the directory. A box is a whole userland; devenv is a version of `node`.
 | you have | reach for |
 |---|---|
 | anything in nixpkgs | nixpkgs -- always first |
+| a package you are not sure you want yet | [`nixarchy try`](try-it-first) -- runs it once, installs nothing, isolates nothing |
 | a GUI app that is not, and you want it contained | Flatpak |
 | a loose prebuilt binary | `nix-ld`, already on |
 | a toolchain this project needs | [devenv](per-project-environments) |

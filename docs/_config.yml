@@ -41,6 +41,7 @@ nav:
   - { path: /manual/updating-nixos,           title: Updating NixOS }
   - { path: /manual/updates,                  title: Updates }
   - { path: /manual/other-packages,           title: Packages }
+  - { path: /manual/try-it-first,             title: Try It First }
   - { path: /manual/dotfiles,                 title: Dotfiles }
   - { path: /manual/making-your-own-theme,    title: Making Your Own Theme }
   - { path: /manual/development-tools,        title: Development Tools }

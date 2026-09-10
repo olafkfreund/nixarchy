@@ -1241,6 +1241,14 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # nixarchy-android turns what the network says into a host:port, so
+          # the parsing is the command. avahi-browse and adb are stubbed with
+          # real output. See tests/android.nix.
+          android = import ./tests/android.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # The `try` front door's refusals, each driven with a stubbed
           # environment that lies about KVM, RAM, disk and the build plan.
           # Building tryApp is itself half the assertion: the app evaluates

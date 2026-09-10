@@ -220,6 +220,44 @@ else
   fi
 fi
 
+# ------------------------------------------------------------------- board --
+
+# The board is only as good as what is on it, and the thing that rots is not
+# the board -- it is the habit of filing an issue and moving on. An issue with
+# no milestone is invisible in every view that groups by one, so it is work
+# nobody can see and nobody schedules.
+#
+# Checked here rather than as a build gate on purpose: a missing milestone is
+# untidiness, not breakage, and failing somebody's unrelated PR over it would
+# teach them to resent the board. The nightly says so once a day, and this
+# issue does not close until it is dealt with -- which is the same pressure
+# applied at the right person.
+#
+# Epics are exempt: they are the milestones' own headline, and #478 sitting in
+# "Reinstall image" beside its children reads as a child of itself.
+unmilestoned=$(gh issue list --state open --limit 200   --json number,milestone,labels   --jq '[.[] | select(.milestone == null)
+           | select([.labels[].name] | index("epic") | not)
+           | .number] | join(" ")' 2>/dev/null)
+if [ -z "$unmilestoned" ]; then
+  ok "board" "every open issue" "has a milestone"
+else
+  n=$(printf '%s' "$unmilestoned" | wc -w)
+  finding "board" "$n without a milestone" "all of them" \
+    "invisible in the by-feature views: $unmilestoned"
+fi
+
+# A milestone with nothing in it is a plan somebody abandoned, and it makes
+# the progress bars lie by omission -- five milestones of which two are empty
+# reads as less progress than three milestones all moving.
+empty_ms=$(gh api "repos/{owner}/{repo}/milestones" \
+  --jq '[.[] | select(.open_issues + .closed_issues == 0) | .title] | join(", ")' \
+  2>/dev/null)
+if [ -z "$empty_ms" ]; then
+  ok "milestones" "all" "carry work"
+else
+  finding "milestones" "empty" "-" "nothing filed against: $empty_ms"
+fi
+
 # The quickshell override carries a DELETE THIS. Nothing tested the condition,
 # so it would have outlived its reason silently.
 if grep -q 'quickshell = final.quickshell.overrideAttrs' flake.nix; then

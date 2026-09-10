@@ -167,15 +167,33 @@ grep -rlE '\b(pacman|yay)\b' "$omarchy/share/omarchy/bin" 2>/dev/null |
   xargs -r -n1 basename | sort > "$tmp/pac"
 repl_n=$(comm -12 "$tmp/pac" "$tmp/nixbin" | wc -l)
 
-# The one number the README spells as a word.
+# The numbers the README spells as words.
 word_for() {
   case "$1" in
     5) echo Five ;; 6) echo Six ;; 7) echo Seven ;; 8) echo Eight ;;
     9) echo Nine ;; 10) echo Ten ;; 11) echo Eleven ;; 12) echo Twelve ;;
+    13) echo Thirteen ;; 14) echo Fourteen ;; 15) echo Fifteen ;;
     *) echo "" ;;
   esac
 }
 repl_word=$(word_for "$repl_n")
+
+# The skills, counted from what actually SHIPS rather than from the source
+# directory: diagnose-crash is upstream's, patched in place, so it has no
+# directory under pkgs/omarchy/skills and a count of that directory is one
+# short. Every skill is a SKILL.md in the built package, which is also the
+# thing the agents read.
+#
+# Added because this number drifted and nothing noticed: nixos-android shipped
+# with #459, the README went on saying twelve and listing twelve, and the miss
+# survived until somebody read the directory beside the table. The skill SET is
+# checked in CI; the sentence about it was not.
+# -L, because $omarchy is usually the `result` SYMLINK and find does not
+# follow one without it -- it returns zero, the count comes out empty, and the
+# script refuses rather than reporting a wrong number. Which is the guard
+# working, but it cost a run to see.
+skills=$(find -L "$omarchy" -name SKILL.md 2>/dev/null | wc -l)
+skills_word=$(word_for "$skills" | tr '[:upper:]' '[:lower:]')
 
 quantity "commands" "$commands" \
   '.*\*\*([0-9]+) shell commands\*\*.*' \
@@ -195,6 +213,9 @@ quantity "pacman-scripts" "$pac" \
 quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'
+quantity "skills" "$skills_word" \
+  '^So (twelve|thirteen|fourteen|fifteen) skills ship here instead:$' \
+  's/^So (twelve|thirteen|fourteen|fifteen) skills ship here instead:$/So '"$skills_word"' skills ship here instead:/'
 quantity "apps-total" "$a_total" \
   '.*\| ([0-9]+) apps in the selection \|.*' \
   "s/\| [0-9]+ apps in the selection \| [0-9]+ from nixpkgs, [0-9]+ as NixOS modules, [0-9]+ built here, [0-9]+ with no equivalent \|/| $a_total apps in the selection | $a_nixpkgs from nixpkgs, $a_mod as NixOS modules, $a_ours built here, $a_un with no equivalent |/"

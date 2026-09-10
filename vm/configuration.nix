@@ -38,6 +38,24 @@
   users.users.omarchy = {
     description = "Nixarchy smoke test";
     password = "omarchy"; # VM-only; never reachable off the host.
+
+    # And the line above is INERT without this, which is why it is here.
+    #
+    # installer/host.nix:181 sets hashedPasswordFile = /var/lib/nixarchy/
+    # password.hash -- load-bearing for #436, because a machine installed
+    # offline gets its password from a file rather than from an evaluation.
+    # The installer writes that file. This VM never runs the installer, so the
+    # file does not exist; and with mutableUsers the FILE outranks `password`,
+    # so the account had no usable password at all.
+    #
+    # Nobody noticed because autoLogin below walks straight past it. It shows
+    # up the moment anything in the VM asks for a password -- `sudo` at a
+    # prompt that cannot be satisfied.
+    #
+    # Found by the evaluation warning about multiple password options, which
+    # is the case for reading warnings rather than living with them: it was
+    # pointing at a real defect, not at untidiness.
+    hashedPasswordFile = lib.mkForce null;
   };
 
   # Straight to a session -- a login prompt adds nothing to the smoke test.

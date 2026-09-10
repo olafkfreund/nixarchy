@@ -890,161 +890,170 @@
       # Smoke-test VM. Not a daily driver -- it exists to prove the QuickShell
       # bar comes up against Hyprland's Lua config before any packaging effort
       # is spent on the long tail.
-      nixosConfigurations = rec {
-        # Whose machines the images below carry.
-        #
-        # Named here rather than inside installer/cd.nix so that a user's own
-        # image (#478) is the same module with a different `source` -- their
-        # flake, their machines, their rev -- instead of a second copy of a
-        # 900-line file. What stays nixarchy's either way is the installer
-        # itself: the script, the version and the branding come from
-        # `inputs.self` inside cd.nix, whoever is being installed.
-        #
-        # `rec` so the three configurations below can be named without
-        # repeating `self.nixosConfigurations`. They are defined further down
-        # this attrset.
-        isoSource = {
-          flake = inputs.self;
-          configs = [
-            reference
-            reference-unencrypted
+      # isoSource is a helper, not a machine, so it is removed after the `rec`
+      # has used it. Left in, `nix flake show` lists it as a configuration and
+      # anything iterating nixosConfigurations -- checks.config-warnings does
+      # exactly that -- gets an attrset with no `config` and has to guess what
+      # it is looking at.
+      nixosConfigurations =
+        let
+          withHelpers = rec {
+            # Whose machines the images below carry.
+            #
+            # Named here rather than inside installer/cd.nix so that a user's own
+            # image (#478) is the same module with a different `source` -- their
+            # flake, their machines, their rev -- instead of a second copy of a
+            # 900-line file. What stays nixarchy's either way is the installer
+            # itself: the script, the version and the branding come from
+            # `inputs.self` inside cd.nix, whoever is being installed.
+            #
+            # `rec` so the three configurations below can be named without
+            # repeating `self.nixosConfigurations`. They are defined further down
+            # this attrset.
+            isoSource = {
+              flake = inputs.self;
+              configs = [
+                reference
+                reference-unencrypted
 
-            # The hardware the reference machine does not have. #382: a real
-            # laptop's hardware-configuration.nix is not the reference's, and
-            # where the difference is a PACKAGE the "a few dozen text
-            # derivations" argument stops holding -- building a package with
-            # no compiler on the image is the source bootstrap. This exists so
-            # those packages are on the medium; nobody installs it.
-            reference-hardware
-          ];
-        };
+                # The hardware the reference machine does not have. #382: a real
+                # laptop's hardware-configuration.nix is not the reference's, and
+                # where the difference is a PACKAGE the "a few dozen text
+                # derivations" argument stops holding -- building a package with
+                # no compiler on the image is the source bootstrap. This exists so
+                # those packages are on the medium; nobody installs it.
+                reference-hardware
+              ];
+            };
 
-        # The live image. See installer/cd.nix.
-        iso = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = {
-            inherit inputs;
-            offline = true;
-            source = isoSource;
+            # The live image. See installer/cd.nix.
+            iso = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = {
+                inherit inputs;
+                offline = true;
+                source = isoSource;
+              };
+              modules = [ ./installer/cd.nix ];
+            };
+
+            # Same module, one argument different. See the `offline` parameter in
+            # installer/cd.nix for what it turns off.
+            iso-net = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = {
+                inherit inputs;
+                offline = false;
+                source = isoSource;
+              };
+              modules = [ ./installer/cd.nix ];
+            };
+
+            installer-vm = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = { inherit inputs; };
+              modules = [ ./installer/vm.nix ];
+            };
+
+            vm = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = { inherit inputs; };
+              modules = [
+                self.nixosModules.nixarchy
+                home-manager.nixosModules.home-manager
+                ./vm/configuration.nix
+              ];
+            };
+
+            # Why: docs/internals/flake.md#the-same-vm-with-room-to-run-a-model
+            vm-big = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+              specialArgs = { inherit inputs; };
+              modules = [
+                self.nixosModules.nixarchy
+                home-manager.nixosModules.home-manager
+                ./vm/configuration.nix
+                (
+                  { lib, ... }:
+                  {
+                    virtualisation = {
+                      memorySize = lib.mkForce 32768;
+                      cores = lib.mkForce 8;
+                      diskSize = lib.mkForce 131072; # 128GB: several models, comfortably
+                      diskImage = lib.mkForce "./nixarchy-vm-big.qcow2";
+                      # A different port, so this and .#vm can run side by side.
+                      forwardPorts = lib.mkForce [
+                        {
+                          from = "host";
+                          host.port = 2224;
+                          guest.port = 22;
+                        }
+                      ];
+                    };
+
+                    # Sized for the machine rather than inherited from the smoke
+                    # test: with 32GB the 8b tier is comfortable, and 8b is the
+                    # smallest size shown to follow the skills rather than answer
+                    # from memory while claiming to have read them.
+                    programs.nixarchy.localAi = {
+                      enable = lib.mkDefault true;
+                      model = lib.mkDefault "qwen3:8b";
+                      # A VM has no GPU, and localAi refuses to build without one
+                      # unless told. This is the case the option exists for: a rig
+                      # for exercising the wiring, where a slow answer is still an
+                      # answer and nobody is trying to work.
+                      allowCpu = lib.mkDefault true;
+                    };
+                  }
+                )
+              ];
+            };
+
+            # The machine the installer produces, with the installer's own defaults.
+            # Built in CI so the install path cannot rot between releases, and baked
+            # into the ISO's store later so that installing copies rather than
+            # downloads -- which only works if this closure is a closure of something
+            # a real install actually produces.
+            #
+            # `device` is a placeholder: nothing here formats a disk. What matters is
+            # that the expensive derivations in this toplevel are the same ones a real
+            # install needs, and the device string is not one of them.
+            reference = self.lib.mkReference { encrypt = true; };
+
+            # The same machine on an unencrypted disk.
+            #
+            # Not a variant anybody installs -- it exists so the ISO can carry
+            # both. The installer offers encryption on or off, and the two produce
+            # different systems: 51 derivations differ, all of them unit files and
+            # etc fragments, 180 MiB of content. Small, but not present is not
+            # present, and on an image with no network the difference between
+            # having them and not is a source bootstrap.
+            reference-unencrypted = self.lib.mkReference { encrypt = false; };
+
+            # The same machine again, with every hardware attribute
+            # nixos-generate-config can emit that ADDS A PACKAGE turned on. It is
+            # not a machine anyone installs; it exists so installer/cd.nix can put
+            # those packages on the image.
+            #
+            # #382: an Intel NPU made the tool write hardware.cpu.intel.npu.enable
+            # into hardware-configuration.nix, which put intel-npu-driver into
+            # environment.systemPackages, which no baked closure carried, so the
+            # target had to BUILD it -- and building a cmake package with no
+            # compiler on the image is the stdenv source bootstrap, which is where
+            # two users' installs died, after the disk was partitioned.
+            #
+            # boot.swraid.enable is the one that matters most and was found by
+            # tests/generate-config-surface.nix rather than by a user: a machine
+            # whose root is on mdraid gets it written, and it pulls mdadm. That
+            # one cannot be worked around by commenting it out either -- without
+            # it the installed machine does not boot at all.
+            reference-hardware = self.lib.mkReference {
+              encrypt = false;
+              hardware = true;
+            };
           };
-          modules = [ ./installer/cd.nix ];
-        };
-
-        # Same module, one argument different. See the `offline` parameter in
-        # installer/cd.nix for what it turns off.
-        iso-net = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = {
-            inherit inputs;
-            offline = false;
-            source = isoSource;
-          };
-          modules = [ ./installer/cd.nix ];
-        };
-
-        installer-vm = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = { inherit inputs; };
-          modules = [ ./installer/vm.nix ];
-        };
-
-        vm = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = { inherit inputs; };
-          modules = [
-            self.nixosModules.nixarchy
-            home-manager.nixosModules.home-manager
-            ./vm/configuration.nix
-          ];
-        };
-
-        # Why: docs/internals/flake.md#the-same-vm-with-room-to-run-a-model
-        vm-big = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = { inherit inputs; };
-          modules = [
-            self.nixosModules.nixarchy
-            home-manager.nixosModules.home-manager
-            ./vm/configuration.nix
-            (
-              { lib, ... }:
-              {
-                virtualisation = {
-                  memorySize = lib.mkForce 32768;
-                  cores = lib.mkForce 8;
-                  diskSize = lib.mkForce 131072; # 128GB: several models, comfortably
-                  diskImage = lib.mkForce "./nixarchy-vm-big.qcow2";
-                  # A different port, so this and .#vm can run side by side.
-                  forwardPorts = lib.mkForce [
-                    {
-                      from = "host";
-                      host.port = 2224;
-                      guest.port = 22;
-                    }
-                  ];
-                };
-
-                # Sized for the machine rather than inherited from the smoke
-                # test: with 32GB the 8b tier is comfortable, and 8b is the
-                # smallest size shown to follow the skills rather than answer
-                # from memory while claiming to have read them.
-                programs.nixarchy.localAi = {
-                  enable = lib.mkDefault true;
-                  model = lib.mkDefault "qwen3:8b";
-                  # A VM has no GPU, and localAi refuses to build without one
-                  # unless told. This is the case the option exists for: a rig
-                  # for exercising the wiring, where a slow answer is still an
-                  # answer and nobody is trying to work.
-                  allowCpu = lib.mkDefault true;
-                };
-              }
-            )
-          ];
-        };
-
-        # The machine the installer produces, with the installer's own defaults.
-        # Built in CI so the install path cannot rot between releases, and baked
-        # into the ISO's store later so that installing copies rather than
-        # downloads -- which only works if this closure is a closure of something
-        # a real install actually produces.
-        #
-        # `device` is a placeholder: nothing here formats a disk. What matters is
-        # that the expensive derivations in this toplevel are the same ones a real
-        # install needs, and the device string is not one of them.
-        reference = self.lib.mkReference { encrypt = true; };
-
-        # The same machine on an unencrypted disk.
-        #
-        # Not a variant anybody installs -- it exists so the ISO can carry
-        # both. The installer offers encryption on or off, and the two produce
-        # different systems: 51 derivations differ, all of them unit files and
-        # etc fragments, 180 MiB of content. Small, but not present is not
-        # present, and on an image with no network the difference between
-        # having them and not is a source bootstrap.
-        reference-unencrypted = self.lib.mkReference { encrypt = false; };
-
-        # The same machine again, with every hardware attribute
-        # nixos-generate-config can emit that ADDS A PACKAGE turned on. It is
-        # not a machine anyone installs; it exists so installer/cd.nix can put
-        # those packages on the image.
-        #
-        # #382: an Intel NPU made the tool write hardware.cpu.intel.npu.enable
-        # into hardware-configuration.nix, which put intel-npu-driver into
-        # environment.systemPackages, which no baked closure carried, so the
-        # target had to BUILD it -- and building a cmake package with no
-        # compiler on the image is the stdenv source bootstrap, which is where
-        # two users' installs died, after the disk was partitioned.
-        #
-        # boot.swraid.enable is the one that matters most and was found by
-        # tests/generate-config-surface.nix rather than by a user: a machine
-        # whose root is on mdraid gets it written, and it pulls mdadm. That
-        # one cannot be worked around by commenting it out either -- without
-        # it the installed machine does not boot at all.
-        reference-hardware = self.lib.mkReference {
-          encrypt = false;
-          hardware = true;
-        };
-      };
+        in
+        builtins.removeAttrs withHelpers [ "isoSource" ];
 
       devShells = eachSystem (system: {
         default = pkgsFor.${system}.callPackage ./shell.nix { };
@@ -1091,6 +1100,22 @@
             # partitions a physical disk never is.
             hardware.cpu.intel.npu.enable = true;
             boot.swraid.enable = true;
+
+            # Answered, not muted. swraid.nix:16 accepts any mdadm.conf
+            # matching MAILADDR|PROGRAM, and without one it warns that mdmon
+            # will crash -- on every evaluation of this configuration, which
+            # is every ISO build and every run of checks.iso-source.
+            #
+            # #472 answered the same question for the `iso` configuration and
+            # verified ITS warnings were empty; this one was never checked and
+            # went on warning. Hence checks.config-warnings below, so the next
+            # one fails instead of accumulating.
+            #
+            # root is where NixOS mail goes with no MTA configured, which on a
+            # configuration that exists only to put mdadm's packages on an
+            # image is exactly right: the point is that mdmon starts, not that
+            # anyone reads it.
+            boot.swraid.mdadmConf = "MAILADDR root";
             virtualisation.hypervGuest.enable = true;
             virtualisation.virtualbox.guest.enable = true;
 
@@ -1269,6 +1294,14 @@
           channel = import ./tests/channel.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+          };
+
+          # Every configuration this repository ships evaluates without
+          # warnings. See tests/config-warnings.nix for why that is a check
+          # and not a preference.
+          config-warnings = import ./tests/config-warnings.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
           };
 
           # The shipped images carry the reference machines, and the network

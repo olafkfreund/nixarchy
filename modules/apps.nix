@@ -1886,14 +1886,26 @@ in
               # `|| true`: a refused preflight (or a preview closed with a
               # nonzero status) must land back at the switch question, not
               # kill the apply under set -e.
+              # `|| reply=""` on every prompt, because EOF is not a crash.
+              #
+              # `read` returns non-zero at end of input, and under
+              # writeShellApplication's `set -e` that KILLS the script. So the
+              # moment this file grew a second prompt, `echo n | nixarchy-apply`
+              # -- one line, two reads -- started exiting 1: the first read took
+              # the "n", the second hit EOF. checks.session drives exactly that
+              # and went red on it.
+              #
+              # Treating EOF as an empty answer is also the right behaviour
+              # rather than a test accommodation: a piped or non-interactive
+              # apply should decline to switch, not die halfway through.
               if command -v nixarchy-preview >/dev/null 2>&1; then
-                read -r -p "Preview in a VM first? [y/N] " reply
+                read -r -p "Preview in a VM first? [y/N] " reply || reply=""
                 case "$reply" in
                   [yY]*) nixarchy-preview || true ;;
                 esac
               fi
 
-              read -r -p "Build and switch now? [y/N] " reply
+              read -r -p "Build and switch now? [y/N] " reply || reply=""
               case "$reply" in
                 # No sudo: nh elevates itself, and wrapping it means the
                 # elevation happens before nh can decide how to do it.

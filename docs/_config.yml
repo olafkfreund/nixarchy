@@ -8,9 +8,19 @@ baseurl: "/nixarchy"
 
 # Only the manual is a site. The screenshots and the demo gif live in docs/
 # too and are linked from the README, so they must not become pages.
+#
+# internals/ is excluded for a different reason, and it was being published
+# by accident: it is DEVELOPER documentation, and its home is the wiki, which
+# .github/workflows/wiki.yml generates from it. Left in, the same words were
+# reachable at two public URLs with no link between them -- and the one nobody
+# remembered would be the one somebody read. It is also written to be read on
+# github.com rather than as a site: flake.nix carries a dozen
+# `# Why: docs/internals/flake.md#anchor` pointers into it, and those resolve
+# against the file view, not against Pages.
 include:
   - manual
 exclude:
+  - internals
   - screenshots
   - capture-screenshots.sh
   - nixarchy-demo.gif

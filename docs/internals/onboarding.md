@@ -1,7 +1,3 @@
----
-title: Starting work on nixarchy
----
-
 # Starting work on nixarchy
 
 For a developer — human or agent — with commit access and no history here.

@@ -21,6 +21,7 @@ working:
 | `home.nix` | the Home Manager side: the seed, plugins, per-user state |
 | `apps.nix` | the app catalogue and the selection model (`nixarchy-apply`) |
 | `flatpaks.nix` | the software nixpkgs genuinely does not carry |
+| `preview.nix` | the `virtualisation.vmVariant` defaults that make a previewed desktop render |
 | `fleet.nix` | pull-based `system.autoUpgrade` from a remote flake, opt-in |
 
 ## Tests

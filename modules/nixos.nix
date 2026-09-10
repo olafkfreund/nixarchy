@@ -137,6 +137,7 @@ in
     ./fleet.nix
     ./auto-update.nix
     (import ./services inputs)
+    ./preview.nix
     ./flatpaks.nix
     inputs.nix-flatpak.nixosModules.nix-flatpak
 

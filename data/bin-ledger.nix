@@ -66,6 +66,10 @@
     class = "new";
     reason = "Not in upstream. programs.nixarchy.localAi enables the service but deliberately downloads no weights; this pulls a model at runtime and sizes it against VRAM, which Nix cannot read.";
   };
+  "nixarchy-preview" = {
+    class = "new";
+    reason = "Not in upstream, where a config change is a pacman transaction with no dry run to look at. Builds nixosConfigurations.<host>.config.system.build.vm -- the same configuration re-evaluated under qemu-vm.nix -- and boots it in a window, on a managed disk that is refused when stale rather than silently reused.";
+  };
   "nixarchy-reinstall-iso" = {
     class = "new";
     reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a bootable image from this machine's own configuration -- the system closure and /etc/nixos, never /home or secrets -- after refusing on low disk, an uncommitted tree, or a running system that drifted from the flake.";

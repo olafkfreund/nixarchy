@@ -299,6 +299,7 @@ jobs:
           # boot one. The integration that added the check is what surfaced it.
           claimed="wifi-hwsim install free-space installer-refusal
             install-encrypted install-iso install-iso-net iso-budget microvm-boot
+            reinstall-vm
             box-boot box-template coexist dashboard-clock installer-ui
             installer-wizard integration microvm-template options plugin
             reference-toplevel session try-nixarchy vm-toplevel"
@@ -339,7 +340,11 @@ jobs:
           #                    already runs two of those against a 90-minute job
           #                    and that pair grazed the timeout on 2026-09-03
           #   microvm-boot     a nested VM on the -tcg runner
-          nightly_only="install-iso iso-budget microvm-boot install-iso-net install-encrypted"
+          # reinstall-vm builds a SECOND full ISO and installs from it -- the
+          # same ~3h shape as install-iso, and it arrived on main (#512)
+          # before it was claimed here, which would have put a multi-hour
+          # build in the light job on every pull request.
+          nightly_only="install-iso iso-budget microvm-boot install-iso-net install-encrypted reinstall-vm"
 
           # Ask Nix, do not parse the file.
           #

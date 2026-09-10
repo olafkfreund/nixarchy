@@ -4,6 +4,29 @@
   lib,
   pkgs,
   modulesPath,
+  # Whose machines this image carries.
+  #
+  # Defaults to this flake, which is every image nixarchy itself builds -- so
+  # the reference ISO is unchanged by this parameter existing, and CI proves
+  # that by comparing the derivation rather than by asserting it.
+  #
+  # A user's image (#478) passes their own flake instead: their
+  # nixosConfigurations get baked, their inputs get collected, and their rev
+  # names the file. What does NOT come from here is the installer itself --
+  # the script, the version, the branding are nixarchy's whoever is being
+  # installed, and they keep reading `inputs.self` below.
+  #
+  # `configs` is a list of nixosConfigurations rather than names, because a
+  # user's machines are called whatever they called them; the reference set is
+  # three configurations that happen to have fixed names, which is a fact
+  # about this repository and not about the shape of an image.
+  # Passed through specialArgs, NOT defaulted here with `?`. A module argument
+  # missing from specialArgs is resolved through `_module.args` rather than by
+  # the function default, so `source ? {...}` evaluates to
+  # `error: attribute 'source' missing` -- confusing, because the default is
+  # right there in the signature. It belongs at the call site anyway, beside
+  # `offline`, which is the other per-image decision.
+  source,
   # Whether this image carries the desktop or downloads it. True is the real
   # product -- see the header. False builds the same installer over the network
   # instead, which is the same install path the `install` check has always
@@ -66,7 +89,7 @@ let
   collectInputs =
     flake: [ flake.outPath ] ++ lib.concatMap collectInputs (lib.attrValues (flake.inputs or { }));
 
-  inputSources = lib.unique (collectInputs inputs.self);
+  inputSources = lib.unique (collectInputs source.flake);
 
   # Both disk modes, because the installer offers both.
   #
@@ -99,18 +122,9 @@ let
   # Kept in step with tests/generate-config-surface.nix, which reads the same
   # three and fails if a generate-config attribute adds a package none of them
   # carries.
-  referenceConfigs = map (c: c.config) [
-    inputs.self.nixosConfigurations.reference
-    inputs.self.nixosConfigurations.reference-unencrypted
-
-    # The hardware the reference machine does not have. #382: a real laptop's
-    # hardware-configuration.nix is not the reference's, and where the
-    # difference is a PACKAGE the argument above -- "a few dozen text
-    # derivations" -- stops holding, because building a package with no
-    # compiler on the image is the source bootstrap. This one exists so those
-    # packages are on the medium; it is not a machine anyone installs.
-    inputs.self.nixosConfigurations.reference-hardware
-  ];
+  # The default set, and why it is what it is, is documented on the `source`
+  # argument at the top of this file.
+  referenceConfigs = map (c: c.config) source.configs;
 
   references = map (c: c.system.build) referenceConfigs;
 
@@ -549,7 +563,7 @@ in
   # The version comes from the omarchy package rather than a second binding,
   # so it cannot drift from what is actually on the image.
   image.baseName = lib.mkForce "nixarchy-${version}${variant}-${
-    inputs.self.shortRev or "dirty"
+    source.flake.shortRev or "dirty"
   }-x86_64";
 
   # A volume ID that overflows 32 characters or carries a character outside

@@ -64,9 +64,15 @@ module surface and catches most mistakes in a minute or two.
 ```bash
 nix fmt -- --ci
 nix run --inputs-from . nixpkgs#statix -- check .
+nix run --inputs-from . nixpkgs#deadnix -- --fail .
 nix run --inputs-from . nixpkgs#shellcheck -- <script>
 nix run --inputs-from . nixpkgs#actionlint -- .github/workflows/<file>.yml
 ```
+
+**Copy those invocations exactly, flags included.** `deadnix` without
+`--fail` prints the same warning and exits **0** -- so the obvious form says
+clean while CI says otherwise. `build.yml:132-138` is the authority, and this
+list was missing `deadnix` altogether until it cost a red pipeline.
 
 They catch different things and CI runs all of them. `statix` in particular
 finds repeated keys and useless parens that `nix fmt` is happy with — it has

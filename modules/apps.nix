@@ -1184,18 +1184,23 @@ in
               file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
               [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
+              # `|| continue`, not `&&`: this script runs under set -e, and a
+              # failing AND-list on a blank line would end it mid-collect.
               entries=()
               while IFS= read -r name; do
-                [ -n "$name" ] && entries+=("app"$'\t'"$name")
+                [ -n "$name" ] || continue
+                entries+=("app"$'\t'"$name")
               done < <(
                 grep -oE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" \
                   | sed -E 's/[[:space:]]*//; s/\.enable//'
               )
               while IFS= read -r name; do
-                [ -n "$name" ] && entries+=("pkg"$'\t'"$name")
+                [ -n "$name" ] || continue
+                entries+=("pkg"$'\t'"$name")
               done < <(grep -oE '#@pkg [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@pkg //')
               while IFS= read -r name; do
-                [ -n "$name" ] && entries+=("opt"$'\t'"$name")
+                [ -n "$name" ] || continue
+                entries+=("opt"$'\t'"$name")
               done < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
 
               if [ ''${#entries[@]} -eq 0 ]; then

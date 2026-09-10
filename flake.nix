@@ -74,7 +74,7 @@
 
     # Why: docs/internals/flake.md#the-rdp-server-behind-the-remote-desktop-feature-1
     hypr-rdp = {
-      url = "github:MuNeNiCK/hypr-rdp/v0.1.5";
+      url = "github:MuNeNiCK/hypr-rdp/v0.1.6";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

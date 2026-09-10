@@ -85,11 +85,13 @@ while IFS= read -r f; do
     .github/workflows/build.yml) relevant=true; break ;;
     .github/scripts/pr-touches-build.sh) relevant=true; break ;;
 
-    # README.md is NOT in this list, and that is deliberate rather than an
+    # README.md is NOT in this arm, and that is deliberate rather than an
     # oversight. build.yml derives the app and command counts from data/ and
     # greps README.md for them, so a README-only edit can legitimately fail
-    # the omarchy job -- it did on #424. Excluding it would turn a working
-    # guard into one that only runs when something else changed too.
+    # the omarchy job -- it did on #424. Excluding it HERE would turn a
+    # working guard into one that only runs when something else changed too.
+    # It is excluded from the INSTALL question further down instead, which
+    # is a different question and does not touch that guard.
     # `AGENTS.md` matched only at the root, so installer/AGENTS.md and
     # modules/AGENTS.md fell through to `*` and ran the whole build -- and,
     # once install-check grew its own narrower list, a 26-46 minute VM install
@@ -118,6 +120,27 @@ while IFS= read -r f; do
     tests/hardware-configuration.nix|tests/test-instrumentation.nix)
       relevant=true; break ;;
     tests/*)
+      if [ "$install_only" = true ]; then continue; fi
+      relevant=true; break ;;
+
+    # README.md, for the install question only -- and the split is the whole
+    # point of it being here rather than in the arm above.
+    #
+    # The guard that makes README relevant is the omarchy job's: build.yml
+    # derives the app and command counts from data/ and greps README for
+    # them, and it caught a real mismatch on #424. That job runs in build.yml
+    # and is not gated by the install question at all -- install-check.yml's
+    # own header says its cap covers "the one job that boots a VM, not the
+    # build, system, box or omarchy jobs that run beside it". So the counts
+    # are still checked on every README edit, exactly as before.
+    #
+    # What a README edit cannot do is change an install. The three checks the
+    # install job builds -- install, free-space, installer-refusal -- reach
+    # ./hardware-configuration.nix and ./test-instrumentation.nix and nothing
+    # else; no derivation reads README.md. Measured cost of not saying so: a
+    # one-line Roadmap row took a 55-minute VM install, serialised behind the
+    # single slot every other pull request is also waiting for.
+    README.md)
       if [ "$install_only" = true ]; then continue; fi
       relevant=true; break ;;
 

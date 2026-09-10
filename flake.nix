@@ -24,6 +24,29 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The same, on the release branch, for a machine whose nixpkgs is a
+    # release rather than unstable (#525).
+    #
+    # home-manager and nixpkgs are developed as a pair, and home-manager says
+    # so itself: point this flake's nixpkgs at nixos-26.05 and every
+    # evaluation carries its warning that "using mismatched versions is
+    # likely to cause errors and unexpected behavior" -- version 26.11
+    # against nixpkgs 26.05. That is upstream's judgement, not ours.
+    #
+    # installer/template/flake.nix has told users to move the two together
+    # since it was written. This is that advice applied to this flake, so the
+    # advice is something the project follows rather than only prints.
+    #
+    # Worth being plain about the cost of NOT doing it, because it is not the
+    # warning itself: modules/nixos.nix now emits a real warning on stable,
+    # about screen sharing being gone. A second warning that every stable
+    # evaluation prints and nobody can act on is what teaches a reader to
+    # skip both.
+    home-manager-stable = {
+      url = "github:nix-community/home-manager/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#hyprland-from-hyprwm-tracking-their-branch-not-a
     hyprland.url = "github:hyprwm/Hyprland";
 
@@ -121,6 +144,7 @@
       nixpkgs,
       systems,
       home-manager,
+      home-manager-stable,
       hyprland,
       omarchy,
       zen-browser,
@@ -138,6 +162,37 @@
       );
 
       omarchyVersion = "4.0.3";
+
+      # home-manager, matched to whichever nixpkgs this is being evaluated
+      # against (#525).
+      #
+      # The two are developed as a pair, and home-manager warns when they are
+      # not: "Home Manager version 26.11 and Nixpkgs version 26.05 ... likely
+      # to cause errors and unexpected behavior". Nothing here overrides a
+      # user's choice -- it FOLLOWS it. Whatever nixpkgs the machine is on
+      # picks the home-manager built for it.
+      #
+      # `lib.trivial.release` is nixpkgs' own release string ("26.05",
+      # "26.11"), so this reads the package set actually in use rather than
+      # any flag or option someone has to remember to set.
+      #
+      # The accepted weakness, stated rather than hidden: `stableRelease`
+      # must name the same release as the home-manager-stable input's URL,
+      # and nothing here can check that -- a flake input URL is not readable
+      # from inside the flake. The two move together when NixOS cuts a
+      # release. What makes that survivable is that being wrong is LOUD: if
+      # they disagree, home-manager's own mismatch warning is exactly what
+      # comes back, which is the thing this exists to remove.
+      #
+      # A machine on some third release (25.11, say) gets master and its
+      # warning. That is honest -- this project carries one release branch,
+      # not every one -- and the warning names the real situation.
+      stableRelease = "26.05";
+      homeManagerModule =
+        if lib.trivial.release == stableRelease then
+          home-manager-stable.nixosModules.home-manager
+        else
+          home-manager.nixosModules.home-manager;
 
       # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
       nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
@@ -1002,7 +1057,7 @@
               specialArgs = { inherit inputs; };
               modules = [
                 self.nixosModules.nixarchy
-                home-manager.nixosModules.home-manager
+                homeManagerModule
                 ./vm/configuration.nix
               ];
             };
@@ -1013,7 +1068,7 @@
               specialArgs = { inherit inputs; };
               modules = [
                 self.nixosModules.nixarchy
-                home-manager.nixosModules.home-manager
+                homeManagerModule
                 ./vm/configuration.nix
                 (
                   { lib, ... }:
@@ -1117,7 +1172,7 @@
             specialArgs = { inherit inputs; };
             modules = [
               self.nixosModules.nixarchy
-              home-manager.nixosModules.home-manager
+              homeManagerModule
               inputs.disko.nixosModules.disko
 
               # Why: docs/internals/flake.md#one-module-that-imports-the-machines-own-two-rathe

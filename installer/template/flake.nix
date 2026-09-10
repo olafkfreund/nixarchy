@@ -26,12 +26,12 @@
     # `omarchy update`) moves it forward when you decide to.
     #
     # To follow STABLE nixpkgs instead, point this at the release branch (e.g.
-    # "github:NixOS/nixpkgs/nixos-25.05") -- and move home-manager with it, as
+    # "github:NixOS/nixpkgs/nixos-26.05") -- and move home-manager with it, as
     # the two are developed as a pair. Add this inside the `nixarchy` block
     # below, beside the `follows`:
     #
     #   inputs.home-manager.url =
-    #     "github:nix-community/home-manager/release-25.05";
+    #     "github:nix-community/home-manager/release-26.05";
     #
     # then `nix flake update nixpkgs` and `nh os switch` (the changed
     # home-manager override is re-locked in the same pass).

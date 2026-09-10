@@ -201,6 +201,29 @@ jobs:
   # derivation depends on the flake's own rev and lastModified, so a path built
   # from any other tree -- a branch, a dirty checkout -- is a DIFFERENT path
   # that would 404 for reasons having nothing to do with the cache.
+  # A SEPARATE job, not a step on install-iso, and the number is the reason:
+  # both build a full ISO and install from it, so two of them under one
+  # timeout-minutes: 180 is a job that cannot finish. This one also carries a
+  # higher ceiling than its sibling because the check's own globalTimeout is
+  # 170 minutes -- a job timeout below that kills the driver before it can
+  # report, and a driver that is killed says nothing about what failed.
+  #
+  # Why it is here at all: #512 landed the check with no workflow naming it,
+  # so build.yml's generated step picked it up and would have put ~3h on every
+  # pull request. Claiming it without scheduling it is the other failure --
+  # build.yml refuses that outright, in the same words AGENTS.md 4 uses: a
+  # check nothing runs is worse than no check.
+  reinstall-vm:
+    name: build a user image, reinstall from it, boot the result
+    runs-on: [self-hosted, nixos, kvm, big]
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-nix
+
+      - name: Reinstall a machine from an image built out of its own config
+        run: nix build .#checks.x86_64-linux.reinstall-vm --no-link --print-build-logs
+
   cache:
     runs-on: ubuntu-latest
     timeout-minutes: 10

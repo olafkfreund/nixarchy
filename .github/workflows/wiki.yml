@@ -1,0 +1,107 @@
+# The wiki is GENERATED from docs/internals/, never edited in place.
+#
+# A wiki is a separate git repository that no check in this repo can see, so
+# anything hand-written there is unguarded by construction: nothing fails when
+# it stops being true, and the first person to notice is a new developer
+# following instructions that no longer work. That is the failure mode this
+# repo already spends effort avoiding elsewhere -- the roadmap check, the
+# derived README numbers, the bin ledger.
+#
+# So the source of truth is docs/internals/, which lives beside the code, is
+# reviewed in pull requests, and is the thing anyone editing the code has open
+# anyway. This workflow copies it out. An edit made in the wiki UI is
+# overwritten on the next push to main, deliberately -- there is one place to
+# change these words and it is not the wiki.
+name: wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/internals/**"
+      - ".github/workflows/wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Copy docs/internals into the wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # The wiki's git repository does not exist until somebody creates
+          # the first page in the web UI -- there is no API for it. So this
+          # says which button to press rather than failing with git's
+          # "Repository not found", which names nothing useful.
+          if ! git clone -q \
+            "https://x-access-token:$GH_TOKEN@github.com/${{ github.repository }}.wiki.git" wiki
+          then
+            echo "::error::the wiki has no first page yet, so it has no git repository."
+            echo "Create any page once at https://github.com/${{ github.repository }}/wiki"
+            echo "and re-run this workflow. GitHub exposes no API for that first page."
+            exit 1
+          fi
+
+          # Home.md is the wiki's landing page and _Sidebar.md is its
+          # navigation; both are wiki conventions rather than file names we
+          # chose, which is why they are mapped rather than copied verbatim.
+          cp docs/internals/onboarding.md wiki/Home.md
+          cp docs/internals/workflows.md wiki/Workflows.md
+          cp docs/internals/flake.md wiki/Flake-outputs.md
+
+          cat > wiki/_Sidebar.md <<'SIDEBAR'
+          ### nixarchy
+
+          - [Starting work here](Home)
+          - [The workflows](Workflows)
+          - [Flake outputs](Flake-outputs)
+
+          ---
+
+          - [Board](https://github.com/users/olafkfreund/projects/9)
+          - [Roadmap](https://github.com/olafkfreund/nixarchy#roadmap)
+          - [Manual](https://olafkfreund.github.io/nixarchy/manual/)
+          SIDEBAR
+
+          # The banner is on every page because a wiki invites editing, and an
+          # edit made here is lost on the next push to main. Saying so where
+          # somebody is about to type is the only place it helps.
+          for f in wiki/Home.md wiki/Workflows.md wiki/Flake-outputs.md; do
+            {
+              echo "> Generated from \`docs/internals/\` in the main repository."
+              echo "> Edits made here are overwritten on the next push to \`main\`."
+              echo
+              cat "$f"
+            } > "$f.new"
+            mv "$f.new" "$f"
+          done
+
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          # Nothing to say is not a failure. Without this the job fails on
+          # every re-run that changes nothing, which trains people to ignore
+          # a red wiki job.
+          if git diff --cached --quiet; then
+            echo "the wiki already matches docs/internals"
+            exit 0
+          fi
+
+          git commit -q -m "Mirror docs/internals from ${{ github.sha }}"
+          git push -q origin HEAD
+          echo "wiki updated"

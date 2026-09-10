@@ -371,7 +371,8 @@ Do not retry-until-green. A flaky pass is a bug report you deleted.
   human: never file anywhere unprompted, and a fix to how Omarchy itself
   behaves belongs upstream, not patched here — a patch carried here is
   re-applied at every source bump; a fix landed upstream arrives for free.
-- **The `epic` label** — applying or removing it has CI consequences (§9)
+- **The `epic` label** — applying or removing it has CI consequences (§10,
+  and the whole filing process is §12)
   that outlive your session. When a human does ask for an epic, the README
   Roadmap row is part of that change, not a follow-up: an epic opened with the
   label and no row turns `main` red and fails **every** subsequent PR until
@@ -382,3 +383,63 @@ Do not retry-until-green. A flaky pass is a bug report you deleted.
 
 When in doubt, the cost asymmetry decides: a question costs a minute; an
 unwanted force-push or a misrouted issue costs a human an evening.
+
+## 12. Issues, milestones and the board
+
+The work is visible in three places and they answer different questions. Keep
+all three true or none of them is worth reading.
+
+| | answers |
+|---|---|
+| README **Roadmap** | what the shape is. CI-enforced: see §11 |
+| **Milestones** | how far each feature has got. One per feature, not per release |
+| The [**board**](https://github.com/users/olafkfreund/projects/9) | where each individual piece is right now. **Public** |
+
+**Milestones are per feature, not per release.** Releases here are driven by
+Omarchy bumps and can be cut any day, so a release milestone would be a bucket
+with an arbitrary line through it. `Keeping the lights on` is where CI, docs
+and small fixes go — it has no end and is not a failure to plan.
+
+**Every issue gets a milestone and an area label when it is filed.** Not
+later. An issue with no milestone is invisible in every view that groups by
+one, which makes it work nobody can see and nobody schedules. The nightly
+review has a `board` row that names any issue missing one, and #195 does not
+close while it is red — so this is checked rather than hoped, and the pressure
+lands on whoever filed it rather than on someone's unrelated PR.
+
+Epics are deliberately exempt: an epic in its own milestone reads as a child
+of itself.
+
+**Filing an epic is three things, not one** (§11 has the cost of forgetting):
+the issue with the `epic` label, the README Roadmap row, and the milestone
+with its children. Do all three in the same change.
+
+### What the board does on its own
+
+- **"Auto-add sub-issues" is on.** Adding a tracked epic pulls in its
+  children, and new sub-issues join by themselves. The board grows without
+  anyone touching it — expect that rather than discover it.
+- Items stay when they close, which is what makes the *Shipped* view mean
+  anything.
+
+### What the API cannot do, so a human must
+
+`createProjectV2View` takes a name, a layout and a filter. Its `configuration`
+accepts **only** `visibleFieldIds` — there is no group-by, no sort. So an
+agent can create and filter a view and **cannot** group it. If a view should
+be grouped by Milestone, say so and let a human click it once; do not leave an
+ungrouped table looking like the intended result.
+
+Changing the board's **visibility** is a repository setting under §11: it is
+outward-facing, and public means every issue title and every piece of
+half-finished work is readable by anyone. Ask.
+
+### Where a thing belongs
+
+Anything a check can verify goes **in the repo**, where CI enforces it: the
+Roadmap row, the derived numbers in the README, the board row above. The
+[wiki](https://github.com/olafkfreund/nixarchy/wiki) is a separate git
+repository that **no check in this repo can see**, so nothing load-bearing
+lives there. It carries orientation and reasoning — the parts that do not
+drift on their own. If you find yourself wanting to put a rule in the wiki,
+that is the signal it belongs in a check instead.

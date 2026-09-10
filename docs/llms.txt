@@ -104,6 +104,7 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started): building and booting the installer ISO, the seven install questions, and the first hour on the desktop
 - [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos): flake updates, the rebuild modes, generations, rollback, and the stale-session trap
 - [Updates](https://olafkfreund.github.io/nixarchy/manual/updates): what Update ▸ Nixarchy does here, why release channels do not exist, firmware updates, rolling back
+- [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview): booting a config change in a VM before switching to it — the disk lifecycle, and what a green preview does not prove
 - [Packages](https://olafkfreund.github.io/nixarchy/manual/other-packages): the app selection, apps.nix and nixarchy-apply, Install ▸ Search, services.nix, unfree software, removing apps
 - [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
 - [Making Your Own Theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme): overlaying or forking a stock theme out of the read-only store

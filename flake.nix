@@ -1330,6 +1330,14 @@
             installScript = ./installer/install.sh;
           };
 
+          # nixarchy-preview's preflights and its disk lifecycle, with a df,
+          # meminfo and /dev/kvm that lie -- plus the #485 honesty strings.
+          # See tests/preview.nix.
+          preview = import ./tests/preview.nix {
+            pkgs = pkgsFor.${system};
+            previewScript = ./pkgs/omarchy/nix-bin/nixarchy-preview;
+          };
+
           # nixarchy-reinstall-iso's preflights, with a df, git and eval that
           # lie -- plus the #478 honesty strings. See tests/reinstall-iso.nix.
           reinstall-iso = import ./tests/reinstall-iso.nix {

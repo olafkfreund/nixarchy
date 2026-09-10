@@ -1,0 +1,337 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Build this machine's configuration and boot it in a VM window, before switching to it
+# omarchy:args=[--fresh | --keep] [--memory MB]
+# omarchy:examples=nixarchy preview
+# omarchy:examples=nixarchy preview --fresh
+# omarchy:examples=nixarchy preview --memory 4096
+
+# Look at a configuration change before the machine switches to it (#486).
+# `nix build` of nixosConfigurations.<host>.config.system.build.vm is the
+# same configuration re-evaluated with nixpkgs' qemu-vm.nix layered on --
+# what `nixos-rebuild build-vm` builds -- and the result is a script that
+# boots it in a window. The guest shares this machine's /nix/store
+# read-only, so the disk image carries state, not a copy of the system.
+#
+# ## The disk trap this exists to refuse (#489)
+#
+# qemu-vm.nix's runner creates its qcow2 only if missing and keeps it
+# forever, defaulting to the CURRENT DIRECTORY -- so previewing change N+1
+# silently boots on change N's disk, and the receipt is real:
+# vm/configuration.nix:98-109 records stale notification history replayed
+# from a reused disk. So the disk lives in a managed state dir under an
+# explicit name, and when one is already there this refuses to guess
+# (installer/try.sh:400-410 is the precedent): --fresh deletes it, --keep
+# boots on it, no flag gets a sentence instead of a coin toss.
+#
+# ## What a green preview does NOT verify
+#
+# The vmVariant re-evaluates with VM filesystems and a VM bootloader, so
+# the toplevel differs from the one the real machine would switch to. It is
+# strong evidence -- your services, your session, your options, evaluated
+# and booted -- and it is not proof: not your bootloader, not your real
+# GPU, not your real disks. The script says so out loud before booting,
+# and tests/preview.nix asserts it keeps saying so.
+
+set -euo pipefail
+
+FLAKE="${NIXARCHY_FLAKE:-/etc/nixos}"
+STATE_DIR="${NIXARCHY_PREVIEW_DIR:-$HOME/.local/share/nixarchy/preview}"
+
+# 8192 MB is the house standard for a graphical guest and 4096 the floor
+# (vm/configuration.nix:102-105, installer/try.sh:50-52): below the floor a
+# desktop guest dies partway up with errors that name none of this.
+MEM_MB=8192
+MEM_MIN=4096
+
+red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
+dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
+bold() { printf "\033[1m%s\033[0m\n" "$1"; }
+
+usage() {
+  echo "Usage: nixarchy-preview [--fresh | --keep] [--memory MB]"
+  echo "  (no flag)      boot a preview on a new disk; refuse if an old one is there"
+  echo "  --fresh        delete the previous preview's disk and start clean"
+  echo "  --keep         boot on the previous preview's disk, state and all"
+  echo "  --memory MB    give the guest this much RAM (default $MEM_MB, floor $MEM_MIN)"
+}
+
+# ---------------------------------------------------------------------------
+# Probes. Each returns a word or a verdict, reads its inputs from stubbable
+# paths or plain arguments, and touches neither qemu nor nix --
+# tests/preview.nix drives every one with an environment that lies.
+# ---------------------------------------------------------------------------
+
+# kvm | nogroup | none -- installer/try.sh:63-72, for the same reason:
+# existence alone is not the answer, because on most setups /dev/kvm exists
+# and the user is simply not in the kvm group, and qemu's accel fallback
+# would then run several times slower without a word.
+detect_kvm() {
+  local dev="${PREVIEW_KVM_DEV:-/dev/kvm}"
+  if [ ! -e "$dev" ]; then
+    echo none
+  elif [ ! -r "$dev" ] || [ ! -w "$dev" ]; then
+    echo nogroup
+  else
+    echo kvm
+  fi
+}
+
+# Loud, not fatal: a preview under software emulation is still a preview,
+# but a graphical desktop under TCG is near-unusable and somebody who was
+# not told will read the lag as their configuration being broken.
+explain_kvm() {
+  case "$1" in
+    kvm) dim "hardware virtualisation: yes (/dev/kvm)" ;;
+    none)
+      red "WARNING: no /dev/kvm -- this machine offers no hardware virtualisation."
+      echo "  The preview will run under software emulation, SEVERAL TIMES SLOWER,"
+      echo "  and a graphical desktop under it is near-unusable. The lag is the"
+      echo "  emulation, not your configuration. If the CPU has VT-x/AMD-V,"
+      echo "  enable it in the firmware setup."
+      ;;
+    nogroup)
+      red "WARNING: /dev/kvm exists but you may not open it -- you are probably"
+      echo "  not in the 'kvm' group. The preview will run under software"
+      echo "  emulation, SEVERAL TIMES SLOWER; the lag is the emulation, not"
+      echo "  your configuration. To fix it:"
+      # shellcheck disable=SC2016  # $USER is theirs to expand, not ours
+      echo '    sudo usermod -aG kvm $USER    # then log out and back in'
+      ;;
+  esac
+}
+
+# Refuse rather than OOM -- installer/try.sh:96-113: a guest that outgrows
+# the host dies mid-boot under errors that name neither RAM nor the guest.
+# A meminfo with no MemAvailable line proceeds: a probe that cannot read
+# must not invent a refusal (the tolerance rule
+# tests/installer-store-space.nix states).
+check_ram() {
+  local need=$1 meminfo="${PREVIEW_MEMINFO:-/proc/meminfo}" avail_kb avail
+  avail_kb=$(awk '/^MemAvailable:/ { print $2 }' "$meminfo" 2>/dev/null || :)
+  [ -n "$avail_kb" ] || return 0
+  avail=$((avail_kb / 1024))
+  if [ "$avail" -lt $((need + 512)) ]; then
+    red "Not enough free memory: the preview VM wants ${need} MB and this"
+    echo "  machine has ${avail} MB available. Close something, or run a"
+    echo "  smaller preview:"
+    echo "    nixarchy-preview --memory $MEM_MIN"
+    echo "  ($MEM_MIN MB is the floor: below it a graphical desktop is not a"
+    echo "  preview of anything.)"
+    return 1
+  fi
+}
+
+# The same probe installer/try.sh:118-135 runs, for the same reason: on a
+# tmpfs the number df prints is RAM, not disk -- /tmp here is exactly that
+# -- and running out of either mid-build dies several levels from the
+# cause. This repo has the ENOSPC scars.
+check_disk() {
+  local dir=$1 need_mb=$2 what=$3 fstype avail
+  read -r fstype avail < <(df --output=fstype,avail -BM "$dir" 2>/dev/null | tail -n1) || :
+  # No df answer, no verdict (the tolerance rule again).
+  [ -n "${avail:-}" ] || return 0
+  avail=${avail%M}
+  case "$fstype" in
+    tmpfs | ramfs)
+      red "$dir is on $fstype -- RAM, not disk."
+      echo "  $what would be written there, competing with the memory the VM"
+      echo "  itself needs. df calls it free space; it is not. Point"
+      echo "  NIXARCHY_PREVIEW_DIR at a real filesystem."
+      return 1
+      ;;
+  esac
+  if [ "$avail" -lt "$need_mb" ]; then
+    red "Not enough disk space for $what."
+    echo "  It needs roughly ${need_mb} MB and $dir has ${avail} MB free."
+    echo "  Free some space (nix-collect-garbage reclaims old generations)"
+    echo "  and run this again. Nothing was started."
+    return 1
+  fi
+}
+
+# contradict | keep-missing | stale | fresh | keep | none. A word, not a
+# refusal, so the caller owns the sentences and a test owns the truth
+# table. `stale` is the row that matters: a disk exists and no flag chose
+# what to do with it, and guessing either way is the #489 trap.
+disk_verdict() {
+  local exists=$1 fresh=$2 keep=$3
+  if [ "$fresh" = 1 ] && [ "$keep" = 1 ]; then
+    echo contradict
+  elif [ "$keep" = 1 ] && [ "$exists" = 0 ]; then
+    echo keep-missing
+  elif [ "$keep" = 1 ]; then
+    echo keep
+  elif [ "$fresh" = 1 ]; then
+    echo fresh
+  elif [ "$exists" = 1 ]; then
+    echo stale
+  else
+    echo none
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Flags
+# ---------------------------------------------------------------------------
+
+fresh=0
+keep=0
+mem=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fresh) fresh=1 ;;
+    --keep) keep=1 ;;
+    --memory)
+      mem="${2:-}"
+      case "$mem" in
+        '' | *[!0-9]*)
+          red "--memory takes a number of megabytes, like: --memory $MEM_MIN"
+          exit 1
+          ;;
+      esac
+      if [ "$mem" -lt "$MEM_MIN" ]; then
+        red "--memory $mem is below the $MEM_MIN MB floor."
+        echo "  Below it a graphical desktop guest dies partway up, with errors"
+        echo "  that name none of this. $MEM_MIN is the least that previews anything."
+        exit 1
+      fi
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+[ -f "$FLAKE/flake.nix" ] || {
+  red "No flake at $FLAKE."
+  echo "  The preview builds this machine's own configuration, and there is"
+  echo "  none there to build. Set NIXARCHY_FLAKE, or programs.nixarchy.flake."
+  exit 1
+}
+
+host=$(uname -n)
+
+# The seam, like nixarchy-reinstall-iso's REINSTALL_ATTR: overridable for
+# the day the output moves, and for the tests.
+PREVIEW_ATTR="${NIXARCHY_PREVIEW_ATTR:-$FLAKE#nixosConfigurations.$host.config.system.build.vm}"
+
+# One explicit name, not qemu-vm.nix's cwd default. The runner reads
+# NIX_DISK_IMAGE, which is its documented seam for exactly this.
+disk="$STATE_DIR/preview-$host.qcow2"
+
+# ---------------------------------------------------------------------------
+# What this is, and is not, before anything builds.
+# ---------------------------------------------------------------------------
+
+bold "Preview this machine's configuration in a VM"
+echo
+echo "What $FLAKE evaluates to right now, built and booted in a window --"
+echo "so you can look at a change before switching the machine to it."
+echo "The machine itself is not touched."
+echo
+
+# ---------------------------------------------------------------------------
+# The disk lifecycle (#489). Decided before any preflight spends time.
+# ---------------------------------------------------------------------------
+
+mkdir -p "$STATE_DIR"
+
+exists=0
+[ -e "$disk" ] && exists=1
+
+case "$(disk_verdict "$exists" "$fresh" "$keep")" in
+  contradict)
+    red "--fresh deletes the previous preview's disk and --keep boots on it;"
+    echo "  they contradict. Pick one."
+    exit 1
+    ;;
+  keep-missing)
+    red "--keep: there is no previous preview disk at $disk."
+    echo "  Run without --keep and this preview makes one."
+    exit 1
+    ;;
+  keep)
+    dim "Booting on the previous preview's disk ($disk)."
+    dim "It carries that preview's state -- logins, notification history,"
+    dim "anything written in the guest -- replayed into this one."
+    ;;
+  fresh)
+    if [ "$exists" = 1 ]; then
+      rm -f "$disk"
+      dim "Deleted the previous preview's disk. This one starts clean."
+    fi
+    ;;
+  stale)
+    red "$disk already exists -- a previous preview made it, and booting the"
+    echo "  new configuration on the old disk replays the old preview's state"
+    echo "  into it (stale notification history is the receipt this repo"
+    echo "  holds). Refusing to guess:"
+    echo "    --fresh    delete it and preview on a clean disk"
+    echo "    --keep     boot on it, previous state and all"
+    exit 1
+    ;;
+  none) ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Preflights, each refusing in a sentence, all before the build.
+# ---------------------------------------------------------------------------
+
+explain_kvm "$(detect_kvm)"
+check_ram "${mem:-$MEM_MB}" || exit 1
+# The build lands in /nix/store; the qcow2 lands in the state dir. The
+# store figure is a floor, not the worst case: the guest shares this
+# machine's store over 9p/virtiofs, so a preview builds the delta of the
+# change, not a second copy of the desktop. The disk figure is small for
+# the same reason -- the image is sparse and holds state, not the system.
+check_disk /nix/store 8192 "building the preview system" || exit 1
+check_disk "$STATE_DIR" 4096 "the preview VM's disk" || exit 1
+
+# ---------------------------------------------------------------------------
+# Build, then say what a green boot means before showing one.
+# ---------------------------------------------------------------------------
+
+echo
+bold "Building the preview of $FLAKE#$host. The first one is the long one."
+if ! nix build "$PREVIEW_ATTR" -o "$STATE_DIR/result" --print-build-logs; then
+  echo
+  red "The build failed. The messages above say why; the same failure would"
+  echo "  have met 'Apply changes'. Nothing on this machine was changed, and"
+  echo "  no VM was started."
+  exit 1
+fi
+
+# find -L, because find does not follow the result symlink (AGENTS.md §5).
+runner=$(find -L "$STATE_DIR/result/bin" -name 'run-*-vm' 2>/dev/null | head -1 || :)
+if [ -z "$runner" ]; then
+  red "The build succeeded but produced no run-*-vm script."
+  echo "  That is a bug in the VM output, not in your configuration."
+  exit 1
+fi
+
+echo
+red "A green preview is strong evidence, not proof."
+echo "  The VM re-evaluates your configuration with VM filesystems and a VM"
+echo "  bootloader, so it does not verify your bootloader, your real GPU,"
+echo "  or your real disks. What it does verify: your options evaluate,"
+echo "  your services start, your session comes up."
+echo
+dim "Close the VM window (or poweroff inside it) to end the preview."
+echo
+
+# NIX_DISK_IMAGE pins the disk to the managed name above; the cd is the
+# belt for any qemu-vm.nix that derives a second path from the cwd.
+# QEMU_OPTS is appended after the baked -m, and qemu takes the last one.
+export NIX_DISK_IMAGE="$disk"
+[ -n "$mem" ] && export QEMU_OPTS="${QEMU_OPTS:-} -m $mem"
+cd "$STATE_DIR"
+exec "$runner"

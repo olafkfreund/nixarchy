@@ -448,6 +448,17 @@ let
           action = "omarchy-launch-webapp 'https://search.nixos.org/options'";
           description = "Search NixOS configuration options";
         };
+        # Beside Apply, because it answers the question Apply raises: what
+        # does this change look like, before the machine switches to it?
+        # NOT "nixarchy vm" -- that name is taken by MicroVM sandboxes, and
+        # docs/manual/sandboxes.md says outright "Not nixarchy's own test
+        # VM". #485 settles the name.
+        "install.preview" = {
+          icon = "󰍹";
+          label = "Preview changes";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-preview";
+          description = "Build this configuration and boot it in a VM window, before switching the machine to it";
+        };
         "install.apply" = {
           icon = "";
           label = "Apply changes";
@@ -1860,6 +1871,26 @@ in
                 echo "  host under hosts/<name>/ needs ../../nixarchy-apps.nix"
                 echo "  or however many levels up the flake root is."
                 echo
+              fi
+
+              # The offer, at the one moment somebody actually wants it
+              # (#488): the selection is copied, the switch is the next
+              # keypress, and a look before leaping costs a question.
+              #
+              # `command -v`, because nixarchy-preview ships in the omarchy
+              # package rather than in this script's runtimeInputs -- it is
+              # reached through the session PATH writeShellApplication
+              # prepends to, and on a machine without the package the offer
+              # must vanish rather than break the apply.
+              #
+              # `|| true`: a refused preflight (or a preview closed with a
+              # nonzero status) must land back at the switch question, not
+              # kill the apply under set -e.
+              if command -v nixarchy-preview >/dev/null 2>&1; then
+                read -r -p "Preview in a VM first? [y/N] " reply
+                case "$reply" in
+                  [yY]*) nixarchy-preview || true ;;
+                esac
               fi
 
               read -r -p "Build and switch now? [y/N] " reply

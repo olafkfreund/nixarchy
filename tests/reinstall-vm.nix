@@ -29,6 +29,15 @@
 # toplevel in both slots. The CARRIED step below is the assertion that
 # interface holds: read the marker cd.nix wrote and compare it to the
 # toplevel this file built, not to a name borrowed from either side.
+#
+# What is still owed, so the next reader does not have to work it out: this
+# check is written, wired, and scheduled, and has not yet been watched through
+# a green end-to-end run -- boot, CARRIED, INSTALLED, OFFLINE, and back up into
+# the reinstalled closure. It is in `nightly_only` because it builds a SECOND
+# full image, so the run that can answer is the nightly, not a pull request.
+# #478's remaining child stays open until one is green; a check that has never
+# completed is a claim, and this file's whole argument is that a claim is not
+# evidence.
 # ---------------------------------------------------------------------------
 #
 # Everything about DRIVING the machine -- no test instrumentation, send_chars

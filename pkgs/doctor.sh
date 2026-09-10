@@ -518,6 +518,61 @@ fi
 # be read at runtime: nixarchy follows the machine's nixpkgs, so on the
 # installed system both names resolve to the same lock node and the question
 # answers itself trivially and uselessly.
+# ---- which channel this machine follows (#532) ---------------------------
+#
+# Reported before the drift figure below, because it changes what that figure
+# MEANS: a stable machine is not drifting from the tested nixpkgs, it is on a
+# different branch of it, and comparing timestamps across branches answers a
+# question nobody asked.
+#
+# Read from flake.nix rather than flake.lock, the same way nixarchy-channel
+# does and for its reason: the URL is what an update will resolve to, the lock
+# is only where it last landed. A machine mid-edit should be reported as what
+# it is about to become.
+if [ -r "$flake_dir/flake.nix" ]; then
+  chan_url=$(sed -nE "s/^[[:space:]]*nixpkgs\.url[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p" \
+    "$flake_dir/flake.nix" | head -1)
+  case "$chan_url" in
+    *nixos-unstable*)
+      finding "This machine follows unstable" "$ok" "what nixarchy is tested against"
+      ;;
+    *nixos-[0-9][0-9].[0-9][0-9]*)
+      finding "This machine follows stable" "$warn" "$chan_url"
+      say "     Nixarchy is developed and tested against UNSTABLE. Stable is a"
+      say "     real answer, not a supported one -- fewer people run it here and"
+      say "     CI proves only that it EVALUATES, never that it boots."
+      say "     ${dim}nixarchy channel   shows both, and switches between them.${off}"
+      ;;
+    "")
+      : # No nixpkgs.url line. A reshaped flake is the owner's; say nothing.
+      ;;
+    *)
+      finding "This machine follows neither channel" "$warn" "$chan_url"
+      say "     nixpkgs points somewhere of your own, which is allowed and"
+      say "     untested here."
+      ;;
+  esac
+fi
+
+# Packages taken from the other channel, and what they cost.
+#
+# Worth its own line because the cost is invisible and large: two channels
+# share NOTHING in the store, even at identical versions -- measured, btop at
+# the same version is 0 shared paths and 51 MB duplicated, vlc 3.0.23-2 is
+# 1.5 GB. Somebody wondering where several gigabytes went should be able to
+# ask rather than guess.
+if [ -r "$flake_dir/apps.nix" ]; then
+  other_count=$(grep -c '#@pkg-other ' "$flake_dir/apps.nix" 2>/dev/null || true)
+  if [ "${other_count:-0}" -gt 0 ]; then
+    finding "$other_count package(s) come from the other channel" "$warn" ""
+    say "     Each carries its whole closure: the two channels share no store"
+    say "     paths, even where the version is identical."
+    grep -oE '#@pkg-other [A-Za-z0-9_.-]+$' "$flake_dir/apps.nix" 2>/dev/null |
+      sed 's/^#@pkg-other /       /' || true
+  fi
+fi
+say ""
+
 tested_nixpkgs=@nixpkgstested@
 if [ -r "$flake_dir/flake.lock" ]; then
   mine=$(jq -r '

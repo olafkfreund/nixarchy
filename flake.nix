@@ -1542,6 +1542,14 @@
           # Evaluation against stable, ~20s and no VM (#527). `stableVm` is
           # passed in rather than reached through `inputs.self`, because it is
           # deliberately not a nixosConfigurations entry -- see its definition.
+          # The per-package escape (#530-#532). Evaluation only, like
+          # stable-eval beside it: it asks which closure would be built, and
+          # that question does not require building one.
+          other-channel = import ./tests/other-channel.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           stable-eval = import ./tests/stable-eval.nix {
             inherit inputs stableVm;
             pkgs = pkgsFor.${system};

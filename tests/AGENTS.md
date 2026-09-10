@@ -141,3 +141,20 @@ Two branches only these can reach, as illustration:
 - A forbid-pattern matches prose too. Forbidding a bare package name failed
   against correctly-gated code because the surrounding comment mentioned it —
   match the call, not the string.
+- **Never name a shell variable `out` in a `runCommand` script.** `$out` is the
+  derivation's output path, and assigning to it means every assertion passes
+  and the build then fails with *"builder failed to produce output path"* —
+  which reads as a broken derivation rather than a shadowed variable. Cost one
+  full build in `tests/android.nix` before the cause was obvious. `got` is the
+  usual name for "what the thing under test printed".
+- **`step`-style helpers truncate their capture file before running the
+  command.** In `tests/install-iso.nix` a `grep` placed inside `step` reads the
+  file `step` is about to write, so it always sees an empty one. Copy the
+  output first (`cp /tmp/out /tmp/eval`) and grep the copy.
+- **A driver that waits only for the success marker turns every failure into a
+  timeout.** The guest prints `TAG-$rc-X` for any exit code; waiting for
+  `TAG-0-X` meant a failing step's `-1-X` scrolled past unmatched and the
+  driver blocked until timeout on a marker that could never appear —
+  reporting `action timed out after 120s` two minutes after the guest had
+  printed the reason. Wait for `TAG-\d+-X`, then read the code out of
+  `get_console_log()`.

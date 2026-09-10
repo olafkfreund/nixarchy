@@ -37,6 +37,26 @@
     # home-manager override is re-locked in the same pass).
     nixpkgs.url = "@nixpkgs_url@";
 
+    # A SECOND nixpkgs, if you want one package from the other channel.
+    #
+    # Commented out because almost no machine needs it, and the cost is not
+    # obvious: the two channels share NOTHING in the nix store, even at
+    # identical versions. Measured -- btop, same version on both, 0 shared
+    # paths and 51 MB duplicated; vlc 3.0.23-2, 1.5 GB. So this is a
+    # deliberate per-package decision, never a default.
+    #
+    # Point it at the channel this machine does NOT follow, wire it to the
+    # option in your host configuration, and `nixarchy pkg add --stable` (or
+    # --unstable) writes the lines that use it:
+    #
+    #   nixpkgs-other.url = "github:NixOS/nixpkgs/nixos-unstable";
+    #
+    #   # in hosts/<name>/default.nix:
+    #   programs.nixarchy.otherChannel.flake = inputs.nixpkgs-other;
+    #
+    # Packages only. A NixOS *module* comes from the package set the system
+    # is evaluated with, so an option cannot be taken from the other channel.
+
     # Nixarchy itself, locked at the revision this machine was installed from.
     # `nix flake update nixarchy` moves it to the latest release, deliberately
     # -- nothing moves until you run it. Then `nh os switch`.

@@ -49,6 +49,7 @@ nav:
   - { path: /manual/sandboxes,                title: Sandboxes }
   - { path: /manual/ai,                       title: AI }
   - { path: /manual/gaming,                   title: Gaming }
+  - { path: /manual/android,                  title: Android }
   - { path: /manual/security,                 title: Security }
   - { path: /manual/remote-desktop,           title: Remote Desktop }
   - { path: /manual/system-snapshots,         title: System Snapshots }

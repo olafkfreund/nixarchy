@@ -890,13 +890,42 @@
       # Smoke-test VM. Not a daily driver -- it exists to prove the QuickShell
       # bar comes up against Hyprland's Lua config before any packaging effort
       # is spent on the long tail.
-      nixosConfigurations = {
+      nixosConfigurations = rec {
+        # Whose machines the images below carry.
+        #
+        # Named here rather than inside installer/cd.nix so that a user's own
+        # image (#478) is the same module with a different `source` -- their
+        # flake, their machines, their rev -- instead of a second copy of a
+        # 900-line file. What stays nixarchy's either way is the installer
+        # itself: the script, the version and the branding come from
+        # `inputs.self` inside cd.nix, whoever is being installed.
+        #
+        # `rec` so the three configurations below can be named without
+        # repeating `self.nixosConfigurations`. They are defined further down
+        # this attrset.
+        isoSource = {
+          flake = inputs.self;
+          configs = [
+            reference
+            reference-unencrypted
+
+            # The hardware the reference machine does not have. #382: a real
+            # laptop's hardware-configuration.nix is not the reference's, and
+            # where the difference is a PACKAGE the "a few dozen text
+            # derivations" argument stops holding -- building a package with
+            # no compiler on the image is the source bootstrap. This exists so
+            # those packages are on the medium; nobody installs it.
+            reference-hardware
+          ];
+        };
+
         # The live image. See installer/cd.nix.
         iso = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = {
             inherit inputs;
             offline = true;
+            source = isoSource;
           };
           modules = [ ./installer/cd.nix ];
         };
@@ -908,6 +937,7 @@
           specialArgs = {
             inherit inputs;
             offline = false;
+            source = isoSource;
           };
           modules = [ ./installer/cd.nix ];
         };
@@ -1239,6 +1269,14 @@
           channel = import ./tests/channel.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+          };
+
+          # The shipped images carry the reference machines, and the network
+          # image carries none of them. Guards the `source` argument #479
+          # added to installer/cd.nix. See tests/iso-source.nix.
+          iso-source = import ./tests/iso-source.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
           };
 
           # nixarchy-android turns what the network says into a host:port, so

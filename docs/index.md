@@ -6,7 +6,7 @@ layout: home
 [Omarchy](https://omarchy.org) — the Hyprland desktop — vendored for NixOS, with
 its menus rewired to Nix instead of pacman.
 
-Omarchy 4.x is not a dotfiles repo, it is an application: 429 shell commands, a
+Omarchy 4.x is not a dotfiles repo, it is an application: 444 shell commands, a
 QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua API
 introduced in 0.55. nixarchy packages that tree as a derivation and replaces the
 parts that assume Arch, rather than reimplementing it in Nix.
@@ -48,14 +48,16 @@ holding the disk layout, the configuration and your app selection. A rebuild
 straight after installing builds nothing, because everything the installer did
 is written there rather than done behind it.
 
-The ISO still downloads rather than carrying its own closure, so an install
-needs a network — [see the manual](manual/getting-started) for that and the
-other limits. Already running NixOS? Then you want the flake, not the ISO, and
-that is on the same page.
+**The ISO carries its own closure, so an install needs no network.** It is
+checked with no network device present at all: 2,221 store paths copied from
+the medium, zero fetched, nothing built. A machine with no wifi driver yet, or
+no cable to hand, still installs — [see the manual](manual/getting-started) for
+the remaining limits. Already running NixOS? Then you want the flake, not the
+ISO, and that is on the same page.
 
 ## Search everything, install declaratively
 
-Omarchy's Install menu offers 56 applications. **Install ▸ Search** offers the
+Omarchy's Install menu offers 64 applications. **Install ▸ Search** offers the
 rest of NixOS — one fuzzy picker over **137,599 rows**: every nixpkgs package,
 every NixOS option, and the app selection, with each entry's type, default and
 documentation in a preview pane.
@@ -91,9 +93,9 @@ See **[other packages](manual/other-packages)** for the whole flow.
 ## An agent that knows this machine
 
 Omarchy symlinks its agent skills into every harness's skill directory. Upstream
-ships one, written for Arch; nixarchy ships ten, written for NixOS — the desktop,
-packages, GPUs, services, secrets, performance, security, log triage, and getting
-the configuration into git.
+ships one, written for Arch; nixarchy ships thirteen, written for NixOS — the
+desktop, packages, GPUs, services, secrets, performance, security, log triage,
+Android, and getting the configuration into git.
 
 That matters more than it sounds. A model asked how to install a package on NixOS
 will confidently invent an answer; the same model handed the `nixos` skill routes
@@ -126,10 +128,56 @@ skills, and the NixOS philosophy underneath all of it.
 New to NixOS? Start with
 **[the philosophy](manual/philosophy)** and **[updating NixOS](manual/updating-nixos)**.
 
+## Where this has got to
+
+Four features finished recently, and each is here because it is *checked*, not
+because it was written:
+
+**An install that needs no network.** The ISO carries its own closure instead
+of downloading one. Proven with no network device present at all — 2,221 store
+paths copied from the medium, zero fetched, nothing built. This was the last
+thing standing between the installer and a machine whose wifi driver is not
+loaded yet.
+
+**See a change before you live in it.** `nixarchy-preview` boots your edited
+configuration in a VM and shows it to you, and the machine you are sitting at
+is untouched until you decide. It is not `build-vm`, which is one command and
+gives you a black screen — qemu's virgl path hands out no usable EGLConfig, so
+the feature is a VM-only module carrying software-GL fallbacks that never reach
+your real machine. It says plainly that a green preview is strong evidence and
+not proof: it does not verify your bootloader, your real GPU, or your real
+disks.
+
+**Your phone, on the desktop.** scrcpy and Waydroid in the catalogues, and a
+pairing helper for the part that actually defeats people — pairing over Wi-Fi,
+where Android wants two different ports, regenerates one of them every time you
+open the dialog, and gives you a code that expires in seconds.
+Discovery goes through avahi, because nixpkgs builds `android-tools` without an
+mDNS backend and the command every tutorial names answers *"mdns is not
+supported by this version of adb"*.
+
+**The session, from somewhere else.** A headless output, an RDP service and its
+firewall hole, and authentication that does not quietly fall back to a shared
+secret.
+
+### What is being worked on now
+
+A **choice of channel** — stable or unstable — offered the way Omarchy offers
+it, plus a way to take a single package from the other one. It is sequenced
+deliberately: nixos-26.05 ships a version of the desktop shell whose lockscreen
+can leave a machine blank with nowhere to type a password, so that is fixed
+*before* anyone is offered the choice that would hand it to them. Also in
+flight: the package picker remade, running an application once without
+installing it, and building a reinstall image from a machine's own
+configuration.
+
+The [board](https://github.com/users/olafkfreund/projects/9) is public, and its
+*Shipped* view is the honest answer to "is this thing alive".
+
 ## Elsewhere
 
 | Where | What is there |
 |---|---|
 | [Source and README](https://github.com/olafkfreund/nixarchy) | installation, module options, design notes, what is left |
 | [Omarchy's own manual](https://omarchy.org/manual/) | the desktop itself — 38 of its 51 pages are true here unchanged |
-| [Issues](https://github.com/olafkfreund/nixarchy/issues) | including the epic for a bare-metal installer, which does not exist yet |
+| [Issues](https://github.com/olafkfreund/nixarchy/issues) and the [board](https://github.com/users/olafkfreund/projects/9) | what is in flight, what is waiting, and what each feature has left — public |

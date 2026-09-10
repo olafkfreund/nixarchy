@@ -168,17 +168,32 @@ fi
 
 # ------------------------------------------------------------- consistency --
 
-# The tag is written in three places. omarchy.yml rewrites all three now, but
-# it did not always, and a mismatch means the store path names a version the
-# tree is not.
-nvim_version=$(sed -n 's/.*omarchyVersion ? "\([^"]*\)".*/\1/p' \
+# The tag is written in TWO places, and used to be three. The third was a
+# default in pkgs/omarchy-nvim/default.nix -- `omarchyVersion ? "4.0.2"` --
+# removed because a default that flake.nix always overrides is inert and can
+# still go stale, which is the worst pair: nothing could catch it drifting.
+# The comment there explains it at length.
+#
+# This check went on looking for that default. The sed found nothing, compared
+# the empty string against the pin, and reported "one of the three copies is
+# stale" on every run since -- flagging the tree for the shape the fix had
+# removed. It asserted the old model, which is what a check does when the thing
+# it measures moves and it does not.
+#
+# So: the flake's literal must match the flake's own pin, and the nvim argument
+# must stay required. A REINTRODUCED default is now the thing that could drift
+# unnoticed, so that is what is watched.
+nvim_default=$(sed -n 's/.*omarchyVersion ? "\([^"]*\)".*/\1/p' \
   pkgs/omarchy-nvim/default.nix | head -1)
 pkg_version=$(sed -n 's/.*omarchyVersion = "\([^"]*\)".*/\1/p' flake.nix | head -1)
-if [ "$pkg_version" = "${omarchy_pin#v}" ] && [ "$nvim_version" = "${omarchy_pin#v}" ]; then
+if [ -n "$nvim_default" ]; then
+  finding "version literals" "nvim defaults to $nvim_default" "${omarchy_pin#v}" \
+    "omarchy-nvim has a version default again -- inert, and able to go stale"
+elif [ "$pkg_version" = "${omarchy_pin#v}" ]; then
   ok "version literals" "$pkg_version" "match the pin"
 else
-  finding "version literals" "flake $pkg_version / nvim $nvim_version" \
-    "${omarchy_pin#v}" "one of the three copies is stale"
+  finding "version literals" "flake $pkg_version" "${omarchy_pin#v}" \
+    "the flake's omarchyVersion does not match its own pin"
 fi
 
 # Is what main vendors actually released? The bump merges itself, so main can
@@ -289,11 +304,32 @@ while IFS=$'\t' read -r name kind repo at modified; do
       ;;
     ref)
       # A branch that has not moved in four months is either a very quiet
-      # project or a ref that no longer means what it says -- disko's `latest`
-      # is the one to watch here.
+      # project or a ref that no longer means what it says.
+      #
+      # But not every "ref" is a branch, and disko's `latest` is the example
+      # this comment used to hold up. It is an ANNOTATED TAG that upstream
+      # re-points at each release; flake-pins.py classifies by shape -- a bare
+      # name is a ref, `vN.N.N` is a tag -- so it lands here. Age is then taken
+      # from OUR lock, which measured our pin's date and blamed it for
+      # upstream's release cadence: on 2026-09-10 this read "232 days" while
+      # `latest` dereferenced to v1.13.0, the newest tag disko has. There was
+      # nothing to update, and it was a finding on every run.
+      #
+      # So ask the question the shape hides. A ref that resolves to the newest
+      # tag's commit is current no matter how long ago that release was cut --
+      # `gh api commits/<ref>` dereferences an annotated tag for us.
       if [ "$at" != "(default)" ] && [ "$age" -gt 120 ]; then
-        finding "$name" "$at, ${age}d" "-" \
-          "a ref chosen on purpose that has not moved in $age days"
+        newest=$(latest_tag "$repo")
+        ref_commit=$(gh api "repos/$repo/commits/$at" --jq .sha 2>/dev/null)
+        newest_commit=""
+        [ -n "$newest" ] &&
+          newest_commit=$(gh api "repos/$repo/commits/$newest" --jq .sha 2>/dev/null)
+        if [ -n "$ref_commit" ] && [ "$ref_commit" = "$newest_commit" ]; then
+          ok "$name" "$at (${age}d)" "$newest, the newest tag"
+        else
+          finding "$name" "$at, ${age}d" "-" \
+            "a ref chosen on purpose that has not moved in $age days"
+        fi
       else
         ok "$name" "$at" "${age}d old"
       fi

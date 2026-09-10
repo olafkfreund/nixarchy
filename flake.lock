@@ -118,16 +118,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1787094885,
-        "narHash": "sha256-yrC8fITJofWJ2wpZMiaX06UVCMFI4GRg9pGyaTdosHg=",
+        "lastModified": 1789012155,
+        "narHash": "sha256-9s5DeiKzmdbXMnGBmXOSxTdaAp7jBxyd7IgVLxZ717Q=",
         "owner": "MuNeNiCK",
         "repo": "hypr-rdp",
-        "rev": "cf3fbd82e2176070c0860bd53eb87d0b098decd4",
+        "rev": "8744778de2eb9add74224d57fac399aba6039a26",
         "type": "github"
       },
       "original": {
         "owner": "MuNeNiCK",
-        "ref": "v0.1.5",
+        "ref": "v0.1.6",
         "repo": "hypr-rdp",
         "type": "github"
       }

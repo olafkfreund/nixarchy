@@ -24,6 +24,41 @@ failure history for its own area, and they are where the long reasoning lives:
 `CLAUDE.md` is a symlink to this file, because Claude Code reads `CLAUDE.md`
 and not `AGENTS.md`. Without it none of this loads.
 
+## Write back what cost you an hour
+
+Every numbered section below exists because something broke, and most name the
+issue. That is not decoration — it is the only reason this file is worth
+reading rather than skimming. **Keeping it that way is part of doing the
+work**, not a chore afterwards.
+
+So: when something costs you an hour, and the cause was *general* rather than
+a fact about the one thing you were fixing, add it here in the same pull
+request as the fix. Same PR, because a follow-up commit for documentation is
+the one that never gets written.
+
+The test is whether it would bite somebody else:
+
+- **General** — `find` does not follow the `result` symlink; a module argument
+  cannot have a `?` default; a check that cannot run reads as one that passes.
+  Those belong here.
+- **Specific** — this attribute was misspelled, that path moved. Those belong
+  in the commit message, where `git log -S` will find them.
+
+Put it in the section it belongs to rather than opening a new one: the numbers
+are cross-referenced from `build.yml`, `omarchy.yml`, `tests/bus-mcp.nix` and
+the PR template, so **inserting a section renumbers the ones below it and
+breaks those references silently.** Append a new section only when nothing
+existing fits, and never insert one in the middle.
+
+Area-specific lessons go in that directory's own `AGENTS.md`. A trap in how
+checks are written belongs in `tests/AGENTS.md`, where somebody writing a
+check is already looking.
+
+And prefer a check to a paragraph. If the mistake can be caught mechanically,
+the paragraph is a consolation prize — `checks.iso-source`, the roadmap gate,
+the board rows in the nightly review and `readme-counts.sh` all began as
+things somebody would otherwise have had to remember.
+
 ## 1. Prove your check fails
 
 This is the most important rule in the file.
@@ -161,6 +196,29 @@ So: adding a `checks.<name>` entry means also naming
 `pull_request` — and that workflow edit is a CI-gate change, which needs a
 human (see §10). Raise it in the PR rather than wiring it yourself.
 
+Two other ways a check stops checking, both found in one week:
+
+- **A check that cannot RUN reads as a check that passes.** The install job
+  pushed to cachix and then asked the cache whether it had taken it — and died
+  on `curl: command not found`, because the runner is self-hosted NixOS where a
+  step's shell carries only what the environment provides. `continue-on-error`
+  was on it (correctly: #235, a cache upload must not fail a build that
+  succeeded), so nothing was red and nobody looked. **The verification had
+  never checked anything, for any commit.** If a step is
+  `continue-on-error`, its failure has to be *loud somewhere else* — the
+  nightly, the summary — or it is decoration.
+- **After the model changes, the checks that encode the old model fail for the
+  reason the work succeeded.** Stage 3 of #436 made the installer copy a
+  prebuilt closure instead of evaluating one. Three checks then failed in
+  sequence: one greped the drvPath for the hostname that stage 1 had removed
+  *on purpose*; one used `unable to download` as a proxy for "something was
+  fetched", when it means a fetch was **attempted and failed** — evidence the
+  machine is offline; one rebuilt the system to add a serial console, which
+  under stage 3 is a different closure and therefore a build. Each looked like
+  a regression and was a stale assertion. **When a check fails immediately
+  after a deliberate change to how something works, ask what the check is
+  asserting before asking what broke.**
+
 ## 5. Git and flake mechanics that bite
 
 - **A flake in a worktree sees only tracked or staged files.** A new file you
@@ -176,6 +234,24 @@ human (see §10). Raise it in the PR rather than wiring it yourself.
 - **Work in a worktree under `/mnt/data/vmtest/`, never `/tmp`.** `/tmp` is a
   32 GB tmpfs. A VM disk image or an ISO build there is competing with the
   machine's RAM, and loses quietly.
+- **You cannot compare closures across commits.** `installer/cd.nix` collects
+  `flake.outPath` into `inputSources`, so the source tree's own store path is
+  in the closure and **every commit changes every derivation**. To prove a
+  refactor changes nothing that ships, evaluate the old and new code **in the
+  same tree** — check the old file out beside the new one (`git show
+  <rev>:path > path-old.nix`), instantiate both, compare `drvPath`. Baselining
+  before and comparing after looks obvious, produces a difference every time,
+  and the difference means nothing. #479 lost an hour to reading that noise as
+  a real change.
+- **A NixOS module argument cannot have a `?` default.** `{ source ? {...} }`
+  in a module reads as correct and fails with `error: attribute 'source'
+  missing`, because an argument absent from `specialArgs` is resolved through
+  `_module.args` rather than by the function default — the trace says so, two
+  frames down. Pass it from the call site instead.
+- **`find` does not follow the `result` symlink.** `find "$out" -name X`
+  where `$out` is `./result` returns nothing, silently. Use `find -L`.
+  `readme-counts.sh` counted zero skills this way, and only failed loudly
+  because it refuses on an implausible count.
 
 ## 6. How to run the checks, and what each one costs
 
@@ -399,6 +475,13 @@ all three true or none of them is worth reading.
 Omarchy bumps and can be cut any day, so a release milestone would be a bucket
 with an arbitrary line through it. `Keeping the lights on` is where CI, docs
 and small fixes go — it has no end and is not a failure to plan.
+
+**Check the premise before filing.** An issue filed on something already true
+is worse than no issue: it looks like work, it gets picked up, and the person
+who picks it up learns not to trust the queue. One was filed this way — "the
+bin ledger has no row for nixarchy-android", where the row had landed with the
+command itself — and closing it cost less than leaving it. Read the tree
+first; it is thirty seconds.
 
 **Every issue gets a milestone and an area label when it is filed.** Not
 later. An issue with no milestone is invisible in every view that groups by

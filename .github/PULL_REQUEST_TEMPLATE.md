@@ -24,11 +24,28 @@
 ## Checks run locally
 
 <!-- Which `nix build .#checks.x86_64-linux.<name>` you ran, by name.
-     `checks.install` costs ~25 min on the one runner — you don't need to
-     have run it locally, but say what you did run. -->
+     `checks.install` costs ~25 min and only ONE install job runs at a time —
+     p620 has four runners, but install-check.yml caps this job because the
+     in-VM timeout is a guest-side one and contention turns "slower" into
+     "failed". You don't need to have run it locally; say what you did run. -->
 
 - [ ] `nix fmt` / statix / deadnix are clean
 - [ ] New files are `git add`ed (a flake cannot see untracked files)
 - [ ] If this adds an option: `tests/options.nix` covers both states
 - [ ] If this adds a `checks.*` entry: a PR-triggered workflow builds it
       (CI enforces this; the workflow edit needs maintainer sign-off)
+
+## What this cost, and where it is written down
+
+<!-- If something here cost you an hour and the cause was GENERAL — a nix
+     mechanic, a way a check can silently stop checking, a trap in the test
+     harness — add it to AGENTS.md in THIS pull request. See "Write back what
+     cost you an hour" at the top of that file.
+
+     Same PR, because the follow-up commit for documentation is the one that
+     never gets written. Specific facts ("this attribute was misspelled")
+     belong in the commit message instead.
+
+     Nothing surprising happened? Say "nothing general" and move on. -->
+
+- [ ] A general lesson is recorded in `AGENTS.md`, or nothing general came up

@@ -106,6 +106,7 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Updates](https://olafkfreund.github.io/nixarchy/manual/updates): what Update ▸ Nixarchy does here, why release channels do not exist, firmware updates, rolling back
 - [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview): booting a config change in a VM before switching to it — the disk lifecycle, and what a green preview does not prove
 - [Packages](https://olafkfreund.github.io/nixarchy/manual/other-packages): the app selection, apps.nix and nixarchy-apply, Install ▸ Search, services.nix, unfree software, removing apps
+- [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first): nixarchy try runs an app once, from the pinned nixpkgs, without installing — no isolation, no launcher entry, and it stays in /nix/store until garbage collection nobody schedules
 - [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
 - [Making Your Own Theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme): overlaying or forking a stock theme out of the read-only store
 - [Development Tools](https://olafkfreund.github.io/nixarchy/manual/development-tools): editors, and the 13 language toolchains from nixpkgs instead of mise

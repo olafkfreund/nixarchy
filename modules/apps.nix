@@ -172,7 +172,13 @@ let
         let
           flat = lib.replaceStrings [ "\n" "\t" ] [ " " " " ];
         in
-        "${name}\t${app.label}\t${app.category}\t${flat (app.note or "")}\n"
+        # The fifth field marks the rows `nixarchy try` can run: only an app
+        # backed by a package attribute is runnable. A module app (firefox,
+        # docker) has nothing to execute, so its preview must not sell a key
+        # that would only print a refusal.
+        "${name}\t${app.label}\t${app.category}\t${flat (app.note or "")}\t${
+          if app ? attr then "try" else ""
+        }\n"
       ) available
     )
   );
@@ -1412,10 +1418,11 @@ in
                 # it as a package does not.
                 awk -F'\t' -v OFS='\t' '{
                   note = ($4 == "" ? "" : "\\n\\n" $4)
+                  foot = ($5 == "try" ? "\\n\\nctrl-t tries it now, without installing." : "")
                   print "app", $1, $2 " (" $3 ")", "",
                     "OMARCHY APP  " $1 "\\n\\n" $2 "\\n" $3 \
                     note "\\n\\nEnabling this writes a line in your app selection:\\n  " \
-                    $1 ".enable = true;"
+                    $1 ".enable = true;" foot
                 }' "$appindex" > "$tmp"
 
                 # Empty when this system builds no manual, in which case the
@@ -1459,6 +1466,7 @@ in
                         + "\n\n" + ($v.description // "(no description)")
                         + "\n\nAdding this writes it into your app selection:\n  "
                         + "environment.systemPackages = with pkgs; [ " + $a + " ];"
+                        + "\n\nctrl-t tries it now, without installing."
                       )
                     ] | @tsv' >> "$tmp"
 
@@ -1477,14 +1485,37 @@ in
                 build_index
               fi
 
-              selection=$(fzf --multi \
+              # --expect makes fzf accept on ctrl-t as well as enter, and say which
+              # was pressed on the first output line. The previews on pkg and app
+              # rows document the key; the other two kinds have nothing to run.
+              picked=$(fzf --multi \
                 --delimiter='\t' --with-nth=1,2,3 --nth=2,3 \
+                --expect=ctrl-t \
                 --preview 'printf "%b\n" {5}' \
                 --preview-window='right,58%,wrap' \
                 --prompt='nixarchy > ' \
-                --header='enter to select · tab for several · esc to cancel' \
+                --header='enter to select · ctrl-t to try · tab for several · esc to cancel' \
                 --query="''${*:-}" < "$index") || exit 0
+              key=$(printf '%s\n' "$picked" | head -n 1)
+              selection=$(printf '%s\n' "$picked" | tail -n +2)
               [ -n "$selection" ] || exit 0
+
+              # Try, not queue: run it now, in this terminal, and write nothing.
+              # `nixarchy try` owns the how -- the pinned tree, the catalogue's
+              # binary field, unfree -- and refuses with a reason on an app that
+              # is really a NixOS module. Options and flatpaks have no package
+              # attribute to run, so the picker says so itself.
+              if [ "$key" = "ctrl-t" ]; then
+                while IFS=$'\t' read -r kind name _ _ _; do
+                  [ -n "$kind" ] || continue
+                  case "$kind" in
+                    app | pkg) nixarchy try "$name" || true ;;
+                    opt) echo "$name is a NixOS option -- there is nothing to run, so nothing to try" ;;
+                    flatpak) echo "$name is a flatpak -- nothing to try; enable it and apply instead" ;;
+                  esac
+                done <<< "$selection"
+                exit 0
+              fi
 
               [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
@@ -1719,6 +1750,17 @@ in
                     init) shift 2; exec nixarchy-dev-init "$@" ;;
                   esac
                   ;;
+                # Without this row `nixarchy try foo` falls through to
+                # `exec omarchy try ...` and dies as "Unknown Omarchy command"
+                # -- omarchy's own dispatcher discovers only omarchy-*
+                # siblings, and nixarchy-try is not one.
+                #
+                # It is the Search picker's ctrl-t path too, so the whole
+                # feature is unreachable without it. Both halves shipped
+                # green: the picker's check greps that nixarchy-search SAYS
+                # `nixarchy try `, which is the call site, not the route.
+                # checks.options now asserts the route.
+                try) shift; exec nixarchy-try "$@" ;;
                 vm) shift; exec nixarchy-vm "$@" ;;
                 box) shift; exec nixarchy-box "$@" ;;
                 ""|--help|-h|help)
@@ -1734,6 +1776,7 @@ in
                 nixarchy app remove         Pick what to deselect, interactively
                 nixarchy apply              Copy the selection into your flake and rebuild
                 nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
+                nixarchy try <app|attr>     Run something once without installing it
                 nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                 nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                 nixarchy doctor             What this machine needs to run nixarchy

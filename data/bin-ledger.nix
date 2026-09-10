@@ -74,6 +74,10 @@
     class = "new";
     reason = "Not in upstream, whose recovery story is snapper snapshots on the same disk. Builds a bootable image from this machine's own configuration -- the system closure and /etc/nixos, never /home or secrets -- after refusing on low disk, an uncommitted tree, or a running system that drifted from the flake.";
   };
+  "nixarchy-try" = {
+    class = "new";
+    reason = "Not in upstream, where trying an app IS installing it (pacman, then remove). Runs a catalogue app or nixpkgs attribute once from the machine's own pinned nixpkgs -- nix shell -f with the catalogue's binary field, never nix run's mainProgram guess -- and prints the app-enable/pkg-add hand-off when it exits.";
+  };
   "nixarchy-rollback" = {
     class = "new";
     reason = "Not in upstream, whose undo is omarchy-snapshot via snapper and limine. Lists and switches NixOS system generations, which are the bootable snapshot every rebuild already leaves behind.";

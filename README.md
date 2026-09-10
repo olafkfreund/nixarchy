@@ -1880,14 +1880,15 @@ Known gaps in detail:
 
 ## Roadmap
 
-What has been built at epic scale, and what is not going to be. The issues are
-the detail; this is the shape.
+What is being worked on, and what is planned. The issues are the detail; this
+is the shape.
 
-**No epic is open.** Every one that has been opened is finished, and the list
-below is what they were. That is a statement about scope rather than about
-ambition: the next one gets written when something is worth doing at that
-size, and [the open issues](https://github.com/olafkfreund/nixarchy/issues)
-are where the smaller work lives in the meantime.
+| epic | what it is for | |
+| --- | --- | --- |
+| [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
+| [#485](https://github.com/olafkfreund/nixarchy/issues/485) | **Preview changes** — boot a config change in a VM and look at it before switching the machine to it | 5 filed |
+| [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
+| [#498](https://github.com/olafkfreund/nixarchy/issues/498) | **Try without installing** — run something once to see whether you want it, from the catalogue's own idea of which binary that is | 5 filed |
 
 **Recently finished:**
 [Android](https://github.com/olafkfreund/nixarchy/issues/364)
@@ -1969,9 +1970,9 @@ and the backup and reset work in
 there rather than warning about it.
 
 [Every open issue](https://github.com/olafkfreund/nixarchy/issues) is the
-authoritative list; this section is the summary and CI keeps it honest — an
-epic opened or closed without updating it fails the build, which is why the
-line above can say no epic is open and be believed.
+authoritative list; this table is the summary and CI keeps it honest — an epic
+opened or closed without touching this section fails the build, so the table
+above is the open set rather than a description of it.
 
 ## Contributing
 

@@ -1881,7 +1881,10 @@ Known gaps in detail:
 ## Roadmap
 
 What is being worked on, and what is planned. The issues are the detail; this
-is the shape.
+is the shape. The [project board](https://github.com/users/olafkfreund/projects/9)
+is the same work with its state attached -- what is in flight, what is waiting,
+and what each feature has left. It is public, and the *Shipped* view is the
+honest answer to "is this thing alive".
 
 | epic | what it is for | |
 | --- | --- | --- |

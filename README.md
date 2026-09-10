@@ -1891,6 +1891,7 @@ honest answer to "is this thing alive".
 | [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
 | [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
 | [#498](https://github.com/olafkfreund/nixarchy/issues/498) | **Try without installing** — run something once to see whether you want it, from the catalogue's own idea of which binary that is | 5 filed |
+| [#525](https://github.com/olafkfreund/nixarchy/issues/525) | **Choose a channel** — stable or unstable, chosen from the menu the way Omarchy offers it, and a way to take a single package from the other one. Sequenced so the lockscreen that ships on stable is fixed *before* the choice is offered | 7 filed |
 
 **Recently finished:**
 [preview changes](https://github.com/olafkfreund/nixarchy/issues/485)

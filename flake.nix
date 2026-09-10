@@ -1577,6 +1577,15 @@
             pkgs = pkgsFor.${system};
           };
 
+          # A previewed config's desktop actually renders: the vmVariant
+          # gains the software-GL fallbacks and sizing, only when nixarchy
+          # is on, all of it overridable. See tests/preview-variant.nix
+          # and #487.
+          preview-variant = import ./tests/preview-variant.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Two machines differing only by name must build the same parts, or
           # an offline install has to build the difference. See #404.
           machine-name-free = import ./tests/machine-name-free.nix {

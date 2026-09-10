@@ -32,16 +32,32 @@
         memorySize = lib.mkDefault 8192;
         cores = lib.mkDefault 4;
 
-        # ssh -p 2222 <user>@localhost, IF the previewed config runs sshd --
-        # nothing here enables it, because the preview should show the
-        # user's config, not a doctored one. A list, so a plain assignment
-        # that merges with the user's own forwards (modules/services/
-        # default.nix header: mkDefault on a merging type drops the whole
-        # contribution the moment they add an element).
+        # ssh -p 2223 <user>@localhost, IF the previewed config runs sshd --
+        # nothing here enables it, because the preview should show the user's
+        # config, not a doctored one. A list, so a plain assignment that
+        # merges with the user's own forwards (modules/services/default.nix
+        # header: mkDefault on a merging type drops the whole contribution the
+        # moment they add an element).
+        #
+        # 2223, and the number is not free choice. qemu cannot bind a host
+        # port twice, so a forward that collides fails the SECOND VM to start
+        # -- with an error about binding, not about ports being a shared
+        # resource. Every guest this repository can run, in one place, because
+        # the next person adding one will look for exactly this list:
+        #
+        #   2222  vm/configuration.nix   `nix run .#vm`, the smoke VM
+        #   2223  here                   a user previewing their own config
+        #   2224  flake.nix              `nix run .#vm-big`
+        #   set   modules/services/microvm.nix  per machine, `sshPort`
+        #
+        # The collision this avoids is specifically a nixarchy DEVELOPER's:
+        # a user previewing their own machine has no smoke VM running. It is
+        # still worth avoiding, because the person who hits it is whoever is
+        # working on this feature.
         forwardPorts = [
           {
             from = "host";
-            host.port = 2222;
+            host.port = 2223;
             guest.port = 22;
           }
         ];

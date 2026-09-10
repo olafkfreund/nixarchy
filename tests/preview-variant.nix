@@ -86,7 +86,11 @@ let
       v: (on.environment.sessionVariables.${v} or null) == "1"
     ) glVars;
     on-sizes-the-guest = on.virtualisation.memorySize == 8192 && on.virtualisation.cores == 4;
-    on-forwards-ssh = builtins.elem 2222 (hostPorts on);
+    # 2223, not 2222: qemu cannot bind a host port twice, and 2222 belongs to
+    # `nix run .#vm`. The map of every guest's port is in modules/preview.nix
+    # beside the forward. Asserting the NUMBER rather than "some forward exists"
+    # is the point -- a collision is a wrong number, not a missing one.
+    on-forwards-ssh = builtins.elem 2223 (hostPorts on);
 
     # ---- off: Mode A, indistinguishable from no module at all ----
     off-adds-no-variables = builtins.all (
@@ -105,7 +109,7 @@ let
     # AND ours survives. If ours vanished, forwardPorts was mkDefault'd and
     # the module has the merging-type trap the services header warns about.
     override-merges-forwards =
-      builtins.elem 8080 (hostPorts overridden) && builtins.elem 2222 (hostPorts overridden);
+      builtins.elem 8080 (hostPorts overridden) && builtins.elem 2223 (hostPorts overridden);
   };
 
   broken = lib.filterAttrs (_: ok: !ok) cases;

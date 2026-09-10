@@ -390,12 +390,14 @@ let
         # Upstream wears the Arch logo here and runs `pacman -Rns` on the
         # selection. This picks over the app selection instead, and only ever
         # edits ~/.config/nixarchy/apps.nix -- never the user's own NixOS
-        # configuration, which nixarchy does not own.
+        # configuration, which nixarchy does not own. One picker for all
+        # three kinds the Install picker writes -- apps, extra packages,
+        # options -- so Remove covers what Install can add (#494, #522).
         "remove.package" = {
           icon = "󰭌";
-          label = "App";
+          label = "App / package";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-app-remove";
-          description = "Deselect apps, then Apply changes to rebuild without them";
+          description = "Deselect apps, added packages and options, then Apply changes to rebuild without them";
         };
 
         # Upstream's label is "Omarchy" and its action pulls a git checkout and
@@ -1164,6 +1166,12 @@ in
           # An interactive picker over what is currently selected, for the
           # Remove > Package row. Upstream offers a fuzzy picker over installed
           # pacman packages; this is the same shape over the app selection.
+          #
+          # All three kinds the Install picker can write, because "Remove" that
+          # only sees one of them is a menu row that lies (#494, #522): curated
+          # apps (`id.enable` lines), extra packages (`#@pkg` markers from
+          # nixarchy-pkg-add) and options (`#@opt` markers from the Search
+          # picker's add_option).
           (pkgs.writeShellApplication {
             name = "nixarchy-app-remove";
             runtimeInputs = [
@@ -1176,26 +1184,260 @@ in
               file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
               [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
-              mapfile -t enabled < <(
+              entries=()
+              while IFS= read -r name; do
+                [ -n "$name" ] && entries+=("app"$'\t'"$name")
+              done < <(
                 grep -oE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" \
                   | sed -E 's/[[:space:]]*//; s/\.enable//'
               )
-              if [ ''${#enabled[@]} -eq 0 ]; then
+              while IFS= read -r name; do
+                [ -n "$name" ] && entries+=("pkg"$'\t'"$name")
+              done < <(grep -oE '#@pkg [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@pkg //')
+              while IFS= read -r name; do
+                [ -n "$name" ] && entries+=("opt"$'\t'"$name")
+              done < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
+
+              if [ ''${#entries[@]} -eq 0 ]; then
                 echo "Nothing is selected. Install > Package lists what is available."
                 exit 0
               fi
 
-              chosen=$(printf '%s\n' "''${enabled[@]}" | fzf --multi \
+              # The preview shows the line that would go, so what "remove"
+              # means for each entry is visible before it happens.
+              chosen=$(printf '%s\n' "''${entries[@]}" | fzf --multi \
+                --delimiter='\t' \
                 --prompt="remove > " \
-                --header="tab to select several, enter to confirm") || exit 0
+                --header="tab to select several, enter to confirm" \
+                --preview "grep -F -- {2} '$file' | grep -F -e '.enable' -e '#@'" \
+                --preview-window='down,3,wrap') || exit 0
               [ -n "$chosen" ] || exit 0
 
-              while IFS= read -r app; do
-                [ -n "$app" ] && nixarchy-app-disable "$app"
+              # Packages and options are batched: one backup, one parse check,
+              # one notification per kind rather than per line.
+              pkgsel=()
+              optsel=()
+              while IFS=$'\t' read -r kind name; do
+                [ -n "$name" ] || continue
+                case "$kind" in
+                  app) nixarchy-app-disable "$name" ;;
+                  pkg) pkgsel+=("$name") ;;
+                  opt) optsel+=("$name") ;;
+                esac
               done <<< "$chosen"
+              [ ''${#pkgsel[@]} -eq 0 ] || nixarchy-pkg-remove "''${pkgsel[@]}"
+              [ ''${#optsel[@]} -eq 0 ] || nixarchy-opt-remove "''${optsel[@]}"
 
               echo
               echo "Run 'nixarchy-apply' to rebuild without them."
+            '';
+          })
+
+          # The inverse of nixarchy-pkg-add. It deletes only lines carrying the
+          # `#@pkg` marker -- the marker is the writer's claim of ownership --
+          # and never reformats anything else: the file is the user's. The
+          # systemPackages block stays even when its last marked line goes,
+          # because the user may have put their own, unmarked lines in it, and
+          # an empty list evaluates fine.
+          (pkgs.writeShellApplication {
+            name = "nixarchy-pkg-remove";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.fzf
+              config.nix.package
+              cfg.package # omarchy-notification-send
+            ];
+            text = ''
+              file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+              [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+              if [ $# -eq 0 ]; then
+                mapfile -t attrs < <(grep -oE '#@pkg [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@pkg //')
+                if [ ''${#attrs[@]} -eq 0 ]; then
+                  echo "No extra packages are selected. 'nixarchy pkg add' or the Search picker adds one."
+                  exit 0
+                fi
+                chosen=$(printf '%s\n' "''${attrs[@]}" | fzf --multi \
+                  --prompt="remove pkg > " \
+                  --header="tab to select several, enter to confirm") || exit 0
+                [ -n "$chosen" ] || exit 0
+                mapfile -t picked <<< "$chosen"
+                set -- "''${picked[@]}"
+              fi
+
+              # Reverted as a unit if anything goes wrong, exactly as the
+              # writer's edits are: the file is the user's own NixOS module.
+              backup=$(mktemp)
+              cp "$file" "$backup"
+              trap 'rm -f "$backup"' EXIT
+              restore() { cp "$backup" "$file"; }
+
+              removed=()
+              for attr in "$@"; do
+                # Same alphabet nixarchy-pkg-add accepts. Anything else would
+                # reach the sed address below as a pattern, not a name.
+                case "$attr" in
+                  "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+                    restore
+                    echo "'$attr' is not a nixpkgs attribute name." >&2
+                    exit 1
+                    ;;
+                esac
+                if ! grep -qF -- "#@pkg $attr" "$file"; then
+                  restore
+                  echo "nixarchy: no package '$attr' in $file. Nothing was changed." >&2
+                  exit 1
+                fi
+                # Exactly the marked line nixarchy-pkg-add wrote, wherever the
+                # user has moved it to.
+                sed -i "/#@pkg $attr\$/d" "$file"
+                removed+=("$attr")
+              done
+
+              [ ''${#removed[@]} -gt 0 ] || exit 0
+
+              if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                restore
+                echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                exit 1
+              fi
+
+              count=$(grep -c '#@pkg ' "$file" || true)
+              if command -v omarchy-notification-send >/dev/null 2>&1; then
+                omarchy-notification-send -r 8471 -t 8000 -u normal \
+                  "''${removed[*]} removed from your selection" \
+                  "$count extra package(s) still selected. Click here to run nixos-rebuild and apply it." \
+                  --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+              fi
+              for attr in "''${removed[@]}"; do
+                echo "removed $attr from $file"
+              done
+              echo "it stays installed until 'nixarchy-apply' rebuilds"
+            '';
+          })
+
+          # Removes an option the Search picker wrote (#522). What "remove"
+          # means here follows nixarchy-channel's rule -- only lines this
+          # project wrote get rewritten -- and the `#@opt` marker is the claim
+          # of authorship:
+          #
+          #   - a value the picker set, or a scaffold the user uncommented and
+          #     filled in while keeping the marker, is ONE marked line: that
+          #     line goes, and nothing around it. The picker's preview shows
+          #     the line first, so a filled-in scaffold is deleted with the
+          #     current value in view, not behind the user's back.
+          #   - an UNTOUCHED scaffold -- still commented, value never filled
+          #     in -- takes its doc-comment block with it: add_option wrote
+          #     blank line, comments and marker line as one unit, and the
+          #     comments mean nothing without the line they explain.
+          #   - a line the user stripped the marker from is invisible here,
+          #     which is the marker working as intended: removing it is how
+          #     an adopted line is kept out of this tool's reach.
+          #
+          # In both cases the one blank line add_option put above the unit
+          # goes too, so removing is byte-for-byte the inverse of adding --
+          # checks.options holds it to exactly that.
+          (pkgs.writeShellApplication {
+            name = "nixarchy-opt-remove";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.gawk
+              pkgs.fzf
+              config.nix.package
+            ];
+            text = ''
+              file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+              [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+              if [ $# -eq 0 ]; then
+                mapfile -t paths < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
+                if [ ''${#paths[@]} -eq 0 ]; then
+                  echo "No options from the picker are in $file. The Search picker adds one."
+                  exit 0
+                fi
+                chosen=$(printf '%s\n' "''${paths[@]}" | fzf --multi \
+                  --prompt="remove opt > " \
+                  --header="tab to select several, enter to confirm" \
+                  --preview "grep -F -- '#@opt '{} '$file'" \
+                  --preview-window='down,3,wrap') || exit 0
+                [ -n "$chosen" ] || exit 0
+                mapfile -t picked <<< "$chosen"
+                set -- "''${picked[@]}"
+              fi
+
+              backup=$(mktemp)
+              cp "$file" "$backup"
+              trap 'rm -f "$backup"' EXIT
+              restore() { cp "$backup" "$file"; }
+
+              # String comparison throughout, never a regex: option paths
+              # carry dots, quotes and <name> placeholders, and a path read
+              # as a pattern would delete the wrong line quietly.
+              remove_one() {
+                path=$1
+                tmp=$(mktemp)
+                # `if !` rather than checking $? after: this script runs under
+                # set -e, and a bare failing awk would abort before the caller
+                # could restore the backup.
+                if ! awk -v path="$path" '
+                  { line[NR] = $0 }
+                  END {
+                    marker = "#@opt " path
+                    target = 0
+                    for (i = 1; i <= NR; i++) {
+                      l = line[i]
+                      if (length(l) >= length(marker) &&
+                          substr(l, length(l) - length(marker) + 1) == marker) {
+                        target = i; break
+                      }
+                    }
+                    if (target == 0) exit 3
+                    first = target
+                    stripped = line[target]
+                    sub(/^[ \t]*/, "", stripped)
+                    if (stripped == "# " path " = ;  " marker) {
+                      while (first > 1) {
+                        prev = line[first - 1]
+                        sub(/^[ \t]*/, "", prev)
+                        if (substr(prev, 1, 1) == "#") first -= 1; else break
+                      }
+                    }
+                    if (first > 1 && line[first - 1] == "") first -= 1
+                    for (i = 1; i <= NR; i++)
+                      if (i < first || i > target) print line[i]
+                  }' "$file" > "$tmp"; then
+                  rm -f "$tmp"
+                  return 1
+                fi
+                mv "$tmp" "$file"
+              }
+
+              removed=()
+              for path in "$@"; do
+                if ! remove_one "$path"; then
+                  restore
+                  echo "nixarchy: no option '$path' in $file. Nothing was changed." >&2
+                  exit 1
+                fi
+                removed+=("$path")
+              done
+
+              [ ''${#removed[@]} -gt 0 ] || exit 0
+
+              if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                restore
+                echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                exit 1
+              fi
+
+              for path in "''${removed[@]}"; do
+                echo "removed $path from $file"
+              done
+              echo "a value that was live stays in effect until 'nixarchy-apply' rebuilds"
             '';
           })
 
@@ -1736,6 +1978,7 @@ in
                 pkg)
                   case "''${2:-}" in
                     add) shift 2; exec nixarchy-pkg-add "$@" ;;
+                    remove) shift 2; exec nixarchy-pkg-remove "$@" ;;
                   esac
                   ;;
                 app)
@@ -1771,9 +2014,10 @@ in
 
                 nixarchy search [query]     Every package, NixOS option and app, in one picker
                 nixarchy pkg add <attr>     Add a nixpkgs package to the app selection
+                nixarchy pkg remove [attr]  Take one out again (no argument picks interactively)
                 nixarchy app enable <id>    Select an app from the curated list
                 nixarchy app disable <id>   Deselect one
-                nixarchy app remove         Pick what to deselect, interactively
+                nixarchy app remove         Pick apps, packages and options to remove
                 nixarchy apply              Copy the selection into your flake and rebuild
                 nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
                 nixarchy try <app|attr>     Run something once without installing it

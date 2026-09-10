@@ -90,7 +90,16 @@ while IFS= read -r f; do
     # greps README.md for them, so a README-only edit can legitimately fail
     # the omarchy job -- it did on #424. Excluding it would turn a working
     # guard into one that only runs when something else changed too.
-    docs/*|AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
+    # `AGENTS.md` matched only at the root, so installer/AGENTS.md and
+    # modules/AGENTS.md fell through to `*` and ran the whole build -- and,
+    # once install-check grew its own narrower list, a 26-46 minute VM install
+    # for a markdown file. Every AGENTS.md in this repository is documentation
+    # for agents; verified that nothing reads one into a derivation, and the
+    # only mentions in .nix files and scripts are comments citing it.
+    #
+    # `*/AGENTS.md` covers any depth, because `case` globs are not path-aware
+    # and `*` crosses `/` -- the same property the `docs/*` arm relies on.
+    docs/*|AGENTS.md|*/AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
       continue ;;
 
     # Only for the install question, and only files the install job cannot

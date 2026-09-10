@@ -49,10 +49,18 @@ pkgs.runCommand "nixarchy-install-gate"
     # and greps README for them, so a README-only edit can legitimately fail.
     t "README does"                            --install "README.md" true
 
+    # `AGENTS.md` matched at the ROOT only, so installer/AGENTS.md ran a
+    # 26-46 minute VM install for a markdown file. Every depth, because
+    # `case` globs cross `/` and the fix relies on that.
+    t "a nested AGENTS.md does not run the VM"  --install "installer/AGENTS.md" false
+    t "nor a deeper one"                        --install "a/b/AGENTS.md" false
+    t "nor the root one"                        --install "AGENTS.md" false
+
     echo "the build question, unchanged:"
     t "an unrelated check still builds"        "" "tests/substitutable.nix" true
     t "docs still do not"                      "" "docs/manual/android.md" false
     t "the gate itself always does"            "" ".github/scripts/pr-touches-build.sh" true
+    t "a nested AGENTS.md builds nothing"      "" "modules/AGENTS.md" false
     t "install-check.yml always does"          "" ".github/workflows/install-check.yml" true
 
     echo "fails safe:"

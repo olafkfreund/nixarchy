@@ -128,6 +128,25 @@ skills, and the NixOS philosophy underneath all of it.
 New to NixOS? Start with
 **[the philosophy](manual/philosophy)** and **[updating NixOS](manual/updating-nixos)**.
 
+## Get this machine back on new hardware
+
+`nixarchy reinstall iso` builds a bootable image **from this machine's own
+configuration**. Boot it on a new laptop and you get this system back --
+packages, desktop, services, settings -- with nothing downloaded and nothing
+compiled, because the closure is on the medium.
+
+It is the only one of the five ways back that survives losing the disk: a
+generation covers a bad change, a snapshot covers a deleted file, and two git
+repos cover your dotfiles and your configuration.
+
+**It is not a backup, and the name says so on purpose.** It carries your
+system, not your files -- no `/home`, no browser profiles, no service state --
+and booting it erases the target disk. The trap that names avoids is somebody
+losing a disk, booting the thing they called a backup, and getting a clean
+machine with none of their photographs.
+
+See **[a reinstall image of this machine](manual/reinstall-image)**.
+
 ## Where this has got to
 
 Four features finished recently, and each is here because it is *checked*, not

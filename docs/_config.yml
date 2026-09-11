@@ -49,6 +49,7 @@ nav:
   - { path: /manual/development-tools,        title: Development Tools }
   - { path: /manual/per-project-environments, title: Per-Project Environments }
   - { path: /manual/python,                   title: Python }
+  - { path: /manual/prebuilt-binaries,        title: Prebuilt Binaries }
   - { path: /manual/boxes,                    title: Boxes }
   - { path: /manual/sandboxes,                title: Sandboxes }
   - { path: /manual/ai,                       title: AI }

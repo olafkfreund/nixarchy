@@ -113,6 +113,7 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Development Tools](https://olafkfreund.github.io/nixarchy/manual/development-tools): editors, and the 13 language toolchains from nixpkgs instead of mise
 - [Per-Project Environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments): nixarchy dev init and devenv — a pinned toolchain that activates on cd (opt-in)
 - [Python](https://olafkfreund.github.io/nixarchy/manual/python): pip in a venv works today; why an import dies on libGL.so.1 (the loader, not pip), the nix-ld fix, then the project preset and uv
+- [Prebuilt binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries): the three on-by-default answers to a downloaded Linux binary -- nix-ld and its curated library set, envfs for shebangs, binfmt-registered AppImages -- and where each stops
 - [Boxes](https://olafkfreund.github.io/nixarchy/manual/boxes): Arch or Debian userlands via rootless podman and distrobox, ad hoc or declared (opt-in)
 - [Sandboxes](https://olafkfreund.github.io/nixarchy/manual/sandboxes): disposable NixOS MicroVMs sharing the host store, and the declarative always-up half (opt-in)
 - [AI](https://olafkfreund.github.io/nixarchy/manual/ai): the ten NixOS agent skills, the Ask menu, choosing an agent, and running it all locally

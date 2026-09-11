@@ -25,6 +25,42 @@ actual problem on a NixOS host:
 | Boot splash | Whether Omarchy's Plymouth theme is the one in use, or stylix's |
 | TLP | TLP is on, so power-profiles-daemon is off and `omarchy powerprofiles` cannot work |
 
+### `libGL.so.1: cannot open shared object file: No such file or directory`
+
+Or `libstdc++.so.6`, or any other `.so` -- from a pip wheel at `import`, a
+Node native module, or a downloaded binary. The binary is a prebuilt Linux
+binary looking for its libraries where every other distro keeps them, and
+NixOS keeps them elsewhere; [Prebuilt binaries](prebuilt-binaries) is the
+full story. The machine can diagnose it -- hand the doctor the binary, as a
+path or a command name:
+
+```sh
+nixarchy-doctor ~/.venv/lib/python3.12/site-packages/cv2/cv2.so
+nixarchy-doctor some-downloaded-tool
+```
+
+It runs the loader's own resolution against the nix-ld library set, names
+each missing library, and for the common ones prints the
+`programs.nix-ld.libraries` line that fixes it -- for the rest, how to find
+the package that carries the file. After the rebuild, **log out and back in**:
+`NIX_LD_LIBRARY_PATH` is set at login, so the session you are sitting in
+keeps the old list.
+
+What it cannot do, so a clean report is not a guarantee:
+
+- It checks only the files you name. The report's no-argument scan covers
+  `~/.local/bin` and nothing else -- it does not crawl your venvs or
+  `node_modules`, so for a broken import, name the actual `.so` inside the
+  package (the traceback usually names it for you).
+- It answers "is every library findable", not "is every library right". A
+  library that is present but the wrong ABI or the wrong generation loads
+  cleanly and misbehaves later; the doctor reports it as found.
+- It resolves what the binary declares it needs. A library the program
+  `dlopen`s by hand at run time is invisible until that moment, so a
+  binary can pass the check and still fail later with the same error --
+  bring the doctor the library name from *that* error and add it the same
+  way.
+
 ### I broke my system with an update!
 
 Roll back the generation, from the desktop or from the boot menu; see

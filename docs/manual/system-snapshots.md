@@ -33,9 +33,9 @@ the previous system was never modified in the first place.
 ## How long a generation lasts
 
 Generations are what rollback is made of, so they are not collected eagerly.
-On a machine the installer built, a weekly job removes generations older than
-**thirty days** -- long enough to outlast the gap between noticing a problem
-and having time to look at it.
+On a machine the installer built, `nh` keeps the **last five** and anything
+from the **last fourteen days**, whichever is more -- long enough to outlast
+the gap between noticing a problem and having time to look at it.
 
 Separately, and for a different reason, the Nix daemon collects unreferenced
 store paths when free space falls below 5 GiB. That is *garbage*, not

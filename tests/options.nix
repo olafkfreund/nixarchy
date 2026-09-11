@@ -160,32 +160,33 @@ let
       off = nixiOff.systemd.user.services ? nixi;
     };
 
-    # ---- store hygiene is the installer's, never an adopter's (#583) -----
+    # ---- the free-space floor is the installer's, never an adopter's ----
     #
-    # `nixarchy try` creates no GC root by design, so an uncollected store is
-    # a nixarchy problem rather than a stock NixOS one, and installer-built
-    # machines now carry a policy: garbage under space pressure, generations
-    # after thirty days, twenty boot entries.
+    # #583, and the correction that came with it: `programs.nh.clean` ALREADY
+    # collected generations here (`--keep-since 14d --keep 5`), so the first
+    # attempt added `nix.gc.automatic` on top and nixpkgs warned that the two
+    # conflict -- checks.config-warnings caught it, which is what that check
+    # is for. Generations were never the gap.
     #
-    # The pair is the whole point. ON is the machine the installer generates
-    # (nixosConfigurations.vm imports installer/host.nix). OFF is an adopter
-    # who imported nixosModules.nixarchy into a configuration they already
-    # run -- Mode A -- and whose own GC policy this must never overwrite.
-    # Turning GC on underneath somebody is exactly the surprise §7 forbids,
-    # and it is the off state a refactor breaks quietly.
-    storeGcAutomatic = {
-      on = inputs.self.nixosConfigurations.vm.config.nix.gc.automatic;
-      off = adopter.config.nix.gc.automatic;
-    };
-
-    # min-free is the half that answers `try`: it collects only what nothing
-    # references, so it can never cost a rollback. Asserted separately from
-    # gc.automatic because they are different mechanisms -- the daemon's
-    # space pressure versus a weekly timer -- and one arriving without the
-    # other would leave half the problem with a passing test.
+    # The gap was GARBAGE. `nixarchy try` creates no GC root, so an
+    # application the user evaluated and rejected is retained forever, and
+    # collecting it can never cost a rollback. min-free/max-free is the half
+    # nothing was doing.
+    #
+    # ON is the machine the installer generates; OFF is an adopter who
+    # imported nixosModules.nixarchy into a configuration they already run --
+    # Mode A -- whose own collection policy this must never overwrite.
     storeGcMinFree = {
       on = inputs.self.nixosConfigurations.vm.config.nix.settings ? min-free;
       off = adopter.config.nix.settings ? min-free;
+    };
+
+    # The boot menu is capped for the installer's machines only. A cap on the
+    # MENU, not on the generations -- nh.clean owns those, and
+    # `nixos-rebuild --rollback` still reaches the one before this.
+    storeBootLimit = {
+      on = inputs.self.nixosConfigurations.vm.config.boot.loader.systemd-boot.configurationLimit != null;
+      off = adopter.config.boot.loader.systemd-boot.configurationLimit != null;
     };
 
     # Everything the guide leaves in a home, in one case, because "off" has to

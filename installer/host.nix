@@ -142,7 +142,34 @@
   # machine, `nixpkgs#foo` pointed at this flake's UNSTABLE nixpkgs is exactly
   # the "binary built against a different glibc" the paragraph above exists to
   # prevent. The requirement stands; NixOS is now what meets it.
-  nix.settings.flake-registry = "";
+  nix.settings = {
+    flake-registry = "";
+
+    # The free-space floor -- #583, and the half `programs.nh.clean` below
+    # does NOT do.
+    #
+    # Two different problems, and conflating them is how a collection policy
+    # eats the thing it was meant to protect:
+    #
+    #   nh.clean collects GENERATIONS (`--keep-since 14d --keep 5`), and
+    #   generations are what rollback is made of. That is why it is
+    #   conservative, and why `nix.gc.automatic` is NOT set here -- nixpkgs
+    #   warns that the two together conflict, and checks.config-warnings
+    #   fails on the warning rather than letting it print for weeks.
+    #
+    #   min-free/max-free collects GARBAGE -- paths nothing references --
+    #   under space pressure rather than on a timer. That is exactly what
+    #   `nixarchy try` leaves behind: a tried package has no GC root, so an
+    #   application the user evaluated and rejected is pure garbage, and
+    #   collecting it can never cost a rollback.
+    #
+    # 5 GiB floor, 20 GiB target, sized for what this desktop does rather
+    # than for a server: an install VM image is 32 GiB and a box is a whole
+    # userland, so a floor that clears a few hundred megabytes is hit again
+    # during the same build.
+    min-free = 5 * 1024 * 1024 * 1024;
+    max-free = 20 * 1024 * 1024 * 1024;
+  };
 
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or
@@ -522,49 +549,6 @@
     # The ESP is 2G (installer/disk-config.nix), so this is about a list
     # somebody can read, not about space.
     systemd-boot.configurationLimit = 20;
-  };
-
-  # Store hygiene, on a machine the installer built -- #583.
-  #
-  # Closures do not orphan, but stores grow, and nixarchy makes that worse
-  # than stock NixOS in a way worth naming: `nixarchy try` creates NO GC root
-  # by design (docs/manual/try-it-first.md says so), so every application a
-  # user evaluated and decided AGAINST is retained forever. `nixarchy dev
-  # init` and uv add toolchains per project. Until now the answer was that
-  # the user learns `nix-collect-garbage` and remembers to run it.
-  #
-  # TWO knobs, because there are two different problems and conflating them
-  # is how a GC policy eats the thing it was meant to protect:
-  #
-  #   min-free/max-free collects GARBAGE -- store paths nothing references.
-  #   That is exactly what `try` leaves behind, and collecting it can never
-  #   cost you a rollback, because a generation is a GC root. The daemon does
-  #   it under space pressure rather than on a timer, which is when it
-  #   matters.
-  #
-  #   gc.automatic with --delete-older-than collects GENERATIONS, and
-  #   generations ARE what rollback is made of. Thirty days is chosen to
-  #   outlast the gap between noticing a problem and having time to look at
-  #   it; a week would be tidier and would have deleted the evidence.
-  #
-  # Only on installer-built machines. An adopter importing
-  # nixosModules.nixarchy into a configuration they already run keeps their
-  # own policy -- Mode A, modules/AGENTS.md -- and this file is imported by
-  # nothing else.
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
-  };
-
-  # 5 GiB left is the floor, 20 GiB the target once collecting starts. Sized
-  # for what this desktop actually does rather than for a server: an install
-  # VM image is 32 GiB, a devenv toolchain is gigabytes, and a box is a whole
-  # userland. A floor that only clears a few hundred megabytes gets hit again
-  # during the same build.
-  nix.settings = {
-    min-free = 5 * 1024 * 1024 * 1024;
-    max-free = 20 * 1024 * 1024 * 1024;
   };
 
   # mkDefault: the generated configuration.nix carries the answers the installer

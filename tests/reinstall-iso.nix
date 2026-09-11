@@ -112,6 +112,45 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
   EOF
   bash dvt.sh
 
+  # ------------------------------------------------------------------------
+  # substitutable_verdict (#483): the network image is only honest for a
+  # closure the caches hold, and installer/substitutable.sh answers that
+  # with its exit code. The mapping must keep the three verdicts apart --
+  # above all, nothing but a real exit 0 may read as fetchable, because
+  # "nothing to build" is the answer that strands a target mid-install.
+  # ------------------------------------------------------------------------
+  sed -n '/^substitutable_verdict()/,/^}/p' ${reinstallScript} > sv.sh
+  test -s sv.sh || { echo "substitutable_verdict is not in nixarchy-reinstall-iso any more" >&2; exit 1; }
+
+  cat > svt.sh <<'EOF'
+  . ./sv.sh
+  echo 'exit 0' > can-fetch.sh
+  echo 'exit 1' > must-build.sh
+  echo 'exit 2' > cannot-say.sh
+  echo 'exit 127' > broke.sh
+  fails=0
+  t() {
+    want=$1 name=$2 script=$3 top=$4
+    g=$(substitutable_verdict "$script" "$top" 2>/dev/null)
+    if [ "$g" = "$want" ]; then
+      echo "  ok      $name -> $g"
+    else
+      echo "  FAILED  $name: wanted $want, got '$g'"
+      fails=$((fails + 1))
+    fi
+  }
+  t fetchable "every path in a cache"          can-fetch.sh  /nix/store/aaa-toplevel
+  t build     "something must be built"        must-build.sh /nix/store/aaa-toplevel
+  t unknown   "the question was not answered"  cannot-say.sh /nix/store/aaa-toplevel
+  # Tolerance both ways: a script that broke, went missing, or was never
+  # found is unknown -- never fetchable, never a crash.
+  t unknown   "the script itself broke"        broke.sh      /nix/store/aaa-toplevel
+  t unknown   "no script was located"          ""            /nix/store/aaa-toplevel
+  t unknown   "no toplevel to ask about"       can-fetch.sh  ""
+  exit $fails
+  EOF
+  bash svt.sh
+
   echo "the three preflights refuse what they must and only that"
 
   # ------------------------------------------------------------------------
@@ -122,7 +161,7 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
   # ------------------------------------------------------------------------
   build_line=$(grep -n 'nix build "$REINSTALL_ATTR"' ${reinstallScript} | cut -d: -f1 | head -1 || true)
   [ -n "$build_line" ] || { echo "the script no longer builds via REINSTALL_ATTR; retarget this check" >&2; exit 1; }
-  for probe in 'check_disk /nix/store' 'committed_verdict "$FLAKE"' 'drift_verdict "$running"'; do
+  for probe in 'check_disk /nix/store' 'committed_verdict "$FLAKE"' 'drift_verdict "$running"' 'case "$(substitutable_verdict'; do
     line=$(grep -n "$probe" ${reinstallScript} | cut -d: -f1 | head -1 || true)
     [ -n "$line" ] || { echo "main() never calls: $probe" >&2; exit 1; }
     [ "$line" -lt "$build_line" ] || {
@@ -146,10 +185,15 @@ pkgs.runCommand "nixarchy-reinstall-iso" { } ''
   # and a bare grep stayed green with the printed line deleted. Found by
   # breaking it.
   # ------------------------------------------------------------------------
+  # The last two are #483's: the network image must say when the caches
+  # cannot supply this machine, and an unanswered question must never be
+  # presented as a fetchable closure.
   for claim in \
     'red "It is NOT a backup.' \
     'echo "  It carries no /home, no service state, no secrets' \
-    'ERASES the disk it installs to.'; do
+    'ERASES the disk it installs to.' \
+    'red "Some of this system is in NO cache.' \
+    'red "Whether the target could fetch this system could not be answered.'; do
     grep -qF "$claim" ${reinstallScript} || {
       echo "the script no longer says: $claim" >&2
       echo "#478 makes that honesty non-negotiable -- the image carries the" >&2

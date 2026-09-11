@@ -96,6 +96,13 @@ fi
 # where the reasoning did hold.
 SUBSTITUTE_FLAGS=(--option always-allow-substitutes true)
 
+# Derivations every machine assembles for itself -- /etc fragments, units,
+# activation scripts. Expected in any build plan and cheap anywhere, so any
+# report about what a plan REALLY builds filters them out, or the entries that
+# matter drown under a thousand that do not. Shared by preflight_build and the
+# offline failure report: two filters would disagree about the same plan.
+PLAN_TRIVIA='-(etc|activate|dry-activate|system-path|system-units|user-units|unit-|X-Restart|initrd|boot\.json|users-groups|nixos-system|.*\.conf|.*\.service|hosts|.*-hostname)'
+
 dry_run=false
 answers_file=""
 answers_fetched=""
@@ -2243,7 +2250,7 @@ rescue_build() {
       # etc fragments and units -- those are expected to be built and are
       # cheap. A compiler appearing under any of them is the actual finding.
       for drv in $(printf '%s\n' "$builds" \
-        | grep -vE -- '-(etc|activate|dry-activate|system-path|system-units|user-units|unit-|X-Restart|initrd|boot\.json|users-groups|nixos-system|.*\.conf|.*\.service|hosts|.*-hostname)' \
+        | grep -vE -- "$PLAN_TRIVIA" \
         | head -3); do
         echo >&2
         echo "  Why this system needs $(basename "$drv"):" >&2
@@ -2336,6 +2343,40 @@ rescue_build() {
 # of either kind and a seeded store -- keying on anything but the net image's
 # own marker would make a passing check demand a network and fail, which is
 # the trap the ask_network comment already names.
+
+# The plan succeeded; now what does it SAY (#483). `nix build --dry-run`
+# lists what no reachable cache could supply under "will be built", and on
+# this image a real package there is compiled on the target, mid-install,
+# into the live session's RAM-backed store. cache.nixos.org carries no
+# unfree packages at all, and nothing built on the source machine is in any
+# cache -- so a USER's closure (a reinstall-iso-net image) can plan cleanly
+# and still be mostly a build. Name it while refusal still costs nothing.
+# Asking is interactive-only: the reference image's closure is fully cached,
+# and a stray small derivation must not hang an unattended install on a
+# prompt nobody is there to answer.
+preflight_report_builds() {
+  local builds
+  builds=$(sed -n 's|^ *\(/nix/store/[^ ]*\.drv\)$|\1|p' <<<"$1" \
+    | grep -vE -- "$PLAN_TRIVIA" || true)
+  [ -n "$builds" ] || return 0
+
+  local count
+  count=$(printf '%s\n' "$builds" | grep -c .)
+  echo >&2
+  echo "nixarchy-install: not everything can be fetched." >&2
+  echo >&2
+  echo "  No cache this image can reach has these $count, so they would be" >&2
+  echo "  BUILT on this machine, over the install:" >&2
+  printf '%s\n' "$builds" | head -12 | sed 's|^/nix/store/[^-]*-|    |' >&2
+  [ "$count" -gt 12 ] && echo "    ... and $((count - 12)) more" >&2
+  echo >&2
+  ui_interactive || return 0
+  gum confirm --padding "$(ui_gum_pad)" \
+    "Install anyway, building these here first?" && return 0
+  echo "Nothing was written: the disk has not been touched." >&2
+  return 1
+}
+
 preflight_build() {
   on_net_image || return 0
 
@@ -2358,8 +2399,11 @@ preflight_build() {
   git -C "$work" init -q
   git -C "$work" add -A
   local plan
-  plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
-    "$work#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1) && return 0
+  if plan=$(nix "${NIX_FLAGS[@]}" build --dry-run "${SUBSTITUTE_FLAGS[@]}" \
+    "$work#nixosConfigurations.$hostname.config.system.build.toplevel" 2>&1); then
+    preflight_report_builds "$plan"
+    return
+  fi
 
   echo "nixarchy-install: the system cannot be planned, so no install was started." >&2
   echo >&2

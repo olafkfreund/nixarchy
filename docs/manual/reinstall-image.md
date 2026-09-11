@@ -61,6 +61,31 @@ compression is most of it.
 The image lands at `~/.local/share/nixarchy/reinstall-iso/`, and the command
 prints the exact path and size.
 
+## The network variant
+
+```
+nixarchy reinstall iso --net
+```
+
+About 1.5 GB instead of 6–10, because it carries the configuration and
+fetches the system from the binary caches as it installs. The trade is
+explicit: the target needs a network, and the image is only honest if the
+caches actually hold your system.
+
+They often do not hold all of it. `cache.nixos.org` carries **no unfree
+packages** — vscode, zoom, every IDE with a licence — and anything built on
+your machine (an overlay, a patched package) is in no cache anywhere. A
+target would have to *compile* those, mid-install, which is the failure the
+command exists to get in front of: before offering the build, it asks your
+own store what a fresh machine could not fetch, lists it with sizes, and
+points at the offline image — which carries everything and needs no such
+answer. The installer asks the same question again on the target, before
+anything is formatted.
+
+If your closure comes back clean — everything fetchable — the network image
+is the cheaper artifact to keep and re-make. If it does not, burn the big
+one.
+
 ## Writing it to a USB stick
 
 ```
@@ -125,6 +150,12 @@ reinstalls correctly in a VM; it says nothing about whether your new laptop's
 wifi chip has a driver in the closure you baked. If the new machine's hardware
 differs from the old one, expect to edit `hosts/<name>/hardware-configuration.nix`
 after the first boot, and to rebuild — which needs a network.
+
+The network variant's prediction is tested against real `nix path-info`
+shapes, but no automated check can watch a network image actually fail to
+fetch — every store CI touches is warm, and every closure it installs is
+cached. If `--net` predicted "all fetchable" and the install still had to
+build something, that is a bug in the prediction: please report it.
 
 ## Related
 

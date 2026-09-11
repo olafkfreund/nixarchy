@@ -1329,8 +1329,10 @@
             flake,
             host,
             # Offline by default, because the whole point is a machine that can
-            # be rebuilt when there is nothing to fetch from. The network
-            # variant is #483.
+            # be rebuilt when there is nothing to fetch from. false is the
+            # network variant (#483): ~1.5 GB, fetching at install time --
+            # honest only for a closure the caches hold, which
+            # `nixarchy reinstall iso --net` checks before offering the build.
             offline ? true,
           }:
           let

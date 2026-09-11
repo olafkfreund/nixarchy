@@ -1904,7 +1904,14 @@ in
                 added=()
                 missed=()
                 unfree_hits=()
+                to_eval=()
+                report=()
 
+                # First pass: everything answerable without evaluating nixpkgs.
+                # What survives it goes into ONE evaluation below (#496) --
+                # loading nixpkgs is the cost, and it is the same load whether
+                # it answers for one attribute or ten, so a multi-select from
+                # the picker must not pay it per selection.
                 for attr in "$@"; do
                   case "$attr" in
                     "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
@@ -1918,57 +1925,76 @@ in
                   # package in systemPackages that does none of that.
                   app=$(awk -F'\t' -v a="$attr" '$1 == a { print $2; exit }' "$table")
                   if [ -n "$app" ]; then
-                    echo "$attr is on the curated app list, as '$app'. Enable it that way --"
-                    echo "that route knows whether it needs a NixOS module rather than a package:"
-                    echo
-                    echo "  nixarchy-app-enable $app"
-                    echo
+                    report+=("$attr"$'\t'"curated"$'\t'"an Omarchy app -- enable it that way:  nixarchy-app-enable $app")
                     continue
                   fi
 
                   if grep -q "#@pkg $attr\$" "$file"; then
-                    echo "$attr is already in $file"
+                    report+=("$attr"$'\t'"present"$'\t'"already in $file")
                     continue
                   fi
 
-                  # Resolved against the system's own nixpkgs rather than the flake registry,
-                  # so the answer matches what a rebuild would actually build, and it works
-                  # with no network. nix-instantiate rather than `nix eval`: no pure-eval mode
-                  # to fight over an absolute store path, and no experimental flag to require.
-                  # allowUnfree only so an unfree package reports as unfree instead of
-                  # throwing here; nothing in this script decides your licence policy.
-                  if ! info=$(nix-instantiate --eval --strict --json --expr "
+                  to_eval+=("$attr")
+                done
+
+                # Resolved against the system's own nixpkgs rather than the flake registry,
+                # so the answer matches what a rebuild would actually build, and it works
+                # with no network. nix-instantiate rather than `nix eval`: no pure-eval mode
+                # to fight over an absolute store path, and no experimental flag to require.
+                # allowUnfree only so an unfree package reports as unfree instead of
+                # throwing here; nothing in this script decides your licence policy.
+                #
+                # Every name in one evaluation, each probed under tryEval: one
+                # evaluation that died on the first bad attribute would be worse
+                # than N evaluations, because a user adding five packages would
+                # learn about one typo (#496). The names travel as a JSON
+                # argument, not spliced into the expression.
+                declare -A evalinfo
+                if [ ''${#to_eval[@]} -gt 0 ]; then
+                  names_json=$(printf '%s\n' "''${to_eval[@]}" | jq -R . | jq -sc .)
+                  batch=$(nix-instantiate --eval --strict --json \
+                    --argstr attrsJson "$names_json" --expr "
+                    { attrsJson }:
                     let
                       p = import $nixpkgs { config.allowUnfree = true; };
-                      q = p.$attr;
-                      ls = if q.meta ? license then
-                             (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
-                           else [ ];
-                    in {
-                      inherit (q) name;
-                      pname = q.pname or \"\";
-                      description = q.meta.description or \"\";
-                      unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
-                      broken = q.meta.broken or false;
-                    }" 2>/dev/null); then
+                      probe = a:
+                        let
+                          path = p.lib.splitString \".\" a;
+                          q = p.lib.attrByPath path null p;
+                          ls = if (q.meta or { }) ? license then
+                                 (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
+                               else [ ];
+                          v = {
+                            inherit (q) name;
+                            pname = q.pname or \"\";
+                            description = q.meta.description or \"\";
+                            unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
+                            broken = q.meta.broken or false;
+                          };
+                          r = builtins.tryEval
+                            (if p.lib.hasAttrByPath path p
+                             then { ok = true; } // builtins.deepSeq v v
+                             else { ok = false; });
+                        in if r.success then r.value else { ok = false; };
+                    in builtins.listToAttrs
+                      (map (a: { name = a; value = probe a; }) (builtins.fromJSON attrsJson))" \
+                    2>/dev/null) || batch='{}'
+                  for attr in "''${to_eval[@]}"; do
+                    evalinfo[$attr]=$(jq -c --arg a "$attr" '.[$a] // { ok: false }' <<<"$batch")
+                  done
+                fi
+
+                for attr in "''${to_eval[@]}"; do
+                  info=''${evalinfo[$attr]}
+                  if [ "$(jq -r .ok <<<"$info")" != true ]; then
                     # A name that does not resolve is a typo more often than a
                     # missing package, and the fuzzy index exists for typos: open
                     # the picker on the query instead of handing back homework
-                    # (#492). Not when this run IS the picker's writer -- its rows
-                    # come from the index, so a miss there is an index bug and
-                    # recursing into a fresh picker would loop.
-                    if can_pick; then
-                      missed+=("$attr")
-                      continue
-                    fi
-                    echo "nixpkgs has no package '$attr'." >&2
-                    echo >&2
-                    echo "Search for the right name:" >&2
-                    echo "  nixarchy-search $attr" >&2
-                    echo >&2
-                    echo "If nixpkgs genuinely does not have it, draft a package from its source:" >&2
-                    echo "  nixarchy pkg new <url>" >&2
-                    exit 1
+                    # (#492). Collected here, acted on after the loop, so one
+                    # bad name does not sink the rest of the batch (#496).
+                    missed+=("$attr")
+                    report+=("$attr"$'\t'"no match"$'\t'"nixpkgs has no attribute by that name")
+                    continue
                   fi
 
                   ensure_block
@@ -1986,11 +2012,9 @@ in
                       echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
                       exit 1
                     fi
-                    echo "$attr added, from the $want_channel channel."
-                    echo "  It brings its own closure -- the two channels share no store"
-                    echo "  paths, even where the version is identical."
                     other_added=true
                     added+=("$attr")
+                    report+=("$attr"$'\t'"added"$'\t'"from the $want_channel channel -- it brings its own closure; the two channels share no store paths")
                     continue
                   fi
 
@@ -2005,30 +2029,51 @@ in
                   fi
                   added+=("$attr")
 
-                  echo "added $attr ($(jq -r .name <<<"$info")) -- $(jq -r '.description // ""' <<<"$info")"
+                  flags=""
                   if [ "$(jq -r .unfree <<<"$info")" = true ]; then
                     if [ "$allowunfree" = true ]; then
-                      echo "  unfree: fine here -- this machine allows unfree packages."
+                      flags=" [unfree -- fine here, this machine allows it]"
                     else
                       # The minority case (#497): allowUnfree defaults on, so
                       # reaching this line means somebody turned it off on
                       # purpose. Collect the pname (what allowUnfreePredicate
                       # matches on), and offer the narrow grant after the loop.
-                      echo "  unfree, and this machine sets allowUnfree = false: the rebuild will refuse it."
+                      flags=" [unfree -- allowUnfree = false here, the rebuild will refuse it]"
                       pn=$(jq -r '.pname // ""' <<<"$info")
                       unfree_hits+=("''${pn:-$attr}")
                     fi
                   fi
                   if [ "$(jq -r .broken <<<"$info")" = true ]; then
-                    echo "  marked broken in nixpkgs: expect the build to fail."
+                    flags="$flags [broken in nixpkgs -- expect the build to fail]"
                   fi
+                  report+=("$attr"$'\t'"added"$'\t'"$(jq -r .name <<<"$info") -- $(jq -r '.description // ""' <<<"$info")$flags")
                 done
+
+                # One report for the whole batch, one row per name asked for
+                # (#496): every outcome side by side, so a typo among five good
+                # names is visible without costing the other four.
+                printf '%s\n' "''${report[@]}" |
+                  awk -F'\t' '{ printf "  %-28s %-9s %s\n", $1, $2, $3 }'
 
                 # Names that resolved nowhere, with a picker available: hand them
                 # to it, pre-filtered, so a typo becomes a fuzzy match. exec, so
                 # this only runs once everything above is committed or reverted.
+                # Without a picker (no tty, or this run IS the picker's writer,
+                # where a miss is an index bug -- #492), the guidance is printed
+                # instead and the exit code says something failed; whatever did
+                # resolve is already committed above.
                 open_missed() {
                   [ ''${#missed[@]} -gt 0 ] || return 0
+                  if ! can_pick; then
+                    echo "nixpkgs has no package matching: ''${missed[*]}" >&2
+                    echo >&2
+                    echo "Search for the right name:" >&2
+                    echo "  nixarchy-search ''${missed[*]}" >&2
+                    echo >&2
+                    echo "If nixpkgs genuinely does not have it, draft a package from its source:" >&2
+                    echo "  nixarchy pkg new <url>" >&2
+                    exit 1
+                  fi
                   echo "no exact match for ''${missed[*]} -- opening the picker on it"
                   # Said here, before exec, because the picker itself cannot:
                   # its miss is fzf exiting empty, and no script runs after
@@ -2658,11 +2703,16 @@ in
                   echo "then run 'nixarchy-apply'"
                 }
 
+                pkg_batch=()
                 while IFS=$'\t' read -r kind name _ type _; do
                   [ -n "$kind" ] || continue
                   case "$kind" in
                     app) nixarchy-app-enable "$name" && changed=1 ;;
-                    pkg) nixarchy-pkg-add "$name" && changed=1 ;;
+                    # Collected, not dispatched one by one: pkg-add resolves its
+                    # names in a single nixpkgs evaluation and sends a single
+                    # notification, so a multi-select must arrive as one call
+                    # to get one of each rather than N (#496).
+                    pkg) pkg_batch+=("$name") ;;
                     opt) add_option "$name" "$type" ;;
                     # nixarchy-service-enable, not a flatpak-specific command:
                     # the rows live in services.nix and carry the same #@ markers,
@@ -2690,6 +2740,16 @@ in
                       ;;
                   esac
                 done <<< "$selection"
+
+                if [ ''${#pkg_batch[@]} -gt 0 ]; then
+                  # Judged by the file, not the exit code: pkg-add exits
+                  # nonzero when ANY name missed, and inside the picker a miss
+                  # is an index bug -- but the names that did resolve are
+                  # committed, and they still deserve the summary below.
+                  pre=$(cksum < "$file")
+                  nixarchy-pkg-add "''${pkg_batch[@]}" || true
+                  [ "$pre" = "$(cksum < "$file")" ] || changed=1
+                fi
 
                 [ "$changed" = 1 ] || exit 0
 

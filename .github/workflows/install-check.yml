@@ -78,8 +78,8 @@ concurrency:
   # against a main that lacked the other. With the SHA in the group each merge
   # gets a group of its own, which nothing can supersede. The cost is the one
   # build.yml already accepted -- a burst of merges queues rather than drops,
-  # and the job-level `nixarchy-install-vm` group below still keeps the VM to
-  # one at a time.
+  # and the job-level `nixarchy-install-vm-{1,2}` slot groups below still cap
+  # the install VMs at two at a time.
   group: >-
     install-check-${{ github.ref }}-${{
       github.ref == 'refs/heads/main' && github.sha || 'shared' }}
@@ -109,6 +109,7 @@ jobs:
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
       runner: ${{ steps.filter.outputs.runner }}
+      slot: ${{ steps.filter.outputs.slot }}
     steps:
       # This job used to need no checkout at all -- it asked the API for the
       # file list and decided from that. It needs one now only because the
@@ -170,13 +171,25 @@ jobs:
             echo 'runner=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
           fi
 
-          echo "relevant=$relevant" >> "$GITHUB_STEP_SUMMARY"
+          # Which of the two VM slot groups this ref belongs to (#555).
+          # Computed here in shell because workflow expressions have no
+          # string-hash function -- hashFiles hashes files, not strings.
+          # cksum is POSIX and stable across runs, so a given ref always
+          # lands in the same slot: a PR's re-runs queue behind themselves,
+          # never migrate to the other slot, and main always maps to one
+          # fixed slot. The reasoning for two -- and only two -- is on the
+          # `install` job's concurrency block below.
+          slot=$(( ($(printf %s "$GITHUB_REF" | cksum | cut -d' ' -f1) % 2) + 1 ))
+          echo "slot=$slot" >> "$GITHUB_OUTPUT"
+
+          echo "relevant=$relevant slot=$slot" >> "$GITHUB_STEP_SUMMARY"
 
   install:
     name: install
     needs: gate
 
-    # One install VM at a time, machine-wide.
+    # At most TWO install VMs at a time, fleet-wide -- two slot groups, not
+    # one, and not three.
     #
     # This job boots a nested QEMU VM and runs an installer inside it against a
     # THIRTY MINUTE budget -- tests/install.nix:495, `timeout=1800`. That budget
@@ -231,30 +244,44 @@ jobs:
     # change.
     #
     # So an irrelevant run gets its own private group and reports success in
-    # seconds without ever touching the shared slot. Every property the block
-    # below defends is untouched: a RELEVANT run still lands in
-    # `nixarchy-install-vm`, still one at a time, machine-wide.
+    # seconds without ever touching the shared slots.
     #
-    # And that means the eviction described above STILL APPLIES to relevant
-    # runs (#555) -- #548's fix covered only the runs the gate rules
-    # irrelevant. GitHub retains one pending job per group, so with one
-    # relevant run building and two waiting, each newcomer evicts whoever was
-    # queued. More than one pending run is the normal state here, not an edge
-    # case. The evicted job reports `cancelled`, which renders as a failure
-    # and SILENTLY DISABLES AUTO-MERGE on that PR; re-running cannot clear it,
-    # because the workflow-level PR group reaps the re-run within a second of
-    # the gate finishing. The only escape is a new head commit. A real fix is
-    # a small pool of slot groups sized to the runners that can take the work,
-    # but that changes the contention model the measurements above defend
-    # (2 concurrent succeed, 3-4 fail), so it wants doing against real numbers
-    # -- #555 tracks it. Until then this hole is documented, not closed.
+    # RELEVANT runs land in one of TWO slot groups, and #555 is why it is two
+    # rather than the single constant #548 left behind. The single group
+    # capped concurrency at one when the measurement above says two is safe --
+    # and it destroyed the runs it excluded rather than delaying them: GitHub
+    # retains one PENDING job per group (a RUNNING job blocks nothing), so
+    # with one relevant run building and two waiting, each newcomer evicted
+    # whoever was queued. Measured on 2026-09-10, driving eight PRs through
+    # the mutex: #553, #563, #571, #572 and #580 all reported `cancelled`
+    # without being broken, which SILENTLY DISABLES AUTO-MERGE, and re-running
+    # cannot clear it because the workflow-level PR group reaps the re-run
+    # within a second of the gate finishing. The only escape was a new head
+    # commit.
+    #
+    # The slot is `cksum(github.ref) % 2`, computed by the gate (workflow
+    # expressions have no string hash). Deterministic per ref: a branch never
+    # changes slot between pushes, and main always occupies the same one. Two
+    # groups admit at most two concurrent installs -- exactly the measured
+    # ceiling, never the 3-4 that all fail. Do not add a third slot without a
+    # new measurement.
+    #
+    # What this does NOT solve, stated so nobody reads it as solved: the
+    # one-pending-job rule still applies WITHIN each slot. Three relevant PRs
+    # hashed to the same slot still evict each other's pending jobs, and a
+    # pending main install shares that fate with whatever PRs share its slot
+    # -- the workflow-level per-commit group (#561/#563) protects main's RUN
+    # from cancellation, not its install job's place in this queue. Hashing
+    # halves the collision population; it does not repeal the rule. The full
+    # fix would be a scheduler that queues arbitrarily deep, which GitHub
+    # does not offer -- #555 stays open on the residue.
     #
     # `needs` is available in a job-level `concurrency:` -- that is what makes
     # this expressible at all, and it is the same context `runs-on` below
     # already reads for the runner labels. The two must agree: a run that asks
     # for a hosted runner must not hold the VM group.
     concurrency:
-      group: ${{ needs.gate.outputs.relevant == 'true' && 'nixarchy-install-vm' || format('install-noop-{0}', github.ref) }}
+      group: ${{ needs.gate.outputs.relevant == 'true' && format('nixarchy-install-vm-{0}', needs.gate.outputs.slot) || format('install-noop-{0}', github.ref) }}
       cancel-in-progress: false
 
     # No `if:` on this job, and that is the whole fix -- measured, not assumed.

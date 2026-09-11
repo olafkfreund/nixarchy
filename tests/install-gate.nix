@@ -65,10 +65,41 @@ pkgs.runCommand "nixarchy-install-gate"
     # ever flips to false, a README whose counts disagree with data/ merges
     # without the omarchy job ever looking at it.
     t "README still builds"                    "" "README.md" true
-    t "docs still do not"                      "" "docs/manual/android.md" false
     t "the gate itself always does"            "" ".github/scripts/pr-touches-build.sh" true
     t "a nested AGENTS.md builds nothing"      "" "modules/AGENTS.md" false
     t "install-check.yml always does"          "" ".github/workflows/install-check.yml" true
+
+    # This line used to read `t "docs still do not" "" "docs/…" false`, and it
+    # was asserting the ARRANGEMENT rather than the property -- it made a real
+    # hole look deliberate. Eight derivations take `docs/` or
+    # `.github/scripts/` as INPUTS, so both provably CAN change a derivation,
+    # which is the one thing the denylist promises its entries cannot do.
+    #
+    # A pull request editing only `omarchy-config-delta.sh` answered `false`,
+    # so `checks.config-delta` -- the check whose entire job is testing that
+    # script -- never ran on it. Same shape for package-delta, patched-files,
+    # release-notes, bin-ledger, swap-guard and doc-options.
+    #
+    # `doc-options` reads `${../docs}` WHOLESALE, so this cannot be narrowed
+    # to the doc files named in a grep: any page can move that output.
+    echo "derivation inputs are not deniable (the build question):"
+    t "a delta script builds"                  "" ".github/scripts/omarchy-config-delta.sh" true
+    t "so does the package delta"              "" ".github/scripts/omarchy-package-delta.sh" true
+    t "so does the patched-files script"       "" ".github/scripts/omarchy-patched-files.sh" true
+    t "so do the release notes"                "" ".github/scripts/release-notes.sh" true
+    t "so does the ledger checker"             "" ".github/scripts/check-bin-ledger.py" true
+    t "a manual page builds (doc-options)"     "" "docs/manual/android.md" true
+    t "so does the troubleshooting page"       "" "docs/manual/troubleshooting.md" true
+    # A workflow file still cannot change a derivation, so the rest of
+    # `.github/` stays denied -- narrowing this arm must not widen that one.
+    t "an unrelated workflow still does not"   "" ".github/workflows/release.yml" false
+
+    echo "and none of them runs the install VM:"
+    # The expensive saving is the one that must survive this change: the three
+    # checks the install job builds import only ./hardware-configuration.nix
+    # and ./test-instrumentation.nix, so none of these can reach an install.
+    t "a delta script does not"                --install ".github/scripts/omarchy-config-delta.sh" false
+    t "the troubleshooting page does not"      --install "docs/manual/troubleshooting.md" false
 
     echo "fails safe:"
     # An empty list means the question could not be answered -- a paginated API

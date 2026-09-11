@@ -15,6 +15,34 @@ let
     rev = "553638f04efc12f4439debd413eaf3ac838a1f9a";
     hash = "sha256-DkuuYlxYYh4hZrL+2dUVnrlxfP3uXsbuIJWRVaZcmGk=";
   };
+
+  # A downloaded binary, faithfully: FHS interpreter, no rpath, and a
+  # DT_NEEDED on libGL.so.1 -- the exact library of the #566 ImportError,
+  # in modules/nixos.nix's nix-ld set and NOT in nixpkgs' base set, so it
+  # only resolves if OUR contribution reaches the loader. Everything #572
+  # shipped was asserted at evaluation only; this is the first time a
+  # binary actually starts under the stub loader.
+  loaderProbe =
+    pkgs.runCommandCC "loader-probe"
+      {
+        buildInputs = [ pkgs.libGL ];
+        nativeBuildInputs = [ pkgs.patchelf ];
+      }
+      ''
+        cat > probe.c <<'EOF'
+        #include <stdio.h>
+        int main(void) { puts("loader-probe: libGL loaded"); return 0; }
+        EOF
+        mkdir -p $out/bin
+        # --no-as-needed, or the linker drops the unused libGL and the
+        # probe passes forever with nix-ld gone -- the exact green light
+        # CLAUDE.md section 1 is about. The print-needed grep below is the
+        # guard on that guard.
+        cc -o $out/bin/loader-probe probe.c -Wl,--no-as-needed -lGL
+        patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 \
+          --remove-rpath $out/bin/loader-probe
+        patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1
+      '';
 in
 # Drives a real Omarchy session and reports what it logged.
 #
@@ -184,6 +212,45 @@ pkgs.testers.runNixOSTest {
     machine.succeed("grep -q 'brave.enable' /etc/nixos/nixarchy/apps.nix")
     machine.succeed("grep -q './nixarchy/apps.nix' /etc/nixos/nixarchy-apps.nix")
     print("selection reached /etc/nixos/nixarchy/apps.nix, and the stub imports it")
+
+    # ---- the loader hatches actually open (#572) -------------------------
+    # Deliberately before anything graphical, like the block above: nix-ld
+    # and envfs are multi-user.target properties, and a local run of this
+    # check dies later at the wallpaper comparison, so pre-greeter is the
+    # only place a developer can still watch these fail.
+    #
+    # `su - omarchy`, a login shell, because that is where a user runs a
+    # downloaded binary: NIX_LD_LIBRARY_PATH arrives via /etc/set-environment,
+    # which the test driver's backdoor shell never sources.
+    probe = machine.succeed(
+        "su - omarchy -c '${loaderProbe}/bin/loader-probe' 2>&1")
+    print(f"loader probe: {probe.strip()!r}")
+    assert "loader-probe: libGL loaded" in probe, (
+        "a binary with an FHS interpreter and a DT_NEEDED on libGL.so.1 did "
+        "not start; the nix-ld library set is not reaching the stub loader: "
+        + probe)
+
+    # envfs: the two paths every foreign script hardcodes. /bin/sh exists on
+    # bare NixOS, so it proves nothing; /bin/bash and /usr/bin/env exist only
+    # if envfs is mounted and resolving.
+    machine.succeed("/bin/bash -c 'echo envfs resolved /bin/bash'")
+    machine.succeed("/usr/bin/env true")
+    print("envfs resolves /bin/bash and /usr/bin/env")
+
+    # AppImage: only the binfmt registration is asserted -- the kernel will
+    # hand an AppImage to the wrapper. Running a real AppImage would need one
+    # built hermetically in-sandbox, and a fake with the right magic bytes
+    # would test appimage-run's error path, not the feature. Execution stays
+    # unproven; this line is the honest boundary.
+    # Two registrations, by ELF magic: nixpkgs' programs.appimage names them
+    # appimage_type_1 and appimage_type_2. Asserting a single "appimage" entry
+    # was tried first and failed on this exact line -- the name was wrong, and
+    # the failure is what said so.
+    for reg in ("appimage_type_1", "appimage_type_2"):
+        binfmt = machine.succeed("cat /proc/sys/fs/binfmt_misc/" + reg)
+        print(reg + ": " + binfmt.splitlines()[0])
+        assert "enabled" in binfmt, (
+            "the " + reg + " binfmt registration is not enabled: " + binfmt)
 
     # ---- the menu extension belongs to the user (#210) ------------------
     # Omarchy reads two menu files and merges the second over the first: the

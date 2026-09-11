@@ -543,24 +543,39 @@ the alternative is guessing which of a machine's users logs into the
 desktop.
 
 <a id="docker-is-enabled-above-at-mkdefault-for-every-mac"></a>
-### Docker is enabled above, at mkDefault, for every machine
+### Docker runs rootless, and that is why there is no group
 
 ```nix
-++ lib.optional config.virtualisation.docker.enable "docker";
+virtualisation.docker.enable = lib.mkDefault false;
+virtualisation.docker.rootless.enable = lib.mkDefault (!config.virtualisation.docker.enable);
 ```
 
-Docker is enabled above, at mkDefault, for every machine. Enabled and
-unusable, until now: without this group every command wants sudo, and
-`docker ps` answers "permission denied while trying to connect to the
-Docker daemon socket" -- which reads like a broken install rather than
-a missing group.
+The rooted daemon's socket is owned by root, so the only way `docker ps`
+works without sudo is the `docker` group -- and that group is
+passwordless root for anything running as the user, which on a desktop
+means a browser, a postinstall script, any dependency in any shell.
+`docker run -v /:/host` is the whole exploit. It grants no capability
+the user lacks (they are in `wheel`); what it removes is the prompt.
 
-The installer has always put its user in `docker` directly
-(installer/host.nix), so this was only ever wrong for someone adding
-nixarchy to a machine they already run: they got the daemon and not
-the access. Conditioned on the option rather than set unconditionally,
-so turning Docker off does not leave a group behind that grants root
-to whatever installs a socket there later.
+This was the arrangement here until #617/#618. The group was added
+conditionally in this file *and* listed outright in
+`installer/host.nix` -- so the conditional, whose entire purpose was
+that "turning Docker off does not leave a group behind that grants root
+to whatever installs a socket there later", was defeated on every
+machine the installer built. Both halves are fixed together: the
+default is rootless, and `host.nix` no longer names the group.
+
+Rootless is gated on the rooted daemon being off rather than set flat.
+Somebody who turns Docker back on -- devcontainers, a port below 1024 --
+gets the classic arrangement and the group with it, because Docker
+enabled and unusable reads as a broken install. They must not get both:
+`setSocketVariable` would otherwise point their `DOCKER_HOST` at a
+second daemon they never asked for.
+
+`tests/options.nix` asserts both states. The check that lived here
+previously asserted the user *was* in the group; it was correct for the
+old default and was retargeted rather than satisfied, which is the
+distinction CLAUDE.md §1 draws.
 
 <a id="default-fontconfig-conf-avail-50-omarchy-conf-whic"></a>
 ### default/fontconfig/conf.avail/50-omarchy.conf, which upstream symlinks

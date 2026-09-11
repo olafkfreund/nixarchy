@@ -42,7 +42,9 @@
 # modules/nixos.nix enables these for every nixarchy machine, at mkDefault, so
 # a catalogue entry would be an option that changes nothing:
 #
-#   virtualisation.docker.enable        nixos.nix:705
+#   virtualisation.docker.rootless      nixos.nix (the ROOTED daemon is off by
+#                                       default: its socket needs the `docker`
+#                                       group, which is passwordless root)
 #   services.printing.enable            nixos.nix:634
 #   services.avahi.{enable,nssmdns4}    nixos.nix:635-639
 #

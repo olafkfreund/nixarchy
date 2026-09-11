@@ -1186,6 +1186,13 @@ fi
 say ""
 
 for unit in docker.service NetworkManager.service; do
+  # Docker's default here is ROOTLESS, so the system docker.service is off on a
+  # stock machine and its absence says nothing. The daemon is a *user* unit of
+  # the same name; without this arm the doctor reported "docker is off here" on
+  # every correctly configured desktop.
+  if [ "$unit" = docker.service ] && systemctl --user is-enabled docker.service >/dev/null 2>&1; then
+    continue
+  fi
   if ! systemctl is-enabled "$unit" >/dev/null 2>&1; then
     say "  ${dim}${unit%.service} is off here; nixarchy defaults it on but defers to you.${off}"
   fi

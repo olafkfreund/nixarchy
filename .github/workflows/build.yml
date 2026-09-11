@@ -629,7 +629,7 @@ jobs:
       # a reading order is a judgement, whether it is reachable at all is not.
       - name: Every manual page is in the sidebar
         run: |
-          pages=$(ls docs/manual/*.md | xargs -n1 basename |
+          pages=$(basename -a docs/manual/*.md |
             sed 's/\.md$//' | grep -v '^index$' | sort)
           nav=$(grep -oE 'path: /manual/[a-z-]+' docs/_config.yml |
             sed 's|path: /manual/||' | sort -u)

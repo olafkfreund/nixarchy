@@ -293,6 +293,14 @@
             # sed on JSON is how a check starts reporting confidently wrong
             # things the first time nix reformats a lock.
             jq
+            # ldd, for the dynamic-link section. Undeclared, every binary it
+            # inspects would read as "could not be checked" -- the vainfo trap
+            # again, one section down.
+            glibc
+            # --print-interpreter distinguishes "statically linked, fine" from
+            # "asks for /lib64/ld-linux..., which nix-ld has not provided" --
+            # ldd alone reports both as "not a dynamic executable".
+            patchelf
           ];
           # @apps@ is the app-to-command table, generated here for the same
           # reason the menu's is: the doctor has to answer "which of these do
@@ -1514,6 +1522,14 @@
           # no-wlan0 cases can occur there at all. Two users hit them in one
           # week and neither could tell which they had.
           doctor-wireless = import ./tests/doctor-wireless.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+          };
+
+          # The dynamic-link check, against binaries built broken on purpose.
+          # No CI machine keeps a wheel missing libGL in ~/.local/bin, so
+          # these branches exist nowhere else -- see tests/doctor-ldd.nix.
+          doctor-ldd = import ./tests/doctor-ldd.nix {
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) doctor;
           };

@@ -113,6 +113,29 @@ without direnv. It is off by default and it costs a second lockfile;
 [Per-project environments](per-project-environments) is the whole story,
 including when not to.
 
+## Two tools that are not toolchains
+
+Both are rows in _Install ▸ Development_, and neither is a language, so
+neither is in the table above.
+
+**Git LFS** is selected as a NixOS option rather than a bare package, and
+the difference matters. Installing the binary alone is a trap: `git-lfs` only
+does anything once its filter configuration is written, and until then a clone
+of a repository using LFS **silently hands you pointer files instead of
+content** — a few lines of text where the asset should be. Nothing errors. The
+checkout looks corrupt rather than incomplete, which is why people lose an
+afternoon to it. Selecting the row turns on `programs.git.lfs`, which installs
+the package *and* writes `filter.lfs` into the system git configuration, so
+`git lfs install` is never something you have to know about.
+
+**`uv`** is the Python package and project manager. The `python` devenv preset
+already pins its own copy per project, so this row is the machine-wide one —
+for `uv tool install`, `uvx`, and the quick script that is not a project yet.
+If what you want is a project with a pinned interpreter, use
+[per-project environments](per-project-environments); if what you want is
+`pip install` to work at all, [Python](python) is the page that explains why
+it sometimes does not.
+
 ## Docker
 
 Docker and Docker Compose are enabled by `virtualisation.docker.enable`,

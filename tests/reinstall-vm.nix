@@ -30,14 +30,14 @@
 # interface holds: read the marker cd.nix wrote and compare it to the
 # toplevel this file built, not to a name borrowed from either side.
 #
-# What is still owed, so the next reader does not have to work it out: this
-# check is written, wired, and scheduled, and has not yet been watched through
-# a green end-to-end run -- boot, CARRIED, INSTALLED, OFFLINE, and back up into
-# the reinstalled closure. It is in `nightly_only` because it builds a SECOND
-# full image, so the run that can answer is the nightly, not a pull request.
-# #478's remaining child stays open until one is green; a check that has never
-# completed is a claim, and this file's whole argument is that a claim is not
-# evidence.
+# The debt the paragraph above used to describe is paid: the nightly of
+# 2026-09-11 (run 34557396063) ran this file end to end and every marker came
+# back 0 -- CARRIED, INSTALLED under --max-jobs 0, COPIED, OFFLINE, SAME,
+# BOOTENTRY -- and the reinstalled closure booted to multi-user on its own
+# disk. It stays in `nightly_only` because it builds a SECOND full image, so
+# the nightly is the run that answers, not a pull request. And it has been
+# seen failing as well as passing: its first run is what found #514, so this
+# is a check in the AGENTS.md 1 sense, not a green light.
 # ---------------------------------------------------------------------------
 #
 # Everything about DRIVING the machine -- no test instrumentation, send_chars

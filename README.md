@@ -1930,9 +1930,22 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | --- | --- | --- |
 | [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
 | [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
-| [#566](https://github.com/olafkfreund/nixarchy/issues/566) | **The escape hatches** — a downloaded binary finds its libraries, `/bin` and `/usr/bin` resolve, AppImages run, and software in no repository gets a draft derivation you own | 7 filed |
 
 **Recently finished:**
+[the escape hatches](https://github.com/olafkfreund/nixarchy/issues/566)
+— the moment that breaks NixOS is running a binary somebody else compiled, and
+`pip install` succeeding then dying on `libGL.so.1` is the shape of it. `nix-ld`
+was already on; its library list was whatever nixpkgs defaulted to. It now
+carries a deliberate set, `envfs` resolves `/bin` and `/usr/bin`, AppImages are
+registered with the kernel, and `nixarchy doctor <file>` names the library a
+binary cannot find. Proved on a booted machine rather than in evaluation: a
+probe linked against `libGL`, its interpreter patched to `/lib64/ld-linux`, runs
+in `checks.session` — and was watched failing first. `nixarchy pkg new <url>`
+answers the other half, drafting a package for software in no repository,
+building it, and offering it commented out for review, because a generated
+derivation that does not compile is worse than none. Nine children closed.
+Executing an AppImage is still untested, and the announcement says so.
+Also
 [choose a channel](https://github.com/olafkfreund/nixarchy/issues/525)
 — stable or unstable, from *Update ▸ Channel*, moving nixpkgs and
 home-manager together because neither project supports the mismatch. All seven

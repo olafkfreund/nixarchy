@@ -110,7 +110,37 @@ pkgs.runCommand "nixarchy-pkg-new"
 
     if o=$(bash pkg-new.sh https://example.org/x/tool 2>&1); then
       fail "an existing draft was overwritten"
-    else ok "an existing draft refuses a redraft"; fi
+    else
+      ok "an existing draft refuses a redraft"
+      printf '%s' "$o" | grep -q -- '--update' \
+        && ok "the refusal names --update as the deliberate way" \
+        || fail "the refusal does not say how to redraft on purpose"
+    fi
+
+    # -- --update redrafts over the existing draft -------------------------
+    echo '# my edits' >> "$draft"
+    lines_before=$(grep -c '#@draft tool$' "$cfg/apps.nix")
+    if ! o=$(bash pkg-new.sh --update https://example.org/x/tool 2>&1); then
+      printf '%s\n' "$o" | sed 's/^/          | /'
+      fail "--update did not redraft over an existing draft"
+    else
+      grep -q '# my edits' "$draft" \
+        && fail "--update kept the old draft instead of redrafting" \
+        || ok "--update replaced the draft with a fresh one"
+      [ "$lines_before" = "$(grep -c '#@draft tool$' "$cfg/apps.nix")" ] \
+        && ok "--update did not duplicate the apps.nix line" \
+        || fail "--update wrote a second #@draft line into apps.nix"
+    fi
+
+    # -- --update, but nix-init fails: the edited draft comes back ---------
+    echo '# my edits' >> "$draft"
+    if o=$(STUB_INIT_FAIL=1 bash pkg-new.sh --update https://example.org/x/tool 2>&1); then
+      fail "--update reported success though nix-init failed"
+    elif grep -q '# my edits' "$draft"; then
+      ok "a failed --update gives the edited draft back"
+    else
+      fail "a failed --update traded the edited draft for nothing"
+    fi
 
     # -- the build fails: reported as a failure, draft KEPT ----------------
     rm -rf "$cfg"; mkapps

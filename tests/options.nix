@@ -2673,6 +2673,48 @@ pkgs.runCommand "nixarchy-options"
         fi
         echo "an added package can be removed, byte for byte"
 
+        # A draft (#581). nixarchy-pkg-new needs a network to run for real,
+        # so the add is simulated with the writer's own byte shape -- and the
+        # grep below pins the WRITER's format string, so if pkg-new changes
+        # what it writes, this goes red here rather than drifting apart
+        # silently. Undraft must be the exact inverse, and must also take the
+        # line after the user uncommented it: the marker is the anchor, not
+        # the comment.
+        grep -qF -- '  #@draft $name' "$vm/sw/bin/nixarchy-pkg-new" || {
+          echo "nixarchy-pkg-new no longer writes '...  #@draft <name>'" >&2
+          echo "  update the simulated draft add below to the new shape" >&2
+          exit 1
+        }
+        simulate_draft() {
+          tmp2=$(mktemp)
+          awk -v line="$1" '
+            /#@pkgs-end/ && !done { print line; done = 1 }
+            { print }
+          ' "$appfile" > "$tmp2"
+          mv "$tmp2" "$appfile"
+        }
+        draftbase=$(cksum < "$appfile")
+        simulate_draft '    # (callPackage ./packages/tool.nix { })  #@draft tool'
+        run nixarchy-pkg-undraft tool >/dev/null
+        [ "$draftbase" = "$(cksum < "$appfile")" ] || {
+          echo "draft add/undraft is not symmetric for the commented line pkg-new writes" >&2
+          exit 1
+        }
+        simulate_draft '    (callPackage ./packages/tool.nix { })  #@draft tool'
+        run nixarchy-pkg-undraft tool >/dev/null
+        [ "$draftbase" = "$(cksum < "$appfile")" ] || {
+          echo "draft add/undraft is not symmetric for a line the user uncommented" >&2
+          exit 1
+        }
+        # A name that is not there must change nothing and say so.
+        if run nixarchy-pkg-undraft no-such-draft >/dev/null 2>&1; then
+          echo "nixarchy-pkg-undraft succeeded on a draft that is not in the file" >&2
+          exit 1
+        fi
+        [ "$draftbase" = "$(cksum < "$appfile")" ] || {
+          echo "a refused undraft still changed the file" >&2; exit 1; }
+        echo "a drafted line can be un-drafted, byte for byte, commented or live"
+
         # An option. add_option lives inside nixarchy-search's fzf loop and
         # cannot be driven without a tty, so the add is simulated with the
         # writer's own byte shapes -- and those two greps below pin the
@@ -2729,7 +2771,7 @@ pkgs.runCommand "nixarchy-options"
         # different coat. Comments stripped first; match the greps and the
         # dispatch, not prose.
         appremove=$(grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-app-remove")
-        for needle in '#@pkg ' '#@opt ' nixarchy-pkg-remove nixarchy-opt-remove; do
+        for needle in '#@pkg ' '#@opt ' '#@draft ' nixarchy-pkg-remove nixarchy-opt-remove nixarchy-pkg-undraft; do
           printf '%s' "$appremove" | grep -qF -- "$needle" || {
             echo "nixarchy-app-remove does not handle $needle:" >&2
             echo "  the Remove menu is then blind to a kind the Install picker writes" >&2
@@ -2783,6 +2825,27 @@ pkgs.runCommand "nixarchy-options"
             ;;
         esac
         echo "nixarchy pkg new routes to nixarchy-pkg-new"
+
+        # And `pkg undraft`, in the same shape: advertised, routed, and the
+        # route proven by reaching the command's own refusal.
+        grep -q 'nixarchy pkg undraft' "$vm/sw/bin/nixarchy" || {
+          echo "the dispatcher's usage does not advertise 'nixarchy pkg undraft'" >&2
+          exit 1
+        }
+        if r=$(run "$vm/sw/bin/nixarchy" pkg undraft nosuchdraft 2>&1); then
+          echo "nixarchy pkg undraft succeeded on a draft that is not in the file:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"no draft 'nosuchdraft'"*) ;;
+          *)
+            echo "nixarchy pkg undraft did not reach nixarchy-pkg-undraft; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy pkg undraft routes to nixarchy-pkg-undraft"
 
           touch $out
       ''

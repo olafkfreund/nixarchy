@@ -100,6 +100,24 @@ touches `installer/disk-config.nix`. Both an online and an offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
+## The stub-only one: `pkg-new` never runs a real nix-init here
+
+`tests/pkg-new.nix` drives the real `pkgs/pkg-new.sh` against **stub**
+`nix-init` and `nix`, because the real ones fetch and a sandboxed derivation
+has no network. The stubs are enough for the script's own promises — the
+draft kept on a failed build, the placeholder cargoHash filled in from the
+failed build's `got:` line, the apps.nix edit staying inside the
+`#@pkgs-end` block — but they imitate nix-init's output rather than produce
+it. Whether `nix-init --headless` still drafts something buildable from a
+real repository, with the real GitHub API and the real hash-mismatch text,
+no check here can say.
+
+That real run lives in `.github/workflows/nightly.yml` (`pkg-new` job): it
+drafts hexyl at a pinned tag with real nix-init and builds the draft.
+Non-gating, per-night, filed as its own issue by the report job — a job
+rather than a check for the same reason devenv-presets is (see build.yml's
+comment on that job).
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

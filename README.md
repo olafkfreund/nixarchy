@@ -43,6 +43,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[Look before you switch](https://olafkfreund.github.io/nixarchy/manual/preview)** | `nixarchy preview` boots the pending configuration in a VM window |
 | **[Disposable VMs](https://olafkfreund.github.io/nixarchy/manual/sandboxes)** | `nixarchy vm run` |
 | **[Arch or Debian, when NixOS will not do](https://olafkfreund.github.io/nixarchy/manual/boxes)** | `nixarchy box create` |
+| **[Run the binary you just downloaded](https://olafkfreund.github.io/nixarchy/manual/python)** | `nix-ld`, `envfs` and AppImages, on by default — `nixarchy-doctor <binary>` names what is still missing |
 | **[Get this machine back](https://olafkfreund.github.io/nixarchy/manual/reinstall-image)** | `nixarchy reinstall iso` — an install image built from your own configuration |
 | **[One flake, many machines](https://olafkfreund.github.io/nixarchy/manual/many-machines)** | roll a change out to a fleet from one repository |
 | **[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)** | `Update ▸ Channel`, per machine or per package |
@@ -109,6 +110,7 @@ sandboxes, themes and plugins, throughout
 | **Boxes** | `nixarchy box create dev --template archlinux` drops you into an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
 | **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](docs/manual/remote-desktop.md). Off by default |
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
+| **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](docs/manual/python.md). **On by default** |
 | Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
 | **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a hands-on tour, an offline manual search and a tutor grounded in your machine, offered in the bar — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
 | **Agent skills** | from `nixarchy` and `nixos` to `nixos-gpu` and `nixos-android` — rewritten for NixOS, not Omarchy's Arch originals |

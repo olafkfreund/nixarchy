@@ -636,7 +636,75 @@ in
       };
 
       # Why: modules/AGENTS.md#mise-is-in-omarchys-base-packages-and-its-dev-env-
-      nix-ld.enable = lib.mkDefault true;
+      nix-ld = {
+        enable = lib.mkDefault true;
+
+        # What a desktop's downloaded binaries actually dlopen. Plain
+        # assignment: this MERGES with nixpkgs' own base set (zlib, openssl,
+        # libxml2, curl, systemd, ...), it does not replace it -- and
+        # mkDefault here would silently drop the whole list the moment a
+        # user adds one library of their own (see modules/services/
+        # default.nix). Each entry names what dies without it, in the same
+        # register as pkgs/omarchy/default.nix's runtime list: a missing
+        # library is a runtime ImportError no build ever sees.
+        libraries = with pkgs; [
+          # libstdc++/libgcc_s -- nearly every C++ or Rust prebuilt binary;
+          # without it the loader stops at libstdc++.so.6. In nixpkgs' base
+          # set too, but it is the one entry nothing here can afford to lose
+          # to upstream drift.
+          stdenv.cc.cc.lib
+          # libGL.so.1 -- the #566 ImportError: anything that renders, from
+          # matplotlib and opencv wheels to downloaded games.
+          libGL
+          # Wayland client socket -- this is a Wayland desktop; a prebuilt
+          # GUI binary that speaks Wayland needs libwayland-client.so.0.
+          wayland
+          # Keyboard maps for both Wayland and X clients (libxkbcommon.so.0);
+          # SDL and GLFW binaries fail to create a window without it.
+          libxkbcommon
+          # The X client stack, for everything that runs under XWayland:
+          # Electron, Java AWT, SDL/GLFW games. libX11 is the core protocol;
+          # the rest are the extensions Chromium's own sandbox probes for.
+          xorg.libX11
+          xorg.libxcb
+          xorg.libXcursor
+          xorg.libXrandr
+          xorg.libXi
+          xorg.libXext
+          # Text on screen: fontconfig finds the fonts, freetype rasterises
+          # them. A GUI binary without them renders blank labels or aborts.
+          fontconfig
+          freetype
+          # GObject/GIO (libglib-2.0.so.0) -- Electron, GTK-adjacent
+          # binaries, and gdk-pixbuf loaders all pull it in.
+          glib
+          # NSS/NSPR -- Chromium's TLS stack; every Electron app dlopens
+          # libnss3.so at startup and exits without it.
+          nss
+          nspr
+          # libasound.so.2 -- sound for games and Electron; PipeWire serves
+          # the ALSA API but the client library still has to exist.
+          alsa-lib
+          # libav*/libsw* -- media wheels (pyav, opencv-python's videoio,
+          # torchaudio) link these rather than bundling them.
+          ffmpeg
+          # In nixpkgs' base set today, but load-bearing enough to pin here
+          # deliberately: libz (Pillow, every compressed asset), libssl/
+          # libcrypto (anything speaking TLS), libxml2 (lxml and friends).
+          zlib
+          openssl
+          libxml2
+        ];
+      };
+
+      # The AppImage rung of #566's ladder: binfmt registration is what makes
+      # a downloaded AppImage double-clickable rather than "run it through
+      # appimage-run", which nobody who just downloaded one knows to do. The
+      # wrapper extracts and runs it against the nix-ld set above.
+      appimage = {
+        enable = lib.mkDefault true;
+        binfmt = lib.mkDefault true;
+      };
 
       # See programs.nixarchy.bashIntegration. This lands in /etc/bashrc, which
       # bash sources BEFORE ~/.bashrc, so a user's own aliases still win.
@@ -832,6 +900,13 @@ in
     # mkForce their way out one option at a time. Their setting wins now, and
     # they lose only the feature that depended on it.
     services = {
+      # The shebang half of #566: a script starting `#!/bin/bash` or
+      # `#!/usr/bin/env python` fails with "no such file or directory" on a
+      # bare NixOS, because /bin holds only sh and /usr/bin only env. envfs
+      # mounts both as a FUSE view of the current PATH, so every tutorial
+      # script and every downloaded installer's shebang resolves.
+      envfs.enable = lib.mkDefault true;
+
       # Why: modules/AGENTS.md#passed-straight-through
       flatpak.uninstallUnmanaged = lib.mkDefault cfg.flatpaks.uninstallUnmanaged;
 

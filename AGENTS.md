@@ -218,6 +218,19 @@ Two other ways a check stops checking, both found in one week:
   a regression and was a stale assertion. **When a check fails immediately
   after a deliberate change to how something works, ask what the check is
   asserting before asking what broke.**
+- **A hand-maintained list fails OPEN.** Found three times in one day, in
+  three unrelated places: four manual pages published and reachable from no
+  sidebar; a third page index (`docs/manual/index.md`) that nothing compared,
+  already missing Boxes and Sandboxes; and `nightly.yml`'s `report` job
+  missing `reinstall-vm` from `needs`, so a 200-minute check could fail every
+  night and file nothing. In each case the thing still worked — the page
+  published, the job ran — so nothing went red and the only detector was a
+  human happening to look. The same shape sat in `docs/llms.txt` saying *ten*
+  skills while `ai.md` said *twelve* and the README said *thirteen*; the
+  README was right because it was the only one with a check.
+  **Any list naming things that exist elsewhere wants a comparison, not
+  discipline** — and the comparison should name the missing item, because a
+  count only says a number moved.
 
 ## 5. Git and flake mechanics that bite
 
@@ -248,6 +261,13 @@ Two other ways a check stops checking, both found in one week:
   missing`, because an argument absent from `specialArgs` is resolved through
   `_module.args` rather than by the function default — the trace says so, two
   frames down. Pass it from the call site instead.
+- **Two processes cannot share one worktree.** A background driver doing
+  `git checkout` while you do the same in the same directory is a race, and
+  git's refusal to check out a branch already held by another worktree turns
+  a failed `checkout` into a `reset --hard` landing on whatever branch was
+  there. That happened here twice: once discarding pushed work (recoverable
+  from the remote), once rebasing the wrong branch. If something else may be
+  driving the tree, `git worktree add` and work there.
 - **`find` does not follow the `result` symlink.** `find "$out" -name X`
   where `$out` is `./result` returns nothing, silently. Use `find -L`.
   `readme-counts.sh` counted zero skills this way, and only failed loudly
@@ -291,13 +311,35 @@ merge latency now: the build step took **16–19 minutes on a warm store**
 and a cold store can push it toward that limit (#434 timed out at the cap
 three times). There are **four self-hosted runners** — p510-nixarchy,
 p510-nixarchy-2, p620-nixarchy, p620-nixarchy-2 — with identical labels and
-separate stores, but the `nixarchy-install-vm` concurrency group still admits
-**one relevant install job at a time, machine-wide**: 3–4 concurrent installs
-all fail at the in-guest timeout (measured 2026-09-09). So the check gates
-every pull request, the queue for that one slot is shared, and concurrent PRs
-still wait on it. Every push to your branch cancels and restarts your own run
-(that is deliberate — a PR only needs an answer about its current head), but
+separate stores, but the `nixarchy-install-vm-{1,2}` concurrency groups admit
+**two relevant install jobs at a time, machine-wide** (#555, #587). Two is the
+measurement, not a guess: 2 concurrent installs both succeed, 3–4 all fail at
+the in-guest timeout (2026-09-09). A ref is assigned its slot by
+`cksum(GITHUB_REF) % 2`, so a pull request's re-runs queue behind themselves
+rather than migrating. Every push to your branch cancels and restarts your own
+run (deliberate — a PR only needs an answer about its current head), but
 batching your pushes is a courtesy to everyone else's merge latency.
+
+**The mechanism, because getting it wrong costs hours.** GitHub retains
+**one PENDING job per concurrency group**, and `cancel-in-progress: false`
+means a newcomer cancels the *queued* job, not the *running* one. So:
+
+- a **running** job blocks nothing — `main` building plus one PR pending is
+  fine;
+- eviction begins at the **second pending** job in the same group;
+- the evicted job reports `cancelled`, which renders as a failure and
+  **silently disables auto-merge**, and a re-run reaps itself — the only
+  escape is a new head commit (#548).
+
+Three separate supervisor designs were written here on the assumption that a
+*running* job was the blocker. All three waited for a condition that never
+came, and achieved nothing across about ninety minutes. The rule that works:
+re-trigger when nothing is **queued**, not when nothing is running.
+
+And read the JOB's conclusion, never the column: `gh pr checks` prints
+`cancelled` as `fail`, so an eviction and a real failure look identical in the
+summary. `gh run view <id> --json jobs` tells them apart, and the difference
+decides whether you re-trigger or read a log.
 
 **Do not build a VM check locally while CI has an install job in flight.**
 The concurrency group in `install-check.yml` serialises GitHub *jobs*; it
@@ -371,6 +413,40 @@ files carry the full reasoning and the failure history.
   is the real one.
 - Fill in the PR template, including the section that asks for your check's
   failing output. That section is §1 in form-field shape.
+
+### Closing keywords do exactly what they say, and nothing you add to them
+
+Both of these were written here in one day, and both lost tracking silently:
+
+- **`Closes #555 in part`** closes #555. GitHub parses the keyword and the
+  number and ignores every qualifier around it. There is no "closes in part".
+  A partial fix uses `Refs #N`, and says in the body what is left — the
+  residue of #555 went untracked the moment that merged, on a pull request
+  whose own description explained why it must stay open.
+- **`Closes #575, #576, #578`** closes only **#575**. The keyword has to be
+  repeated per issue: `closes #575, closes #576, closes #578`. The other two
+  sat open for hours with their work already on `main`.
+
+Neither produces an error. Check the issues actually closed rather than
+assuming the body did it.
+
+### `auto=on` is not "will merge"
+
+Auto-merge waits for required checks — and it waits **just as quietly** on a
+`CONFLICTING` merge state, with nothing in `gh pr checks` to say so. Two pull
+requests sat armed and unmergeable here while every check read green.
+
+`gh pr view <n> --json mergeable` is the only answer. Check it before
+reporting that something is on its way.
+
+### A stacked PR conflicts the moment its base squash-merges
+
+The branch still carries the commits that just landed as one squashed commit,
+so git sees the same content twice. The fix is not to merge `main` into it:
+**cherry-pick the branch's OWN commit onto the new `main`** and force-push.
+That happened to four pull requests in one afternoon; the replay is
+mechanical and takes a minute, but only if you recognise it rather than
+fighting the conflict.
 
 ## 9. Territory, and the failure no single PR can see
 
@@ -512,6 +588,22 @@ who picks it up learns not to trust the queue. One was filed this way — "the
 bin ledger has no row for nixarchy-android", where the row had landed with the
 command itself — and closing it cost less than leaving it. Read the tree
 first; it is thirty seconds.
+
+**And search for the BEHAVIOUR, not for the implementation you expect.** An
+issue was filed here saying nixarchy had no garbage-collection policy, on the
+strength of grepping `nix.gc.automatic`, `nix.gc.options` and
+`configurationLimit` and finding nothing. All three were genuinely absent, and
+the conclusion was still wrong: `programs.nh.clean` had been collecting
+generations for a long time, with a comment making the same argument the issue
+made. The fix that followed added a duplicate, nixpkgs warned the two
+conflict, and `checks.config-warnings` failed.
+
+The question that would have worked is "does anything collect generations",
+not "is `nix.gc.automatic` set". A grep for one spelling answers whether that
+spelling is present, which is not the same claim. The same mistake closed
+#484 as outstanding work when the check it asked for was already on `main`,
+scheduled nightly, and green — the agent that picked it up checked and said
+so rather than building a second one.
 
 **Every issue gets a milestone and an area label when it is filed.** Not
 later. An issue with no milestone is invisible in every view that groups by

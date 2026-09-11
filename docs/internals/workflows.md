@@ -119,29 +119,38 @@ it cost*.
 
 ### Why it is slow, and why that is deliberate
 
-It boots a VM and installs nixarchy into it, capped so **one install runs at a
-time**.
+It boots a VM and installs nixarchy into it, capped so **two installs run at a
+time** (#587).
 
 That cap is not caution. The in-guest install has a 30-minute timeout, and a
 guest-side timeout is a **hidden concurrency limit**: host-side timeouts scale
 with the machine, guest-side ones do not. Four at once on one box turned
 "slower" into "failed", and the failure named the test rather than the
-contention. Two concurrent jobs is what demonstrably passes.
+contention. Two concurrent jobs is what demonstrably passes, and two is
+therefore the cap: `cksum(GITHUB_REF) % 2` puts every relevant run in one of
+`nixarchy-install-vm-1` or `-2`. The hash is stable, so a pull request's
+re-runs queue behind themselves instead of migrating between slots.
 
 **A queued install check may be the cap working — or a job about to be
 evicted.** The two look identical from the outside (#548 measured it). GitHub
 retains only **one pending job** per concurrency group, so when a second run
-queues into `nixarchy-install-vm`, the next arrival cancels whoever was
-waiting. A `cancelled` install renders as a **failure**, and a cancelled
+queues into a slot, the next arrival cancels whoever was waiting. Note what
+this does and does not mean: a **running** job blocks nothing — `main`
+building while one PR waits is fine — and eviction begins at the **second
+pending** job. Three supervisor designs were written here on the opposite
+assumption and none of them worked. A `cancelled` install renders as a **failure**, and a cancelled
 required check **silently disables auto-merge** — the pull request then sits
 there with nothing visibly wrong. #550 gave runs the gate rules irrelevant
 their own `install-noop-<ref>` group, so a docs-only PR no longer touches the
-shared slot at all; for relevant runs the eviction remains, tracked in #555.
+shared slots at all, and #587 split the one shared group into two. **The
+eviction is halved, not repealed**: the one-pending rule still applies within
+each slot, so three relevant pull requests hashing to the same slot still
+evict each other. That residue is #555.
 
 ### What that cap costs, and what is done instead
 
-One slot for the whole repository means every minute spent there is a minute
-every other pull request waits. Two rules follow from it, and both are visible
+Two slots for the whole repository means every minute spent there is a minute
+other pull requests wait. Two rules follow from it, and both are visible
 in the checks:
 
 - **A check that does not need a VM must not take one.** `stable-eval` proves

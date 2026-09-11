@@ -195,6 +195,18 @@ repl_word=$(word_for "$repl_n")
 skills=$(find -L "$omarchy" -name SKILL.md 2>/dev/null | wc -l)
 skills_word=$(word_for "$skills" | tr '[:upper:]' '[:lower:]')
 
+# The installer's question count (#557), which the README stated twice with two
+# different numbers and nothing checking either. The authority is
+# validate_answers in installer/install.sh: the answers a full install REQUIRES
+# -- device, encrypt, hostname, username, password, timezone, keymap -- are
+# exactly the questions the wizard exists to ask. Counted from the required-key
+# guards (`[ -n "$var" ] || problems+=`), deduplicated because the --host branch
+# repeats the password guard. The optional recovery passphrase and the two
+# confirmations are not answers the machine needs, and are not counted.
+questions=$(grep -oE '\[ -n "\$[a-z_]+" \] \|\| problems' "$root/installer/install.sh" |
+  sort -u | wc -l)
+questions_word=$(word_for "$questions" | tr '[:upper:]' '[:lower:]')
+
 quantity "commands" "$commands" \
   '.*\*\*([0-9]+) shell commands\*\*.*' \
   's/\*\*[0-9]+ shell commands\*\*/**'"$commands"' shell commands**/'
@@ -242,13 +254,22 @@ quantity "apps-indexed" "$a_indexed" \
 quantity "apps-nixpkgs-row" "$a_untouched" \
   '.*\| nixpkgs \(([0-9]+) of [0-9]+ apps\) \|.*' \
   "s/\| nixpkgs \([0-9]+ of [0-9]+ apps\) \|/| nixpkgs ($a_untouched of $a_total apps) |/"
+# The same number in two sentences, so each gets its own pattern: quantity
+# compares only the FIRST match, and one pattern over both lines would report
+# calm while the second line disagreed -- which is #557 verbatim.
+quantity "installer-questions" "$questions_word" \
+  '.*bootable ISO, (five|six|seven|eight|nine|ten) questions.*' \
+  's/bootable ISO, (five|six|seven|eight|nine|ten) questions/bootable ISO, '"$questions_word"' questions/'
+quantity "installer-questions-iso" "$questions_word" \
+  '.*and answer (five|six|seven|eight|nine|ten) questions.*' \
+  's/and answer (five|six|seven|eight|nine|ten) questions/and answer '"$questions_word"' questions/'
 
-# A floor. Eleven quantities are declared above; a run that checked fewer means
-# something stopped matching and this reported calm about numbers it never
-# looked at.
+# A floor. Fourteen quantities are declared above; a run that checked fewer
+# means something stopped matching and this reported calm about numbers it
+# never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 11 ]; then
-  echo "::error::only $checked of 11 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 14 ]; then
+  echo "::error::only $checked of 14 quantities were accounted for" >&2
   fail=1
 fi
 

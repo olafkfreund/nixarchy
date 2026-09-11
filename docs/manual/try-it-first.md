@@ -34,15 +34,22 @@ isolation. `try` is for an app you would happily install and are just not
 sure you want.
 
 **Not gone when it exits.** The package is downloaded into `/nix/store`
-and stays there until garbage collection -- and nixarchy schedules none,
-so tried apps accumulate until you clear them yourself:
+and stays there until garbage collection. A tried package has no
+garbage-collection root, so it is pure garbage the moment you close the
+terminal -- nothing references it, and collecting it can never cost you a
+rollback.
+
+On a machine the installer built, that collection is automatic: the Nix
+daemon collects when free space falls below 5 GiB, which is the case this
+setting exists for. You can also do it now, and it is the same operation:
 
 ```sh
 sudo nix-collect-garbage
 ```
 
-A tried package has no garbage-collection root, so that one command
-reclaims it (along with anything else nothing references).
+If you added nixarchy to a machine you already run, none of this is turned on
+for you -- your own collection policy stands, and the command above is the
+manual version.
 
 **Not installed.** No launcher entry is created -- nothing writes a
 `.desktop` file -- and the app runs in the terminal you launched it from.

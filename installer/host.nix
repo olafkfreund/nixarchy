@@ -142,7 +142,34 @@
   # machine, `nixpkgs#foo` pointed at this flake's UNSTABLE nixpkgs is exactly
   # the "binary built against a different glibc" the paragraph above exists to
   # prevent. The requirement stands; NixOS is now what meets it.
-  nix.settings.flake-registry = "";
+  nix.settings = {
+    flake-registry = "";
+
+    # The free-space floor -- #583, and the half `programs.nh.clean` below
+    # does NOT do.
+    #
+    # Two different problems, and conflating them is how a collection policy
+    # eats the thing it was meant to protect:
+    #
+    #   nh.clean collects GENERATIONS (`--keep-since 14d --keep 5`), and
+    #   generations are what rollback is made of. That is why it is
+    #   conservative, and why `nix.gc.automatic` is NOT set here -- nixpkgs
+    #   warns that the two together conflict, and checks.config-warnings
+    #   fails on the warning rather than letting it print for weeks.
+    #
+    #   min-free/max-free collects GARBAGE -- paths nothing references --
+    #   under space pressure rather than on a timer. That is exactly what
+    #   `nixarchy try` leaves behind: a tried package has no GC root, so an
+    #   application the user evaluated and rejected is pure garbage, and
+    #   collecting it can never cost a rollback.
+    #
+    # 5 GiB floor, 20 GiB target, sized for what this desktop does rather
+    # than for a server: an install VM image is 32 GiB and a box is a whole
+    # userland, so a floor that clears a few hundred megabytes is hit again
+    # during the same build.
+    min-free = 5 * 1024 * 1024 * 1024;
+    max-free = 20 * 1024 * 1024 * 1024;
+  };
 
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or
@@ -509,6 +536,19 @@
   boot.loader = {
     systemd-boot.enable = true;
     efi.canTouchEfiVariables = true;
+
+    # The boot menu is a list a human reads under time pressure, with a
+    # keyboard and no scrollback. Uncapped it grows one entry per switch, and
+    # `nh os switch` is the loop this machine lives in -- a month of ordinary
+    # use buries "the one from before the thing I just broke" somewhere in the
+    # middle of forty near-identical lines.
+    #
+    # This caps the MENU, not the generations: `nix-env --list-generations`
+    # still shows everything the store holds, and `nixos-rebuild --rollback`
+    # still reaches the one before this. Only the ESP entries are trimmed.
+    # The ESP is 2G (installer/disk-config.nix), so this is about a list
+    # somebody can read, not about space.
+    systemd-boot.configurationLimit = 20;
   };
 
   # mkDefault: the generated configuration.nix carries the answers the installer

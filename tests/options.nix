@@ -160,6 +160,35 @@ let
       off = nixiOff.systemd.user.services ? nixi;
     };
 
+    # ---- the free-space floor is the installer's, never an adopter's ----
+    #
+    # #583, and the correction that came with it: `programs.nh.clean` ALREADY
+    # collected generations here (`--keep-since 14d --keep 5`), so the first
+    # attempt added `nix.gc.automatic` on top and nixpkgs warned that the two
+    # conflict -- checks.config-warnings caught it, which is what that check
+    # is for. Generations were never the gap.
+    #
+    # The gap was GARBAGE. `nixarchy try` creates no GC root, so an
+    # application the user evaluated and rejected is retained forever, and
+    # collecting it can never cost a rollback. min-free/max-free is the half
+    # nothing was doing.
+    #
+    # ON is the machine the installer generates; OFF is an adopter who
+    # imported nixosModules.nixarchy into a configuration they already run --
+    # Mode A -- whose own collection policy this must never overwrite.
+    storeGcMinFree = {
+      on = inputs.self.nixosConfigurations.vm.config.nix.settings ? min-free;
+      off = adopter.config.nix.settings ? min-free;
+    };
+
+    # The boot menu is capped for the installer's machines only. A cap on the
+    # MENU, not on the generations -- nh.clean owns those, and
+    # `nixos-rebuild --rollback` still reaches the one before this.
+    storeBootLimit = {
+      on = inputs.self.nixosConfigurations.vm.config.boot.loader.systemd-boot.configurationLimit != null;
+      off = adopter.config.boot.loader.systemd-boot.configurationLimit != null;
+    };
+
     # Everything the guide leaves in a home, in one case, because "off" has to
     # be all of them and a per-trace case would let one survivor hide behind
     # four passes. The port is not probed directly: it exists only as
@@ -515,6 +544,28 @@ let
   # The built reference machine, for the things that are facts about a system
   # rather than about an option.
   vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
+
+  # Mode A, as a machine rather than as an argument: nixosModules.nixarchy
+  # imported into a configuration somebody already runs, with nothing of
+  # installer/host.nix in it. The minimum that evaluates -- a root filesystem
+  # and a stateVersion -- because everything else would be this test asserting
+  # its own fixture. #583 uses it for the half that matters: what an adopter
+  # does NOT get.
+  adopter = inputs.nixpkgs.lib.nixosSystem {
+    system = "x86_64-linux";
+    modules = [
+      inputs.self.nixosModules.nixarchy
+      {
+        programs.nixarchy.enable = true;
+        boot.loader.grub.enable = false;
+        fileSystems."/" = {
+          device = "/dev/null";
+          fsType = "ext4";
+        };
+        system.stateVersion = "25.05";
+      }
+    ];
+  };
 
   # ---- the boot splash is ours ------------------------------------------
   #

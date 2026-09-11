@@ -30,9 +30,14 @@ directory and offers to run `nh os switch <flake>`.
 package, every NixOS option and the curated app list, with each entry's type,
 default and description in a preview pane. Picking a row routes it: an app is
 enabled as an app, a package is appended as a package, and an option is written
-as a line of its own -- booleans and enums get a value picker, anything more
-complicated is written commented out with its type and docs beside it, for you
-to fill in.
+as a line of its own. Booleans and enums get a value picker. Simple scalars --
+a port, a string, a path -- prompt for the value with the default in sight;
+leave the prompt empty and nothing is written, because the default is already
+in force and a copied-out default reads like a choice. Anything more
+complicated is written commented out with its type and docs beside it, seeded
+with the option's own example (or its default) as a starting shape, for you to
+edit rather than invent. The seeded scaffold stays commented: the picker knows
+the shape, not your value.
 
 The index comes from this machine's own nixpkgs and its own options rather than
 from search.nixos.org, which costs about a minute once per system generation and
@@ -183,6 +188,17 @@ starting point for a person to review, not a finished package, and this
 command never pretends otherwise. A draft pins one revision of one upstream;
 updating it when upstream releases is yours to do, by editing the version and
 hashes in the file.
+
+Two ways to find this without knowing the command's name. `nixarchy pkg add`
+names it whenever nixpkgs has no such package -- that miss is the moment you
+have proved the package is not there, so it is the reliable signpost. The
+Search picker also carries a static row for it (_Missing from nixpkgs? Draft a
+new package from a source URL_), which asks for the URL and runs the same
+command -- but the picker is a single fuzzy search, so that row only appears
+when your query happens to match its own words (try `missing` or `draft`).
+Searching for the absent package's *name* matches nothing and simply closes
+the picker; nothing runs on an empty result, so the picker itself cannot point
+you onward.
 
 ## Removing
 

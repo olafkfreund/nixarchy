@@ -2764,6 +2764,28 @@ pkgs.runCommand "nixarchy-options"
         fi
         [ "$optbase" = "$(cksum < "$appfile")" ] || {
           echo "a refused opt removal still changed the file" >&2; exit 1; }
+        # A SEEDED scaffold (#581): the doc block now carries a starting
+        # shape from the option's example (or default), as comment lines
+        # above the marked line. The removal walk keys on the marked line's
+        # exact bare shape, so the seed must ride in the comment block --
+        # this pins that arrangement: one unit in, one unit out, seed
+        # included. Two writer pins first, matching the calls, not prose.
+        grep -qF '"  #   " $0' "$vm/sw/bin/nixarchy-search" || {
+          echo "add_option no longer writes seed lines as '  #   ' comments" >&2
+          echo "  an uncommented seed breaks nixarchy-opt-remove's comment walk" >&2
+          exit 1
+        }
+        grep -qF "a starting shape, from the option's %s" "$vm/sw/bin/nixarchy-search" || {
+          echo "add_option no longer announces the seed's source (example/default)" >&2
+          echo "  update the simulated seeded scaffold below to the new shape" >&2
+          exit 1
+        }
+        simulate_add '\n  # NIXOS OPTION  services.demo.settings\n  #\n  # type:     attribute set\n  #\n  # a starting shape, from the option'"'"'s example -- yours to edit:\n  #   services.demo.settings = { port = 8080; }\n  # services.demo.settings = ;  #@opt services.demo.settings\n'
+        run nixarchy-opt-remove services.demo.settings >/dev/null
+        [ "$optbase" = "$(cksum < "$appfile")" ] || {
+          echo "opt add/remove is not symmetric for a seeded scaffold" >&2
+          exit 1
+        }
         echo "a picker-written option can be removed, byte for byte, scaffold included"
 
         # The Remove picker must SEE all three kinds -- being removable from
@@ -2779,6 +2801,28 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "the Remove picker lists apps, packages and options"
+
+        # ---- pkg new is findable where nixpkgs misses (#581) ----
+        #
+        # The Search picker is one fzf call: a miss exits before any script
+        # runs, so no empty-result hook can name `nixarchy pkg new`. What CAN
+        # is asserted here instead: pkg-add's miss message (the moment a user
+        # has proved nixpkgs lacks a name), the line printed before the
+        # picker takes over, and the picker's own static row with its
+        # dispatch. Match the calls and the command name, not prose.
+        for pair in \
+          "nixarchy-pkg-add:nixarchy pkg new" \
+          "nixarchy-search:pkgnewrow=" \
+          "nixarchy-search:nixarchy-pkg-new \"\$url\""; do
+          bin=''${pair%%:*}
+          needle=''${pair#*:}
+          grep -qF -- "$needle" "$vm/sw/bin/$bin" || {
+            echo "$bin no longer carries '$needle':" >&2
+            echo "  the route from 'nixpkgs does not have it' to 'nixarchy pkg new' is broken" >&2
+            exit 1
+          }
+        done
+        echo "a nixpkgs miss names nixarchy pkg new, and the picker's row dispatches to it"
 
         # And the ROUTE, not just the call site: #498 shipped `nixarchy try`
         # advertised and unreachable, because nothing asserted the dispatcher

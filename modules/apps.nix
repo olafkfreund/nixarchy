@@ -215,6 +215,20 @@ let
     + "This is the only row here that needs a network, and the only one that can offer an app nobody has checked. A hit that is in nixarchy's catalogue is enabled the normal way; anything else prints a line for you to paste, because writing an unchecked app id into your configuration is not this tool's call to make.\n"
   );
 
+  # The tier below the Flathub row: software in no repository at all (#581).
+  # Same five-field shape, whole row on one line, preview newlines escaped --
+  # the same rules the flathub row above documents. One static row, so
+  # `nixarchy pkg new` is findable from the picker at all. Findable is the
+  # honest word: the picker is a single fzf call, so this row appears only
+  # when the query happens to match its own text -- a search for the missing
+  # package's NAME matches nothing and closes the picker. The reliable
+  # signpost is nixarchy-pkg-add's miss message, which names the command;
+  # docs/manual/other-packages.md states the limitation.
+  pkgNewIndexRow = pkgs.writeText "nixarchy-pkg-new-row.tsv" (
+    "new	pkg-new	Missing from nixpkgs? Draft a new package from a source URL		"
+    + "NOT IN NIXPKGS\\n\\nWhen nixpkgs, the app list and Flathub all miss, this drafts a derivation from the software's own source URL (e.g. a GitHub repo) with nix-init, builds it once, and keeps the draft either way.\\n\\nPicking this asks for the URL, then runs:\\n  nixarchy pkg new <url>\\n\\nNeeds a network. The result is a draft for you to review, not a finished package.\n"
+  );
+
   flatpakRow =
     name: fp:
     let
@@ -1951,6 +1965,9 @@ in
                     echo >&2
                     echo "Search for the right name:" >&2
                     echo "  nixarchy-search $attr" >&2
+                    echo >&2
+                    echo "If nixpkgs genuinely does not have it, draft a package from its source:" >&2
+                    echo "  nixarchy pkg new <url>" >&2
                     exit 1
                   fi
 
@@ -2013,6 +2030,12 @@ in
                 open_missed() {
                   [ ''${#missed[@]} -gt 0 ] || return 0
                   echo "no exact match for ''${missed[*]} -- opening the picker on it"
+                  # Said here, before exec, because the picker itself cannot:
+                  # its miss is fzf exiting empty, and no script runs after
+                  # that. This is the one moment a user has proved nixpkgs
+                  # lacks a name, so the way onward is named now (#581).
+                  echo "  (if nothing there matches either, nixpkgs may not have it --"
+                  echo "   'nixarchy pkg new <url>' drafts a package from its source)"
                   exec nixarchy-search "''${missed[@]}"
                 }
 
@@ -2222,6 +2245,7 @@ in
                 appindex=${appIndexTable}
                 apptable=${appAttrTable}
                 flatpakrows=${flatpakIndexRows}
+                pkgnewrow=${pkgNewIndexRow}
                 optionsjson=${optionsJsonPath}
                 nixpkgs=${pkgs.path}
                 walk=${./pkg-index.nix}
@@ -2342,6 +2366,9 @@ in
                   # they are local, so building the index still needs no network.
                   cat "$flatpakrows" >> "$tmp"
 
+                  # The tier below those: draft a package nixpkgs lacks (#581).
+                  cat "$pkgnewrow" >> "$tmp"
+
                   mv "$tmp" "$index"
                   readlink -f /run/current-system > "$stamp"
                 }
@@ -2436,6 +2463,7 @@ in
                       app | pkg) nixarchy try "$name" || true ;;
                       opt) echo "$name is a NixOS option -- there is nothing to run, so nothing to try" ;;
                       flatpak) echo "$name is a flatpak -- nothing to try; enable it and apply instead" ;;
+                      new) echo "nothing to try yet -- picking this row asks for a source URL to draft from" ;;
                     esac
                   done <<< "$selection"
                   exit 0
@@ -2463,6 +2491,21 @@ in
                   mv "$tmp" "$file"
                 }
 
+                # One option's default or example, structured, straight out of
+                # options.json -- not parsed back out of the index's preview
+                # text, which flattened it for display (#581). Both fields are
+                # rendered `{ _type: literalExpression, text: ... }` in modern
+                # options.json; a bare JSON value is the fallback shape. Empty
+                # when this system builds no manual, and every caller degrades
+                # to the pre-#581 behaviour on empty.
+                opt_field() {
+                  [ -n "$optionsjson" ] && [ -f "$optionsjson" ] || return 0
+                  jq -r --arg p "$1" --arg f "$2" \
+                    '.[$p][$f]? // empty
+                     | if type == "object" then (.text // tostring) else tojson end' \
+                    "$optionsjson"
+                }
+
                 add_option() {
                   path=$1
                   type=$2
@@ -2481,6 +2524,36 @@ in
                       value=$(printf '%s' "''${type#one of }" | grep -oE '"[^"]*"' |
                         fzf --height=12 --prompt="$path = ") || return 0
                       ;;
+                    # Simple scalars: ask, with the default in sight (#581).
+                    # /dev/tty, because stdin here is the picker's selection
+                    # herestring. Empty input keeps the default by writing
+                    # NOTHING -- a copied-out default is a line that reads as
+                    # a choice and is not one. The patterns are anchored
+                    # whole-string, so "list of string" and "null or path"
+                    # fall through to the scaffold below, as they should:
+                    # their values are not one prompted word.
+                    "signed integer"* | "unsigned integer"* | *" bit unsigned integer"* | "positive integer"* | string | "string,"* | "string "* | path | "path,"* | "absolute path"*)
+                      default=$(opt_field "$path" default || true)
+                      default=''${default//$'\n'/ }
+                      if ! read -r -p "$path [''${default:-no default}] = " value < /dev/tty; then
+                        return 0
+                      fi
+                      if [ -z "$value" ]; then
+                        echo "kept the default for $path -- nothing written"
+                        return 0
+                      fi
+                      # A string or path needs Nix quotes; typing them is the
+                      # sort of homework this prompt exists to remove. Already
+                      # quoted input passes through untouched.
+                      case "$type" in
+                        string* | path* | "absolute path"*)
+                          case "$value" in
+                            \"*) ;;
+                            *) value="\"''${value//\"/\\\"}\"" ;;
+                          esac
+                          ;;
+                      esac
+                      ;;
                   esac
 
                   if [ -n "$value" ]; then
@@ -2495,11 +2568,30 @@ in
                   # function, a package, a list of them -- and a picker that pretended
                   # otherwise would write plausible-looking wrong configuration. So it writes
                   # what it does know, commented out, in the right file, and leaves the
-                  # expression to you.
+                  # expression to you -- seeded with the option's own example (or its
+                  # default, when there is no example) as a starting shape to edit,
+                  # rather than a shape to invent (#581).
+                  #
+                  # The seed lines are COMMENTS above the marked line, and the marked
+                  # line itself keeps the exact `# <path> = ;  #@opt <path>` bytes:
+                  # nixarchy-opt-remove keys its walk up the comment block on that
+                  # shape, which is what lets a scaffold leave byte for byte
+                  # (checks.options asserts it, seed included).
+                  seed=$(opt_field "$path" example || true)
+                  seedsrc=example
+                  if [ -z "$seed" ]; then
+                    seed=$(opt_field "$path" default || true)
+                    seedsrc=default
+                  fi
                   {
                     printf '\n'
                     grep -P "^opt\t\Q$path\E\t" "$index" | head -1 |
                       cut -f5 | sed 's/\\n/\n/g' | sed 's/^/  # /'
+                    if [ -n "$seed" ]; then
+                      printf '  #\n'
+                      printf "  # a starting shape, from the option's %s -- yours to edit:\n" "$seedsrc"
+                      printf '%s\n' "$seed" | awk -v p="$path" 'NR == 1 { $0 = p " = " $0 } { print "  #   " $0 }'
+                    fi
                     printf '  # %s = ;  #@opt %s\n' "$path" "$path"
                   } > "$cache/scaffold.$$"
                   insert_line "$(cat "$cache/scaffold.$$")
@@ -2574,6 +2666,20 @@ in
                         flathub_search
                       else
                         nixarchy-service-enable "$name" && changed=1
+                      fi
+                      ;;
+                    # Software in no repository at all (#581). The binary, not
+                    # `nixarchy pkg new`: the same session-PATH route every
+                    # other writer in this case uses, without leaning on the
+                    # dispatcher's routing. /dev/tty, because stdin here is
+                    # the selection herestring and a bare read would eat the
+                    # next picked row. `|| true`: a draft that fails to build
+                    # is a reported outcome, not a reason to abort the loop.
+                    # No changed=1 -- nixarchy-pkg-new validates its own write
+                    # and prints its own guidance.
+                    new)
+                      if read -r -p "Source URL (e.g. https://github.com/someone/tool): " url < /dev/tty; then
+                        [ -z "$url" ] || nixarchy-pkg-new "$url" || true
                       fi
                       ;;
                   esac

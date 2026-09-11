@@ -101,6 +101,33 @@ pkgs.runCommand "nixarchy-install-gate"
     t "a delta script does not"                --install ".github/scripts/omarchy-config-delta.sh" false
     t "the troubleshooting page does not"      --install "docs/manual/troubleshooting.md" false
 
+    # #554 gave a push to main its own diff for the INSTALL question, so a
+    # docs-only merge stops spending 55 minutes of the one VM slot. Every way
+    # that can fail must fall back to running everything, and these are the
+    # paths that need no network to assert -- the API path itself is tested
+    # against real commits in the pull request, because a sandboxed
+    # derivation has neither a token nor a network.
+    #
+    # If one of these ever answers `false`, main stops installing and nothing
+    # says so.
+    echo "a push whose diff cannot be established runs everything:"
+    pushq() {
+      got=$(EVENT_NAME=push GH_REPO=o/r GITHUB_SHA=deadbeef GITHUB_EVENT_PATH=$2 \
+        bash $gate --install 2>/dev/null || true)
+      if [ "$got" = true ]; then echo "  ok      $1"
+      else echo "  FAILED  $1: got '$got', wanted 'true'"; fails=$((fails + 1)); fi
+    }
+    printf '{"before":"0000000000000000000000000000000000000000"}' > zeroed.json
+    printf '{}' > nobefore.json
+    pushq "a zeroed before (new branch, force push)" zeroed.json
+    pushq "an event payload without .before"        nobefore.json
+    pushq "no event payload at all"                 /nonexistent-event.json
+    # The build question on main is never filtered: two pull requests green
+    # apart can break main together, and main's build is what catches it.
+    got=$(EVENT_NAME=push bash $gate 2>/dev/null || true)
+    if [ "$got" = true ]; then echo "  ok      the build question on a push is never filtered"
+    else echo "  FAILED  build question on push: got '$got', wanted 'true'"; fails=$((fails + 1)); fi
+
     echo "fails safe:"
     # An empty list means the question could not be answered -- a paginated API
     # call that returned nothing, a renamed field. Unknown must mean run

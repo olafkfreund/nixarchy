@@ -46,9 +46,49 @@ fi
 
 if [ "${1:-}" = "-" ]; then
   files=$(cat)
+elif [ "${EVENT_NAME:-}" = "push" ] && [ "$install_only" = true ] &&
+  before=$(jq -r '.before // empty' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null) &&
+  [ -n "$before" ] &&
+  [ "$before" != "0000000000000000000000000000000000000000" ] &&
+  [ -n "${GITHUB_SHA:-}" ]; then
+  # A push to main, asked the INSTALL question only -- #554.
+  #
+  # This branch used to be part of the blanket `not a pull request, so not
+  # filtered` below, and the result was that #550's saving lasted exactly one
+  # event: a docs-only pull request skipped the install, merged, and its push
+  # to main then ran install + free-space + installer-refusal for ~55 minutes
+  # on a self-hosted runner for a README edit -- holding the mutex every
+  # other pull request queues behind.
+  #
+  # What makes filtering main SAFE here is narrow and worth stating, because
+  # the blanket rule was not an oversight:
+  #
+  #   - It is the BUILD question that must never be filtered on main. Two
+  #     pull requests green apart can break main together (CLAUDE.md §9,
+  #     #137 + #141), and build.yml calls this script WITHOUT `--install`,
+  #     so that path is untouched and still answers `true` below.
+  #   - The denylist's entries provably cannot change an install closure. If
+  #     the squashed commit touched only such paths, main's closure is the
+  #     one the previous push already installed, so there is nothing new to
+  #     test -- regardless of what any other pull request did.
+  #
+  # `.before` and `GITHUB_SHA` rather than `git diff HEAD~1`: actions/checkout
+  # gives this job one commit, so a local diff needs a deepened fetch whose
+  # depth is a guess -- the same argument the pull request path below makes,
+  # and the reason both use the API.
+  #
+  # Every way this can fail falls through to the blanket `true`: a zeroed
+  # `.before` (a new branch or a force push), no event payload, no `jq`, an
+  # API that errors. Unknown means run everything.
+  files=$(gh api "repos/$GH_REPO/compare/$before...$GITHUB_SHA" \
+    --jq '.files[].filename' 2>/dev/null || true)
+  if [ -z "$(printf '%s' "$files" | tr -d '[:space:]')" ]; then
+    echo true
+    exit 0
+  fi
 elif [ "${EVENT_NAME:-}" != "pull_request" ]; then
-  # Not a pull request, so not filtered. main and workflow_dispatch always
-  # ran the real thing and still do.
+  # Not a pull request, so not filtered. The build question on main, and
+  # workflow_dispatch, always ran the real thing and still do.
   echo true
   exit 0
 else

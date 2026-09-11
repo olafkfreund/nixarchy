@@ -111,6 +111,35 @@ let
 
   hasOmarchySession = cfg: builtins.elem "omarchy" (pkgs.lib.flatten (sessionNames cfg));
 
+  # ---- the escape hatches for prebuilt binaries (#566) ----------------
+  #
+  # nix-ld's library set, envfs and AppImage support all ride on
+  # programs.nixarchy.enable rather than on options of their own, so their
+  # "off" state is the Mode A machine: the module imported, nothing enabled.
+  # That machine must carry none of them -- no FUSE mount over /usr/bin, no
+  # binfmt handler, no loader library set -- because every one of them is a
+  # system-wide behaviour change on a configuration somebody already runs.
+  loaderOff =
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        {
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
+  # By name rather than builtins.elem on the derivation: the nixosSystem
+  # under test instantiates its own pkgs, and outPath equality across two
+  # instantiations is a coincidence, not a property.
+  hasNixLdLib = cfg: name: builtins.any (p: pkgs.lib.getName p == name) cfg.programs.nix-ld.libraries;
+
   # Each case is (what it should look like on, what it should look like off).
   cases = {
     # ---- nixi, on for everyone, and provably gone when told ----
@@ -207,6 +236,33 @@ let
       off =
         builtins.any (p: (p.pname or "") == "Pinta")
           (configWith { preinstalls = false; }).environment.systemPackages;
+    };
+
+    # ---- #566: the loader set, probed by entries nixpkgs' base list ----
+    # lacks. nss and alsa-lib are ours alone, so a refactor that dropped the
+    # deliberate list while leaving nix-ld enabled fails here -- against the
+    # base set alone both probes are false. "off" is the Mode A machine,
+    # where nix-ld is off and the list is empty.
+    nixLdLibraries = {
+      on =
+        hasNixLdLib (configWith { }) "nss"
+        && hasNixLdLib (configWith { }) "alsa-lib"
+        && (configWith { }).programs.nix-ld.enable;
+      off = hasNixLdLib loaderOff "nss" || loaderOff.programs.nix-ld.enable;
+    };
+
+    # envfs mounts a PATH-derived view over /bin and /usr/bin -- exactly the
+    # kind of thing a Mode A machine must never grow unasked.
+    envfs = {
+      on = (configWith { }).services.envfs.enable;
+      off = loaderOff.services.envfs.enable;
+    };
+
+    # Both halves of AppImage support: without binfmt the package is a
+    # wrapper nobody knows to call, so double-clickability is the property.
+    appimage = {
+      on = (configWith { }).programs.appimage.enable && (configWith { }).programs.appimage.binfmt;
+      off = loaderOff.programs.appimage.enable || loaderOff.programs.appimage.binfmt;
     };
 
     # The unit itself, both ways. "off" is the half that matters: a nixarchy

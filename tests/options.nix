@@ -2673,6 +2673,30 @@ pkgs.runCommand "nixarchy-options"
         fi
         echo "an added package can be removed, byte for byte"
 
+        # A batch with a bad name in it (#496). The names resolve in ONE
+        # nixpkgs evaluation, and the property that makes that acceptable is
+        # that one unresolvable name neither dies alone nor takes the others
+        # with it. The miss comes FIRST because the old per-attr loop exited
+        # on it before ever reaching the names behind it -- this ordering is
+        # what varies. No tty here, so the miss cannot escape into the picker:
+        # the command must report it per name and exit nonzero.
+        if batchout=$(run nixarchy-pkg-add no-such-package-496 hello cowsay 2>&1); then
+          echo "pkg-add exited 0 with an unresolvable name in the batch" >&2
+          exit 1
+        fi
+        grep -q '#@pkg hello$' "$appfile" && grep -q '#@pkg cowsay$' "$appfile" || {
+          echo "a bad name ahead of the batch lost the good names behind it (#496):" >&2
+          printf '%s\n' "$batchout" >&2
+          exit 1
+        }
+        grep -q 'no-such-package-496' <<<"$batchout" || {
+          echo "the per-attr report does not name the miss -- a user adding five" >&2
+          echo "packages learns about none of their typos (#496)" >&2
+          exit 1
+        }
+        run nixarchy-pkg-remove hello cowsay >/dev/null
+        echo "one bad name in a batch is reported without sinking the rest"
+
         # A draft (#581). nixarchy-pkg-new needs a network to run for real,
         # so the add is simulated with the writer's own byte shape -- and the
         # grep below pins the WRITER's format string, so if pkg-new changes

@@ -351,6 +351,56 @@ jobs:
           echo
           echo "both toplevels evaluate against tomorrow's inputs"
 
+  # The one real run of `nixarchy pkg new`. tests/pkg-new.nix drives the same
+  # script against STUB nix-init and nix, because a sandboxed derivation has
+  # no network and nix-init's whole job is to fetch -- so nothing on a pull
+  # request has ever executed a real `nix-init --headless`. This does, and it
+  # is a job rather than a flake check for the same reason devenv-presets is
+  # (build.yml's comment on that job, and docs/internals/flake.md): work that
+  # needs the network cannot be a `checks` entry at all.
+  #
+  # Non-gating, like the canary and for the same reason: a red here means
+  # GitHub's API moved, or nix-init's inference changed under a nixpkgs bump
+  # -- not that a PR broke something, so it blocks nobody. The report job
+  # below files it as its own issue.
+  #
+  # The target is hexyl at a PINNED release tag: a small Rust CLI whose
+  # repository has been stable for years, small enough that the draft builds
+  # in minutes, and Rust because that reaches the cargoHash-placeholder loop
+  # -- the one part of the script the stubs can only imitate. The pin means
+  # upstream commits cannot move this job; the residual risk is the
+  # repository vanishing or the GitHub API changing shape, and either of
+  # those is exactly the upstream movement this job exists to notice.
+  pkg-new:
+    name: draft a real package with headless nix-init
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-nix
+
+      - name: Draft hexyl with real nix-init and build the draft
+        env:
+          # nix-init asks the GitHub API for the licence and description;
+          # unauthenticated calls from a shared Actions IP are a rate-limit
+          # lottery.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          # The same splice modules/apps.nix performs: @nixpkgs@ becomes the
+          # tree the draft is parsed and built against.
+          nixpkgs=$(nix eval --raw --inputs-from . nixpkgs#path)
+          sed "s|@nixpkgs@|$nixpkgs|" pkgs/pkg-new.sh > "$RUNNER_TEMP/pkg-new.sh"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/config"
+          nix shell --inputs-from . nixpkgs#nix-init -c \
+            bash "$RUNNER_TEMP/pkg-new.sh" \
+            https://github.com/sharkdp/hexyl --rev v0.17.0 | tee "$RUNNER_TEMP/out"
+          # The script itself exits nonzero when the draft does not build;
+          # these two are for the quieter failure, an exit 0 that produced
+          # nothing.
+          test -s "$RUNNER_TEMP/config/nixarchy/packages/hexyl.nix"
+          grep -qF 'building  hexyl ... ok' "$RUNNER_TEMP/out"
+
   report:
     name: report a failure
     runs-on: ubuntu-latest
@@ -361,7 +411,7 @@ jobs:
     # dependencies, and reported SUCCESS. The encrypted install is the DEFAULT
     # answer to the installer's own question, and it was the one failure that
     # filed no issue.
-    needs: [install, install-encrypted, install-iso, microvm, cache, canary]
+    needs: [install, install-encrypted, install-iso, microvm, cache, canary, pkg-new]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -408,6 +458,14 @@ jobs:
             # jobs later. It also collides with the dedupe search, appending a
             # sandbox failure to the install issue.
             title="nightly: a sandbox will not boot"
+          elif [ "${{ needs.pkg-new.result }}" != "success" ] &&
+            [ "${{ needs.install.result }}" = "success" ] &&
+            [ "${{ needs.install-encrypted.result }}" = "success" ] &&
+            [ "${{ needs.install-iso.result }}" = "success" ]; then
+            # Its own identity, same shape as the canary: a failure here means
+            # upstream moved under a real nix-init run, and the install checks
+            # are the wrong place to send the reader.
+            title="nightly: a real nix-init draft no longer builds"
           else
             title="nightly: the install checks are failing"
           fi

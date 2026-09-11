@@ -154,6 +154,36 @@ translate it: fonts are answered with `fonts.packages`, PHP extensions with
 `hardware.graphics.enable32Bit`, because each of those is a different shape on
 NixOS and `systemPackages` would be the wrong answer.
 
+## Software in no repository at all
+
+When nixpkgs, the curated list and Flathub all miss, the answer used to be
+"write a derivation" — which needs the language this desktop was installed to
+avoid. `nixarchy pkg new` gets you a first draft instead:
+
+```sh
+nixarchy pkg new https://github.com/someone/tool
+```
+
+runs [nix-init](https://github.com/nix-community/nix-init) headless: it picks
+a builder, prefetches the hashes, infers dependencies for Rust, Go and Python,
+and detects the licence. The result lands in
+`~/.config/nixarchy/packages/tool.nix`, and is then **built once** before
+anything is claimed. If the build has to learn a hash the draft could not know
+in advance (Rust's `cargoHash`, Go's `vendorHash`), the failed build names it
+and the draft is corrected automatically.
+
+If it builds, a commented-out line is added to the packages block of
+`~/.config/nixarchy/apps.nix`; review the draft, uncomment the line, and
+`nixarchy apply` carries both into your flake. If it does not build, that is
+said out loud and the draft is **kept** — a failed draft is still a better
+starting point than a blank file.
+
+Either way it is a draft: nix-init's authors are explicit that it produces a
+starting point for a person to review, not a finished package, and this
+command never pretends otherwise. A draft pins one revision of one upstream;
+updating it when upstream releases is yours to do, by editing the version and
+hashes in the file.
+
 ## Removing
 
 _Remove > App / package_ runs `nixarchy-app-remove`, a picker over everything

@@ -2070,6 +2070,28 @@ in
               '';
             })
 
+            # `nixarchy pkg new <url>`: a draft derivation for software in no
+            # repository (#581). The body lives in pkgs/pkg-new.sh, spliced
+            # here the way flake.nix splices pkgs/doctor.sh, so a check can
+            # run the raw file against stubs -- see tests/pkg-new.nix.
+            (pkgs.writeShellApplication {
+              name = "nixarchy-pkg-new";
+              runtimeInputs = [
+                pkgs.coreutils
+                pkgs.gnugrep
+                pkgs.gnused
+                pkgs.gawk
+                pkgs.nix-init
+                # nix-init resolves GitHub URLs entirely on its own (proven
+                # under a PATH holding nothing else), but shells out for the
+                # rest of its fetchers; an undeclared command here reads as
+                # "cannot draft this", not "git is missing".
+                pkgs.git
+                config.nix.package
+              ];
+              text = lib.replaceStrings [ "@nixpkgs@" ] [ "${pkgs.path}" ] (builtins.readFile ../pkgs/pkg-new.sh);
+            })
+
             # Why: modules/AGENTS.md#search-everything-this-machine-could-install-and-r
             (pkgs.writeShellApplication {
               name = "nixarchy-search";
@@ -2531,6 +2553,8 @@ in
                     case "''${2:-}" in
                       add) shift 2; exec nixarchy-pkg-add "$@" ;;
                       remove) shift 2; exec nixarchy-pkg-remove "$@" ;;
+                      new) shift 2; exec nixarchy-pkg-new "$@" ;;
+
                     esac
                     ;;
                   app)
@@ -2615,6 +2639,7 @@ in
                   nixarchy search [query]     Every package, NixOS option and app, in one picker
                   nixarchy pkg add <attr>     Add a nixpkgs package to the app selection
                   nixarchy pkg remove [attr]  Take one out again (no argument picks interactively)
+                  nixarchy pkg new <url>      Draft a derivation for software in no repository
                   nixarchy app enable <id>    Select an app from the curated list
                   nixarchy app disable <id>   Deselect one
                   nixarchy app remove         Pick apps, packages and options to remove
@@ -2720,6 +2745,26 @@ in
                   cp "$src" "$dst"
                   copied="$copied $part"
                 done
+
+                # Draft derivations from `nixarchy pkg new` ride along:
+                # apps.nix names them as ./packages/<name>.nix, a path
+                # relative to the COPY, so they must sit beside it or the
+                # uncommented line fails evaluation with "path does not
+                # exist". Copies accumulate and are never deleted here --
+                # removing a draft from the flake is an edit to a tree the
+                # user owns, not this tool's call.
+                if [ -d "$srcdir/packages" ]; then
+                  mkdir -p "$base/nixarchy/packages"
+                  for src in "$srcdir"/packages/*.nix; do
+                    [ -f "$src" ] || continue
+                    dst="$base/nixarchy/packages/$(basename "$src")"
+                    if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                      continue
+                    fi
+                    cp "$src" "$dst"
+                    copied="$copied packages/$(basename "$src")"
+                  done
+                fi
 
                 # Only what exists is imported. A machine seeded before
                 # services.nix existed has two files, not three, and a stub

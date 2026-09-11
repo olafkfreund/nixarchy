@@ -1926,11 +1926,24 @@ with a changelog: what was added, what changed, and what is coming. This
 section says what is PLANNED; a merged pull request announces nothing to
 somebody who only uses nixarchy, and that is the gap those posts fill.
 
-| epic | what it is for | |
-| --- | --- | --- |
-| [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
+**Nothing is in flight right now.** The three epics that were here — the
+escape hatches, the reinstall image and the package picker — all finished, and
+the table below is where they went. That is a real state rather than an
+oversight: the next one gets a row here when it is filed, and this section is
+CI-enforced, so an epic opened without one turns the build red.
 
 **Recently finished:**
+[the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)
+— a miss opens the picker instead of printing a URL, rows say what they cost
+(licence, homepage, unfree, broken, and whether you already have it), a dry run
+shows the diff before anything is written, and Remove means remove. The last
+child was the interesting one: adding several packages ran one nixpkgs
+evaluation per name, and on a non-interactive shell the first unresolvable name
+aborted the loop — so `nixarchy pkg add ripgrep typo fd` wrote `ripgrep` and
+**silently dropped `fd`**. One evaluation for all of them fixed the speed
+(1.06s to 0.21s for five, flat in the count) and the data loss together. Six
+children closed.
+Also
 [a reinstall image of this machine](https://github.com/olafkfreund/nixarchy/issues/478)
 — `nixarchy reinstall iso` builds a bootable image from this machine's own
 configuration, so it can be rebuilt on new hardware after the disk is gone. The

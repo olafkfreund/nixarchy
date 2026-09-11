@@ -616,6 +616,39 @@ jobs:
       - name: Every derived number in the README
         run: .github/scripts/readme-counts.sh --check
 
+      # docs/_config.yml carries the manual's sidebar as an explicit list,
+      # because alphabetical would open the manual on "AI" and bury Getting
+      # Started. The cost of stating the order is that a page added to
+      # manual/ and not listed is published at its URL and reachable from
+      # nothing -- its own comment says so, and four pages had drifted out of
+      # the nav that way (channels, preview, reinstall-image,
+      # how-this-is-tested) before anyone noticed the manual never mentioned
+      # two shipped features.
+      #
+      # Order still is not checked, only membership: where a page belongs in
+      # a reading order is a judgement, whether it is reachable at all is not.
+      - name: Every manual page is in the sidebar
+        run: |
+          pages=$(ls docs/manual/*.md | xargs -n1 basename |
+            sed 's/\.md$//' | grep -v '^index$' | sort)
+          nav=$(grep -oE 'path: /manual/[a-z-]+' docs/_config.yml |
+            sed 's|path: /manual/||' | sort -u)
+          llms=$(grep -oE 'manual/[a-z-]+' docs/llms.txt |
+            sed 's|manual/||' | sort -u)
+          rc=0
+          for n in $(comm -23 <(echo "$pages") <(echo "$nav") || true); do
+            echo "::error::docs/manual/$n.md is published but not in the docs/_config.yml sidebar"
+            rc=1
+          done
+          # llms.txt is the same list for a reader that is a model rather than
+          # a person, and it had drifted further than the sidebar had.
+          for n in $(comm -23 <(echo "$pages") <(echo "$llms") || true); do
+            echo "::error::docs/manual/$n.md is published but not in docs/llms.txt"
+            rc=1
+          done
+          [ $rc -eq 0 ] || exit 1
+          echo "every manual page is in the sidebar and in llms.txt"
+
       - name: Verify shebangs were patched
         run: |
           # Line 1 only. Several scripts legitimately contain `#!/bin/bash`

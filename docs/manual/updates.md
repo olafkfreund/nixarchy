@@ -43,23 +43,36 @@ on disk as a generation; see [rolling back](#rolling-back-bad-updates).
 The update-available icon next to the clock is upstream's, and it is driven by
 `omarchy-update-available`, which has been replaced to fit this model.
 
-## Channels do not exist here
+## Channels: two of upstream's four mean something here
 
-Upstream's four channels — stable, RC, edge, dev — are a choice of pacman
-repository and, for dev, a git checkout in `~/omarchy`. Neither exists on
-NixOS. Your "channel" is whatever the flake's `omarchy` input is pinned to,
-and the `nixpkgs` input decides whether your packages track a stable release
-or unstable.
+Upstream has four — stable, RC, edge, dev. Two of them have a NixOS meaning
+and two do not, so _Update ▸ Channel_ offers exactly the two:
 
-So _Update > Channel_ is hidden from the menu, and `omarchy-channel-set` is
-one of the roughly fifteen scripts that still shell out to pacman. Those get a
-shim that explains what replaced them and exits non-zero rather than
-`pacman: command not found`.
+| upstream | here |
+|---|---|
+| stable | `nixos-26.05`, and the matching home-manager |
+| edge | `nixos-unstable`, what nixarchy is developed against |
+| RC, dev | hidden — pacman repositories with no NixOS equivalent |
 
-If you want the equivalent of edge, point your `nixpkgs` input at
-`nixos-unstable` in `flake.nix`. If you want to develop nixarchy itself, point
-the `nixarchy` input at a local checkout. Both are edits to your own flake,
-which nixarchy does not make for you.
+`rc` and `dev` are left out rather than given an invented meaning: a row that
+does something other than what its name says is the failure this menu guards
+against hardest.
+
+The rows run `nixarchy channel`, which edits your `flake.nix` under the rule
+`nixarchy-unfreeze` set — only lines this project wrote get rewritten, and a
+flake you have reshaped is yours, so the edit is printed for you to make
+instead of guessed at. nixpkgs and home-manager always move together, because
+neither project supports the mismatch.
+
+**"Stable" sounds safer and here it is less tested** — nixarchy is developed
+against unstable, and what CI proves about stable is a twenty-second
+evaluation, not a booted machine. That trade-off, the per-package escape from
+one channel to the other, and what switching costs you in rebuild time are all
+in **[stable or unstable](channels)**.
+
+`omarchy-channel-set` and `omarchy-channel-current` are still carried
+unchanged and are still unreachable: the UI entry points they served are
+replaced by `pkgs/omarchy/nix-bin`.
 
 ## Firmware updates
 

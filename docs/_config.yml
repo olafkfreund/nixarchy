@@ -40,6 +40,8 @@ nav:
   - { path: /manual/getting-started,          title: Getting Started }
   - { path: /manual/updating-nixos,           title: Updating NixOS }
   - { path: /manual/updates,                  title: Updates }
+  - { path: /manual/preview,                  title: Preview Changes }
+  - { path: /manual/channels,                 title: Stable or Unstable }
   - { path: /manual/other-packages,           title: Packages }
   - { path: /manual/try-it-first,             title: Try It First }
   - { path: /manual/dotfiles,                 title: Dotfiles }
@@ -55,6 +57,8 @@ nav:
   - { path: /manual/remote-desktop,           title: Remote Desktop }
   - { path: /manual/system-snapshots,         title: System Snapshots }
   - { path: /manual/many-machines,            title: "Many machines, one repo" }
+  - { path: /manual/reinstall-image,          title: "A reinstall image of this machine" }
   - { path: /manual/dual-boot-install,        title: Dual Boot Install }
   - { path: /manual/unattended-installs,      title: Unattended Installs }
+  - { path: /manual/how-this-is-tested,       title: How This Is Tested }
   - { path: /manual/troubleshooting,          title: Troubleshooting }

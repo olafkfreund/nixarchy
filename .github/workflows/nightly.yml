@@ -411,7 +411,7 @@ jobs:
     # dependencies, and reported SUCCESS. The encrypted install is the DEFAULT
     # answer to the installer's own question, and it was the one failure that
     # filed no issue.
-    needs: [install, install-encrypted, install-iso, microvm, cache, canary, pkg-new]
+    needs: [install, install-encrypted, install-iso, microvm, cache, canary, pkg-new, reinstall-vm]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -458,6 +458,16 @@ jobs:
             # jobs later. It also collides with the dedupe search, appending a
             # sandbox failure to the install issue.
             title="nightly: a sandbox will not boot"
+          elif [ "${{ needs.reinstall-vm.result }}" != "success" ] &&
+            [ "${{ needs.install.result }}" = "success" ] &&
+            [ "${{ needs.install-encrypted.result }}" = "success" ] &&
+            [ "${{ needs.install-iso.result }}" = "success" ]; then
+            # The image builds from this machine's own configuration and the
+            # installs are fine, so the reinstall path broke on its own rather
+            # than riding an installer regression -- #592. This job ran for
+            # months with reinstall-vm absent from `needs`, which meant a
+            # 200-minute check could fail nightly and file nothing.
+            title="nightly: a machine can no longer be rebuilt from its own image"
           elif [ "${{ needs.pkg-new.result }}" != "success" ] &&
             [ "${{ needs.install.result }}" = "success" ] &&
             [ "${{ needs.install-encrypted.result }}" = "success" ] &&

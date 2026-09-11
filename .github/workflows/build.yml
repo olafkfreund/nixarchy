@@ -173,6 +173,50 @@ jobs:
           nix shell --inputs-from . nixpkgs#actionlint -c \
             actionlint -ignore 'SC[0-9]+:(info|style):'
 
+      # The nightly's watchdog watches every job the nightly runs -- #592.
+      #
+      # `nightly.yml`'s `report` job turns a nightly failure into a filed
+      # issue, and `if: failure()` observes only what is in `needs`. So a job
+      # missing from that list fails into silence: red in a workflow run
+      # nobody opens, which is §4's "a check that nothing surfaces is worse
+      # than no check" one level up.
+      #
+      # It had already happened twice. The report job's own comment was
+      # written after install-iso died in a way it did not catch -- "a
+      # watchdog that only barks at one of the two ways its subject can die is
+      # not a watchdog" -- and `reinstall-vm`, a 200-minute check, was absent
+      # from `needs` for months after that was written.
+      #
+      # So the list is compared rather than maintained. `schedule` is the
+      # gate every other job depends on and `report` cannot need itself;
+      # everything else must be watched.
+      - name: The nightly's report job watches every nightly job
+        run: |
+          jobs=$(awk '/^jobs:/{f=1;next} f&&/^  [a-z][a-z0-9-]*:$/{gsub(/[ :]/,"");print}' \
+            .github/workflows/nightly.yml | sort)
+          watched=$(awk '/^  report:/{f=1} f&&/^    needs:/{print;exit}' \
+            .github/workflows/nightly.yml |
+            grep -oE '[a-z][a-z0-9-]*' | grep -v '^needs$' | sort -u)
+          # The two that are structurally exempt, named rather than inferred.
+          expected=$(printf '%s\n' "$jobs" | grep -vxE 'report|schedule')
+
+          missing=$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$watched") || true)
+          if [ -n "$missing" ]; then
+            for j in $missing; do
+              echo "::error::nightly.yml job '$j' is not in the report job's needs, so its failure files no issue"
+            done
+            exit 1
+          fi
+
+          # A floor: if the parse stops matching, this must fail rather than
+          # report calm about a list it never read.
+          n=$(printf '%s\n' "$expected" | grep -c .)
+          if [ "$n" -lt 5 ]; then
+            echo "::error::only $n nightly jobs parsed -- the extraction is wrong, not the workflow" >&2
+            exit 1
+          fi
+          echo "the report job watches all $n nightly jobs"
+
   # Every preset in data/devenv-presets.nix, scaffolded with the real
   # `nixarchy dev init` and handed to a real devenv to evaluate.
   #

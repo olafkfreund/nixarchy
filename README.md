@@ -1928,11 +1928,49 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 
 | epic | what it is for | |
 | --- | --- | --- |
-| [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
-| [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
-| [#566](https://github.com/olafkfreund/nixarchy/issues/566) | **The escape hatches** — a downloaded binary finds its libraries, `/bin` and `/usr/bin` resolve, AppImages run, and software in no repository gets a draft derivation you own | 7 filed |
+| [#606](https://github.com/olafkfreund/nixarchy/issues/606) | **The skills that cover what nixarchy actually does** — an agent asked why a downloaded binary will not run has nothing to reach for today. Three skills: the loader ladder, gaming, and one flake across several machines | 3 filed |
+| [#611](https://github.com/olafkfreund/nixarchy/issues/611) | **Secrets you can actually use** — adding one is five manual steps today and neither `sops` nor `ssh-to-age` is on PATH. A menu row and an editor instead; a machine that can say what secrets exist and what uses them; a personal key you can copy without a terminal | 4 filed |
 
 **Recently finished:**
+[the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)
+— a miss opens the picker instead of printing a URL, rows say what they cost
+(licence, homepage, unfree, broken, and whether you already have it), a dry run
+shows the diff before anything is written, and Remove means remove. The last
+child was the interesting one: adding several packages ran one nixpkgs
+evaluation per name, and on a non-interactive shell the first unresolvable name
+aborted the loop — so `nixarchy pkg add ripgrep typo fd` wrote `ripgrep` and
+**silently dropped `fd`**. One evaluation for all of them fixed the speed
+(1.06s to 0.21s for five, flat in the count) and the data loss together. Six
+children closed.
+Also
+[a reinstall image of this machine](https://github.com/olafkfreund/nixarchy/issues/478)
+— `nixarchy reinstall iso` builds a bootable image from this machine's own
+configuration, so it can be rebuilt on new hardware after the disk is gone. The
+fifth way back, and the only one that survives losing the disk: generations
+cover a bad change, snapshots cover a deleted file, the home backup covers
+dotfiles, the config repo covers the configuration, and this covers the whole
+system. It is not a backup and does not pretend to be — it carries no `/home`,
+and booting it erases the target. A `--net` variant trades ~1.5 GB for fetching
+the closure, and **predicts what it cannot fetch** twice over: on the build
+machine before a stick is burned, and on the target before anything is
+formatted, where only a literal exit 0 reads as "all fetchable". The check that
+keeps it honest asserts #436's property — not that the install succeeded, but
+that nothing was built and nothing was fetched. Six children closed.
+Also
+[the escape hatches](https://github.com/olafkfreund/nixarchy/issues/566)
+— the moment that breaks NixOS is running a binary somebody else compiled, and
+`pip install` succeeding then dying on `libGL.so.1` is the shape of it. `nix-ld`
+was already on; its library list was whatever nixpkgs defaulted to. It now
+carries a deliberate set, `envfs` resolves `/bin` and `/usr/bin`, AppImages are
+registered with the kernel, and `nixarchy doctor <file>` names the library a
+binary cannot find. Proved on a booted machine rather than in evaluation: a
+probe linked against `libGL`, its interpreter patched to `/lib64/ld-linux`, runs
+in `checks.session` — and was watched failing first. `nixarchy pkg new <url>`
+answers the other half, drafting a package for software in no repository,
+building it, and offering it commented out for review, because a generated
+derivation that does not compile is worse than none. Nine children closed.
+Executing an AppImage is still untested, and the announcement says so.
+Also
 [choose a channel](https://github.com/olafkfreund/nixarchy/issues/525)
 — stable or unstable, from *Update ▸ Channel*, moving nixpkgs and
 home-manager together because neither project supports the mismatch. All seven

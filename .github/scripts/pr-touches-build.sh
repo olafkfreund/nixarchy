@@ -101,7 +101,38 @@ while IFS= read -r f; do
     #
     # `*/AGENTS.md` covers any depth, because `case` globs are not path-aware
     # and `*` crosses `/` -- the same property the `docs/*` arm relies on.
-    docs/*|AGENTS.md|*/AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
+    # `docs/` and `.github/scripts/` are derivation INPUTS, and the denylist's
+    # whole contract is that it names paths which PROVABLY CANNOT change a
+    # derivation. These provably can, so they are relevant to the build
+    # question and exempt only from the install one -- the README split, for
+    # the same reason.
+    #
+    # Eight derivations read them, verified by grep rather than assumed:
+    #
+    #   tests/config-delta.nix:100    ${../.github/scripts/omarchy-config-delta.sh}
+    #   tests/package-delta.nix:57    ${../.github/scripts/omarchy-package-delta.sh}
+    #   tests/patched-files.nix:52    ${../.github/scripts/omarchy-patched-files.sh}
+    #   tests/release-notes.nix:61-62 release-notes.sh, omarchy-package-delta.sh
+    #   tests/bin-ledger.nix:33       ${../.github/scripts/check-bin-ledger.py}
+    #   tests/install-gate.nix:20     ${../.github/scripts/pr-touches-build.sh}
+    #   tests/swap-guard.nix:57       ${../docs/manual/troubleshooting.md}
+    #   tests/doc-options.nix:87      ${../docs}          <- the whole tree
+    #
+    # So a pull request editing ONLY `omarchy-config-delta.sh` used to answer
+    # `false` and skip `checks.config-delta` -- the one check that exists to
+    # test that script. It merged green and broke main. `doc-options` takes
+    # `${../docs}` wholesale, which is why this cannot be narrowed to the two
+    # doc files named above: any page can change that derivation's output.
+    #
+    # Still excluded from `--install`: the three checks the install job builds
+    # reach `./hardware-configuration.nix` and `./test-instrumentation.nix`
+    # and nothing else, so none of this can change an install. The expensive
+    # saving is kept; only the cheap hosted build comes back.
+    .github/scripts/*|docs/*)
+      if [ "$install_only" = true ]; then continue; fi
+      relevant=true; break ;;
+
+    AGENTS.md|*/AGENTS.md|CONTRIBUTING.md|.envrc|.gitignore|.github/*)
       continue ;;
 
     # Only for the install question, and only files the install job cannot

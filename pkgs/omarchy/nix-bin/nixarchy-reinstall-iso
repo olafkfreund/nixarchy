@@ -2,7 +2,7 @@
 
 # nixarchy:new
 # omarchy:summary=Build a bootable image that reinstalls this machine's system. Not a backup.
-# omarchy:args=[--check]
+# omarchy:args=[--check|--net]
 # omarchy:examples=nixarchy reinstall iso
 
 # The fifth leg of getting back (#478): generations cover a bad change,
@@ -48,13 +48,22 @@ FLAKE="${NIXARCHY_FLAKE:-/etc/nixos}"
 # named differently, and for the tests.
 REINSTALL_ATTR="${NIXARCHY_REINSTALL_ATTR:-$FLAKE#reinstall-iso}"
 
+# The network twin (#483): ~1.5 GB, fetching the closure at install time
+# instead of carrying it. Same seam, same reasons -- and only offered after
+# the preflight below has said whether the caches can actually supply this
+# machine, because an image that boots and then cannot fetch is the failure
+# a warm-store CI never sees.
+REINSTALL_NET_ATTR="${NIXARCHY_REINSTALL_NET_ATTR:-$FLAKE#reinstall-iso-net}"
+
 red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
 dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
 bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 
 usage() {
-  echo "Usage: nixarchy-reinstall-iso [--check]"
+  echo "Usage: nixarchy-reinstall-iso [--check|--net]"
   echo "  (no argument)  build the image, after the preflights"
+  echo "  --net          the ~1.5 GB variant that fetches the system over the"
+  echo "                 network as it installs, instead of carrying it"
   echo "  --check        exit 0 if this machine is one nixarchy installed. Prints nothing."
 }
 
@@ -127,6 +136,35 @@ drift_verdict() {
   fi
 }
 
+# fetchable | build | unknown, over installer/substitutable.sh's exit code.
+# unknown is a verdict of its own and never collapses into fetchable:
+# "nothing to build" is the answer that strands an installer on a
+# half-fetched machine, so it is only ever given when the script said it.
+substitutable_verdict() {
+  local script=$1 top=$2 rc=0
+  [ -n "$script" ] && [ -n "$top" ] || { echo unknown; return; }
+  bash "$script" "$top" >&2 || rc=$?
+  case "$rc" in
+    0) echo fetchable ;;
+    1) echo build ;;
+    *) echo unknown ;;
+  esac
+}
+
+# Where the prediction script lives: inside the nixarchy input this flake
+# already pins, so there is no second copy to drift and no second install.
+# `nix flake archive --dry-run` names the inputs' store paths without
+# copying anything, and they are already local on a machine that evaluates
+# its own flake. Any failure prints nothing, which the verdict above reads
+# as unknown -- never as fetchable.
+substitutable_script() {
+  local src
+  src=$(nix flake archive --json --dry-run "$FLAKE" 2>/dev/null \
+    | jq -r '.inputs.nixarchy.path // empty' 2>/dev/null) || return 0
+  [ -n "$src" ] && [ -f "$src/installer/substitutable.sh" ] || return 0
+  printf '%s\n' "$src/installer/substitutable.sh"
+}
+
 # Closure size of the running system in MB, empty when it cannot be read.
 closure_mb() {
   local bytes
@@ -141,8 +179,11 @@ closure_mb() {
 # Flags
 # ---------------------------------------------------------------------------
 
+net=false
+
 case "${1:-}" in
   "") ;;
+  --net) net=true ;;
   --check)
     installed_by_nixarchy || exit 1
     exit 0
@@ -187,12 +228,27 @@ echo
 dim "It also goes stale: rebuild it after meaningful configuration changes."
 echo
 
+if [ "$net" = true ]; then
+  echo "The NETWORK variant: about 1.5 GB instead of 6-10, because it fetches"
+  echo "the system from the caches as it installs instead of carrying it."
+  echo "That needs a network on the target -- and it is only honest if the"
+  echo "caches actually hold this system, which is checked below."
+  echo
+fi
+
 # ---------------------------------------------------------------------------
 # Preflight 1: space. ~1x the closure for the image, ~2x transient in /nix.
 # ---------------------------------------------------------------------------
 
 closure=$(closure_mb)
-if [ -n "$closure" ]; then
+if [ "$net" = true ]; then
+  # No closure on the image, so no closure in the math: the live environment
+  # squashfs is the bulk of it, and the number barely varies per machine.
+  dim "The network image is about 1.5 GB; the build wants a few GB of"
+  dim "transient disk, and the image itself lands in /nix/store."
+  echo
+  check_disk /nix/store 6000 "building the image" || exit 1
+elif [ -n "$closure" ]; then
   need=$((closure * 2))
   dim "The running system's closure is ${closure} MB; the build wants roughly"
   dim "twice that in transient disk, and the image itself lands in /nix/store."
@@ -282,8 +338,60 @@ case "$(drift_verdict "$running" "$evaluated")" in
 esac
 
 # ---------------------------------------------------------------------------
+# Preflight 4, --net only: what the target could NOT fetch (#483, the whole
+# scope of the network variant). cache.nixos.org builds no unfree packages
+# at all, nixarchy.cachix.org holds the reference closure rather than this
+# machine's app selection, and anything built here is in no cache anywhere.
+# The local store already knows which paths no cache vouched for --
+# installer/substitutable.sh explains why it is asked instead of the caches
+# -- and discovering the answer after a disk is formatted is the failure
+# this question exists to prevent.
+# ---------------------------------------------------------------------------
+
+if [ "$net" = true ]; then
+  echo
+  bold "What a fresh machine could fetch, and what it could not"
+  top=${evaluated:-$running}
+  case "$(substitutable_verdict "${NIXARCHY_SUBSTITUTABLE:-$(substitutable_script)}" "$top")" in
+    fetchable)
+      dim "Every path in this system can be fetched from a cache; the network"
+      dim "image is honest for this machine."
+      ;;
+    build)
+      echo
+      red "Some of this system is in NO cache."
+      echo "  The paths above would be COMPILED on the target, mid-install,"
+      echo "  over the network image's live session -- unfree packages are"
+      echo "  not in cache.nixos.org by policy, and locally built ones are in"
+      echo "  no cache by definition. The offline image carries all of them"
+      echo "  instead:"
+      echo
+      bold "    nixarchy reinstall iso"
+      echo
+      printf "Build the network image anyway? [y/N] "
+      read -r reply
+      case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
+      ;;
+    unknown)
+      red "Whether the target could fetch this system could not be answered."
+      echo "  Do not read that as 'it can all be fetched' -- that is the"
+      echo "  answer that strands an installer on a machine it cannot finish."
+      echo "  The offline image needs no answer: nixarchy reinstall iso."
+      echo
+      printf "Build the network image anyway? [y/N] "
+      read -r reply
+      case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
+      ;;
+  esac
+fi
+
+# ---------------------------------------------------------------------------
 # Confirm, build, report.
 # ---------------------------------------------------------------------------
+
+if [ "$net" = true ]; then
+  REINSTALL_ATTR=$REINSTALL_NET_ATTR
+fi
 
 echo
 printf "Build the image? It takes tens of minutes. [y/N] "
@@ -291,6 +399,7 @@ read -r reply
 case "$reply" in [yY]*) ;; *) echo "Nothing built."; exit 0 ;; esac
 
 outlink="$HOME/.local/share/nixarchy/reinstall-iso"
+[ "$net" = true ] && outlink="$outlink-net"
 mkdir -p "$(dirname "$outlink")"
 
 echo
@@ -318,9 +427,14 @@ echo "Write it to a USB stick (this ERASES the stick):"
 dim "  sudo dd if=$iso of=/dev/sdX bs=4M status=progress oflag=sync"
 echo
 echo "Keep it OFF this machine -- an image on the disk it exists to replace"
-echo "protects nothing. And keep it private: it contains your /etc/nixos and"
-echo "any unfree packages your system uses, which are yours to keep and not"
-echo "yours to publish."
+echo "protects nothing. And keep it private: it contains your /etc/nixos"
+if [ "$net" = true ]; then
+  echo "(the system itself is fetched at install time, so a network on the"
+  echo "target is part of the deal)."
+else
+  echo "and any unfree packages your system uses, which are yours to keep"
+  echo "and not yours to publish."
+fi
 echo
 red "Remember what it is not: booting it erases the target disk and brings"
 red "back the system, not your files. Files come back from your backups."

@@ -289,8 +289,14 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   # the build could start. Same doctrine as above -- the function on its own,
   # driven with stubs that lie.
   # ------------------------------------------------------------------------
-  sed -n '/^preflight_build()/,/^}/p' ${installScript} > pf.sh
-  test -s pf.sh || { echo "preflight_build is not in install.sh any more" >&2; exit 1; }
+  grep '^PLAN_TRIVIA=' ${installScript} > pf.sh
+  test -s pf.sh || { echo "PLAN_TRIVIA is not in install.sh any more" >&2; exit 1; }
+  sed -n '/^preflight_report_builds()/,/^}/p' ${installScript} >> pf.sh
+  grep -q 'preflight_report_builds()' pf.sh \
+    || { echo "preflight_report_builds is not in install.sh any more" >&2; exit 1; }
+  sed -n '/^preflight_build()/,/^}/p' ${installScript} >> pf.sh
+  grep -q 'preflight_build()' pf.sh \
+    || { echo "preflight_build is not in install.sh any more" >&2; exit 1; }
   grep '^on_net_image()' ${installScript} >> pf.sh
 
   cat > pt.sh <<'EOF'
@@ -302,6 +308,9 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   wipefs() { touch wipefs-called; }
   git() { :; }
   curl() { [ "$CURL_OK" = 1 ]; }
+  ui_interactive() { [ "$UI" = 1 ]; }
+  ui_gum_pad() { echo "0 0"; }
+  gum() { [ "$GUM_YES" = 1 ]; }
   nix() {
     if [ "$NIX_OK" = 1 ]; then echo 'these 0 derivations will be built'; else
       # Long on purpose: a real dry-run of a desktop closure is thousands of
@@ -342,6 +351,47 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   ! grep -qi 'broken pipe' out || { echo "  FAILED  refusal is preceded by Broken pipe noise"; fails=$((fails+1)); }
   # And a network that works installs as before.
   t proceed "net image, everything answers"      net  1 1
+
+  # preflight_report_builds (#483): a plan that SUCCEEDS can still be mostly
+  # a build -- a user's reinstall-iso-net closure holds unfree and locally
+  # built paths no cache has. The report must name the real packages, filter
+  # the trivia every machine assembles for itself, and only ever ask when
+  # somebody is there to answer.
+  plan_builds='these 3 derivations will be built:
+  /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-vscode-1.90.0.drv
+  /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-etc-fstab.drv
+  /nix/store/cccccccccccccccccccccccccccccccc-unit-nginx.service.drv
+  these 2 paths will be fetched (0.10 MiB download):
+  /nix/store/dddddddddddddddddddddddddddddddd-firefox-140.0'
+  plan_trivia='these 2 derivations will be built:
+  /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-etc-fstab.drv
+  /nix/store/cccccccccccccccccccccccccccccccc-unit-nginx.service.drv'
+
+  r() {
+    want=$1 name=$2 plan=$3 ui=$4 gumyes=$5
+    if UI=$ui GUM_YES=$gumyes preflight_report_builds "$plan" >rout 2>&1; then got=proceed; else got=refuse; fi
+    if [ "$got" = "$want" ]; then
+      echo "  ok      $name ($got)"
+    else
+      echo "  FAILED  $name: wanted $want, got $got"; sed 's/^/            /' rout
+      fails=$((fails + 1))
+    fi
+  }
+
+  # Unattended: say it, never hang on a prompt nobody answers.
+  r proceed "real build in the plan, unattended"   "$plan_builds" 0 0
+  grep -q 'vscode' rout || { echo "  FAILED  the report does not name vscode"; fails=$((fails+1)); }
+  # The fetched section must not be misread as builds.
+  ! grep -q 'firefox' rout || { echo "  FAILED  a FETCHED path reported as a build"; fails=$((fails+1)); }
+  # Somebody at the terminal declines: refused before the wipe.
+  r refuse  "real build in the plan, declined"     "$plan_builds" 1 0
+  r proceed "real build in the plan, accepted"     "$plan_builds" 1 1
+  # Trivia alone -- etc fragments, units -- is every install's plan, and a
+  # report about it would cry wolf on the reference image.
+  r proceed "only trivia in the plan"              "$plan_trivia" 1 0
+  ! grep -q 'not everything can be fetched' rout || {
+    echo "  FAILED  trivia-only plan still warned"; fails=$((fails+1));
+  }
 
   # An ENCRYPTED install must pin the ENCRYPTED module list.
   #
@@ -385,6 +435,13 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   # written, extracted, asserted, and run by nothing.
   # `|| true` because stdenv sets pipefail, and a grep with no match must
   # reach the named refusal below rather than kill the script mid-pipe.
+  # The report function is tested above and must also be WIRED: a successful
+  # dry-run hands its plan over, or #483's prediction never runs anywhere.
+  grep -q 'preflight_report_builds "$plan"' ${installScript} || {
+    echo "preflight_build no longer hands its plan to preflight_report_builds (#483)" >&2
+    exit 1
+  }
+
   pf_line=$(grep -n 'preflight_build || exit 1' ${installScript} | cut -d: -f1 | head -1 || true)
   fmt_line=$(grep -n '^    format_disk &&' ${installScript} | cut -d: -f1 | head -1 || true)
   [ -n "$pf_line" ] || { echo "main() no longer calls preflight_build" >&2; exit 1; }

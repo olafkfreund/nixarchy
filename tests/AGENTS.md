@@ -118,6 +118,20 @@ Non-gating, per-night, filed as its own issue by the report job — a job
 rather than a check for the same reason devenv-presets is (see build.yml's
 comment on that job).
 
+## The cold-cache one: nobody here can watch a network image fail to fetch
+
+The network reinstall image (#483) is only honest for a closure the caches
+hold, and every store CI touches is warm and every closure it installs is
+cached. So the failure the feature is about — a target that formats, then
+cannot fetch an unfree or locally built path — cannot be produced by any
+layer here. What IS covered: the prediction's classification against real
+`nix path-info` shapes (`substitutable`), the build-machine verdict wiring
+(`reinstall-iso`), and the target-side plan report with plans nix really
+prints (`installer-store-space`). What is not: a real `reinstall-iso-net`
+image, booted against real caches, missing a real unfree package. That run
+needs a human with vscode in their closure and a machine to lose; until one
+reports back, the prediction is tested and the event it predicts is not.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

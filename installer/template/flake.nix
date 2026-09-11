@@ -111,28 +111,35 @@
       # embeds the flake as git sees it -- which is also why the command
       # refuses on an uncommitted tree.
       packages.x86_64-linux =
-        lib.genAttrs hosts (
-          name:
-          nixarchy.lib.mkUserIso {
-            flake = self;
-            host = name;
-          }
-        )
-        // {
-          # The bare name, for the common case of one machine. With several,
+        let
+          image =
+            offline: host:
+            nixarchy.lib.mkUserIso {
+              inherit host offline;
+              flake = self;
+            };
+          # The bare names, for the common case of one machine. With several,
           # the command names the one it means.
-          reinstall-iso =
+          only =
+            offline: suffix:
             if lib.length hosts == 1 then
-              nixarchy.lib.mkUserIso {
-                flake = self;
-                host = lib.head hosts;
-              }
+              image offline (lib.head hosts)
             else
               throw ''
                 This repository has ${toString (lib.length hosts)} machines, so
-                "reinstall-iso" does not say which one. Name it:
-                ${lib.concatStringsSep "\n" (map (h: "  nix build .#${h}") hosts)}
+                "reinstall-iso${suffix}" does not say which one. Name it:
+                ${lib.concatStringsSep "\n" (map (h: "  nix build .#${h}${suffix}") hosts)}
               '';
+        in
+        lib.genAttrs hosts (image true)
+        # The -net twins fetch the closure at install time instead of carrying
+        # it: ~1.5 GB, a network on the target, and only honest when the
+        # caches hold this system -- which `nixarchy reinstall iso --net`
+        # checks before offering the build.
+        // lib.listToAttrs (map (name: lib.nameValuePair "${name}-net" (image false name)) hosts)
+        // {
+          reinstall-iso = only true "";
+          reinstall-iso-net = only false "-net";
         };
     };
 }

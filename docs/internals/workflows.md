@@ -128,7 +128,15 @@ with the machine, guest-side ones do not. Four at once on one box turned
 "slower" into "failed", and the failure named the test rather than the
 contention. Two concurrent jobs is what demonstrably passes.
 
-**If your install check sits queued for twenty minutes, the cap is working.**
+**A queued install check may be the cap working — or a job about to be
+evicted.** The two look identical from the outside (#548 measured it). GitHub
+retains only **one pending job** per concurrency group, so when a second run
+queues into `nixarchy-install-vm`, the next arrival cancels whoever was
+waiting. A `cancelled` install renders as a **failure**, and a cancelled
+required check **silently disables auto-merge** — the pull request then sits
+there with nothing visibly wrong. #550 gave runs the gate rules irrelevant
+their own `install-noop-<ref>` group, so a docs-only PR no longer touches the
+shared slot at all; for relevant runs the eviction remains, tracked in #555.
 
 ### What that cap costs, and what is done instead
 

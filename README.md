@@ -1934,6 +1934,7 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | --- | --- | --- |
 | [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
 | [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
+| [#566](https://github.com/olafkfreund/nixarchy/issues/566) | **The escape hatches** — a downloaded binary finds its libraries, `/bin` and `/usr/bin` resolve, AppImages run, and software in no repository gets a draft derivation you own | 7 filed |
 
 **Recently finished:**
 [choose a channel](https://github.com/olafkfreund/nixarchy/issues/525)

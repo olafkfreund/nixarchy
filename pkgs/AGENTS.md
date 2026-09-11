@@ -55,4 +55,5 @@ purpose; a fenced block is what an agent copies.
 | `omarchy-runtime` | the replaced commands run |
 | `patched-files` | every `--replace-fail` patch still applies |
 | `doctor-graphics` | the doctor's GPU rules, against fixture machines |
+| `doctor-ldd` | the doctor's dynamic-link check, against binaries built broken |
 | `dashboard-clock` | the install dashboard against a rewound clock |

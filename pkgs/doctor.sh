@@ -31,6 +31,142 @@ finding() { printf '  %s%s%s %s\n' "$2" "$1" "$off" "$3"; }
 declare -a snippet=()
 declare -a notes=()
 
+# ---- a binary that cannot find its libraries -----------------------------
+# "libGL.so.1: cannot open shared object file" is the most confusing error a
+# NixOS newcomer meets: a prebuilt binary -- a pip wheel, an npm native
+# module, a downloaded tool -- looking for an ordinary Linux library that
+# programs.nix-ld.libraries does not carry. The error names a file every
+# other distro has, and nothing on the machine says why it is missing here.
+#
+# ldd rather than reading DT_NEEDED by hand, because ldd resolves
+# transitively -- the missing library is often a dependency of a dependency.
+# NIX_LD_LIBRARY_PATH goes first on LD_LIBRARY_PATH so ldd answers the
+# question the runtime will: nix-ld's loader prepends exactly that variable.
+
+# The nixpkgs attribute for the sonames people actually hit. Deliberately
+# short: a wrong mapping is worse than "go look it up", so only entries that
+# are stable across nixpkgs go in.
+lib_pkg() {
+  case "$1" in
+    libGL.so* | libEGL.so* | libOpenGL.so* | libGLX.so*) echo "libGL" ;;
+    libstdc++.so* | libgcc_s.so*) echo "stdenv.cc.cc.lib" ;;
+    libz.so*) echo "zlib" ;;
+    libssl.so* | libcrypto.so*) echo "openssl" ;;
+    libX11.so*) echo "xorg.libX11" ;;
+    libasound.so*) echo "alsa-lib" ;;
+    libpulse.so*) echo "libpulseaudio" ;;
+    *) echo "" ;;
+  esac
+}
+
+# LINK_BAD tells the scan loop below whether this file produced a warning;
+# a function under errexit cannot use its return status for that without
+# every call site growing an `|| true` that also swallows real failures.
+LINK_BAD=0
+link_check() { # <file> <verbose>  verbose=1 also reports health and non-answers
+  local f=$1 verbose=${2:-} name interp ldd_out missing
+  LINK_BAD=0
+  name=${f##*/}
+
+  if [ ! -r "$f" ]; then
+    if [ -n "$verbose" ]; then finding "$name is not readable" "$warn" "$f"; fi
+    return 0
+  fi
+  case "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" in
+    7f454c46) ;;
+    *)
+      if [ -n "$verbose" ]; then
+        finding "$name is not an ELF binary" "$ok" "a script, probably -- nothing for this check to say"
+      fi
+      return 0
+      ;;
+  esac
+
+  interp=$(patchelf --print-interpreter "$f" 2>/dev/null) || interp=""
+  if [ -z "$interp" ]; then
+    # No PT_INTERP: statically linked, needs no loader and no libraries.
+    if [ -n "$verbose" ]; then finding "$name is statically linked" "$ok" "needs no libraries"; fi
+    return 0
+  fi
+
+  if [ ! -e "$interp" ]; then
+    LINK_BAD=1
+    finding "$name asks for $interp, which does not exist" "$warn" ""
+    say "     A prebuilt Linux binary starts through that loader, and NixOS has"
+    say "     one there only when nix-ld provides it:"
+    say "       programs.nix-ld.enable = true;"
+    say "     nixarchy defaults this ON, so if it is missing, your own"
+    say "     configuration turned it off."
+    return 0
+  fi
+
+  ldd_out=$(LD_LIBRARY_PATH="${NIX_LD_LIBRARY_PATH:-}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+    ldd "$f" 2>&1) || true
+  missing=$(awk '/=> not found/ { print $1 }' <<<"$ldd_out" | sort -u) || missing=""
+
+  if [ -z "$missing" ]; then
+    if grep -q "not a dynamic executable" <<<"$ldd_out"; then
+      # An interpreter is set but ldd cannot read the file -- another
+      # architecture, usually. "Cannot answer" is the answer; reporting fine
+      # here would be a green light, not a check.
+      LINK_BAD=1
+      finding "$name could not be checked" "$warn" "ldd cannot read it -- built for another architecture?"
+      return 0
+    fi
+    if [ -n "$verbose" ]; then finding "$name finds all its libraries" "$ok" ""; fi
+    return 0
+  fi
+
+  LINK_BAD=1
+  finding "$name cannot load: $(tr '\n' ' ' <<<"$missing")" "$warn" ""
+  say "     It resolves libraries through nix-ld, and these are not in"
+  say "     programs.nix-ld.libraries. In your configuration:"
+  local mapped="" unknown="" so p
+  while IFS= read -r so; do
+    [ -n "$so" ] || continue
+    p=$(lib_pkg "$so")
+    if [ -n "$p" ]; then
+      case " $mapped " in *" $p "*) ;; *) mapped="$mapped $p" ;; esac
+    else
+      unknown="$unknown $so"
+    fi
+  done <<<"$missing"
+  if [ -n "$mapped" ]; then
+    say "       programs.nix-ld.libraries = with pkgs; [$mapped ];"
+  fi
+  if [ -n "$unknown" ]; then
+    say "     For$unknown: find the package that carries it --"
+    say "       nix-locate lib/<name>            # from nix-index"
+    say "     or search the file name at search.nixos.org, and add that package"
+    say "     to the same list."
+  fi
+  say "     Then rebuild and ${bold}log out and back in${off}: NIX_LD_LIBRARY_PATH is set"
+  say "     at login, so a running session keeps the old list."
+  return 0
+}
+
+# `nixarchy-doctor <file-or-command>...` answers only this question, for
+# exactly the files named -- the one mode that can reach into a venv or a
+# node_modules, which the report's default scope below cannot.
+if [ $# -gt 0 ]; then
+  say ""
+  say "${bold}Can these binaries find their libraries?${off}"
+  for f in "$@"; do
+    if [ ! -e "$f" ]; then
+      resolved=$(command -v "$f" 2>/dev/null) || resolved=""
+      if [ -n "$resolved" ]; then
+        f=$resolved
+      else
+        finding "$f does not exist" "$warn" "not a path, and not on PATH"
+        continue
+      fi
+    fi
+    link_check "$f" 1
+  done
+  say ""
+  exit 0
+fi
+
 say ""
 say "${bold}nixarchy: what this machine needs${off}"
 say "${dim}Reading the running system. Nothing is modified.${off}"
@@ -1008,6 +1144,44 @@ if [ -n "$devenv_rc" ] && [ -r "$devenv_rc" ] && grep -q 'devenv hook' "$devenv_
     say "     cd into a project does nothing and says nothing."
     notes+=("devenv is in your configuration but not in this session. The hook is guarded, so a stale shell stays silent rather than erroring at every prompt -- which also means nothing tells you to log out. This is that.")
   fi
+fi
+say ""
+
+# ---- prebuilt binaries in the one place this can honestly look -----------
+# The scope is ~/.local/bin and nothing else, because that is where pipx, uv,
+# npm -g and "curl | install" put user-installed binaries -- and because a
+# claim to have scanned every venv and node_modules on the machine would be
+# false. The narrow scope is stated in the output either way, with the arg
+# form as the escape: `nixarchy-doctor <path>` reaches what this does not.
+#
+# The directory is a variable for the same reason NIXARCHY_SYSFS_PCI is: no
+# CI machine has a broken wheel in its real ~/.local/bin, so the check pins
+# the scope at a fixture or these branches are never exercised.
+say "${bold}Prebuilt binaries${off}"
+: "${NIXARCHY_LDD_SCAN:=$HOME/.local/bin}"
+elf_seen=0 elf_broken=0
+if [ -d "$NIXARCHY_LDD_SCAN" ]; then
+  for f in "$NIXARCHY_LDD_SCAN"/*; do
+    [ -f "$f" ] || continue
+    case "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" in
+      7f454c46) ;;
+      *) continue ;;
+    esac
+    elf_seen=$((elf_seen + 1))
+    link_check "$f" ""
+    elf_broken=$((elf_broken + LINK_BAD))
+  done
+fi
+if [ "$elf_seen" -eq 0 ]; then
+  say "  ${dim}No ELF binaries in ${NIXARCHY_LDD_SCAN/#$HOME/\~}, the one place this looks."
+  say "  A pip wheel or an npm module elsewhere is out of its sight -- ask about"
+  say "  one directly:  nixarchy-doctor <path-or-command>${off}"
+elif [ "$elf_broken" -eq 0 ]; then
+  finding "All $elf_seen prebuilt binaries in ${NIXARCHY_LDD_SCAN/#$HOME/\~} find their libraries" "$ok" ""
+  say "  ${dim}Only that directory was scanned. For a venv or a node module:"
+  say "  nixarchy-doctor <path-or-command>${off}"
+else
+  notes+=("A binary in ${NIXARCHY_LDD_SCAN/#$HOME/\~} cannot find a shared library. The runtime error it produces -- 'cannot open shared object file' -- names the library and never the fix; the fix is programs.nix-ld.libraries, printed above.")
 fi
 say ""
 

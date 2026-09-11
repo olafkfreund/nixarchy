@@ -1928,10 +1928,23 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 
 | epic | what it is for | |
 | --- | --- | --- |
-| [#478](https://github.com/olafkfreund/nixarchy/issues/478) | **A reinstall image** — build a bootable image from this machine's own configuration, so it can be rebuilt on new hardware. Not a backup: it carries no `/home` and booting it erases the target | 6 filed |
 | [#491](https://github.com/olafkfreund/nixarchy/issues/491) | **The package picker, remade** — a miss opens the picker instead of a URL, rows say what they cost, and packages can be removed as well as added | 6 filed |
 
 **Recently finished:**
+[a reinstall image of this machine](https://github.com/olafkfreund/nixarchy/issues/478)
+— `nixarchy reinstall iso` builds a bootable image from this machine's own
+configuration, so it can be rebuilt on new hardware after the disk is gone. The
+fifth way back, and the only one that survives losing the disk: generations
+cover a bad change, snapshots cover a deleted file, the home backup covers
+dotfiles, the config repo covers the configuration, and this covers the whole
+system. It is not a backup and does not pretend to be — it carries no `/home`,
+and booting it erases the target. A `--net` variant trades ~1.5 GB for fetching
+the closure, and **predicts what it cannot fetch** twice over: on the build
+machine before a stick is burned, and on the target before anything is
+formatted, where only a literal exit 0 reads as "all fetchable". The check that
+keeps it honest asserts #436's property — not that the install succeeded, but
+that nothing was built and nothing was fetched. Six children closed.
+Also
 [the escape hatches](https://github.com/olafkfreund/nixarchy/issues/566)
 — the moment that breaks NixOS is running a binary somebody else compiled, and
 `pip install` succeeding then dying on `libGL.so.1` is the shape of it. `nix-ld`

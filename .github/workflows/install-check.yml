@@ -66,7 +66,23 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: install-check-${{ github.ref }}
+  # Per COMMIT on main, per branch everywhere else -- the same shape as
+  # build.yml's workflow-level group, for the same reason (#561). Only one run
+  # per group may be PENDING, and a newer arrival cancels the previously
+  # pending one -- a rule `cancel-in-progress: false` does not touch. The old
+  # `install-check-${{ github.ref }}` was a constant on main, so in a burst of
+  # merges run 2 was cancelled by run 3, run 3 by run 4, and only the first
+  # and last ever reported. The commit in the middle never got an install
+  # verdict, nothing re-tests a merged commit, and main's install is the only
+  # check that can catch the CLAUDE.md section-9 failure: two PRs each green
+  # against a main that lacked the other. With the SHA in the group each merge
+  # gets a group of its own, which nothing can supersede. The cost is the one
+  # build.yml already accepted -- a burst of merges queues rather than drops,
+  # and the job-level `nixarchy-install-vm` group below still keeps the VM to
+  # one at a time.
+  group: >-
+    install-check-${{ github.ref }}-${{
+      github.ref == 'refs/heads/main' && github.sha || 'shared' }}
   # Not a constant, and #144 assumed it was one: it read this file as already
   # having `cancel-in-progress`, and it has it set to false. On main that is
   # right and deliberate -- the whole reason this file was split out of
@@ -118,6 +134,23 @@ jobs:
           # how one of them goes stale while both are still trusted. The
           # reasoning that was here is there, next to the list.
           relevant=$(.github/scripts/pr-touches-build.sh --install)
+
+          # The script promises exactly `true` or `false`, and every consumer
+          # in `install` gates on `== 'true'` -- so any THIRD value (empty
+          # output, a renamed field, a step dying after printing nothing)
+          # would read as "skip" and produce a green install that installed
+          # nothing, inverting the script's own fail-safe policy (#559).
+          # Enforce the contract here instead of making every consumer
+          # defensive: a failed gate makes `install` report `skipped`, which
+          # is not `success`, so the merge is blocked -- the failure is loud,
+          # not a false pass.
+          case "$relevant" in
+            true | false) ;;
+            *)
+              echo "::error::pr-touches-build.sh printed '$relevant'; the contract is exactly 'true' or 'false'"
+              exit 1
+              ;;
+          esac
 
           echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
 
@@ -201,6 +234,20 @@ jobs:
     # seconds without ever touching the shared slot. Every property the block
     # below defends is untouched: a RELEVANT run still lands in
     # `nixarchy-install-vm`, still one at a time, machine-wide.
+    #
+    # And that means the eviction described above STILL APPLIES to relevant
+    # runs (#555) -- #548's fix covered only the runs the gate rules
+    # irrelevant. GitHub retains one pending job per group, so with one
+    # relevant run building and two waiting, each newcomer evicts whoever was
+    # queued. More than one pending run is the normal state here, not an edge
+    # case. The evicted job reports `cancelled`, which renders as a failure
+    # and SILENTLY DISABLES AUTO-MERGE on that PR; re-running cannot clear it,
+    # because the workflow-level PR group reaps the re-run within a second of
+    # the gate finishing. The only escape is a new head commit. A real fix is
+    # a small pool of slot groups sized to the runners that can take the work,
+    # but that changes the contention model the measurements above defend
+    # (2 concurrent succeed, 3-4 fail), so it wants doing against real numbers
+    # -- #555 tracks it. Until then this hole is documented, not closed.
     #
     # `needs` is available in a job-level `concurrency:` -- that is what makes
     # this expressible at all, and it is the same context `runs-on` below

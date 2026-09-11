@@ -90,6 +90,31 @@ you own, and only then a rebuild:
 
 See **[other packages](manual/other-packages)** for the whole flow.
 
+## The binary you just downloaded runs
+
+NixOS deliberately has no `/usr/lib`, so a prebuilt Linux binary — a pip
+wheel with compiled code, an Electron app, a game — normally dies with
+`libGL.so.1: cannot open shared object file`. nixarchy turns the escape
+hatches on by default:
+
+- **[nix-ld](https://github.com/nix-community/nix-ld)**, loaded with a
+  curated set of what desktop downloads actually link against — `libGL`, the
+  X and Wayland client stacks, fontconfig, NSS for Electron, ALSA, ffmpeg —
+  so most prebuilt binaries simply run.
+- **envfs** mounts `/bin` and `/usr/bin`, so a script whose shebang says
+  `#!/usr/bin/python3` runs instead of reporting "No such file or directory"
+  about a file you are looking at.
+- **AppImages are double-clickable**: binfmt registration runs them directly,
+  no `appimage-run` incantation to know about.
+
+And when something still fails, `nixarchy-doctor <binary>` runs the loader's
+own resolution against that file and names the missing library and the
+`programs.nix-ld.libraries` line that supplies it — instead of leaving you
+to decode `cannot open shared object file` yourself.
+
+See **[Python](manual/python)** — the page is named for where people hit
+this first, but the loader story covers Node, Electron and games too.
+
 ## An agent that knows this machine
 
 Omarchy symlinks its agent skills into every harness's skill directory. Upstream

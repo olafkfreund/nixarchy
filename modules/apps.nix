@@ -1303,11 +1303,12 @@ in
             # Remove > Package row. Upstream offers a fuzzy picker over installed
             # pacman packages; this is the same shape over the app selection.
             #
-            # All three kinds the Install picker can write, because "Remove" that
-            # only sees one of them is a menu row that lies (#494, #522): curated
+            # All four kinds the pickers can write, because "Remove" that
+            # only sees some of them is a menu row that lies (#494, #522): curated
             # apps (`id.enable` lines), extra packages (`#@pkg` markers from
-            # nixarchy-pkg-add) and options (`#@opt` markers from the Search
-            # picker's add_option).
+            # nixarchy-pkg-add), options (`#@opt` markers from the Search
+            # picker's add_option) and drafts (`#@draft` markers from
+            # nixarchy-pkg-new).
             (pkgs.writeShellApplication {
               name = "nixarchy-app-remove";
               runtimeInputs = [
@@ -1338,6 +1339,10 @@ in
                   [ -n "$name" ] || continue
                   entries+=("opt"$'\t'"$name")
                 done < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
+                while IFS= read -r name; do
+                  [ -n "$name" ] || continue
+                  entries+=("draft"$'\t'"$name")
+                done < <(grep -oE '#@draft [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@draft //')
 
                 if [ ''${#entries[@]} -eq 0 ]; then
                   echo "Nothing is selected. Install > Package lists what is available."
@@ -1358,16 +1363,19 @@ in
                 # one notification per kind rather than per line.
                 pkgsel=()
                 optsel=()
+                draftsel=()
                 while IFS=$'\t' read -r kind name; do
                   [ -n "$name" ] || continue
                   case "$kind" in
                     app) nixarchy-app-disable "$name" ;;
                     pkg) pkgsel+=("$name") ;;
                     opt) optsel+=("$name") ;;
+                    draft) draftsel+=("$name") ;;
                   esac
                 done <<< "$chosen"
                 [ ''${#pkgsel[@]} -eq 0 ] || nixarchy-pkg-remove "''${pkgsel[@]}"
                 [ ''${#optsel[@]} -eq 0 ] || nixarchy-opt-remove "''${optsel[@]}"
+                [ ''${#draftsel[@]} -eq 0 ] || nixarchy-pkg-undraft "''${draftsel[@]}"
 
                 echo
                 echo "Run 'nixarchy-apply' to rebuild without them."
@@ -1456,6 +1464,106 @@ in
                   echo "removed $attr from $file"
                 done
                 echo "it stays installed until 'nixarchy-apply' rebuilds"
+              '';
+            })
+
+            # The inverse of the apps.nix line `nixarchy pkg new` wrote, and
+            # deliberately NOT of its draft file: deleting
+            # ~/.config/nixarchy/packages/<name>.nix, or the copy
+            # nixarchy-apply put in the flake, is an edit to a tree the user
+            # owns, not this tool's call -- so this drops the marked line and
+            # prints where the draft file still is. The `#@draft` marker
+            # survives the user uncommenting the line (the same property
+            # `#@opt` has), so the commented and the live form are both
+            # removable, by the same sed.
+            (pkgs.writeShellApplication {
+              name = "nixarchy-pkg-undraft";
+              runtimeInputs = [
+                pkgs.coreutils
+                pkgs.gnugrep
+                pkgs.gnused
+                pkgs.fzf
+                config.nix.package
+                cfg.package # omarchy-notification-send
+              ];
+              text = ''
+                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                list_drafts() {
+                  grep -oE '#@draft [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@draft //'
+                }
+
+                if [ $# -eq 0 ]; then
+                  mapfile -t names < <(list_drafts)
+                  if [ ''${#names[@]} -eq 0 ]; then
+                    echo "No drafts are in $file. 'nixarchy pkg new <url>' drafts one."
+                    exit 0
+                  fi
+                  chosen=$(printf '%s\n' "''${names[@]}" | fzf --multi \
+                    --prompt="remove draft > " \
+                    --header="tab to select several, enter to confirm" \
+                    --preview "grep -F -- '#@draft '{} '$file'" \
+                    --preview-window='down,3,wrap') || exit 0
+                  [ -n "$chosen" ] || exit 0
+                  mapfile -t picked <<< "$chosen"
+                  set -- "''${picked[@]}"
+                fi
+
+                # Reverted as a unit if anything goes wrong, exactly as
+                # nixarchy-pkg-remove's edits are: the file is the user's own
+                # NixOS module.
+                backup=$(mktemp)
+                cp "$file" "$backup"
+                trap 'rm -f "$backup"' EXIT
+                restore() { cp "$backup" "$file"; }
+
+                removed=()
+                for name in "$@"; do
+                  # Same alphabet nixarchy-pkg-new accepts. Anything else would
+                  # reach the sed address below as a pattern, not a name.
+                  case "$name" in
+                    "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+                      restore
+                      echo "'$name' is not a draft name." >&2
+                      exit 1
+                      ;;
+                  esac
+                  # Exact string, not a substring: `#@draft foo` must not
+                  # answer for `#@draft foobar`.
+                  if ! list_drafts | grep -qFx -- "$name"; then
+                    restore
+                    echo "nixarchy: no draft '$name' in $file. Nothing was changed." >&2
+                    echo "'nixarchy pkg remove' takes out a #@pkg line instead." >&2
+                    exit 1
+                  fi
+                  # The marked line wherever the user moved it, commented or
+                  # uncommented. Dots escaped: the name lands in a sed address.
+                  sed -i "/#@draft ''${name//./\\.}\$/d" "$file"
+                  removed+=("$name")
+                done
+
+                [ ''${#removed[@]} -gt 0 ] || exit 0
+
+                if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                  restore
+                  echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                  exit 1
+                fi
+
+                if command -v omarchy-notification-send >/dev/null 2>&1; then
+                  omarchy-notification-send -r 8471 -t 8000 -u normal \
+                    "''${removed[*]} removed from your selection" \
+                    "The draft file itself is kept. Click here to run nixos-rebuild and apply it." \
+                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                fi
+                pkgdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/packages"
+                for name in "''${removed[@]}"; do
+                  echo "removed $name from $file"
+                  [ ! -e "$pkgdir/$name.nix" ] || \
+                    echo "the draft file is yours and stays at $pkgdir/$name.nix"
+                done
+                echo "a draft that was live stays installed until 'nixarchy-apply' rebuilds"
               '';
             })
 
@@ -2554,6 +2662,7 @@ in
                       add) shift 2; exec nixarchy-pkg-add "$@" ;;
                       remove) shift 2; exec nixarchy-pkg-remove "$@" ;;
                       new) shift 2; exec nixarchy-pkg-new "$@" ;;
+                      undraft) shift 2; exec nixarchy-pkg-undraft "$@" ;;
 
                     esac
                     ;;
@@ -2640,6 +2749,7 @@ in
                   nixarchy pkg add <attr>     Add a nixpkgs package to the app selection
                   nixarchy pkg remove [attr]  Take one out again (no argument picks interactively)
                   nixarchy pkg new <url>      Draft a derivation for software in no repository
+                  nixarchy pkg undraft [name] Take a draft's line out again (the draft file stays)
                   nixarchy app enable <id>    Select an app from the curated list
                   nixarchy app disable <id>   Deselect one
                   nixarchy app remove         Pick apps, packages and options to remove

@@ -15,17 +15,18 @@ set -euo pipefail
 nixpkgs='@nixpkgs@'
 
 usage() {
-  echo "usage: nixarchy pkg new <url> [--rev REV] [--name NAME]"
+  echo "usage: nixarchy pkg new <url> [--rev REV] [--name NAME] [--update]"
   echo "  e.g. nixarchy pkg new https://github.com/someone/tool"
   echo
   echo "  Drafts a derivation into ~/.config/nixarchy/packages/<name>.nix"
   echo "  with nix-init, then builds it once and reports the result."
-  echo "  The draft is yours to edit either way."
+  echo "  The draft is yours to edit either way. --update redrafts over an"
+  echo "  existing draft; without it, an existing draft is never overwritten."
   echo
   echo "  For software nixpkgs already carries, use: nixarchy pkg add <attr>"
 }
 
-url="" rev="" name=""
+url="" rev="" name="" update=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --rev)
@@ -37,6 +38,10 @@ while [ $# -gt 0 ]; do
       name="${2:-}"
       [ -n "$name" ] || { echo "--name needs a value" >&2; exit 1; }
       shift 2
+      ;;
+    --update)
+      update=true
+      shift
       ;;
     -h | --help)
       usage
@@ -82,12 +87,24 @@ esac
 
 pkgdir="${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/packages"
 draft="$pkgdir/$name.nix"
-if [ -e "$draft" ]; then
+# The default is a refusal, not a prompt: the existing draft may carry the
+# user's edits, and silently overwriting them is the failure --update exists
+# to make deliberate.
+if [ -e "$draft" ] && [ "$update" != true ]; then
   echo "$draft already exists." >&2
-  echo "Edit it, or remove it and run this again to redraft." >&2
+  echo "Edit it, or redraft over it with: nixarchy pkg new --update $url" >&2
   exit 1
 fi
 mkdir -p "$pkgdir"
+
+# Under --update the old draft is held aside, so a failed redraft gives it
+# back instead of trading an edited draft for nothing.
+old=""
+if [ -e "$draft" ]; then
+  old=$(mktemp)
+  cp "$draft" "$old"
+  rm -f "$draft"
+fi
 
 echo "drafting  $draft"
 initargs=(--headless --url "$url" -n "$nixpkgs")
@@ -102,8 +119,14 @@ if ! nix-init "${initargs[@]}" "$draft" || [ ! -s "$draft" ]; then
   # A failed nix-init can leave an empty file behind; an empty draft is not
   # a starting point, it is a landmine for the next run's already-exists check.
   rm -f "$draft"
+  if [ -n "$old" ]; then
+    cp "$old" "$draft"
+    rm -f "$old"
+    echo "Your existing draft at $draft was left as it was." >&2
+  fi
   exit 1
 fi
+[ -z "$old" ] || rm -f "$old"
 
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
@@ -151,7 +174,11 @@ entry="(callPackage ./packages/$name.nix { })"
 # project wrote get rewritten. The #@pkgs-end marker is nixarchy-pkg-add's own
 # block, so inserting there -- commented out -- is within it; a file without
 # the marker is the user's shape, and gets the edit printed instead.
-if [ -f "$appsfile" ] && grep -q '#@pkgs-end' "$appsfile" && ! grep -qF "packages/$name.nix" "$appsfile"; then
+if [ -f "$appsfile" ] && grep -qF "packages/$name.nix" "$appsfile"; then
+  # An update, or a re-run after `nixarchy pkg undraft` left the file: the
+  # line is already in the user's hands, so there is nothing to write.
+  :
+elif [ -f "$appsfile" ] && grep -q '#@pkgs-end' "$appsfile"; then
   tmp=$(mktemp)
   awk -v line="    # $entry  #@draft $name" '
     /#@pkgs-end/ && !done { print line; done = 1 }

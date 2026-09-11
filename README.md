@@ -1926,11 +1926,9 @@ with a changelog: what was added, what changed, and what is coming. This
 section says what is PLANNED; a merged pull request announces nothing to
 somebody who only uses nixarchy, and that is the gap those posts fill.
 
-**Nothing is in flight right now.** The three epics that were here — the
-escape hatches, the reinstall image and the package picker — all finished, and
-the table below is where they went. That is a real state rather than an
-oversight: the next one gets a row here when it is filed, and this section is
-CI-enforced, so an epic opened without one turns the build red.
+| epic | what it is for | |
+| --- | --- | --- |
+| [#606](https://github.com/olafkfreund/nixarchy/issues/606) | **The skills that cover what nixarchy actually does** — an agent asked why a downloaded binary will not run has nothing to reach for today. Three skills: the loader ladder, gaming, and one flake across several machines | 3 filed |
 
 **Recently finished:**
 [the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)

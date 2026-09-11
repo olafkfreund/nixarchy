@@ -2,7 +2,7 @@
 
 > nixarchy is Omarchy — DHH's Hyprland desktop — vendored for NixOS. The whole
 > desktop ships as upstream builds it (the QuickShell bar, the menus, the
-> themes, the 430 shell commands), with the parts that assume Arch Linux
+> themes, the 444 shell commands), with the parts that assume Arch Linux
 > replaced: the Install menu writes Nix declarations instead of running pacman,
 > updates are a flake-input bump and a rebuild, and every change is a NixOS
 > generation you can roll back.

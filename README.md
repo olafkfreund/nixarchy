@@ -3,12 +3,74 @@
 [Omarchy](https://omarchy.org) vendored for NixOS — the whole desktop, with its
 menus rewired to Nix instead of pacman.
 
+> 📖 **[Read the manual](https://olafkfreund.github.io/nixarchy/)**
+
+**[Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started)** ·
+**[Add it to a NixOS machine you already run](#adding-it-to-a-machine-you-already-run)** ·
+**[Try it in a VM](#try-it-in-a-vm)** ·
+**[Roadmap](#roadmap)** ·
+**[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
+
 Omarchy 4.x is not a dotfiles repo, it's an application: **444 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
 
 Tracking an upstream release is a source bump, not a re-port.
+
+What that buys you: the Install menu writes to a Nix config instead of running
+pacman, **64 applications** are selectable that way, **every other package and
+NixOS option is one `Install ▸ Search` away**, plugins and themes still install
+from a git URL at runtime the way upstream intends, and every command that
+assumed `/usr` either points at what NixOS uses or says why it cannot.
+
+![nixarchy-app-enable helix writing a declaration into ~/.config/nixarchy/apps.nix, grep showing the uncommented line, then nixarchy-apply copying it into the flake and stopping at "Not switching. Run: nh os switch /etc/nixos"](docs/img/features/install.gif)
+
+*The whole model in one clip: a pick becomes a declaration in
+`~/.config/nixarchy/apps.nix`, `nixarchy-apply` copies it into your flake, and
+only then does anything build.*
+
+## What you can do with it
+
+Every row ships today, and links to its page in
+**[the manual](https://olafkfreund.github.io/nixarchy/)**.
+
+| | |
+|---|---|
+| **Install apps from a menu** | A pick writes a *declaration*, not a package. [`Install ▸ Search`](https://olafkfreund.github.io/nixarchy/manual/other-packages) then puts every nixpkgs package and every NixOS option one key away — 137k rows. |
+| **Try an app before installing it** | [`nixarchy try <name>`](https://olafkfreund.github.io/nixarchy/manual/try-it-first) runs something once, from the same pinned nixpkgs an install would use, and offers to keep it when you exit. Your configuration is untouched. |
+| **Look before you switch** | [`nixarchy preview`](https://olafkfreund.github.io/nixarchy/manual/preview) boots your *pending* configuration in a VM window, so you see a change before the machine takes it. |
+| **Disposable VMs** | [`nixarchy vm run`](https://olafkfreund.github.io/nixarchy/manual/sandboxes) boots a NixOS **MicroVM** sharing the host's `/nix/store` — real isolation, no root, no rebuild, gone when you close it. |
+| **Arch or Debian, when NixOS will not do** | [`nixarchy box create dev --template archlinux`](https://olafkfreund.github.io/nixarchy/manual/boxes) drops you into an Arch or Debian userland through rootless **podman** and **distrobox** — for the binary that insists on an FHS. |
+| **Get this machine back** | [`nixarchy reinstall iso`](https://olafkfreund.github.io/nixarchy/manual/reinstall-image) builds a bootable image **from this machine's own configuration** — the one way back that survives losing the disk, beside [generations, snapshots and a home backup](https://olafkfreund.github.io/nixarchy/manual/system-snapshots). |
+| **One flake, many machines** | [Roll a change out to a fleet](https://olafkfreund.github.io/nixarchy/manual/many-machines) from one repository, and let machines pull their own configuration on a timer. |
+| **Stable or unstable** | [*Update ▸ Channel*](https://olafkfreund.github.io/nixarchy/manual/channels) moves nixpkgs and home-manager together — and a single package can come from the other channel. |
+| **A toolchain per project** | [`nixarchy dev init react`](https://olafkfreund.github.io/nixarchy/manual/per-project-environments) scaffolds a [devenv](https://devenv.sh) project that activates on `cd`, in bash, zsh and fish. |
+| **Your phone on the desktop** | [`scrcpy` mirrors the phone you own, `nixarchy android` pairs it over Wi-Fi](https://olafkfreund.github.io/nixarchy/manual/android), and Waydroid runs Android apps without one. |
+| **The desktop from anywhere** | [`hypr-rdp`](https://olafkfreund.github.io/nixarchy/manual/remote-desktop) serves the *running* Hyprland session to any RDP client, from an encrypted password, with the firewall closed. |
+| **Ask the machine** | [Agent skills written for NixOS](https://olafkfreund.github.io/nixarchy/manual/ai), in the menu — and they can run against a [local model](#a-local-model), so nothing leaves the machine. |
+
+Five of those are **off until you ask for them** — sandboxes, boxes,
+per-project environments, Android and remote desktop, each one line of Nix. The
+rest are commands and menu rows that ship with the desktop. Undoing a *declared*
+change is `nixos-rebuild --rollback`; a box or a VM you created by hand is not
+part of a generation and has its own removal path, which
+[its page says](https://olafkfreund.github.io/nixarchy/manual/boxes).
+
+![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
+
+| the menu | Install |
+|---|---|
+| ![menu](docs/screenshots/01-menu-root.jpg) | ![install](docs/screenshots/02-install.jpg) |
+| **Remove** | **Update** |
+| ![remove](docs/screenshots/09-remove.jpg) | ![update](docs/screenshots/10-update.jpg) |
+| ![greeter](docs/screenshots/15-greeter.jpg) | ![app selection](docs/screenshots/16-app-selection.jpg) |
+
+More in [`docs/screenshots/`](docs/screenshots) — and more recordings, of boxes,
+sandboxes, themes and plugins, throughout
+[the manual](https://olafkfreund.github.io/nixarchy/).
+
+## Before you install
 
 > [!WARNING]
 > **This is in active development. Expect to hit problems.**
@@ -30,30 +92,6 @@ Tracking an upstream release is a source bump, not a re-port.
 > checks in CI exist precisely because this is the part that needs proving.
 > Please [file what you hit](https://github.com/olafkfreund/nixarchy/issues) —
 > `omarchy bug-report` collects the useful details for you.
-
-What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **64 applications** are selectable that way, **every other package and
-NixOS option is one `Install ▸ Search` away**, plugins and themes still install
-from a git URL at runtime the way upstream intends, and every command that
-assumed `/usr` either points at what NixOS uses or says why it cannot.
-
-![nixarchy-app-enable helix writing a declaration into ~/.config/nixarchy/apps.nix, grep showing the uncommented line, then nixarchy-apply copying it into the flake and stopping at "Not switching. Run: nh os switch /etc/nixos"](docs/img/features/install.gif)
-
-*The whole model in one clip: a pick becomes a declaration in
-`~/.config/nixarchy/apps.nix`, `nixarchy-apply` copies it into your flake, and
-only then does anything build. More recordings — boxes, sandboxes, themes,
-plugins — throughout [the manual](https://olafkfreund.github.io/nixarchy/).*
-
-![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
-
-| the menu | Install |
-|---|---|
-| ![menu](docs/screenshots/01-menu-root.jpg) | ![install](docs/screenshots/02-install.jpg) |
-| **Remove** | **Update** |
-| ![remove](docs/screenshots/09-remove.jpg) | ![update](docs/screenshots/10-update.jpg) |
-| ![greeter](docs/screenshots/15-greeter.jpg) | ![app selection](docs/screenshots/16-app-selection.jpg) |
-
-More in [`docs/screenshots/`](docs/screenshots).
 
 ## What works
 

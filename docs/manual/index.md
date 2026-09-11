@@ -50,6 +50,8 @@ the documentation as much as the code.
 | **Ai** | **differs on NixOS** — [read here](ai) |
 | **Development tools** | **differs on NixOS** — [read here](development-tools) |
 | **Per-project environments** | **nixarchy only** — [read here](per-project-environments) |
+| **Boxes** | **nixarchy only** — [read here](boxes) |
+| **Sandboxes** | **nixarchy only** — [read here](sandboxes) |
 | Shell tools | same as Omarchy — [read there](https://omarchy.org/manual/shell-tools/) |
 | Shell functions | same as Omarchy — [read there](https://omarchy.org/manual/shell-functions/) |
 | Tuis | same as Omarchy — [read there](https://omarchy.org/manual/tuis/) |

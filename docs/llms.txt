@@ -93,7 +93,7 @@ Key facts an assistant should know before answering questions about nixarchy:
   run. nixpkgs first, always.
 - Unfree packages are allowed by default (`programs.nixarchy.allowUnfree =
   false;` restores nixpkgs' policy).
-- Ten AI agent skills written for NixOS ship with the desktop and are exposed
+- Thirteen AI agent skills written for NixOS ship with the desktop and are exposed
   through Menu ▸ Trigger ▸ Ask; `programs.nixarchy.localAi.enable = true`
   runs them against local models via Ollama (needs a supported GPU).
 
@@ -116,7 +116,7 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Prebuilt binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries): the three on-by-default answers to a downloaded Linux binary -- nix-ld and its curated library set, envfs for shebangs, binfmt-registered AppImages -- and where each stops
 - [Boxes](https://olafkfreund.github.io/nixarchy/manual/boxes): Arch or Debian userlands via rootless podman and distrobox, ad hoc or declared (opt-in)
 - [Sandboxes](https://olafkfreund.github.io/nixarchy/manual/sandboxes): disposable NixOS MicroVMs sharing the host store, and the declarative always-up half (opt-in)
-- [AI](https://olafkfreund.github.io/nixarchy/manual/ai): the ten NixOS agent skills, the Ask menu, choosing an agent, and running it all locally
+- [AI](https://olafkfreund.github.io/nixarchy/manual/ai): the thirteen NixOS agent skills, the Ask menu, choosing an agent, and running it all locally
 - [Gaming](https://olafkfreund.github.io/nixarchy/manual/gaming): Steam, RetroArch, the launchers and cloud gaming — how each Install ▸ Gaming row lands on NixOS
 - [Android](https://olafkfreund.github.io/nixarchy/manual/android): running Android apps — scrcpy mirroring a phone, and Waydroid in a container
 - [Security](https://olafkfreund.github.io/nixarchy/manual/security): the firewall, disk encryption, and what the port changes

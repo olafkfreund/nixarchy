@@ -73,7 +73,7 @@ quantity() {
 
   current=$(sed -nE "s/$find/\1/p" "$readme" | head -1)
   if [ -z "$current" ]; then
-    echo "::error::$name: nothing in README.md matches its pattern" >&2
+    echo "::error::$name: nothing in $(basename "$readme") matches its pattern" >&2
     echo "::error::  the wording moved, or the pattern is wrong. Not guessing." >&2
     fail=1
     return
@@ -85,7 +85,7 @@ quantity() {
   fi
 
   if [ "$mode" = "--check" ]; then
-    echo "::error::$name: README says $current, the repository says $value" >&2
+    echo "::error::$name: $(basename "$readme") says $current, the repository says $value" >&2
     fail=1
   else
     # $repl is already a complete sed expression. Wrapping it in another
@@ -193,7 +193,8 @@ repl_word=$(word_for "$repl_n")
 # script refuses rather than reporting a wrong number. Which is the guard
 # working, but it cost a run to see.
 skills=$(find -L "$omarchy" -name SKILL.md 2>/dev/null | wc -l)
-skills_word=$(word_for "$skills" | tr '[:upper:]' '[:lower:]')
+skills_cap=$(word_for "$skills")
+skills_word=$(printf '%s' "$skills_cap" | tr '[:upper:]' '[:lower:]')
 
 # The installer's question count (#557), which the README stated twice with two
 # different numbers and nothing checking either. The authority is
@@ -264,12 +265,49 @@ quantity "installer-questions-iso" "$questions_word" \
   '.*and answer (five|six|seven|eight|nine|ten) questions.*' \
   's/and answer (five|six|seven|eight|nine|ten) questions/and answer '"$questions_word"' questions/'
 
-# A floor. Fourteen quantities are declared above; a run that checked fewer
+# The docs state the skill count too, and #506 is what happens when only the
+# README is guarded: nixos-android shipped, the README moved to thirteen, and
+# docs/llms.txt and docs/manual/ai.md went on saying ten and twelve. quantity
+# reads the $readme global, so point it at each docs file in turn.
+readme_saved=$readme
+readme="$root/docs/llms.txt"
+quantity "skills-llms" "$skills_cap" \
+  '^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen) AI agent skills written.*' \
+  's/^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen) AI agent skills written/- '"$skills_cap"' AI agent skills written/'
+quantity "skills-llms-manual" "$skills_word" \
+  '.*the (ten|eleven|twelve|thirteen|fourteen|fifteen) NixOS agent skills.*' \
+  's/the (ten|eleven|twelve|thirteen|fourteen|fifteen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
+readme="$root/docs/manual/ai.md"
+quantity "skills-manual-ai" "$skills_word" \
+  '^(ten|eleven|twelve|thirteen|fourteen|fifteen) skills instead of one:$' \
+  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen) skills instead of one:$/'"$skills_word"' skills instead of one:/'
+readme=$readme_saved
+
+# The count says a number moved; this says which skill a table forgot. Every
+# skill that ships must have a row in each table that lists them all -- the
+# README's and docs/manual/ai.md's. Check-only in both modes: writing a row's
+# prose is a decision, not a calculation.
+skill_names=$(find -L "$omarchy" -name SKILL.md -printf '%h\n' 2>/dev/null |
+  sed 's|.*/||' | sort)
+if [ -z "$skill_names" ]; then
+  echo "::error::skill-rows: no SKILL.md in the built tree -- refusing" >&2
+  fail=1
+fi
+for f in "$readme" "$root/docs/manual/ai.md"; do
+  for s in $skill_names; do
+    if ! grep -qE "^\| (\*\*)?\`$s\`" "$f"; then
+      echo "::error::skill-rows: $(basename "$f") has no table row for \`$s\`" >&2
+      fail=1
+    fi
+  done
+done
+
+# A floor. Seventeen quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 14 ]; then
-  echo "::error::only $checked of 14 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 17 ]; then
+  echo "::error::only $checked of 17 quantities were accounted for" >&2
   fail=1
 fi
 

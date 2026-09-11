@@ -665,12 +665,12 @@ in
           # The X client stack, for everything that runs under XWayland:
           # Electron, Java AWT, SDL/GLFW games. libX11 is the core protocol;
           # the rest are the extensions Chromium's own sandbox probes for.
-          xorg.libX11
-          xorg.libxcb
-          xorg.libXcursor
-          xorg.libXrandr
-          xorg.libXi
-          xorg.libXext
+          libx11
+          libxcb
+          libxcursor
+          libxrandr
+          libxi
+          libxext
           # Text on screen: fontconfig finds the fonts, freetype rasterises
           # them. A GUI binary without them renders blank labels or aborts.
           fontconfig

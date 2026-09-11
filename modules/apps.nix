@@ -2606,7 +2606,13 @@ in
                 # Why: modules/AGENTS.md#ask-flathub-org-directly
                 flathub_search() {
                   local query hits picked id line
-                  read -r -p "Search Flathub for: " query || return 0
+                  # /dev/tty, because stdin here is the picker's selection --
+                  # this function is called from inside `done <<< "$selection"`,
+                  # which has already consumed it. Without this the read hits
+                  # EOF, `|| return 0` fires, and the row that exists for
+                  # "the other three sources have failed you" silently does
+                  # NOTHING. It failed quietly, which is why it survived (#596).
+                  read -r -p "Search Flathub for: " query < /dev/tty || return 0
                   [ -n "$query" ] || return 0
 
                   # --fail so an HTTP error is an error rather than an error page

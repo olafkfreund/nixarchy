@@ -2824,6 +2824,33 @@ pkgs.runCommand "nixarchy-options"
         done
         echo "a nixpkgs miss names nixarchy pkg new, and the picker's row dispatches to it"
 
+        # ---- a prompt inside the picker reads the TERMINAL, not the loop ----
+        #
+        # #596: `flathub_search`'s `read` had no redirect, and the picker
+        # dispatches through `done <<< "$selection"`. So stdin was the
+        # herestring the loop had already consumed: the read hit EOF,
+        # `|| return 0` fired, and "Search all of Flathub" -- the row whose own
+        # comment calls it "precisely the row someone needs when the other
+        # three sources have failed them" -- silently did NOTHING.
+        #
+        # It failed QUIETLY, which is why it survived. That is the shape this
+        # asserts: every prompt reachable from the dispatch loop names a tty.
+        # The prompts in nixarchy-pkg-add and nixarchy-apply are deliberately
+        # NOT here -- they run at top level with a real terminal, and adding a
+        # redirect they do not need would make this check about style.
+        while IFS= read -r prompt; do
+          case "$prompt" in
+            *"/dev/tty"*) ;;
+            *)
+              echo "a prompt in the picker's dispatch does not read /dev/tty:" >&2
+              echo "  $prompt" >&2
+              echo "  stdin there is the selection herestring, so it reads EOF and no-ops (#596)" >&2
+              exit 1
+              ;;
+          esac
+        done < <(grep -E 'read -r -p' "$vm/sw/bin/nixarchy-search")
+        echo "every prompt in the picker reads the terminal, not the loop"
+
         # And the ROUTE, not just the call site: #498 shipped `nixarchy try`
         # advertised and unreachable, because nothing asserted the dispatcher
         # had a row for it. Run the dispatcher itself; a missing route falls

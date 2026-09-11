@@ -41,7 +41,9 @@ leave the directory. A box is a whole userland; devenv is a version of `node`.
 | anything in nixpkgs | nixpkgs -- always first |
 | a package you are not sure you want yet | [`nixarchy try`](try-it-first) -- runs it once, installs nothing, isolates nothing |
 | a GUI app that is not, and you want it contained | Flatpak |
-| a loose prebuilt binary | `nix-ld`, already on |
+| a loose prebuilt binary | `nix-ld`, already on -- [Python](python) covers growing its library set |
+| a pip wheel that installs but dies on `libGL.so.1` at import | the same loader problem -- [Python](python) |
+| pip compiling C against system libraries | a [devenv](per-project-environments) with the libraries added, or an FHS shell (`pkgs.buildFHSEnv`) |
 | a toolchain this project needs | [devenv](per-project-environments) |
 | software that wants a distro | a box |
 

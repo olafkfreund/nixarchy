@@ -32,30 +32,24 @@ only then does anything build.*
 
 ## What you can do with it
 
-Every row ships today, and links to its page in
-**[the manual](https://olafkfreund.github.io/nixarchy/)**.
+Every row ships today. The left column links to the feature's page in
+**[the manual](https://olafkfreund.github.io/nixarchy/)**; what each one is
+made of, and which are on by default, is in [What works](#what-works) below.
 
 | | |
 |---|---|
-| **Install apps from a menu** | A pick writes a *declaration*, not a package. [`Install ▸ Search`](https://olafkfreund.github.io/nixarchy/manual/other-packages) then puts every nixpkgs package and every NixOS option one key away — 137k rows. |
-| **Try an app before installing it** | [`nixarchy try <name>`](https://olafkfreund.github.io/nixarchy/manual/try-it-first) runs something once, from the same pinned nixpkgs an install would use, and offers to keep it when you exit. Your configuration is untouched. |
-| **Look before you switch** | [`nixarchy preview`](https://olafkfreund.github.io/nixarchy/manual/preview) boots your *pending* configuration in a VM window, so you see a change before the machine takes it. |
-| **Disposable VMs** | [`nixarchy vm run`](https://olafkfreund.github.io/nixarchy/manual/sandboxes) boots a NixOS **MicroVM** sharing the host's `/nix/store` — real isolation, no root, no rebuild, gone when you close it. |
-| **Arch or Debian, when NixOS will not do** | [`nixarchy box create dev --template archlinux`](https://olafkfreund.github.io/nixarchy/manual/boxes) drops you into an Arch or Debian userland through rootless **podman** and **distrobox** — for the binary that insists on an FHS. |
-| **Get this machine back** | [`nixarchy reinstall iso`](https://olafkfreund.github.io/nixarchy/manual/reinstall-image) builds a bootable image **from this machine's own configuration** — the one way back that survives losing the disk, beside [generations, snapshots and a home backup](https://olafkfreund.github.io/nixarchy/manual/system-snapshots). |
-| **One flake, many machines** | [Roll a change out to a fleet](https://olafkfreund.github.io/nixarchy/manual/many-machines) from one repository, and let machines pull their own configuration on a timer. |
-| **Stable or unstable** | [*Update ▸ Channel*](https://olafkfreund.github.io/nixarchy/manual/channels) moves nixpkgs and home-manager together — and a single package can come from the other channel. |
-| **A toolchain per project** | [`nixarchy dev init react`](https://olafkfreund.github.io/nixarchy/manual/per-project-environments) scaffolds a [devenv](https://devenv.sh) project that activates on `cd`, in bash, zsh and fish. |
-| **Your phone on the desktop** | [`scrcpy` mirrors the phone you own, `nixarchy android` pairs it over Wi-Fi](https://olafkfreund.github.io/nixarchy/manual/android), and Waydroid runs Android apps without one. |
-| **The desktop from anywhere** | [`hypr-rdp`](https://olafkfreund.github.io/nixarchy/manual/remote-desktop) serves the *running* Hyprland session to any RDP client, from an encrypted password, with the firewall closed. |
-| **Ask the machine** | [Agent skills written for NixOS](https://olafkfreund.github.io/nixarchy/manual/ai), in the menu — and they can run against a [local model](#a-local-model), so nothing leaves the machine. |
-
-Five of those are **off until you ask for them** — sandboxes, boxes,
-per-project environments, Android and remote desktop, each one line of Nix. The
-rest are commands and menu rows that ship with the desktop. Undoing a *declared*
-change is `nixos-rebuild --rollback`; a box or a VM you created by hand is not
-part of a generation and has its own removal path, which
-[its page says](https://olafkfreund.github.io/nixarchy/manual/boxes).
+| **[Install apps from a menu](https://olafkfreund.github.io/nixarchy/manual/other-packages)** | a pick writes a *declaration* — `Install ▸ Search` covers all of nixpkgs |
+| **[Try an app before installing it](https://olafkfreund.github.io/nixarchy/manual/try-it-first)** | `nixarchy try <name>` |
+| **[Look before you switch](https://olafkfreund.github.io/nixarchy/manual/preview)** | `nixarchy preview` boots the pending configuration in a VM window |
+| **[Disposable VMs](https://olafkfreund.github.io/nixarchy/manual/sandboxes)** | `nixarchy vm run` |
+| **[Arch or Debian, when NixOS will not do](https://olafkfreund.github.io/nixarchy/manual/boxes)** | `nixarchy box create` |
+| **[Get this machine back](https://olafkfreund.github.io/nixarchy/manual/reinstall-image)** | `nixarchy reinstall iso` — an install image built from your own configuration |
+| **[One flake, many machines](https://olafkfreund.github.io/nixarchy/manual/many-machines)** | roll a change out to a fleet from one repository |
+| **[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)** | `Update ▸ Channel`, per machine or per package |
+| **[A toolchain per project](https://olafkfreund.github.io/nixarchy/manual/per-project-environments)** | `nixarchy dev init react` |
+| **[Your phone on the desktop](https://olafkfreund.github.io/nixarchy/manual/android)** | `nixarchy android`, mirrored or emulated |
+| **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `hypr-rdp`, the running session over RDP |
+| **[Ask the machine](https://olafkfreund.github.io/nixarchy/manual/ai)** | agent skills written for NixOS, even against a [local model](#a-local-model) |
 
 ![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
 
@@ -934,8 +928,8 @@ any conflict to warn you.
 
 ## Installing on a fresh machine
 
-There is an ISO now. Download it, write it to a stick, boot it, and answer nine
-questions.
+There is an ISO now. Download it, write it to a stick, boot it,
+and answer seven questions.
 
 > [!CAUTION]
 > **This is the least mature part of nixarchy, and it partitions disks.**

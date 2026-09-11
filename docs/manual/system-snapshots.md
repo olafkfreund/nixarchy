@@ -30,6 +30,27 @@ sudo nix-env --list-generations --profile /nix/var/nix/profiles/system
 No snapshot is taken before an update because there is nothing to snapshot:
 the previous system was never modified in the first place.
 
+## How long a generation lasts
+
+Generations are what rollback is made of, so they are not collected eagerly.
+On a machine the installer built, a weekly job removes generations older than
+**thirty days** -- long enough to outlast the gap between noticing a problem
+and having time to look at it.
+
+Separately, and for a different reason, the Nix daemon collects unreferenced
+store paths when free space falls below 5 GiB. That is *garbage*, not
+generations: a package you [tried](try-it-first) and closed, a build input
+nothing needs. Collecting it can never cost you a rollback, because every
+generation is a garbage-collection root.
+
+The boot menu shows the most recent twenty entries. That is a cap on the
+*menu*, not on the generations -- `--list-generations` above still shows
+everything the store holds, and `--rollback` still reaches the one before
+this.
+
+If you added nixarchy to a machine you already run, none of this applies:
+your own policy stands.
+
 ## Rolling back
 
 From a running desktop:

@@ -160,6 +160,34 @@ let
       off = nixiOff.systemd.user.services ? nixi;
     };
 
+    # ---- store hygiene is the installer's, never an adopter's (#583) -----
+    #
+    # `nixarchy try` creates no GC root by design, so an uncollected store is
+    # a nixarchy problem rather than a stock NixOS one, and installer-built
+    # machines now carry a policy: garbage under space pressure, generations
+    # after thirty days, twenty boot entries.
+    #
+    # The pair is the whole point. ON is the machine the installer generates
+    # (nixosConfigurations.vm imports installer/host.nix). OFF is an adopter
+    # who imported nixosModules.nixarchy into a configuration they already
+    # run -- Mode A -- and whose own GC policy this must never overwrite.
+    # Turning GC on underneath somebody is exactly the surprise §7 forbids,
+    # and it is the off state a refactor breaks quietly.
+    storeGcAutomatic = {
+      on = inputs.self.nixosConfigurations.vm.config.nix.gc.automatic;
+      off = adopter.config.nix.gc.automatic;
+    };
+
+    # min-free is the half that answers `try`: it collects only what nothing
+    # references, so it can never cost a rollback. Asserted separately from
+    # gc.automatic because they are different mechanisms -- the daemon's
+    # space pressure versus a weekly timer -- and one arriving without the
+    # other would leave half the problem with a passing test.
+    storeGcMinFree = {
+      on = inputs.self.nixosConfigurations.vm.config.nix.settings ? min-free;
+      off = adopter.config.nix.settings ? min-free;
+    };
+
     # Everything the guide leaves in a home, in one case, because "off" has to
     # be all of them and a per-trace case would let one survivor hide behind
     # four passes. The port is not probed directly: it exists only as
@@ -515,6 +543,28 @@ let
   # The built reference machine, for the things that are facts about a system
   # rather than about an option.
   vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
+
+  # Mode A, as a machine rather than as an argument: nixosModules.nixarchy
+  # imported into a configuration somebody already runs, with nothing of
+  # installer/host.nix in it. The minimum that evaluates -- a root filesystem
+  # and a stateVersion -- because everything else would be this test asserting
+  # its own fixture. #583 uses it for the half that matters: what an adopter
+  # does NOT get.
+  adopter = inputs.nixpkgs.lib.nixosSystem {
+    system = "x86_64-linux";
+    modules = [
+      inputs.self.nixosModules.nixarchy
+      {
+        programs.nixarchy.enable = true;
+        boot.loader.grub.enable = false;
+        fileSystems."/" = {
+          device = "/dev/null";
+          fsType = "ext4";
+        };
+        system.stateVersion = "25.05";
+      }
+    ];
+  };
 
   # ---- the boot splash is ours ------------------------------------------
   #

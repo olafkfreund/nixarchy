@@ -509,6 +509,62 @@
   boot.loader = {
     systemd-boot.enable = true;
     efi.canTouchEfiVariables = true;
+
+    # The boot menu is a list a human reads under time pressure, with a
+    # keyboard and no scrollback. Uncapped it grows one entry per switch, and
+    # `nh os switch` is the loop this machine lives in -- a month of ordinary
+    # use buries "the one from before the thing I just broke" somewhere in the
+    # middle of forty near-identical lines.
+    #
+    # This caps the MENU, not the generations: `nix-env --list-generations`
+    # still shows everything the store holds, and `nixos-rebuild --rollback`
+    # still reaches the one before this. Only the ESP entries are trimmed.
+    # The ESP is 2G (installer/disk-config.nix), so this is about a list
+    # somebody can read, not about space.
+    systemd-boot.configurationLimit = 20;
+  };
+
+  # Store hygiene, on a machine the installer built -- #583.
+  #
+  # Closures do not orphan, but stores grow, and nixarchy makes that worse
+  # than stock NixOS in a way worth naming: `nixarchy try` creates NO GC root
+  # by design (docs/manual/try-it-first.md says so), so every application a
+  # user evaluated and decided AGAINST is retained forever. `nixarchy dev
+  # init` and uv add toolchains per project. Until now the answer was that
+  # the user learns `nix-collect-garbage` and remembers to run it.
+  #
+  # TWO knobs, because there are two different problems and conflating them
+  # is how a GC policy eats the thing it was meant to protect:
+  #
+  #   min-free/max-free collects GARBAGE -- store paths nothing references.
+  #   That is exactly what `try` leaves behind, and collecting it can never
+  #   cost you a rollback, because a generation is a GC root. The daemon does
+  #   it under space pressure rather than on a timer, which is when it
+  #   matters.
+  #
+  #   gc.automatic with --delete-older-than collects GENERATIONS, and
+  #   generations ARE what rollback is made of. Thirty days is chosen to
+  #   outlast the gap between noticing a problem and having time to look at
+  #   it; a week would be tidier and would have deleted the evidence.
+  #
+  # Only on installer-built machines. An adopter importing
+  # nixosModules.nixarchy into a configuration they already run keeps their
+  # own policy -- Mode A, modules/AGENTS.md -- and this file is imported by
+  # nothing else.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
+  };
+
+  # 5 GiB left is the floor, 20 GiB the target once collecting starts. Sized
+  # for what this desktop actually does rather than for a server: an install
+  # VM image is 32 GiB, a devenv toolchain is gigabytes, and a box is a whole
+  # userland. A floor that only clears a few hundred megabytes gets hit again
+  # during the same build.
+  nix.settings = {
+    min-free = 5 * 1024 * 1024 * 1024;
+    max-free = 20 * 1024 * 1024 * 1024;
   };
 
   # mkDefault: the generated configuration.nix carries the answers the installer

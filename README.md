@@ -1929,6 +1929,7 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | epic | what it is for | |
 | --- | --- | --- |
 | [#606](https://github.com/olafkfreund/nixarchy/issues/606) | **The skills that cover what nixarchy actually does** — an agent asked why a downloaded binary will not run has nothing to reach for today. Three skills: the loader ladder, gaming, and one flake across several machines | 3 filed |
+| [#611](https://github.com/olafkfreund/nixarchy/issues/611) | **Secrets you can actually use** — adding one is five manual steps today and neither `sops` nor `ssh-to-age` is on PATH. A menu row and an editor instead; a machine that can say what secrets exist and what uses them; a personal key you can copy without a terminal | 4 filed |
 
 **Recently finished:**
 [the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)

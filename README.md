@@ -3,7 +3,7 @@
 [Omarchy](https://omarchy.org) vendored for NixOS — the whole desktop, with its
 menus rewired to Nix instead of pacman.
 
-### 📖 **[Read the manual](https://olafkfreund.github.io/nixarchy/)**
+> 📖 **[Read the manual](https://olafkfreund.github.io/nixarchy/)**
 
 **[Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started)** ·
 **[Add it to a NixOS machine you already run](#adding-it-to-a-machine-you-already-run)** ·
@@ -37,7 +37,7 @@ Every row ships today, and links to its page in
 
 | | |
 |---|---|
-| **Install apps from a menu** | A pick writes a *declaration*, not a package. [`Install ▸ Search`](https://olafkfreund.github.io/nixarchy/manual/other-packages) then puts every nixpkgs package and every NixOS option one key away — 137,599 rows. |
+| **Install apps from a menu** | A pick writes a *declaration*, not a package. [`Install ▸ Search`](https://olafkfreund.github.io/nixarchy/manual/other-packages) then puts every nixpkgs package and every NixOS option one key away — 137k rows. |
 | **Try an app before installing it** | [`nixarchy try <name>`](https://olafkfreund.github.io/nixarchy/manual/try-it-first) runs something once, from the same pinned nixpkgs an install would use, and offers to keep it when you exit. Your configuration is untouched. |
 | **Look before you switch** | [`nixarchy preview`](https://olafkfreund.github.io/nixarchy/manual/preview) boots your *pending* configuration in a VM window, so you see a change before the machine takes it. |
 | **Disposable VMs** | [`nixarchy vm run`](https://olafkfreund.github.io/nixarchy/manual/sandboxes) boots a NixOS **MicroVM** sharing the host's `/nix/store` — real isolation, no root, no rebuild, gone when you close it. |
@@ -50,9 +50,12 @@ Every row ships today, and links to its page in
 | **The desktop from anywhere** | [`hypr-rdp`](https://olafkfreund.github.io/nixarchy/manual/remote-desktop) serves the *running* Hyprland session to any RDP client, from an encrypted password, with the firewall closed. |
 | **Ask the machine** | [Agent skills written for NixOS](https://olafkfreund.github.io/nixarchy/manual/ai), in the menu — and they can run against a [local model](#a-local-model), so nothing leaves the machine. |
 
-Everything in that table except the Install menu is **off until you ask for it**,
-by a menu row or one line of Nix, and undoing any of it is
-`nixos-rebuild --rollback`.
+Five of those are **off until you ask for them** — sandboxes, boxes,
+per-project environments, Android and remote desktop, each one line of Nix. The
+rest are commands and menu rows that ship with the desktop. Undoing a *declared*
+change is `nixos-rebuild --rollback`; a box or a VM you created by hand is not
+part of a generation and has its own removal path, which
+[its page says](https://olafkfreund.github.io/nixarchy/manual/boxes).
 
 ![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
 
@@ -69,23 +72,26 @@ sandboxes, themes and plugins, throughout
 
 ## Before you install
 
-**This is in active development, and the ISO installer is the least settled part
-of it.** It writes partition tables and bootloaders on real disks, it is the
-hardest thing here to test, and it is where the bugs have been. Treat it as
-something for a spare machine or a VM — not a laptop you need working on Monday,
-and not a disk holding anything you have not backed up.
-
-**If you already run NixOS, start with the flake instead.** Adding
-`nixarchy.nixosModules.nixarchy` to a machine you already have is the mature
-route: it has had the most use and the most testing, it changes nothing about
-your disk or your bootloader, and a bad result is one `nixos-rebuild --rollback`
-away. See
-[Adding it to a machine you already run](#adding-it-to-a-machine-you-already-run).
-
-Everything is worked on and tested continuously — the four VM install checks in
-CI exist precisely because this is the part that needs proving. Please
-[file what you hit](https://github.com/olafkfreund/nixarchy/issues);
-`omarchy bug-report` collects the useful details for you.
+> [!WARNING]
+> **This is in active development. Expect to hit problems.**
+>
+> **The ISO installer is the least settled part of it.** It writes partition
+> tables and bootloaders on real disks, it is the hardest thing here to test,
+> and it is where the bugs have been. Treat it as something to try on a spare
+> machine or a VM — not on a laptop you need working on Monday, and not on a
+> disk holding anything you have not backed up.
+>
+> **The flake route is the mature one.** Adding
+> `nixarchy.nixosModules.nixarchy` to a machine that already runs NixOS is the
+> path that has had the most use and the most testing, it changes nothing about
+> your disk or your bootloader, and a bad result is one `nixos-rebuild
+> --rollback` away. If you already run NixOS, start there — see
+> [Adding it to a machine you already run](#adding-it-to-a-machine-you-already-run).
+>
+> Everything is being worked on and tested continuously; the four VM install
+> checks in CI exist precisely because this is the part that needs proving.
+> Please [file what you hit](https://github.com/olafkfreund/nixarchy/issues) —
+> `omarchy bug-report` collects the useful details for you.
 
 ## What works
 

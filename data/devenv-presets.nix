@@ -93,15 +93,21 @@
     note = "Node, npm, tsc and the TypeScript language server. The javascript lines come too -- devenv's typescript module is the compiler, not a runtime.";
   };
 
+  # uv.enable, not uv.sync.enable: sync runs `uv sync` on entering the shell,
+  # which wants a pyproject.toml a freshly scaffolded project does not have.
+  # With uv.enable devenv creates the venv through uv and puts uv itself on
+  # the project's PATH; `uv sync` is one documented line for a project that
+  # grows a pyproject.toml. Checked against src/modules/languages/python.
   python = {
     label = "Python";
     lines = ''
       languages.python = {
         enable = true;
         venv.enable = true;
+        uv.enable = true;
       };
     '';
-    note = "Python with a virtualenv devenv creates and enters for you, so `pip install` lands in the project rather than in your home directory.";
+    note = "Python with uv and a virtualenv devenv creates and enters for you, so `uv pip install` and `pip install` land in the project rather than in your home directory.";
   };
 
   go = {

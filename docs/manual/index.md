@@ -51,6 +51,7 @@ the documentation as much as the code.
 | **Development tools** | **differs on NixOS** — [read here](development-tools) |
 | **Per-project environments** | **nixarchy only** — [read here](per-project-environments) |
 | **Python** | **nixarchy only** — [read here](python) |
+| **Prebuilt binaries** | **nixarchy only** — [read here](prebuilt-binaries) |
 | **Boxes** | **nixarchy only** — [read here](boxes) |
 | **Sandboxes** | **nixarchy only** — [read here](sandboxes) |
 | Shell tools | same as Omarchy — [read there](https://omarchy.org/manual/shell-tools/) |

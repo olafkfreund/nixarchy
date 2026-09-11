@@ -37,8 +37,9 @@ workflow is wrong here, and nothing below asks you to give it up.
 
 ## The error this page exists for
 
-Then you install numpy, or opencv, or matplotlib, and `pip install`
-succeeds -- and the `import` dies:
+Then you install a wheel with compiled code in it, `pip install`
+succeeds -- and on a bare NixOS (or for a library nixarchy's shipped set
+does not carry) the `import` dies:
 
 ```
 ImportError: libGL.so.1: cannot open shared object file: No such file or directory
@@ -63,26 +64,25 @@ PyTorch and Playwright -- anything that ships prebuilt compiled code.
 NixOS's answer to loose prebuilt binaries is
 [nix-ld](https://github.com/nix-community/nix-ld): a shim at the path
 binaries expect the loader at, which supplies a configured set of libraries.
-It is already enabled on every nixarchy machine. What it can hand a wheel is
-whatever `programs.nix-ld.libraries` holds -- and today nixarchy leaves that
-at the NixOS default, a minimal set, which is why the import above still
-dies. A curated library set that covers the common wheels is being added
-under [#566](https://github.com/olafkfreund/nixarchy/issues/566); until it
-lands, the fix is one option in your own configuration, naming the library
-the error names:
+It is already enabled on every nixarchy machine, and nixarchy curates
+`programs.nix-ld.libraries` beyond the NixOS default -- `libGL`, `zlib`,
+`libstdc++` and the rest of what common wheels load are in the shipped set,
+so the import above works out of the box.
+[Prebuilt binaries](prebuilt-binaries) is the full story of that set.
+
+When a wheel wants a library the set does not carry, the error names it,
+and the fix is one option in your own configuration -- your entries merge
+with nixarchy's rather than replacing them:
 
 ```nix
-programs.nix-ld.libraries = with pkgs; [
-  libGL
-  zlib
-  stdenv.cc.cc.lib   # libstdc++.so.6
-];
+programs.nix-ld.libraries = with pkgs; [ libpulseaudio ];
 ```
 
-Rebuild, open a new shell, and the same venv -- no reinstall -- imports.
-Each new `cannot open shared object file` is one more entry in that list:
-the error tells you the library, [search](other-packages) tells you the
-package.
+Rebuild, log out and back in (`NIX_LD_LIBRARY_PATH` is set at login), and
+the same venv -- no reinstall -- imports. Each new
+`cannot open shared object file` is one more entry in that list: the error
+tells you the library, [search](other-packages) tells you the package, and
+`nixarchy-doctor <path-or-command>` does the diagnosis for you.
 
 ## When the project matters more than the tutorial
 
@@ -118,12 +118,13 @@ Honesty about the limits, so the failure you hit next is not a surprise:
   headers. That needs the C libraries in the environment -- a devenv with the
   packages added, a `nix-shell` with them, or an FHS environment
   (`pkgs.buildFHSEnv`, plain nixpkgs) that fakes the whole `/usr` layout.
-- **Scripts with hard-coded paths.** A tool that execs `/usr/bin/python` or
-  `#!/bin/bash` fails before any loader is involved, because those paths do
-  not exist here. (`envfs`, which resolves them, is another rung of
-  [#566](https://github.com/olafkfreund/nixarchy/issues/566) and is not
-  shipped yet; today the fix is running the script with the interpreter
-  named explicitly.)
+- **Hard-coded paths to a name that is not on your `PATH`.** `envfs` is
+  shipped and on: it mounts `/bin` and `/usr/bin` as a view of your current
+  `PATH`, so `#!/bin/bash` and `/usr/bin/env python` resolve
+  ([Prebuilt binaries](prebuilt-binaries) covers it). But it can only
+  resolve a name to something your `PATH` actually has -- a script that
+  execs a command you never installed still fails, and the fix is
+  installing that command, not the loader.
 - **Installers that manage their own binaries.** conda and friends download
   whole toolchains of foreign binaries; some run under nix-ld once the
   library list is grown far enough, none are supported. If a tool insists on

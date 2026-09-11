@@ -103,8 +103,9 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [The NixOS Philosophy](https://olafkfreund.github.io/nixarchy/manual/philosophy): why installs are declarations, what is yours to edit imperatively vs. what a rebuild owns
 - [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started): building and booting the installer ISO, the seven install questions, and the first hour on the desktop
 - [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos): flake updates, the rebuild modes, generations, rollback, and the stale-session trap
-- [Updates](https://olafkfreund.github.io/nixarchy/manual/updates): what Update ▸ Nixarchy does here, why release channels do not exist, firmware updates, rolling back
+- [Updates](https://olafkfreund.github.io/nixarchy/manual/updates): what Update ▸ Nixarchy does here, the two release channels that have a NixOS meaning, firmware updates, rolling back
 - [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview): booting a config change in a VM before switching to it — the disk lifecycle, and what a green preview does not prove
+- [Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels): Update ▸ Channel follows nixos-26.05 or nixos-unstable, moving home-manager with it; stable is less tested here, not more, and a single package can come from the other channel
 - [Packages](https://olafkfreund.github.io/nixarchy/manual/other-packages): the app selection, apps.nix and nixarchy-apply, Install ▸ Search, services.nix, unfree software, removing apps
 - [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first): nixarchy try runs an app once, from the pinned nixpkgs, without installing — no isolation, no launcher entry, and it stays in /nix/store until garbage collection nobody schedules
 - [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
@@ -115,12 +116,15 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Sandboxes](https://olafkfreund.github.io/nixarchy/manual/sandboxes): disposable NixOS MicroVMs sharing the host store, and the declarative always-up half (opt-in)
 - [AI](https://olafkfreund.github.io/nixarchy/manual/ai): the ten NixOS agent skills, the Ask menu, choosing an agent, and running it all locally
 - [Gaming](https://olafkfreund.github.io/nixarchy/manual/gaming): Steam, RetroArch, the launchers and cloud gaming — how each Install ▸ Gaming row lands on NixOS
+- [Android](https://olafkfreund.github.io/nixarchy/manual/android): running Android apps — scrcpy mirroring a phone, and Waydroid in a container
 - [Security](https://olafkfreund.github.io/nixarchy/manual/security): the firewall, disk encryption, and what the port changes
 - [Remote Desktop](https://olafkfreund.github.io/nixarchy/manual/remote-desktop): serving the running Hyprland session over RDP (opt-in)
 - [System Snapshots](https://olafkfreund.github.io/nixarchy/manual/system-snapshots): generations replace snapper for the system; snapper covers /home on installer-built machines
 - [Many machines, one repo](https://olafkfreund.github.io/nixarchy/manual/many-machines): one flake for a fleet, and machines that pull their configuration on a timer
+- [A reinstall image of this machine](https://olafkfreund.github.io/nixarchy/manual/reinstall-image): nixarchy reinstall iso builds a bootable image from this machine's own configuration — the only way back that survives losing the disk
 - [Dual Boot Install](https://olafkfreund.github.io/nixarchy/manual/dual-boot-install): the installer's free-space mode — installing into unpartitioned space beside an existing OS
 - [Unattended Installs](https://olafkfreund.github.io/nixarchy/manual/unattended-installs): an answers file so an image boots, installs and reboots with nobody at the keyboard
+- [How this is tested](https://olafkfreund.github.io/nixarchy/manual/how-this-is-tested): what CI runs, when, what each check proves — and what it does not prove
 - [Troubleshooting](https://olafkfreund.github.io/nixarchy/manual/troubleshooting): start with `nix run github:olafkfreund/nixarchy#doctor`, then the specific failures and their fixes
 
 ## Source

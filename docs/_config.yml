@@ -58,8 +58,8 @@ nav:
   - { path: /manual/security,                 title: Security }
   - { path: /manual/remote-desktop,           title: Remote Desktop }
   - { path: /manual/system-snapshots,         title: System Snapshots }
-  - { path: /manual/many-machines,            title: "Many machines, one repo" }
-  - { path: /manual/reinstall-image,          title: "A reinstall image of this machine" }
+  - { path: /manual/many-machines,            title: Many Machines }
+  - { path: /manual/reinstall-image,          title: Reinstall Image }
   - { path: /manual/dual-boot-install,        title: Dual Boot Install }
   - { path: /manual/unattended-installs,      title: Unattended Installs }
   - { path: /manual/how-this-is-tested,       title: How This Is Tested }

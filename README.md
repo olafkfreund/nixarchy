@@ -1930,6 +1930,8 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | --- | --- | --- |
 | [#606](https://github.com/olafkfreund/nixarchy/issues/606) | **The skills that cover what nixarchy actually does** — an agent asked why a downloaded binary will not run has nothing to reach for today. Three skills: the loader ladder, gaming, and one flake across several machines | 3 filed |
 | [#611](https://github.com/olafkfreund/nixarchy/issues/611) | **Secrets you can actually use** — adding one is five manual steps today and neither `sops` nor `ssh-to-age` is on PATH. A menu row and an editor instead; a machine that can say what secrets exist and what uses them; a personal key you can copy without a terminal | 4 filed |
+| [#620](https://github.com/olafkfreund/nixarchy/issues/620) | **AI and GPU work that does not compile for two hours** — `cache.nixos.org` does not cache CUDA, so a GPU machine builds PyTorch from source. Plus agents grounded in real option names instead of guessed ones, and models that do not silently fill the root disk | 6 filed |
+| [#621](https://github.com/olafkfreund/nixarchy/issues/621) | **Making Nix answerable** — 4% of Nix users say they understand every error message. The three cliffs a distribution can fix rather than document: which package has this binary, what this error means, and what options exist | 3 filed |
 
 **Recently finished:**
 [the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)

@@ -635,6 +635,15 @@ jobs:
             sed 's|path: /manual/||' | sort -u)
           llms=$(grep -oE 'manual/[a-z-]+' docs/llms.txt |
             sed 's|manual/||' | sort -u)
+          # The manual's own welcome table -- a THIRD hand-maintained index of
+          # the same pages, and the one nothing checked. It had drifted to 24
+          # of 26 (#574): `boxes` and `sandboxes`, two of the features most
+          # worth showing a new reader, were unreachable from the page a
+          # reader lands on. Links here are relative (`](boxes)`), sometimes
+          # with an anchor, which is why this strips a `#fragment` rather than
+          # matching a `/manual/` prefix like the two above.
+          index=$(grep -oE '\]\([a-z-]+(#[a-z-]*)?\)' docs/manual/index.md |
+            sed 's/](//;s/)//;s/#.*//' | sort -u)
           rc=0
           for n in $(comm -23 <(echo "$pages") <(echo "$nav") || true); do
             echo "::error::docs/manual/$n.md is published but not in the docs/_config.yml sidebar"
@@ -646,8 +655,12 @@ jobs:
             echo "::error::docs/manual/$n.md is published but not in docs/llms.txt"
             rc=1
           done
+          for n in $(comm -23 <(echo "$pages") <(echo "$index") || true); do
+            echo "::error::docs/manual/$n.md is published but not linked from docs/manual/index.md"
+            rc=1
+          done
           [ $rc -eq 0 ] || exit 1
-          echo "every manual page is in the sidebar and in llms.txt"
+          echo "every manual page is in the sidebar, in llms.txt and in the manual index"
 
       - name: Verify shebangs were patched
         run: |

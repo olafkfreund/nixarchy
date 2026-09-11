@@ -678,4 +678,36 @@
     attr = "ocaml";
     arch = "ocaml";
   };
+
+  git-lfs = {
+    # An option, not an attr, because the package alone is a trap: git-lfs
+    # only works after its filter config is written, and without it a clone
+    # of an LFS repo silently hands you pointer files instead of content.
+    # NixOS's programs.git.lfs module installs the package AND writes
+    # filter.lfs into the system gitconfig, so no user ever has to know
+    # `git lfs install` exists (#566).
+    #
+    # No menuId and no arch: upstream ships no Install row for it, the row
+    # generator fails on a menuId upstream does not ship, and an invented
+    # arch name would fire on somebody else's package -- same reasoning as
+    # scrcpy.
+    label = "Git LFS";
+    category = "Development";
+    option = [
+      "programs"
+      "git"
+      "lfs"
+    ];
+    note = "Installs git-lfs and writes the LFS filter config system-wide, so cloning an LFS repo just works.";
+  };
+
+  uv = {
+    # No menuId and no arch, as git-lfs above. The `python` devenv preset
+    # pins uv per project; this is the machine-wide copy for everything
+    # outside a project -- `uv tool install`, `uvx`, a quick script (#566).
+    label = "uv";
+    category = "Development";
+    attr = "uv";
+    note = "Astral's Python package and project manager. `nixarchy dev init python` gives each project its own; this one is for everywhere else.";
+  };
 }

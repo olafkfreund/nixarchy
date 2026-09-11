@@ -1541,6 +1541,14 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # `nixarchy pkg new` against stub nix-init and nix: the draft is
+          # kept when its build fails, the placeholder hash is filled in from
+          # the failed build, and a reshaped apps.nix is printed at rather
+          # than edited. See tests/pkg-new.nix.
+          pkg-new = import ./tests/pkg-new.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # What a network install would have to build, before it formats
           # anything. See tests/substitutable.nix.
           substitutable = import ./tests/substitutable.nix {

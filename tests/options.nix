@@ -2711,6 +2711,28 @@ pkgs.runCommand "nixarchy-options"
         esac
         echo "nixarchy pkg remove routes to nixarchy-pkg-remove"
 
+        # Same shape for `pkg new` (#581): advertised in the usage, routed by
+        # the dispatcher, and the route proven by reaching the command's own
+        # refusal -- its URL check needs no network and touches no file.
+        grep -q 'nixarchy pkg new' "$vm/sw/bin/nixarchy" || {
+          echo "the dispatcher's usage does not advertise 'nixarchy pkg new'" >&2
+          exit 1
+        }
+        if r=$(run "$vm/sw/bin/nixarchy" pkg new not-a-url 2>&1); then
+          echo "nixarchy pkg new accepted something that is not a URL:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"does not look like a URL"*) ;;
+          *)
+            echo "nixarchy pkg new did not reach nixarchy-pkg-new; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy pkg new routes to nixarchy-pkg-new"
+
           touch $out
       ''
     else

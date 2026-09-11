@@ -277,24 +277,33 @@ your question:
 | `omarchy` (package) | the vendored tree assembles | minutes |
 | `installer-ui`, `installer-wizard` | the installer's screens and questions | minutes |
 | `session`, `coexist`, `integration`, `plugin` | booted VMs | ~10–20 min each |
-| `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | ~29 min, one self-hosted runner |
-| `free-space` | install beside an existing OS, which survives | ~27 min, same runner, same job |
+| `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | self-hosted, shares the one VM slot |
+| `free-space` | install beside an existing OS, which survives | same job, same nix invocation |
+| `installer-refusal` | a dark substituter is refused, disk left intact | ~2–3 min, same job — a VM too |
 | `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
 
-`install` and `free-space` are one job. `install-check.yml` runs them
-back to back on the single self-hosted machine, so the number that
-governs your merge latency is **their sum: 55 minutes of a 58-minute job,
-against a 90-minute timeout** (run 33798891329; every other step in that job
-totalled four seconds). It gates every pull request, and with
-runs that long a handful of concurrent PRs queue for hours. Every push
-to your branch cancels and restarts your own run (that is deliberate — a PR
-only needs an answer about its current head), but the queue is shared:
+`install`, `free-space` and `installer-refusal` are one job.
+`install-check.yml` builds all three in a single `nix build --max-jobs 3`,
+so they **overlap** rather than run in sequence — the old serial model, and
+its "55 minutes of a 58-minute job" sum, no longer exists. What governs your
+merge latency now: the build step took **16–19 minutes on a warm store**
+(runs 34573539340, 34509257501, 2026-09-10/11) against a 90-minute timeout,
+and a cold store can push it toward that limit (#434 timed out at the cap
+three times). There are **four self-hosted runners** — p510-nixarchy,
+p510-nixarchy-2, p620-nixarchy, p620-nixarchy-2 — with identical labels and
+separate stores, but the `nixarchy-install-vm` concurrency group still admits
+**one relevant install job at a time, machine-wide**: 3–4 concurrent installs
+all fail at the in-guest timeout (measured 2026-09-09). So the check gates
+every pull request, the queue for that one slot is shared, and concurrent PRs
+still wait on it. Every push to your branch cancels and restarts your own run
+(that is deliberate — a PR only needs an answer about its current head), but
 batching your pushes is a courtesy to everyone else's merge latency.
 
 **Do not build a VM check locally while CI has an install job in flight.**
 The concurrency group in `install-check.yml` serialises GitHub *jobs*; it
 knows nothing about a `nix build .#checks.x86_64-linux.session` you start by
-hand on the same machine. The runners are on p620 and so is your shell.
+hand on the same machine. Two of the four runners are on p620, and so is
+your shell.
 
 What it looks like when you do is not "your build was slow" — it is somebody
 else's check failing, on a line that has nothing to do with their change:

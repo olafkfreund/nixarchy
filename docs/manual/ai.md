@@ -38,7 +38,7 @@ location, so most harnesses load it automatically. nixarchy keeps the
 mechanism — `omarchy-provision-user` symlinks every directory under
 `$OMARCHY_PATH/default/agents/skills/` into `~/.claude/skills`,
 `~/.agents/skills`, `~/.codex/skills` and `~/.pi/agent/skills` — but ships
-thirteen skills instead of one:
+sixteen skills instead of one:
 
 | skill | owns |
 |---|---|
@@ -53,6 +53,9 @@ thirteen skills instead of one:
 | `nixos-doctor` | the whole-machine sweep to run before forming a theory |
 | `nixos-config-repo` | getting the configuration into git, and keeping it there |
 | `nixos-android` | mirroring a phone with scrcpy over USB or Wi-Fi, and Waydroid in a container |
+| `nixos-binaries` | why a downloaded binary or a pip wheel will not run, and the ladder out: nix-ld, envfs, AppImages, an FHS environment, a box |
+| `nixos-gaming` | Steam and Proton, the 32-bit graphics stack, controllers, gamescope, RetroArch and the launchers |
+| `nixos-fleet` | one flake and several machines: the `hosts/<name>/` layout, sharing without coupling, pulling on a timer, deploying with `--target-host` |
 | `devenv` | per-project environments: `devenv.nix`, the lockfile, and whether a tool belongs to the project or the machine |
 | `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
 

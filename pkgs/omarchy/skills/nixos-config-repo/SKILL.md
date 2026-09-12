@@ -10,7 +10,9 @@ description: >
   is ignored by the build. Triggers: git, GitHub, GitLab, repo, repository, commit,
   push, remote, .gitignore, CI, GitHub Actions, flake check, back up my config,
   version control, "untracked", "does not exist", dubious ownership, nixarchy config repo.
-  For encrypting secrets that live in that repo, use `nixos-secrets`.
+  For encrypting secrets that live in that repo, use `nixos-secrets`; for the
+  shape of a repository that holds SEVERAL machines — `hosts/<name>/`, sharing
+  without coupling, deploying and pulling — use `nixos-fleet`.
 ---
 
 # NixOS Config Repo Skill
@@ -265,6 +267,13 @@ sudo nixos-rebuild switch --flake .#laptop
 Shared modules go in `./modules`, per-machine differences in `./hosts/<name>`.
 Do not restructure someone's working single-host config into this shape unless
 they ask.
+
+**That is as far as this skill goes.** The `nixos-fleet` skill owns the multi-host
+layout itself — what a nixarchy-installed repository already looks like, what
+belongs in a shared module versus a host file, `nixarchy-apply`'s hostname match,
+pulling on a timer and deploying with `--target-host`. This skill owns git around
+it: remotes, CI, ignores, and getting the configuration in there at all. Hand a
+"several machines" question over rather than answering half of it here.
 
 ## Troubleshooting
 

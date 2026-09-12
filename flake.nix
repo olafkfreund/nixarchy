@@ -747,6 +747,11 @@
           # `nixarchy box` execs.
           nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
 
+          # Same reason again: tests/menu-verbs.nix reads the verbs out of the
+          # command the Secrets menu rows exec, and it can only do that if the
+          # command is a package it can build.
+          nixarchy-secret = pkgsFor.${system}.callPackage ./pkgs/secret.nix { };
+
           verify = pkgsFor.${system}.nixarchy-verify;
 
           # `nix run .#review` -- what needs updating, and what is quietly

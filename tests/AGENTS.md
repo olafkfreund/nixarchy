@@ -245,3 +245,19 @@ Two branches only these can reach, as illustration:
   region you did not touch, diff `nix eval --raw .#checks.<system>.<name>.buildCommand`
   before reading the shell — and indent interpolation openers to match their
   surroundings. `nix fmt` does not catch this; it happily formats both.
+- **Grep the spelling the script CONTAINS, not the value it resolves to.** A
+  check meant to prove every call to a root-only helper goes through `sudo`
+  greped for the helper's *store path* — which appears on exactly one line, its
+  assignment. The loop iterated once, matched the arm that skips the
+  assignment, and passed with the `sudo` deleted from every call. The script
+  spells those calls `"$HOST_SOPS"`. Same shape as the forbid-pattern note
+  above and worth stating the other way round: after writing a loop over
+  `grep` output, **count what it iterated and assert a floor**, because a loop
+  that reads zero of the right lines satisfies every case in silence.
+- **Break the product, not the assertion, and watch which assertion fires.**
+  Two of this repository's newest checks were wrong in ways only that found:
+  one matched `$(` immediately followed by `sops`, and the real bug put an
+  environment assignment in between; one counted `sops -d --extract` when half
+  the calls go through a wrapper whose name merely *ends* in `sops`. Both
+  reported green on the broken code, and both were caught because §1's
+  break-it-first contract was actually run rather than described.

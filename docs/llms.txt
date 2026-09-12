@@ -120,6 +120,7 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Gaming](https://olafkfreund.github.io/nixarchy/manual/gaming): Steam, RetroArch, the launchers and cloud gaming — how each Install ▸ Gaming row lands on NixOS
 - [Android](https://olafkfreund.github.io/nixarchy/manual/android): running Android apps — scrcpy mirroring a phone, and Waydroid in a container
 - [Security](https://olafkfreund.github.io/nixarchy/manual/security): the firewall, disk encryption, and what the port changes
+- [Secrets](https://olafkfreund.github.io/nixarchy/manual/secrets): `nixarchy secret` over sops-nix — system secrets root-only for services, user secrets to the clipboard, and what reads each one
 - [Remote Desktop](https://olafkfreund.github.io/nixarchy/manual/remote-desktop): serving the running Hyprland session over RDP (opt-in)
 - [System Snapshots](https://olafkfreund.github.io/nixarchy/manual/system-snapshots): generations replace snapper for the system; snapper covers /home on installer-built machines
 - [Many machines, one repo](https://olafkfreund.github.io/nixarchy/manual/many-machines): one flake for a fleet, and machines that pull their configuration on a timer

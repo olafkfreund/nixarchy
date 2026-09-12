@@ -1355,7 +1355,14 @@ pkgs.runCommand "nixarchy-options"
     splashUpstream = "${(pkgs.extend inputs.self.overlays.default).omarchy.src}/default/plymouth";
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
-    nativeBuildInputs = [ pkgs.python3 ];
+    nativeBuildInputs = [
+      pkgs.python3
+      # For the secrets round-trip below. A throwaway identity is generated
+      # inside the check: NOTHING encrypted with a real key is committed as a
+      # fixture, even though an encrypted fixture looks harmless.
+      pkgs.sops
+      pkgs.age
+    ];
   }
   (
     if flatpakProblems != [ ] then
@@ -2093,7 +2100,7 @@ pkgs.runCommand "nixarchy-options"
         # nixarchy-apply are built by writeShellApplication in
         # modules/apps.nix rather than shipped in nix-bin -- so they cannot be
         # derived below and are named here.
-        for verb in try search apply vm box; do
+        for verb in try search apply vm box secret; do
           grep -qE "^ *$verb\)" "$vm/sw/bin/nixarchy" || {
             echo "the nixarchy dispatcher has no route for '$verb':" >&2
             echo "  it falls through to \`exec omarchy $verb\`, which knows only" >&2
@@ -2906,8 +2913,20 @@ pkgs.runCommand "nixarchy-options"
               exit 1
               ;;
           esac
-        done < <(grep -E 'read -r -p' "$vm/sw/bin/nixarchy-search")
-        echo "every prompt in the picker reads the terminal, not the loop"
+        done < <(grep -E 'read -r -p' "$vm/sw/bin/nixarchy-search" "$vm/sw/bin/nixarchy-secret")
+        echo "every prompt in the pickers reads the terminal, not the loop"
+
+        # And the loop has to have READ something. Greping two files for a
+        # pattern neither contains satisfies every case above in silence --
+        # the floor this repository keeps arriving at (#538, #596). Both
+        # pickers prompt, so both must contribute.
+        for picker in nixarchy-search nixarchy-secret; do
+          grep -qE 'read -r -p' "$vm/sw/bin/$picker" || {
+            echo "$picker has no 'read -r -p' at all, so the tty check above" >&2
+            echo "  read nothing for it and proved nothing." >&2
+            exit 1
+          }
+        done
 
         # And the ROUTE, not just the call site: #498 shipped `nixarchy try`
         # advertised and unreachable, because nothing asserted the dispatcher
@@ -2975,6 +2994,208 @@ pkgs.runCommand "nixarchy-options"
             ;;
         esac
         echo "nixarchy pkg undraft routes to nixarchy-pkg-undraft"
+
+        # ---- nixarchy secret (#611, #612, #613, #614, #615) -----------------
+        #
+        # The three properties this command cannot be allowed to lose. Each is
+        # a security property rather than a feature, so each is asserted
+        # against the BUILT script rather than trusted to a comment.
+        secretbin="$vm/sw/bin/nixarchy-secret"
+        test -x "$secretbin" || {
+          echo "nixarchy-secret is not on the system, so every row and route" >&2
+          echo "  below points at nothing." >&2
+          exit 1
+        }
+
+        # 1. The host's age identity never leaves root. Converting the SSH
+        #    host key to an age identity has to happen INSIDE a process that
+        #    is already root -- pkgs/secret.nix does it in a wrapper reached
+        #    only through sudo. The way to get this wrong is
+        #    `sudo env SOPS_AGE_KEY="$(sudo ssh-to-age -private-key ...)"`,
+        #    which puts the machine's private identity in argv, where
+        #    /proc/*/cmdline makes it readable by every process on the box.
+        if grep -q 'ssh-to-age -private-key' "$secretbin"; then
+          echo "::error::nixarchy-secret derives the host's age identity in its" >&2
+          echo "  own (unprivileged) process. That value must only ever exist" >&2
+          echo "  inside the root-side wrapper -- see rule 2 in pkgs/secret.nix." >&2
+          exit 1
+        fi
+        hostsops=$(sed -n 's/^HOST_SOPS=//p' "$secretbin")
+        test -n "$hostsops" || { echo "nixarchy-secret names no root-side sops wrapper" >&2; exit 1; }
+        grep -q 'ssh-to-age -private-key' "$hostsops" || {
+          echo "the root-side wrapper no longer derives the identity from the host key" >&2
+          exit 1
+        }
+        # The USES, which are spelled "$HOST_SOPS" -- not the store path. The
+        # first version of this loop greped for the store path, which appears
+        # on exactly one line (the assignment), so it iterated once, matched
+        # the *HOST_SOPS=* arm and passed with the sudo deleted from every
+        # call. A loop that reads the wrong lines is a green light (§1).
+        uses=0
+        while IFS= read -r line; do
+          case "$line" in
+            *HOST_SOPS=*) continue ;;
+          esac
+          uses=$((uses + 1))
+          case "$line" in
+            *sudo*'"$HOST_SOPS"'*) ;;
+            *)
+              echo "::error::nixarchy-secret reaches the root-side sops wrapper" >&2
+              echo "  without sudo. That wrapper reads /etc/ssh/ssh_host_ed25519_key," >&2
+              echo "  so unprivileged it fails at runtime -- and the temptation" >&2
+              echo "  then is to derive the identity on the user side instead," >&2
+              echo "  which is the leak rule 2 in pkgs/secret.nix exists to stop:" >&2
+              echo "  $line" >&2
+              exit 1
+              ;;
+          esac
+        done < <(grep -F -- '"$HOST_SOPS"' "$secretbin")
+        test "$uses" -ge 3 || {
+          echo "::error::only $uses calls reach the root-side wrapper; the loop" >&2
+          echo "  above is not reading the lines it thinks it is." >&2
+          exit 1
+        }
+        echo "the host's age identity is derived only inside the root-side wrapper"
+
+        # 2. A decrypted value reaches the clipboard through a PIPE and is
+        #    never captured. `v=$(sops -d ...)` would put plaintext in a shell
+        #    variable, which `set -x`, a core dump or an exported environment
+        #    can all expose, and which outlives the call.
+        #    Written as "a decrypting line must not contain a command
+        #    substitution at all", not as "must not start with $(sops": the
+        #    first version of this check matched `$(` immediately followed by
+        #    sops, and a break that put an environment assignment in between
+        #    -- `v=$(SOPS_AGE_KEY_FILE=... sops -d ...)`, the exact bug --
+        #    walked straight past it. Proving the check fails is what found
+        #    that; §1 is not a formality.
+        if grep -n -- '-d --extract' "$secretbin" | grep -F -- '$('; then
+          echo "::error::nixarchy-secret captures a decrypted value in a" >&2
+          echo "  command substitution. It must be piped straight to wl-copy:" >&2
+          echo "  plaintext never touches disk and never outlives the pipe," >&2
+          echo "  where set -x, a core dump and an exported environment cannot" >&2
+          echo "  reach it (#613)." >&2
+          exit 1
+        fi
+        # ...and each decrypting call is the head of a pipe into the clipboard.
+        # `-d --extract`, not `sops -d --extract`: the system path calls the
+        # root-side WRAPPER, whose store path ends in ...host-sops" -- so the
+        # obvious spelling matched the user path only, and reported one call
+        # where there are two. Found by breaking the sudo on the other path
+        # and watching the wrong assertion fire.
+        deccalls=$(grep -c -- '-d --extract' "$secretbin")
+        test "$deccalls" -eq 2 || {
+          echo "::error::nixarchy-secret has $deccalls decrypting calls, not the" >&2
+          echo "  two (system, user) this check knows how to reason about." >&2
+          exit 1
+        }
+        pipes=$(grep -c 'wl-copy --paste-once' "$secretbin")
+        test "$pipes" -ge 2 || {
+          echo "::error::nixarchy-secret has $pipes clipboard writes; both the" >&2
+          echo "  system and the user path must pipe to wl-copy." >&2
+          exit 1
+        }
+        echo "a decrypted value is piped to the clipboard and never captured ($pipes paths)"
+
+        # 3. The declaration goes in hosts/<host>/configuration.nix, and the
+        #    command says so. nixarchy-apply copies ~/.config/nixarchy/*.nix
+        #    into hosts/<host>/nixarchy/ and `git add -A`s them, so a
+        #    `./secrets.yaml` written there resolves one directory too deep --
+        #    a failure whose message names a missing path and not the cause.
+        for needle in 'configuration.nix' 'sops.secrets.$name.sopsFile = ./secrets.yaml;' \
+                      'one directory too deep' 'services.openssh.enable = true;'; do
+          grep -qF -- "$needle" "$secretbin" || {
+            echo "::error::nixarchy-secret no longer says '$needle'." >&2
+            echo "  Every one of these is a trap a user meets as an unexplained" >&2
+            echo "  build error if the command stops naming it (#612)." >&2
+            exit 1
+          }
+        done
+        echo "the command names the file the declaration goes in, and the sshd prerequisite"
+
+        # ---- and it works, on a store this check encrypts itself ------------
+        #
+        # NO REAL SECRET AS A FIXTURE, encrypted or otherwise. The identity is
+        # made here, used here, and thrown away with the build directory.
+        #
+        # What this proves is the property `nixarchy secret list` rests on:
+        # sops encrypts VALUES and leaves the keys in plaintext, so the names
+        # of a machine's secrets can be read with no identity at all. If that
+        # ever stopped being true, list would silently report nothing.
+        secretwork=$PWD/secret-roundtrip
+        mkdir -p "$secretwork/hosts/$(cat /proc/sys/kernel/hostname)"
+        age-keygen -o "$secretwork/id.txt" 2>/dev/null
+        recipient=$(age-keygen -y "$secretwork/id.txt")
+        printf 'demo-token: not-a-real-value-0123456789\n' > "$secretwork/plain.yaml"
+        sops --age "$recipient" --encrypt --input-type yaml --output-type yaml \
+          "$secretwork/plain.yaml" \
+          > "$secretwork/hosts/$(cat /proc/sys/kernel/hostname)/secrets.yaml"
+
+        store="$secretwork/hosts/$(cat /proc/sys/kernel/hostname)/secrets.yaml"
+        grep -q '^demo-token:' "$store" || {
+          echo "::error::sops no longer leaves the key names in plaintext." >&2
+          echo "  \`nixarchy secret list\` reads them without an identity and" >&2
+          echo "  would now report an empty machine." >&2
+          exit 1
+        }
+        if grep -q 'not-a-real-value-0123456789' "$store"; then
+          echo "::error::the value survived encryption in plaintext." >&2
+          exit 1
+        fi
+
+        # The real command, against that store. `nix` is not in this sandbox,
+        # so declared_json returns empty and the fallback path runs -- which
+        # is the path a machine whose flake will not evaluate takes, and the
+        # one whose message must not claim the machine has no secrets.
+        listout=$(NIXARCHY_FLAKE=$secretwork run "$secretbin" list 2>&1)
+        case "$listout" in
+          *demo-token*) ;;
+          *)
+            echo "::error::nixarchy secret list did not name the secret in the store:" >&2
+            printf '%s\n' "$listout" >&2
+            exit 1
+            ;;
+        esac
+        case "$listout" in
+          *"could not evaluate"*) ;;
+          *)
+            echo "::error::list reported no evaluation problem on a tree it cannot" >&2
+            echo "  evaluate. 'could not evaluate' and 'no secrets declared' are" >&2
+            echo "  different answers and must not be reported as the same one." >&2
+            printf '%s\n' "$listout" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy secret list reads a store it has no identity for, and says so"
+
+        # ---- and the config repo still refuses to publish a plaintext one ---
+        #
+        # nixarchy-config-repo's secret_scan reads *.nix, and a secret store is
+        # YAML -- so `nixarchy secret` opens a path the existing scan cannot
+        # see. The new guard keys on sops' own ENC[AES256_GCM marker, and THAT
+        # is the half worth checking rather than asserting: if sops ever
+        # changed how it wraps a value, the guard would quietly pass every
+        # encrypted file AND every plaintext one. The store encrypted above is
+        # real sops output, so this varies with the thing it is about.
+        repobin="$vm/sw/bin/nixarchy-config-repo"
+        grep -qF 'ENC\[AES256_GCM' "$repobin" || {
+          echo "::error::nixarchy-config-repo no longer looks for an unencrypted" >&2
+          echo "  secret store, so 'nixarchy config repo' would commit and push" >&2
+          echo "  a plaintext secrets.yaml (#611 added the path; the *.nix grep" >&2
+          echo "  cannot see it)." >&2
+          exit 1
+        }
+        grep -qF 'ENC[AES256_GCM' "$store" || {
+          echo "::error::sops no longer writes ENC[AES256_GCM into an encrypted" >&2
+          echo "  file. nixarchy-config-repo's plaintext-store guard keys on that" >&2
+          echo "  marker and would now pass a plaintext store as encrypted." >&2
+          exit 1
+        }
+        grep -qF 'ENC[AES256_GCM' "$secretwork/plain.yaml" && {
+          echo "::error::the plaintext fixture carries the encrypted marker, so" >&2
+          echo "  the guard above cannot tell the two apart." >&2
+          exit 1
+        }
+        echo "the marker config-repo's plaintext-store guard keys on is the one sops writes"
 
           touch $out
       ''

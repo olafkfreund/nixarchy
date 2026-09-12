@@ -35,6 +35,7 @@ let
 
   vmcli = inputs.self.packages.${system}.nixarchy-vm;
   boxcli = inputs.self.packages.${system}.nixarchy-box;
+  secretcli = inputs.self.packages.${system}.nixarchy-secret;
 
   # nixarchy-channel ships in the omarchy tree rather than as its own package,
   # so it is reached through the built tree the same way the menu reaches it.
@@ -74,10 +75,12 @@ pkgs.runCommand "nixarchy-menu-verbs"
 
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
     verbs_of ${boxcli}/bin/nixarchy-box > box-verbs
+    verbs_of ${secretcli}/bin/nixarchy-secret > secret-verbs
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
 
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
     echo "nixarchy-box accepts: $(tr '\n' ' ' < box-verbs)"
+    echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
 
     # A floor. An empty verb list makes every row below pass, turning "the
@@ -85,6 +88,8 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # this file exists to reject.
     test "$(wc -l < vm-verbs)"  -ge 5
     test "$(wc -l < box-verbs)" -ge 5
+    # new, edit, list, where, copy, remove -- plus the three help spellings.
+    test "$(wc -l < secret-verbs)" -ge 6
     # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
     # NixOS meaning and stay out of the menu, so this floor is 2 and not 4.
     test "$(wc -l < channel-verbs)" -ge 2
@@ -112,6 +117,12 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy-box +[-a-z]+'     2 nixarchy-box box-verbs
     scan '\bnixarchy +box +[-a-z]+'    3 nixarchy-box box-verbs
 
+    # The Secrets group (#611/#612). Four rows, added with the rows rather
+    # than after one of them breaks -- `nixarchy-vm new`, the row this file
+    # exists about, was a verb that did not exist and a tester found it.
+    scan '\bnixarchy-secret +[-a-z]+'  2 nixarchy-secret secret-verbs
+    scan '\bnixarchy +secret +[-a-z]+' 3 nixarchy-secret secret-verbs
+
     # The channel rows (#529). Added with the rows themselves rather than
     # after the first one breaks, because the row this file was written about
     # -- `nixarchy-vm new`, a verb that does not exist -- shipped and was
@@ -122,7 +133,17 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # The second floor: if the menu stopped carrying these rows, every scan
     # above would run zero times and the check would pass having read nothing.
     echo "menu verbs checked: $checked"
-    test "$checked" -ge 8
+    test "$checked" -ge 12
+
+    # And the Secrets group specifically. The floor above is a sum, so losing
+    # every secret row would drop it from 16 to 12 and still pass -- which is
+    # the "a loop that iterated nothing" shape this file already guards
+    # against for the CLIs.
+    secretrows=$(grep -coE '\bnixarchy-secret +[-a-z]+' ${menu} || true)
+    test "$secretrows" -ge 3 || {
+      echo "ERROR: the menu has $secretrows Secrets rows; the group is gone" >&2
+      exit 1
+    }
 
     test "$fail" -eq 0
     echo "every menu row names a subcommand its CLI has"

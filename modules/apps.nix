@@ -325,6 +325,53 @@ let
           description = "Every package, NixOS option and Omarchy app, in one picker";
         };
 
+        # The Secrets group (#611). A new parent with no action of its own,
+        # which is legitimate for a submenu -- Menu.qml renders the children.
+        # Every row here is a new id upstream does not ship, so every one of
+        # them carries its own `label` and `icon`: the generator fails on a
+        # row it cannot name, and a row that omits `label` renders the raw id
+        # rather than inheriting one.
+        #
+        # `secret new` and not `secret add`: tests/menu-verbs.nix checks each
+        # of these actions against the verbs nixarchy-secret's own case block
+        # accepts, because the last row written to match a menu KEY rather
+        # than a CLI shipped broken and was found by a tester.
+        "setup.secret" = {
+          icon = "󰌾";
+          label = "Secrets";
+          aliases = [
+            "password"
+            "key"
+            "token"
+            "sops"
+            "credential"
+          ];
+        };
+        "setup.secret.new" = {
+          icon = "󰷖";
+          label = "New secret";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-secret new";
+          description = "A password or key a service on this machine can read. Encrypted to this machine";
+        };
+        "setup.secret.copy" = {
+          icon = "󰅍";
+          label = "Copy a secret";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-secret copy";
+          description = "Put one on the clipboard. Never written to disk";
+        };
+        "setup.secret.list" = {
+          icon = "󰈙";
+          label = "What secrets exist";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-secret list";
+          description = "Everything this machine declares, and what reads each one";
+        };
+        "setup.secret.edit" = {
+          icon = "󰏫";
+          label = "Edit secrets";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-secret edit";
+          description = "Open the encrypted store in your editor";
+        };
+
         # Why: modules/AGENTS.md#backup-and-recovery-one-menu-542
         "system.recovery" = {
           icon = "󰁯";
@@ -2798,6 +2845,13 @@ in
             # a /nix/store path.
             (pkgs.callPackage ../pkgs/box.nix { })
 
+            # `nixarchy secret <subcommand>`. Its own file for the same reason
+            # as the three above: tests/menu-verbs.nix reads the verbs out of
+            # the command the Secrets rows exec. See pkgs/secret.nix for why
+            # the host's age identity never leaves root, and why the
+            # declaration line is printed rather than written.
+            (pkgs.callPackage ../pkgs/secret.nix { })
+
             # Why: modules/AGENTS.md#one-name-for-the-commands-this-repo-adds-and-a-way
             (pkgs.writeShellApplication {
               name = "nixarchy";
@@ -2865,6 +2919,7 @@ in
                   try) shift; exec nixarchy-try "$@" ;;
                   vm) shift; exec nixarchy-vm "$@" ;;
                   box) shift; exec nixarchy-box "$@" ;;
+                  secret) shift; exec nixarchy-secret "$@" ;;
 
                   # The rest of them (#538). Every one of these was shipped,
                   # documented, and unreachable: without a row here the command
@@ -2942,6 +2997,7 @@ in
                   nixarchy rollback           Go back to an earlier system generation
                   nixarchy unfreeze           Let this machine receive updates again
                   nixarchy config repo        Put /etc/nixos in git, with a remote and CI
+                  nixarchy secret <subcommand> Passwords and keys, encrypted -- 'nixarchy secret help'
                   nixarchy home backup        Back up the desktop configuration in your home
                   nixarchy reinstall iso      Build an image that reinstalls this machine
                   nixarchy android            Connect an Android phone over Wi-Fi, for scrcpy

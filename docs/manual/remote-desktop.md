@@ -69,55 +69,33 @@ you, under `/run` — never in the store and never in git.
 
 ### Getting the password there
 
-You need `services.openssh.enable = true` first, and one rebuild after it. The
-secret is encrypted to the machine's own SSH host key, and that key is
-generated on first boot — so on a machine installed from the ISO this is
-always the second rebuild, not the first. Without sshd there is no key at all
-and sops-nix says so rather than guessing.
-
-**1. Read this host's public key as an age recipient.**
+One command does all of it:
 
 ```sh
-nix-shell -p ssh-to-age --run 'ssh-keyscan localhost 2>/dev/null | ssh-to-age'
+nixarchy secret new hypr-rdp-password
 ```
 
-**2. Name it in `.sops.yaml` at the root of your flake repository.** Create the
-file if it is not there:
-
-```yaml
-keys:
-  - &desk age1qz...           # the key from step 1
-creation_rules:
-  - path_regex: hosts/desk/secrets\.yaml$
-    key_groups:
-      - age:
-          - *desk
-```
-
-Add your own age key as a second recipient here if you have one. Encrypted to
-the host alone, the file can only ever be decrypted on that host, as root —
-which is fine until you want to change the password from your laptop.
-
-**3. Write the password in.**
-
-```sh
-nix-shell -p sops --run 'sops edit hosts/desk/secrets.yaml'
-```
-
-The file's content is plain YAML before sops encrypts it, and the key is the
-name you are about to declare:
+That derives this host's age recipient, writes `.sops.yaml` at the root of your
+flake if there is not one, and opens `hosts/<host>/secrets.yaml` in your
+editor. The file is plain YAML while you edit it and encrypted when you save:
 
 ```yaml
 hypr-rdp-password: something-long
 ```
 
-Avoid a double quote, a backslash or a newline in it. The value is written
-into a TOML string, and one that breaks the quoting makes hypr-rdp fail to
-parse its config — a safe failure, since it exits rather than starting, but a
-confusing way to find out.
+Avoid a double quote, a backslash or a newline in the value. It is written into
+a TOML string, and one that breaks the quoting makes hypr-rdp fail to parse its
+config -- a safe failure, since it exits rather than starting, but a confusing
+way to find out.
 
-**4. Declare the secret and point the service at it,** in
-`hosts/desk/configuration.nix`:
+You need sshd enabled first, and one rebuild after it. The secret is encrypted
+to the machine's own SSH host key, and that key is generated on first boot --
+so on a machine installed from the ISO this is always the second rebuild, not
+the first. Without sshd there is no key at all, and `nixarchy secret` says so
+rather than letting you meet it as a build error.
+
+Then **declare the secret and point the service at it**, in
+`hosts/<host>/configuration.nix`:
 
 ```nix
 sops.secrets.hypr-rdp-password.sopsFile = ./secrets.yaml;
@@ -128,23 +106,27 @@ programs.nixarchy.services.hypr-rdp = {
 };
 ```
 
-`passwordSecret` is the attribute name under `sops.secrets` — not the password
+`passwordSecret` is the attribute name under `sops.secrets` -- not the password
 and not a path to it.
 
 Put this in `configuration.nix` rather than in `~/.config/nixarchy/services.nix`.
-The menu's file is copied into `hosts/<host>/nixarchy/` by `nixarchy-apply`, so
+The menu's file is copied into `hosts/<host>/nixarchy/` by `nixarchy apply`, so
 a relative `./secrets.yaml` written there would resolve one directory too deep.
 Enabling from the menu is fine; the secret's two lines belong beside the file
 they name.
 
-**5. `git add` the encrypted file, then rebuild.** A flake in a git worktree
+Finally `git add` the encrypted file and rebuild. A flake in a git worktree
 sees only tracked files, so an unstaged `secrets.yaml` does not exist as far as
 evaluation is concerned, and the error says the path is missing rather than
 that it is untracked.
 
-Changing the password later means editing the encrypted file, rebuilding, and
-then `systemctl --user restart hypr-rdp`. sops-nix restarts system units and
-this is a user unit, so nothing restarts it for you.
+Changing the password later means `nixarchy secret edit`, a rebuild, and then
+`systemctl --user restart hypr-rdp`. sops-nix restarts system units and this is
+a user unit, so nothing restarts it for you.
+
+[The Secrets page](secrets) covers the rest of the command -- what exists on
+this machine, what reads it, and the second kind of secret, which goes to your
+clipboard rather than to a service.
 
 ## Reaching it: three shapes
 

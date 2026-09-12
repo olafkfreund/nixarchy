@@ -5,7 +5,7 @@ description: >
   other secret has to reach this NixOS machine's configuration. Use when asked to
   store a secret, add an API key, set a service password, encrypt something in the
   config repo, set up sops-nix or agenix, rotate or share a key, give a systemd
-  service a credential, or review a config for leaked secrets. Triggers: secret,
+  service a credential, or review a config for leaked secrets. Triggers: nixarchy secret, secret,
   password, API key, token, credential, agenix, sops, sops-nix, age, .age, SOPS,
   ssh key, private key, .env, environmentFile, hashedPasswordFile, "world-readable
   store", "don't commit the password", encrypt, decrypt, rotate, GPG, ACME key.
@@ -37,9 +37,18 @@ Stop at the first one that fits.
 |---|---|
 | It is a password *hash* for a user account | `users.users.<n>.hashedPasswordFile` |
 | A single machine, secret never needs to be in the repo | A file in `/var/lib/...`, referenced by path |
-| Secrets live in the config repo, one or two machines, SSH-key based | **agenix** |
-| Many machines/users, key rotation, partial-file encryption, non-Nix consumers too | **sops-nix** |
+| **Anything that has to be encrypted, on a nixarchy machine** | **`nixarchy secret`** — see below |
+| Secrets in the config repo, on a machine that is not nixarchy | **sops-nix**, or agenix if that repo already uses it |
 | A secret only one systemd service needs, at runtime | `LoadCredential=` |
+
+**On a nixarchy machine there is no agenix choice to make.** nixarchy ships
+sops-nix, imported by `modules/nixos.nix`, and `modules/secrets.md` records why
+agenix was rejected: agenix delivers files containing raw secrets and has no
+templating, so composing one into a config file would need a hand-rolled
+`ExecStartPre` shim per service — the exact hack the mechanism exists to avoid.
+Reaching for agenix here means installing a second framework to do what the
+first one already does. The agenix section further down is kept for machines
+that are not nixarchy; **do not follow it on this one**.
 
 Do not reach for an encryption framework for a single secret on a single laptop
 that is never committed. A `0400` file in `/var/lib` and a `*File` option is a
@@ -67,7 +76,71 @@ inlining the secret. The honest workarounds are, in order: a systemd
 `LoadCredential` + a wrapper, an `environmentFile` on the generated unit, or
 patching the module. Never "just this once" in a `.nix` file.
 
-## agenix
+## nixarchy secret — the command on this machine
+
+`nixarchy secret` is sops-nix with the ceremony removed. Prefer it to every
+raw `sops` invocation below when the machine is nixarchy.
+
+```bash
+nixarchy secret new <name>      # bootstrap if needed, then $EDITOR, then encrypt
+nixarchy secret new --user <n>  # a secret for the PERSON, not for a service
+nixarchy secret list            # what exists, and what reads each one
+nixarchy secret where <name>    # what names this one
+nixarchy secret copy [<name>]   # to the clipboard, never to disk
+nixarchy secret edit
+nixarchy secret remove <name>
+```
+
+`new` derives the host's age recipient from its SSH host key, writes
+`.sops.yaml` at the flake root if there is none, opens
+`hosts/<host>/secrets.yaml`, and then **prints the declaration for you to
+place**:
+
+```nix
+# hosts/<host>/configuration.nix   -- and nowhere else
+sops.secrets.<name>.sopsFile = ./secrets.yaml;
+```
+
+Three things to get right, each of which is a real failure someone met:
+
+- **The declaration goes in `hosts/<host>/configuration.nix`.** Not in
+  `~/.config/nixarchy/*.nix`: `nixarchy apply` copies those into
+  `hosts/<host>/nixarchy/`, so a relative `./secrets.yaml` written there
+  resolves one directory too deep, and the error names a missing path rather
+  than the cause.
+- **sshd must be enabled, with one rebuild after it.** The host's SSH key is
+  generated on first boot; without `services.openssh.enable` there is no key
+  at all and any declared secret fails evaluation with sops-nix's own "No key
+  source configured for sops". `nixarchy secret` says this before you get
+  there.
+- **`git add` the encrypted file.** A flake in a git worktree sees only tracked
+  files, so an unstaged `secrets.yaml` "does not exist" to evaluation.
+
+### Two kinds, and never conflate them
+
+| | system | `--user` |
+|---|---|---|
+| decrypted by | root, at activation, into `/run/secrets` `0400` | you, on request |
+| goes to | a **service** | the **clipboard**, never disk |
+| encrypted to | the host's SSH key | an age identity in `~/.local/share/nixarchy/secrets/` |
+
+If asked to make system secrets readable by the user, **push back**: it means
+every process running as that user — a browser, a dev-shell dependency, an
+agent — can read every secret on the machine. Use a user secret for the human
+case instead.
+
+Two limits worth stating rather than discovering: the user identity file is
+outside the config repo and outside `nixarchy home backup`, so losing it loses
+the store; and Omarchy records the clipboard in
+`~/.local/state/omarchy/clipboard-history.json` in plaintext, which
+`nixarchy secret copy` warns about and cannot prevent.
+
+User-facing instructions live in `docs/manual/secrets.md`; the design record is
+`modules/secrets.md`.
+
+## agenix — for machines that are not nixarchy
+
+**Not on a nixarchy machine.** See the note under the decision table.
 
 Encrypts each secret to a set of **age or SSH public keys**. Decryption happens at
 activation using the machine's SSH host key — so no passphrase, no unlock step,

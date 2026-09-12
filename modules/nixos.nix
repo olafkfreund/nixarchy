@@ -1152,6 +1152,29 @@ in
 
       # Why: modules/AGENTS.md#omarchy-path-default-systemd-user-which-upstream-i
       user.services = {
+        # nixpkgs guards the rootless Docker user unit with
+        # `ConditionUser = "!root"`, and root is not the problem. The unit is
+        # `wantedBy = default.target`, so systemd starts it for EVERY user
+        # session that has one -- including the display manager's. `sddm` is
+        # uid 175, is not root, has no subuid range, and rootlesskit cannot
+        # build a uid map without one:
+        #
+        #   dockerd-rootless: failed to setup UID/GID map: failed to compute
+        #   uid/gid map: No subuid ranges found for user 175 ("sddm")
+        #
+        # So every machine with a display manager gained a failing unit the
+        # moment rootless became the default (#619). Nothing a user runs
+        # depends on sddm having a Docker daemon, which is exactly why it would
+        # have sat there red forever.
+        #
+        # `!@system` is the condition that was meant: not root, and not any
+        # other account that exists to run a service rather than to be sat in
+        # front of. mkForce because nixpkgs sets the narrower value at ordinary
+        # priority -- this corrects upstream's literal, not a user's choice.
+        docker.unitConfig.ConditionUser = lib.mkIf config.virtualisation.docker.rootless.enable (
+          lib.mkForce "!@system"
+        );
+
         bt-agent = {
           description = "Bluetooth pairing agent (auto-accept)";
           documentation = [ "man:bt-agent(1)" ];

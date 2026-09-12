@@ -391,7 +391,15 @@ in
     # For the user's own tools, not for the service -- the Ollama unit gets
     # OLLAMA_MODELS from modelsDir, and Open WebUI has its own HF_HOME under
     # its stateDir. attrset, so plain assignment for the reason above.
-    environment.sessionVariables = lib.optionalAttrs (aiCfg.hfHome != null) {
+    environment.sessionVariables = {
+      # The endpoint, once, for anything in a shell that talks to the local
+      # model and is not one of the agents this module writes a provider file
+      # for -- a Neovim plugin the user declared, a script. Computed here from
+      # the port the server actually bound, so it cannot disagree with the
+      # provider files (#659).
+      OLLAMA_ENDPOINT = endpoint;
+    }
+    // lib.optionalAttrs (aiCfg.hfHome != null) {
       HF_HOME = aiCfg.hfHome;
     };
 

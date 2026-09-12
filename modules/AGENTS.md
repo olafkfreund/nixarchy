@@ -1026,6 +1026,65 @@ in Omarchy writes models.json today. Doing it the same way means a future
 version that does cannot break activation, and means a user's own extra
 providers survive.
 
+<a id="neovim-specs-written-once-and-gated-on-what-was-se"></a>
+### Neovim specs, written once and gated on what was selected
+
+```nix
+nvimSpecScript =
+```
+
+Every Neovim feature this module adds (#630, #656–#659) is one file under
+`~/.config/nvim/lua/plugins/`, produced by `nvimSpec`. The shape is fixed and
+each part of it was paid for:
+
+- **Written only when the file is absent, never rewritten.** LazyVim reads
+  every `.lua` under `lua/plugins` as a spec, and the tree is seeded once and
+  then the user's. The header says `Delete this file to be rid of it; nothing
+  here rewrites it`, and that sentence is a contract: the "off" state of every
+  option here is *the file is not written*, not *the file is removed*.
+- **One file per feature, and per agent.** A single `nixarchy.lua` would be
+  written once with whatever was selected that day; a machine that already has
+  `nixd.lua` from #630 would never gain the grammar, and an agent installed
+  later would never gain its key. Per-file, a new selection gets a new file
+  and nothing else changes.
+- **Gated on the thing, not on the editor.** nixd and the formatter on
+  `languageServer`; nvim-sops on `sops.secrets != {}` (sops-nix's own
+  predicate); each AI spec on `appEnabled <agent>`; `<leader>o` on pi being
+  among `localAi.agents`. `tests/options.nix` asserts each in both states, and
+  the AI "off" halves select a *different* agent rather than none, because a
+  spec for an agent the user did not install is the failure that matters.
+
+Three findings from #656–#659 that the issues did not have:
+
+- **The nixd settings quoted in #656 do not exist.** `diagnostics.excluded`,
+  `path.exclude`, `lsp.failureHandling`, `eval.workers` are read by nothing:
+  nixd 2.x's `Configuration.cpp` maps `nixpkgs`, `formatting`, `options` and
+  `diagnostic.suppress`, full stop. They sat in a working config because nixd
+  ignores unknown keys, which is the §2 shape — a config naming something that
+  is not there — without even a failure to notice. Formatting through the LSP
+  was already in `nixdSettings`. The grammar was the real gap.
+- **LazyVim could compile no parser on a default machine.** Upstream ships
+  `clang` and `tree-sitter-cli` in omarchy-base.packages; the vendored runtime
+  list had neither, so `ensure_installed` failed for every language, not just
+  `nix`, with a notification that scrolls past. Both now ride on
+  `languageServer` in modules/nixos.nix, gcc rather than clang because it is
+  stdenv's and already in every store.
+- **No `lazyvim.json` edit and no third-party pin.** LazyVim's `ai.sidekick`
+  extra drives claude, codex, gemini, opencode and pi from one maintained
+  spec, and `{ import = "lazyvim.plugins.extras.ai.sidekick" }` works from
+  inside a plugin file — lazy.nvim's `Spec:import` dedups by module name, so
+  five files importing it load it once. That is what let the vendored
+  `lazyvim.json` stay byte-identical to v3.0.2, and why the local model is pi
+  through the same extra rather than a plugin nixarchy would have to re-pin
+  at every bump. `nes.enabled = false` in every spec, because next-edit
+  suggestions need `copilot-language-server` and the LazyVim extra registers
+  it with lspconfig unless told not to.
+
+The formatter check (#657) runs the editor's tool and the flake's on one file
+and diffs, rather than comparing names. `nixFormatter` is read off
+`nixdSettings.formatting.command`, so conform, nixd and the check all start
+from one string in modules/nixos.nix.
+
 <a id="same-extension-point-on-the-other-hook-omarchy-alr"></a>
 ### Same extension point, on the other hook Omarchy already runs
 

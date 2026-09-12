@@ -211,6 +211,44 @@ Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.
 
+## In Neovim
+
+The agents you select in the Install menu follow you into the editor nixarchy
+ships. For each of Claude Code, Codex, Gemini CLI and OpenCode that is
+selected, a spec is written once into `~/.config/nvim/lua/plugins/` importing
+LazyVim's own `ai.sidekick` extra — LazyVim maintains it, nothing here pins a
+third-party plugin — and adding one key:
+
+| key | opens |
+|---|---|
+| `<leader>ac` | Claude Code |
+| `<leader>ax` | Codex |
+| `<leader>ag` | Gemini CLI |
+| `<leader>ao` | OpenCode |
+| `<leader>aa` / `<leader>as` / `<leader>at` … | sidekick's own: toggle, select, send this, and the rest |
+
+`<leader>a` is cloud: large, and it costs money. `<leader>o` is the local
+model, when `localAi` is on and `pi` is among its agents — small, private,
+free, and reachable by muscle memory when the network is not:
+
+| key | does |
+|---|---|
+| `<leader>oo` | toggle pi, which `localAi` already points at Ollama |
+| `<leader>ot` | send this — the function or line under the cursor |
+| `<leader>ov` | send the selection |
+| `<leader>op` | pick a prompt |
+
+An agent you did not select gets no spec, and every file is yours to delete.
+Sidekick's next-edit suggestions are off, because they need the Copilot
+language server, which is not on the machine.
+
+Want something that talks to Ollama directly, a completion plugin, a different
+chat window? `OLLAMA_ENDPOINT` is in the session environment whenever
+`localAi` is on — `http://<host>:<port>/v1`, derived from the port the server
+actually bound — and `programs.nixarchy.neovimSpecs` writes the spec for you
+under the same once-and-never-again rules. Point the plugin at
+`vim.env.OLLAMA_ENDPOINT` and it follows the server.
+
 ## Running the model locally
 
 ```nix

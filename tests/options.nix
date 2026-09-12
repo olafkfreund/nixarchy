@@ -192,6 +192,88 @@ let
   hasPackageNamed =
     cfg: name: builtins.any (p: pkgs.lib.hasPrefix name (p.name or "")) cfg.environment.systemPackages;
 
+  # By pname, exactly, for the one name a prefix would over-match: "sops"
+  # is also the prefix of sops-nix's own sops-install-secrets.
+  hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;
+
+  # homeOn, for a machine where some other module has an opinion -- here a
+  # declared secret, which programs.nixarchy cannot express and which the
+  # sops-gated Neovim spec (#658) has to see through osConfig.
+  homeBeside =
+    extra: hmSettings:
+    (inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      extraSpecialArgs = {
+        osConfig = configBeside extra;
+      };
+      modules = [
+        inputs.self.homeManagerModules.nixarchy
+        {
+          home = {
+            username = "someone";
+            homeDirectory = "/home/someone";
+            stateVersion = "25.05";
+          };
+          programs.nixarchy.enable = true;
+        }
+        hmSettings
+      ];
+    }).config;
+
+  # ---- #656-#659: Neovim that knows it is on NixOS ----------------------
+  #
+  # The four Install-menu agents the AI specs follow, in the order the "off"
+  # half of each case picks its neighbour from: the failure that matters is a
+  # spec for an agent the user did not select, so "off" is a machine that
+  # selected a DIFFERENT one rather than none at all.
+  aiApps = [
+    "claude-code"
+    "codex"
+    "gemini-cli"
+    "opencode"
+  ];
+  aiNeighbour =
+    app:
+    let
+      i = pkgs.lib.lists.findFirstIndex (a: a == app) 0 aiApps;
+    in
+    builtins.elemAt aiApps (pkgs.lib.mod (i + 1) (builtins.length aiApps));
+  aiHomeWith = app: homeOn { apps.${app}.enable = true; } { };
+  aiCase = app: {
+    on = (aiHomeWith app).home.activation ? "nixarchyNeovimAi-${app}";
+    off = (aiHomeWith (aiNeighbour app)).home.activation ? "nixarchyNeovimAi-${app}";
+  };
+
+  # The local model with pi as one of its agents, and without: the spec rides
+  # on pi being pointed at the model, not on the model merely running.
+  localHome =
+    agents:
+    homeOn {
+      localAi = {
+        enable = true;
+        allowCpu = true;
+      }
+      // agents;
+    } { };
+
+  # One home with every spec present, so the runCommand can read each file
+  # the way the nixd cases above read the editor settings.
+  neovimHome = homeBeside {
+    programs.nixarchy = {
+      apps = pkgs.lib.genAttrs aiApps (_: {
+        enable = true;
+      });
+      localAi = {
+        enable = true;
+        allowCpu = true;
+      };
+    };
+    sops = sopsDecl;
+  } { };
+  neovimSpecNames = builtins.filter (n: pkgs.lib.hasPrefix "nixarchyNeovim" n) (
+    builtins.attrNames neovimHome.home.activation
+  );
+
   # nixi's bar plugin, by the id in its own manifest.json. Named once: the
   # "on" and "off" halves have to ask about the same path or the pair proves
   # nothing.
@@ -423,6 +505,78 @@ let
     nixdLeavesAdopterAlone = {
       on = hasPackageNamed (configWith { }) "nixd";
       off = hasPackageNamed loaderOff "nixd";
+    };
+
+    # ---- #656-#659: Neovim that knows it is on NixOS ----------------------
+    #
+    # The formatter conform runs by bare name, on the same gate as nixd. That
+    # it is the tool `nix fmt` runs is asserted in the runCommand below, by
+    # running both.
+    nixFormatterPackage = {
+      on = hasPackageNamed (configWith { }) "nixfmt";
+      off = hasPackageNamed (configWith { languageServer = false; }) "nixfmt";
+    };
+
+    # What nvim-treesitter compiles the nix grammar with. Neither was on any
+    # nixarchy machine before this, so `ensure_installed` failed for EVERY
+    # language, silently, with a notification nobody reads.
+    nixTreesitterToolchain = {
+      on =
+        hasPackageNamed (configWith { }) "tree-sitter" && hasPackageNamed (configWith { }) "gcc-wrapper";
+      off =
+        hasPackageNamed (configWith { languageServer = false; }) "tree-sitter"
+        || hasPackageNamed (configWith { languageServer = false; }) "gcc-wrapper";
+    };
+
+    nixNeovimSpec = {
+      on = (homeOn { } { }).home.activation ? nixarchyNeovimNix;
+      off = (homeOn { } { programs.nixarchy.neovim = "off"; }).home.activation ? nixarchyNeovimNix;
+    };
+    nixNeovimSpecFollowsLanguageServer = {
+      on = (homeOn { } { }).home.activation ? nixarchyNeovimNix;
+      off = (homeOn { languageServer = false; } { }).home.activation ? nixarchyNeovimNix;
+    };
+
+    # #658: gated on a declared secret, not on the editor. `off` is the
+    # default machine, which declares none -- the same machine the `sops`
+    # case below asserts sops-nix is inert on.
+    sopsNeovim = {
+      on = (homeBeside { sops = sopsDecl; } { }).home.activation ? nixarchyNeovimSops;
+      off = (homeOn { } { }).home.activation ? nixarchyNeovimSops;
+    };
+    # And the binary the plugin execs, on the same predicate.
+    sopsOnPath = {
+      on = hasPname sopsOn "sops";
+      off = hasPname sopsOff "sops";
+    };
+
+    # #659: one spec per selected agent, and none for an agent that is not.
+    aiNeovimClaude = aiCase "claude-code";
+    aiNeovimCodex = aiCase "codex";
+    aiNeovimGemini = aiCase "gemini-cli";
+    aiNeovimOpencode = aiCase "opencode";
+
+    aiNeovimLocal = {
+      on = (localHome { }).home.activation ? nixarchyNeovimAiLocal;
+      off = (localHome { agents = [ "opencode" ]; }).home.activation ? nixarchyNeovimAiLocal;
+    };
+
+    # The endpoint, exported once from where it is derived, so a plugin the
+    # user declares reads the port the server actually bound.
+    ollamaEndpointExported = {
+      on =
+        (aiPlain.environment.sessionVariables.OLLAMA_ENDPOINT or "")
+        == aiPlain.programs.nixarchy.localAi.resolved.endpoint;
+      off = (configWith { }).environment.sessionVariables ? OLLAMA_ENDPOINT;
+    };
+
+    # The user's own specs, on a standalone home: this option has no NixOS
+    # side to read across from and must work without one.
+    neovimSpecs = {
+      on =
+        (homeWith { programs.nixarchy.neovimSpecs.mine = "return {}"; }).home.activation
+        ? nixarchyNeovimSpecs;
+      off = (homeWith { }).home.activation ? nixarchyNeovimSpecs;
     };
     # ---- upstream's /etc overlay, the part of it that is installed ----------
     #
@@ -1165,14 +1319,13 @@ let
   # import that never worked. validateSopsFiles is off because there is no
   # encrypted file here to validate, and a key source is named so this reads
   # as a machine someone actually configured.
-  sopsOn = configBeside {
-    sops = {
-      validateSopsFiles = false;
-      age.keyFile = "/var/lib/sops-nix/key.txt";
-      defaultSopsFile = ./options.nix;
-      secrets.a-secret = { };
-    };
+  sopsDecl = {
+    validateSopsFiles = false;
+    age.keyFile = "/var/lib/sops-nix/key.txt";
+    defaultSopsFile = ./options.nix;
+    secrets.a-secret = { };
   };
+  sopsOn = configBeside { sops = sopsDecl; };
 
   # Which of the two activation paths upstream picks depends on whether the
   # machine uses systemd-sysusers or userborn, so asking for one of them by
@@ -1739,6 +1892,16 @@ pkgs.runCommand "nixarchy-options"
     nixdActivationScripts = pkgs.lib.concatStringsSep "\n" (
       map (n: (homeOn everyEditor { }).home.activation.${n}.data) nixdActivationNames
     );
+    # #656-#659, the same way: the generated Lua files are named in these
+    # scripts, so the check can grep the files rather than the expression.
+    neovimSpecScripts = pkgs.lib.concatStringsSep "\n" (
+      map (n: neovimHome.home.activation.${n}.data) neovimSpecNames
+    );
+    neovimSpecCount = builtins.toString (builtins.length neovimSpecNames);
+    # The two formatters #657 is about: the one the editor is pointed at
+    # (the LSP's, which conform's is read from) and the one `nix fmt` runs.
+    editorFormatter = builtins.head (configWith { }).programs.nixarchy.nixdSettings.formatting.command;
+    flakeFormatter = pkgs.lib.getExe inputs.self.formatter.${system};
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
@@ -3964,6 +4127,110 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "every editor is told where the flake is, in its own spelling"
+
+        # ---- #656-#659: the Neovim specs, and what each one names --------
+        #
+        # A floor on how many specs the home above produced, because a loop
+        # over zero files passes every assertion below in silence.
+        [ "$neovimSpecCount" -ge 7 ] || {
+          echo "expected at least 7 Neovim spec activations, found $neovimSpecCount" >&2
+          exit 1
+        }
+        nvimspec() {
+          printf '%s' "$neovimSpecScripts" |
+            grep -o "/nix/store/[0-9a-z]*-nixarchy-nvim-$1" | head -n 1
+        }
+        need() {
+          local f="$1" pat="$2" why="$3"
+          grep -qF -- "$pat" "$f" || {
+            echo "$f does not say $pat:" >&2
+            cat "$f" >&2
+            echo "  $why" >&2
+            exit 1
+          }
+        }
+
+        # #656: the grammar, by name, where LazyVim's opts_extend picks it up.
+        nixlua=$(nvimspec nixarchy-nix.lua)
+        [ -n "$nixlua" ] && [ -e "$nixlua" ] || {
+          echo "the nix spec did not reach its activation" >&2
+          exit 1
+        }
+        need "$nixlua" 'ensure_installed = { "nix" }' \
+          "without it a .nix buffer gets regex highlighting and no text objects"
+
+        # #657, the name half: conform is pointed at the LSP's formatter.
+        editor=$(basename "$editorFormatter")
+        need "$nixlua" "nix = { \"$editor\" }" \
+          "conform and nixd would format with two different tools"
+        need "$nixlua" 'optional = true' \
+          "without it removing conform from LazyVim would re-add it"
+
+        # #657, the property: the editor's formatter and nix fmt produce the
+        # same file. Run, not compared by name -- a name is what someone
+        # changes on one side and forgets on the other.
+        d=$(mktemp -d)
+        export HOME="$d" XDG_CACHE_HOME="$d/cache"
+        printf '%s\n' '{ a = 1; b = [ 1 2 ]; c = {x=1;}; }' > "$d/sample.nix"
+        cp "$d/sample.nix" "$d/editor.nix"
+        "$editorFormatter" "$d/editor.nix"
+        case "$(basename "$flakeFormatter")" in
+          treefmt)
+            "$flakeFormatter" --tree-root "$d" --walk filesystem --no-cache -C "$d" sample.nix >/dev/null
+            ;;
+          *)
+            "$flakeFormatter" "$d/sample.nix"
+            ;;
+        esac
+        grep -q '^  a = 1;' "$d/sample.nix" || {
+          echo "nix fmt left the sample untouched, so the comparison below proves nothing:" >&2
+          cat "$d/sample.nix" >&2
+          exit 1
+        }
+        diff -u "$d/sample.nix" "$d/editor.nix" || {
+          echo "the editor's formatter ($editor) and the flake's ($(basename "$flakeFormatter")) disagree" >&2
+          echo "  every save in Neovim would produce a diff nix fmt -- --ci rejects" >&2
+          exit 1
+        }
+        echo "the editor formats Nix exactly as nix fmt does"
+
+        # #658: the plugin, its commands, and the identity nixarchy secret made.
+        sopslua=$(nvimspec nixarchy-sops.lua)
+        [ -n "$sopslua" ] && [ -e "$sopslua" ] || {
+          echo "the sops spec did not reach its activation" >&2
+          exit 1
+        }
+        need "$sopslua" 'nvim-sops' "no plugin, no :SopsDecrypt"
+        need "$sopslua" 'SopsDecrypt' "the command is the whole point"
+        need "$sopslua" 'nixarchy/secrets/identity.txt' \
+          "without the user identity a --user secret cannot be decrypted from the editor"
+
+        # #659: each agent's spec names its own tool and turns NES off --
+        # NES needs the Copilot language server, which is not on this machine,
+        # and left on it reports a missing LSP in every buffer.
+        for app in claude-code codex gemini-cli opencode; do
+          case "$app" in
+            claude-code) tool=claude ;;
+            gemini-cli) tool=gemini ;;
+            *) tool=$app ;;
+          esac
+          f=$(nvimspec "nixarchy-ai-$app.lua")
+          [ -n "$f" ] && [ -e "$f" ] || {
+            echo "the $app spec did not reach its activation" >&2
+            exit 1
+          }
+          need "$f" 'extras.ai.sidekick' "LazyVim's own extra is what drives the agent"
+          need "$f" "name = \"$tool\"" "the key would open whichever tool sidekick picked"
+          need "$f" 'nes = { enabled = false }' "NES wants copilot-language-server, which is not here"
+        done
+        locallua=$(nvimspec nixarchy-ai-local.lua)
+        [ -n "$locallua" ] && [ -e "$locallua" ] || {
+          echo "the local-model spec did not reach its activation" >&2
+          exit 1
+        }
+        need "$locallua" 'name = "pi"' "pi is the agent pointed at the local model"
+        need "$locallua" '<leader>o' "the local model is <leader>o, cloud is <leader>a"
+        echo "every Neovim spec names what it is for, and nothing it cannot have"
 
           touch $out
       ''

@@ -1190,7 +1190,13 @@ for unit in docker.service NetworkManager.service; do
   # stock machine and its absence says nothing. The daemon is a *user* unit of
   # the same name; without this arm the doctor reported "docker is off here" on
   # every correctly configured desktop.
-  if [ "$unit" = docker.service ] && systemctl --user is-enabled docker.service >/dev/null 2>&1; then
+  # XDG_RUNTIME_DIR first, and it is not belt-and-braces: `systemctl --user`
+  # with no user bus to talk to is a host-environment read whose answer depends
+  # on whether a session exists, which is exactly the kind of thing that makes
+  # a check pass on one runner and fail on the next. A rootless daemon only
+  # means anything where there IS a user session.
+  if [ "$unit" = docker.service ] && [ -n "${XDG_RUNTIME_DIR:-}" ] \
+     && systemctl --user is-enabled docker.service >/dev/null 2>&1; then
     continue
   fi
   if ! systemctl is-enabled "$unit" >/dev/null 2>&1; then

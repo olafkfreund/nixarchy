@@ -1209,6 +1209,16 @@ let
   dockerRootlessDefault = dockerDefault.virtualisation.docker.rootless.enable;
   dockerRootlessRooted = dockerRooted.virtualisation.docker.rootless.enable;
 
+  # The rootless daemon is a systemd USER unit, `wantedBy = default.target`,
+  # so systemd starts it for every user session that has one -- the display
+  # manager's included. nixpkgs guards it with `ConditionUser = "!root"`, and
+  # root was never the problem: `sddm` is uid 175, is not root, and has no
+  # subuid range, so rootlesskit fails to build a uid map and the unit dies at
+  # every boot. Nothing a user runs depends on sddm having a Docker daemon,
+  # which is why it would have stayed red and unnoticed.
+  dockerRootlessCondition =
+    dockerDefault.systemd.user.services.docker.unitConfig.ConditionUser or "unset";
+
   # ---- "nixarchy wrote this machine", both ways -------------------------
   #
   # The armed commands -- nixarchy-config-repo, and the post-boot hook that
@@ -1449,6 +1459,7 @@ pkgs.runCommand "nixarchy-options"
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     dockerRootedGroups = pkgs.lib.concatStringsSep " " dockerRootedGroups;
     dockerRootlessDefault = pkgs.lib.boolToString dockerRootlessDefault;
+    inherit dockerRootlessCondition;
     dockerRootlessRooted = pkgs.lib.boolToString dockerRootlessRooted;
     managedModeA = pkgs.lib.boolToString managedModeA;
     factoryUnitModeA = pkgs.lib.boolToString factoryUnitModeA;
@@ -1762,6 +1773,18 @@ pkgs.runCommand "nixarchy-options"
                exit 1 ;;
             *) echo "no docker group by default" ;;
           esac
+          # Not merely "is it set" -- the value nixpkgs ships passes that and
+          # still starts the unit for sddm. This asserts system accounts are
+          # excluded, which is the property, and it fails on upstream's own
+          # default rather than only on an empty one.
+          case "$dockerRootlessCondition" in
+            *"@system"*) echo "the rootless daemon skips system accounts" ;;
+            *) echo "rootless docker starts for system users too:" >&2
+               echo "  ConditionUser is '$dockerRootlessCondition', which does not exclude @system." >&2
+               echo "  sddm is uid 175 with no subuid range -- the unit dies at every boot." >&2
+               exit 1 ;;
+          esac
+
           [ "$dockerRootlessDefault" = "true" ] || {
             echo "no docker group AND no rootless daemon: docker is simply gone" >&2
             exit 1

@@ -1847,6 +1847,10 @@
             inherit inputs;
             pkgs = pkgsFor.${system};
           };
+          # Upstream's /etc overlay, which nothing installs: data/etc-overlay.nix
+          # says what answers each file here, and this fails when upstream adds
+          # or drops one. See tests/etc-overlay.nix and #642.
+          etc-overlay = import ./tests/etc-overlay.nix { pkgs = pkgsFor.${system}; };
 
           # The reference initrd can mount a disk it was not built on, which is
           # a precondition for offline install stage 3. See

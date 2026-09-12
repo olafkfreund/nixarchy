@@ -1,8 +1,9 @@
 { pkgs }:
 # Upstream's /etc overlay, held to data/etc-overlay.nix in both directions.
 #
-# The tree is carried into $out/share/omarchy/etc and nothing installs it, so
-# every file in it is ignored by definition. The manifest says which of those
+# The tree is carried into $out/share/omarchy/etc and, apart from the rows the
+# manifest classes `installed` (which modules/nixos.nix reads and declares
+# through environment.etc), nothing installs it. The manifest says which files
 # are ignored because something else answers them and which are ignored because
 # nobody has decided yet; this makes upstream's next change force that decision
 # rather than arrive silently:
@@ -28,6 +29,7 @@ let
   classes = [
     "covered"
     "divergent"
+    "installed"
     "na"
     "native"
     "seed"

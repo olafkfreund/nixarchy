@@ -1841,6 +1841,13 @@
             pkgs = pkgsFor.${system};
           };
 
+          # data/skill-parity.nix, held to upstream's own SKILL.md. See
+          # tests/skill-parity.nix and #643.
+          skill-parity = import ./tests/skill-parity.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The reference initrd can mount a disk it was not built on, which is
           # a precondition for offline install stage 3. See
           # tests/reference-initrd.nix and #436.

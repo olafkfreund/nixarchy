@@ -82,6 +82,18 @@ install`, which "work" and then vanish at the next rebuild. That is the one
 failure mode that looks like success, so the skill is renamed `nixarchy` and its
 front page rewritten rather than patched.
 
+Rewriting it wholesale leaves a second problem, which `data/skill-parity.nix`
+answers: upstream's own `SKILL.md` can gain a section, lose one, or have one
+rewritten at any bump, and a replacement performed without reading it would
+never notice. The manifest carries one row per upstream heading and per command
+group — `preserved`, `adapted` or `omitted`, with a reason where the content is
+gone and an `anchor` string that has to be findable in this port's skill where
+it is not — and `checks.skill-parity` fails in both directions plus on a pinned
+digest, so the decision is forced at bump time rather than found by a user. The
+idea and the anchor-proof shape come from [zicochaos/omarchy-nix][zon] (MIT).
+
+[zon]: https://github.com/zicochaos/omarchy-nix
+
 `nixos` is new and owns the install question outright. Its first rule is that
 a request that would normally end in an install command ends in a file edit and
 a rebuild instead, and it ranks the routes: `nixarchy-app-enable <id>` then

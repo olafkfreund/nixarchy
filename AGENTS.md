@@ -91,6 +91,14 @@ Two mechanical traps that produced fake green results here, live:
   iterated once, over the whole string. Interactive shells on the machines
   this repo is developed on are zsh. Put `#!/usr/bin/env bash` on the script
   and run it as a script, not by pasting into your shell.
+- **A break that stays green may be a break that never applied.** Step 1 of the
+  contract is as fallible as the check. A `sed -i` written against
+  `^rfkill unblock bluetooth` matched nothing, because the line is indented
+  inside a function -- so the check passed, and for a minute that read as the
+  check being blind to the thing it was written for. Before concluding anything
+  about a check, prove the break landed: `git diff`, or `grep` the file for
+  what you meant to remove. A silent no-op break and a blind check are
+  indistinguishable from the exit status alone.
 
 And the same rule read backwards, for the day a check goes red on you: **ask
 whether it was testing the property or the arrangement.** #220 moved the menu

@@ -553,10 +553,25 @@ by a stranger, because it may have been.
 
 First establish that it *is* unrelated: is `main` red too? One standing trap —
 opening an issue with the `epic` label without adding a row to README's
-Roadmap table fails CI **on every subsequent PR**, related or not (four times
-in one day: #105, #148, #159, #174; the guard is the "roadmap still matches
-the open epics" step in `build.yml`, and it fails the other way when an epic
-closes and the row remains).
+Roadmap table breaks the roadmap guard, the "roadmap still matches the open
+epics" step in `build.yml` (four times in one day: #105, #148, #159, #174).
+It fails **both** ways: an open epic with no row, and a row whose epic has
+since closed.
+
+**Where it fails changed, and this paragraph used to say otherwise.** The step
+carries `if: github.event_name != 'pull_request'`, so it runs on pushes to
+`main` and weekly — never on a pull request. The sentence here used to say it
+failed "on every subsequent PR", which sends a reader through PR runs looking
+for a failure that only ever appears in main's push build.
+
+It reads the **live issue list**, not the diff, so a red clears on a re-run once
+the state is consistent — no new commit needed. `docs/internals/workflows.md`
+has the filing and retirement orders and why each one avoids the red.
+
+The same shape now guards milestones: "A milestone whose work is done is
+closed" names any milestone with no open issues left. `Keeping the lights on`
+is exempt by design (§12) — it sits at zero open issues whenever the queue is
+briefly clear.
 
 If the failure is unrelated: do not "fix" it inside your PR — that is scope
 the reviewer did not ask for and a second thing to review. Say in the PR what

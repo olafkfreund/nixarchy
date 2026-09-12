@@ -379,3 +379,42 @@ merged first is not always possible — if another pull request is already armed
 with auto-merge it will land ahead of yours — in which case the red is
 expected, harmless, and clears on a re-run once the row exists. No new commit
 is needed, because the check reads live state.
+
+### Retiring a finished epic: close the issue *before* the row leaves
+
+The mirror of the above, and the direction that comes up once an epic's
+children have all shipped. The guard fails both ways, so there is no state
+where a half-done retirement passes:
+
+| epic | Roadmap row | guard |
+|---|---|---|
+| open | present | pass |
+| open | absent | fails — "open and not in the README's Roadmap" |
+| closed | present | fails — "closed but the Roadmap still lists it as planned" |
+| closed | absent | pass |
+
+Every single-step transition crosses a failing state. The order that avoids
+the red:
+
+1. open the pull request that moves the row into *Recently finished* prose
+2. **close the epic** — closing an issue pushes nothing, so nothing evaluates
+3. merge
+
+The row must not leave `main` while the epic is open, so do not merge before
+closing. And as above, a red here is recoverable: the check reads live state,
+so once the epic is closed and the row is gone, a re-run is green without a new
+commit.
+
+The prose under *Recently finished* is invisible to the guard — it matches only
+table rows (`^| [#`). That is deliberate, and the comment in `build.yml` records
+why: reading every link in the section flagged the finished one as a lie the
+first time it ran.
+
+### A milestone whose work is done is closed
+
+The same argument one level out. Milestones answer "how far has each feature
+got", and a milestone whose issues are all closed answers it wrongly. Nobody
+had ever closed one — six features were complete and still open, some for
+weeks — because nothing asked. The check names each one rather than counting
+them, and exempts `Keeping the lights on`, which sits at zero open issues
+whenever the queue is briefly clear and has no end by design (`AGENTS.md` §12).

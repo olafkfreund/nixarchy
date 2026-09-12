@@ -66,13 +66,44 @@ NixOS's answer to loose prebuilt binaries is
 binaries expect the loader at, which supplies a configured set of libraries.
 It is already enabled on every nixarchy machine, and nixarchy curates
 `programs.nix-ld.libraries` beyond the NixOS default -- `libGL`, `zlib`,
-`libstdc++` and the rest of what common wheels load are in the shipped set,
-so the import above works out of the box.
+`libstdc++` and the rest of what common wheels load are in the shipped set.
+
+**Which interpreter you are running decides whether that helps you**, and the
+distinction is worth thirty seconds because getting it wrong costs a rebuild
+and a logout for nothing. nix-ld works by *being* the loader at
+`/lib64/ld-linux-x86-64.so.2`; only a binary whose ELF interpreter is that
+path reaches the shim, and only the shim reads `NIX_LD_LIBRARY_PATH`. One
+command tells you which you have:
+
+```sh
+patchelf --print-interpreter "$(readlink -f "$(command -v python3)")"
+```
+
+- `/lib64/ld-linux-x86-64.so.2` -- a foreign interpreter (the CPython **uv**
+  downloads for itself is the one you are most likely to meet). nix-ld
+  applies, and the shipped library set is what makes the import above work.
+- `/nix/store/...-glibc-.../ld-linux-x86-64.so.2` -- a **nixpkgs** python3,
+  which is what `python3` on this machine is. It uses the store's own loader
+  and never consults `NIX_LD_LIBRARY_PATH`, so growing
+  `programs.nix-ld.libraries` changes nothing about what it can import, no
+  matter how long that list gets.
+
+For the second case, hand the same libraries over for the one command that
+needs them:
+
+```sh
+LD_LIBRARY_PATH="$NIX_LD_LIBRARY_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" python3 app.py
+```
+
+Per command, not exported globally -- a global `LD_LIBRARY_PATH` is how
+unrelated Nix programs start failing. The durable answers are a devenv (below),
+an FHS environment, or simply running the venv on uv's own Python.
 [Prebuilt binaries](prebuilt-binaries) is the full story of that set.
 
-When a wheel wants a library the set does not carry, the error names it,
-and the fix is one option in your own configuration -- your entries merge
-with nixarchy's rather than replacing them:
+When a wheel wants a library the set does not carry -- on an interpreter
+nix-ld can actually reach -- the error names it, and the fix is one option in
+your own configuration; your entries merge with nixarchy's rather than
+replacing them:
 
 ```nix
 programs.nix-ld.libraries = with pkgs; [ libpulseaudio ];
@@ -107,6 +138,37 @@ current answer -- `uv.lock` as the source of truth. And when you need Nix to
 whose own documentation says to skip it for day-to-day development and just
 use uv. That is a useful signal, not a criticism: reach for uv2nix when
 something must consume the project as a Nix package, not before.
+
+## Machine learning, CUDA, and the one thing nix-ld cannot do
+
+PyTorch and friends are the hardest case of everything above, and they are
+also the case where the advice above stops applying — so it is worth being
+precise rather than general.
+
+A CUDA or ROCm wheel from PyPI already contains its own CUDA runtime. The
+only thing it needs from the machine is the *driver*, `libcuda.so.1`, which
+on NixOS is in `/run/opengl-driver/lib`. That is a `LD_LIBRARY_PATH` problem,
+not a nix-ld one.
+
+And the distinction that trips most people:
+
+> nix-ld helps an **unpatched** binary — one built on an ordinary distro,
+> which asks for the loader at `/lib64/ld-linux-x86-64.so.2` and reads
+> `NIX_LD_LIBRARY_PATH` from its environment. A `python3` out of nixpkgs is
+> not such a binary. It is patched to use Nix's own loader and consults
+> neither variable, so growing `programs.nix-ld.libraries` does nothing for
+> what *it* imports.
+
+The interpreter that does read them is the one **uv** downloads for itself.
+So the working answer for an ML project is uv's own Python, and
+[`nixarchy dev init ml`](per-project-environments#nixarchy-dev-init-ml) is
+that in one command — uv, `UV_PYTHON_PREFERENCE = "only-managed"`, and the
+driver path already set.
+
+For notebooks, [`nixarchy dev init jupyter`](per-project-environments#nixarchy-dev-init-jupyter)
+is an ordinary devshell built from `python3.withPackages`. Do not reach for
+**jupyenv** (formerly jupyterWith), which every search puts first: it is
+unmaintained and does not track current nixpkgs.
 
 ## What still will not work, and why
 

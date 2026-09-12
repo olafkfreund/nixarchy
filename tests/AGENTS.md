@@ -190,3 +190,17 @@ Two branches only these can reach, as illustration:
   reporting `action timed out after 120s` two minutes after the guest had
   printed the reason. Wait for `TAG-\d+-X`, then read the code out of
   `get_console_log()`.
+- **A single column-zero line changes the indentation of a whole `''` string,
+  and the failure lands somewhere else entirely.** Nix strips the *common*
+  leading whitespace off an indented string at parse time. Adding one literal
+  line at column zero — an `${lib.optionalString ...}` opener written flush
+  left is the easy way to do it — drops that common indent to nothing, so
+  every other line in the script keeps the four spaces it used to lose. The
+  script still runs; what breaks is an indented heredoc terminator, because
+  `<<STUB` (unlike `<<-`) only matches a terminator at column zero. In
+  `tests/microvm-template.nix` the result was the stub-`nix` heredoc running to
+  end of file and bash reporting `nixarchy: command not found` on a line five
+  hundred away from the edit. If a `runCommand` script starts failing in a
+  region you did not touch, diff `nix eval --raw .#checks.<system>.<name>.buildCommand`
+  before reading the shell — and indent interpolation openers to match their
+  surroundings. `nix fmt` does not catch this; it happily formats both.

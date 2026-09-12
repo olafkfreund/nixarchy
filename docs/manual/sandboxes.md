@@ -66,6 +66,7 @@ is the same catalogue, `data/microvm-templates.nix`.
 | `shell` | nothing beyond the base guest | the fastest way to a throwaway prompt, and the template every other one starts from |
 | `python` | `python3`, `uv`, 3 GiB RAM | ephemeral — `uv venv /mnt/host/.venv` if the venv should outlive the VM |
 | `podman` | rootless-capable podman, Docker-compatible | `/var/lib/containers` is a 20 GiB volume that survives a restart; the rest of the root filesystem does not |
+| `agent` | `shell` plus git, curl, and an egress allowlist | nothing in the guest reaches the network except through a local proxy that only permits hosts you name — see [Running an agent that cannot phone home](#running-an-agent-that-cannot-phone-home) |
 | `persistent` | `shell` plus `/home` on its own volume | the volume goes when the VM does; the root filesystem is still thrown away every boot |
 
 Every template is a plain NixOS module — nothing here invents nixarchy
@@ -86,12 +87,97 @@ Every guest, regardless of template, gets the same four things from
 - **The network is NAT out, nothing in.** User-mode (SLiRP) networking:
   `curl`, `git clone`, a package fetch all work; nothing on the host, and
   nothing on your LAN, can reach in. No bridge, no tap device, no firewall
-  rule to write.
+  rule to write. The `agent` template is the one that restricts the *outbound*
+  half of this.
 - **A root filesystem on tmpfs.** Gone at every boot, along with anything
   you installed imperatively with `nix-env` or wrote outside a path a
   template explicitly persists. `shell` and `python` persist nothing at
   all; `podman` persists `/var/lib/containers`; `persistent` persists
   `/home`.
+
+## Running an agent that cannot phone home
+
+The `agent` template exists for one job: running an AI coding agent — or any
+program you are willing to let loose on a checkout but not on your network —
+where the filesystem boundary is not the only boundary.
+
+The filesystem half is the same one every template gets, and it is the strong
+half: the guest sees your host `/nix/store` read-only and one directory at
+`/mnt/host`, and nothing else. That is worth saying plainly, because the
+common alternatives are weaker. A bubblewrap wrapper maps *your* user into
+the sandbox, so a process that gets out of it reads `~/.ssh` and every API
+key on the machine. A guest kernel does not have that shape.
+
+What `agent` adds is the network. Every other template inherits "NAT out,
+nothing in", which is no constraint at all on a process you are running
+*because* you do not fully trust it. Here, the guest's own firewall drops
+everything outbound except the local proxy's traffic, and the proxy refuses
+any host you did not name.
+
+You name them one per line, in the VM's own directory, before you start it:
+
+```sh
+nixarchy vm create review-bot --template agent
+cat > ~/.local/state/nixarchy/microvm/review-bot/allow-hosts <<'EOF'
+api.anthropic.com
+github.com
+EOF
+nixarchy vm run review-bot
+```
+
+Subdomains of a listed host are allowed (`github.com` covers
+`api.github.com`), nothing else is, and `#` starts a comment. Inside the
+guest, `http_proxy` and `https_proxy` are already set, so `curl`, `git`,
+`pip`, `uv`, `npm` and every model SDK route through the proxy without being
+told.
+
+**No file, or an empty one, means nothing is allowed.** That is the only safe
+way for this to fail, and it is the failure you will meet first: an agent
+that reports it cannot reach its own API is telling you the allowlist is not
+where it expected.
+
+### What this does and does not contain
+
+It **does** stop a process in the guest from reaching anything but the hosts
+you listed. Not by asking it politely — there is no socket to the outside
+world for any user but the proxy's, DNS included, so an agent cannot resolve
+a name, let alone open a connection. DNS tunnelling is off the table for the
+same reason.
+
+It **does not**:
+
+- **Stop data leaving through an allowed host.** You allowed your model
+  endpoint; everything you hand the agent goes there. That channel is the
+  point of the exercise, and an allowlist cannot tell a prompt from an
+  exfiltration.
+- **Work for `ssh://` git remotes.** The proxy speaks HTTP `CONNECT` and is
+  restricted to port 443. Use an `https://` remote and a token.
+- **Verify what is on the other end of an allowed name.** The allowlist
+  matches the hostname the client asks for; TLS is end to end, so nothing
+  here inspects or re-signs it. That is the right trade — a sandbox that
+  terminated your TLS would be a sandbox that could read your model traffic.
+- **Survive root inside the guest.** A process that becomes root there can
+  flush the ruleset. It still cannot leave the VM, which is the boundary that
+  matters, but treat the allowlist as a policy for an agent doing what agents
+  do, not as a cage for an attacker.
+- **Restrict the shared directory.** `/mnt/host` is read-write, as it is for
+  every template. Put the checkout there and nothing else.
+
+### And when it does get out and break something
+
+Worth saying once, because nobody markets it and it is free: on a NixOS
+machine an agent's damage to the *system* is undone by
+
+```sh
+sudo nixos-rebuild --rollback switch
+```
+
+or by picking the previous generation in the boot menu. Whatever it added,
+removed or reconfigured through the system's own configuration is gone, in
+one command, atomically. That is not a sandbox — it does not touch your home
+directory, your git working tree, or anything installed imperatively — but it
+is the reason "let an agent edit my configuration" is a much smaller bet here
+than on a distribution where it is not reversible.
 
 ## Getting back in, stopping, destroying
 

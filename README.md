@@ -2106,4 +2106,4 @@ been seen working.
 
 ## License
 
-Packaging is MIT. Vendored Omarchy is MIT, © Basecamp.
+[MIT](LICENSE). Vendored Omarchy is MIT, © Basecamp.

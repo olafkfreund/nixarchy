@@ -548,19 +548,14 @@ It fails **both** ways: an open epic with no row, and a row whose epic has
 since closed.
 
 **Where it fails changed, and this paragraph used to say otherwise.** The step
-now carries `if: github.event_name != 'pull_request'`, so it runs on pushes to
-`main` and weekly — never on a pull request. The sentence here said it failed
-"on every subsequent PR", which sent at least one reader looking through PR
-runs for a failure that was only ever in main's push build. Look at the push
-run for the merge, or the weekly one.
+carries `if: github.event_name != 'pull_request'`, so it runs on pushes to
+`main` and weekly — never on a pull request. The sentence here used to say it
+failed "on every subsequent PR", which sends a reader through PR runs looking
+for a failure that only ever appears in main's push build.
 
-That gating is also what makes an epic retirable at all. There is no state
-where both halves are true at once — closing the epic leaves the row lying,
-removing the row leaves the epic unlisted — so the only safe order is: get the
-row-removal PR green (the guard never runs on it), close the epic (no push, so
-nothing evaluates), then merge immediately (one push, landing in the good
-state). Anything merging to `main` in that window fails, so do not do it while
-other pull requests are landing.
+It reads the **live issue list**, not the diff, so a red clears on a re-run once
+the state is consistent — no new commit needed. `docs/internals/workflows.md`
+has the filing and retirement orders and why each one avoids the red.
 
 The same shape now guards milestones: "A milestone whose work is done is
 closed" names any milestone with no open issues left. `Keeping the lights on`

@@ -1932,9 +1932,7 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | epic | what it is for | |
 | --- | --- | --- |
 
-*Nothing in flight at the moment.* The last four epics landed together and are
-written up below; the next one is picked in
-[Discussions](https://github.com/olafkfreund/nixarchy/discussions).
+| [#640](https://github.com/olafkfreund/nixarchy/issues/640) | **What upstream adds must be classified, not absorbed** — the ledger says whether a vendored script changed, not what it does; upstream's 40-file `/etc` overlay is carried and inert; its own SKILL.md is replaced with no comparison. Three manifests that fail until a human classifies what arrived | 3 filed |
 
 **Recently finished:**
 [the skills that cover what nixarchy actually does](https://github.com/olafkfreund/nixarchy/issues/606)

@@ -542,10 +542,30 @@ by a stranger, because it may have been.
 
 First establish that it *is* unrelated: is `main` red too? One standing trap —
 opening an issue with the `epic` label without adding a row to README's
-Roadmap table fails CI **on every subsequent PR**, related or not (four times
-in one day: #105, #148, #159, #174; the guard is the "roadmap still matches
-the open epics" step in `build.yml`, and it fails the other way when an epic
-closes and the row remains).
+Roadmap table breaks the roadmap guard, the "roadmap still matches the open
+epics" step in `build.yml` (four times in one day: #105, #148, #159, #174).
+It fails **both** ways: an open epic with no row, and a row whose epic has
+since closed.
+
+**Where it fails changed, and this paragraph used to say otherwise.** The step
+now carries `if: github.event_name != 'pull_request'`, so it runs on pushes to
+`main` and weekly — never on a pull request. The sentence here said it failed
+"on every subsequent PR", which sent at least one reader looking through PR
+runs for a failure that was only ever in main's push build. Look at the push
+run for the merge, or the weekly one.
+
+That gating is also what makes an epic retirable at all. There is no state
+where both halves are true at once — closing the epic leaves the row lying,
+removing the row leaves the epic unlisted — so the only safe order is: get the
+row-removal PR green (the guard never runs on it), close the epic (no push, so
+nothing evaluates), then merge immediately (one push, landing in the good
+state). Anything merging to `main` in that window fails, so do not do it while
+other pull requests are landing.
+
+The same shape now guards milestones: "A milestone whose work is done is
+closed" names any milestone with no open issues left. `Keeping the lights on`
+is exempt by design (§12) — it sits at zero open issues whenever the queue is
+briefly clear.
 
 If the failure is unrelated: do not "fix" it inside your PR — that is scope
 the reviewer did not ask for and a second thing to review. Say in the PR what

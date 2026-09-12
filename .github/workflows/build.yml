@@ -648,6 +648,60 @@ jobs:
           done
           echo "the roadmap names every open epic and no closed one"
 
+      # The same argument as the roadmap check above, one level out. Milestones
+      # answer "how far has each feature got", and a milestone whose issues are
+      # all closed answers it wrongly: it says in progress about something that
+      # shipped. Nobody had ever closed one -- six features were complete and
+      # still open when this was written -- because nothing asked.
+      #
+      # Discipline is what this replaces. AGENTS.md §4: any list naming things
+      # that exist elsewhere wants a comparison, not a habit, and the comparison
+      # has to NAME the item rather than print a count, because a count only
+      # says a number moved.
+      #
+      # Same trigger as the roadmap check and for the same reason: it reads the
+      # live issue list, which a pull request from a fork cannot be trusted to
+      # do, and closing happens after the merge anyway.
+      - name: A milestone whose work is done is closed
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # The same argument as the roadmap check above, one level out.
+          # Milestones answer "how far has each feature got", and a milestone
+          # whose issues are all closed answers it wrongly: it says in progress
+          # about something that shipped. Nobody had ever closed one -- six
+          # features were complete and still open when this was written --
+          # because nothing ever asked.
+          #
+          # AGENTS.md §4: any list naming things that exist elsewhere wants a
+          # comparison, not a habit, and the comparison must NAME the item,
+          # because a count only says a number moved.
+          #
+          # "Keeping the lights on" is exempt BY DESIGN, not by oversight: §12
+          # says it is where CI, docs and small fixes go, that it has no end,
+          # and that this "is not a failure to plan". It sits at zero open
+          # issues every time the queue is briefly clear.
+          #
+          # jq does the selecting and the exemption, so the shell never splits
+          # a title on spaces -- every milestone title here contains them.
+          mapfile -t stale < <(
+            gh api "repos/$GH_REPO/milestones?state=open&per_page=100" --jq '
+              .[]
+              | select(.open_issues == 0 and .closed_issues > 0)
+              | select(.title != "Keeping the lights on")
+              | .title'
+          )
+
+          if [ "${#stale[@]}" -gt 0 ]; then
+            for title in "${stale[@]}"; do
+              echo "::error::milestone \"$title\" has no open issues left and is still open -- close it, or the milestone list stops meaning what is in flight"
+            done
+            exit 1
+          fi
+          echo "every milestone with work left is open, and none outlives its work"
+
       # Every number in the README that is derived from this repository --
       # command counts, app counts, the size of the pacman surface -- checked
       # by one script instead of six hand-written assertions. They went stale

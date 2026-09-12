@@ -1931,12 +1931,67 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 
 | epic | what it is for | |
 | --- | --- | --- |
-| [#606](https://github.com/olafkfreund/nixarchy/issues/606) | **The skills that cover what nixarchy actually does** — an agent asked why a downloaded binary will not run has nothing to reach for today. Three skills: the loader ladder, gaming, and one flake across several machines | 3 filed |
-| [#611](https://github.com/olafkfreund/nixarchy/issues/611) | **Secrets you can actually use** — adding one is five manual steps today and neither `sops` nor `ssh-to-age` is on PATH. A menu row and an editor instead; a machine that can say what secrets exist and what uses them; a personal key you can copy without a terminal | 4 filed |
-| [#620](https://github.com/olafkfreund/nixarchy/issues/620) | **AI and GPU work that does not compile for two hours** — `cache.nixos.org` does not cache CUDA, so a GPU machine builds PyTorch from source. Plus agents grounded in real option names instead of guessed ones, and models that do not silently fill the root disk | 6 filed |
-| [#621](https://github.com/olafkfreund/nixarchy/issues/621) | **Making Nix answerable** — 4% of Nix users say they understand every error message. The three cliffs a distribution can fix rather than document: which package has this binary, what this error means, and what options exist | 3 filed |
+
+*Nothing in flight at the moment.* The last four epics landed together and are
+written up below; the next one is picked in
+[Discussions](https://github.com/olafkfreund/nixarchy/discussions).
 
 **Recently finished:**
+[the skills that cover what nixarchy actually does](https://github.com/olafkfreund/nixarchy/issues/606)
+— an agent asked why a downloaded binary will not run had nothing to reach for,
+and answered from whatever it had absorbed about Arch. Three skills close that:
+the loader ladder, gaming, and one flake across several machines. The most
+valuable line in any of them is a correction — **`nix-ld` does not help a
+nixpkgs Python.** Only an unpatched interpreter reads `NIX_LD`, which is why a
+`uv`-managed CPython works and the system `python3` does not, and guidance
+elsewhere including the wiki says the opposite. That single fact is the most
+common "I did exactly what the docs said and it still failed" report there is.
+Sixteen skills ship now, and the count is derived from the shipped files rather
+than written down, because the three lists that name them had already drifted
+apart once. Three children closed.
+Also
+[secrets you can actually use](https://github.com/olafkfreund/nixarchy/issues/611)
+— adding one was five manual steps ending in a hand-written `.sops.yaml`, and
+neither `sops` nor `ssh-to-age` was on `PATH` at all. It is a menu row and an
+editor now, the machine can say what secrets exist and what references them, and
+a personal key can be copied without a terminal. sops-nix rather than agenix,
+for the reason the design record already gave: agenix delivers raw files with no
+templating, so composing one into a config would need a hand-rolled
+`ExecStartPre` shim per service. The mechanism was always there — exactly one
+service used it. What changed is that a person can now reach it. Four children
+closed.
+Also
+[AI and GPU work that does not compile for two hours](https://github.com/olafkfreund/nixarchy/issues/620)
+— `cache.nixos.org` deliberately does not cache CUDA, because the NixOS
+Foundation does not redistribute NVIDIA binaries. So every machine with CUDA
+enabled built PyTorch from source, and `magma-cuda-static` alone is a ~10 GB
+closure. The community cache that fixes it **moved off Cachix to
+`cache.nixos-cuda.org` in November 2025**, so every guide still naming
+`cuda-maintainers.cachix.org` points somewhere stale. It is configured here now,
+gated on the declared NVIDIA path. The trap documented beside it is the one a
+blog post will hand you: narrowing `cudaCapabilities` cuts closure size and
+takes you **off** the cache, making a cached machine strictly slower. Also
+models that no longer silently fill `/`, a chat UI over the Ollama already
+running, ML and Jupyter devshells — `jupyenv` is unmaintained and is what people
+find first — and agents grounded in real option names instead of guessed ones.
+Six children closed.
+Also
+[making Nix answerable](https://github.com/olafkfreund/nixarchy/issues/621)
+— **4.0%** of respondents to the 2025 Nix community survey say they understand
+every error message, and 62.5% are tutorial-dependent, including 57% of people
+who call themselves *intermediate*. That is a discoverability failure rather
+than a reading failure, which is why more prose does not fix it and a
+distribution has leverage a manual does not: it can answer at the instant the
+question is asked. Three answers, for the three cliffs. `command-not-found` now
+answers instead of dead-ending, with `comma` for a one-shot run — the doctor
+used to *name* `nix-locate` without installing it, which is the worst of both.
+An explainer covers the dozen failures a desktop user actually meets, including
+the unstaged-file-in-a-flake trap that reports as `path does not exist` and has
+cost contributors here three debugging sessions in one day. And `nixd` is
+configured for the user's editor rather than only the contributor shell, because
+knowing where the flake is is exactly what a distribution knows and a user does
+not. Three children closed.
+Also
 [the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)
 — a miss opens the picker instead of printing a URL, rows say what they cost
 (licence, homepage, unfree, broken, and whether you already have it), a dry run

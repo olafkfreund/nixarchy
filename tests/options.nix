@@ -1048,11 +1048,22 @@ let
     services.ollama.port = 21434;
   };
 
-  # And the group the desktop user gets, which is the other half of #92: docker
-  # is enabled for every machine at nixos.nix:705 and was usable only on
-  # machines the installer built.
-  dockerGroups =
-    (configBeside { programs.nixarchy.user = "someone"; }).users.users.someone.extraGroups;
+  # And the group the desktop user gets. This check used to assert the user WAS
+  # in `docker`, which was right while the rooted daemon was the default: the
+  # group was the only way `docker ps` worked without sudo. The default is now
+  # rootless, so the property flipped -- the group is passwordless root, and
+  # nothing should be handing it out by default. Both states, because the off
+  # state is the one a refactor breaks quietly: somebody who turns the rooted
+  # daemon back on must still get the group, or Docker is enabled and unusable.
+  dockerDefault = configBeside { programs.nixarchy.user = "someone"; };
+  dockerRooted = configBeside {
+    programs.nixarchy.user = "someone";
+    virtualisation.docker.enable = true;
+  };
+  dockerGroups = dockerDefault.users.users.someone.extraGroups;
+  dockerRootedGroups = dockerRooted.users.users.someone.extraGroups;
+  dockerRootlessDefault = dockerDefault.virtualisation.docker.rootless.enable;
+  dockerRootlessRooted = dockerRooted.virtualisation.docker.rootless.enable;
 
   # ---- "nixarchy wrote this machine", both ways -------------------------
   #
@@ -1273,6 +1284,9 @@ pkgs.runCommand "nixarchy-options"
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
+    dockerRootedGroups = pkgs.lib.concatStringsSep " " dockerRootedGroups;
+    dockerRootlessDefault = pkgs.lib.boolToString dockerRootlessDefault;
+    dockerRootlessRooted = pkgs.lib.boolToString dockerRootlessRooted;
     managedModeA = pkgs.lib.boolToString managedModeA;
     factoryUnitModeA = pkgs.lib.boolToString factoryUnitModeA;
     # The factory-reset script, run rather than read. Every branch of it is
@@ -1514,11 +1528,31 @@ pkgs.runCommand "nixarchy-options"
           echo "local-ai yields the Ollama port and the agents follow it"
 
           case " $dockerGroups " in
-            *" docker "*) echo "the desktop user can reach the docker socket" ;;
-            *) echo "docker is enabled but the desktop user is not in its group" >&2
-               echo "groups: $dockerGroups" >&2
+            *" docker "*)
+               echo "the default machine puts the desktop user in the docker group," >&2
+               echo "which is passwordless root: groups: $dockerGroups" >&2
+               exit 1 ;;
+            *) echo "no docker group by default" ;;
+          esac
+          [ "$dockerRootlessDefault" = "true" ] || {
+            echo "no docker group AND no rootless daemon: docker is simply gone" >&2
+            exit 1
+          }
+          echo "rootless docker is what gives the default machine containers"
+
+          # The other state. Turning the rooted daemon back on has to restore
+          # the group, or docker is enabled and every command wants sudo -- and
+          # rootless must go, so DOCKER_HOST is not pointed at a second daemon.
+          case " $dockerRootedGroups " in
+            *" docker "*) echo "opting back in to the rooted daemon restores the group" ;;
+            *) echo "rooted docker is enabled but the user is not in its group" >&2
+               echo "groups: $dockerRootedGroups" >&2
                exit 1 ;;
           esac
+          [ "$dockerRootlessRooted" = "false" ] || {
+            echo "rooted docker is on and rootless came with it" >&2
+            exit 1
+          }
 
           # ---- no Omarchy artwork on either boot splash -------------------
           #

@@ -67,8 +67,8 @@ This turns on rootless [podman](https://podman.io) (`virtualisation.docker`,
 if you already use it, is untouched -- boxes only need podman) and installs
 `distrobox` itself. Rootless means `--userns keep-id`: files a box writes in
 `$HOME` stay yours, there is no daemon, and no root-equivalent group -- the
-same thing this desktop's own `nixos-security` skill already flags about
-plain Docker.
+same property nixarchy's own rootless Docker default has, for the same
+reason.
 
 ## Making one
 

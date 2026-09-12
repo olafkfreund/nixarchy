@@ -136,21 +136,93 @@ If what you want is a project with a pinned interpreter, use
 `pip install` to work at all, [Python](python) is the page that explains why
 it sometimes does not.
 
-## Docker
+## Docker, rootless
 
-Docker and Docker Compose are enabled by `virtualisation.docker.enable`,
-which nixarchy sets by default, and Lazydocker is on `Super + Shift + D`.
+Docker and Docker Compose are enabled by default and Lazydocker is on
+`Super + Shift + D`, as upstream. What differs is **whose** daemon it is:
+nixarchy runs Docker **rootless**, as a systemd user service under your own
+account, rather than the usual root-owned daemon.
 
-As upstream, your user is not in the `docker` group, for the reason upstream
-gives: the group is effectively passwordless root. Use `sudo docker`, and the
-Docker TUI asks for authorisation through polkit when it needs the socket.
-_Setup > Security > Sudoless Docker_ (`omarchy-setup-security-sudoless-docker`)
-adds you to the group after its warning. To make that choice part of your
-configuration rather than a one-off, the declarative form is:
+`docker build`, `docker run`, `docker compose` all work unprivileged, with no
+`sudo` and no group.
+
+The reason is the group that arrangement otherwise requires. A root-owned
+socket means `docker ps` without `sudo` needs you in the `docker` group, and
+**that group is equivalent to passwordless root** -- `docker run -v /:/host` is
+the whole exploit. It is not that it grants something you lack; you are in
+`wheel` already. It removes **the prompt**, for everything running as you: a
+browser, an `npm install` postinstall script, a dependency in a shell you
+opened for one afternoon. Rootless keeps the convenience and drops that.
+
+An escape from a rootless container gets your user account, not the machine.
+
+### What rootless costs
+
+Not nothing, so it is worth knowing before you meet it:
+
+| | |
+|---|---|
+| ports below 1024 | need `net.ipv4.ip_unprivileged_port_start` lowered, or a higher port |
+| bind mounts | file ownership maps through user namespaces, which surprises people once |
+| devcontainers, testcontainers | some assume a root-owned socket and fail to find one |
+| containers after logout | it is a *user* service -- `loginctl enable-linger $USER` to keep them running |
+| images you already had | live in root's `/var/lib/docker` and are not visible to your own daemon |
+
+That last row is the one that bites on upgrade. If you were running nixarchy
+before this changed, your existing images and containers are still there, under
+the root daemon -- `sudo docker images` shows them. Re-pull or `docker save` /
+`docker load` across, or turn the rooted daemon back on.
+
+### Turning the rooted daemon back on
+
+It is your machine. One line puts the classic arrangement back, group included:
 
 ```nix
-users.users.<you>.extraGroups = [ "docker" ];
+virtualisation.docker.enable = true;
 ```
+
+Rootless switches off when you do that, so `DOCKER_HOST` is not left pointing
+at a second daemon. **You are then in the `docker` group, with the
+root-equivalence described above** -- that is the trade you are making, and it
+is a reasonable one to make deliberately for devcontainers or a low port.
+
+To keep the rooted daemon and *not* the group, use `sudo docker` and say which
+groups you keep:
+
+```nix
+virtualisation.docker.enable = true;
+users.users.<you>.extraGroups = lib.mkForce [ "wheel" "video" "input" "i2c" ];
+```
+
+`mkForce`, because a plain assignment merges with what is there instead of
+replacing it. **List the groups you keep** -- `mkForce [ ]` would take `wheel`
+with it and leave you unable to `sudo`.
+
+Upstream offers _Setup > Security > Sudoless Docker_
+(`omarchy-setup-security-sudoless-docker`) for the same opt-in. It still works;
+on a rootless machine there is no root socket for it to grant access to.
+
+### Podman
+
+Rootless [podman](https://podman.io) solves the same problem a different way --
+no daemon at all. nixarchy already uses it: [boxes](boxes) are rootless podman
+underneath, though podman is only switched on when you enable boxes.
+
+If you prefer it as your container runtime, note that nixpkgs refuses to build
+a machine where both `dockerCompat` and the rooted Docker daemon exist
+(*"Option dockerCompat conflicts with docker"*). With nixarchy's default that
+daemon is already off, so this is enough:
+
+```nix
+virtualisation.podman = {
+  enable = true;
+  dockerCompat = true;                      # provides a `docker` command
+  defaultNetwork.settings.dns_enabled = true;
+};
+```
+
+You will then want `virtualisation.docker.rootless.enable = false;` as well, so
+only one thing is answering to the name `docker`.
 
 Upstream's [Docker section](https://omarchy.org/manual/development-tools/)
 covers the rest — including _Install > Development > Docker DB_ for local

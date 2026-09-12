@@ -1027,8 +1027,24 @@ in
       "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}"
     ];
 
-    # install/config/docker.sh
-    virtualisation.docker.enable = lib.mkDefault true;
+    # install/config/docker.sh, but rootless.
+    #
+    # The rooted daemon's socket is owned by root, so making `docker ps` work
+    # without sudo means the `docker` group -- and that group is passwordless
+    # root for anything running as the user. Rootless runs the daemon AS the
+    # user instead: same `docker` command, no group, and an escape gets the
+    # account rather than the machine.
+    #
+    # Why: modules/AGENTS.md#docker-is-enabled-above-at-mkdefault-for-every-mac
+    virtualisation.docker.enable = lib.mkDefault false;
+    virtualisation.docker.rootless = {
+      # Gated on the rooted daemon being off rather than set flat, so somebody
+      # who turns Docker back on gets the classic arrangement and not both --
+      # setSocketVariable would otherwise point their DOCKER_HOST at a daemon
+      # they did not ask for.
+      enable = lib.mkDefault (!config.virtualisation.docker.enable);
+      setSocketVariable = lib.mkDefault (!config.virtualisation.docker.enable);
+    };
 
     networking = {
       # install/config/firewall.sh (upstream uses ufw)

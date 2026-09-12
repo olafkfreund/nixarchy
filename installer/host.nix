@@ -198,11 +198,15 @@
 
   users.users.${username} = {
     isNormalUser = true;
+    # No "docker" here. modules/nixos.nix adds it if and only if the rooted
+    # daemon is enabled, which by default it is not; listing it outright left
+    # the group on every installed machine even with Docker off -- a group
+    # granting root to whatever installs a socket there later, which is the
+    # exact outcome that conditional exists to prevent.
     extraGroups = [
       "wheel"
       "video"
       "input"
-      "docker"
       "i2c"
     ];
     # The password is a FILE, not an evaluation input, and that is what makes

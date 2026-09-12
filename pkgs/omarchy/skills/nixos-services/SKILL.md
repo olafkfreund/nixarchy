@@ -171,7 +171,9 @@ agenix, sops-nix, rotation, leak handling — use the **`nixos-secrets` skill**.
 
 ```nix
 virtualisation.docker.enable = true;          # or virtualisation.podman
-users.users.<name>.extraGroups = [ "docker" ];  # docker group == root. Say so.
+# The docker group == passwordless root. Say so, and prefer rootless, which is
+# nixarchy's default and needs no group at all:
+virtualisation.docker.rootless = { enable = true; setSocketVariable = true; };
 
 virtualisation.oci-containers.containers.myapp = {
   image = "myapp:1.2.3";                      # pin a tag; :latest is not reproducible

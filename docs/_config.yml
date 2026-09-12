@@ -56,6 +56,7 @@ nav:
   - { path: /manual/gaming,                   title: Gaming }
   - { path: /manual/android,                  title: Android }
   - { path: /manual/security,                 title: Security }
+  - { path: /manual/secrets,                  title: Secrets }
   - { path: /manual/remote-desktop,           title: Remote Desktop }
   - { path: /manual/system-snapshots,         title: System Snapshots }
   - { path: /manual/many-machines,            title: Many Machines }

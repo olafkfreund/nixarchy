@@ -281,6 +281,15 @@ Two other ways a check stops checking, both found in one week:
   where `$out` is `./result` returns nothing, silently. Use `find -L`.
   `readme-counts.sh` counted zero skills this way, and only failed loudly
   because it refuses on an implausible count.
+- **`builtins.tryEval` does not catch a missing attribute.** It catches
+  `throw` and `assert`, and nothing else — so `tryEval (v.${n})` around an
+  attribute access reads as a guard and is not one. A walk over
+  `config.programs.nixarchy` aborted with `attribute 'allowUnfreePredicate'
+  missing`, thrown from an *option default*
+  (`{ inherit (pkgs.config) allowUnfree allowUnfreePredicate; }`), with every
+  access already wrapped. If you are walking evaluated configuration, bound
+  the root to a subtree you know rather than trusting `tryEval` to make an
+  unbounded walk safe.
 
 ## 6. How to run the checks, and what each one costs
 

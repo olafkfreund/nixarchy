@@ -370,6 +370,31 @@ secret_scan() {
     | grep -vE 'File[[:space:]]*=|hashedPasswordFile|\.path|placeholder|config\.(age|sops)' \
     | head -20)
 
+  # The path `nixarchy secret` opens (#611). The grep above reads *.nix only,
+  # and a secret store is YAML -- so a hosts/<host>/secrets.yaml that sops
+  # never encrypted (an interrupted `sops edit`, or a file written by hand
+  # before reading the manual) is invisible to it, and this command would
+  # commit and push it. sops writes `ENC[AES256_GCM,...]` around every value
+  # it encrypts, so its absence in a file named for secrets is the signal.
+  local plain=""
+  while IFS= read -r f; do
+    [[ -f $f ]] || continue
+    grep -q 'ENC\[AES256_GCM' "$f" || plain+="    ''${f#"$FLAKE"/}"$'\n'
+  done < <(find "$FLAKE" -name 'secrets.yaml' -o -name 'secrets.yml' 2>/dev/null)
+
+  if [[ -n $plain ]]; then
+    warn "These are named as secret stores and are NOT encrypted:\n"
+    printf '%s' "$plain"
+    say "\n  sops wraps every value it encrypts in \033[1mENC[AES256_GCM...]\033[0m, and"
+    say "  none of these has one. Committing the file puts the value in the"
+    say "  history permanently, where a later edit does not remove it."
+    say "  Encrypt it first: \033[1mnixarchy secret edit\033[0m\n"
+
+    gum confirm --default=false "Commit anyway?" && return 0
+    abort_on_quit $?
+    return 1
+  fi
+
   [[ -z $hits ]] && { ok "nothing obvious found"; return 0; }
 
   warn "Found values that look like secrets written directly into Nix files:\n"

@@ -71,6 +71,99 @@ let
   # one they made themselves.
   appEnabled = name: osConfig.programs.nixarchy.apps.${name}.enable or false;
 
+  # Whether this machine declares a secret -- the predicate sops-nix itself
+  # gates on, so the editor plugin below (#658) appears exactly when the
+  # mechanism it drives is live and never on a machine that has none.
+  secretsInUse = (osConfig.sops.secrets or { }) != { } || (osConfig.sops.templates or { }) != { };
+
+  # The formatter the editor runs by name, read off the same nixd settings
+  # the LSP formats with rather than spelled a second time: one answer to
+  # "which formatter", and tests/options.nix runs it against the flake's own
+  # `nix fmt` to prove they agree (#657).
+  nixFormatter = baseNameOf (lib.head (nixdSettings.formatting.command or [ "nixfmt" ]));
+
+  # The Install-menu agents LazyVim's sidekick extra can drive, each with the
+  # <leader>a key it gets. Cloud, large, costs money -- <leader>o is the
+  # local model, below.
+  aiTools = {
+    claude-code = {
+      tool = "claude";
+      key = "c";
+      label = "Claude Code";
+    };
+    codex = {
+      tool = "codex";
+      key = "x";
+      label = "Codex";
+    };
+    gemini-cli = {
+      tool = "gemini";
+      key = "g";
+      label = "Gemini CLI";
+    };
+    opencode = {
+      tool = "opencode";
+      key = "o";
+      label = "OpenCode";
+    };
+  };
+
+  # Why: modules/AGENTS.md#neovim-specs-written-once-and-gated-on-what-was-se
+  nvimSpecScript =
+    {
+      file,
+      because,
+      said,
+      text,
+    }:
+    ''
+      spec="${config.xdg.configHome}/nvim/lua/plugins/${file}"
+      if [ -d "${config.xdg.configHome}/nvim/lua/plugins" ] && [ ! -e "$spec" ]; then
+        run install -m 0644 ${pkgs.writeText "nixarchy-nvim-${file}" ''
+          -- Written by nixarchy (${because}).
+          -- Delete this file to be rid of it; nothing here rewrites it.
+          ${text}''} "$spec"
+        echo "nixarchy: ${said}"
+      fi
+    '';
+  nvimSpec = args: lib.hm.dag.entryAfter [ "writeBoundary" ] (nvimSpecScript args);
+
+  # LazyVim's own sidekick extra, imported from inside a spec file. Every AI
+  # spec below imports it; lazy.nvim keeps one copy (Spec:import dedups by
+  # module name). NES is off because it needs the Copilot language server,
+  # which this machine does not have -- left on, every buffer reports it.
+  sidekickSpec = ''
+    { import = "lazyvim.plugins.extras.ai.sidekick" },
+    {
+      "folke/sidekick.nvim",
+      opts = { nes = { enabled = false } },
+  '';
+
+  # One agent's spec: the extra, plus one <leader>a key for that tool.
+  aiSpec =
+    app:
+    let
+      t = aiTools.${app};
+    in
+    lib.mkIf (appEnabled app && cfg.neovim != "off") (nvimSpec {
+      file = "nixarchy-ai-${app}.lua";
+      because = "${t.label} is selected in the Install menu";
+      said = "gave Neovim <leader>a${t.key} for ${t.label}";
+      text = ''
+        return {
+          ${sidekickSpec}
+            keys = {
+              {
+                "<leader>a${t.key}",
+                function() require("sidekick.cli").toggle({ name = "${t.tool}", focus = true }) end,
+                desc = "${t.label}",
+              },
+            },
+          },
+        }
+      '';
+    });
+
   # The MCP server declaration, in whichever shape the agent being written to
   # reads. mcp-servers-nix owns the shapes: `mcpServers` in JSON for Claude
   # Code, `mcp_servers` in TOML for Codex, `mcp` with the command as an array
@@ -366,6 +459,38 @@ in
 
         Nothing here ever overwrites a file you wrote. There is no setting that
         does: an editor configuration is not this module's to replace.
+      '';
+    };
+
+    neovimSpecs = lib.mkOption {
+      type = lib.types.attrsOf lib.types.lines;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          codecompanion = '''
+            return {
+              {
+                "olimorris/codecompanion.nvim",
+                opts = { adapters = { http = { ollama = { url = vim.env.OLLAMA_ENDPOINT } } } },
+              },
+            }
+          ''';
+        }
+      '';
+      description = ''
+        LazyVim plugin specs of your own, one file each under
+        `~/.config/nvim/lua/plugins/<name>.lua`.
+
+        For a plugin nixarchy does not ship -- a different AI plugin, a
+        language extra -- declared in your configuration rather than dropped
+        into the tree by hand. Each is written the way every generated spec
+        here is: once, only when the file does not exist, and never over a
+        file you wrote. Delete the file and it is gone until you change the
+        text here; nothing rewrites it behind you.
+
+        `OLLAMA_ENDPOINT` is in the session environment when
+        `programs.nixarchy.localAi` is on, so a plugin that reads it follows
+        the local model to wherever it actually listens.
       '';
     };
 
@@ -916,31 +1041,149 @@ in
     # user who wants it gone deletes one file -- and written only when it is
     # absent, for the reason the seed above states: every .lua under
     # lua/plugins is read as a plugin spec, and clobbering one somebody wrote
-    # is not this module's to do.
-    home.activation.nixarchyNixdNeovim = lib.mkIf (languageServer && cfg.neovim != "off") (
-      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        spec="${config.xdg.configHome}/nvim/lua/plugins/nixd.lua"
-        if [ -d "${config.xdg.configHome}/nvim/lua/plugins" ] && [ ! -e "$spec" ]; then
-          run install -m 0644 ${pkgs.writeText "nixarchy-nvim-nixd.lua" ''
-            -- Written by nixarchy (programs.nixarchy.languageServer).
-            -- Delete this file to be rid of it; nothing here rewrites it.
+    # is not this module's to do. Every spec below is the same shape, through
+    # nvimSpec; each is its own file so a machine that already has nixd.lua
+    # from #630 still gains the ones added since.
+    home.activation.nixarchyNixdNeovim = lib.mkIf (languageServer && cfg.neovim != "off") (nvimSpec {
+      file = "nixd.lua";
+      because = "programs.nixarchy.languageServer";
+      said = "pointed Neovim at nixd, which knows this machine's flake";
+      text = ''
+        return {
+          {
+            "neovim/nvim-lspconfig",
+            opts = {
+              servers = {
+                nixd = {
+                  cmd = { "nixd" },
+                  settings = { nixd = vim.json.decode([==[${builtins.toJSON nixdSettings}]==]) },
+                },
+              },
+            },
+          },
+        }
+      '';
+    });
+
+    # ---- #656, #657: the grammar, and format on save with what CI runs ----
+    #
+    # The nixd settings the issue asked for beyond these -- diagnostics
+    # exclusions, failure handling, eval workers -- are not nixd settings:
+    # nixd 2.x reads `nixpkgs`, `formatting`, `options` and
+    # `diagnostic.suppress` and nothing else (nixd/lib/Controller/
+    # Configuration.cpp). Formatting through the LSP is already in
+    # nixdSettings. What was genuinely missing is here.
+    home.activation.nixarchyNeovimNix = lib.mkIf (languageServer && cfg.neovim != "off") (nvimSpec {
+      file = "nixarchy-nix.lua";
+      because = "programs.nixarchy.languageServer";
+      said = "gave Neovim the nix grammar and format-on-save with ${nixFormatter}";
+      text = ''
+        return {
+          -- The grammar. nvim-treesitter compiles it with the tree-sitter CLI
+          -- and the C compiler programs.nixarchy.languageServer puts on PATH.
+          { "nvim-treesitter/nvim-treesitter", opts = { ensure_installed = { "nix" } } },
+          -- Format on save with the tool `nix fmt` runs, so the editor and CI
+          -- agree by construction. `optional`: extends conform if LazyVim
+          -- loaded it, and does nothing if you removed it.
+          {
+            "stevearc/conform.nvim",
+            optional = true,
+            opts = { formatters_by_ft = { nix = { "${nixFormatter}" } } },
+          },
+        }
+      '';
+    });
+
+    # ---- #658: sops files, from the editor ---------------------------------
+    #
+    # Gated on a secret being declared, not on the editor: the machine that
+    # declares none must gain nothing, which is the inertness tests/options.nix
+    # asserts for sops-nix itself. <leader>k rather than the <leader>e/<leader>d
+    # pair the source config used, because <leader>e is neo-tree in the config
+    # this module seeds and <leader>d is LazyVim's debug group.
+    home.activation.nixarchyNeovimSops = lib.mkIf (secretsInUse && cfg.neovim != "off") (nvimSpec {
+      file = "nixarchy-sops.lua";
+      because = "a secret is declared under sops.secrets";
+      said = "gave Neovim :SopsDecrypt and :SopsEncrypt; docs/manual/secrets.md says where the plaintext goes";
+      text = ''
+        return {
+          {
+            "prismatic-koi/nvim-sops",
+            event = { "BufReadPre" },
+            keys = {
+              { "<leader>k", "", desc = "+secrets (sops)" },
+              { "<leader>kd", vim.cmd.SopsDecrypt, desc = "Decrypt this file in place" },
+              { "<leader>ke", vim.cmd.SopsEncrypt, desc = "Encrypt this file in place" },
+            },
+            opts = function()
+              -- The identity `nixarchy secret new --user` made, when there is
+              -- one. A system secret is encrypted to the host's SSH key, which
+              -- only root can read: add your own age key as a recipient in
+              -- .sops.yaml to edit those from here.
+              local id = vim.fn.expand("~/.local/share/nixarchy/secrets/identity.txt")
+              return { defaults = { ageKeyFile = vim.fn.filereadable(id) == 1 and id or nil } }
+            end,
+          },
+        }
+      '';
+    });
+
+    # ---- #659: the AI plugins follow the AI tools you chose -----------------
+    #
+    # One file per selected agent, each importing LazyVim's sidekick extra
+    # (lazy.nvim loads it once) and adding one <leader>a key for its own tool.
+    # Per tool rather than one file listing all of them, because a file is
+    # written once: an agent selected later still gets its spec, and the one
+    # failure that matters -- a spec for an agent the user never installed --
+    # cannot happen, because nothing writes one.
+    home.activation."nixarchyNeovimAi-claude-code" = aiSpec "claude-code";
+    home.activation."nixarchyNeovimAi-codex" = aiSpec "codex";
+    home.activation."nixarchyNeovimAi-gemini-cli" = aiSpec "gemini-cli";
+    home.activation."nixarchyNeovimAi-opencode" = aiSpec "opencode";
+
+    # <leader>o: the local model. pi is the agent modules/local-ai.nix already
+    # points at Ollama by default (nixarchyPiDefaultModel), so the offline path
+    # is the same extra with a different tool -- small, private, free, and
+    # reachable by muscle memory when the network is not. No third-party
+    # plugin, and therefore nothing to pin at every bump; a plugin that talks
+    # to Ollama directly goes in programs.nixarchy.neovimSpecs and reads
+    # OLLAMA_ENDPOINT.
+    home.activation.nixarchyNeovimAiLocal =
+      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents && cfg.neovim != "off")
+        (nvimSpec {
+          file = "nixarchy-ai-local.lua";
+          because = "programs.nixarchy.localAi points pi at the local model";
+          said = "gave Neovim <leader>o for the local model, through pi";
+          text = ''
             return {
-              {
-                "neovim/nvim-lspconfig",
-                opts = {
-                  servers = {
-                    nixd = {
-                      cmd = { "nixd" },
-                      settings = { nixd = vim.json.decode([==[${builtins.toJSON nixdSettings}]==]) },
-                    },
-                  },
+              ${sidekickSpec}
+                keys = {
+                  { "<leader>o", "", desc = "+local ai (pi, offline)", mode = { "n", "v" } },
+                  { "<leader>oo", function() require("sidekick.cli").toggle({ name = "pi", focus = true }) end, desc = "Toggle pi" },
+                  { "<leader>ot", function() require("sidekick.cli").send({ name = "pi", msg = "{this}" }) end, mode = { "n", "x" }, desc = "Send this to pi" },
+                  { "<leader>ov", function() require("sidekick.cli").send({ name = "pi", msg = "{selection}" }) end, mode = { "x" }, desc = "Send selection to pi" },
+                  { "<leader>op", function() require("sidekick.cli").prompt({ name = "pi" }) end, mode = { "n", "x" }, desc = "Prompt pi" },
                 },
               },
             }
-          ''} "$spec"
-          echo "nixarchy: pointed Neovim at nixd, which knows this machine's flake"
-        fi
-      ''
+          '';
+        });
+
+    # The user's own specs, through the same helper and under the same rules.
+    home.activation.nixarchyNeovimSpecs = lib.mkIf (cfg.neovimSpecs != { } && cfg.neovim != "off") (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] (
+        lib.concatStrings (
+          lib.mapAttrsToList (
+            name: text:
+            nvimSpecScript {
+              file = "${name}.lua";
+              because = "programs.nixarchy.neovimSpecs.${name}";
+              said = "wrote your ${name} spec for Neovim";
+              inherit text;
+            }
+          ) cfg.neovimSpecs
+        )
+      )
     );
 
     # Why: modules/AGENTS.md#provider-files-for-the-local-model-when-the-system

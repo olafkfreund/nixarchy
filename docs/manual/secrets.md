@@ -206,6 +206,41 @@ See [sops on adding and removing keys](https://github.com/getsops/sops#adding-an
 nixarchy does not wrap this, because a half-implemented fleet story is worse
 than none.
 
+## From the editor
+
+Once a machine declares a secret under `sops.secrets`, Neovim gains
+[nvim-sops](https://github.com/prismatic-koi/nvim-sops), written once into
+`~/.config/nvim/lua/plugins/nixarchy-sops.lua`:
+
+| key | does |
+|---|---|
+| `<leader>kd` | decrypt this file in place |
+| `<leader>ke` | encrypt it again |
+
+Open `hosts/<host>/secrets.yaml` or the user store, decrypt, edit, encrypt,
+write. A machine that declares no secret gets no plugin, the same way it gets
+no sops-nix unit.
+
+**This is a different trade from `nixarchy secret copy`, and worth knowing
+before you use it.** That command decrypts to the clipboard and never to disk.
+A decrypted buffer is plaintext in Neovim's memory, in its **swapfile**, in its
+**undo history** and, if you yank from it, in the clipboard history the
+[section above](#the-clipboard-is-not-private) describes. The file on disk
+stays encrypted; the working copies do not. `:set noswapfile noundofile` in
+that buffer before decrypting is the cheap mitigation, and re-encrypting
+before you close is the one that matters.
+
+Two things about identities:
+
+- A **user** secret decrypts with the identity `nixarchy secret new --user`
+  made, at `~/.local/share/nixarchy/secrets/identity.txt`. The spec points
+  sops at it when the file exists.
+- A **system** secret is encrypted to this host's SSH key, which only root can
+  read, so the editor cannot decrypt it as you. `nixarchy secret edit` goes
+  through sudo for exactly that reason. To edit one from the editor, add your
+  own age key as a second recipient in `.sops.yaml` — the file the command
+  wrote has a comment saying where — and `sops updatekeys` the store.
+
 ## Before you push
 
 `nixarchy config repo` scans for secrets before it commits anything: values

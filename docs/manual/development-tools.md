@@ -49,7 +49,43 @@ An editor you have not selected gets nothing. The Helix and Neovim files are
 written only when they do not already say something about nixd, and the three
 JSON files are merged into rather than replaced, so your own settings survive.
 
-Turn it off with:
+### Neovim: the grammar, and format on save with what CI runs
+
+The same option writes two more files into the LazyVim tree nixarchy seeds,
+each once and each deletable:
+
+| file | what it adds |
+|---|---|
+| `lua/plugins/nixarchy-nix.lua` | the treesitter `nix` grammar, and format-on-save through conform.nvim |
+| `lua/plugins/nixd.lua` | the `nvim-lspconfig` spec above |
+
+The formatter is **`nixfmt`, because that is what `nix fmt` runs** — this
+repository's `flake.nix` names `nixfmt-tree`, and CI runs `nix fmt -- --ci`.
+An editor that formatted with anything else would produce a diff on every
+save that CI then rejects, which is worse than no formatter because it looks
+like help. The check that guards this does not compare names: it runs the
+editor's formatter and the flake's on one file and diffs the result.
+
+The grammar needs compiling, and LazyVim compiles every parser with the
+`tree-sitter` CLI and a C compiler. Upstream ships both (`tree-sitter-cli`,
+`clang`) and nixarchy did not, so until now `:TSInstall` failed for *every*
+language on a default machine, not only Nix. `programs.nixarchy.languageServer`
+now puts `tree-sitter`, `gcc` and `nixfmt` on PATH beside `nixd`.
+
+A plugin nixarchy does not ship goes in your configuration rather than into
+the tree by hand:
+
+```nix
+programs.nixarchy.neovimSpecs.lspsaga = ''
+  return { { "nvimdev/lspsaga.nvim", opts = {} } }
+'';
+```
+
+That is written to `~/.config/nvim/lua/plugins/lspsaga.lua` under the same
+rules as everything above: once, only when absent, never over a file you
+wrote.
+
+Turn all of it off with:
 
 ```nix
 programs.nixarchy.languageServer = false;

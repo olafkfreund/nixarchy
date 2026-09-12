@@ -1187,6 +1187,27 @@ in
         # modules/home.nix, which is where an editor's configuration file
         # lives; what has to be on PATH is the binary they exec.
         pkgs.nixd
+        # The formatter conform.nvim runs by bare name (#657). nixd is handed
+        # an absolute path in nixdSettings above; the editor plugin is not,
+        # and a formatter that is not on PATH is format-on-save doing nothing.
+        # It has to be the tool flake.nix's `formatter` wraps, or every save
+        # produces a diff `nix fmt -- --ci` rejects; tests/options.nix runs
+        # both on one file and diffs the result.
+        pkgs.nixfmt
+        # What LazyVim's nvim-treesitter compiles every parser with. Upstream
+        # ships `clang` and `tree-sitter-cli` in omarchy-base.packages; neither
+        # was here, so `ensure_installed` -- including the nix grammar the
+        # generated spec adds (#656) -- failed on every start with "no C
+        # compiler". gcc rather than clang because it is stdenv's, and so
+        # already in the store of any machine that has built anything.
+        pkgs.tree-sitter
+        pkgs.gcc
+      ]
+      ++ lib.optionals (config.sops.secrets != { } || config.sops.templates != { }) [
+        # nvim-sops execs `sops` by name (#658). Gated on the same predicate
+        # sops-nix gates itself on, so a machine that declares no secret gains
+        # no package -- the inertness tests/options.nix asserts for sops-nix.
+        pkgs.sops
       ]
       ++ lib.optionals cfg.preinstalls (
         # Filtered by attribute name rather than by pname: the name someone

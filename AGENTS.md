@@ -153,6 +153,15 @@ an assertion; the config side had neither. #202 lived exactly in that gap, and
 #204 is the same defect in mirror image: `satty` ships as a runtime dependency
 and no config names it.
 
+The quieter form is **a setting the tool does not read.** #656 asked for four
+nixd settings copied from a configuration that worked daily; nixd's parser
+maps four keys and none of them were among those. They had never done
+anything — nixd ignores unknown keys, so there was no failure to notice, and
+"it works on my machine" was true and meant nothing. Before shipping a setting
+copied from somewhere, find the line in the tool that reads it; and a check
+that greps the generated config for the key proves only that the key was
+written.
+
 ## 3. Vary the variable that matters
 
 §1 is about a check that cannot fail. This is its wider form: **a check that

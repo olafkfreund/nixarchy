@@ -1324,9 +1324,11 @@ pkgs.testers.runNixOSTest {
     # every nixarchy machine.
     #
     # Checked here rather than trusted to the build patch because the value is
-    # user-visible: etc/fastfetch/config.jsonc calls this, so it is printed in
-    # every new terminal, and omarchy-snapshot and omarchy-channel-current read
-    # it too.
+    # user-visible: /etc/fastfetch/config.jsonc -- installed from the package
+    # by modules/nixos.nix (#649) -- calls it for the OS line of the About
+    # screen omarchy-launch-about renders, and omarchy-snapshot and
+    # omarchy-channel-current read it too. Nothing prints it in every new
+    # terminal; this comment used to claim that, and it was never true here.
     reported = machine.succeed(user % "omarchy version").strip()
     assert reported == "${(pkgs.extend inputs.self.overlays.default).omarchy.version}", (
         f"omarchy version reports {reported!r}, not the packaged version. "

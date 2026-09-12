@@ -326,8 +326,13 @@ if [ -n "${OMARCHY_PATH:-}" ] && [ -e "$sw/bin/omarchy" ]; then
   # not the package's, while bin/ inside it still symlinks straight back. Left
   # as a literal comparison, this told every machine it was running an older
   # build.
+  # `|| true`, because this is the one section whose whole subject is a path
+  # that may no longer exist: a session started before a GC still names the
+  # collected build. readlink -f fails on it, pipefail carries that, and
+  # errexit killed the doctor here -- at the exact finding it was written to
+  # print -- taking the Graphics snippet and everything after it with it.
   session=$(readlink -f "$OMARCHY_PATH/bin/omarchy" 2>/dev/null |
-    sed 's|/bin/omarchy$||')
+    sed 's|/bin/omarchy$||') || true
   if [ "${session:-$OMARCHY_PATH}" != "$installed" ]; then
     finding "This session is running an older build" "$warn" ""
     say "     ${dim}session:   $OMARCHY_PATH${off}"

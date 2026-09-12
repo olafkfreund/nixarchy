@@ -214,6 +214,19 @@ Two branches only these can reach, as illustration:
 - A forbid-pattern matches prose too. Forbidding a bare package name failed
   against correctly-gated code because the surrounding comment mentioned it —
   match the call, not the string.
+- **A tool that prints its verdict last fails every assertion at once when
+  it dies, and says nothing about dying.** `doctor-graphics` asserts on the
+  doctor's snippet, which the doctor prints after every other section, and the
+  doctor runs under `errexit`. So any host read between the Graphics section
+  and the end that fails -- and the fixture pins none of them -- kills the
+  doctor, the snippet is never printed, and the check reports five `no
+  /intelBusId/ in the output` lines that read exactly like five wrong GPU
+  rules. The harness had `|| true` on the doctor, so the one number that
+  would have said "it died" was thrown away (#645). Capture the exit status
+  as part of the output and assert on it first; and when a case fails, print
+  the full transcript plus the host state the fixture does not control, because
+  a check that disagrees with itself across two runners and cannot say what
+  differed is one people learn to re-run until green.
 - **Never name a shell variable `out` in a `runCommand` script.** `$out` is the
   derivation's output path, and assigning to it means every assertion passes
   and the build then fails with *"builder failed to produce output path"* —

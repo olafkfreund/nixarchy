@@ -166,6 +166,19 @@
     note = "For software nixpkgs does not carry. Then: flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo";
   };
 
+  open-webui = {
+    label = "Open WebUI (local chat)";
+    category = "Desktop";
+    kind = "bundled";
+    # Bundled because the UI has to be told where this machine's Ollama
+    # actually listens -- its own default is localhost:11434, and a host that
+    # moved the port gets a working UI with an empty model list and no error.
+    # The second half is smaller and worse: upstream keeps its telemetry-off
+    # settings in the option DEFAULT of `environment`, which any definition
+    # replaces wholesale.
+    note = "A browser chat window over the models this machine already runs. Needs an Ollama -- programs.nixarchy.localAi.enable is the one that puts a model on the machine -- and refuses to build without one rather than showing you an empty model list. Stays on loopback: the first visitor to reach it becomes the administrator, so open the firewall only after you have logged in once.";
+  };
+
   syncthing = {
     label = "Syncthing";
     category = "Desktop";

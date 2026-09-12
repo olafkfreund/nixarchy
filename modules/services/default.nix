@@ -73,6 +73,7 @@ inputs: {
     ./devenv.nix
     (import ./hypr-rdp.nix inputs)
     (import ./microvm.nix inputs)
+    ./open-webui.nix
     ./syncthing.nix
     ./tailscale.nix
   ];

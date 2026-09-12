@@ -344,6 +344,39 @@ in
       '';
     };
 
+    cudaCache = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.binaryCaches;
+      defaultText = lib.literalExpression "config.programs.nixarchy.binaryCaches";
+      description = ''
+        Add the community CUDA cache, `cache.nixos-cuda.org`, on a machine that
+        declares an NVIDIA card. Nothing on any other machine: the substituter
+        appears only when `hardware.nvidia.enabled` is true, so an AMD or a VM
+        host pays nothing for this option existing.
+
+        Why it needs to exist at all: `cache.nixos.org` does not carry
+        `cudaSupport` builds -- the NixOS Foundation does not redistribute
+        CUDA binaries -- so a machine that turns CUDA on compiles PyTorch,
+        and `magma-cuda-static` alone is around a 10GB closure.
+
+        Follows programs.nixarchy.binaryCaches, because somebody who turned
+        that off said something about trust rather than about Hyprland. Its own
+        option so the decision can still be made per cache -- this one is a
+        community cache rather than one Cachix runs for a named project.
+
+        **The trap, which costs more than this option saves.** Narrowing
+        `cudaCapabilities` to your own card, with `cudaForwardCompat = false`,
+        genuinely cuts closure size and compile time -- and it takes you OFF
+        this cache, because what the cache holds is the DEFAULT capability set.
+        It is a source-build optimisation, and on a machine that could have
+        substituted everything it makes the rebuild strictly slower. Leave the
+        capabilities alone unless you have decided to build locally anyway.
+
+        There is no ROCm equivalent. `rocmSupport` means local builds, full
+        stop; the vulkan Ollama build is how an AMD machine sidesteps that.
+      '';
+    };
+
     preinstalls = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -550,31 +583,54 @@ in
     # Why: modules/AGENTS.md#most-of-what-the-install-menu-offers-is-unfree
     nixpkgs.config = lib.mkIf cfg.allowUnfree (lib.mkDefault { allowUnfree = true; });
 
-    nix.settings = {
-      # nixarchy-apply runs `nh os switch <flake>`, so flakes are not
-      # optional here. mkDefault leaves a user free to manage this themselves.
-      experimental-features = lib.mkDefault [
-        "nix-command"
-        "flakes"
-      ];
+    nix.settings =
+      let
+        # The declared NVIDIA path, which is the same signal
+        # modules/local-ai.nix reads to pick an Ollama build: a machine with an
+        # NVIDIA card has said so, and `hardware.nvidia.enabled` is the
+        # read-only option computed from having said it. Nothing probes.
+        cudaCache = cfg.cudaCache && config.hardware.nvidia.enabled;
+      in
+      {
+        # nixarchy-apply runs `nh os switch <flake>`, so flakes are not
+        # optional here. mkDefault leaves a user free to manage this themselves.
+        experimental-features = lib.mkDefault [
+          "nix-command"
+          "flakes"
+        ];
 
-      # hyprland.cachix.org covers Hyprland when the pinned commit is one
-      # hyprwm built; nixarchy.cachix.org covers it when it is not, plus the
-      # vendored Omarchy tree and the packages this flake builds itself.
-      #
-      # Behind an option rather than mkForce: these are lists, so they merge
-      # into a user's existing trust with no conflict and no warning, which
-      # makes them the only thing in this module that can change a machine
-      # silently. See programs.nixarchy.binaryCaches.
-      substituters = lib.mkIf cfg.binaryCaches [
-        "https://nixarchy.cachix.org"
-        "https://hyprland.cachix.org"
-      ];
-      trusted-public-keys = lib.mkIf cfg.binaryCaches [
-        "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
-        "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
-      ];
-    };
+        # hyprland.cachix.org covers Hyprland when the pinned commit is one
+        # hyprwm built; nixarchy.cachix.org covers it when it is not, plus the
+        # vendored Omarchy tree and the packages this flake builds itself.
+        #
+        # Behind an option rather than mkForce: these are lists, so they merge
+        # into a user's existing trust with no conflict and no warning, which
+        # makes them the only thing in this module that can change a machine
+        # silently. See programs.nixarchy.binaryCaches.
+        # Two lists rather than two mkIfs, because there are now two caches with
+        # two different gates. An empty list contributes nothing to a merging
+        # option, so `optionals false` and a removed definition are the same
+        # thing here.
+        #
+        # The CUDA cache is gated on the NVIDIA path as well as on its own
+        # toggle -- see programs.nixarchy.cudaCache, and the cudaCapabilities
+        # trap written out there. Substituter and key are written from the same
+        # condition on purpose: a machine that trusts a cache it cannot reach
+        # still works, and a machine that reaches one it does not trust silently
+        # builds everything, which is the failure nobody notices.
+        substituters =
+          lib.optionals cfg.binaryCaches [
+            "https://nixarchy.cachix.org"
+            "https://hyprland.cachix.org"
+          ]
+          ++ lib.optional cudaCache "https://cache.nixos-cuda.org";
+        trusted-public-keys =
+          lib.optionals cfg.binaryCaches [
+            "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
+            "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
+          ]
+          ++ lib.optional cudaCache "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M=";
+      };
 
     # One `programs` block rather than three scattered assignments: statix
     # flags a repeated top-level key, and it is right that they read better

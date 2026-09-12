@@ -63,10 +63,40 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
       # is a non-zero last status and kills the subshell before the doctor runs.
       # The case with no third argument produced no output at all because of it.
       if [ -n "''${3-}" ]; then export LIBVA_DRIVER_NAME="$3"; fi
-      ${doctor}/bin/nixarchy-doctor 2>&1 ) || true
+      # The exit status is part of the output, on purpose. The doctor runs
+      # under errexit and prints the snippet LAST, so a host read that dies
+      # anywhere after the Graphics section -- #645 -- fails every snippet
+      # assertion at once while saying nothing about why. The status line is
+      # what says it, and the transcript is what the failure dump prints.
+      rc=0; ${doctor}/bin/nixarchy-doctor 2>&1 || rc=$?
+      echo "doctor exit status: $rc"
+    ) | tee -a transcript
+  }
+
+  # What the fixture does NOT control and the doctor still reads. Printed
+  # when a case fails, because a check that disagrees with itself across two
+  # runners and cannot say what differed between them is one people learn to
+  # re-run until green (#645).
+  dump() {
+    echo "== the doctor's full output, every case"; cat transcript
+    echo "== host state the fixture does not control"
+    echo "uname -r: $(uname -r)"; echo "id: $(id)"
+    echo "SHELL=''${SHELL-unset} TMPDIR=''${TMPDIR-unset} XDG_RUNTIME_DIR=''${XDG_RUNTIME_DIR-unset}"
+    echo "MemTotal: $(awk '/^MemTotal:/ { print $2 }' /proc/meminfo) kB"
+    echo "cpu: $(grep -m1 '^vendor_id' /proc/cpuinfo)"
+    echo "mounts:"; grep -E ' (/|/build|/tmp|/proc|/sys) ' /proc/self/mountinfo || true
+    for c in "is-enabled docker.service" "--user is-enabled docker.service" "is-active display-manager.service"; do
+      # shellcheck disable=SC2086
+      echo "systemctl $c -> $(${pkgs.systemd}/bin/systemctl $c 2>&1 || true)"
+    done
   }
 
   fails=0
+  # Every case starts here: a doctor that did not finish has not answered.
+  ran() { # ran <name> <output>
+    if printf '%s' "$2" | grep -q 'doctor exit status: 0'; then echo "  ok      $1: the doctor ran to completion"
+    else echo "  FAILED  $1: the doctor died -- the last lines say where"; printf '%s\n' "$2" | tail -5; fails=$((fails + 1)); fi
+  }
   want() { # want <name> <output> <pattern>
     if printf '%s' "$2" | grep -q "$3"; then echo "  ok      $1"
     else echo "  FAILED  $1: no /$3/ in the output"; fails=$((fails + 1)); fi
@@ -81,7 +111,8 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   # Every `want` below fails identically when the doctor produced nothing, which
   # is indistinguishable from every rule being wrong. Say which it is.
   printf '%s' "$h" | grep -q 'Graphics' || {
-    echo "the doctor printed no Graphics section at all:"; printf '%s\n' "$h"; exit 1; }
+    echo "the doctor printed no Graphics section at all:"; dump; exit 1; }
+  ran  "hybrid"                      "$h"
   want "hybrid is detected"          "$h" 'Hybrid graphics'
   want "decode-only driver is named" "$h" 'cannot encode'
   want "the libva pin is named"      "$h" 'pinning libva'
@@ -95,6 +126,7 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   want "sync is offered as a choice" "$h" 'prime.sync.enable'
 
   a=$(run amd vainfo-enc)
+  ran     "amd"                      "$a"
   want    "encode is recognised"     "$a" 'Video encoding available'
   wantnot "single GPU is not hybrid" "$a" 'Hybrid graphics'
   # e3 is the case that makes the conversion undeniable: read as decimal it is
@@ -107,6 +139,7 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
 
   # No driver answered -- the branch that could not fire.
   n=$(run amd vainfo-none)
+  ran     "no driver"                "$n"
   want    "no driver is said so"     "$n" 'No VAAPI driver answered'
   # And is NOT mistaken for a driver that merely cannot encode, which is what
   # this machine was told before: a wrong diagnosis, plus advice about
@@ -121,15 +154,18 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   # bare string and failed against correctly-gated code, which would have sent
   # someone deleting the explanation instead of the snippet.
   nv=$(run nvidia vainfo-none)
+  ran     "nvidia"                   "$nv"
   wantnot "no intel snippet on nvidia" "$nv" 'extraPackages.*intel-media-driver'
   nvd=$(run nvidia vainfo)
+  ran     "decode-only nvidia"       "$nvd"
   wantnot "none on decode-only nvidia" "$nvd" 'extraPackages.*intel-media-driver'
   # ...and it is still offered where it helps, so the gate did not simply
   # delete the advice.
   i=$(run hybrid vainfo-none)
+  ran     "intel, no driver"         "$i"
   want    "intel snippet on intel"    "$i" 'extraPackages.*intel-media-driver'
 
-  [ "$fails" = 0 ] || { echo "$fails case(s) failed"; exit 1; }
+  [ "$fails" = 0 ] || { echo "$fails case(s) failed"; dump; exit 1; }
   echo "the doctor reads a GPU correctly"
   touch $out
 ''

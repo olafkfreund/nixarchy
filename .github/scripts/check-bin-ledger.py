@@ -18,6 +18,13 @@ So the class is DERIVED here, and data/bin-ledger.nix carries only the rows
 where the port diverges -- the reason, which no comparison can derive. The check
 then asserts derived == declared, both directions.
 
+The class answers "did this file change" and cannot answer "what does this file
+do". So beside it there is a behaviour scan (PATTERNS below) that reads what a
+shipped script actually calls -- ufw, an enable, a usermod, a write under /etc --
+and holds each match against an `allow` field, on the same biconditional. That is
+the half that survives an Omarchy bump: a vendored script that GAINS one of those
+calls stays byte-identical to the new upstream, and the class alone would pass it.
+
 Modes:
 
   (default)  check.  Exits non-zero with every problem named.
@@ -43,6 +50,7 @@ MIN_UPSTREAM = 400
 MIN_SHIPPED = 400
 MIN_VENDOR = 300
 MIN_ROWS = 20
+MIN_MATCHES = 40
 
 # A class the ledger may declare. `vendor` is derived and normally unwritable --
 # a row for a file identical to upstream is a rubber stamp -- with one exception
@@ -52,6 +60,54 @@ CLASSES = ("patch", "replace", "new", "vendor")
 # Upstream's package manager, and the AUR helper it reaches for. Word-boundary
 # matched after comments are stripped, so prose about pacman does not count.
 PACMAN = re.compile(r"\b(pacman|yay)\b")
+
+# What a script DOES, as opposed to whether it changed.
+#
+# The derived class answers "does this file differ from upstream" very well and
+# says nothing about what the file is for. A vendored command that gains
+# `systemctl enable`, `usermod` or a write under /etc at the next Omarchy bump
+# is byte-identical to the new upstream, derives as `vendor`, and passes -- so
+# the classification cannot see the one change that matters most on NixOS,
+# where those paths are declarative and an imperative one does not survive a
+# rebuild.
+#
+# So: a script matching a group needs a row naming that group in `allow`, and a
+# row naming a group the script no longer matches is stale. Both directions,
+# same as everything else here.
+#
+# The fail-closed pattern-group scheme is zicochaos/omarchy-nix's idea (MIT);
+# the patterns, the groups and the code below are ours.
+#
+# These over-match on purpose. `cp /etc/skel/. ~/` reads /etc and counts as an
+# etc-write; heredoc prose naming usermod counts as account-tools, because
+# comment-stripping cannot see inside a heredoc. A false positive costs one row
+# saying so, which is an audit; a false negative costs the whole point.
+PATTERNS = {
+    "ufw": r"\bufw\b",
+    "systemctl-system": (
+        r"\bsystemctl\b(?![^\n]*--user)[^\n]*\b(?:enable|disable|mask|unmask)\b"
+    ),
+    "systemctl-user": r"\bsystemctl\s+--user\b",
+    "etc-write": (
+        r">>?\s*/etc/"
+        r"|\b(?:tee|cp|mv|ln|install|mkdir|rm|chmod|chown|touch)\b[^\n]*\s/etc/"
+        r"|\bsed\b[^\n]*\s-i\b[^\n]*\s/etc/"
+    ),
+    "boot-write": (
+        r"\b(?:bootctl|grub-install|grub-mkconfig"
+        r"|limine-update|limine-install|limine-deploy|limine-snapper-sync)\b"
+        r"|>>?\s*/boot/"
+        r"|\b(?:tee|cp|mv|ln|install|mkdir|rm|chmod|chown|touch)\b[^\n]*\s/boot/"
+    ),
+    "modprobe": r"\b(?:modprobe|rmmod|insmod)\b",
+    "account-tools": r"\b(?:usermod|useradd|userdel|groupadd|gpasswd|chsh|visudo)\b",
+    "kernel-ctl": r"\bsysctl\s+-w\b|>\s*/proc/sys/|>\s*/sys/",
+    "initrd-boot": r"\b(?:mkinitcpio|dracut|update-initramfs)\b",
+    "rfkill": r"\brfkill\b",
+    "nmcli-radio": r"\bnmcli\s+radio\b",
+    "ctl-set": r"\b(?:timedatectl|hostnamectl|localectl|loginctl)\s+set-",
+}
+PATTERNS = {group: re.compile(rx) for group, rx in PATTERNS.items()}
 
 
 def die(message):
@@ -84,6 +140,38 @@ def strip_comments(text):
     behaviour keeps the migration honest.
     """
     return "\n".join(re.sub(r"#.*", "", line) for line in text.splitlines())
+
+
+def scan(shipped_bin, shipped):
+    """{name: {group, ...}} for every shipped command that mutates the system.
+
+    Comment-stripped, like the pacman scan, and for the same reason: a bin that
+    only MENTIONS systemctl is not calling it.
+    """
+    matched = {}
+    for name in sorted(shipped):
+        try:
+            with open(
+                os.path.join(shipped_bin, name), encoding="utf-8", errors="replace"
+            ) as handle:
+                text = strip_comments(handle.read())
+        except OSError:
+            continue
+        groups = {g for g, rx in PATTERNS.items() if rx.search(text)}
+        if groups:
+            matched[name] = groups
+
+    total = sum(len(groups) for groups in matched.values())
+    if total < MIN_MATCHES:
+        die(
+            f"the behaviour scan matched {total} time(s) across "
+            f"{len(matched)} command(s), expected at least {MIN_MATCHES}.\n"
+            "  A scan that sees nothing reports that nothing needs a row, "
+            "which is the one failure this file exists to refuse. Either the "
+            "patterns stopped compiling against real scripts, or the tree "
+            "moved."
+        )
+    return matched
 
 
 def derive(upstream_bin, shipped_bin, nix_bin):
@@ -160,7 +248,7 @@ def derive(upstream_bin, shipped_bin, nix_bin):
     return derived, upstream, shipped
 
 
-def problems(ledger, derived, upstream, shipped, shipped_bin):
+def problems(ledger, derived, upstream, shipped, shipped_bin, matched):
     """Every way the ledger and the trees can disagree."""
     found = []
 
@@ -215,12 +303,17 @@ def problems(ledger, derived, upstream, shipped, shipped_bin):
 
         # 4. The rubber stamp. A row for a file identical to upstream restates
         #    `cmp`, unless it is carrying a pacman reason (see below).
-        if actual == "vendor" and not declared.get("pacman"):
+        if (
+            actual == "vendor"
+            and not declared.get("pacman")
+            and not declared.get("allow")
+        ):
             found.append(
                 f"{name}: a row for a file identical to upstream.\n"
                 "    Vendored commands do not get rows -- the comparison "
                 "already proves it. Delete this, unless it needs a `pacman` "
-                "field, which is the one thing a vendor row may carry."
+                "or an `allow` field -- the two things a vendor row may carry, "
+                "because neither restates the comparison."
             )
 
         reason = (declared.get("reason") or "").strip()
@@ -277,19 +370,47 @@ def problems(ledger, derived, upstream, shipped, shipped_bin):
                 "keeps meaning what it says."
             )
 
+    # 7. The behaviour scan, on the same biconditional as the pacman one. A
+    #    command that mutates the system needs a row naming the groups it
+    #    matches; a row naming a group the command no longer matches is stale,
+    #    which is how an upstream cleanup gets noticed instead of assumed.
+    for name in sorted(set(matched) | set(ledger)):
+        actual = matched.get(name, set())
+        declared = set((ledger.get(name, {}).get("allow") or "").split())
+
+        for group in sorted(actual - declared):
+            found.append(
+                f"{name}: matches `{group}` and its row does not allow it.\n"
+                f"    Add `allow = \"{' '.join(sorted(actual))}\";` and say in "
+                "the reason why that path is carried here, or patch it out. "
+                "The class only says the file changed; this says what it does."
+            )
+        for group in sorted(declared - actual):
+            found.append(
+                f"{name}: allows `{group}` and no longer matches it.\n"
+                "    Upstream cleaned it up, or a patch of ours removed the "
+                "call. Prune the group, so the allowance keeps meaning "
+                "something."
+            )
+
     return found
 
 
-def seed(ledger, derived):
+def seed(ledger, derived, matched):
     """Skeleton rows for everything unclassified, class filled, reason not."""
     rows = []
     for name in sorted(derived):
-        if name in ledger or derived[name] == "vendor":
+        if name in ledger:
             continue
+        groups = sorted(matched.get(name, ()))
+        if derived[name] == "vendor" and not groups:
+            continue
+        allow = f'    allow = "{" ".join(groups)}";\n' if groups else ""
         rows.append(
             f'  "{name}" = {{\n'
             f'    class = "{derived[name]}";\n'
             f'    reason = "FIXME";\n'
+            f"{allow}"
             f"  }};"
         )
     return rows
@@ -333,18 +454,28 @@ def main():
     for name, row in ledger.items():
         if row.get("class") not in CLASSES:
             die(f"{name}: class {row.get('class')!r} is not one of {CLASSES}")
+        # `allow` is a space-separated string, not a list, because the parser
+        # above reads quoted strings only -- a list-valued key would be
+        # invisible to it and the allowance would silently mean nothing.
+        for group in (row.get("allow") or "").split():
+            if group not in PATTERNS:
+                die(
+                    f"{name}: allow names {group!r}, which is not a pattern "
+                    f"group. Known groups: {', '.join(sorted(PATTERNS))}"
+                )
 
     upstream_bin = os.path.join(args.upstream, "bin")
     shipped_bin = os.path.join(args.shipped, "bin")
     derived, upstream, shipped = derive(upstream_bin, shipped_bin, args.nix_bin)
+    matched = scan(shipped_bin, shipped)
 
     if args.seed:
-        rows = seed(ledger, derived)
+        rows = seed(ledger, derived, matched)
         print(f"# {len(rows)} rows need writing. reason = FIXME will not pass.")
         print("\n".join(rows))
         return 0
 
-    found = problems(ledger, derived, upstream, shipped, shipped_bin)
+    found = problems(ledger, derived, upstream, shipped, shipped_bin, matched)
 
     if args.report:
         if not found:
@@ -352,7 +483,9 @@ def main():
                 f"Every one of the {len(shipped)} shipped commands is upstream's "
                 f"or has a row: {len(ledger)} rows, "
                 f"{sum(1 for c in derived.values() if c == 'vendor')} vendored "
-                "untouched."
+                f"untouched, "
+                f"{sum(len(g) for g in matched.values())} behaviour match(es) "
+                "allowed."
             )
         for problem in found:
             print("- " + problem.splitlines()[0])
@@ -380,7 +513,12 @@ def main():
     for cls in derived.values():
         counts[cls] = counts.get(cls, 0) + 1
     summary = ", ".join(f"{n} {cls}" for cls, n in sorted(counts.items()))
-    print(f"{len(shipped)} commands: {summary}. {len(ledger)} rows, all true.")
+    scanned = sum(len(groups) for groups in matched.values())
+    print(
+        f"{len(shipped)} commands: {summary}. {len(ledger)} rows, all true. "
+        f"{scanned} behaviour match(es) across {len(matched)} command(s), "
+        "all allowed."
+    )
     return 0
 
 

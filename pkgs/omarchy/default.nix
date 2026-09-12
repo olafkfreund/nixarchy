@@ -429,6 +429,21 @@ stdenvNoCC.mkDerivation {
                         'cp -r "$OMARCHY_THEMES_PATH/$THEME_NAME/"* "$NEXT_THEME_PATH/"' \
                         'cp -r --no-preserve=mode "$OMARCHY_THEMES_PATH/$THEME_NAME/"* "$NEXT_THEME_PATH/"'
 
+                    # Cursor resolves through PATH, because /usr/bin is not where anything
+                    # lives here.
+                    #
+                    # Upstream's last set_theme line names `/usr/bin/cursor` literally, and
+                    # nixpkgs' code-cursor ships bin/cursor. The guard is
+                    # `omarchy-cmd-present "$editor_cmd" || return 0`, and omarchy-cmd-present
+                    # is `command -v` -- which fails on an absolute path that does not exist
+                    # and returns 0. So Cursor was skipped SILENTLY: no error, no warning,
+                    # and the Install menu offers it (data/apps.nix, install.editor.cursor).
+                    # Every other editor changed colour and that one did not. (#653)
+                    #
+                    # The three above it already resolve through PATH and are untouched.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-vscode \
+                      --replace-fail 'set_theme "/usr/bin/cursor"' 'set_theme "cursor"'
+
                     # And call the Zed setter, which upstream has no equivalent of.
                     #
                     # omarchy ships omarchy-theme-set-{vscode,obsidian,claude,foot,

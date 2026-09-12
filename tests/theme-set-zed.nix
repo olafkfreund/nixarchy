@@ -134,10 +134,50 @@ pkgs.runCommand "nixarchy-theme-set-zed"
     # of per-app setters and upstream's list has no zed in it; pkgs/omarchy
     # patches it in.
     grep -q 'omarchy-theme-set-zed' ${omarchy}/share/omarchy/bin/omarchy-theme-set ||
-      { echo "  FAILED  omarchy-theme-set no longer calls the zed setter"; fails=1; }
+      { echo "  FAILED  omarchy-theme-set no longer calls the zed setter"; fails=$((fails + 1)); }
     echo "  ok      omarchy-theme-set calls it"
 
+    # ---- and every editor the Install menu offers is REACHABLE ------------
+    #
+    # Zed was one half of this. The other was Cursor, and it failed the other
+    # way round: upstream HAS a setter for it, and named the binary
+    # `/usr/bin/cursor`. nixpkgs' code-cursor ships bin/cursor, the guard is
+    # `omarchy-cmd-present` which is `command -v`, and `command -v` on an
+    # absolute path that does not exist returns non-zero -- so set_theme did
+    # `return 0` and Cursor was skipped SILENTLY while the three editors above
+    # it themed correctly. data/apps.nix offers Cursor, so a user installed it
+    # from our own menu and watched every other editor change colour. (#653)
+    #
+    # Asserted on the SHIPPED script rather than trusted to the patch, because
+    # a --replace-fail that stops matching is a build failure only until
+    # somebody rewrites the anchor.
+    vscode=${omarchy}/share/omarchy/bin/omarchy-theme-set-vscode
+
+    setters=$(ls ${omarchy}/share/omarchy/bin/omarchy-theme-set-* | wc -l)
+    [ "$setters" -ge 10 ] || {
+      echo "  FAILED  only $setters theme setters found, expected at least 10 --"
+      echo "          a scan that sees nothing agrees with everything"
+      fails=$((fails + 1))
+    }
+    echo "  ok      $setters theme setters scanned"
+
+    if grep -q 'set_theme "cursor"' "$vscode"; then
+      echo "  ok      cursor is reached through PATH"
+    else
+      echo "  FAILED  the vscode setter no longer reaches cursor through PATH"
+      fails=$((fails + 1))
+    fi
+
+    if grep -qE 'set_theme "/usr/' "$vscode"; then
+      echo "  FAILED  an editor is still named by an absolute /usr path:"
+      grep -nE 'set_theme "/usr/' "$vscode" | sed 's/^/            /'
+      echo "          command -v fails on it, so set_theme skips that editor silently"
+      fails=$((fails + 1))
+    else
+      echo "  ok      no editor is named by an absolute /usr path"
+    fi
+
     [ "$fails" = 0 ] || { echo "$fails case(s) failed"; exit 1; }
-    echo "Zed follows the Omarchy theme"
+    echo "Zed follows the Omarchy theme, and every editor the menu offers is reachable"
     touch $out
   ''

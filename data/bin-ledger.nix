@@ -545,6 +545,10 @@
     class = "patch";
     reason = "New in 4.0.2, it escalates with sudo or pkexec, pins PATH to FHS directories and installs color.json as root under an /etc/sudoers.d rule naming /usr/bin. The escalation goes; the write is the user's.";
   };
+  "omarchy-theme-set-vscode" = {
+    class = "patch";
+    reason = "Cursor was named as `/usr/bin/cursor`, which nixpkgs' code-cursor is not -- it ships bin/cursor. The guard is `command -v`, so an absolute path that does not exist skipped Cursor silently while VS Code, VSCodium and Insiders themed correctly. The Install menu offers Cursor, so this was user-visible with nothing printed. (#653)";
+  };
   "omarchy-theme-set-zed" = {
     class = "new";
     reason = "Not in upstream, which ships theme setters for vscode, obsidian and others but none for Zed, pointing at the AUR's omazed instead -- which cannot work on v4. Reads the palette from colors.toml.";

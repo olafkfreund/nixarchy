@@ -1,0 +1,16 @@
+nixarchy
+Copyright (c) 2026 Olaf Krasicki Freund and the nixarchy contributors
+
+This repository vendors upstream Omarchy rather than reimplementing it. The
+vendored tree under `pkgs/omarchy/` and everything built from it are
+
+  Copyright (c) David Heinemeier Hansson and the Omarchy contributors
+  <https://github.com/basecamp/omarchy>
+
+and are licensed under the MIT License, the same licence this repository uses.
+
+This file exists because that attribution belongs beside the licence rather
+than inside it. GitHub's licence classifier matches the body of LICENSE against
+known texts, and any prose between the copyright line and the permission grant
+makes it report `NOASSERTION` -- "Other" -- on a repository that is plainly
+MIT. The attribution was there first and had exactly that effect.

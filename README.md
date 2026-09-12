@@ -2159,4 +2159,4 @@ been seen working.
 
 ## License
 
-[MIT](LICENSE). Vendored Omarchy is MIT, © Basecamp.
+[MIT](LICENSE). Vendored Omarchy is MIT, © Basecamp — see [NOTICE](NOTICE).

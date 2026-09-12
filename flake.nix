@@ -375,6 +375,25 @@
               (builtins.readFile ./pkgs/doctor.sh);
         };
 
+        # `nixarchy explain` -- reads a Nix failure and says what it is in the
+        # vocabulary of the files the user wrote. In the overlay rather than
+        # only under `packages` for the same reason the doctor is: the module
+        # installs it, and a module cannot take a package from
+        # inputs.self.packages without mixing nixpkgs instances.
+        nixarchy-explain = final.writeShellApplication {
+          name = "nixarchy-explain";
+          runtimeInputs = with final; [
+            coreutils
+            # grep and sed do all of the recognising. Undeclared, every family
+            # would read as "not recognised" rather than as a missing command
+            # -- the vainfo trap in pkgs/AGENTS.md, and worse here, because
+            # "nothing matched" is a legitimate answer this tool gives.
+            gnugrep
+            gnused
+          ];
+          text = builtins.readFile ./pkgs/explain.sh;
+        };
+
         nixarchy-verify = final.writeShellApplication {
           name = "nixarchy-verify";
           runtimeInputs = with final; [
@@ -772,6 +791,12 @@
           # nixarchy is an input anywhere, which is the only entry point someone
           # deciding whether to adopt it actually has.
           doctor = pkgsFor.${system}.nixarchy-doctor;
+
+          # `nix run github:olafkfreund/nixarchy#explain` -- pipe a failing
+          # rebuild into it. Runnable without nixarchy installed on purpose:
+          # the moment someone needs it is the moment their rebuild will not
+          # complete.
+          explain = pkgsFor.${system}.nixarchy-explain;
 
           # Why: docs/internals/flake.md#nix-run-devenv-presets-scaffolds-every-preset-in
           devenv-presets =
@@ -1534,6 +1559,16 @@
           doctor-ldd = import ./tests/doctor-ldd.nix {
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) doctor;
+          };
+
+          # The error explainer, against errors produced in the check rather
+          # than pasted into it -- nixpkgs has reworded two of these families
+          # inside a year, and a pasted trace would keep the check green while
+          # the explainer stopped recognising what a user's machine prints.
+          # See tests/explain.nix.
+          explain = import ./tests/explain.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) explain;
           };
 
           # nixarchy-channel edits a file the user owns, so the check is mostly

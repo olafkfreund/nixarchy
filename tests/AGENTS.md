@@ -1,6 +1,9 @@
 # tests/
 
-Every `checks.<name>` in `flake.nix` is a file here. 37 of them.
+Every `checks.<name>` in `flake.nix` is a file here.
+`nix eval .#checks.x86_64-linux --apply builtins.attrNames` lists them — this
+line used to carry the count, and the count was wrong by half, which is the
+§4 shape: a hand-written number nothing compares.
 
 ## Intent
 
@@ -172,6 +175,22 @@ Two mechanics that make this possible, and one that nearly stopped it:
   output — a fixture that quietly starts succeeding otherwise leaves the thing
   under test reading an empty string, and "recognised nothing" is
   indistinguishable from "there was nothing to recognise".
+
+## An inventory check cannot check its own reasons
+
+`bin-ledger` and `etc-overlay` are the same shape: a table in `data/` claiming
+something about upstream's tree, and a check that diffs the table's keys against
+that tree in both directions. What each proves is narrow and worth stating —
+**that every path is classified and no classification is stale.** Whether the
+row's *reason* is true is prose, and nothing here reads it.
+
+That is a documented hole rather than a fixable one: "`services.resolved` is not
+enabled, so there is no second mDNS responder to silence" is a claim about the
+whole module system, and a check strong enough to verify forty of those is the
+module system. What the check does instead is force the sentence to be written
+when upstream changes, and force it to be long enough to be checkable by a
+person — `etc-overlay` throws on a reason under 80 characters for that reason
+alone. Reasons go stale silently; the keys cannot.
 
 ## The cheap ones, which is where new checks usually belong
 

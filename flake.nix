@@ -1847,9 +1847,10 @@
             inherit inputs;
             pkgs = pkgsFor.${system};
           };
-          # Upstream's /etc overlay, which nothing installs: data/etc-overlay.nix
-          # says what answers each file here, and this fails when upstream adds
-          # or drops one. See tests/etc-overlay.nix and #642.
+          # Upstream's /etc overlay: data/etc-overlay.nix says what answers each
+          # file here (and modules/nixos.nix installs the rows it classes
+          # `installed`), and this fails when upstream adds or drops one. See
+          # tests/etc-overlay.nix and #642.
           etc-overlay = import ./tests/etc-overlay.nix { pkgs = pkgsFor.${system}; };
 
           # The reference initrd can mount a disk it was not built on, which is

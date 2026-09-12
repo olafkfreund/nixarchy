@@ -140,8 +140,37 @@ let
   # instantiations is a coincidence, not a property.
   hasNixLdLib = cfg: name: builtins.any (p: pkgs.lib.getName p == name) cfg.programs.nix-ld.libraries;
 
+  # Upstream's /etc overlay, the three rows data/etc-overlay.nix classes
+  # `installed` (#649). modules/nixos.nix reads that class and declares each
+  # through environment.etc, so the module cannot be out of step with the
+  # manifest -- which is exactly why the three are named HERE rather than
+  # read from it: a check that reads the same list the module reads would
+  # pass with the class removed from all three, and with the genAttrs gone.
+  # `on` is a machine that asked for the desktop; `off` is Mode A, the module
+  # imported and nothing enabled, which must gain no file in /etc at all.
+  etcInstalled =
+    path:
+    let
+      declared = cfg: cfg.environment.etc ? ${path};
+    in
+    {
+      on = declared adopter.config;
+      off = declared loaderOff;
+    };
+
   # Each case is (what it should look like on, what it should look like off).
   cases = {
+    # ---- upstream's /etc overlay, the part of it that is installed ----------
+    #
+    # kitty's system half: the seeded ~/.config/kitty/kitty.conf is a stub whose
+    # own comment sends the reader to /etc/xdg/kitty/kitty.conf.
+    etcKitty = etcInstalled "xdg/kitty/kitty.conf";
+    # The About screen omarchy-launch-about renders, and the file the OS-line
+    # patch in pkgs/omarchy/default.nix is applied to.
+    etcFastfetch = etcInstalled "fastfetch/config.jsonc";
+    # The tool_alias `mise use -g cursor-agent` resolves through.
+    etcMise = etcInstalled "mise/conf.d/omarchy.toml";
+
     # ---- nixi, on for everyone, and provably gone when told ----
     #
     # These are the reverse of every other case in this file, and the header's

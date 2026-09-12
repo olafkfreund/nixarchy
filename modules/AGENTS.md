@@ -354,6 +354,50 @@ removed, so it does not stay on here by inheritance.
 Only browsed goes: avahi stays on for driverless IPP discovery, which
 is how modern printers are found and is what cupsd does by itself.
 
+<a id="three-files-from-upstreams-etc-overlay-installed-as-themselves"></a>
+### Three files from upstream's /etc overlay, installed as themselves
+
+```nix
+// lib.genAttrs installedEtc (name: {
+```
+
+Omarchy's Arch package copies `etc/` into `/etc`. This port carries the same
+tree in `$out/share/omarchy/etc` and, until #649, installed none of it —
+`modules/home.nix` seeds `config/` and `default/`, never `etc/`. Three of the
+forty files were user-visible by their absence: the seeded
+`~/.config/kitty/kitty.conf` is a stub whose own comment sends the reader to
+`/etc/xdg/kitty/kitty.conf`; `omarchy-launch-about` rendered fastfetch's
+stock layout instead of the About screen, and the one patch this repository
+applies to the etc tree (the "Nixarchy" OS line) was applied to a file
+nothing read; and `mise use -g cursor-agent` failed because the alias it
+resolves through lives only in `etc/mise/conf.d/omarchy.toml`.
+
+Mechanism, and why this one:
+
+- **`environment.etc.<path>.source` pointing into `cfg.package`**, the shape
+  `omarchy/xcompose` already uses. The shipped file is the single source of
+  truth: a source bump carries upstream's edits and `--replace-fail` patches
+  still apply once. Copying the content into a Nix string would have been a
+  fork of three files that an Omarchy release would silently drift from.
+- **Driven by `data/etc-overlay.nix`, not by a second list.** The manifest's
+  `installed` class is what installs a row, so the manifest cannot say
+  `installed` about a file that is not, and reclassifying one of the fourteen
+  `divergent` rows later is one edit. A list in the module beside a list in
+  the manifest is the §4 shape — two hand-maintained lists that fail open.
+- **No new option.** Mode A is the module imported with `enable = false`, and
+  this sits inside the same `mkIf cfg.enable` as everything else — that
+  machine gains nothing in `/etc`. `enable = true` is already the request for
+  the Omarchy desktop, whose `/etc` these three are part of on Arch, and it
+  already writes `omarchy/xcompose` the same way. `tests/options.nix` asserts
+  each of the three by name in both states, so a fourth row classed
+  `installed` is not covered until it is named there too — deliberately: the
+  module reads the class, the check reads the promise.
+
+Not `environment.etc` for the other fourteen. Those are behaviour changes
+(sysctls, sudoers, oomd thresholds) rather than files a program looks up by
+path, and each `divergent` row names the NixOS option that would carry it.
+That is #649's remaining work, decided per file.
+
 <a id="the-ownership-marker-for-the-shell-tools-that-cann"></a>
 ### The ownership marker, for the shell tools that cannot ask the module
 

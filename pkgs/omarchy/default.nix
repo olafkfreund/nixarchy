@@ -595,10 +595,10 @@ stdenvNoCC.mkDerivation {
                     # .git, so it took the developer branch every time and printed a bare
                     # "dev".
                     #
-                    # That is not just cosmetic: etc/fastfetch/config.jsonc calls this, so the
-                    # splash Omarchy prints in every new terminal reported the desktop as an
-                    # unversioned dev checkout. omarchy-snapshot and omarchy-channel-current
-                    # read it too.
+                    # That is not just cosmetic: etc/fastfetch/config.jsonc -- installed to
+                    # /etc by modules/nixos.nix -- calls this for the OS line of the About
+                    # screen, which reported the desktop as an unversioned dev checkout.
+                    # omarchy-snapshot and omarchy-channel-current read it too.
                     substituteInPlace $out/share/omarchy/bin/omarchy-version \
                       --replace-fail 'hash=$(git -C "$omarchy_path" rev-parse --short HEAD 2>/dev/null || true)' \
                       'echo "${version}"; exit 0'
@@ -606,7 +606,7 @@ stdenvNoCC.mkDerivation {
                     # The splash said "Omarchy", on a machine that is not Omarchy.
                     #
                     # etc/fastfetch/config.jsonc prints the OS line from a literal
-                    # `echo "Omarchy $version"`, so every new terminal on a nixarchy machine
+                    # `echo "Omarchy $version"`, so the About screen on a nixarchy machine
                     # announced itself as the thing it is a port of. The version stays, and
                     # stays labelled as Omarchy's, because that is the honest reading: this
                     # is nixarchy, running Omarchy's tree at that version, and both halves

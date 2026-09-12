@@ -173,6 +173,8 @@ word_for() {
     5) echo Five ;; 6) echo Six ;; 7) echo Seven ;; 8) echo Eight ;;
     9) echo Nine ;; 10) echo Ten ;; 11) echo Eleven ;; 12) echo Twelve ;;
     13) echo Thirteen ;; 14) echo Fourteen ;; 15) echo Fifteen ;;
+    16) echo Sixteen ;; 17) echo Seventeen ;; 18) echo Eighteen ;;
+    19) echo Nineteen ;; 20) echo Twenty ;;
     *) echo "" ;;
   esac
 }
@@ -227,8 +229,8 @@ quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'
 quantity "skills" "$skills_word" \
-  '^So (twelve|thirteen|fourteen|fifteen) skills ship here instead:$' \
-  's/^So (twelve|thirteen|fourteen|fifteen) skills ship here instead:$/So '"$skills_word"' skills ship here instead:/'
+  '^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead:$' \
+  's/^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead:$/So '"$skills_word"' skills ship here instead:/'
 quantity "apps-total" "$a_total" \
   '.*\| ([0-9]+) apps in the selection \|.*' \
   "s/\| [0-9]+ apps in the selection \| [0-9]+ from nixpkgs, [0-9]+ as NixOS modules, [0-9]+ built here, [0-9]+ with no equivalent \|/| $a_total apps in the selection | $a_nixpkgs from nixpkgs, $a_mod as NixOS modules, $a_ours built here, $a_un with no equivalent |/"
@@ -272,15 +274,15 @@ quantity "installer-questions-iso" "$questions_word" \
 readme_saved=$readme
 readme="$root/docs/llms.txt"
 quantity "skills-llms" "$skills_cap" \
-  '^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen) AI agent skills written.*' \
-  's/^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen) AI agent skills written/- '"$skills_cap"' AI agent skills written/'
+  '^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen) AI agent skills written.*' \
+  's/^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen) AI agent skills written/- '"$skills_cap"' AI agent skills written/'
 quantity "skills-llms-manual" "$skills_word" \
-  '.*the (ten|eleven|twelve|thirteen|fourteen|fifteen) NixOS agent skills.*' \
-  's/the (ten|eleven|twelve|thirteen|fourteen|fifteen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
+  '.*the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) NixOS agent skills.*' \
+  's/the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
 readme="$root/docs/manual/ai.md"
 quantity "skills-manual-ai" "$skills_word" \
-  '^(ten|eleven|twelve|thirteen|fourteen|fifteen) skills instead of one:$' \
-  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen) skills instead of one:$/'"$skills_word"' skills instead of one:/'
+  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one:$' \
+  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one:$/'"$skills_word"' skills instead of one:/'
 readme=$readme_saved
 
 # The count says a number moved; this says which skill a table forgot. Every

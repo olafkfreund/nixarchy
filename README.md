@@ -188,7 +188,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So thirteen skills ship here instead:
+So sixteen skills ship here instead:
 
 | skill | owns |
 |---|---|
@@ -203,6 +203,9 @@ So thirteen skills ship here instead:
 | **`nixos-doctor`** | The sweep to run *before* you have a theory: failed units, `-p err`, disk, memory, and what changed between generations |
 | **`nixos-config-repo`** | Getting the configuration into git and keeping it there, and the two things that bite: untracked files are invisible to the build, and git refuses a repository owned by somebody else |
 | **`nixos-android`** | scrcpy over USB and over Wi-Fi, Waydroid and what it will not run, and the two traps: `programs.adb.enable` is inert on current nixpkgs, and `adb mdns services` cannot work because android-tools is built without an mDNS backend |
+| **`nixos-binaries`** | Why a downloaded binary, an AppImage or a pip wheel will not run, and the ladder out: nix-ld's curated library set, envfs, an FHS environment, a box, packaging it — including the correction that nix-ld cannot help an interpreter nixpkgs built |
+| **`nixos-gaming`** | Steam as a module rather than a package, Proton per title, the 32-bit graphics stack that is the usual cause, controllers, gamescope, and thirteen libretro cores that live in the package rather than `/usr/lib` |
+| **`nixos-fleet`** | One flake, several machines: the `hosts/<name>/` layout, what is shared and what is per-machine, `nixarchy-apply`'s hostname match, pulling on a timer, and where `--target-host` stops |
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 

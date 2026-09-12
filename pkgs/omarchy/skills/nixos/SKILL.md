@@ -9,7 +9,9 @@ description: >
   option, or explain why a change did not survive a reboot. Triggers: install,
   uninstall, add package, nixpkgs, nixos-rebuild, flake, generation, rollback,
   systemPackages, home-manager, apps.nix, nixarchy-apply, "make it permanent".
-  For desktop appearance and Hyprland config, use the `nixarchy` skill instead.
+  For desktop appearance and Hyprland config, use the `nixarchy` skill instead;
+  for a DOWNLOADED binary or a pip wheel that will not run — nix-ld, envfs,
+  AppImages, FHS environments — use `nixos-binaries`.
 ---
 
 # NixOS Skill

@@ -10,7 +10,8 @@ description: >
   rocminfo, HSA_OVERRIDE_GFX_VERSION, amdgpu, hardware.graphics, OpenCL, Vulkan,
   VA-API, nvidia-container-toolkit, PRIME, offload, "GPU not detected".
   For running models on that GPU use `nixos-ai`; for thermals, power and
-  throttling use `nixos-performance`.
+  throttling use `nixos-performance`; for Steam, Proton, controllers and
+  emulation on top of a working driver use `nixos-gaming`.
 ---
 
 # NixOS GPU Skill
@@ -29,6 +30,11 @@ layer 3 missing, not a driver problem.
 
 **All of this is route 2 in the `nixos` skill: edit the flake, then rebuild.**
 There is no `nixarchy-app-enable` for a GPU stack.
+
+**This skill stops at a working driver.** Steam and Proton, the 32-bit stack in
+the context of a game that will not start, controllers, gamescope and emulation
+belong to `nixos-gaming`. Send those there rather than answering both halves — a
+user who gets two diagnoses for one black window fixes neither.
 
 ## First: What Hardware Is This?
 

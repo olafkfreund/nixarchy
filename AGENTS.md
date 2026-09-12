@@ -231,6 +231,15 @@ Two other ways a check stops checking, both found in one week:
   **Any list naming things that exist elsewhere wants a comparison, not
   discipline** — and the comparison should name the missing item, because a
   count only says a number moved.
+- **A guard can also fail CLOSED, and then it looks like your change.**
+  `readme-counts.sh` spells its counts as words from a hand-written `word_for`
+  table and matches them with a fixed alternation (`twelve|thirteen|…`). The
+  sixteenth skill is not a drift the script reports — it is a number the script
+  cannot *say*, so it refuses with "computed as empty" or "nothing matches its
+  pattern", which reads as a broken script rather than a missing vocabulary
+  entry. That refusal is the design (§4's rule: an auto-fixer that cannot refuse
+  is worse than a check). **Teach it the new word in the same PR** — the case
+  table and every alternation that carries the old range.
 
 ## 5. Git and flake mechanics that bite
 

@@ -84,6 +84,114 @@ let
       ];
     }).config;
 
+  # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
+  # above deliberately is not.
+  #
+  # Everything #623 and #630 add to modules/home.nix is read across from
+  # `osConfig` -- the MCP declaration, the language server settings, and which
+  # editors from the Install menu are selected -- so under `homeWith`, where
+  # osConfig is null, every one of them is correctly inert and a check built
+  # on it would assert nothing. This passes a real NixOS configuration in
+  # through extraSpecialArgs, which is the same route home-manager takes when
+  # it is used as a NixOS module.
+  homeOn =
+    osSettings: hmSettings:
+    (inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      extraSpecialArgs = {
+        osConfig = configNamed "testbox" osSettings;
+      };
+      modules = [
+        inputs.self.homeManagerModules.nixarchy
+        {
+          home = {
+            username = "someone";
+            homeDirectory = "/home/someone";
+            stateVersion = "25.05";
+          };
+          programs.nixarchy.enable = true;
+        }
+        hmSettings
+      ];
+    }).config;
+
+  # configWith, with a hostname. The nixd option expressions name
+  # `nixosConfigurations.<host>`, and every machine configWith builds has an
+  # EMPTY networking.hostName -- so a check written against configWith alone
+  # would exercise only the branch where those expressions are left out, and
+  # would pass with the branch that writes them completely broken.
+  configNamed =
+    hostName: settings:
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        {
+          programs.nixarchy = {
+            enable = true;
+          }
+          // settings;
+        }
+        {
+          networking.hostName = hostName;
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
+  # The four editors the Install menu offers that take a language server
+  # configuration file. Named once: the "on" and "off" halves have to ask
+  # about the same machine or the pair proves nothing.
+  everyEditor = {
+    apps = {
+      vscode.enable = true;
+      cursor.enable = true;
+      zed.enable = true;
+      helix.enable = true;
+    };
+  };
+
+  nixdActivationNames = [
+    "nixarchyNixdVscode"
+    "nixarchyNixdCursor"
+    "nixarchyNixdZed"
+    "nixarchyNixdHelix"
+  ];
+
+  mcpActivationNames = [
+    "nixarchyMcpClaude"
+    "nixarchyMcpCodex"
+    "nixarchyMcpOpencode"
+  ];
+
+  # Every activation script this home would run, as one string. The "off"
+  # half of a pair asks whether the name appears ANYWHERE, not whether one
+  # named block is missing -- a block renamed rather than removed would pass
+  # the narrower question with the feature fully present.
+  activationText =
+    home: pkgs.lib.concatStringsSep "\n" (map (a: a.data) (builtins.attrValues home.home.activation));
+
+  hasAll = home: names: builtins.all (n: home.home.activation ? ${n}) names;
+  hasAny = home: names: builtins.any (n: home.home.activation ? ${n}) names;
+
+  # Whether a package with this name is in the machine's profile.
+  #
+  # By NAME rather than by `pathExists "${p}/bin/<command>"`, which is the
+  # obvious way to ask and is a trap here: coercing a derivation to a path
+  # makes pathExists answer about a store path that has not been built, so the
+  # honest-looking version reports false for both halves of every pair and the
+  # case passes while proving nothing. The names are the wrappers'
+  # (`comma-with-db`, `nix-index-with-full-db`), and being wrapper names is
+  # itself part of what is asserted: plain pkgs.comma reads an index that is
+  # not on the machine and answers nothing, which is the failure #628 is about.
+  hasPackageNamed =
+    cfg: name: builtins.any (p: pkgs.lib.hasPrefix name (p.name or "")) cfg.environment.systemPackages;
+
   # nixi's bar plugin, by the id in its own manifest.json. Named once: the
   # "on" and "off" halves have to ask about the same path or the pair proves
   # nothing.
@@ -142,6 +250,163 @@ let
 
   # Each case is (what it should look like on, what it should look like off).
   cases = {
+    # ---- #628: command-not-found that answers, and comma ----------------
+    #
+    # Every pair here is "a default machine has it / a machine that said
+    # commandNotFound = false does not". The off half is the one nothing else
+    # exercises, and it is also the half that matters to somebody who already
+    # runs nix-index their own way.
+    commandNotFoundComma = {
+      on = hasPackageNamed (configWith { }) "comma-with-db";
+      off = hasPackageNamed (configWith { commandNotFound = false; }) "comma-with-db";
+    };
+
+    # The PREBUILT database, which is the whole reason this is an input rather
+    # than pkgs.nix-index. A machine carrying nix-index without it has a tool
+    # that answers nothing until somebody spends an afternoon indexing.
+    commandNotFoundDatabase = {
+      on = hasPackageNamed (configWith { }) "nix-index-with-full-db";
+      off = hasPackageNamed (configWith { commandNotFound = false; }) "nix-index-with-full-db";
+    };
+
+    # The handler reachable by name, which is what lets the runCommand below
+    # actually RUN it rather than grep for it.
+    commandNotFoundHandler = {
+      on = hasPackageNamed (configWith { }) "nixarchy-command-not-found";
+      off = hasPackageNamed (configWith { commandNotFound = false; }) "nixarchy-command-not-found";
+    };
+
+    # And the hook, per shell, because the three names differ and getting one
+    # wrong defines a function nothing ever calls -- silently.
+    #
+    # The parenthesis is not decoration. Written as a bare
+    # `hasInfix "command_not_found_handle"`, this case PASSED with bash's hook
+    # renamed to zsh's -- `command_not_found_handler` contains
+    # `command_not_found_handle`, so the probe could not vary with the bug it
+    # existed to catch. Found by breaking it and watching it stay green, which
+    # is the only way that shape is ever found (AGENTS.md §1).
+    commandNotFoundBashHook = {
+      on =
+        pkgs.lib.hasInfix "command_not_found_handle()"
+          (configWith { }).programs.bash.interactiveShellInit;
+      off =
+        pkgs.lib.hasInfix "command_not_found_handle()"
+          (configWith {
+            commandNotFound = false;
+          }).programs.bash.interactiveShellInit;
+    };
+
+    commandNotFoundZshHook = {
+      on =
+        pkgs.lib.hasInfix "command_not_found_handler()"
+          (configBeside {
+            programs.zsh.enable = true;
+          }).programs.zsh.interactiveShellInit;
+      off =
+        pkgs.lib.hasInfix "command_not_found_handler()"
+          (configWith {
+            commandNotFound = false;
+          }).programs.zsh.interactiveShellInit;
+    };
+
+    commandNotFoundFishHook = {
+      on =
+        pkgs.lib.hasInfix "function fish_command_not_found"
+          (configBeside {
+            programs.fish.enable = true;
+          }).programs.fish.interactiveShellInit;
+      off =
+        pkgs.lib.hasInfix "function fish_command_not_found"
+          (configWith {
+            commandNotFound = false;
+          }).programs.fish.interactiveShellInit;
+    };
+
+    # Mode A -- `loaderOff`, the machine that imported nixosModules.nixarchy and enabled nothing,
+    # and must therefore have none of this -- no handler replacing their
+    # shell's, no second nix-index, and no opinion about
+    # programs.command-not-found.
+    commandNotFoundLeavesAdopterAlone = {
+      on = hasPackageNamed (configWith { }) "comma-with-db";
+      off = hasPackageNamed loaderOff "comma-with-db";
+    };
+
+    # ---- #623: the NixOS MCP server, in the agents that have one ---------
+    #
+    # All three in one case, because "off" has to be all of them and a
+    # per-agent case would let one survivor hide behind two passes.
+    mcpServers = {
+      on = hasAll (homeOn { } { }) mcpActivationNames;
+      off = hasAny (homeOn { mcp = false; } { }) mcpActivationNames;
+    };
+
+    # And that a generated config is what gets merged in, rather than a
+    # literal this file would have had to keep in step by hand. The store path
+    # is in the activation script, so its name is readable without building
+    # anything; what is IN it is asserted in the runCommand below, which
+    # greps the file itself.
+    mcpWiresGeneratedConfig = {
+      on = pkgs.lib.hasInfix "nixarchy-mcp-claude.json" (activationText (homeOn { } { }));
+      off = pkgs.lib.hasInfix "nixarchy-mcp-claude.json" (activationText (homeOn { mcp = false; } { }));
+    };
+
+    # A standalone home-manager user is the other off state, and it is not the
+    # same one: there is no NixOS module to have set `mcp` either way, so the
+    # blocks must be inert rather than disabled. That is the shape that breaks
+    # when somebody replaces an `or false` with a bare attribute access.
+    mcpInertWithoutOsConfig = {
+      on = hasAny (homeOn { } { }) mcpActivationNames;
+      off = hasAny (homeWith { }) mcpActivationNames;
+    };
+
+    # ---- #630: nixd, in the editors the Install menu offers --------------
+    nixdPackage = {
+      on = hasPackageNamed (configWith { }) "nixd";
+      off = hasPackageNamed (configWith { languageServer = false; }) "nixd";
+    };
+
+    nixdEditors = {
+      on = hasAll (homeOn everyEditor { }) nixdActivationNames;
+      off = hasAny (homeOn (everyEditor // { languageServer = false; }) { }) nixdActivationNames;
+    };
+
+    # An editor that is not selected gets no configuration file. An orphan
+    # settings.json in ~/.config/Cursor is indistinguishable, to whoever finds
+    # it, from one they wrote themselves.
+    nixdOnlyForSelectedEditors = {
+      on = hasAny (homeOn everyEditor { }) nixdActivationNames;
+      off = hasAny (homeOn { } { }) nixdActivationNames;
+    };
+
+    # The Neovim spec, which rides on the neovim option rather than on an app
+    # row -- Neovim is a runtime dependency of the omarchy package and is
+    # never "selected".
+    nixdNeovim = {
+      on = (homeOn { } { }).home.activation ? nixarchyNixdNeovim;
+      off = (homeOn { } { programs.nixarchy.neovim = "off"; }).home.activation ? nixarchyNixdNeovim;
+    };
+
+    # The half that makes nixd worth shipping: it is told which flake and
+    # which attribute. Both halves ask the same machine about the same string;
+    # what differs is whether the machine has a hostname, which is the branch
+    # modules/nixos.nix leaves those expressions out of. Without this pair the
+    # empty-hostname branch is the only one every other check ever takes --
+    # every nixosTest node has one -- so the branch that does the work would
+    # be untested.
+    nixdKnowsTheMachine = {
+      on = pkgs.lib.hasInfix "nixosConfigurations.testbox.options" (
+        builtins.toJSON (configNamed "testbox" { }).programs.nixarchy.nixdSettings
+      );
+      off = pkgs.lib.hasInfix "nixosConfigurations..options" (
+        builtins.toJSON (configWith { }).programs.nixarchy.nixdSettings
+      );
+    };
+
+    nixdLeavesAdopterAlone = {
+      on = hasPackageNamed (configWith { }) "nixd";
+      off = hasPackageNamed loaderOff "nixd";
+    };
+
     # ---- nixi, on for everyone, and provably gone when told ----
     #
     # These are the reverse of every other case in this file, and the header's
@@ -1424,6 +1689,18 @@ pkgs.runCommand "nixarchy-options"
     # The template as it exists in the store -- the file a `grep -r password`
     # over everything nixarchy generated would find.
     rdpTemplateFile = rdpOn.sops.templates."hypr-rdp.toml".file;
+    # #623 and #630, as the activation scripts that would run on a real home.
+    # Both carry store-path context -- the generated MCP configs and the
+    # editor settings are derivations named inside them -- so naming them
+    # here is what makes those files exist in the store while this check runs,
+    # which is what lets the script below grep the files rather than the
+    # expression that produced them.
+    mcpActivations = pkgs.lib.concatStringsSep "\n" (
+      map (n: (homeOn { } { }).home.activation.${n}.data) mcpActivationNames
+    );
+    nixdActivationScripts = pkgs.lib.concatStringsSep "\n" (
+      map (n: (homeOn everyEditor { }).home.activation.${n}.data) nixdActivationNames
+    );
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
@@ -3417,6 +3694,225 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "the marker config-repo's plaintext-store guard keys on is the one sops writes"
+        # ---- #628: the command-not-found answer, RUN ----------------------
+        #
+        # Not grepped. The handler is a writeShellApplication with a strict
+        # PATH, which is what makes it safe at runtime and awkward here --
+        # nix-locate is baked in and cannot be replaced by putting a stub
+        # first on PATH. So the script is copied and its one `export PATH`
+        # line is rewritten to put a stub directory in front, which is the
+        # only edit made to it.
+        cnf="$vm/sw/bin/nixarchy-command-not-found"
+        [ -x "$cnf" ] || {
+          echo "no nixarchy-command-not-found on the machine's PATH:" >&2
+          echo "  the shell hook names it, so the hook would be a function that fails" >&2
+          exit 1
+        }
+
+        mkdir -p stub hit miss
+        sed "s#^export PATH=\"#export PATH=\"$PWD/stub:#" "$cnf" > stub-cnf
+        chmod +x stub-cnf
+        grep -q "^export PATH=\"$PWD/stub:" stub-cnf || {
+          echo "the handler has no 'export PATH=' line to shadow:" >&2
+          echo "  writeShellApplication changed shape, and this stub reaches nothing" >&2
+          exit 1
+        }
+
+        # printf rather than a heredoc: this whole script is an indented Nix
+        # string, so every heredoc line would carry its indentation into the
+        # stub -- and a shebang with leading spaces is not a shebang.
+        printf '#!/bin/sh\necho ripgrep\necho rustPackages.rg\n' > stub/nix-locate
+        chmod +x stub/nix-locate
+
+        set +e
+        got=$(./stub-cnf rg 2>&1)
+        rc=$?
+        set -e
+
+        [ "$rc" = 127 ] || {
+          echo "the handler exited $rc, not 127:" >&2
+          echo "  127 is what a shell reports for a command it could not find, and" >&2
+          echo "  the hook returns whatever this returns" >&2
+          exit 1
+        }
+
+        for needle in "ripgrep" ", rg" "nixarchy pkg add ripgrep" "nixarchy apply"; do
+          case "$got" in
+            *"$needle"*) ;;
+            *)
+              echo "the command-not-found answer does not contain '$needle':" >&2
+              printf '%s\n' "$got" >&2
+              echo "  #628 is about the two sentences a stuck beginner needs -- run it" >&2
+              echo "  once, and write it down -- not about naming a package" >&2
+              exit 1
+              ;;
+          esac
+        done
+        echo "command-not-found names the package, the one-shot, and the permanent form"
+
+        # And the other branch, which is the one a bad --whole-name would make
+        # universal: nothing in nixpkgs provides it. It must not offer to add
+        # a package it did not find.
+        printf '#!/bin/sh\nexit 0\n' > stub/nix-locate
+        chmod +x stub/nix-locate
+
+        set +e
+        got=$(./stub-cnf nosuchcommand 2>&1)
+        rc=$?
+        set -e
+
+        [ "$rc" = 127 ] || {
+          echo "the empty-result branch exited $rc, not 127" >&2
+          exit 1
+        }
+        case "$got" in
+          *"nixarchy pkg add"*)
+            echo "the handler offered 'nixarchy pkg add' for a command nothing provides:" >&2
+            printf '%s\n' "$got" >&2
+            exit 1
+            ;;
+        esac
+        case "$got" in
+          *"nothing in nixpkgs provides"*) ;;
+          *)
+            echo "the empty-result branch says nothing useful:" >&2
+            printf '%s\n' "$got" >&2
+            exit 1
+            ;;
+        esac
+        echo "a command nothing provides gets a different answer, not a wrong one"
+
+        # ---- the doctor stops naming a tool the machine does not have ----
+        #
+        # #628 in its smallest form. pkgs/doctor.sh told the user to run
+        # `nix-locate` at the exact moment they were already stuck, and
+        # nothing installed it. The advice is only worth keeping if the
+        # command is there, so this asserts the pair rather than either half
+        # -- the same shape as pkgs/omarchy's runtime list (AGENTS.md §2).
+        if grep -q 'nix-locate' "$vm/sw/bin/nixarchy-doctor"; then
+          [ -x "$vm/sw/bin/nix-locate" ] || {
+            echo "nixarchy-doctor names nix-locate and the machine does not have it:" >&2
+            echo "  that is advice a stuck user cannot act on -- #628" >&2
+            exit 1
+          }
+          echo "the doctor names nix-locate, and nix-locate is on the machine"
+        else
+          echo "nixarchy-doctor no longer names nix-locate; nothing to pair"
+        fi
+
+        # ---- #623: what actually lands in each agent's file --------------
+        #
+        # The generated configs, greped as files. Each is a store path named
+        # inside an activation script, and $mcpActivations carries them here
+        # as build inputs -- so these are the bytes a real activation would
+        # merge in, not a restatement of the expression that made them.
+        claude=$(printf '%s' "$mcpActivations" |
+          grep -o '/nix/store/[0-9a-z]*-nixarchy-mcp-claude.json' | head -n 1)
+        codex=$(printf '%s' "$mcpActivations" |
+          grep -o '/nix/store/[0-9a-z]*-nixarchy-mcp-codex.toml' | head -n 1)
+        opencode=$(printf '%s' "$mcpActivations" |
+          grep -o '/nix/store/[0-9a-z]*-nixarchy-mcp-opencode.json' | head -n 1)
+
+        for pair in "$claude:claude" "$codex:codex" "$opencode:opencode"; do
+          f=''${pair%:*}
+          who=''${pair#*:}
+          [ -n "$f" ] && [ -e "$f" ] || {
+            echo "no generated MCP config reached the $who activation" >&2
+            exit 1
+          }
+          grep -q 'mcp-nixos' "$f" || {
+            echo "the $who MCP config does not name mcp-nixos:" >&2
+            cat "$f" >&2
+            echo "  an empty server block is what a misspelled package attribute" >&2
+            echo "  produces, and it fails silently inside the agent" >&2
+            exit 1
+          }
+        done
+
+        # The three KEYS, which are the whole reason mcp-servers-nix is an
+        # input rather than three toJSON calls. Claude Code reads mcpServers,
+        # Codex reads mcp_servers, opencode reads mcp with the command as an
+        # array -- a config written in one agent's shape is invisible in the
+        # other two, with no error anywhere.
+        grep -q '"mcpServers"' "$claude" || {
+          echo "the Claude Code config has no mcpServers key:" >&2
+          cat "$claude" >&2
+          exit 1
+        }
+        grep -q '^\[mcp_servers\.nixos\]' "$codex" || {
+          echo "the Codex config has no [mcp_servers.nixos] table:" >&2
+          cat "$codex" >&2
+          exit 1
+        }
+        grep -q '"mcp"' "$opencode" || {
+          echo "the opencode config has no mcp key:" >&2
+          cat "$opencode" >&2
+          exit 1
+        }
+        echo "each agent gets the server in the shape that agent reads"
+
+        # ---- #630: what nixd is told, in each editor's own file ----------
+        zedjson=$(printf '%s' "$nixdActivationScripts" |
+          grep -o '/nix/store/[0-9a-z]*-nixarchy-zed-nixd.json' | head -n 1)
+        helixtoml=$(printf '%s' "$nixdActivationScripts" |
+          grep -o '/nix/store/[0-9a-z]*-nixarchy-helix-nixd.toml' | head -n 1)
+        vscodejson=$(printf '%s' "$nixdActivationScripts" |
+          grep -o '/nix/store/[0-9a-z]*-nixarchy-vscode-nixd.json' | head -n 1)
+
+        for f in "$zedjson" "$helixtoml" "$vscodejson"; do
+          [ -n "$f" ] && [ -e "$f" ] || {
+            echo "an editor's nixd configuration did not reach its activation" >&2
+            exit 1
+          }
+          # The one thing that makes this a distro feature rather than a
+          # snippet: the file names THIS machine's flake and THIS machine's
+          # attribute. A nixd told neither completes nothing that matters.
+          grep -q 'nixosConfigurations.testbox.options' "$f" || {
+            echo "$f does not tell nixd which configuration to evaluate:" >&2
+            cat "$f" >&2
+            echo "  without it nixd completes nixpkgs and no NixOS option at all" >&2
+            exit 1
+          }
+          grep -q 'home-manager.users.type.getSubOptions' "$f" || {
+            echo "$f does not reach home-manager's options:" >&2
+            cat "$f" >&2
+            exit 1
+          }
+        done
+
+        # And each editor's own spelling, which is where this silently does
+        # nothing if it is wrong. Zed wants initialization_options and a
+        # languages entry, Helix wants a [[language]] row pointing at the
+        # server it just defined, and VSCode's nix.* keys belong to the Nix
+        # IDE extension rather than to the editor.
+        grep -q 'initialization_options' "$zedjson" || {
+          echo "the Zed config does not use initialization_options:" >&2
+          cat "$zedjson" >&2
+          exit 1
+        }
+        grep -q '"Nix"' "$zedjson" || {
+          echo "the Zed config never points the Nix language at nixd:" >&2
+          cat "$zedjson" >&2
+          exit 1
+        }
+        grep -q '^\[\[language\]\]' "$helixtoml" || {
+          echo "the Helix config defines a server and never uses it:" >&2
+          cat "$helixtoml" >&2
+          exit 1
+        }
+        grep -q 'nix.serverPath' "$vscodejson" || {
+          echo "the VSCode config has no nix.serverPath:" >&2
+          cat "$vscodejson" >&2
+          exit 1
+        }
+        grep -q '/bin/nixd' "$vscodejson" || {
+          echo "the VSCode config's serverPath is not a nixd:" >&2
+          cat "$vscodejson" >&2
+          echo "  the extension spawns the server itself and does not read the" >&2
+          echo "  login shell's PATH, so a bare name would find nothing" >&2
+          exit 1
+        }
+        echo "every editor is told where the flake is, in its own spelling"
 
           touch $out
       ''

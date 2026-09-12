@@ -277,6 +277,17 @@ Two other ways a check stops checking, both found in one week:
   there. That happened here twice: once discarding pushed work (recoverable
   from the remote), once rebasing the wrong branch. If something else may be
   driving the tree, `git worktree add` and work there.
+- **`git checkout -- <path>` restores the INDEX, not the commit.** So a
+  break-it-and-watch-it-fail loop (§1) that does `git add -A` before running
+  the check — which a flake evaluation requires, since it sees only tracked
+  files — and then reverts with `git checkout -- modules`, restores the
+  *break*. It looks like it worked: git reports nothing, the file is
+  "restored", and the next iteration starts from the broken tree. Four
+  deliberate breaks accumulated silently that way here, and the fifth run's
+  failure was read as a fifth bug. `git checkout HEAD -- <path>`, or copy the
+  files aside before you touch them — and commit a known-good baseline before
+  starting the loop, so there is something to check out of.
+
 - **`find` does not follow the `result` symlink.** `find "$out" -name X`
   where `$out` is `./result` returns nothing, silently. Use `find -L`.
   `readme-counts.sh` counted zero skills this way, and only failed loudly

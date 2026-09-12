@@ -41,6 +41,115 @@ let
   # there is no NixOS module to have set it.
   defaultAgent = osConfig.programs.nixarchy.defaultAgent or null;
 
+  # #623 and #630, read across from the NixOS side for the same reason
+  # `localAi` above is: these are machine decisions -- a package installed, a
+  # language server on PATH -- whose effect is a file in somebody's home. A
+  # second option here would be a second answer to the same question.
+  #
+  # `or` defaults throughout, because a standalone home-manager user has no
+  # NixOS module to have set any of them and every block below must then be
+  # inert.
+  mcpEnabled = osConfig.programs.nixarchy.mcp or false;
+  languageServer = osConfig.programs.nixarchy.languageServer or false;
+  nixdSettings = osConfig.programs.nixarchy.nixdSettings or { };
+
+  # The Nix IDE extension's half of the same settings, shared by VSCode and
+  # Cursor because they are the same editor with two config directories.
+  vscodeNixdSettings = pkgs.writeText "nixarchy-vscode-nixd.json" (
+    builtins.toJSON {
+      "nix.enableLanguageServer" = true;
+      "nix.serverPath" = lib.getExe pkgs.nixd;
+      "nix.serverSettings".nixd = nixdSettings;
+      "nix.formatterPath" = lib.getExe pkgs.nixfmt;
+    }
+  );
+
+  # Whether an app from the Install menu is actually selected. The editor
+  # blocks below are gated on it so that nothing writes a configuration file
+  # for an editor this machine does not have -- an orphan settings.json in
+  # ~/.config/Cursor is indistinguishable, to the person who finds it, from
+  # one they made themselves.
+  appEnabled = name: osConfig.programs.nixarchy.apps.${name}.enable or false;
+
+  # The MCP server declaration, in whichever shape the agent being written to
+  # reads. mcp-servers-nix owns the shapes: `mcpServers` in JSON for Claude
+  # Code, `mcp_servers` in TOML for Codex, `mcp` with the command as an array
+  # and a `type` of "local" for opencode. Three files, one declaration, and no
+  # chance of a key that one agent reads and the other two ignore.
+  mcpConfig =
+    args:
+    inputs.mcp-servers-nix.lib.mkConfig pkgs (
+      {
+        programs.nixos.enable = true;
+      }
+      // args
+    );
+
+  # Merge a generated JSON fragment into a config file the user also owns.
+  #
+  # The same shape as nixarchyOpencodeProvider below it, and for the same
+  # reasons: never a home-manager symlink, because these are files the agent
+  # and the editor both write to at runtime and a read-only store path makes
+  # them fail at the moment somebody clicks something; written to a temp file
+  # and moved, so an interrupted activation cannot leave half a config.
+  #
+  # `.[0] * .[1]` -- jq's `*` is a RECURSIVE object merge, so every key the
+  # file already had survives and only the ones named here are replaced. That
+  # is the difference between adding a server and replacing somebody's agent
+  # configuration.
+  mergeJson =
+    {
+      what,
+      file,
+      json,
+    }:
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      conf="${file}"
+      run mkdir -p "$(dirname "$conf")"
+      [ -s "$conf" ] || echo '{}' > "$conf"
+
+      tmp=$(${pkgs.coreutils}/bin/mktemp)
+      if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
+        run mv "$tmp" "$conf"
+      else
+        rm -f "$tmp"
+        echo "nixarchy: could not merge ${what} into $conf" >&2
+      fi
+    '';
+
+  # The same job for the two TOML files, where there is no jq.
+  #
+  # Appending a table rather than merging one, which is safe TOML precisely
+  # once: a second `[mcp_servers.nixos]` in the same file is a duplicate-key
+  # error, so the guard is the point and not a nicety. Guarded on the table
+  # header rather than on a marker comment of ours, because the thing that
+  # must not be written twice is the table -- including when the user wrote
+  # the first one themselves, in which case theirs is kept and nothing here
+  # touches it.
+  appendToml =
+    {
+      what,
+      file,
+      table,
+      toml,
+    }:
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      conf="${file}"
+      run mkdir -p "$(dirname "$conf")"
+      [ -e "$conf" ] || : > "$conf"
+
+      if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
+        echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+      else
+        {
+          echo ""
+          echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
+          echo "# programs.nixarchy in your configuration decides whether it comes back."
+          ${pkgs.coreutils}/bin/cat ${toml}
+        } >> "$conf"
+      fi
+    '';
+
   # Same shape as localAi just above: declared on the NixOS side
   # (modules/services/boxes.nix), because `machines` names containers that
   # should exist regardless of which user's home-manager config is reading
@@ -690,6 +799,147 @@ in
         tmp=$(${pkgs.coreutils}/bin/mktemp)
         printf '%s\n' ${lib.escapeShellArg defaultAgent} > "$tmp"
         run mv "$tmp" "$agentfile"
+      ''
+    );
+
+    # ---- #623: the NixOS MCP server, in the agents that have one --------
+    #
+    # Three agents, not the four this module seeds skills into. `~/.agents`
+    # and `~/.pi/agent` have no documented MCP configuration file, and a path
+    # invented for them would be a feature that writes a file nothing reads --
+    # the shape §2 of AGENTS.md is about. Named here so the gap is a decision
+    # rather than an oversight; close it the day either tool documents one.
+    home.activation.nixarchyMcpClaude = lib.mkIf mcpEnabled (mergeJson {
+      what = "the NixOS MCP server";
+      # Claude Code's user scope is ~/.claude.json, not a file under
+      # ~/.claude/ -- the directory beside it is where the skills go. It is a
+      # large stateful file the tool rewrites constantly, which is exactly why
+      # this merges into it rather than generating it.
+      file = "${config.home.homeDirectory}/.claude.json";
+      json = mcpConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-mcp-claude.json";
+      };
+    });
+
+    home.activation.nixarchyMcpOpencode = lib.mkIf mcpEnabled (mergeJson {
+      what = "the NixOS MCP server";
+      # The same file nixarchyOpencodeProvider below writes the local model
+      # into, and merged the same way, so the two cannot undo each other.
+      file = "${config.xdg.configHome}/opencode/opencode.json";
+      json = mcpConfig {
+        flavor = "opencode";
+        fileName = "nixarchy-mcp-opencode.json";
+      };
+    });
+
+    home.activation.nixarchyMcpCodex = lib.mkIf mcpEnabled (appendToml {
+      what = "The NixOS MCP server";
+      file = "${config.home.homeDirectory}/.codex/config.toml";
+      table = "mcp_servers.nixos";
+      toml = mcpConfig {
+        flavor = "codex";
+        format = "toml";
+        fileName = "nixarchy-mcp-codex.toml";
+      };
+    });
+
+    # ---- #630: nixd, in the editors the Install menu offers --------------
+    #
+    # Every block is gated on the editor actually being selected. nixd itself
+    # is on PATH from modules/nixos.nix; what these do is the half a user
+    # cannot be expected to write, which is telling it which flake and which
+    # attribute -- see programs.nixarchy.nixdSettings.
+    home.activation.nixarchyNixdZed = lib.mkIf (languageServer && appEnabled "zed") (mergeJson {
+      what = "nixd";
+      file = "${config.xdg.configHome}/zed/settings.json";
+      json = pkgs.writeText "nixarchy-zed-nixd.json" (
+        builtins.toJSON {
+          lsp.nixd.initialization_options = nixdSettings;
+          # Zed ships nil as its Nix default, and a language_servers list
+          # naming only nixd would still leave nil running -- the `!` prefix
+          # is Zed's own way of removing a default, and without it two servers
+          # answer every completion request.
+          languages.Nix.language_servers = [
+            "nixd"
+            "!nil"
+          ];
+        }
+      );
+    });
+
+    # VSCode and Cursor read the same settings file under different product
+    # directories, and both go through the Nix IDE extension -- `nix.*` are
+    # its settings, not the editor's. `nix.serverPath` is an absolute store
+    # path on purpose: the extension spawns the server itself, and it does not
+    # inherit the login shell's PATH when the editor was launched from a
+    # desktop file.
+    home.activation.nixarchyNixdVscode = lib.mkIf (languageServer && appEnabled "vscode") (mergeJson {
+      what = "nixd";
+      file = "${config.xdg.configHome}/Code/User/settings.json";
+      json = vscodeNixdSettings;
+    });
+
+    home.activation.nixarchyNixdCursor = lib.mkIf (languageServer && appEnabled "cursor") (mergeJson {
+      what = "nixd";
+      file = "${config.xdg.configHome}/Cursor/User/settings.json";
+      json = vscodeNixdSettings;
+    });
+
+    # Helix takes its language server configuration as TOML, and what it puts
+    # under `[language-server.nixd.config]` is what it sends as the LSP
+    # initializationOptions -- the same attrset the other three editors get,
+    # spelled in Helix's file.
+    home.activation.nixarchyNixdHelix = lib.mkIf (languageServer && appEnabled "helix") (appendToml {
+      what = "nixd, the Nix language server";
+      file = "${config.xdg.configHome}/helix/languages.toml";
+      table = "language-server.nixd";
+      toml = (pkgs.formats.toml { }).generate "nixarchy-helix-nixd.toml" {
+        language-server.nixd = {
+          command = "nixd";
+          config = nixdSettings;
+        };
+        # A [[language]] entry rather than a table: this is how Helix takes a
+        # per-language override, and without it the `nixd` server defined
+        # above is configured and never used.
+        language = [
+          {
+            name = "nix";
+            language-servers = [ "nixd" ];
+          }
+        ];
+      };
+    });
+
+    # Neovim, through the LazyVim tree this module already seeds. A file of
+    # its own under lua/plugins rather than an edit to one of Omarchy's, so a
+    # user who wants it gone deletes one file -- and written only when it is
+    # absent, for the reason the seed above states: every .lua under
+    # lua/plugins is read as a plugin spec, and clobbering one somebody wrote
+    # is not this module's to do.
+    home.activation.nixarchyNixdNeovim = lib.mkIf (languageServer && cfg.neovim != "off") (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        spec="${config.xdg.configHome}/nvim/lua/plugins/nixd.lua"
+        if [ -d "${config.xdg.configHome}/nvim/lua/plugins" ] && [ ! -e "$spec" ]; then
+          run install -m 0644 ${pkgs.writeText "nixarchy-nvim-nixd.lua" ''
+            -- Written by nixarchy (programs.nixarchy.languageServer).
+            -- Delete this file to be rid of it; nothing here rewrites it.
+            return {
+              {
+                "neovim/nvim-lspconfig",
+                opts = {
+                  servers = {
+                    nixd = {
+                      cmd = { "nixd" },
+                      settings = { nixd = vim.json.decode([==[${builtins.toJSON nixdSettings}]==]) },
+                    },
+                  },
+                },
+              },
+            }
+          ''} "$spec"
+          echo "nixarchy: pointed Neovim at nixd, which knows this machine's flake"
+        fi
       ''
     );
 

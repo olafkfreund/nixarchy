@@ -150,6 +150,57 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The MCP configuration framework, for #623 -- the NixOS MCP server the
+    # coding agents on this desktop get so they stop guessing option names.
+    #
+    # Not carrying the server: `mcp-nixos` is in nixpkgs, and is taken from
+    # there through this flake's own pkgs. What nixpkgs has none of is the
+    # part that is actually hard -- three agents want the same server declared
+    # three different ways. Claude Code wants `mcpServers` in JSON, Codex
+    # wants `mcp_servers` in TOML, opencode wants `mcp` with the command as an
+    # array and a `type` of "local". `lib.mkConfig` knows all three, and a
+    # hand-rolled writer is how a config that works in one agent silently
+    # writes a key the other two never read.
+    #
+    # `follows`, and it matters more here than usual: the server package is
+    # resolved through `servers = nixpkgs.extend <their overlay>`, so with the
+    # follows it is OUR mcp-nixos and without it a second one from a second
+    # nixpkgs -- the buildEnv collision modules/AGENTS.md describes, arriving
+    # by a new route.
+    #
+    # Pinned to a COMMIT because this repository publishes no tags at all
+    # (`git ls-remote --tags` is empty), which is the situation sops-nix and
+    # nixi are already in. Bump it deliberately; never track the branch.
+    mcp-servers-nix = {
+      url = "github:natsukium/mcp-servers-nix/11fe2419e274bb223a86dddc9e4803b01ad359e8";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # The prebuilt nix-index database, for #628 -- `command-not-found` that
+    # answers, and `comma`.
+    #
+    # The reason this is an input rather than `pkgs.nix-index` is the whole
+    # feature: nix-index's own database is built by running `nix-index`, which
+    # walks every store path nixpkgs describes and takes hours. A tool that
+    # answers "which package has this command" only after an afternoon of
+    # indexing is a tool nobody on a fresh install ever gets an answer from.
+    # This repository publishes that database, built weekly against
+    # nixos-unstable, as a fetchable artifact.
+    #
+    # Pinned to one of its weekly TAGS rather than to `main`: the database is
+    # dated by construction, so the pin should say which date, and a branch
+    # would move the closure under every open pull request. The lock bump
+    # moves it.
+    #
+    # `follows`, so the wrapper packages are built against the nixpkgs the
+    # machine is on -- the database is a data file and does not care, but
+    # `comma` and `nix-index` are binaries that would otherwise be a second
+    # copy of what is already in the profile.
+    nix-index-database = {
+      url = "github:nix-community/nix-index-database/2026-09-06-071918";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#221-222
     microvm = {
       url = "github:microvm-nix/microvm.nix/fdfc1821a0eb76e44a13d206b72e6ca6961fbb7c";

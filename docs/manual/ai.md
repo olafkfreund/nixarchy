@@ -70,6 +70,41 @@ flake only changes at a rebuild. An agent that does not know which side of that
 line a request falls on will do the wrong kind of change, and the wrong kind is
 the one that silently does not last.
 
+## The agents are given a server that knows NixOS
+
+Skills tell an agent how this machine is shaped. They cannot tell it whether
+`services.foo.enable` exists — that is a fact about nixpkgs on the day you ask,
+and it is the fact models are worst at. Nix is lazy and untyped, the public
+corpus of it is small, and option names are not guessable, so a confident
+sentence naming an option that does not exist is the normal failure rather than
+an unusual one.
+
+So nixarchy declares [`mcp-nixos`](https://github.com/utensils/mcp-nixos) in the
+agents that can take one. It is an MCP server that answers package and option
+questions against the real sets — nixpkgs, NixOS options, Home Manager and
+nix-darwin — so the answer comes from the index rather than from memory.
+
+Three agents get it, each in the file that agent actually reads:
+
+| agent | file | key |
+|---|---|---|
+| Claude Code | `~/.claude.json` | `mcpServers` |
+| Codex | `~/.codex/config.toml` | `[mcp_servers.nixos]` |
+| opencode | `~/.config/opencode/opencode.json` | `mcp` |
+
+Two of the four skill directories above get nothing, and that is deliberate
+rather than an omission: `~/.agents/skills` is a generic convention with no
+single tool behind it, and Pi documents no MCP configuration file. Writing one
+anyway would put a file on your disk that nothing reads.
+
+Nothing is clobbered. Each file is merged into key by key — a server you
+declared yourself survives, and so does everything else in the file. Turn the
+whole thing off with:
+
+```nix
+programs.nixarchy.mcp = false;
+```
+
 ### Why `omarchy` could not ship as-is
 
 Upstream's skill is written for Arch. It points the agent at

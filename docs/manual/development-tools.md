@@ -19,6 +19,81 @@ you find out at build time.
 Theme matching for VSCode, Cursor, VSCodium and Helix, and _Setup > Defaults >
 Editor_ for the system-wide default, work as upstream describes.
 
+## A language server that already knows your machine
+
+The question a person learning NixOS cannot answer is the same one the agents
+above cannot: *what options exist?* For a human the structural fix is editor
+completion, and the two Nix language servers are not equivalent about it.
+`nil` does keywords, locals and builtins. `nixd` links the real evaluator, so it
+completes NixOS and Home Manager option names **and their defaults** against
+your actual configuration.
+
+nixd's one real weakness is that it has to be told where the flake is and which
+attribute to evaluate — which is precisely the thing a distribution knows and
+you should not have to write down. nixarchy writes it for you, into whichever
+of these editors you selected:
+
+| editor | file | through |
+|---|---|---|
+| VSCode | `~/.config/Code/User/settings.json` | the Nix IDE extension's `nix.*` settings |
+| Cursor | `~/.config/Cursor/User/settings.json` | the same |
+| Zed | `~/.config/zed/settings.json` | `lsp.nixd.initialization_options` |
+| Helix | `~/.config/helix/languages.toml` | `[language-server.nixd]` |
+| Neovim | `~/.config/nvim/lua/plugins/nixd.lua` | an `nvim-lspconfig` spec |
+
+VSCode and Cursor still need the Nix IDE extension itself — extensions are not
+something a NixOS module can put in your editor — but every setting it needs is
+already there when you install it.
+
+An editor you have not selected gets nothing. The Helix and Neovim files are
+written only when they do not already say something about nixd, and the three
+JSON files are merged into rather than replaced, so your own settings survive.
+
+Turn it off with:
+
+```nix
+programs.nixarchy.languageServer = false;
+```
+
+## When a command is not found
+
+The Arch reflex is `pacman -S thing`, and on NixOS it is a dead end at exactly
+the moment you are already stuck. NixOS has a `command-not-found` of its own and
+it cannot help on a flake machine: it reads a database that only the channel
+mechanism ships, so it is either missing or stale and your shell says nothing at
+all.
+
+nixarchy replaces it with one that answers:
+
+```
+$ rg
+rg: command not found. In nixpkgs it comes from:
+  ripgrep
+
+  Run it once:      , rg
+  Keep it:          nixarchy pkg add ripgrep    (then: nixarchy apply)
+```
+
+Both lines are real commands. `,` is [comma](https://github.com/nix-community/comma):
+it fetches the package, runs the thing once, and leaves nothing behind — useful
+when you are not sure you want it. `nixarchy pkg add` writes it into
+`~/.config/nixarchy/apps.nix`, which is the permanent form on a machine whose
+software lives in a file. (`nixarchy try` covers the same ground when you
+already know the package exists; this is for when you do not.)
+
+What makes the answer possible is a prebuilt index. `nix-index` builds its
+database by walking nixpkgs, which takes hours, so nixarchy ships the one
+[nix-index-database](https://github.com/nix-community/nix-index-database)
+publishes weekly instead. `nix-locate` is therefore on your machine and works
+immediately — which is also what `nixarchy doctor` has always assumed when it
+tells you to run it.
+
+Turn it off with:
+
+```nix
+programs.nixarchy.commandNotFound = false;
+```
+
 ## Environments: nixpkgs, not mise
 
 Upstream installs its language runtimes with `mise use --global <lang>@latest`,

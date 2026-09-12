@@ -128,6 +128,100 @@ let
       (_: {
         passthru.providedSessions = [ "omarchy" ];
       });
+  # The prebuilt nix-index database and the two wrappers that read it (#628).
+  #
+  # Through `import <input> { inherit pkgs; }` rather than through the input's
+  # own NixOS module, and the reason is Mode A. `imports` cannot be
+  # conditional, and their module's `programs.nix-index-database.enable`
+  # defaults to TRUE -- so importing it would turn nix-index on for somebody
+  # who imported nixosModules.nixarchy and left programs.nixarchy.enable at
+  # false, which is the one thing this module promises never to do. Taking the
+  # packages and putting them inside our own mkIf costs three lines and keeps
+  # the promise.
+  nixIndexPackages = import inputs.nix-index-database { inherit pkgs; };
+
+  # The `command not found` answer, which is not nix-index's own.
+  #
+  # nix-index's handler ends at `nix shell nixpkgs#foo`. That is the right
+  # sentence on a machine whose software is imperative, and the wrong one
+  # here: this machine's packages live in a file, and an ephemeral shell is
+  # gone at the next prompt. The two lines a stuck beginner needs are the one
+  # that runs it now and the one that writes it down -- `, foo` and
+  # `nixarchy pkg add <attr>`.
+  #
+  # runtimeInputs, not a PATH assumption: writeShellApplication builds a
+  # strict PATH from it, and nix-locate missing at runtime would read as
+  # "nothing provides that command" -- a wrong answer rather than a missing
+  # one, which is the failure this whole feature exists to end.
+  commandNotFound = pkgs.writeShellApplication {
+    name = "nixarchy-command-not-found";
+    runtimeInputs = [
+      nixIndexPackages.nix-index-with-db
+      pkgs.coreutils
+    ];
+    text = ''
+      cmd=''${1:-}
+      [ -n "$cmd" ] || exit 127
+
+      # --top-level keeps the answer to attribute names somebody can actually
+      # write in apps.nix; --minimal drops everything but the name; --type x
+      # and s are executables and symlinks to them, which is what `bin/` holds.
+      hits=$(nix-locate --minimal --no-group --top-level \
+        --type x --type s --whole-name "bin/$cmd" 2>/dev/null | head -n 5 || true)
+
+      if [ -z "$hits" ]; then
+        echo "$cmd: command not found, and nothing in nixpkgs provides bin/$cmd." >&2
+        echo "  nixarchy search $cmd    looks for it by name instead" >&2
+        exit 127
+      fi
+
+      first=$(printf '%s\n' "$hits" | head -n 1)
+
+      echo "$cmd: command not found. In nixpkgs it comes from:" >&2
+      printf '%s\n' "$hits" | while IFS= read -r attr; do
+        [ -n "$attr" ] || continue
+        echo "  $attr" >&2
+      done
+      echo >&2
+      echo "  Run it once:      , $cmd" >&2
+      echo "  Keep it:          nixarchy pkg add $first    (then: nixarchy apply)" >&2
+      exit 127
+    '';
+  };
+
+  # nixd, told where the flake is -- which is the whole of #630.
+  #
+  # These expressions are what a user is otherwise asked to write by hand, out
+  # of two facts they have to know: the path of their flake and the attribute
+  # their machine is under. Both are already in this evaluation, so neither
+  # has to be guessed. Shared with modules/home.nix through
+  # `programs.nixarchy.nixdSettings`, because the settings have to land in
+  # five editors' config files and a second copy would be a second answer.
+  #
+  # builtins.getFlake on a path, not a flake reference: nixd evaluates this in
+  # its own nix, with no flake registry entry for this machine.
+  nixdSettings = {
+    nixpkgs.expr = "import (builtins.getFlake \"${cfg.flake}\").inputs.nixpkgs { }";
+    formatting.command = [ "${lib.getExe pkgs.nixfmt}" ];
+  }
+  # The option expressions name `nixosConfigurations.<host>`, so they need a
+  # host to name. An empty networking.hostName is a real state -- every
+  # nixosTest node has one, and so does a configuration evaluated before the
+  # installer has written a hostname -- and interpolating it produces
+  # `nixosConfigurations..options`, which nixd would evaluate, fail on, and
+  # report as nothing at all. Completion against nixpkgs still works without
+  # this half, so the half that cannot work is left out rather than shipped
+  # broken.
+  // lib.optionalAttrs (config.networking.hostName != "") {
+    options = {
+      nixos.expr = "(builtins.getFlake \"${cfg.flake}\").nixosConfigurations.${config.networking.hostName}.options";
+      # home-manager's options are not a top-level attribute of the system;
+      # they are the per-user submodule's, and getSubOptions is the only way
+      # to reach them from outside an evaluated user. Without this line nixd
+      # completes NixOS options and silently knows nothing about home.*.
+      home-manager.expr = "(builtins.getFlake \"${cfg.flake}\").nixosConfigurations.${config.networking.hostName}.options.home-manager.users.type.getSubOptions []";
+    };
+  };
 in
 {
   imports = [
@@ -526,6 +620,117 @@ in
       '';
     };
 
+    commandNotFound = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Answer `command not found` with the package that carries the command,
+        a way to run it once, and the line that installs it for good.
+
+        The Arch reflex is `pacman -S thing`, and on NixOS it is a dead end at
+        precisely the moment a beginner is already stuck. NixOS' own
+        `programs.command-not-found` cannot help on a flake machine: it reads
+        a database that only the channel mechanism ships, so on every machine
+        this project writes it is either absent or stale and the shell says
+        nothing at all.
+
+        What this turns on instead is `nix-index`, with the PREBUILT database
+        from the nix-index-database input -- the distinction that makes the
+        feature exist rather than being a package nobody can use. nix-index's
+        own index is produced by walking nixpkgs for hours, and an answer that
+        arrives after an afternoon is not an answer to somebody at a prompt.
+
+        It also installs `comma`, so `, somecommand` runs a thing once without
+        installing it, and it replaces the handler's stock advice with this
+        machine's: `nixarchy pkg add <attr>` then `nixarchy apply`, which is
+        the permanent form on a machine whose software lives in a file.
+
+        Turning it off leaves `programs.nix-index` and
+        `programs.command-not-found` exactly as your own configuration has
+        them.
+      '';
+    };
+
+    mcp = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Declare the NixOS MCP server (`mcp-nixos`) in the coding agents this
+        machine already seeds skills into.
+
+        LLMs write bad Nix because the corpus is small, the language is lazy
+        and untyped, and option names are not guessable -- the failure this
+        repository's own AGENTS.md files are full of is an agent confidently
+        naming an option that does not exist. An MCP server answers that
+        question against the real package and option sets rather than against
+        a model's memory of them.
+
+        Three agents get it, and the count is three rather than four on
+        purpose. Claude Code (`~/.claude.json`), Codex (`~/.codex/config.toml`)
+        and opencode (`~/.config/opencode/opencode.json`) each have a
+        documented MCP configuration file, and each wants the same server in a
+        different shape -- which is why the config is generated by
+        mcp-servers-nix rather than written out three times here. The other
+        two skill directories this machine writes, `~/.agents/skills` and
+        `~/.pi/agent/skills`, have no documented MCP configuration file to
+        write, and inventing a path for them would be a feature that silently
+        does nothing.
+
+        Never clobbers: each file is merged into, key by key, so a server you
+        declared yourself survives and nothing else in the file is touched.
+      '';
+    };
+
+    languageServer = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Install `nixd` and point this machine's editors at it, already told
+        where the flake is.
+
+        `nixd` links the real evaluator, so it completes NixOS and Home
+        Manager option names AND their defaults against this machine's actual
+        configuration -- which is the question a person learning NixOS cannot
+        answer and cannot guess. `nil`, the other Nix language server, does
+        keywords, locals and builtins; it cannot tell you that
+        `services.foo.enable` exists.
+
+        nixd's one real weakness is that it has to be told where the flake is
+        and which attribute to evaluate, and that is exactly the thing a
+        distribution knows and a user does not. `programs.nixarchy.flake` and
+        `networking.hostName` are both already here, so the `nixpkgs`,
+        `options.nixos` and `options.home-manager` expressions are written out
+        rather than left as a snippet in a manual for somebody to copy.
+
+        The editors wired are the ones the Install menu offers plus the Neovim
+        configuration this desktop seeds: VSCode and Cursor (through the Nix
+        IDE extension's settings), Zed, Helix and Neovim. Each is written only
+        when that editor is actually selected, and never over a setting you
+        made yourself.
+      '';
+    };
+
+    nixdSettings = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      internal = true;
+      default = { };
+      description = ''
+        The nixd configuration this machine derives from its own flake path
+        and hostname. Derived, not chosen -- which is why it is `internal`
+        rather than `readOnly`: an option default is itself a definition, and
+        `readOnly` counts it, so a read-only option with a default throws
+        "set multiple times" the moment anything defines it. Measured, not
+        assumed.
+
+        It exists as an option rather than as a `let` binding because
+        modules/home.nix is a separate module tree that has to write the same
+        settings into five editors' configuration files, and two copies of an
+        expression that names `nixosConfigurations.<host>` is two answers to
+        the same question -- the failure programs.nixarchy.localAi already
+        avoids by being read across rather than declared twice.
+      '';
+    };
+
   };
 
   config = lib.mkIf cfg.enable {
@@ -582,6 +787,10 @@ in
 
     # Why: modules/AGENTS.md#most-of-what-the-install-menu-offers-is-unfree
     nixpkgs.config = lib.mkIf cfg.allowUnfree (lib.mkDefault { allowUnfree = true; });
+
+    # Derived, not chosen -- see the option. Published here so modules/home.nix
+    # can write the same settings into every editor it configures.
+    programs.nixarchy.nixdSettings = nixdSettings;
 
     nix.settings =
       let
@@ -770,24 +979,62 @@ in
       # mention -- Arch's env-bootstrap and bash_completion -- are both behind
       # `[ -r ... ]` guards, and their jobs are already done by this module and
       # by NixOS respectively.
-      bash.interactiveShellInit = lib.mkIf cfg.bashIntegration ''
-        source ${cfg.package}/share/omarchy/default/bash/rc
-      '';
+      bash.interactiveShellInit = lib.mkMerge [
+        (lib.mkIf cfg.bashIntegration ''
+          source ${cfg.package}/share/omarchy/default/bash/rc
+        '')
+
+        # bash's hook is spelled command_not_found_handle -- no trailing `r`,
+        # unlike zsh's. Getting that wrong defines a function nothing ever
+        # calls, which is silent, so both names are written out here rather
+        # than shared through a variable that would hide the difference.
+        (lib.mkIf cfg.commandNotFound ''
+          command_not_found_handle() {
+            ${lib.getExe commandNotFound} "$1"
+            return $?
+          }
+        '')
+      ];
 
       # The same for zsh, which upstream does not ship. Only when zsh is
       # actually enabled: programs.zsh.interactiveShellInit on a machine with
       # no zsh writes an rc nothing reads, and turning zsh on for someone who
       # did not ask is not this module's business.
-      zsh.interactiveShellInit = lib.mkIf (cfg.shellIntegration && config.programs.zsh.enable) ''
-        source ${cfg.package}/share/omarchy/default/zsh/rc
-      '';
+      zsh.interactiveShellInit = lib.mkMerge [
+        (lib.mkIf (cfg.shellIntegration && config.programs.zsh.enable) ''
+          source ${cfg.package}/share/omarchy/default/zsh/rc
+        '')
+        (lib.mkIf (cfg.commandNotFound && config.programs.zsh.enable) ''
+          command_not_found_handler() {
+            ${lib.getExe commandNotFound} "$1"
+            return $?
+          }
+        '')
+      ];
 
       # fish, same condition. Its rc derives everything from the same bash
       # files rather than translating them, so it tracks upstream the way the
       # other two do.
-      fish.interactiveShellInit = lib.mkIf (cfg.shellIntegration && config.programs.fish.enable) ''
-        source ${cfg.package}/share/omarchy/default/fish/rc
-      '';
+      fish.interactiveShellInit = lib.mkMerge [
+        (lib.mkIf (cfg.shellIntegration && config.programs.fish.enable) ''
+          source ${cfg.package}/share/omarchy/default/fish/rc
+        '')
+        # fish uses an event function, not a name the shell looks up, and it
+        # passes the command as $argv[1].
+        (lib.mkIf (cfg.commandNotFound && config.programs.fish.enable) ''
+          function fish_command_not_found
+            ${lib.getExe commandNotFound} $argv[1]
+          end
+        '')
+      ];
+
+      # NixOS' own command-not-found reads a programs.sqlite that only the
+      # channel mechanism ships. On a flake machine -- every machine this
+      # project writes -- it is absent or stale, so the shell says nothing at
+      # all, which is worse than saying the wrong thing because there is no
+      # symptom to search for. mkDefault: somebody who has a channel and wants
+      # it keeps it by saying so.
+      command-not-found.enable = lib.mkIf cfg.commandNotFound (lib.mkDefault false);
     };
 
     # The resolved half of the flake's safe.directory entry -- see the
@@ -914,6 +1161,28 @@ in
         # the theme: Ice is white for dark themes, Classic black for light.
         bibata-cursors
       ])
+      ++ lib.optionals cfg.commandNotFound [
+        # nix-locate, backed by the prebuilt database rather than by one this
+        # machine would have to spend an afternoon building -- and `comma`,
+        # so `, foo` runs something once. Both wrappers come from the
+        # nix-index-database input; the plain pkgs.comma reads an index that
+        # is not there and answers nothing.
+        nixIndexPackages.nix-index-with-db
+        nixIndexPackages.comma-with-db
+
+        # The handler itself, on PATH rather than only inside the shell hook.
+        # Two reasons, and the second is the load-bearing one: `nixarchy
+        # doctor` and a user can both ask it a question directly, and a check
+        # can RUN it. A handler reachable only through a shell function is one
+        # no evaluation-time check can do more than grep for.
+        commandNotFound
+      ]
+      ++ lib.optionals cfg.languageServer [
+        # The language server itself. The editors are pointed at it by
+        # modules/home.nix, which is where an editor's configuration file
+        # lives; what has to be on PATH is the binary they exec.
+        pkgs.nixd
+      ]
       ++ lib.optionals cfg.preinstalls (
         # Filtered by attribute name rather than by pname: the name someone
         # writes in preinstallsExclude is the one they would look up on

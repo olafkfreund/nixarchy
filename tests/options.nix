@@ -468,6 +468,71 @@ let
           (configWith { browserThemeUser = null; }).systemd.tmpfiles.rules;
     };
 
+    # ---- #622: the cache appears on the NVIDIA path and nowhere else ----
+    cudaCacheSubstituter = {
+      on = builtins.elem cudaUrl nvidiaHost.nix.settings.substituters;
+      # A machine with no NVIDIA card declared. Same option, same default --
+      # the gate is the hardware the configuration claims.
+      off = builtins.elem cudaUrl (configWith { }).nix.settings.substituters;
+    };
+    cudaCacheKey = {
+      on = builtins.elem cudaKey nvidiaHost.nix.settings.trusted-public-keys;
+      off = builtins.elem cudaKey nvidiaDeclined.nix.settings.trusted-public-keys;
+    };
+    # binaryCaches = false has to take this one with it, or "trust neither"
+    # quietly became "trust one of the three".
+    cudaCacheFollowsBinaryCaches = {
+      on = builtins.elem cudaUrl nvidiaHost.nix.settings.substituters;
+      off = builtins.elem cudaUrl cachesDeclined.nix.settings.substituters;
+    };
+
+    # ---- #624: the weights move, and everything that has to move with them --
+    ollamaModelsDir = {
+      on = aiModels.services.ollama.modelsDir == "/mnt/big/ollama/models";
+      off = aiPlain.services.ollama.modelsDir == "/mnt/big/ollama/models";
+    };
+    # The variable the server actually reads, derived by the NixOS module from
+    # the option above. Asserted separately because "the option is set" and
+    # "the process is told" are two claims, and the rename shim between
+    # `models` and `modelsDir` is exactly where they came apart for people.
+    ollamaModelsEnv = {
+      on = (aiModels.systemd.services.ollama.environment.OLLAMA_MODELS or "") == "/mnt/big/ollama/models";
+      off = (aiPlain.systemd.services.ollama.environment.OLLAMA_MODELS or "") == "/mnt/big/ollama/models";
+    };
+    # Without this the unit does not start: ReadWritePaths on a path that does
+    # not exist fails the mount namespace, and the journal blames a path the
+    # configuration plainly names.
+    ollamaModelsDirCreated = {
+      on = hasModelsRule aiModels;
+      off = hasModelsRule aiPlain;
+    };
+    # And the rule needs an owner that exists. A DynamicUser's uid is
+    # allocated at start, so a directory outside the StateDirectory cannot
+    # belong to it.
+    ollamaStaticUser = {
+      on = aiModels.services.ollama.user != null;
+      off = aiPlain.services.ollama.user != null;
+    };
+    hfHomeSessionVar = {
+      on = (aiModels.environment.sessionVariables.HF_HOME or "") == "/mnt/big/huggingface";
+      off = aiPlain.environment.sessionVariables ? HF_HOME;
+    };
+
+    # ---- #625: Open WebUI, opt-in, and inert until it is asked for ----
+    webuiUnit = {
+      on = webuiOn.systemd.services ? open-webui;
+      off = webuiOff.systemd.services ? open-webui;
+    };
+    # Upstream keeps its telemetry-off settings in the option DEFAULT of
+    # `environment`, and an option default is replaced wholesale the moment
+    # anything defines the option. So a module that adds one variable there
+    # turns analytics back on unless it restates them -- silently, which is
+    # why this is a case rather than a comment.
+    webuiTelemetryOff = {
+      on = (webuiOn.services.open-webui.environment.ANONYMIZED_TELEMETRY or "") == "False";
+      off = webuiOff.services.open-webui.environment ? OLLAMA_API_BASE_URL;
+    };
+
     # sops-nix is imported by every nixarchy machine and must do nothing
     # until a secret is declared. See sopsOff/sopsOn below for why this is
     # asserted rather than assumed.
@@ -1048,6 +1113,85 @@ let
     services.ollama.port = 21434;
   };
 
+  # ---- the CUDA cache, and the two things that must stay tied (#622) ----
+  #
+  # `cache.nixos.org` carries no cudaSupport build, so a machine that turns
+  # CUDA on compiles PyTorch. The community cache fixes that and must appear
+  # ONLY where it was asked for: substituters are a merging list, so a cache
+  # that leaks onto every machine leaks silently.
+  #
+  # The NVIDIA signal is `services.xserver.videoDrivers`, because
+  # `hardware.nvidia.enabled` is readOnly and computed from exactly that --
+  # which is also the line the local-ai assertion tells a user to write, so
+  # this asserts the same shape a real machine has.
+  cudaUrl = "https://cache.nixos-cuda.org";
+  cudaKey = "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M=";
+  nvidiaHost = configBeside { services.xserver.videoDrivers = [ "nvidia" ]; };
+  nvidiaDeclined = configBeside {
+    services.xserver.videoDrivers = [ "nvidia" ];
+    programs.nixarchy.cudaCache = false;
+  };
+  # Somebody who declined every cache: cudaCache follows binaryCaches, so this
+  # is the state where a second option would have had to be found and turned
+  # off by hand for the promise to hold.
+  cachesDeclined = configBeside {
+    services.xserver.videoDrivers = [ "nvidia" ];
+    programs.nixarchy.binaryCaches = false;
+  };
+
+  # ---- models off the root filesystem (#624) ----
+  #
+  # The failure this prevents is a full `/`, which on NixOS is also a machine
+  # that cannot rebuild its way out. Four mechanisms, because relocating the
+  # weights takes all four and three of them are invisible: the option
+  # upstream renamed (`modelsDir`, not `models`), the OLLAMA_MODELS the unit
+  # derives from it, the tmpfiles rule without which the unit cannot start at
+  # all, and the static user without which that rule has no owner to name.
+  aiModels = configWith {
+    localAi = {
+      enable = true;
+      allowCpu = true;
+      modelsDir = "/mnt/big/ollama/models";
+      hfHome = "/mnt/big/huggingface";
+    };
+  };
+  aiPlain = configWith {
+    localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+  };
+  # Mode A: a host that had already moved its own models keeps them. modelsDir
+  # is a scalar, so ours is mkDefault and theirs must win.
+  aiModelsBeside = configBeside {
+    programs.nixarchy.localAi = {
+      enable = true;
+      allowCpu = true;
+      modelsDir = "/mnt/big/ollama/models";
+    };
+    services.ollama.modelsDir = "/srv/models";
+  };
+  hasModelsRule =
+    cfg: builtins.any (r: pkgs.lib.hasInfix "/mnt/big/ollama/models" r) cfg.systemd.tmpfiles.rules;
+
+  # ---- Open WebUI over the Ollama that is actually running (#625) ----
+  #
+  # The port is moved on purpose. Open WebUI's own default base URL is
+  # localhost:11434 and this machine's Ollama is not there, which is the whole
+  # reason the row is "bundled" -- the symptom otherwise is a working UI with
+  # an empty model list and nothing on screen about why.
+  webuiOn = configBeside {
+    programs.nixarchy = {
+      localAi = {
+        enable = true;
+        allowCpu = true;
+      };
+      services.open-webui.enable = true;
+    };
+    services.ollama.port = 21434;
+  };
+  webuiOff = configWith { };
+
   # And the group the desktop user gets. This check used to assert the user WAS
   # in `docker`, which was right while the rooted daemon was the default: the
   # group was the only way `docker ps` worked without sudo. The default is now
@@ -1283,6 +1427,25 @@ pkgs.runCommand "nixarchy-options"
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
+    # The two halves of trusting a cache, counted rather than spot-checked: a
+    # machine that trusts a cache it cannot reach still works, and one that
+    # reaches a cache it does not trust builds everything and says nothing.
+    cudaSubstituters = pkgs.lib.concatStringsSep " " nvidiaHost.nix.settings.substituters;
+    cudaKeys = pkgs.lib.concatStringsSep " " nvidiaHost.nix.settings.trusted-public-keys;
+    cudaKeyWanted = cudaKey;
+    # A machine with no NVIDIA card, whose keys nothing else reads. The
+    # substituter half of this is a case above; the KEY half is only visible
+    # here, and it is the quieter failure -- a trusted key for a cache you
+    # never reach changes nothing you can see, and is still this machine
+    # trusting a third party nobody asked it to trust.
+    plainSubstituters = pkgs.lib.concatStringsSep " " (configWith { }).nix.settings.substituters;
+    plainKeys = pkgs.lib.concatStringsSep " " (configWith { }).nix.settings.trusted-public-keys;
+    # The other two caches must survive the change that added a third.
+    modelsDirMine = aiModels.services.ollama.modelsDir;
+    modelsDirTheirs = aiModelsBeside.services.ollama.modelsDir;
+    modelsRule = pkgs.lib.concatStringsSep " | " aiModels.systemd.tmpfiles.rules;
+    modelsOwner = aiModels.services.ollama.user;
+    webuiBaseUrl = webuiOn.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     dockerRootedGroups = pkgs.lib.concatStringsSep " " dockerRootedGroups;
     dockerRootlessDefault = pkgs.lib.boolToString dockerRootlessDefault;
@@ -1526,6 +1689,64 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "local-ai yields the Ollama port and the agents follow it"
+
+          # ---- the CUDA cache: substituter and key, or neither -----------
+          case " $cudaSubstituters " in
+            *" https://nixarchy.cachix.org "*) ;;
+            *) echo "adding the CUDA cache dropped the ones that were there:" >&2
+               echo "  substituters = $cudaSubstituters" >&2
+               exit 1 ;;
+          esac
+          case " $cudaKeys " in
+            *" $cudaKeyWanted "*) ;;
+            *) echo "the CUDA substituter is trusted by no key:" >&2
+               echo "  keys = $cudaKeys" >&2
+               echo "an untrusted substituter is silently skipped, so this is" >&2
+               echo "a machine that compiles CUDA while looking configured." >&2
+               exit 1 ;;
+          esac
+          echo "the CUDA cache arrives with its key and beside the other two"
+
+          case " $plainSubstituters $plainKeys " in
+            *cache.nixos-cuda.org*)
+               echo "a machine with no NVIDIA card was given the CUDA cache:" >&2
+               echo "  substituters = $plainSubstituters" >&2
+               echo "  keys         = $plainKeys" >&2
+               echo "substituters and keys are merging lists, so this arrives" >&2
+               echo "with no conflict and nothing on screen to say it did." >&2
+               exit 1 ;;
+          esac
+          echo "a machine with no NVIDIA card is given neither half of it"
+
+          # ---- the weights, where they were asked for --------------------
+          [ "$modelsDirMine" = "/mnt/big/ollama/models" ] || {
+            echo "modelsDir did not reach services.ollama: $modelsDirMine" >&2
+            exit 1
+          }
+          [ "$modelsDirTheirs" = "/srv/models" ] || {
+            echo "local-ai overrode a models directory the user had set:" >&2
+            echo "  services.ollama.modelsDir is $modelsDirTheirs, not /srv/models" >&2
+            echo "modelsDir is a scalar and must be lib.mkDefault." >&2
+            exit 1
+          }
+          case "$modelsRule" in
+            *"d /mnt/big/ollama/models "*"$modelsOwner"*) ;;
+            *) echo "the models directory is created for nobody in particular:" >&2
+               echo "  rules = $modelsRule" >&2
+               echo "  ollama runs as $modelsOwner" >&2
+               exit 1 ;;
+          esac
+          echo "the models directory is relocated, created, and owned by the server"
+
+          # ---- Open WebUI dials the Ollama that is actually running ------
+          [ "$webuiBaseUrl" = "http://127.0.0.1:21434" ] || {
+            echo "Open WebUI was pointed somewhere Ollama is not:" >&2
+            echo "  OLLAMA_API_BASE_URL is $webuiBaseUrl, not http://127.0.0.1:21434" >&2
+            echo "its own default is localhost:11434, which is why this module" >&2
+            echo "exists: the symptom otherwise is an empty model list." >&2
+            exit 1
+          }
+          echo "Open WebUI follows the Ollama port the machine actually uses"
 
           case " $dockerGroups " in
             *" docker "*)

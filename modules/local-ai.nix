@@ -1,12 +1,25 @@
 {
   config,
   lib,
+  options,
   pkgs,
   ...
 }:
 let
   cfg = config.programs.nixarchy;
   aiCfg = cfg.localAi;
+
+  # What this nixpkgs calls the models directory, asked rather than written
+  # down. nixos-26.05 calls it `services.ollama.models`; unstable renamed it to
+  # `modelsDir` and keeps `models` only as a rename shim. Writing either name
+  # breaks one of the two, and in opposite ways: `modelsDir` is an eval error
+  # on stable ("The option ... does not exist", which is what checks.stable-eval
+  # caught), and `models` on unstable is accepted and WARNS, which
+  # checks.config-warnings fails on -- so the working name is the one that is
+  # there. Same shape as the hyprland-preview-share-picker guard in
+  # modules/nixos.nix: prefer what unstable has, so nothing changes for the
+  # people on it.
+  modelsAttr = if options.services.ollama ? modelsDir then "modelsDir" else "models";
 
   # Which Ollama to build against, decided from what this machine has ALREADY
   # declared about its GPU rather than by probing for one.
@@ -196,6 +209,59 @@ in
       description = "Port the Ollama server listens on.";
     };
 
+    modelsDir = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/mnt/data/ollama/models";
+      description = ''
+        Where Ollama keeps model weights, or null for the NixOS default
+        (`/var/lib/ollama/models`, under the service's StateDirectory).
+
+        Set this when `/` is small and the disk with room is somewhere else.
+        Weights are multi-gigabyte mutable blobs -- one 70b model is larger
+        than many root filesystems -- and a full root on NixOS is also a
+        machine that cannot rebuild its way out of being full.
+
+        Underneath it is `services.ollama.modelsDir` on unstable and
+        `services.ollama.models` on nixos-26.05 -- the option was renamed, and
+        this writes whichever name your nixpkgs declares, because on stable the
+        new name is an evaluation error and on unstable the old one is an
+        alias that warns. The unit's `OLLAMA_MODELS` is derived from it by the
+        NixOS module either way, so the server and anything reading its
+        environment agree by construction.
+
+        Two things happen with it that are worth knowing before you look for
+        them. The Ollama service runs under `DynamicUser` by default, whose uid
+        is not stable, so a directory outside its StateDirectory cannot be
+        owned by it -- setting this therefore also asks for a static `ollama`
+        user (at mkDefault) and a tmpfiles rule that creates the directory
+        owned by it. And the path is a systemd mount-namespace exception:
+        upstream puts it in `ReadWritePaths`, so anyone adding hardening or
+        impermanence of their own has to grant it there too.
+      '';
+    };
+
+    hfHome = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/mnt/data/huggingface";
+      description = ''
+        `HF_HOME` for this machine's interactive users, or null to leave the
+        Hugging Face default (`~/.cache/huggingface`) alone.
+
+        The other half of the same disk problem as modelsDir, for everything
+        that is not Ollama: `huggingface-cli download`, a transformers script,
+        a diffusers pipeline. That cache grows in the background of a workflow
+        nobody is watching, inside a home directory that is usually on the
+        root filesystem.
+
+        A session variable, so it reaches a shell, a Python process started
+        from one, and anything they launch -- it is not the Open WebUI
+        service's `HF_HOME`, which upstream puts under
+        `services.open-webui.stateDir` and which moves with that option.
+      '';
+    };
+
     pullModel = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -271,6 +337,7 @@ in
       package = lib.mkDefault ollamaPackage;
       host = lib.mkDefault aiCfg.host;
       port = lib.mkDefault aiCfg.port;
+
       loadModels = lib.optional aiCfg.pullModel aiCfg.model;
 
       environmentVariables = {
@@ -290,6 +357,42 @@ in
       // lib.optionalAttrs (aiCfg.contextWindow != null) {
         OLLAMA_CONTEXT_LENGTH = toString aiCfg.contextWindow;
       };
+    }
+    # Relocation, only when asked for -- and under whichever name this nixpkgs
+    # declares, see modelsAttr above. optionalAttrs rather than mkIf on the
+    # value, because an absent DEFINITION is what leaves upstream's own default
+    # (`${config.services.ollama.home}/models`) computing itself, and because a
+    # dynamic attribute name cannot be written inside the literal above.
+    #
+    # The user is named for the same reason: Ollama runs under DynamicUser,
+    # whose uid is allocated at start -- fine for a StateDirectory systemd
+    # creates and chowns, impossible for a path on another filesystem that has
+    # to exist first. mkDefault, so a machine that already runs Ollama as its
+    # own user keeps that user and the tmpfiles rule below follows whoever won.
+    // lib.optionalAttrs (aiCfg.modelsDir != null) {
+      ${modelsAttr} = lib.mkDefault aiCfg.modelsDir;
+      user = lib.mkDefault "ollama";
+    };
+
+    # The directory itself. Not systemd.tmpfiles.settings: `rules` is what the
+    # rest of this repo writes and they merge identically. A list, so plain
+    # assignment -- mkDefault on a merging type drops our contribution the
+    # moment the machine has a rule of its own.
+    #
+    # The owner is read back off services.ollama rather than hardcoded, so a
+    # host that set its own user gets a directory that user can write. Without
+    # this the unit does not start at all: ReadWritePaths on a path that does
+    # not exist fails the mount namespace, and the journal says "No such file
+    # or directory" about a path the configuration plainly names.
+    systemd.tmpfiles.rules = lib.optional (
+      aiCfg.modelsDir != null
+    ) "d ${aiCfg.modelsDir} 0750 ${ollamaCfg.user} ${ollamaCfg.group} -";
+
+    # For the user's own tools, not for the service -- the Ollama unit gets
+    # OLLAMA_MODELS from modelsDir, and Open WebUI has its own HF_HOME under
+    # its stateDir. attrset, so plain assignment for the reason above.
+    environment.sessionVariables = lib.optionalAttrs (aiCfg.hfHome != null) {
+      HF_HOME = aiCfg.hfHome;
     };
 
     environment.systemPackages =
@@ -297,6 +400,25 @@ in
       ++ lib.optional (builtins.elem "pi" aiCfg.agents) pkgs.pi-coding-agent;
 
     assertions = [
+      # Both paths reach systemd, which resolves nothing relative: a tmpfiles
+      # rule with a relative path is rejected at activation, and a relative
+      # OLLAMA_MODELS is resolved against the unit's WorkingDirectory, which
+      # is the state directory somebody was trying to move off. Caught at
+      # evaluation instead, where it is one line to fix.
+      {
+        assertion = aiCfg.modelsDir == null || lib.hasPrefix "/" aiCfg.modelsDir;
+        message = ''
+          programs.nixarchy.localAi.modelsDir must be an absolute path, and is
+          "${aiCfg.modelsDir}".
+        '';
+      }
+      {
+        assertion = aiCfg.hfHome == null || lib.hasPrefix "/" aiCfg.hfHome;
+        message = ''
+          programs.nixarchy.localAi.hfHome must be an absolute path, and is
+          "${aiCfg.hfHome}".
+        '';
+      }
       {
         assertion = acceleration != "cpu" || aiCfg.allowCpu;
         message = ''

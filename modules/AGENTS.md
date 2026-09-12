@@ -40,6 +40,16 @@ working:
   finished.
 - `writeShellApplication` builds a strict PATH from `runtimeInputs`. A command
   a script calls and does not declare is a runtime failure no build catches.
+- **`lib.mkIf false` does not hide a definition from the option tree.** Setting
+  an option nixpkgs-unstable has and nixos-26.05 does not — `services.ollama
+  .modelsDir`, renamed from `models` — fails `checks.stable-eval` with "The
+  option ... does not exist", *with the condition printed as `false`*. The
+  module system attaches the definition to the path before any condition is
+  evaluated, so the guard has to be on the NAME: pick it off the `options`
+  argument (`if options.services.ollama ? modelsDir then … else …`) the way
+  `modules/nixos.nix` guards `hyprland-preview-share-picker` on `pkgs ?`. And
+  do not "fix" it by writing the old name on unstable — a rename shim accepts
+  the definition and warns, which `checks.config-warnings` fails on.
 - The rest of this file is the reasoning that used to sit in the code, moved
   here so the modules read as code. Each one is reachable from a `# Why:`
   pointer at the line it explains — follow the anchor, and if you change the

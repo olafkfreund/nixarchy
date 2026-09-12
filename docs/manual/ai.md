@@ -185,6 +185,90 @@ one question through an agent took five round trips and twenty-five minutes and
 still did not finish. Nothing was misconfigured — an agent simply needs several
 turns and each turn is minutes. Set `allowCpu = true` if you want it anyway.
 
+### The CUDA cache, on a machine with an NVIDIA card
+
+`cache.nixos.org` carries no `cudaSupport` build — the NixOS Foundation does not
+redistribute CUDA binaries — so a machine that turns CUDA on compiles PyTorch
+from source, and `magma-cuda-static` alone is around a 10GB closure. nixarchy
+adds the community cache for you, on a machine whose configuration declares an
+NVIDIA card and nowhere else:
+
+```
+https://cache.nixos-cuda.org
+```
+
+`programs.nixarchy.cudaCache = false` declines it and builds locally instead. It
+follows `programs.nixarchy.binaryCaches`, so somebody who turned all the caches
+off does not have to find this one separately. Note that the URL moved off
+Cachix in November 2025 — any guide naming `cuda-maintainers.cachix.org` is
+pointing at a stale cache.
+
+**And the trap, which costs more than the cache saves.** Narrowing
+`cudaCapabilities` to your own card, usually with `cudaForwardCompat = false`,
+is real advice that genuinely cuts closure size and compile time — and it takes
+you **off** this cache, because what the cache holds is the *default* capability
+set. It is a source-build optimisation, and on a machine that could have
+substituted everything it makes the rebuild strictly slower. Leave the
+capabilities alone unless you have already decided to build locally.
+
+There is no ROCm equivalent: `rocmSupport` means local builds, full stop. The
+vulkan Ollama build is how an AMD machine sidesteps that, and `acceleration =
+"vulkan"` is how you ask for it.
+
+### Models on the big disk
+
+Weights are multi-gigabyte mutable blobs, and the defaults put them on `/` —
+`/var/lib/ollama/models` for Ollama, `~/.cache/huggingface` for everything
+else. A laptop with a small root and a big second disk fills the root quietly,
+and a full `/` on NixOS is also a machine that cannot rebuild its way out.
+
+```nix
+programs.nixarchy.localAi = {
+  enable = true;
+  modelsDir = "/mnt/data/ollama/models";
+  hfHome = "/mnt/data/huggingface";
+};
+```
+
+`modelsDir` writes `services.ollama.modelsDir` on unstable and
+`services.ollama.models` on nixos-26.05 — nixpkgs renamed it, and nixarchy uses
+whichever name your nixpkgs declares, because on stable the new name does not
+exist and on unstable the old one is an alias that warns. The unit's `OLLAMA_MODELS` is derived from it, so the server and
+anything reading its environment cannot disagree. Setting it also asks for a
+static `ollama` user and creates the directory owned by it: the service runs
+under `DynamicUser` by default, whose uid is allocated at start, so a directory
+outside its state directory has no owner to be given to — and a path in
+`ReadWritePaths` that does not exist fails the unit's mount namespace outright.
+
+`hfHome` is a session variable, for `huggingface-cli`, a transformers script,
+anything you start from a shell. Open WebUI has its own `HF_HOME` under
+`services.open-webui.stateDir`, which is the option to move for that one. If you
+add systemd hardening or impermanence of your own, both paths need naming there
+too — people hit this with `InaccessiblePaths` derived from `/var/lib/*`.
+
+### A chat window over it
+
+```nix
+programs.nixarchy.services.open-webui.enable = true;
+```
+
+Then <http://localhost:8080>. It is off by default like everything else in the
+services catalogue, and it is a thin layer over `services.open-webui`: port,
+host, `stateDir` and `openFirewall` stay upstream's options, because those are
+the names every wiki page uses. What nixarchy adds is the part that goes wrong
+unattended — the UI is pointed at the Ollama this machine actually runs, rather
+than at its own built-in guess of `localhost:11434`, which on a host that moved
+the port produces a working UI with an empty model list and no error anywhere.
+
+It refuses to build with no Ollama on the machine, and it keeps Open WebUI's
+telemetry-off settings, which are easy to lose: upstream keeps them in the
+*default* of `services.open-webui.environment`, and an option default is
+replaced wholesale the moment anything defines the option.
+
+**The first visitor becomes the administrator.** Leave it on loopback and reach
+it over Tailscale; if you do open the firewall, log in once first. nixarchy warns
+at build time when `openFirewall` is on.
+
 `nixarchy local-ai` pulls the model, reads the actual VRAM, recommends a size
 and tells you the measured tokens per second, which is a better basis for
 expectation than a table. It will not recommend anything below 4b: `qwen3:1.7b`

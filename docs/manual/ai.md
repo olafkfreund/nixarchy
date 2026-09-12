@@ -206,6 +206,33 @@ It is offered once as a notification after an agent is set up, and a
 configuration that is already committed and pushed marks itself done rather than
 asking again.
 
+## Giving an agent less than the whole machine
+
+Two things this desktop has that are worth knowing before you hand an agent a
+terminal, because neither is advertised and both are free.
+
+**An agent's damage to the system is one command to undo.**
+
+```sh
+sudo nixos-rebuild --rollback switch
+```
+
+or the previous generation in the boot menu. Whatever it added, removed or
+reconfigured *through the system's configuration* is gone, atomically. It
+does not touch your home directory, your working tree, or anything installed
+imperatively — but it is why "let it edit my configuration" is a much smaller
+bet here than on a distribution where the change is not reversible.
+
+**And it can be given a machine instead of yours.** `nixarchy vm create
+review-bot --template agent` boots a MicroVM whose only view of this machine
+is the read-only `/nix/store` and one shared directory — and whose network
+reaches nothing but the hosts you list, one per line, in the VM's own
+`allow-hosts` file. Your model endpoint and your git remote, and nothing
+else; not even DNS for anything else.
+
+[Sandboxes ▸ Running an agent that cannot phone home](sandboxes#running-an-agent-that-cannot-phone-home)
+is the page for it, including an honest list of what it does not contain.
+
 ## Pointing your own AI at nixarchy
 
 Ask any assistant about nixarchy cold and it answers from what it absorbed

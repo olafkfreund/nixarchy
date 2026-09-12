@@ -67,6 +67,14 @@
     note = "Rootless-capable podman with Docker compatibility. /var/lib/containers is a 20 GiB volume that survives a restart; the rest of the root filesystem does not.";
   };
 
+  # The one template whose point is what it CANNOT do. Note says so in the
+  # same register as every other note here: what you get, and what it costs.
+  agent = {
+    label = "Agent";
+    module = ../modules/microvm/templates/agent.nix;
+    note = "Shell plus git and curl, and an egress allowlist: nothing in the guest can reach the network except through a local proxy, which only permits the hosts named one per line in the VM's own 'allow-hosts' file. HTTPS only -- an ssh:// git remote does not pass.";
+  };
+
   persistent = {
     label = "Persistent";
     module = ../modules/microvm/templates/persistent.nix;

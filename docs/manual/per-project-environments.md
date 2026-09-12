@@ -58,7 +58,7 @@ not trust that cache; the environments still work, they are just built locally.
 ## What `nixarchy dev init` writes
 
 `nixarchy dev init` with no argument lists the presets — `react`, `node`,
-`typescript`, `python`, `go`, `rust`. With one, it runs devenv's own
+`typescript`, `python`, `ml`, `jupyter`, `go`, `rust`. With one, it runs devenv's own
 `devenv init`, replaces the commented example language line in the scaffold
 with the preset's options, and runs `devenv allow` for you.
 
@@ -82,6 +82,76 @@ The first activation needs the network and takes a while: the inputs
 `devenv.nix`; it only scaffolds. Against a file you have been working in it
 prints the preset's two or three lines for you to paste, because there is no
 honest way to guess where in your file they belong.
+
+## The two machine-learning presets
+
+`ml` and `jupyter` are both Python and are deliberately not the same preset,
+because the two questions have different right answers on NixOS.
+
+### `nixarchy dev init ml`
+
+uv, and the GPU driver on `LD_LIBRARY_PATH`. The wheels an ML project
+installs — torch, jax, onnxruntime — ship their own CUDA or ROCm runtime
+*inside the wheel*; the one thing they cannot bundle is the driver, and on
+NixOS `libcuda.so.1` lives in `/run/opengl-driver/lib`, which is on no
+default search path. That is the whole of the machine-specific problem.
+
+```sh
+nixarchy dev init ml
+cd .                       # or re-enter the directory
+uv venv
+uv pip install torch       # CUDA wheels, from PyPI
+```
+
+For AMD, the same command against ROCm's index:
+
+```sh
+uv pip install torch --index-url https://download.pytorch.org/whl/rocm6.3
+```
+
+**The correction this preset exists to carry: `nix-ld` does not help a
+nixpkgs Python.** This is the most common "I did what the wiki said and it
+still fails" report, and the reason is mechanical. nix-ld works by putting a
+loader where a foreign binary expects one and reading `NIX_LD` and
+`NIX_LD_LIBRARY_PATH` out of the environment. A `python3` from nixpkgs is
+patched to use Nix's own loader and never consults either variable — so
+enabling nix-ld, or growing `programs.nix-ld.libraries`, changes nothing
+about what it can import. Only an **unpatched** interpreter is in a position
+to read them, and the one you have is the CPython uv downloads for itself.
+That is why the preset sets
+
+```nix
+env.UV_PYTHON_PREFERENCE = "only-managed";
+```
+
+rather than letting uv reuse the nixpkgs interpreter sitting next to it.
+
+Two things the preset deliberately does not do. It does not pull in nixpkgs'
+`cudaPackages`: those exist to *build* CUDA software from source and cost an
+unfree rebuild of a large part of the world, which is not what installing a
+wheel needs. And it does not use **poetry2nix**, which is legacy — its own
+README points at uv2nix, which self-describes as experimental with breaking
+API changes. Reach for uv2nix when something must consume the project as a
+Nix package; not for a project you are starting.
+
+### `nixarchy dev init jupyter`
+
+JupyterLab, and nothing clever:
+
+```nix
+languages.python.package = pkgs.python3.withPackages (ps: [ ps.jupyterlab ... ]);
+processes.jupyter.exec = "jupyter lab --no-browser";
+```
+
+`devenv up` starts the server; `devenv.lock` pins it.
+
+The sharp part is what this is *not*. Search for Jupyter on Nix and the first
+answer is **jupyenv** (formerly jupyterWith). It is unmaintained and does not
+track current nixpkgs, so the evening goes: find it, fight its flake inputs,
+fail, and conclude that Jupyter on NixOS is hard. It is not hard.
+`python3.withPackages` with `jupyterlab` in it is the entire answer, and
+`languages.python.package` is where devenv takes one. Add kernels by adding
+packages to that list.
 
 ## What is promised, and what is not
 

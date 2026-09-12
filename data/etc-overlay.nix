@@ -2,9 +2,12 @@
 #
 # Omarchy's Arch package copies `etc/` straight into `/etc`. This port copies
 # the same tree into `$out/share/omarchy/etc` -- the `cp -r .` in
-# pkgs/omarchy/default.nix -- and NOTHING INSTALLS IT. Not one of these 40
-# files is read on a running nixarchy machine, and until this file existed
-# nothing in the repository said so, or said what took each one's place.
+# pkgs/omarchy/default.nix -- and, until #649, NOTHING INSTALLED IT. Not one
+# of these 40 files was read on a running nixarchy machine, and until this
+# file existed nothing in the repository said so, or said what took each
+# one's place. Now the rows classed `installed` are the exception, and this
+# file is what installs them: modules/nixos.nix reads it and declares
+# environment.etc.<path> for each, pointing at the shipped file.
 #
 # So the risk is not that a file is ignored. It is that a file is ignored
 # WITHOUT A DECISION: upstream adds a sysctl, a modprobe quirk, a sudoers
@@ -22,22 +25,28 @@
 # ## The classes
 #
 #   native      a NixOS option in modules/ declares the equivalent
+#   installed   the file itself, at its upstream path, through environment.etc
+#               in modules/nixos.nix -- which reads this class from this file
 #   seed        modules/home.nix seeds it per user
 #   covered     another mechanism satisfies it -- the reason names which
 #   na          Arch-stack specific, nothing here to answer it
 #   divergent   meaningful on NixOS, deliberately NOT adopted
 #
 # `divergent` is not in #642's four classes, and is the reason this file is
-# worth reading. Seventeen of these are neither native, nor covered, nor
+# worth reading. Fourteen of these are neither native, nor covered, nor
 # inapplicable: they would do something here and we do not do it. Calling those
 # `na` would have made the inventory the rubber stamp #642 warns about. Each
 # `divergent` row names the NixOS option that would carry it, so adopting one
 # later is a rebuild rather than an investigation.
 #
 # No row is `seed`: modules/home.nix seeds `config/` and `default/`, never
-# `etc/`, and that is itself a finding rather than an omission -- two files
-# here (fastfetch and kitty) are the system half of a pair whose user half IS
-# seeded, and both say so.
+# `etc/`. Two files here (fastfetch and kitty) are the system half of a pair
+# whose user half IS seeded, and both were `divergent` until #649 made them
+# `installed`; mise's alias went with them. Those three were the user-visible
+# symptoms -- a stub config pointing at a file that did not exist, an About
+# screen in fastfetch's stock layout, a `mise use` that could not resolve --
+# and reclassifying one of the fourteen is the same shape of change: turn the
+# row's class, and modules/nixos.nix installs it.
 #
 # ## What a reason is for
 #
@@ -71,8 +80,8 @@
   };
 
   "fastfetch/config.jsonc" = {
-    class = "divergent";
-    reason = "Upstream's About layout, installed to /etc/fastfetch/config.jsonc by the Arch package. Nothing writes that path here, so fastfetch and omarchy-launch-about fall back to fastfetch's stock layout -- and the one patch this repository applies to the etc tree (pkgs/omarchy/default.nix, the Nixarchy OS line) is applied to a file nothing reads.";
+    class = "installed";
+    reason = "Upstream's About layout, which omarchy-launch-about renders through fastfetch and fastfetch finds at /etc/fastfetch/config.jsonc when ~/.config has none. Installed as the shipped file, so the one patch this repository applies to the etc tree (pkgs/omarchy/default.nix, the Nixarchy OS line) is read. #649.";
   };
 
   "gnupg/dirmngr.conf" = {
@@ -91,8 +100,8 @@
   };
 
   "mise/conf.d/omarchy.toml" = {
-    class = "divergent";
-    reason = "A mise tool_alias so `mise use -g cursor-agent` resolves, which is how upstream's omarchy-mise-install wrapper installs the Cursor CLI. mise reads /etc/mise/conf.d and nothing writes it here, so that one agent install fails while the others work.";
+    class = "installed";
+    reason = "A mise tool_alias so `mise use -g cursor-agent` resolves, which is how upstream's omarchy-mise-install wrapper installs the Cursor CLI. mise reads /etc/mise/conf.d, and this is the shipped file at that path, so that agent installs like the others. #649.";
   };
 
   "mkinitcpio.conf.d/omarchy_hooks.conf" = {
@@ -246,7 +255,7 @@
   };
 
   "xdg/kitty/kitty.conf" = {
-    class = "divergent";
-    reason = "Omarchy's kitty defaults -- font, padding, the CSI-u bindings for shift+enter, the remote-control socket -- installed to /etc/xdg/kitty/kitty.conf. modules/home.nix seeds upstream's config/kitty/kitty.conf into ~/.config, and that file is a five-line stub whose own comment points at this one for the real settings, so kitty here is themed but otherwise stock.";
+    class = "installed";
+    reason = "Omarchy's kitty defaults -- font, padding, the CSI-u bindings for shift+enter, the remote-control socket. kitty reads $XDG_CONFIG_DIRS/kitty/kitty.conf and NixOS sets that to /etc/xdg, so the shipped file is the system half; modules/home.nix seeds upstream's config/kitty/kitty.conf, the stub whose comment points at this one. #649.";
   };
 }

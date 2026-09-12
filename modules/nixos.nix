@@ -8,6 +8,11 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
+  # The rows of upstream's /etc overlay that are installed as themselves.
+  installedEtc = lib.attrNames (
+    lib.filterAttrs (_: row: row.class == "installed") (import ../data/etc-overlay.nix)
+  );
+
   # Every storage driver nixpkgs would put in a "supports most hardware"
   # initrd, taken from nixpkgs rather than copied out of it.
   #
@@ -1053,24 +1058,35 @@ in
     # Screenshot inside the session.
     services.displayManager.sessionPackages = lib.mkIf cfg.session [ omarchySession ];
 
-    # The anchor ~/.XCompose includes. That file is written once at first
-    # login and never rewritten, so it cannot name a store path: this one is
-    # regenerated with the system and always points at the current package.
-    environment.etc."omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
+    environment.etc =
+      # The anchor ~/.XCompose includes. That file is written once at first
+      # login and never rewritten, so it cannot name a store path: this one is
+      # regenerated with the system and always points at the current package.
+      {
+        "omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
 
-    # Why: modules/AGENTS.md#the-ownership-marker-for-the-shell-tools-that-cann
-    environment.etc."nixarchy/managed" = lib.mkIf cfg.installerManaged {
-      text = ''
-        This machine's configuration descends from the host module the Nixarchy
-        installer generates (installer/host.nix), so nixarchy commands that
-        commit, push or rewrite configuration will act on it.
+        # Why: modules/AGENTS.md#the-ownership-marker-for-the-shell-tools-that-cann
+        "nixarchy/managed" = lib.mkIf cfg.installerManaged {
+          text = ''
+            This machine's configuration descends from the host module the Nixarchy
+            installer generates (installer/host.nix), so nixarchy commands that
+            commit, push or rewrite configuration will act on it.
 
-        Written declaratively by programs.nixarchy.installerManaged and renewed
-        by every rebuild. Deleting it changes nothing until the next switch.
+            Written declaratively by programs.nixarchy.installerManaged and renewed
+            by every rebuild. Deleting it changes nothing until the next switch.
 
-        nixarchy ${cfg.package.version}
-      '';
-    };
+            nixarchy ${cfg.package.version}
+          '';
+        };
+      }
+      # Upstream's /etc overlay, the rows data/etc-overlay.nix classes
+      # `installed`: the file itself, at the path Omarchy's Arch package puts
+      # it, so a source bump carries upstream's edits. tests/options.nix names
+      # each one in both states.
+      # Why: modules/AGENTS.md#three-files-from-upstreams-etc-overlay-installed-as-themselves
+      // lib.genAttrs installedEtc (name: {
+        source = "${cfg.package}/share/omarchy/etc/${name}";
+      });
 
     # glib looks for compiled schemas in $XDG_DATA_DIRS/glib-2.0/schemas, but
     # nixpkgs' glib setup hook relocates them to

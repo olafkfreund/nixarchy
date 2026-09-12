@@ -75,7 +75,7 @@ purpose; a fenced block is what an agent copies.
 | `omarchy` | the tree builds, and the README's counts still match it |
 | `omarchy-runtime` | the replaced commands run |
 | `patched-files` | every `--replace-fail` patch still applies |
-| `etc-overlay` | the 40 files of upstream's `/etc` tree are each classified in `data/etc-overlay.nix` — nothing installs that tree, so every one of them is ignored, and the manifest is where "ignored on purpose" is written down |
+| `etc-overlay` | the 40 files of upstream's `/etc` tree are each classified in `data/etc-overlay.nix` — the rows classed `installed` are what `modules/nixos.nix` puts in `/etc`, and the manifest is where "ignored on purpose" is written down for the rest |
 | `doctor-graphics` | the doctor's GPU rules, against fixture machines |
 | `doctor-ldd` | the doctor's dynamic-link check, against binaries built broken |
 | `dashboard-clock` | the install dashboard against a rewound clock |

@@ -283,6 +283,12 @@ readme="$root/docs/manual/ai.md"
 quantity "skills-manual-ai" "$skills_word" \
   '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one:$' \
   's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one:$/'"$skills_word"' skills instead of one:/'
+# The manual's front page said "thirteen" for three skills' worth of releases
+# (#664) -- the fourth copy of this number, and the only one nothing read.
+readme="$root/docs/index.md"
+quantity "skills-index" "$skills_word" \
+  '.*nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen), written for NixOS.*' \
+  's/nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen), written for NixOS/nixarchy ships '"$skills_word"', written for NixOS/'
 readme=$readme_saved
 
 # The count says a number moved; this says which skill a table forgot. Every
@@ -304,12 +310,12 @@ for f in "$readme" "$root/docs/manual/ai.md"; do
   done
 done
 
-# A floor. Seventeen quantities are declared above; a run that checked fewer
+# A floor. Eighteen quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 17 ]; then
-  echo "::error::only $checked of 17 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 18 ]; then
+  echo "::error::only $checked of 18 quantities were accounted for" >&2
   fail=1
 fi
 

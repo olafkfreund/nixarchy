@@ -3,11 +3,13 @@
 [Omarchy](https://omarchy.org) vendored for NixOS — the whole desktop, with its
 menus rewired to Nix instead of pacman.
 
+![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
+
 > 📖 **[Read the manual](https://olafkfreund.github.io/nixarchy/)**
 
-**[Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started)** ·
-**[Add it to a NixOS machine you already run](#adding-it-to-a-machine-you-already-run)** ·
+**[Install](#install)** ·
 **[Try it in a VM](#try-it-in-a-vm)** ·
+**[Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started)** ·
 **[Roadmap](#roadmap)** ·
 **[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
 
@@ -50,9 +52,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[A toolchain per project](https://olafkfreund.github.io/nixarchy/manual/per-project-environments)** | `nixarchy dev init react` |
 | **[Your phone on the desktop](https://olafkfreund.github.io/nixarchy/manual/android)** | `nixarchy android`, mirrored or emulated |
 | **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `hypr-rdp`, the running session over RDP |
-| **[Ask the machine](https://olafkfreund.github.io/nixarchy/manual/ai)** | agent skills written for NixOS, even against a [local model](#a-local-model) |
-
-![The Omarchy desktop on NixOS](docs/screenshots/00-desktop.jpg)
+| **[Ask the machine](https://olafkfreund.github.io/nixarchy/manual/ai)** | agent skills written for NixOS, even against a [local model](https://olafkfreund.github.io/nixarchy/manual/ai#running-the-model-locally) |
 
 | the menu | Install |
 |---|---|
@@ -65,383 +65,20 @@ More in [`docs/screenshots/`](docs/screenshots) — and more recordings, of boxe
 sandboxes, themes and plugins, throughout
 [the manual](https://olafkfreund.github.io/nixarchy/).
 
-## Before you install
-
-> [!WARNING]
-> **This is in active development. Expect to hit problems.**
->
-> **The ISO installer is the least settled part of it.** It writes partition
-> tables and bootloaders on real disks, it is the hardest thing here to test,
-> and it is where the bugs have been. Treat it as something to try on a spare
-> machine or a VM — not on a laptop you need working on Monday, and not on a
-> disk holding anything you have not backed up.
->
-> **The flake route is the mature one.** Adding
-> `nixarchy.nixosModules.nixarchy` to a machine that already runs NixOS is the
-> path that has had the most use and the most testing, it changes nothing about
-> your disk or your bootloader, and a bad result is one `nixos-rebuild
-> --rollback` away. If you already run NixOS, start there — see
-> [Adding it to a machine you already run](#adding-it-to-a-machine-you-already-run).
->
-> Everything is being worked on and tested continuously; the four VM install
-> checks in CI exist precisely because this is the part that needs proving.
-> Please [file what you hit](https://github.com/olafkfreund/nixarchy/issues) —
-> `omarchy bug-report` collects the useful details for you.
-
-## What works
-
-| | |
-|---|---|
-| Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 444 subcommands, `omarchy commands --check` green |
-| **Install menu** | picks write to a Nix config, not pacman |
-| **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 444 |
-| **Remove menu** | deselects apps, never touches your own config |
-| **Update menu** | `nh os switch --update <flake>` |
-| 66 apps in the selection | 50 from nixpkgs, 5 as NixOS modules, 9 built here, 2 with no equivalent |
-| Learn menu | NixOS wiki, `search.nixos.org` packages and options |
-| Shell functions | bash and zsh source the chain; fish derives it from the same files |
-| RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
-| **Plugins** | `omarchy plugin add <url>` works as upstream ships it, and `programs.nixarchy.plugins` pins one in your flake |
-| **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
-| 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
-| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
-| **Boxes** | `nixarchy box create dev --template archlinux` drops you into an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
-| **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](docs/manual/remote-desktop.md). Off by default |
-| **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
-| **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](docs/manual/python.md). **On by default** |
-| Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
-| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a hands-on tour, an offline manual search and a tutor grounded in your machine, offered in the bar — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
-| **Agent skills** | from `nixarchy` and `nixos` to `nixos-gpu` and `nixos-android` — rewritten for NixOS, not Omarchy's Arch originals |
-| **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
-| Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
-| **Fresh-machine install** | a bootable ISO, seven questions, and the machine is a flake you own — with no network |
-| **Android** | `scrcpy` mirrors the phone you own, `nixarchy android` gets it paired over Wi-Fi, and Waydroid runs Android without one — [the page](docs/manual/android.md). Off by default |
-| Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
-
-## Two names, on purpose
-
-The desktop is Omarchy's. The port is nixarchy's. The commands say which is
-which, and `nixarchy` is the way in:
-
-```sh
-nixarchy                     # what this port adds, and what it defers to
-nixarchy search tailscale    # nixarchy-search
-nixarchy pkg add ripgrep     # nixarchy-pkg-add
-nixarchy apply               # nixarchy-apply
-nixarchy dev init react      # nixarchy-dev-init — a devenv project, here
-nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
-```
-
-Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
-work and the exit status, terminal and signals stay the command's own.
-
-**Upstream's 444 commands keep upstream's name, deliberately.** `omarchy theme
-set` is the same script here as on Arch — a bug in it is a bug to report there,
-and renaming it would say otherwise. It would also cost the property this repo
-is built on: tracking a release is a source bump because nixarchy replaces 19
-scripts and patches ~100 strings, and renaming would make all 5,365 occurrences
-of `omarchy` a patch to re-apply on every bump. `omarchy.*` is also a reserved
-plugin namespace that `omarchy plugin validate` enforces and third-party
-plugins target.
-
-The branding you *do* see is nixarchy's: the session is **Nixarchy**, the menu
-button wears the snowflake, and the screensaver and About window carry the
-NIXARCHY banner. The session's id stays `omarchy` so a greeter that already
-remembers it keeps remembering it — `Name=` is what a greeter prints, the
-basename is what it stores.
-
-## Why vendoring
-
-Everything upstream resolves through a single environment variable:
-
-```lua
--- default/hypr/bootstrap.lua
-package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
-  ..(os.getenv("OMARCHY_PATH") or "/usr/share/omarchy").."/?.lua;"
-```
-
-Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
-the Lua defaults all follow. Only **32 of 444 scripts** actually run
-`pacman`/`yay` — that's the entire distro-coupling surface.
-
-Six of those are replaced outright, in `pkgs/omarchy/nix-bin/`: the ones the
-menus drive. The rest manage Arch release channels, keyrings and orphan
-pruning, none of which have a Nix meaning worth reimplementing — your flake
-input *is* the release channel, and the store has no orphans. Those fail either
-way, so a `pacman` shim only changes *how*: instead of `command not found`, you
-get told what replaced the command. It keeps pacman's contract (stderr,
-non-zero), so `omarchy version` and `omarchy debug`, which already wrap it in
-`2>/dev/null || fallback`, are unaffected.
-
-## AI agent skills
-
-Omarchy ships skills for coding agents, and `omarchy-provision-user` symlinks every
-one of them into `~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills` and
-`~/.pi/agent/skills`. Whatever is in that directory is what an agent on this machine
-is told to do.
-
-Upstream's are written for Arch. They point at `/usr/share/omarchy`, and their
-decision framework answers "install a package" with `omarchy pkg add` — a script
-this repo replaced with one that deliberately refuses. Shipping them unchanged means
-an agent confidently doing imperative things the next rebuild wipes, which is the
-one failure mode that looks like success.
-
-So sixteen skills ship here instead:
-
-| skill | owns |
-|---|---|
-| **`nixarchy`** | The desktop: Hyprland, the bar, themes, capture. Upstream's `omarchy` skill, renamed and corrected |
-| **`nixos`** | Packages and system changes: `apps.nix`, the Install menu, `nixos-rebuild`, generations, rollback, option search |
-| **`nixos-gpu`** | NVIDIA/CUDA, AMD/ROCm, Intel — as three layers, because almost every "the GPU does not work" report is one specific layer and skipping to the last one is why they stay unsolved |
-| **`nixos-ai`** | Ollama, Open WebUI, llama.cpp, model sizing, pointing an agent at a local endpoint |
-| **`nixos-services`** | systemd units, the firewall, containers, why a service will not start, why a rebuild will not evaluate |
-| **`nixos-secrets`** | agenix, sops-nix, `*File` options, `LoadCredential`, and why a leaked secret is rotated rather than deleted |
-| **`nixos-performance`** | Kernel choice, zram and swappiness, governors, storage, Nix build speed, boot time |
-| **`nixos-security`** | Firewall and nftables, SSH, sudo and the groups that are root in a costume, systemd sandboxing, kernel hardening |
-| **`nixos-doctor`** | The sweep to run *before* you have a theory: failed units, `-p err`, disk, memory, and what changed between generations |
-| **`nixos-config-repo`** | Getting the configuration into git and keeping it there, and the two things that bite: untracked files are invisible to the build, and git refuses a repository owned by somebody else |
-| **`nixos-android`** | scrcpy over USB and over Wi-Fi, Waydroid and what it will not run, and the two traps: `programs.adb.enable` is inert on current nixpkgs, and `adb mdns services` cannot work because android-tools is built without an mDNS backend |
-| **`nixos-binaries`** | Why a downloaded binary, an AppImage or a pip wheel will not run, and the ladder out: nix-ld's curated library set, envfs, an FHS environment, a box, packaging it — including the correction that nix-ld cannot help an interpreter nixpkgs built |
-| **`nixos-gaming`** | Steam as a module rather than a package, Proton per title, the 32-bit graphics stack that is the usual cause, controllers, gamescope, and thirteen libretro cores that live in the package rather than `/usr/lib` |
-| **`nixos-fleet`** | One flake, several machines: the `hosts/<name>/` layout, what is shared and what is per-machine, `nixarchy-apply`'s hostname match, pulling on a timer, and where `--target-host` stops |
-| **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
-| **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
-
-Every one is written against the modules on this disk rather than from memory,
-which is not a stylistic preference — it caught two options that current models
-still write confidently and that fail evaluation:
-`services.ollama.acceleration` was **removed** (the package chooses the
-accelerator now), and `services.ollama.models` was **renamed** to `modelsDir`.
-Both are documented as such, and `nixos-services` teaches reading a module's
-`mkRenamedOptionModule` block as the general form of that fix.
-
-The split is the point. `nixarchy`'s decision framework used to answer "is it a
-package install?" with a pacman command; now it hands off to `nixos`, which opens
-with the only rule that matters — **a package installed imperatively does not
-survive the next rebuild** — and routes to `nixarchy-app-enable`, a flake edit, or
-`nix shell` depending on which is actually being asked for.
-
-`diagnose-crash` gets three corrections that are not cosmetic: there is no public
-debuginfod serving nixpkgs builds, so it explains `nixseparatedebuginfod` instead
-of pointing at Arch's server; "recent package updates" becomes
-`nix profile diff-closures`, which names exactly what changed between generations;
-and a bug report now has two possible destinations rather than one.
-
-The `nixarchy` skill also carries two things an agent gets wrong by default here.
-That a rebuild does **not** update a running session, so a fix that looks like it
-failed may simply not have been loaded yet -- and specifically not to verify one
-by running the script at its absolute installed path, because that path works
-while the keybinding still does not, which is the most misleading result
-available. And that the rewrite pointing every `install.*` row at the Nix
-selection lives in the menu *defaults* -- `$OMARCHY_PATH` is a per-machine tree
-carrying them -- so `~/.config/omarchy/extensions/omarchy-menu.jsonc` is left
-entirely to the user and to plugins, which is the file upstream documents as
-theirs.
-
-Only `SKILL.md` and `contributing.md` are replaced outright — their guidance is
-wrong here, not merely misspelt. Everything else is patched with `--replace-fail`,
-so an Omarchy bump that rewords a line this depends on fails the build rather than
-quietly restoring Arch instructions. CI additionally asserts that no skill code
-block contains a pacman, yay, `/usr/share/omarchy` or Arch-debuginfod line, because
-prose may contrast with Arch on purpose but a fenced block is what an agent copies.
-
-### Pointing your own AI at nixarchy
-
-Ask any assistant about nixarchy cold and it answers from what it absorbed
-about Omarchy on Arch — which is wrong in exactly the way that matters here:
-apps are declarations, not `pacman -S`, and nothing installs until a rebuild.
-
-So this repository publishes a file written for language models:
-
-```
-https://olafkfreund.github.io/nixarchy/llms.txt
-```
-
-Hand it over and the answers change:
-
-| your assistant | what to do |
-|---|---|
-| Claude, ChatGPT, Gemini — anything with web access | Paste the URL: *"Read this and answer my nixarchy questions from it."* |
-| An assistant with no web access | Open the URL, copy the file, paste it in as reference |
-| Claude Code, Cursor, or another agent in a checkout | Point it at [`docs/llms.txt`](docs/llms.txt) — it is a normal file in the tree |
-| The assistant on a running nixarchy machine | Nothing. It already reads the skills above. |
-
-It carries the install model, the two ways in and which one is mature, the
-commands, and the manual's layout — deliberately including the caveat that
-the ISO installer is the least settled part, so an assistant does not
-recommend it to somebody who already runs NixOS.
-
-## The agent room — opt-in
-
-There is a public Matrix room, `#nixarchy-agents:freundcloud.org.uk`, where
-coding agents working on nixarchy leave each other notes: a gotcha with its
-cause, a dead end worth not repeating, a decision and the reasoning behind it.
-None of that survives in git history, and all of it is what the next person —
-or the next agent — actually needs.
-
-It is worth joining. Reading it costs nothing and has repeatedly turned a
-two-hour rediscovery into a two-minute read.
-
-**It is off unless you turn it on, and it should stay that way unless you
-decide otherwise.** Nothing in nixarchy connects to it, registers an account,
-or sends a single byte anywhere until you follow `share/agent-bus/ONBOARDING.md`
-and put credentials into your own agent's config. There is no default-on, no
-telemetry, and no check-in.
-
-Before you switch it on, know what it means:
-
-- **Everything your agent posts is public and permanent.** The room is
-  world-readable, anyone can make an account, and new arrivals see the entire
-  backlog. Assume a stranger reads every message, because one does.
-- **Your agent decides what to post, and it can be wrong about that.** It may
-  quote a path, a hostname, an error containing a URL, or a fragment of the code
-  it is working on. If you work on anything you cannot afford to leak — client
-  code, private infrastructure, anything under NDA — do not connect an agent
-  that has access to it.
-- **It is a homelab server with no uptime promise**, run by the nixarchy
-  maintainer, hosting rooms that are not end-to-end encrypted. Treat it as a
-  public noticeboard, which is what it is.
-- **You can leave at any time.** Delete the credentials from your agent's
-  config; nothing else in nixarchy depends on it.
-
-If that is an acceptable trade for you, `share/agent-bus/README.md` explains
-the room and `share/agent-bus/ONBOARDING.md` connects an agent in about ten
-minutes. The same folder covers reading the room yourself in Element, which is
-worth doing for a while before you let an agent post — it is the cheapest way
-to see what the room is actually like.
-
-If it is not an acceptable trade, do nothing. That is a completely reasonable
-answer and costs you nothing else.
-
-## Ask the machine
-
-Skills only help if something loads them. **Menu ▸ Trigger ▸ Ask** is ten rows
-that do, each one routed to the skill that answers it:
-
-![The Ask menu](docs/screenshots/20-ask.jpg)
-
-| row | skill |
-|---|---|
-| What's wrong? | `nixos-doctor` |
-| Make it faster | `nixos-performance` |
-| Am I exposed? | `nixos-security` |
-| Disk is full | `nixos-doctor` |
-| GPU not working | `nixos-gpu` |
-| What changed? | `nixos` + `nixos-doctor` |
-| Back up my config | `nixos-config-repo` |
-| Install something | `nixos` |
-| Ask anything | whichever fits |
-
-The prompts live in `nix-bin/nixarchy-ask`, not in the menu JSON, so they can be
-read and corrected as text. Each one **names the skill**, and that is the whole
-trick: a model is much better at following a skill it has been handed than at
-choosing one from nine descriptions. Moving the routing out of the model and
-into a file makes it reviewable, and makes the same row work with a frontier
-agent and a local one.
-
-Every prompt also says measure first and propose before changing. An agent that
-reaches for a fix before reading anything is the failure these tasks invite.
-
-Nothing in it names an agent: it goes through `omarchy-agent-prompt`, which
-launches whichever one you have chosen. The rows are hidden until you choose
-one, because a menu of things that cannot work is worse than no menu.
-
-![The Default Agent menu](docs/screenshots/21-setup-agent.jpg)
-
-Agents are installed the way everything else here is: picking one adds it to the
-selection and rebuilds, rather than downloading a binary into `~/.local` that no
-file records and the next rebuild does not reproduce. Antigravity is in the list
-because Google deprecated `gemini-cli` in its favour.
-
-Nothing is ticked above because nothing is installed on that machine. Upstream's
-tick asks only whether an agent was *picked*, which on Arch is the same question
-— installation is immediate there. Here a rebuild sits in between, so the tick
-asks whether the command exists, and a half-finished choice cannot look
-finished.
-
-## The configuration in git
-
-The installer leaves `/etc/nixos` as a git repository with one staged tree and
-no commit — deliberately, because `git commit` needs an identity and choosing
-yours is not an installer's business. What that leaves is a machine whose entire
-definition has no history and exists on exactly one disk.
-
-```
-nixarchy config repo
-```
-
-walks out of that: identity, a `.gitignore` that knows encrypted secrets belong
-*in* the repo and plaintext ones do not, a **scan for secrets before the first
-commit**, public-or-private as a decision rather than a default, the remote via
-`gh`/`glab` (fetched on demand — neither is in the closure), and an eval-only CI
-workflow.
-
-Eval-only on purpose: `nix flake check --no-build` catches renamed options, type
-errors and typos, which is nearly everything that actually breaks, while a full
-system build on a free runner takes hours and regularly runs out of disk.
-
-A notification offers this once, on a boot after you have set up an agent, and
-only when there is something to say — a configuration already committed and
-pushed marks itself done and never asks again.
-
-## A local model
-
-`programs.nixarchy.localAi` runs Ollama and points opencode and pi at it, so the
-skills work with no account, no key and no network.
-
-```nix
-programs.nixarchy.localAi.enable = true;
-```
-
-Which Ollama gets built is read off the configuration rather than probed for.
-Nix evaluates before the machine runs, so there is no hardware to look at — and
-no need, because a machine with an NVIDIA card has already said so in
-`hardware.nvidia` and an AMD one in `hardware.amdgpu`:
-
-| declared | build |
-|---|---|
-| `services.xserver.videoDrivers = [ "nvidia" ]` | `ollama-cuda` |
-| `hardware.amdgpu.opencl.enable = true` | `ollama-rocm` |
-| neither | refuses to build — see below |
-
-**It will not run on a CPU unless you insist**, and that is measured rather than
-assumed. On eight cores with `qwen3:8b`, one question through an agent:
-
-```
-500 | 4m59s     the client gave up waiting
-200 | 1m48s
-200 | 8m58s
-200 | 7m28s
-500 | 1m38s     the client gave up waiting
-```
-
-Five round trips, twenty-five minutes, no answer. Nothing was misconfigured —
-the context held and three requests succeeded. An agent needs several turns and
-on a CPU each turn is minutes. A warning would scroll past, so the build fails
-instead, and the message names the three ways out: declare the GPU, use a hosted
-agent, or `allowCpu = true` and accept it.
-
-Model weights are not pulled during activation either. `nixarchy local-ai` does
-it where there is a terminal to ask in, and where the VRAM can actually be read
-— evaluation cannot size a model, and a model larger than the budget does not
-fail, it spills into system memory and crawls.
-
-Two findings from getting this working, both of which cost a day and neither of
-which is in any documentation:
-
-- **A forced context window is worse than no opinion, and no opinion is worse
-  than a bounded one.** 64k OOM-killed the service on 8GB; letting Ollama choose
-  gave 4096 on a machine with no VRAM, which cannot hold a system prompt and a
-  skill together. It is pinned to 32k, which flash attention and a `q8_0` cache
-  make affordable — a measured 3584 MiB of KV cache became 238 MiB.
-- **A small model is not a small frontier model.** `qwen3:1.7b` lists the skills
-  correctly and calls tools correctly, then answers from memory anyway while
-  saying it used the skill. `nixarchy local-ai` refuses to recommend anything
-  below 4b for that reason.
-
-## Installing apps
+## How it works — read this first
+
+1. **Pick.** An Install row uncomments one line in a file you own. Nothing
+   is built.
+2. **Apply.** `Install ▸ Apply changes` copies that file into your flake.
+3. **Rebuild.** `nh os switch` builds the machine — the only step that
+   installs anything, and one rebuild for one app or twenty.
+4. **Roll back** if you dislike it: every rebuild is a NixOS generation, in
+   the boot menu and one `nixos-rebuild --rollback` away.
+
+Themes and plugins are the deliberate exception: `omarchy theme install <url>`
+and `omarchy plugin add <url>` still clone at runtime the way upstream intends,
+because trying one should be a command, not a rebuild. Where the line falls,
+and why, is [the NixOS philosophy](https://olafkfreund.github.io/nixarchy/manual/philosophy).
 
 Omarchy's Install menu runs `pacman -S`. Here it edits a file you own.
 
@@ -472,6 +109,7 @@ Install ▸ Apply changes  →  nh os switch <flake>
 ```
 
 The notification is clickable and runs the rebuild.
+
 
 ### Anything the menu does not offer
 
@@ -551,636 +189,30 @@ it buys the one property that matters: the picker cannot offer you a package
 that this machine then refuses to build. The options half substitutes from
 `cache.nixos.org`, so only the nixpkgs half is real work.
 
-### Neovim, and the config you may already have
+## Install
 
-On Arch, Omarchy's Neovim setup arrives as an `omarchy-nvim` package. That
-package has no published source — it is not in the basecamp org and the
-repository serves binaries — but Omarchy carried the same files in-tree as
-`config/nvim` until v3.0.2, and `pkgs/omarchy-nvim/` is that tree, byte for
-byte, at the last revision anyone can read.
-
-It is three files and under three kilobytes, because it is not a Neovim
-distribution: it is **LazyVim**, plus what Omarchy changes about it. LazyVim
-still resolves and locks its own plugins at runtime, exactly as on Arch.
-
-Neovim itself is installed either way — it is one of the omarchy package's
-runtime dependencies, as it is one of upstream's base packages. The only
-question is `~/.config/nvim`, which is yours:
-
-```nix
-programs.nixarchy.neovim = "theme-only";   # the default
-```
-
-| | `theme-only` (default) | `adopt` | `off` |
-|---|---|---|---|
-| **no `~/.config/nvim`** — a fresh install | seed the config, link the theme | same | nothing |
-| **you have one, no `theme.lua`** | add only the theme link | same | nothing |
-| **you have a real `theme.lua`** | keep yours, say so | keep yours, and name what will collide | nothing |
-
-**Nothing here ever overwrites a file you wrote,** and there is no setting that
-does — an editor configuration is not this module's to replace. The seed fires
-only into a directory that does not exist, because half-seeding is worse than
-not seeding: LazyVim reads every `.lua` under `lua/plugins` as a plugin spec,
-so dropping Omarchy's into someone else's config means their setup silently
-loads two it never asked for.
-
-The theming is one symlink:
-
-```
-~/.config/nvim/lua/plugins/theme.lua → ~/.local/state/omarchy/current/theme/neovim.lua
-```
-
-All 22 themes ship a `neovim.lua`, and that link is what reads it. It is set
-only when the path is absent or already a symlink — the same rule upstream's
-own migrations follow.
-
-`adopt` adds nothing to what is written; it names the collisions instead. A
-`lua/plugins/colorscheme.lua` beside the link is two LazyVim specs setting
-`opts.colorscheme`, and a Home-Manager-owned `~/.config/nvim` is a tree the
-link cannot be written into at all. Both work alone and disagree together,
-which is the kind of thing worth being told once rather than debugging.
-
-### Naming the user who runs the desktop
-
-```nix
-programs.nixarchy.user = "alice";
-```
-
-Optional, and worth setting. A NixOS machine has many users and the module
-cannot guess which one logs into Omarchy, so the few things that need a name
-are skipped rather than applied to someone arbitrary. Today that is the
-**`input` group** — upstream's installer runs `usermod -aG input`, and without
-it the dictation tools and game controllers Omarchy offers cannot read their
-devices.
-
-`browserThemeUser` is deliberately *not* defaulted from it: naming the desktop
-user should not silently hand them the browsers' policy directories.
-
-### The boot splash and the login screen
-
-Two different screens, with two very different answers.
-
-**The boot splash** is nixarchy's own: the NIXARCHY wordmark draws itself in
-with a ttfx text effect -- the same engine the screensaver runs, over the same
-ASCII banner -- and a progress bar fills underneath it. The animation is
-rendered to stills when the package is built, because Plymouth has no terminal
-for ttfx to draw in. The bar is a change from upstream, which shows it only
-after a passphrase prompt, so a machine with no encrypted disk never saw it.
-
-It yields to anything that names a theme of its own — stylix does, so a
-stylix machine keeps the stylix splash. To take nixarchy's instead:
-
-```nix
-programs.nixarchy.bootSplash = "force";
-```
-
-`force` moves `boot.plymouth.theme` **and** `themePackages` together. Reaching
-for `lib.mkForce` on the theme alone does not work: NixOS asserts the named
-theme exists in the package list, and on a stylix machine stylix still owns
-that list, so the build fails on a theme it cannot find. `"off"` leaves
-`boot.plymouth` alone entirely.
-
-**The login screen is SDDM-only, and this is a real limitation.** Omarchy's
-greeter is an SDDM theme — `Main.qml` plus assets, written against SDDM's own
-`userModel` and `login()` API. It is not a program greetd can run, and upstream
-ships nothing for greetd. So:
-
-- **On SDDM** you get it automatically. `programs.nixarchy.displayManager` is
-  on by default and sets `services.displayManager.sddm.theme = "omarchy"`,
-  branded with the NIXARCHY wordmark.
-- **On greetd** you cannot have that screen. Your greeter keeps greeting and
-  picks up the Omarchy session like any other — which is what
-  `programs.nixarchy.displayManager = false` is for. Switching to SDDM to get
-  it means giving up greetd, and two display managers is not a working
-  configuration.
-
-There is no third option today. Porting the QML to a greetd greeter would mean
-rewriting it against a different login API, which is a fork of upstream's
-greeter rather than a setting.
-
-### Apps you already have
-
-The Install menu dims a row when the app is already there — whether it is in
-your selection, or you installed it yourself and nixarchy knows nothing about
-it. That second case is the one worth naming: an app in your own
-`environment.systemPackages` or `home.packages` used to be offered as though
-you had nothing, and taking the offer wrote a second declaration for something
-you already run.
-
-`nix run github:olafkfreund/nixarchy#doctor` reports the overlap before you
-install anything:
-
-```
-Omarchy apps you already have
-  15 of them, and nixarchy will not install a second copy:
-    Alacritty
-    Chrome
-    Firefox
-    ...
-```
-
-Both the report and the menu look for the same thing — the app's command on
-PATH — so what the doctor lists and what the menu dims agree. The command comes
-from nixpkgs' own `meta.mainProgram`, read at evaluation time without building
-anything, because the attribute name is wrong often enough to matter: `vscode`
-puts `code` on PATH and `obs-studio` puts `obs`.
-
-**Remove rows deliberately do not work this way.** They stay bound to the
-selection, because deselecting is the only removal nixarchy is allowed to
-perform. An app that arrived from your own configuration is not this menu's to
-take away.
-
-### The selection has to be imported
-
-`nixarchy-apply` copies `~/.config/nixarchy/apps.nix` to your flake root as
-`nixarchy-apps.nix`. A flake cannot read a file outside its own tree, so the
-copy is unavoidable — but **importing it is yours to do**:
-
-```nix
-imports = [ ./nixarchy-apps.nix ];   # path relative to the file you add it to
-```
-
-Without that line the menu marks apps enabled, apply reports a copy, the
-rebuild runs to completion, and **nothing is ever installed**. `apply` now says
-so loudly rather than leaving you to work it out from an app that never
-appears.
-
-### Why it isn't a package list
-
-Several of these are **not packages** on NixOS, and a flat `systemPackages`
-list would have been quietly wrong:
-
-| app | what it actually needs |
-|---|---|
-| Steam | `programs.steam` — an FHS wrapper, or it will not run |
-| 1Password | `programs._1password-gui` — a setuid helper, or it cannot unlock |
-| Xbox controllers | `hardware.xpadneo` — a kernel driver |
-| Firefox | `programs.firefox` — so policies and extensions stay declarative |
-
-`data/apps.nix` records which is which, and per-app `settings` merge at that
-app's own option path:
-
-```nix
-programs.nixarchy.apps._1password = {
-  enable = true;
-  settings.polkitPolicyOwners = [ "you" ];   # → programs._1password-gui.polkitPolicyOwners
-};
-```
-
-Services — Tailscale, remote desktop, Syncthing, OpenSSH — are the companion
-catalogue in `data/services.nix` and a file of their own. A service nixarchy
-only relays gets upstream's own line, `services.openssh.enable = true;`; one it
-integrates gets an option, `programs.nixarchy.services.tailscale.enable`. There
-is no `settings` passthrough on those, because upstream's options are still
-upstream's and are written beside ours:
-
-```nix
-programs.nixarchy.services.tailscale.enable = true;   # + trusts the interface
-services.tailscale.useRoutingFeatures = "client";     # upstream's option, untouched
-```
-
-## Usage
-
-```nix
-{
-  inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.1-1";
-
-  outputs = { nixpkgs, nixarchy, ... }: {
-    nixosConfigurations.mymachine = nixpkgs.lib.nixosSystem {
-      modules = [
-        nixarchy.nixosModules.nixarchy
-        {
-          programs.nixarchy.enable = true;
-          # Where nixarchy-apply copies your app selection before rebuilding.
-          programs.nixarchy.flake = "/home/you/nixos-config";
-        }
-        ./nixarchy-apps.nix # the generated selection
-      ];
-    };
-  };
-}
-```
-
-And in Home Manager:
-
-```nix
-{
-  imports = [ nixarchy.homeManagerModules.nixarchy ];
-  programs.nixarchy.enable = true;
-  programs.nixarchy.defaultTheme = "tokyo-night";
-}
-```
-
-### Shell functions
-
-Omarchy's [shell functions](https://omarchy.org/manual/shell-functions/) —
-`compress`, `dip`, `hdl`, `tdl`, `iso2sd`, the tmux and git-worktree helpers,
-20 in all — come from a bash rc chain that also sets aliases and `EDITOR`. It
-needs no patching here: every path in it resolves through `OMARCHY_PATH`.
-
-It is on by default, and opinionated: it aliases `ls` to eza, `cd` to zoxide
-and `g` to git. Turn it off if you bring your own shell config:
-
-```nix
-programs.nixarchy.bashIntegration = false;
-```
-
-Left on, it loads from `/etc/bashrc` — *before* `~/.bashrc` — so anything you
-define yourself still wins. Nothing in the desktop depends on it: the menus
-call the `omarchy-*` executables directly, not these functions.
-
-### Plugins
-
-[Omarchy's plugin system](https://omarchy.org/manual/plugins/) works here
-unchanged — the menu below is upstream's own, running on NixOS:
-
-![Setup > Plugins, with Enable, Disable, Add, Clone and Remove](docs/screenshots/17-plugins-menu.jpg)
-
-Two published third-party plugins, installed into that session and then turned
-off again. The top bar is the same bar in both strips — the teleprompter glyph
-beside the clock and the widget-toggle icon on the right are
-[omteleprompt](https://github.com/seyhunak/omteleprompt) and
-[omarchy-bar-toggle](https://github.com/r3mcos3/omarchy-bar-toggle):
-
-![The same bar with two plugins enabled, then disabled](docs/screenshots/18-plugins-bar.jpg)
-
-Both frames come out of `checks.plugin`, which installs those two plugins from
-their real repositories on every push and fails if the shell does not load
-them. Adding one is a command, not a rebuild:
-
-```bash
-omarchy plugin add https://github.com/seyhunak/omteleprompt.git --enable
-```
-
-![omarchy plugin add in a terminal — Cloning, then Added, then Enabled remco.bar-toggle — and the bar showing the plugin's toggle](docs/img/features/plugin.gif)
-
-Or from the menu above, which is where most people will find it. Add opens a
-floating terminal and asks for the URL. Those rows are upstream's own — nixarchy
-adds none and, more to the point, takes none away: the menu you see is Omarchy's default with the
-nixarchy extension merged over it by id, and that extension rewrites only the
-`install.*` and `remove.*` rows. The check asserts it never names a
-`setup.plugin.*` id, because an override that did would hide the row with no
-error anywhere.
-
-That clones into `~/.config/omarchy/plugins/` at runtime and the running shell
-picks it up — no rebuild, no flake edit, nothing added to `apps.nix`. It is
-upstream's design and nixarchy keeps it: a plugin is somebody's QML loaded into
-your bar, and pinning that in a flake would make trying one a five-minute
-round trip instead of a command.
-
-Two things make it work on NixOS that would otherwise be quiet failures, and
-both are covered by `nix build .#checks.x86_64-linux.plugin`, which installs two
-real published plugins and then removes them again:
-
-- **`~/.config/omarchy` is a real directory, not a store symlink.** Home Manager's
-  usual answer for a config file is a read-only link into `/nix/store`. The seed
-  uses `cp -rn` instead, so `plugin add` can write there at all.
-- **A plugin gets whatever `pkgs/omarchy/default.nix` declares, and nothing else.**
-  Plugins shell out to commands they assume are present — omteleprompt's voice
-  mode runs `python3`, `parecord` and `arecord`. On Arch those are just there.
-  Here they are on the list, and the check keeps them there. A plugin needing
-  something that isn't will fail silently inside a QML `Process`, so if one
-  misbehaves, that is the first thing to look at.
-
-#### Declaring plugins in your configuration
-
-Plugins can also be pinned, so a machine rebuilt from your flake comes up with
-them already there:
-
-```nix
-programs.nixarchy.plugins.omteleprompt.src = pkgs.fetchgit {
-  url = "https://github.com/seyhunak/omteleprompt.git";
-  rev = "9a35865220a0c9d65132329e446a84c466545110";
-  hash = "sha256-KJM/AC1DnPwob40lo39Rlk9qkyKTI++bss1wPIcGsTs=";
-};
-```
-
-`src` is any directory with a `manifest.json` at its root — a `fetchgit`, a
-flake input, or a path in your own repo while you write one.
-
-This works because upstream already separates the two halves: a plugin's *code*
-lives in `~/.config/omarchy/plugins/<id>/`, while whether it is enabled and
-where it sits in the bar are recorded in `~/.config/omarchy/shell.json` by the
-running shell. So the code can come from the store — the directory is a symlink,
-which upstream's scan follows and `omarchy plugin remove` has an explicit branch
-for — without freezing anything the user changes at runtime.
-
-Three consequences worth knowing, all of them deliberate:
-
-- **It installs a plugin; it does not enable one.** Enable it once from
-  Setup → Plugins and that choice sticks, because it is recorded in
-  `shell.json` rather than in the plugin folder. Managing enablement from Nix
-  would mean a plugin you turned off came back at the next rebuild.
-- **The id comes from the plugin's own `manifest.json`**, not from the
-  attribute name. It is what the shell, the menu and every `omarchy-plugin-*`
-  command key on, so a folder named anything else would be a plugin you could
-  not enable or remove by the name on screen.
-- **A broken manifest fails the rebuild**, checked with upstream's own
-  `omarchy-plugin-validate` rather than a copy of its rules — so it cannot
-  drift at the next Omarchy bump. You find out at `nixos-rebuild` instead of
-  after logging in to a plugin that installed and does nothing.
-
-`omarchy plugin add` still works alongside this, and the two do not collide: a
-plugin you add by hand is a real directory this never touches, and adding one
-whose id you already declare is refused rather than installed twice.
-
-Plugins run unsandboxed inside your long-lived shell process. Upstream warns
-about this at the prompt and refuses `ext::`-style URLs that would run a command
-at clone time; both behaviours are intact here.
-
-### RetroArch cores
-
-`pkgs.retroarch` is `retroarch-with-cores` built with an **empty** core list,
-so installing it plainly gives an emulator that can run nothing.
-`programs.nixarchy.apps.retroarch` therefore ships its own build with 13 cores
-— every core Omarchy's own picker offers that nixpkgs carries under a free
-licence, with bsnes and blastem standing in for the unfree snes9x and
-genesis-plus-gx.
-
-`retroarch-full` would be the obvious alternative and is the wrong one: it
-pulls unfree cores, and a single unfree package in the app list aborts the
-whole rebuild rather than failing on its own. nixarchy allows unfree by
-default, so widening the set is just the override:
-
-```nix
-programs.nixarchy.apps.retroarch = {
-  enable = true;
-  package = pkgs.retroarch.withCores (c: [ c.snes9x c.mame c.dolphin ]);
-};
-```
-
-Whatever you pick shows up in the menu picker: upstream filtered the core
-directory against 22 hardcoded names, which would have hidden anything you
-added, so nixarchy lists what is actually installed and takes the labels from
-`libretro-core-info`.
-
-## Binary cache
-
-Enabling nixarchy otherwise means compiling a compositor: it takes Hyprland
-from hyprwm's own flake, tracking their branch rather than nixpkgs' packaging.
-The module adds both caches for you:
-
-```
-https://nixarchy.cachix.org   the vendored tree and this flake's own packages
-https://hyprland.cachix.org   hyprwm's own builds -- the compositor and its
-                              portal, which is why nothing here compiles one
-```
-
-`programs.nixarchy.binaryCaches = false` if you would rather trust neither and
-build from source. This is the one setting worth a deliberate decision:
-substituters are a list, so they merge into whatever you already trust without
-any conflict to warn you.
-
-## Installing on a fresh machine
-
-There is an ISO now. Download it, write it to a stick, boot it,
-and answer seven questions.
-
-> [!CAUTION]
-> **This is the least mature part of nixarchy, and it partitions disks.**
+> [!WARNING]
+> **This is in active development. Expect to hit problems.**
 >
-> The installer is under active development and is where most of the recent
-> bugs have been. It is covered by four VM install checks in CI — blank disk,
-> free space beside an existing OS, encrypted, and a boot of the real ISO —
-> and those checks are the reason problems get found, not a promise there are
-> none left.
+> **The ISO installer is the least settled part of it.** It writes partition
+> tables and bootloaders on real disks, it is the hardest thing here to test,
+> and it is where the bugs have been. Treat it as something to try on a spare
+> machine or a VM — not on a laptop you need working on Monday, and not on a
+> disk holding anything you have not backed up.
 >
-> Use a spare machine or a VM first. Back up anything on the target disk. If
-> the machine already runs NixOS, you do not need this at all — use
-> [the flake route](#adding-it-to-a-machine-you-already-run), which touches
-> neither your partitions nor your bootloader and rolls back in one command.
+> **The flake route is the mature one.** Adding
+> `nixarchy.nixosModules.nixarchy` to a machine that already runs NixOS is the
+> path that has had the most use and the most testing, it changes nothing about
+> your disk or your bootloader, and a bad result is one `nixos-rebuild
+> --rollback` away. If you already run NixOS, start there — see
+> [Adding it to a machine you already run](#on-nixos-you-already-run).
+>
+> Everything is being worked on and tested continuously; the four VM install
+> checks in CI exist precisely because this is the part that needs proving.
+> Please [file what you hit](https://github.com/olafkfreund/nixarchy/issues) —
+> `omarchy bug-report` collects the useful details for you.
 
-**[Releases](https://github.com/olafkfreund/nixarchy/releases)** carry prebuilt
-images from `v4.0.1-3` onward, built and install-tested by CI on the machine
-that runs the nightly checks. The large one is split, because GitHub will not
-take a single file that size:
-
-```
-cat nixarchy-v*.iso.part-* > nixarchy.iso     # the 5.6 GB image only
-sha256sum -c --ignore-missing SHA256SUMS
-sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
-```
-
-`--ignore-missing` because one `SHA256SUMS` covers both images and nobody
-downloads both.
-
-### Writing the stick from Windows or macOS
-
-**Use [balenaEtcher](https://etcher.balena.io/), and take the network image.**
-That combination has no wrong answer in it: Etcher only ever writes an image
-byte-for-byte -- no filesystem to choose, no partition scheme, no mode prompt --
-and the network image is one file that needs no reassembly.
-
-If you want the offline image on Windows, join the parts first. The `/b` is
-load-bearing: without it `copy` treats them as text and stops at the first
-`0x1A` byte, leaving a file that looks complete and is not.
-
-```
-copy /b PART-aa + PART-ab + PART-ac + PART-ad nixarchy.iso
-certutil -hashfile nixarchy.iso SHA256
-```
-
-substituting the real names, and comparing that hash against `SHA256SUMS`
-yourself -- `certutil` will not read a sums file for you.
-
-**If you use Rufus instead**, it will ask one question and its recommended
-answer is the wrong one here; the next caveat explains why. Choose **DD Image
-mode**.
-
-**Turn Secure Boot off** in your firmware before booting the stick. This
-project does not sign its bootloader, which is
-[a decision rather than an oversight](#status).
-
-**Keeping Windows on the same disk?** Free the space from inside Windows
-first, and read [the dual boot page](docs/manual/dual-boot-install.md) --
-it covers Shrink Volume, the 32 GiB floor the installer enforces, and why
-BitLocker has to come off before you start.
-
-Or build it yourself, which is the same image from the same commit:
-
-```
-nix build --extra-experimental-features 'nix-command flakes' \
-  github:olafkfreund/nixarchy#iso
-sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
-```
-
-The `--extra-experimental-features` flag is there because flakes are off by
-default on a stock Nix, and a machine that has never run one is exactly the
-machine someone builds an installer on. On NixOS with this module it is
-redundant and harmless. **Building on a non-NixOS host** also needs the Nix
-daemon running — `systemctl enable --now nix-daemon.socket`, and your user in
-the `nix-users` group on Arch. If `/nix/store` is missing, the Nix install did
-not finish; do not create it by hand, because a multi-user store wants
-`root:nixbld` and mode `1775` rather than whatever `mkdir` leaves behind.
-
-There are two images, and the difference is what they carry:
-
-| | Size | Needs a network | |
-|---|---|---|---|
-| `#iso` | 5.6 GB | no | carries the desktop; installs by copying |
-| `#iso-net` | 1.5 GB | yes | downloads the desktop as it installs |
-
-Take `#iso` unless the download is the thing you mind. It is the one the tests
-boot every night, it works on a machine that has never had a network, and it is
-faster once you have it. `#iso-net` is a quarter of the download and asks you
-to get online first — its first screen offers Wi-Fi if there is no cable.
-
-No boot menu, no login prompt: the installer is what comes up.
-
-![Selecting a keyboard layout](docs/img/installer/step-01-keyboard.png)
-
-Keyboard, then your account, then the disk — [step by step in the
-manual](https://olafkfreund.github.io/nixarchy/manual/getting-started). Encryption is on unless you press
-Ctrl+C at the overwrite warning, and one password serves your user, root and the
-disk alike.
-
-Then it gets out of the way. The log goes to `/var/log/nixarchy-install.log`
-rather than the screen, because a wall of store paths tells nobody anything they
-can act on.
-
-![The install itself: a wordmark, a bar, and a tip](docs/img/installer/install.gif)
-
-*The whole install, four minutes at four-second intervals.*
-
-Measured, not estimated: `checks.install` reports the installer's own figure
-every run — around eight minutes in a VM with no network, and faster on real
-hardware. The number on the finish screen is the same one.
-
-![Installed nixarchy in 7m 32s](docs/img/installer/03-finish.png)
-
-Reboot and you are at the desktop. An encrypted install goes straight there —
-the passphrase you typed at boot already proved who you are, so there is no
-second password.
-
-**`#iso` does not need a network.** The image carries the desktop rather than
-downloading it — 5.6 GB of ISO holding a 15.3 GB closure — so an install is a
-store copy and an activation, not a download. Unplug the cable and it still
-works; `checks.install-iso` proves that by installing with no network device
-present at all. `#iso-net` trades exactly this away: it fetches the same
-closure from `nixarchy.cachix.org` instead, which is why it is 1.5 GB rather
-than 5.6, and why it stops at a Wi-Fi prompt on a machine with no cable. The 56 selectable apps are the exception, and are meant to be:
-they come from the Install menu after first boot, from your own nixpkgs.
-
-**You can answer the questions ahead of time.** `nixarchy-install --answers
-<file>` takes every answer from a file and asks nothing, which is how the VM
-tests drive it and how you reinstall a machine the same way twice:
-
-```
-device=/dev/nvme0n1
-encrypt=yes
-luks_passphrase=...
-hostname=kestrel
-username=you
-password=...
-timezone=Europe/Copenhagen
-keymap=us
-```
-
-`tests/install.nix` is the working reference for it.
-
-**What you get is a flake you own.** `/etc/nixos` is a git repository holding a
-`flake.nix`, the `disk-config.nix` that formatted the disk, the `flake.lock`
-the image was built with — not a fresh one, because regenerating it would make
-your first boot differ from what was actually installed — and your machine as
-a directory under `hosts/`:
-
-```
-/etc/nixos
-├── flake.nix              finds machines by reading ./hosts
-├── flake.lock
-├── disk-config.nix
-└── hosts/nixarchy/        default.nix, configuration.nix,
-                           hardware-configuration.nix, nixarchy-apps.nix
-```
-
-A second machine is a second directory; `flake.nix` reads `./hosts` and there
-is nothing in it to edit. `imports = [ ./nixarchy-apps.nix ];` is already
-written for you: forgetting that line is the silent failure the section below
-warns about for machines you configure by hand, and the installer does not let
-you make it. Edit it and run `nh os switch`. Nothing the installer did is
-hidden from that directory, which is the point: a rebuild immediately after
-install builds nothing, because everything it did is described there.
-
-Installing a second machine from that same repository, and letting them keep
-themselves current, is [many machines, one repo](docs/manual/many-machines.md).
-
-**Five caveats worth knowing before you write the stick.**
-
-**In Rufus, answer the ISOHybrid question with DD — not the recommended
-default.** Rufus asks once:
-
-> This image is an ISOHybrid image … Write in ISO Image mode (Recommended)
-> / Write in DD Image mode
-
-**ISO Image mode is the default and it is the wrong answer here**, and the
-reason is a file size. The offline image contains one 5.8 GB file, the Nix
-store it installs from, which is larger than FAT32 can hold -- so ISO mode
-falls back to NTFS, and because UEFI firmware cannot boot NTFS, Rufus adds its
-own bootloader to chain-load from it. *That* bootloader then tries to load this
-image's GRUB modules, cannot parse them, and stops with:
-
-```
-kern/x86_64/dl.c:grub_arch_dl_relocate_symbols:114:
-  relocation 0x18d570 is not implemented yet
-Aborted. Press any key to exit.
-```
-
-`0x18d570` is not a relocation type — real ones are small integers, and
-`R_X86_64_64` is 1 — which is how you know the loader is reading modules from
-a different build rather than that the download is corrupt. **Nothing is wrong
-with the image.** It boots under UEFI whenever the firmware runs the
-bootloader that is on it.
-
-So: **DD Image mode**. The stick then looks empty or unreadable to Windows,
-which is correct. [balenaEtcher](https://etcher.balena.io/) never asks — it
-only does raw writes — so it is the safer choice if you would rather not have
-to catch a dialog. On Linux, `dd` as above.
-
-Tools that boot the image with their own loader are a different question, and
-the honest answer is "sometimes". **Ventoy** does boot the offline image: a
-tester's install log shows `NIXARCHY_4_0_2` mounted at `/iso` from Ventoy's
-exfat partition, with the installer running and disko partitioning the disk.
-So it is not in the same category as the NTFS shim above, and this text used to
-say it was.
-
-It is still not what to reach for first. Ventoy, unetbootin, YUMI, multiboot
-sticks and "loopback this ISO" entries in an existing GRUB all interpose their
-own loader between the firmware and ours, which is one more thing that can
-differ between your machine and the one this was tested on -- and when it does
-go wrong it goes wrong at boot, before there is anything to read a log from.
-A raw write has no such layer. If Ventoy is already how you keep your sticks,
-it is reasonable to try; if you are choosing now, choose the raw write.
-
-Windows' own *Burn disc image* is for optical media and will not make a
-bootable stick at all.
-
-**It asks how to use the disk, and one of the answers erases it.** The first
-screen offers a free-space install -- it keeps what is already on the drive and
-takes only unallocated space, which is how you put this beside Windows -- and a
-full-disk install, which does exactly what it says. There is still no partition
-*editor*: free-space mode needs at least 32 GiB of contiguous unallocated space
-that you made beforehand, with Windows' own Disk Management or `gparted`, and
-it refuses rather than shrinking anything itself.
-
-Full-disk mode is one file, `installer/disk-config.nix`, run against the disk
-you name. Anything already there is gone.
-
-Making that space is a Windows job and is done before you boot the stick:
-[the dual boot page](docs/manual/dual-boot-install.md) covers Shrink Volume,
-the 32 GiB floor, Fast Startup, and BitLocker.
-
-It is **UEFI only** — the layout is an ESP with systemd-boot, and there is no
-BIOS path.
-
-**`x86_64-linux` only.** Nothing else is built or tested.
-
-And if you encrypt, **the passphrase prompt at boot comes before Bluetooth
-exists**. A wireless keyboard that pairs after the desktop is up cannot type
-into the initrd, so the machine sits there waiting for a key you have no way to
-press. Upstream's manual carries the same warning because people hit it. Use a
-wired keyboard for the first boot, or do not encrypt.
-
-## Adding it to a machine you already run
+### On NixOS you already run
 
 Start here:
 
@@ -1190,35 +222,6 @@ nix run github:olafkfreund/nixarchy#doctor
 
 It reads the running system and prints the configuration that machine needs --
 before nixarchy is an input anywhere. It changes nothing.
-
-Three of the things it reports are worth knowing about in advance, because
-each fails *silently*, or misleadingly, rather than loudly:
-
-**Your session may be running an older build than the one installed.**
-`OMARCHY_PATH` and `PATH` are set at login and keep pointing at whichever store
-path was current then. A `nixos-rebuild switch` installs a new package at a new
-path and cannot change the environment of a session already running, so every
-`omarchy-*` command the desktop executes -- every keybinding, every menu row --
-comes from the old build until you log out and back in. The doctor compares the
-two and says so. On Arch this cannot happen: the tree lives at a fixed
-`/usr/share/omarchy` overwritten in place, and a running session picks up a new
-version at once. Here the path itself changes.
-
-**`Setup > Default browser` may report success and change nothing.** If
-`mimeapps.list` is a store symlink -- which is what `xdg.mimeApps` in Home
-Manager produces, and the right way to declare it -- `xdg-settings` fails on the
-read-only file and *still exits 0*. `omarchy-default-browser`'s `|| exit 1` never
-fires. Nothing is broken and nothing says so, which is the only reason it is
-worth a section: the fix lives in a file the menu cannot reach.
-
-**A tmpfs `/tmp` smaller than 64 GiB will fail a rebuild as a full disk.** Nix
-builds in `$TMPDIR`. When that is a tmpfs it is RAM, not the filesystem `df`
-reports on, and a desktop rebuild unpacking several large sources at once
-(`cef-binary` alone is ~1.9 GiB unpacked) can exhaust it. What you get is `No
-space left on device` and nix's own hint to check free disk space -- on a
-machine with hundreds of gigabytes free. Nothing in the error names tmpfs, RAM
-or `$TMPDIR`. The doctor names the size and both remedies, and sets neither:
-`boot.tmp.*` is your machine's memory policy.
 
 Then, in order:
 
@@ -1257,122 +260,72 @@ Then, in order:
    machine.
 
 5. **Log out and pick "Omarchy"** at your greeter. If you already have a
-   Hyprland config, this is the step that matters -- see below.
+   Hyprland config, this is the step that matters -- see
+   [what defers to you](https://olafkfreund.github.io/nixarchy/manual/configuration#on-a-machine-you-already-run).
 
-### After it is installed
+What the doctor's three silent findings mean, what the module defers to your
+existing configuration, and keeping a `hyprland.lua` you already have:
+[Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration#on-a-machine-you-already-run).
+Then, from inside the session, `nix run github:olafkfreund/nixarchy#verify`
+asks the questions no VM check can — hardware rendering, Bluetooth, the
+RetroArch cores — and prints what it found rather than a verdict.
 
-```sh
-nix run github:olafkfreund/nixarchy#verify
+### On a blank machine
+
+There is an ISO now. Download it, write it to a stick, boot it,
+and answer seven questions.
+
+> [!CAUTION]
+> **This is the least mature part of nixarchy, and it partitions disks.**
+>
+> The installer is under active development and is where most of the recent
+> bugs have been. It is covered by four VM install checks in CI — blank disk,
+> free space beside an existing OS, encrypted, and a boot of the real ISO —
+> and those checks are the reason problems get found, not a promise there are
+> none left.
+>
+> Use a spare machine or a VM first. Back up anything on the target disk. If
+> the machine already runs NixOS, you do not need this at all — use
+> [the flake route](#on-nixos-you-already-run), which touches
+> neither your partitions nor your bootloader and rolls back in one command.
+
+**[Releases](https://github.com/olafkfreund/nixarchy/releases)** carry prebuilt
+images from `v4.0.1-3` onward, built and install-tested by CI on the machine
+that runs the nightly checks. The large one is split, because GitHub will not
+take a single file that size:
+
+```
+cat nixarchy-v*.iso.part-* > nixarchy.iso     # the 5.6 GB image only
+sha256sum -c --ignore-missing SHA256SUMS
+sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-From inside a running Omarchy session. Everything this repo checks in CI runs
-in a machine with no GPU, no Bluetooth radio, no network and no sound -- which
-catches a great deal and cannot answer whether the compositor got hardware
-acceleration, whether bluetoothd sees an adapter, or whether the RetroArch
-cores landed where RetroArch looks. This asks those, and prints what it found
-rather than a verdict: `llvmpipe` and `AMD Radeon` are both a pass to a script
-and mean opposite things to a person.
+`--ignore-missing` because one `SHA256SUMS` covers both images and nobody
+downloads both.
 
-On a laptop with hybrid graphics it reads:
+There are two images, and the difference is what they carry:
 
-```
-Session    ✓ Omarchy shell running        pid 2019165
-Graphics   ✓ hardware rendering
-             Mesa Intel(R) UHD Graphics (CML GT2)
-             Intel CometLake-H GT2 [UHD Graphics]
-             NVIDIA GA104M [GeForce RTX 3080 Mobile / Max-Q 8GB/16GB]
-Bluetooth  ✓ bluetoothd sees 1 adapter(s)
-Theme      ✓ portal reports dark          ✓ cursor follows the theme
-Shell      ✓ functions wired in           ✓ compose sequences resolve
+| | Size | Needs a network | |
+|---|---|---|---|
+| `#iso` | 5.6 GB | no | carries the desktop; installs by copying |
+| `#iso-net` | 1.5 GB | yes | downloads the desktop as it installs |
 
-16 passed, 0 failed, 3 worth a look
-```
+Take `#iso` unless the download is the thing you mind. It is the one the tests
+boot every night, it works on a machine that has never had a network, and it is
+faster once you have it. `#iso-net` is a quarter of the download and asks you
+to get online first — its first screen offers Wi-Fi if there is no cable.
 
-It distinguishes **absent from broken**: on a machine that has never installed
-Omarchy the checks that need it report as notes, not failures, and the header
-names the desktop that *is* running.
+Boot it: no boot menu, no login prompt, the installer is what comes up. The
+questions, one by one, are in
+[Getting started](https://olafkfreund.github.io/nixarchy/manual/getting-started).
+Writing the stick from Windows or macOS (and why Rufus' recommended answer is
+the wrong one), Secure Boot, Ventoy, answering the questions from a file, and
+what the installer leaves in `/etc/nixos`:
+[The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso).
+Keeping Windows on the same disk:
+[dual boot](https://olafkfreund.github.io/nixarchy/manual/dual-boot-install).
 
-### What running it on real hardware found
-
-Nine defects, none of which any VM check could have caught. Six were in this
-repo, and three were in the checks themselves -- tests that passed for
-structural reasons rather than because anything was right:
-
-| | |
-|---|---|
-| `start-hyprland` | the session exec'd the Hyprland binary directly, and 0.56 logs a warning asking to be supervised by its watchdog |
-| `OMARCHY_PATH` | all three shell rc files fell back to `/usr/share/omarchy` when the variable was unset — a path that can never exist here, so a systemd unit or container sourcing one got no aliases at all. They locate themselves now |
-| the app selection | copied into the flake and imported by nobody: apps looked enabled and were never built. `apply` says so now |
-| Vulkan | looked in `/usr/share/vulkan/icd.d`, which NixOS does not use — it reported no Vulkan on every machine |
-| both app launchers | tested `-x /usr/bin/<app>`, never true here, so clicking Spotify offered to *install* Spotify |
-| the boot splash | Omarchy's Plymouth theme was never installed, so the one screen every boot shows was unbranded |
-| **the graphics check** | reported "hardware rendering" on any machine, llvmpipe included: it matched a header containing no renderer, so the software-rendering case could never fire |
-| **the shell check** | `pgrep -x quickshell` cannot match `.quickshell-wrapped`, so it reported the bar missing while it was on screen |
-| **the functions check** | `type tdl` from a script cannot see a parent shell's functions — it was incapable of passing, for every shell |
-
-The last three are the reason this section exists. A check that cannot fail
-looks exactly like a check that passes.
-
-### If you already have a `~/.config/hypr/hyprland.lua`
-
-Nothing is overwritten, and you keep both desktops. The seed never replaces a
-file you own, so Omarchy's own `hyprland.lua` is not installed — and it does not
-need to be. The **Omarchy** session entry runs Hyprland with `--config` against
-Omarchy's copy in the store, so your Hyprland session stays exactly yours and
-Omarchy's is Omarchy's. Pick whichever at the greeter.
-
-You will see one line on rebuild saying so. The only case that warns is
-`programs.nixarchy.session = false` *and* a Home Manager-owned `hypr/` — with
-no session entry and no installed config, that configuration has Omarchy's
-applications and menus but no way to reach its desktop.
-
-
-Nixarchy never overwrites a file you own, so Omarchy's own `hyprland.lua` is
-not installed and nothing in `~/.config/hypr` starts its bar or binds its keys.
-
-The **Omarchy** session is the answer, and it is registered by default. It runs
-Hyprland against Omarchy's own config with `--config`, so it needs no file of
-yours: your session stays yours, and Omarchy's is Omarchy's. `nix build
-.#checks.x86_64-linux.coexist` boots exactly that arrangement -- a foreign
-`hyprland.lua` in place, the Omarchy session launched from its own `.desktop`,
-and the desktop asserted to render.
-
-The two sessions share
-`~/.config/hypr/{monitors,input,bindings,looknfeel,autostart}.lua`, because
-Omarchy's bootstrap builds Hyprland's Lua module path from `$HOME/.config` and
-nothing else. Only the entry point differs, so editing those changes both.
-
-### What defers to you automatically
-
-Every system service the module turns on is `mkDefault`, so your own settings
-win rather than colliding. If you already run Docker your way, or
-systemd-networkd instead of NetworkManager, or Plymouth off, nothing here
-argues with you.
-
-Two cases are handled rather than merely deferred:
-
-| Your machine | What happens |
-| --- | --- |
-| TLP for power management | power-profiles-daemon is left off; NixOS forbids both. `omarchy powerprofiles` stops working, nothing else does |
-| GDM, LightDM, greetd or ly | set `displayManager = false`; your greeter picks up the **Omarchy** entry from `wayland-sessions` and you lose only the branded greeter |
-| Hyprland already configured | log in through the **Omarchy** session. It runs Hyprland against Omarchy's own `hyprland.lua` via `--config`, so it never needs `~/.config/hypr/hyprland.lua` and your session keeps working |
-
-Two are not, because they are not nixarchy's to resolve:
-
-- **PulseAudio.** NixOS enables PipeWire for any graphical session and asserts
-  the two cannot coexist. A plain `programs.hyprland.enable = true` with
-  PulseAudio fails the same way, with no nixarchy in sight.
-- **Hyprland itself.** `programs.hyprland.enable`, its package and `withUWSM`
-  are set outright, not with `mkDefault`. Omarchy is written against Hyprland's
-  Lua API; replacing the compositor means `lib.mkForce`, which is the right
-  amount of friction for that. If you already pin your own Hyprland, `mkForce`
-  it -- anything from 0.55 satisfies the assertion.
-
-The two sessions do share `~/.config/hypr/{monitors,input,bindings,looknfeel,
-autostart}.lua`, because Omarchy's bootstrap builds Hyprland's Lua module path
-from `$HOME/.config` and nothing else. Only the entry point differs.
-
-## Try it in a VM
+### Try it in a VM
 
 The front door needs no repository knowledge at all -- it boots the same
 installer ISO a release ships, in a local UEFI VM, and you answer the wizard
@@ -1399,7 +352,7 @@ and whether `/dev/kvm` is usable -- without it the VM still runs, with a
 loud warning, several times slower. On a machine with no display it serves
 the screen over VNC on `127.0.0.1:5900` instead of dying.
 
-### No Nix yet? Try it from any Linux
+#### No Nix yet? Try it from any Linux
 
 `#try` above is a `nix run` app, so it needs Nix installed. If you are on
 Ubuntu, Fedora, Arch or anything else and would rather look first, there is a
@@ -1419,104 +372,138 @@ rest.
 It takes the latest release and cannot resolve a particular commit — if you
 have Nix, `#try` is the better door and knows it.
 
-The two apps below are different animals: `#vm` boots a prebuilt smoke-test
-*of the installed system* -- no installer, no disk -- and is mainly a
-development tool.
+## Vendored, not reimplemented
 
-```sh
-# graphical -- this is the one that shows the desktop
-QEMU_OPTS="-device virtio-vga-gl -display gtk,gl=on" \
-  nix run github:olafkfreund/nixarchy#vm
+Omarchy is **vendored, not reimplemented** — the desktop is the real thing,
+tracked by a source bump rather than a re-port. Its Install menu writes a
+declaration and rebuilds, so you get a menu *and* a reproducible machine. A
+runtime install menu is not against NixOS; a menu that installs at click time
+is, and this one does not.
 
-# headless -- serial console, for reading the journal when the session is broken
-QEMU_OPTS="-display none -serial mon:stdio" \
-  nix run github:olafkfreund/nixarchy#vm
+Everything upstream resolves through a single environment variable:
+
+```lua
+-- default/hypr/bootstrap.lua
+package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
+  ..(os.getenv("OMARCHY_PATH") or "/usr/share/omarchy").."/?.lua;"
 ```
 
-Autologs in as `omarchy` / `omarchy`, with sshd on `localhost:2222` so the VM
-can be inspected and driven from the host.
+Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
+the Lua defaults all follow. Only **32 of 444 scripts** actually run
+`pacman`/`yay` — that's the entire distro-coupling surface.
 
-**The VM's disk is ephemeral.** `nix run .#vm` otherwise writes a
-`nixarchy-vm.qcow2` and reuses it forever, which makes a smoke test replay the
-previous run's state — Omarchy persists every notification under
-`~/.local/state/omarchy/notifications/history/` and replays it on start, so
-fixed bugs kept reappearing from a stale disk.
+Six of those are replaced outright, in `pkgs/omarchy/nix-bin/`: the ones the
+menus drive. The rest manage Arch release channels, keyrings and orphan
+pruning, none of which have a Nix meaning worth reimplementing — your flake
+input *is* the release channel, and the store has no orphans. Those fail either
+way, so a `pacman` shim only changes *how*: instead of `command not found`, you
+get told what replaced the command. It keeps pacman's contract (stderr,
+non-zero), so `omarchy version` and `omarchy debug`, which already wrap it in
+`2>/dev/null || fallback`, are unaffected.
 
-### A VM with room for a model
+### Two names, on purpose
 
-`.#vm` is a smoke test and is sized like one, which makes it the wrong machine
-for `programs.nixarchy.localAi` in two ways. 8GB does not hold a useful model —
-`qwen3:8b` is 5.2GB of weights before any cache. And the ephemeral root is a
-*tmpfs*, so the weights live in RAM: paid for once to store and once to load,
-out of the same pool, and the service is OOM-killed while every visible number
-says it had room.
-
-```sh
-QEMU_OPTS="-device virtio-vga-gl -display gtk,gl=on" \
-  nix run github:olafkfreund/nixarchy#vm-big
-```
-
-32GB, 8 cores, a real 128GB disk, sshd on `localhost:2224` so it runs beside
-`.#vm`, and `localAi` on with `qwen3:8b`. It keeps its qcow2 between runs — the
-opposite of what `.#vm` wants, and exactly right here, because a pulled model
-then survives a restart instead of being downloaded again.
-
-## Screenshots and the screencast
-
-`nix build .#demo` boots a machine, logs in through the greeter, drives a tour
-of it and writes the frames plus an mp4 and a GIF:
+The desktop is Omarchy's. The port is nixarchy's. The commands say which is
+which, and `nixarchy` is the way in:
 
 ```sh
-nix build .#demo
-ls result/screenshots/          # every step, numbered
-cp result/nixarchy-demo.gif docs/nixarchy-demo.gif
+nixarchy                     # what this port adds, and what it defers to
+nixarchy search tailscale    # nixarchy-search
+nixarchy pkg add ripgrep     # nixarchy-pkg-add
+nixarchy apply               # nixarchy-apply
+nixarchy dev init react      # nixarchy-dev-init — a devenv project, here
+nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 ```
 
-It needs no display and no SSH, because the frames come from qemu's own
-screendump rather than a compositor screencopy -- `grim` cannot help here, as
-nothing consumes the frames and it blocks forever.
+Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
+work and the exit status, terminal and signals stay the command's own.
 
-The feature GIFs in `docs/img/features/` are recorded one scene at a time, so
-a single menu changing means re-recording one GIF rather than the whole tour:
+**Upstream's 444 commands keep upstream's name, deliberately.** `omarchy theme
+set` is the same script here as on Arch — a bug in it is a bug to report there,
+and renaming it would say otherwise. It would also cost the property this repo
+is built on: tracking a release is a source bump because nixarchy replaces 19
+scripts and patches ~100 strings, and renaming would make all 5,365 occurrences
+of `omarchy` a patch to re-apply on every bump. `omarchy.*` is also a reserved
+plugin namespace that `omarchy plugin validate` enforces and third-party
+plugins target.
 
-```sh
-nix run .#demo-record -- --list      # menus, themes, install, devenv, plugin, microvm, boxes
-nix run .#demo-record -- install     # boots a VM, records, verifies, writes
-                                     # docs/img/features/install.gif
-```
+The branding you *do* see is nixarchy's: the session is **Nixarchy**, the menu
+button wears the snowflake, and the screensaver and About window carry the
+NIXARCHY banner. The session's id stays `omarchy` so a greeter that already
+remembers it keeps remembering it — `Name=` is what a greeter prints, the
+basename is what it stores.
 
-Most scenes record inside the sandbox. `boxes` cannot: creating a box pulls
-its image with podman over the real network, and the first `distrobox
-enter` provisions online — so `demo-record` runs that scene's test driver
-outside the sandbox (where qemu's user-mode network reaches out) and then
-applies the very same encode and verification gate to the frames.
+## What works
 
-Every scene's GIF is gated before the build may succeed: frames sampled
-across it must actually change, and their OCR text must contain what the
-scene claims to show -- a recording of a wallpaper cannot pass the microvm
-scene no matter how it was produced. The same gate is a standalone tool for
-auditing any GIF somebody hands you:
+| | |
+|---|---|
+| Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
+| `omarchy` CLI | all 444 subcommands, `omarchy commands --check` green |
+| **Install menu** | picks write to a Nix config, not pacman |
+| **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 444 |
+| **Remove menu** | deselects apps, never touches your own config |
+| **Update menu** | `nh os switch --update <flake>` |
+| 66 apps in the selection | 50 from nixpkgs, 5 as NixOS modules, 9 built here, 2 with no equivalent |
+| Learn menu | NixOS wiki, `search.nixos.org` packages and options |
+| Shell functions | bash and zsh source the chain; fish derives it from the same files |
+| RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
+| **Plugins** | `omarchy plugin add <url>` works as upstream ships it, and `programs.nixarchy.plugins` pins one in your flake |
+| **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
+| 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
+| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
+| **Boxes** | `nixarchy box create dev --template archlinux` drops you into an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
+| **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](docs/manual/remote-desktop.md). Off by default |
+| **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
+| **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](docs/manual/python.md). **On by default** |
+| Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
+| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a hands-on tour, an offline manual search and a tutor grounded in your machine, offered in the bar — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
+| **Agent skills** | from `nixarchy` and `nixos` to `nixos-gpu` and `nixos-android` — rewritten for NixOS, not Omarchy's Arch originals |
+| **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
+| Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
+| **Fresh-machine install** | a bootable ISO, seven questions, and the machine is a flake you own — with no network |
+| **Android** | `scrcpy` mirrors the phone you own, `nixarchy android` gets it paired over Wi-Fi, and Waydroid runs Android without one — [the page](docs/manual/android.md). Off by default |
+| Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
 
-```sh
-nix run .#demo-verify -- some.gif --expect 'dev@demo'
-```
+## AI agent skills
 
-The gate is a floor, not a reviewer: `demo-record` leaves the sampled frames
-next to the build result, and the person committing the GIF is expected to
-look at them.
+Omarchy ships skills for coding agents, and `omarchy-provision-user` symlinks every
+one of them into `~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills` and
+`~/.pi/agent/skills`. Whatever is in that directory is what an agent on this machine
+is told to do.
 
-`docs/capture-screenshots.sh` is the older path and still captures menus the
-tour does not visit. It has to run against a **graphical** VM, for that same
-reason:
+Upstream's are written for Arch. They point at `/usr/share/omarchy`, and their
+decision framework answers "install a package" with `omarchy pkg add` — a script
+this repo replaced with one that deliberately refuses. Shipping them unchanged means
+an agent confidently doing imperative things the next rebuild wipes, which is the
+one failure mode that looks like success.
 
-```sh
-ssh -p 2222 omarchy@localhost 'bash -s' < docs/capture-screenshots.sh
-scp -P 2222 'omarchy@localhost:~/nixarchy-screenshots/*.png' /tmp/shots/
-# they are photographic, so the repo keeps them as jpg
-for f in /tmp/shots/*.png; do
-  magick "$f" -resize 1600x -quality 86 "docs/screenshots/$(basename "${f%.png}").jpg"
-done
-```
+So sixteen skills ship here instead:
+
+| skill | owns |
+|---|---|
+| **`nixarchy`** | The desktop: Hyprland, the bar, themes, capture. Upstream's `omarchy` skill, renamed and corrected |
+| **`nixos`** | Packages and system changes: `apps.nix`, the Install menu, `nixos-rebuild`, generations, rollback, option search |
+| **`nixos-gpu`** | NVIDIA/CUDA, AMD/ROCm, Intel — as three layers, because almost every "the GPU does not work" report is one specific layer and skipping to the last one is why they stay unsolved |
+| **`nixos-ai`** | Ollama, Open WebUI, llama.cpp, model sizing, pointing an agent at a local endpoint |
+| **`nixos-services`** | systemd units, the firewall, containers, why a service will not start, why a rebuild will not evaluate |
+| **`nixos-secrets`** | agenix, sops-nix, `*File` options, `LoadCredential`, and why a leaked secret is rotated rather than deleted |
+| **`nixos-performance`** | Kernel choice, zram and swappiness, governors, storage, Nix build speed, boot time |
+| **`nixos-security`** | Firewall and nftables, SSH, sudo and the groups that are root in a costume, systemd sandboxing, kernel hardening |
+| **`nixos-doctor`** | The sweep to run *before* you have a theory: failed units, `-p err`, disk, memory, and what changed between generations |
+| **`nixos-config-repo`** | Getting the configuration into git and keeping it there, and the two things that bite: untracked files are invisible to the build, and git refuses a repository owned by somebody else |
+| **`nixos-android`** | scrcpy over USB and over Wi-Fi, Waydroid and what it will not run, and the two traps: `programs.adb.enable` is inert on current nixpkgs, and `adb mdns services` cannot work because android-tools is built without an mDNS backend |
+| **`nixos-binaries`** | Why a downloaded binary, an AppImage or a pip wheel will not run, and the ladder out: nix-ld's curated library set, envfs, an FHS environment, a box, packaging it — including the correction that nix-ld cannot help an interpreter nixpkgs built |
+| **`nixos-gaming`** | Steam as a module rather than a package, Proton per title, the 32-bit graphics stack that is the usual cause, controllers, gamescope, and thirteen libretro cores that live in the package rather than `/usr/lib` |
+| **`nixos-fleet`** | One flake, several machines: the `hosts/<name>/` layout, what is shared and what is per-machine, `nixarchy-apply`'s hostname match, pulling on a timer, and where `--target-host` stops |
+| **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
+| **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
+
+What each skill corrects, how **Menu ▸ Trigger ▸ Ask** routes to them, and
+running them against a local model with no account and no network:
+[the AI page](https://olafkfreund.github.io/nixarchy/manual/ai). The reasoning
+behind the split, and the measurements behind refusing a CPU-only model, are in
+[docs/internals/design.md](docs/internals/design.md#ai).
 
 ## Staying current with Omarchy
 
@@ -1607,117 +594,6 @@ programs.nixarchy.apps.once.package =
   });
 ```
 
-## Design notes
-
-Each of these is a bug that shipped, was found, and is now guarded by CI.
-
-### The menu is data, and overrides destroy what they omit
-
-Upstream reads one extension file and merges it over the defaults by id. Its
-comment says you can *"tweak label/icon/action without re-declaring the whole
-row"*. **The code does not do that:**
-
-```js
-label: value.label || id,                    // normalizeItem runs on the override too
-icon:  value.icon  || "",
-for (var k2 in entry) merged[k2] = entry[k2] // then copies ALL keys over the default
-```
-
-An override that omits a key does not inherit upstream's — it blanks it.
-Omitting `label` renders the raw id (`install.editor.vscode` instead of
-`VSCode`); omitting `action` makes the row do nothing when clicked. The menu
-extension is therefore **generated by reading Omarchy's own menu** and carrying
-every unstated key across, so labels can never drift from upstream's. CI
-rejects a row with no label or no action.
-
-The 16 per-app Remove rows are derived the same way: upstream names the app
-only inside its `when`, as `omarchy-pkg-present <arch-package>`, so the
-generator reads that and rewrites the row.
-
-### Bins are symlinked, not wrapped
-
-`bin/omarchy` discovers its subcommands by grepping the first 80 lines of each
-sibling for `# omarchy:summary=`. A `wrapProgram`-generated wrapper has no such
-comment, so wrapping every bin makes the CLI report **zero** commands while
-still building fine. Runtime dependencies reach the scripts through the
-module's `systemPackages` instead.
-
-### Wallpapers are capped at 4096px
-
-Omarchy ships wallpapers up to 7680px wide, and 5 of the 8 in the default theme
-exceed 4096 — `GL_MAX_TEXTURE_SIZE` on llvmpipe and on plenty of integrated
-GPUs. Over that limit the image cannot become a texture and **nothing is drawn,
-with no error anywhere**: Qt reports the image `Ready` at its full size, the
-layer surface exists at alpha 1, and the log is clean. `sourceSize` caps what
-Qt decodes, which fixes it on every machine with that limit.
-
-### GL apps need a software fallback in a VM
-
-Three separate symptoms turned out to be one cause: kitty and LocalSend died
-on startup with `EGL: No EGLConfigs returned`, and opening the menu blanked
-the whole desktop, bar included. The scrim was not at fault — dropping its
-alpha from 0.5 to 0.12 changed the rendered pixel not at all.
-
-qemu's virgl path hands out no usable EGL config, so every GL consumer fails:
-the apps refuse to start, and Hyprland composites nothing beneath its overlay
-layer. The guest has `swrast`, `virtio_gpu` and a render node all the same, so
-nothing looks wrong until something asks for a config.
-
-`LIBGL_ALWAYS_SOFTWARE=1` in the VM fixes all three. With it, the menu dims
-the wallpaper (`#281640` over `#36115A`) instead of erasing it. It is set for
-the VM only: on a real GPU it would push every GL app onto the CPU.
-
-### User state stays mutable
-
-`omarchy-theme-set` applies themes at runtime by copying files into
-`~/.local/state/omarchy/current/` and flipping symlinks. That's anti-Nix, and
-it's also why theme switching is instant instead of a rebuild.
-
-- **Nix owns** packages, services, hardware, `OMARCHY_PATH`, the default theme
-- **Omarchy owns** `~/.local/state/omarchy` and `~/.config/omarchy` at runtime
-
-Those are copied with `--no-preserve=mode`: `$OMARCHY_THEMES_PATH` is a store
-path, so `cp -r` otherwise stages a read-only directory and the *next* theme
-switch cannot clean it up.
-
-### Hyprland comes from upstream, not nixpkgs
-
-Omarchy 4.x needs ≥ 0.55 for `hl.bind` / `hl.window_rule` / `hl.on`; nixpkgs is
-on 0.54.3.
-
-The flake pins a **commit**, not the `v0.56.2` tag, because that tag does not
-build against its own `flake.lock`: its `CMakeLists.txt` asks for
-`find_package(glaze 7...<8)` while `nix/overlays.nix` feeds it the glaze 8.0.0
-from its locked nixpkgs. `find_package` fails, CMake falls back to cloning glaze
-over the network, and the build sandbox has none.
-
-`inputs.nixpkgs.follows` is deliberately **not** set on it — hyprwm asks
-consumers not to, and overriding forfeits their binary cache.
-
-### quickshell is pinned ahead of nixpkgs too, but temporarily
-
-nixpkgs ships 0.3.0, whose session lock reaches `qFatal` when screens sleep and
-wake while locked:
-
-```
-FATAL: Tried to show lockscreen surfaces without active lock
-```
-
-in `WlSessionLock::updateSurfaces`. The process aborts — and because the Wayland
-session-lock protocol deliberately keeps the compositor locked when its lock
-client disappears, what is left is a blank screen with nothing to type a password
-into. Reboot is the only way out. That is the protocol working as designed on top
-of a crash.
-
-v0.3.1 fixes it and says so: *"Fixed session lock crashes on sleep, wake, DPMS,
-and unlocking."* An `overrideAttrs` rather than a fork — nixpkgs keeps the build,
-the Qt wrapper and the dependency set, and only the tag moves. It is passed to
-the omarchy package rather than set on the overlay, so a machine using quickshell
-for something of its own still gets nixpkgs'.
-
-Unlike the Hyprland pin, this one is meant to go away: delete it when nixpkgs
-ships ≥ 0.3.1. Tracked in issue #35.
-
 ## Releases
 
 ```nix
@@ -1759,162 +635,6 @@ keeping until it means something. Until then, expect options to be added and
 occasionally reshaped between releases, and read the release notes before
 bumping.
 
-## Development
-
-```sh
-nix develop                  # or `direnv allow`
-nix build .#omarchy          # fast -- just the vendored tree
-nix flake check              # everything, including a booted session test
-nix run .#vm                 # smoke test
-nix run .#update         # bump the pinned packages
-```
-
-The six checks, and what each is for:
-
-| check | boots a VM | what it is for |
-| --- | --- | --- |
-| `session` | yes | the desktop itself — greeter, bar, themes, the Install loop, theme install, migrations, the `/usr` scan |
-| `plugin` | yes | `omarchy plugin add` from real repos, and `programs.nixarchy.plugins` |
-| `coexist` | yes | the Omarchy session beside somebody else's `hyprland.lua` |
-| `integration` | no — **builds** | the module onto a configuration that already exists |
-| `options` | no | every option both ways, plus menu coverage and menu commands |
-| `vm-toplevel` | no | the reference machine still builds |
-
-Only the first three boot a machine, so `nix build .#checks.x86_64-linux.options`
-is the quick one to run while editing `data/apps.nix`.
-
-## Status
-
-Working, and each line names what proves it rather than asserting it. All but
-the last run in CI on each push; the last is two machines that boot it.
-
-| | proven by |
-| --- | --- |
-| The session, bar, themes and wallpaper | `checks.session` logs in through SDDM's greeter and asserts the desktop *renders* -- it compares the screen against the wallpaper, because every other check passed once while it was black |
-| Installing on a blank machine | a real install from the ISO onto an empty disk: partitioned, closure copied, bootloader written, and the result booted into the desktop on its own. `checks.install` does the same in CI and boots the result, asserting that a rebuild immediately afterwards builds nothing |
-| Installing with **no network at all** | `checks.install-iso` boots the offline image in a VM with no network device, installs from it, and boots what it installed to a login prompt. The assertion that matters is not that the install succeeded but that **nothing was built and nothing was fetched** -- 2,221 store paths copied locally, zero from a substituter, and `--max-jobs 0` on the copied path so a single attempted build fails loudly instead of quietly reaching for a compiler |
-| Adding it to a machine you already run | `checks.integration` **builds** the module onto a config that overrides a package Omarchy also uses, pins its own Hyprland and already greets with greetd |
-| Sitting beside an existing Hyprland | `checks.coexist` boots the Omarchy session with a foreign `hyprland.lua` in place and asserts the bar comes up anyway |
-| The CLI | `omarchy commands --check`, plus a count the build refuses to let drift |
-| The Install/Remove/Update menus | `checks.session` enables an app, applies it, and asserts the selection reached the flake |
-| Third-party plugins | `checks.plugin` runs `omarchy plugin add <url> --enable` for two published plugins, then asks the *running shell* whether it loaded them -- not the filesystem -- before disabling and removing both |
-| Plugins pinned in your configuration | `checks.plugin` installs one through `programs.nixarchy.plugins` as a store symlink and asserts the *shell* discovers and loads it, that `plugin add` refuses to double-install it, and that `plugin remove` unlinks it |
-| Themes installed from a git URL | `checks.session` runs `omarchy theme install` against a real published theme and asserts the desktop moved to it -- name, and a wallpaper that came out of the clone |
-| Nothing reaching into `/usr` | `checks.session` scans every shipped command for a `/usr` path in code, against a named list of the Arch-only ones that explain themselves |
-| Every Install row mapped | `checks.options` compares upstream's menu against `data/apps.nix` both ways -- a row added upstream that nobody maps fails, and so does one that no longer exists |
-| Every menu row's command existing | `checks.options` resolves all 129 `omarchy-*` commands the 332 rows name; a row whose command vanished draws normally and does nothing |
-| Migrations refusing to run | `checks.session` asserts `omarchy migrate` explains itself instead of running 86 Arch scripts that sudo into `/usr` |
-| The session under Hyprland's watchdog | `checks.coexist` greps the journal for the warning 0.56 logs when the compositor is exec'd directly instead of through `start-hyprland` |
-| The shell rc files locating themselves | `checks.session` sources each with `OMARCHY_PATH` unset and asserts it resolves to the store, not to a `/usr` path that cannot exist |
-| **Two real machines** | a workstation and a laptop, both running it beside niri, Hyprland and GNOME behind greetd. `nixarchy-verify` inside the laptop's session: 16 passed, 0 failed |
-| Every desktop entry's command existing | CI derives the list from the shipped `.desktop` files rather than a hand-written one, and resolves each against the package and the runtime env — `Disk Usage` shipped launching a `dua` nothing installed |
-| Every app's `attr` naming a real package | CI resolves each `data/apps.nix` entry in the overlay. The doctor falls back to the attribute name when a lookup fails, which is right by luck when the attribute matches the binary and wrong when it does not: `zen` for a package installing `zen-beta`, `hey-cli` for one installing `hey` |
-| The browser lookup ignoring `$BROWSER` | CI asserts all four scripts that resolve a browser guard the call. `xdg-settings get` skips the mime database when `$BROWSER` is set and answers with the first `.desktop` whose `Exec` matches — on a Chrome user's machine, a web app rather than a browser |
-| The agent skills being NixOS-aware | CI asserts the skill set, that each `SKILL.md`'s frontmatter name matches its directory, and that **no fenced code block** contains a pacman, yay, `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch deliberately; a code block is what an agent copies |
-| Skill links surviving a rebuild | `checks.session` asserts all three skills are linked in all four agent homes and that each resolves to a `SKILL.md` **inside the current closure** — a stale link passes `-L` and fails `-e`, which is the case that matters |
-| The shell chain in bash, zsh and fish | asserted by running each shell and calling the functions, not by checking a file exists |
-| Compose keys, Bluetooth, UPower, the browser accent | asserted on the thing itself: the include resolves, the unit is enabled, the portal answers, the colour is the theme's |
-
-The integration check exists because everything else starts from a clean
-machine. Three bugs shipped that only appear when the module is *built* onto a
-config that already exists -- a desktop file colliding with a real package, two
-nixpkgs instances, and runtime dependencies listed in two profiles at once.
-None of them is an evaluation error, so none of them was caught by anything
-that only evaluates.
-
-### What is left
-
-Nothing on the list below is waiting on a decision -- each is either
-impossible, or a tradeoff taken deliberately. In rough order of how much
-someone would miss it:
-
-1. **Upstream is pinned to v4.0.3, which is the latest release.** There is no
-   bump to take: the tag is current, and Omarchy's default branch (`quattro`)
-   has *diverged* from it -- 351 commits ahead, 103 behind, with its own
-   `version` file still reading `4.0.0.alpha`. Moving to it would drop 103
-   commits of release work, so the pin stays on the tag until a newer one
-   exists.
-
-   The bump machinery has been exercised against that branch rather than left
-   untried. Every `--replace-fail` still matched across 98 commits and 300
-   changed files, `omarchy commands --check` passed at 441 commands, and
-   `vm-toplevel`, `options`, `integration` and `session` were all green. Two
-   checks -- `coexist` and `plugin`, the two that launch through the session's
-   own `.desktop` -- came up to a black desktop. That cause was not chased down,
-   because the answer did not depend on it and guessing at one would be worse
-   than saying so. The guards work; the branch is not somewhere to go.
-2. **The installer will not resize a partition, and there is no Secure Boot and
-   no graphical installer.** Each is a decision rather than a gap. It does
-   install into free space beside another operating system -- see
-   [the dual boot page](docs/manual/dual-boot-install.md) -- but the free space
-   has to be free before it starts: a resize is the operation in this area most
-   likely to lose data and it has a much better tool on the Windows side.
-   Secure Boot
-   needs signed shims and enrolled keys, which is a distribution-level
-   commitment rather than an installer feature. And the installer is a TUI
-   because it runs before there is a desktop to draw a GUI with -- Omarchy's
-   is too, for the same reason.
-
-3. **fish's `ga` and `gd`** cannot change your directory, and never will: they
-   run as upstream's bash behind a wrapper.
-4. **Battle.net and GeForce NOW** need a hand each, named in their rows. The
-   wine prefixes and Flatpaks behind them are not this repo's to own.
-5. **Rails, Laravel and Phoenix** are frameworks rather than packages, so they
-   are not in the selection: each wants a language plus a package manager
-   plus a generator, and the language halves *are* there. Their Install rows
-   answer with the nixpkgs names.
-6. **The boot splash cannot be re-themed at runtime.** Style > Unlock says so
-   rather than failing: the initrd is built from your configuration, so which
-   splash you get is decided at rebuild time. Everything else under Style
-   still follows the theme live.
-
-Known gaps in detail:
-
-- **The installer works, and it is not finished.** `nix build .#iso` produces a
-  bootable image that asks a handful of questions and installs onto a blank disk
-  — see *Installing on a fresh machine* above. It carries the desktop rather
-  than downloading it: 5.6 GB of image holding a 15.3 GB closure, and an install
-  with no network at all is a store copy and an activation. `checks.install`
-  records the duration on every run and fails above a budget, so a package that
-  starts being built rather than copied turns a test red instead of quietly
-  costing everyone ten minutes.
-
-  The rest of the product around it has since been built: release automation
-  publishes both images from a tag, `checks.free-space` installs alongside an
-  existing OS, and `checks.install-iso` runs nightly against the offline image
-  -- booting it with no network device, installing, and booting the result.
-  What is *not* finished is the same list as above: no partition resize, no
-  Secure Boot, no graphical installer, each for a stated reason.
-
-- `brave-origin` has no published source; use `apps.brave` with policies in
-  `/etc/brave/policies/managed`
-- RetroArch's default core set is free-licensed only, so snes9x, genesis-plus-gx,
-  mame and dolphin need a `withCores` override
-- in fish, `ga` and `gd` report where they went but leave you where you were.
-  Every Omarchy function runs as upstream's bash behind a fish wrapper, and a
-  wrapper cannot change its caller's directory. The other shells are unaffected
-- Install rows that name an Arch package tell you the nixpkgs name and the
-  option to put it in, rather than installing it. Fonts, the packages
-  `omarchy install dev-env` adds behind a language, Ollama and the gaming
-  rows' dependencies are all mapped; anything unmapped still gets the generic
-  answer
-- Battle.net and GeForce NOW still want a hand: the first needs
-  `pkgs.umu-launcher` and `hardware.graphics.enable32Bit`, the second
-  `services.flatpak.enable` and then `flatpak install flathub
-  com.nvidia.geforcenow`. Their rows name both. Xbox Cloud Gaming needs
-  nothing -- it is a web app, and never touches a package manager
-- Plugins added with `omarchy plugin add` are runtime state: they clone into
-  `~/.config/omarchy/plugins` and a machine rebuilt from the same flake comes
-  up without them. That is upstream's design and worth keeping, since pinning
-  every plugin would turn *trying* one into a rebuild. Pin the ones you want to
-  keep with `programs.nixarchy.plugins`; whether a plugin is *enabled* stays
-  runtime state either way, deliberately
-- Chromium's theme *accent* needs `programs.nixarchy.browserThemeUser`, which
-  hands that user the browsers' policy directories. Chromium reads policy only
-  from `/etc`, with no per-user equivalent, so this lets them set policy for
-  every user of the machine -- fine alone, not fine shared. Light and dark
-  follow the theme without it
-
 ## Roadmap
 
 What is being worked on, and what is planned. The issues are the detail; this
@@ -1933,208 +653,6 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | --- | --- | --- |
 
 | [#655](https://github.com/olafkfreund/nixarchy/issues/655) | **Neovim that knows it is on NixOS** — the editor this desktop ships has no Nix formatter, no treesitter grammar, and no AI plugin for any of the agents the Install menu offers. Taken from a configuration that already solves it | 5 filed |
-
-**Recently finished:**
-[what upstream adds must be classified, not absorbed](https://github.com/olafkfreund/nixarchy/issues/640)
-— three manifests that fail until a human classifies what arrived, so an
-upstream bump cannot slip anything past us in silence. The bin ledger learns
-what a shipped script *does* rather than only that it changed: twelve mutation
-pattern groups beside the pacman scan, because `PACMAN` was the only
-behavioural pattern in the repository and a script gaining `systemctl enable`
-or `usermod` passed without comment. Upstream's 40-file `/etc` overlay is
-inventoried with a reason per file — and the inventory's own finding is that
-**17 of the 40 would do something on NixOS and we do not do it**, now
-enumerated rather than rediscovered. Upstream's own `SKILL.md` is classified
-section by section with a digest per row, so a rewritten section is caught and
-not merely a renamed one. Each check fails in both directions and carries a
-floor, because a scan that sees nothing agrees with everything. The idea is
-taken from [zicochaos/omarchy-nix](https://github.com/zicochaos/omarchy-nix)
-(MIT), an independent port that had built the comparison we had only written
-the paragraph about. Three children closed.
-Also
-[the skills that cover what nixarchy actually does](https://github.com/olafkfreund/nixarchy/issues/606)
-— an agent asked why a downloaded binary will not run had nothing to reach for,
-and answered from whatever it had absorbed about Arch. Three skills close that:
-the loader ladder, gaming, and one flake across several machines. The most
-valuable line in any of them is a correction — **`nix-ld` does not help a
-nixpkgs Python.** Only an unpatched interpreter reads `NIX_LD`, which is why a
-`uv`-managed CPython works and the system `python3` does not, and guidance
-elsewhere including the wiki says the opposite. That single fact is the most
-common "I did exactly what the docs said and it still failed" report there is.
-Sixteen skills ship now, and the count is derived from the shipped files rather
-than written down, because the three lists that name them had already drifted
-apart once. Three children closed.
-Also
-[secrets you can actually use](https://github.com/olafkfreund/nixarchy/issues/611)
-— adding one was five manual steps ending in a hand-written `.sops.yaml`, and
-neither `sops` nor `ssh-to-age` was on `PATH` at all. It is a menu row and an
-editor now, the machine can say what secrets exist and what references them, and
-a personal key can be copied without a terminal. sops-nix rather than agenix,
-for the reason the design record already gave: agenix delivers raw files with no
-templating, so composing one into a config would need a hand-rolled
-`ExecStartPre` shim per service. The mechanism was always there — exactly one
-service used it. What changed is that a person can now reach it. Four children
-closed.
-Also
-[AI and GPU work that does not compile for two hours](https://github.com/olafkfreund/nixarchy/issues/620)
-— `cache.nixos.org` deliberately does not cache CUDA, because the NixOS
-Foundation does not redistribute NVIDIA binaries. So every machine with CUDA
-enabled built PyTorch from source, and `magma-cuda-static` alone is a ~10 GB
-closure. The community cache that fixes it **moved off Cachix to
-`cache.nixos-cuda.org` in November 2025**, so every guide still naming
-`cuda-maintainers.cachix.org` points somewhere stale. It is configured here now,
-gated on the declared NVIDIA path. The trap documented beside it is the one a
-blog post will hand you: narrowing `cudaCapabilities` cuts closure size and
-takes you **off** the cache, making a cached machine strictly slower. Also
-models that no longer silently fill `/`, a chat UI over the Ollama already
-running, ML and Jupyter devshells — `jupyenv` is unmaintained and is what people
-find first — and agents grounded in real option names instead of guessed ones.
-Six children closed.
-Also
-[making Nix answerable](https://github.com/olafkfreund/nixarchy/issues/621)
-— **4.0%** of respondents to the 2025 Nix community survey say they understand
-every error message, and 62.5% are tutorial-dependent, including 57% of people
-who call themselves *intermediate*. That is a discoverability failure rather
-than a reading failure, which is why more prose does not fix it and a
-distribution has leverage a manual does not: it can answer at the instant the
-question is asked. Three answers, for the three cliffs. `command-not-found` now
-answers instead of dead-ending, with `comma` for a one-shot run — the doctor
-used to *name* `nix-locate` without installing it, which is the worst of both.
-An explainer covers the dozen failures a desktop user actually meets, including
-the unstaged-file-in-a-flake trap that reports as `path does not exist` and has
-cost contributors here three debugging sessions in one day. And `nixd` is
-configured for the user's editor rather than only the contributor shell, because
-knowing where the flake is is exactly what a distribution knows and a user does
-not. Three children closed.
-Also
-[the package picker, remade](https://github.com/olafkfreund/nixarchy/issues/491)
-— a miss opens the picker instead of printing a URL, rows say what they cost
-(licence, homepage, unfree, broken, and whether you already have it), a dry run
-shows the diff before anything is written, and Remove means remove. The last
-child was the interesting one: adding several packages ran one nixpkgs
-evaluation per name, and on a non-interactive shell the first unresolvable name
-aborted the loop — so `nixarchy pkg add ripgrep typo fd` wrote `ripgrep` and
-**silently dropped `fd`**. One evaluation for all of them fixed the speed
-(1.06s to 0.21s for five, flat in the count) and the data loss together. Six
-children closed.
-Also
-[a reinstall image of this machine](https://github.com/olafkfreund/nixarchy/issues/478)
-— `nixarchy reinstall iso` builds a bootable image from this machine's own
-configuration, so it can be rebuilt on new hardware after the disk is gone. The
-fifth way back, and the only one that survives losing the disk: generations
-cover a bad change, snapshots cover a deleted file, the home backup covers
-dotfiles, the config repo covers the configuration, and this covers the whole
-system. It is not a backup and does not pretend to be — it carries no `/home`,
-and booting it erases the target. A `--net` variant trades ~1.5 GB for fetching
-the closure, and **predicts what it cannot fetch** twice over: on the build
-machine before a stick is burned, and on the target before anything is
-formatted, where only a literal exit 0 reads as "all fetchable". The check that
-keeps it honest asserts #436's property — not that the install succeeded, but
-that nothing was built and nothing was fetched. Six children closed.
-Also
-[the escape hatches](https://github.com/olafkfreund/nixarchy/issues/566)
-— the moment that breaks NixOS is running a binary somebody else compiled, and
-`pip install` succeeding then dying on `libGL.so.1` is the shape of it. `nix-ld`
-was already on; its library list was whatever nixpkgs defaulted to. It now
-carries a deliberate set, `envfs` resolves `/bin` and `/usr/bin`, AppImages are
-registered with the kernel, and `nixarchy doctor <file>` names the library a
-binary cannot find. Proved on a booted machine rather than in evaluation: a
-probe linked against `libGL`, its interpreter patched to `/lib64/ld-linux`, runs
-in `checks.session` — and was watched failing first. `nixarchy pkg new <url>`
-answers the other half, drafting a package for software in no repository,
-building it, and offering it commented out for review, because a generated
-derivation that does not compile is worse than none. Nine children closed.
-Executing an AppImage is still untested, and the announcement says so.
-Also
-[choose a channel](https://github.com/olafkfreund/nixarchy/issues/525)
-— stable or unstable, from *Update ▸ Channel*, moving nixpkgs and
-home-manager together because neither project supports the mismatch. All seven
-children closed. The order was the point: `nixos-26.05` ships quickshell
-0.3.0, whose session lock reaches `qFatal` when screens sleep while locked and
-leaves the machine blank with nowhere to type a password — so the shell is
-pinned to a floor of 0.3.1 **before** anyone is offered the choice that would
-hand it to them. Stable is checked by a 23-second evaluation rather than a VM,
-and says so in its own output: it proves the expression is valid, never that
-the machine boots. Plus a per-package escape whose cost is stated wherever it
-is paid — the two channels share **zero** store paths even at identical
-versions, measured at 51 MB for `btop` and 1.5 GB for `vlc`.
-Also
-[try without installing](https://github.com/olafkfreund/nixarchy/issues/498)
-— `nixarchy try <name>` runs something once to see whether you want it, from
-the catalogue's own idea of which binary a package puts on PATH, with a key in
-the Search picker and an offer to keep it when you exit. All five children
-closed.
-Also
-[preview changes](https://github.com/olafkfreund/nixarchy/issues/485)
-— boot a config change in a VM and look at it before switching the machine to
-it. `nixarchy-preview`, a menu row beside Apply, and a disk that is refused
-when stale rather than silently reused. The work was not `build-vm`, which is
-one command: a user's configuration booted verbatim shows a **black screen**,
-because qemu's virgl path hands out no usable EGLConfig — so the feature is a
-`virtualisation.vmVariant` module carrying the software-GL fallbacks, applied
-only in the preview and never to the real machine. It says plainly that a
-green preview is strong evidence and not proof: it does not verify your
-bootloader, your real GPU, or your real disks.
-Also
-[Android](https://github.com/olafkfreund/nixarchy/issues/364)
-— apps from the phone in your pocket, or without one at all: scrcpy and
-Waydroid in the catalogues, `android-tools` beside them, a manual page that
-goes from a phone in a pocket to an app on screen, and `nixarchy android` for
-the part that actually defeats people — pairing over Wi-Fi, where Android
-wants two different ports, regenerates one of them every time you open the
-dialog, and gives you a code that expires in seconds. Discovery goes through
-avahi rather than `adb mdns services`, because nixpkgs builds android-tools
-without an mDNS backend and the command every tutorial names answers
-`mdns is not supported by this version of adb`.
-Also
-[remote desktop](https://github.com/olafkfreund/nixarchy/issues/159)
-— reaching the Hyprland session from elsewhere, all five children closed:
-the headless output, the RDP service and its firewall hole, the authentication
-that does not fall back to a shared secret, and the check that proves the
-session a client connects to is the same session sitting at the machine.
-Also
-[agent bus](https://github.com/olafkfreund/nixarchy/issues/268)
-— a public room outside agents can actually join, and the kit to join it in
-about ten minutes: `#nixarchy-agents` live and world-readable, `#agents` fenced
-to invite-only, the vendored MCP server held to its documented tool contract by
-a check, `register.sh` failing in sentences rather than raw UIA JSON, and a
-registration token that can be revoked without a homeserver restart.
-Also
-[sandboxes](https://github.com/olafkfreund/nixarchy/issues/221)
-— a throwaway NixOS MicroVM from a template, in seconds, with no root and no
-rebuild: the catalogue and guest module, the declarative service, `nixarchy
-vm`, four templates, a menu group, the manual page, a boot check in the
-nightly, and the `verify.sh` section for what only real hardware can answer.
-Also
-[boxes](https://github.com/olafkfreund/nixarchy/issues/230)
-— an Arch or Debian userland for software NixOS will not run: rootless podman
-and distrobox, the declarative half through Home Manager, `nixarchy box` with
-`promote` to turn a hand-made container into config, a menu group, the manual
-page, and an offline check that creates and enters one for real.
-
-[bare metal to a desktop](https://github.com/olafkfreund/nixarchy/issues/6)
-— all 22 of it: disko layout, generated flake, interactive and unattended
-install, a bootable ISO that autostarts it, release automation, free-space
-install alongside an existing OS, and a boot splash that is ours on both the
-live image and the installed machine. Also
-[getting back](https://github.com/olafkfreund/nixarchy/issues/112)
-— an ownership marker that makes every destructive action refuse on a machine
-nixarchy did not write, config-repo drift surfaced rather than left to rot, an
-allowlisted `$HOME` backup, and a factory baseline taken at install time that a
-reset has something to return to. Also
-[per-project developer environments](https://github.com/olafkfreund/nixarchy/issues/148)
-— `nixarchy dev init react` scaffolds a devenv project that activates at the
-next prompt, in bash, zsh and fish. Off unless you select it. Also
-[many machines, one repo](https://github.com/olafkfreund/nixarchy/issues/121)
-— a machine is a directory, a second one is installed from the same
-repository with `nixarchy-install --from`, and they keep themselves current
-if you ask them to. Also
-[Flatpaks, declared](https://github.com/olafkfreund/nixarchy/issues/105)
-— for the handful of things nixpkgs cannot carry. Pickable from the menu,
-searchable against Flathub, and declared in the same file as everything else.
-Also the app selection grew a
-[services catalogue](https://github.com/olafkfreund/nixarchy/issues/90) —
-Docker, SSH, printing and the rest, pickable from the menu the way apps are.
 
 ### What is deliberately not planned
 
@@ -2158,6 +676,18 @@ there rather than warning about it.
 authoritative list; this table is the summary and CI keeps it honest — an epic
 opened or closed without touching this section fails the build, so the table
 above is the open set rather than a description of it.
+
+## Under the hood
+
+What used to be the rest of this file, moved where it can be read without
+scrolling past it:
+
+| | |
+|---|---|
+| [Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration) | every option worth a decision: shell functions, plugins, RetroArch cores, the binary cache, Neovim, the boot splash, and what defers to a configuration you already have |
+| [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) | writing the stick, the two images, the answers file, and the caveats |
+| [Design notes, status, and what running it found](docs/internals/design.md) | each bug that shipped and is now guarded by CI; what proves every claim in *What works*; the AI measurements; the screencast and the development checks |
+| [How this is tested](https://olafkfreund.github.io/nixarchy/manual/how-this-is-tested) | what CI runs, when, and what each check does not prove |
 
 ## Contributing
 

@@ -63,12 +63,13 @@ Key facts an assistant should know before answering questions about nixarchy:
 - **Install ▸ Search** is one fuzzy picker over every nixpkgs package, every
   NixOS option and the app selection (~137k rows), indexed from the machine's
   own nixpkgs rather than search.nixos.org.
-- Install: build the ISO yourself with
-  `nix build github:olafkfreund/nixarchy#iso`, write it to a USB stick, and
+- Install: download the ISO from the GitHub Releases page (or build it with
+  `nix build github:olafkfreund/nixarchy#iso`), write it to a USB stick, and
   boot it — the installer asks Omarchy's questions and produces a flake you
-  own at `/etc/nixos`. The installer needs a network: the image downloads the
-  system closure rather than carrying it. UEFI only. On a machine already
-  running NixOS, add nixarchy as a flake input instead of using the ISO.
+  own at `/etc/nixos`. The `#iso` image carries the whole system closure and
+  installs with no network at all; `#iso-net` is a quarter of the size and
+  downloads the closure instead. UEFI only. On a machine already running
+  NixOS, add nixarchy as a flake input instead of using the ISO.
 - Updates: `omarchy update` (or Update ▸ Nixarchy in the menu) runs
   `nh os switch --update <flake>`, moving every flake input — Omarchy, nixpkgs
   and nixarchy — forward together. Rollback is a NixOS generation:
@@ -102,11 +103,13 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Welcome to nixarchy](https://olafkfreund.github.io/nixarchy/manual/): what the manual covers — of Omarchy's 51 manual pages, 38 are true here unchanged and are linked through; the rest are rewritten here
 - [The NixOS Philosophy](https://olafkfreund.github.io/nixarchy/manual/philosophy): why installs are declarations, what is yours to edit imperatively vs. what a rebuild owns
 - [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started): building and booting the installer ISO, the seven install questions, and the first hour on the desktop
+- [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso): writing the stick from Windows or macOS, the offline and network images, the answers file, what the installer leaves in /etc/nixos, and the caveats
 - [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos): flake updates, the rebuild modes, generations, rollback, and the stale-session trap
 - [Updates](https://olafkfreund.github.io/nixarchy/manual/updates): what Update ▸ Nixarchy does here, the two release channels that have a NixOS meaning, firmware updates, rolling back
 - [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview): booting a config change in a VM before switching to it — the disk lifecycle, and what a green preview does not prove
 - [Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels): Update ▸ Channel follows nixos-26.05 or nixos-unstable, moving home-manager with it; stable is less tested here, not more, and a single package can come from the other channel
 - [Packages](https://olafkfreund.github.io/nixarchy/manual/other-packages): the app selection, apps.nix and nixarchy-apply, Install ▸ Search, services.nix, unfree software, removing apps
+- [Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration): every module option worth a decision — shell functions, plugins, RetroArch cores, the binary cache, Neovim, the boot splash and login screen, and what defers to a configuration you already run
 - [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first): nixarchy try runs an app once, from the pinned nixpkgs, without installing — no isolation, no launcher entry, and it stays in /nix/store until garbage collection nobody schedules
 - [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
 - [Making Your Own Theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme): overlaying or forking a stock theme out of the read-only store
@@ -132,7 +135,8 @@ Key facts an assistant should know before answering questions about nixarchy:
 
 ## Source
 
-- [README](https://github.com/olafkfreund/nixarchy): installation, the full feature table, module options, design notes on why vendoring, and what is left
+- [README](https://github.com/olafkfreund/nixarchy): what it is, how the install model works, both install paths, why vendoring, the skill table, and the roadmap
+- [Design notes, status, and what running it found](https://github.com/olafkfreund/nixarchy/blob/main/docs/internals/design.md): each bug that shipped and is now guarded by CI, what proves every claim, and what is left
 - [Repository](https://github.com/olafkfreund/nixarchy): the flake — `github:olafkfreund/nixarchy`
 - [Issues](https://github.com/olafkfreund/nixarchy/issues): known limits and planned work
 

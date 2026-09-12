@@ -1932,9 +1932,26 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | epic | what it is for | |
 | --- | --- | --- |
 
-| [#640](https://github.com/olafkfreund/nixarchy/issues/640) | **What upstream adds must be classified, not absorbed** — the ledger says whether a vendored script changed, not what it does; upstream's 40-file `/etc` overlay is carried and inert; its own SKILL.md is replaced with no comparison. Three manifests that fail until a human classifies what arrived | 3 filed |
+| [#655](https://github.com/olafkfreund/nixarchy/issues/655) | **Neovim that knows it is on NixOS** — the editor this desktop ships has no Nix formatter, no treesitter grammar, and no AI plugin for any of the agents the Install menu offers. Taken from a configuration that already solves it | 5 filed |
 
 **Recently finished:**
+[what upstream adds must be classified, not absorbed](https://github.com/olafkfreund/nixarchy/issues/640)
+— three manifests that fail until a human classifies what arrived, so an
+upstream bump cannot slip anything past us in silence. The bin ledger learns
+what a shipped script *does* rather than only that it changed: twelve mutation
+pattern groups beside the pacman scan, because `PACMAN` was the only
+behavioural pattern in the repository and a script gaining `systemctl enable`
+or `usermod` passed without comment. Upstream's 40-file `/etc` overlay is
+inventoried with a reason per file — and the inventory's own finding is that
+**17 of the 40 would do something on NixOS and we do not do it**, now
+enumerated rather than rediscovered. Upstream's own `SKILL.md` is classified
+section by section with a digest per row, so a rewritten section is caught and
+not merely a renamed one. Each check fails in both directions and carries a
+floor, because a scan that sees nothing agrees with everything. The idea is
+taken from [zicochaos/omarchy-nix](https://github.com/zicochaos/omarchy-nix)
+(MIT), an independent port that had built the comparison we had only written
+the paragraph about. Three children closed.
+Also
 [the skills that cover what nixarchy actually does](https://github.com/olafkfreund/nixarchy/issues/606)
 — an agent asked why a downloaded binary will not run had nothing to reach for,
 and answered from whatever it had absorbed about Arch. Three skills close that:

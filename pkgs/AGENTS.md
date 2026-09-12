@@ -17,6 +17,7 @@ re-port, and that property is worth more than any individual fix.
 | `omarchy/skills/` | what an agent on a nixarchy machine reads |
 | `apps/` | packages with no nixpkgs equivalent |
 | `doctor.sh`, `verify.sh`, `review.sh` | scripts spliced into derivations at build time |
+| `explain.sh` | reads a Nix failure and says what it is, in the user's vocabulary |
 | `box.nix`, `microvm.nix` | the container and guest runners |
 
 ## The trap that has cost the most here
@@ -35,6 +36,26 @@ Before adding a command to any script here, add it to that derivation's
 `runtimeInputs`. If the script parses JSON, that means `jq` — reaching for `sed`
 on JSON is how a check starts confidently reporting wrong things the first time
 nix reformats a file.
+
+## `writeShellApplication` also sets `errexit`
+
+The `runtimeInputs` trap above is the expensive one. This is its sibling, and
+it cost an hour here: the wrapper is `set -o errexit -o nounset -o pipefail`,
+so a script that runs fine as `bash pkgs/thing.sh` can die at the first
+command substitution once it is packaged.
+
+`nixarchy explain -- <command>` did exactly that. `err=$("$@" 2>&1)` captures
+the output of a command that is failing — that is the entire point of the
+form — and under `errexit` the script exited there, before printing anything,
+with the wrapped command's status. Which reads as the tool never having run.
+`err=$("$@" 2>&1) || status=$?` is the fix; a script's own `set -uo pipefail`
+does **not** turn `errexit` back off.
+
+The general shape: **anything that deliberately runs a failing command has to
+say so at the call site.** And a script whose whole job is to be handed
+failures is one where every path is that path — so exercise the packaged
+binary, not the source file. The bug survived a green check suite because
+every assertion fed the script on stdin, and stdin never fails.
 
 ## Patching upstream
 
@@ -57,3 +78,4 @@ purpose; a fenced block is what an agent copies.
 | `doctor-graphics` | the doctor's GPU rules, against fixture machines |
 | `doctor-ldd` | the doctor's dynamic-link check, against binaries built broken |
 | `dashboard-clock` | the install dashboard against a rewound clock |
+| `explain` | the error explainer, against errors produced inside the check |

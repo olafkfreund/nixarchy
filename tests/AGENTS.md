@@ -132,11 +132,52 @@ image, booted against real caches, missing a real unfree package. That run
 needs a human with vscode in their closure and a machine to lose; until one
 reports back, the prediction is tested and the event it predicts is not.
 
+## A fixture that quotes an error is a fixture that goes stale
+
+`explain` recognises Nix error messages, and the obvious way to test that is a
+directory of captured traces. It is the wrong way, and the reason generalises
+past this check.
+
+An error message is not ours. nixpkgs reworded the buildEnv collision from
+``collision between `a' and `b'`` to `two given paths contain a conflicting
+subpath` — same failure, different words — and Nix reworded the untracked-file
+error from `path '…' does not exist` to `Path '…' is not tracked by Git`, which
+is a better message and matches nothing the old matcher looked for. A captured
+trace keeps passing through both rewordings, because the fixture and the
+matcher agree with each other while both have stopped describing the machine in
+front of the user. That is §1's green light with a different coat on.
+
+So `tests/explain.nix` produces every error inside the check, from the real
+producer: a real git repository with a real untracked file, `lib.evalModules`
+with two definitions of one option, nixpkgs' own `buildenv/builder.pl` against
+two colliding trees, `stdenvNoCC.mkDerivation` with an unfree licence. Nothing
+is quoted. If nixpkgs rewords one again, the fixture changes under the check
+and the check goes red — which is the whole point.
+
+Two mechanics that make this possible, and one that nearly stopped it:
+
+- **Nested `nix` evaluation works in a build sandbox.** Point `NIX_STORE_DIR`,
+  `NIX_STATE_DIR` and `NIX_LOG_DIR` at `$PWD`, and `nix-instantiate --eval`
+  and `nix eval` both run. Full nixpkgs evaluation is available offline
+  because `${pkgs.path}` is already an input. Nothing is built, so this stays
+  a seconds-long check.
+- **A failing derivation cannot be a check's dependency**, so a build-time
+  error has to be produced by running the builder rather than by building.
+  `buildenv/builder.pl` reads its arguments from `NIX_ATTRS_JSON_FILE`; hand
+  it a JSON file naming two trees and it prints the real collision.
+- **`NIXPKGS_ALLOW_UNFREE` is read through `builtins.getEnv`.** A nixarchy
+  desktop exports it, so the unfree fixtures succeed when you run them by hand
+  and fail correctly in the sandbox. Every fixture that depends on nixpkgs
+  policy asserts the raw Nix message before asserting anything about our
+  output — a fixture that quietly starts succeeding otherwise leaves the thing
+  under test reading an empty string, and "recognised nothing" is
+  indistinguishable from "there was nothing to recognise".
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,
 `installer-store-space`, `try-preflight`, `doctor-graphics`, `dashboard-clock`,
-`options`, `review-pins`, `patched-files`, `doc-options`.
+`options`, `review-pins`, `patched-files`, `doc-options`, `explain`.
 
 These are `runCommand`s that finish in seconds and drive one decision with a
 stubbed environment. Prefer one of these over extending a VM test: they are the

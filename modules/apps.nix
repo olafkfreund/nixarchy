@@ -994,6 +994,7 @@ in
             # Why: modules/AGENTS.md#the-doctor-and-verify-which-until-now-were-flake-a
             (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
             (pkgs.extend inputs.self.overlays.default).nixarchy-verify
+            (pkgs.extend inputs.self.overlays.default).nixarchy-explain
 
           ]
           # The default agent's own package, when the configuration names one.
@@ -2819,6 +2820,7 @@ in
                   # actually has. Route to the command that works rather than to
                   # a binary that is not there.
                   verify)   shift; exec nixarchy-verify "$@" ;;
+                  explain)  shift; exec nixarchy-explain "$@" ;;
                   doctor)
                     if command -v nixarchy-doctor >/dev/null 2>&1; then
                       shift; exec nixarchy-doctor "$@"
@@ -2931,6 +2933,7 @@ in
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                   nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                   nixarchy doctor             What this machine needs to run nixarchy
+                  nixarchy explain            What a Nix error means -- pipe a failure into it
 
                 This machine:
 

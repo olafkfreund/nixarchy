@@ -25,6 +25,51 @@ actual problem on a NixOS host:
 | Boot splash | Whether Omarchy's Plymouth theme is the one in use, or stylix's |
 | TLP | TLP is on, so power-profiles-daemon is off and `omarchy powerprofiles` cannot work |
 
+### A rebuild failed and the error is unreadable
+
+```sh
+sudo nixos-rebuild switch --flake . 2>&1 | nixarchy explain
+```
+
+Or, if you would rather it ran the command for you, or you have a saved log:
+
+```sh
+nixarchy explain -- nixos-rebuild build --flake .
+nixarchy explain /tmp/that-log.txt
+```
+
+Only 4.0% of respondents to the [2025 Nix community
+survey](https://nixos.org/surveys/community/2025/) say they understand every
+Nix error message, and error messages were the second-highest thing people
+wanted improved. Upstream's have to be general. This one only has to be right
+about the configuration nixarchy shipped, so it can name the file you wrote
+rather than the frame in `lib/modules.nix` the trace stops at.
+
+What it recognises:
+
+| What Nix says | What it means |
+|---|---|
+| `path '...' does not exist`, about a file you can `ls` | The file is not `git add`ed. A flake evaluates from its git tree, so an untracked file does not exist as far as evaluation is concerned |
+| `infinite recursion encountered` | Something is defined in terms of itself -- and the frame shown is where Nix gave up, not where the loop was closed |
+| `attribute 'x' missing`, with a trace naming only `lib/modules.nix` | A module wants an argument nothing passes it. A module argument cannot have a `?` default; pass it from the call site |
+| `The option 'x' does not exist` | A typo, or an option from a module set this configuration does not import -- a home-manager option written into the system config reads exactly like a typo |
+| `has conflicting definition values` | Two places define one option. `lib.mkDefault` on one of them, or remove it |
+| `collision between`, `conflicting subpath` | Two packages ship the same file. `lib.lowPrio` on the one that should yield |
+| an unfree or `marked as insecure` refusal | A policy refusal, not a failure. One line of opt-in -- and nixarchy already sets the unfree one, so seeing it means a second nixpkgs |
+
+It rebuilds nothing and edits nothing: it reads the text and says what it is,
+then prints the lines to paste. If it does not recognise your error it says so
+rather than guessing, and that is worth
+[reporting](https://github.com/olafkfreund/nixarchy/issues) -- the list grows
+by people saying which one it missed.
+
+It runs without nixarchy installed too, which is the state your machine is in
+when the rebuild that would have installed it has just failed:
+
+```sh
+nix run github:olafkfreund/nixarchy#explain -- /tmp/that-log.txt
+```
+
 ### `libGL.so.1: cannot open shared object file: No such file or directory`
 
 Or `libstdc++.so.6`, or any other `.so` -- from a pip wheel at `import`, a

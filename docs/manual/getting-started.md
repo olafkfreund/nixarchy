@@ -305,7 +305,21 @@ sudo nixos-rebuild switch --flake /home/you/nixos-config
 ```
 
 Every remaining conflict shows up here as an evaluation error, not as a broken
-machine. Then log out and choose the **Omarchy** session at the login screen.
+machine. If one of them is unreadable — and the trace for a conflicting option
+lands in nixpkgs' own `lib/modules.nix`, naming no file of yours — pipe it
+through the explainer rather than reading the trace:
+
+```sh
+sudo nixos-rebuild switch --flake /home/you/nixos-config 2>&1 |
+  nix run github:olafkfreund/nixarchy#explain
+```
+
+It covers the failures that actually stop this step, including the one that
+reads as `path '...' does not exist` about a file you can `ls` — that is a
+file you have not `git add`ed, and a flake cannot see it. There is a table of
+what it recognises in [troubleshooting](troubleshooting).
+
+Then log out and choose the **Omarchy** session at the login screen.
 On SDDM the login screen is Omarchy's own branded greeter; on greetd, GDM or
 LightDM you keep your greeter and it offers the Omarchy entry like any other
 session.

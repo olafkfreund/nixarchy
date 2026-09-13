@@ -5,12 +5,13 @@ set -euo pipefail
 : "${RUN_ID:?}" "${REPO:?}" "${BRANCH:?}"
 max=2 # ponytail: a fixed cap; if Copilot's second fix is still red, a human reads it
 
-# failure, never cancelled: an evicted job reports cancelled (AGENTS.md §6),
-# and summoning an agent to fix an eviction is summoning it to fix nothing.
+# failure, never cancelled. An evicted job reports cancelled, and so does one
+# that hit its timeout (AGENTS.md §6). Neither is Copilot's to fix: an
+# eviction needs nothing, and a timeout is a CI gate change for a human.
 failed=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs \
   -q '[.jobs[]|select(.conclusion=="failure")|.name]|join(", ")')
 if [ -z "$failed" ]; then
-  echo "run $RUN_ID has no failed job -- cancelled only, an eviction; nothing to hand off"
+  echo "run $RUN_ID has no failed job -- cancelled only (an eviction or a timeout); not handed off"
   exit 0
 fi
 
@@ -34,6 +35,9 @@ fi
 # first (the cachix push would fill any tail), and nix's `… while calling`
 # frames are dropped: the line that names the cause is the `error:` at the
 # bottom of a trace two hundred lines deep, and a tail lands past it.
+# Colour is stripped in both spellings: GitHub's log API returns the literal
+# text ^[[31m rather than ESC, and filtering \x1b alone lets every trace
+# frame through the filter below.
 log=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null \
   | awk -F'\t' '$1 != job { job = $1; skip = 0 } /Post job cleanup/ { skip = 1 } !skip { print $1 ": " $3 }' \
   | sed 's/\x1b\[[0-9;]*m//g; s/\^\[\[[0-9;]*m//g; s/: \xEF\xBB\xBF\?[0-9T:.-]*Z /: /' \

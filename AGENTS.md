@@ -387,6 +387,15 @@ And read the JOB's conclusion, never the column: `gh pr checks` prints
 summary. `gh run view <id> --json jobs` tells them apart, and the difference
 decides whether you re-trigger or read a log.
 
+And `cancelled` has a second cause that looks exactly like the first: **a job
+that hits its `timeout-minutes` also reports `cancelled`**, with no failed
+step. Twice in one day a timed-out `omarchy` job was read as an eviction and
+re-run; the re-run passed because the first attempt had warmed the cache, which
+confirmed the wrong diagnosis. The annotation is the only thing that tells
+them apart — `gh api repos/<o>/<r>/check-runs/<job-id>/annotations` says
+*"exceeded the maximum execution time"* for one and nothing of the kind for
+the other. The duration is a hint (a timeout ends at the limit), not proof.
+
 **Do not build a VM check locally while CI has an install job in flight.**
 The concurrency group in `install-check.yml` serialises GitHub *jobs*; it
 knows nothing about a `nix build .#checks.x86_64-linux.session` you start by

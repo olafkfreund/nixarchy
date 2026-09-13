@@ -227,7 +227,10 @@ jobs:
       - name: Arm auto-merge, gated on the required checks
         if: steps.bump.outputs.changed == 'true' && steps.pr.outputs.pull-request-number
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The PAT, not GITHUB_TOKEN: an auto-merge is performed as whoever
+          # armed it, and a push by GITHUB_TOKEN runs no workflows. #671 merged
+          # as github-actions and main's head got no build and no install check.
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail

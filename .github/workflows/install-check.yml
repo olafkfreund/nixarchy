@@ -156,10 +156,9 @@ jobs:
           echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
 
           # And which machine `install` should ask for. A run with nothing to
-          # do must not take a slot in the self-hosted pool -- four runners
-          # now (p510-nixarchy, p510-nixarchy-2, p620-nixarchy,
-          # p620-nixarchy-2), all carrying the same labels, so a job lands on
-          # whichever is free. This comment said "the one self-hosted box" and
+          # do must not take a slot in the self-hosted pool -- four runners,
+          # all on p620 (p620-nixarchy, -2, -3, -4; AGENTS.md §6), all
+          # carrying the same labels, so a job lands on whichever is free. This comment said "the one self-hosted box" and
           # sized the queue for one; the fleet has since quadrupled and the
           # number was left behind. The argument survives the correction, it
           # is just four times less dire: a docs PR occupying a KVM runner for
@@ -292,7 +291,8 @@ jobs:
     # `success`. So the steps below carry the condition and the job always
     # completes green.
     #
-    # p510: 40 cores, 94 GB, /dev/kvm, and a pool with room for the images.
+    # p620: 128 threads, 251 GB, /dev/kvm, and a build-dir with room for the
+    # images (measured 2026-09-13).
     # This job boots a VM, installs a desktop onto a blank disk, boots the
     # result on its own bootloader and asserts a rebuild builds nothing. None
     # of that fits on a hosted runner -- fourteen gigabytes of disk and no KVM
@@ -369,11 +369,11 @@ jobs:
       # minutes rather than an hour -- when the work happens to land on the
       # machine that did it last time.
       #
-      # It often does not. There are FOUR self-hosted runners (p510-nixarchy,
-      # p510-nixarchy-2, p620-nixarchy, p620-nixarchy-2), they carry identical
-      # labels so a job takes whichever is free, and they do not share a
-      # store. "Warm store" is therefore a one-in-four proposition, and this
-      # comment used to say "the one self-hosted box" from when it was true.
+      # It did not, while the four runners were split across p510 and p620
+      # with a store each: "warm store" was then a one-in-four proposition.
+      # Since 2026-09-13 all four are on p620 and share its one store, so a
+      # re-run starts warm (AGENTS.md §6). The history below is from the split
+      # fleet, and is why the store's locality was worth writing down.
       #
       # What that cost, measured: #434 changes networking.hostName, which
       # gives every system closure a new path. Its hosted `system` job had

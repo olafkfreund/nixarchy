@@ -9,7 +9,8 @@ name: release
 # laptop, and carry a checksum that was produced by the same run that produced
 # the image.
 #
-# This runs on p510 for the same reason nightly.yml does: a hosted runner has
+# This runs on the self-hosted runners (all on p620) for the same reason
+# nightly.yml does: a hosted runner has
 # 14 GB of disk, and the image alone is more than a third of that before the
 # 15.3 GB closure it carries. It deliberately mirrors nightly.yml rather than
 # build.yml -- no installer action, no cachix, because the runner is a NixOS

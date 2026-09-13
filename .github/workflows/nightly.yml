@@ -9,10 +9,9 @@ name: nightly
 # all, and installs a 15.3 GB closure into a qcow2. That is about an hour and
 # roughly 16 GB of build directory, on a machine with /dev/kvm.
 #
-# So they run here, nightly, on the self-hosted runners -- p510 (40 cores,
-# 94 GB, KVM) and p620 -- where builds land on each host's own build-dir
-# (`/home/nix-build` on p510, `/mnt/games/nix-build` on p620) with hundreds of
-# gigabytes free. See hosts/*/nixos/github-runner.nix in the NixOS config repo
+# So they run here, nightly, on the self-hosted runners -- all four on p620
+# (128 threads, 251 GB, KVM) -- where builds land on its build-dir,
+# `/mnt/games/nix-build`, with hundreds of gigabytes free. See hosts/*/nixos/github-runner.nix in the NixOS config repo
 # for the runners themselves.
 #
 # Nothing here writes outside the Nix store. An earlier version archived each
@@ -491,11 +490,10 @@ jobs:
           body="The nightly $what: $RUN"
           body="$body
 
-          Both jobs run on a self-hosted runner (p510 or p620). If the
-          failure is 'no space left', check that host's nix build-dir and its
-          store -- /home/nix-build and / on p510, /mnt/games/nix-build and /
-          on p620. A VM test that runs out of room does not fail cleanly, it
-          wedges."
+          Both jobs run on a self-hosted runner, all of which are on p620.
+          If the failure is 'no space left', check its nix build-dir and its
+          store -- /mnt/games/nix-build and /. A VM test that runs out of
+          room does not fail cleanly, it wedges."
           existing=$(gh issue list --state open --search "$title in:title" \
             --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then

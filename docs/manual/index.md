@@ -33,6 +33,7 @@ the documentation as much as the code.
 |---|---|
 | Welcome to omarchy | same as Omarchy — [read there](https://omarchy.org/manual/welcome-to-omarchy/) |
 | **Getting started** | **differs on NixOS** — [read here](getting-started) |
+| **The ISO in depth** | **nixarchy only** — [read here](the-iso) |
 | Coming from mac or windows | same as Omarchy — [read there](https://omarchy.org/manual/coming-from-mac-or-windows/) |
 | Navigation | same as Omarchy — [read there](https://omarchy.org/manual/navigation/) |
 | The top bar | same as Omarchy — [read there](https://omarchy.org/manual/the-top-bar/) |
@@ -66,6 +67,7 @@ the documentation as much as the code.
 | Filling out pdfs | same as Omarchy — [read there](https://omarchy.org/manual/filling-out-pdfs/) |
 | Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |
 | **Other packages** | **differs on NixOS** — [read here](other-packages) |
+| **Configuring nixarchy** | **nixarchy only** — [read here](configuration) |
 | **Preview changes** | **nixarchy only** — [read here](preview) |
 | **Try it first** | **nixarchy only** — [read here](try-it-first) |
 | **Updates** | **differs on NixOS** — [read here](updates) |

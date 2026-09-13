@@ -43,8 +43,8 @@ sudo dd if=result/iso/nixarchy-*.iso of=/dev/sdX bs=4M status=progress oflag=syn
 ```
 
 **On Windows or macOS, how you write the stick matters**, and the way it fails
-is at boot with no explanation — the README's
-[USB section](https://github.com/olafkfreund/nixarchy#writing-the-stick-from-windows-or-macos)
+is at boot with no explanation —
+[the ISO in depth](the-iso#writing-the-stick-from-windows-or-macos)
 has the detail, including why Rufus' *recommended* answer to its ISOHybrid
 question is the wrong one for the offline image. On Linux, `dd` as above has no
 such trap.

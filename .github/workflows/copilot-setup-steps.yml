@@ -47,18 +47,27 @@ jobs:
       # and the last time that happened every build compiled Hyprland from
       # source.
       #
-      # Copilot's firewall must allow cache.nixos.org, channels.nixos.org,
-      # install.determinate.systems and nixarchy.cachix.org, or nix quietly
-      # falls back to building everything and this job times out instead of
-      # failing with a reason. That allowlist is a repository setting and is
-      # NOT set here.
+      # Copilot's firewall must allow, as its custom allowlist:
+      #
+      #   cache.nixos.org  channels.nixos.org  install.determinate.systems
+      #   cachix.org  github.com  api.github.com
+      #
+      # or nix quietly falls back to building everything and the session times
+      # out instead of failing with a reason. `cachix.org` is there for its
+      # subdomains -- the flake's nixarchy and hyprland caches, and devenv's
+      # own, which `nix run .#devenv-presets` needs -- and GitHub for flake
+      # inputs. The recommended allowlist carries none of these. It is a
+      # repository setting, NOT set here, and no API reads it back, so this
+      # comment is the only record: set 2026-09-13.
       #
       # What this does NOT buy: the VM checks. checks.session and its siblings
       # need KVM and minutes this session does not have, and checks.install and
       # install-iso run on self-hosted runners Copilot cannot reach at all --
-      # it supports self-hosted only through ARC, and ours are bare NixOS. A
-      # Copilot PR touching anything VM-verified is unverified by construction
-      # and must say so.
+      # it supports self-hosted only through ARC, and ours are bare NixOS. So
+      # Copilot cannot verify a VM-checked change inside its session, and must
+      # say so. CI still does, after it pushes: "Require approval for workflow
+      # runs" is off (2026-09-13), so its pushes run every workflow unattended
+      # -- including `install`, on our own self-hosted machines.
       - uses: ./.github/actions/setup-nix
 
       - name: Prove nix works here, rather than assuming it

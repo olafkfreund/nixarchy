@@ -355,16 +355,31 @@ its "55 minutes of a 58-minute job" sum, no longer exists. What governs your
 merge latency now: the build step took **16–19 minutes on a warm store**
 (runs 34573539340, 34509257501, 2026-09-10/11) against a 90-minute timeout,
 and a cold store can push it toward that limit (#434 timed out at the cap
-three times). There are **four self-hosted runners** — p510-nixarchy,
-p510-nixarchy-2, p620-nixarchy, p620-nixarchy-2 — with identical labels and
-separate stores, but the `nixarchy-install-vm-{1,2}` concurrency groups admit
-**two relevant install jobs at a time, machine-wide** (#555, #587). Two is the
-measurement, not a guess: 2 concurrent installs both succeed, 3–4 all fail at
-the in-guest timeout (2026-09-09). A ref is assigned its slot by
+three times). There are **four self-hosted runners, all on p620** —
+p620-nixarchy, p620-nixarchy-2, -3 and -4 (2026-09-13; p510's runners are no
+longer registered). `gh api repos/olafkfreund/nixarchy/actions/runners` is the
+source of truth, not this sentence. They carry identical labels and **share
+p620's one nix store** through its daemon, so a re-run starts warm. The
+`nixarchy-install-vm-{1,2}` concurrency groups still admit **two relevant
+install jobs at a time** (#555, #587), and with every runner on one host that
+cap matters more, not less. Two is the measurement, not a guess: 2 concurrent
+installs both succeed, 3–4 all fail at the in-guest timeout (2026-09-09).
+**Four runners do not mean four installs** — the runners also serve `build`,
+the nightly and releases, and raising the cap needs a new measurement on this
+host, not a runner count. A ref is assigned its slot by
 `cksum(GITHUB_REF) % 2`, so a pull request's re-runs queue behind themselves
 rather than migrating. Every push to your branch cancels and restarts your own
 run (deliberate — a PR only needs an answer about its current head), but
 batching your pushes is a courtesy to everyone else's merge latency.
+
+**A deploy to p620 kills every install in flight.** Switching the system
+restarts the runner services, and each running job reports `failure` with
+*"The operation was canceled"* and no failed step — which reads as neither an
+eviction nor a timeout. On 2026-09-13 two installs, 28 and 78 minutes in, ended
+at the same second, 25 seconds before all four services came back. Check the
+queue and announce on the bus before switching p620; and when unrelated jobs
+die at one timestamp, read the runner units' `ActiveEnterTimestamp` before
+either log.
 
 **The mechanism, because getting it wrong costs hours.** GitHub retains
 **one PENDING job per concurrency group**, and `cancel-in-progress: false`
@@ -390,8 +405,8 @@ decides whether you re-trigger or read a log.
 **Do not build a VM check locally while CI has an install job in flight.**
 The concurrency group in `install-check.yml` serialises GitHub *jobs*; it
 knows nothing about a `nix build .#checks.x86_64-linux.session` you start by
-hand on the same machine. Two of the four runners are on p620, and so is
-your shell.
+hand on the same machine. All four runners are on p620, and so is your shell
+whenever you work there.
 
 What it looks like when you do is not "your build was slow" — it is somebody
 else's check failing, on a line that has nothing to do with their change:

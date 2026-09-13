@@ -213,6 +213,11 @@ The Omarchy shell (bar, notifications, plugins, idle) is configured in
 
 **Command:** `omarchy restart terminal`
 
+`~/.config/kitty/kitty.conf` is a short stub: it includes the theme and
+overrides Omarchy's kitty defaults, which live in `/etc/xdg/kitty/kitty.conf`
+(font, padding, the shift+enter bindings, the remote-control socket). Put
+changes in the stub; the `/etc` file is replaced on every rebuild.
+
 ### Other Configs
 
 | App | Location |

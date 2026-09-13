@@ -631,6 +631,37 @@ previously asserted the user *was* in the group; it was correct for the
 old default and was retargeted rather than satisfied, which is the
 distinction CLAUDE.md §1 draws.
 
+<a id="rootless-docker-and-the-display-manager"></a>
+#### Rootless Docker and the display manager
+
+```nix
+docker.unitConfig.ConditionUser = lib.mkIf config.virtualisation.docker.rootless.enable (
+  lib.mkForce "!@system"
+);
+```
+
+nixpkgs guards the rootless Docker user unit with `ConditionUser = "!root"`,
+and root is not the problem. The unit is `wantedBy = default.target`, so
+systemd starts it for **every** user session that has one -- including the
+display manager's. `sddm` is uid 175, is not root, has no subuid range, and
+rootlesskit cannot build a uid map without one:
+
+```
+dockerd-rootless: failed to setup UID/GID map: failed to compute
+uid/gid map: No subuid ranges found for user 175 ("sddm")
+```
+
+So every machine with a display manager gained a failing unit the moment
+rootless became the default (#619), and #644 fixed it. Nothing a user runs
+depends on sddm having a Docker daemon, which is exactly why it would have
+sat there red forever.
+
+`!@system` is the condition that was meant: not root, and not any other
+account that exists to run a service rather than to be sat in front of.
+`mkForce` because nixpkgs sets the narrower value at ordinary priority --
+this corrects upstream's literal, not a user's choice, which is one of the
+two exceptions `modules/services/default.nix` names.
+
 <a id="default-fontconfig-conf-avail-50-omarchy-conf-whic"></a>
 ### default/fontconfig/conf.avail/50-omarchy.conf, which upstream symlinks
 

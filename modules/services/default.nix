@@ -24,9 +24,12 @@
 #                           BEFORE the merge, so our contribution disappears
 #                           the moment the user adds an element of their own.
 #
-#   mkForce                 never. It is a one-way door -- the user then needs
-#                           mkOverride 49 to get past us, and no error message
-#                           NixOS produces will ever tell them that.
+#   mkForce                 never on a value a user would set. It is a one-way
+#                           door -- the user then needs mkOverride 49 to get
+#                           past us, and no error message NixOS produces will
+#                           ever tell them that. The exceptions: an option
+#                           whose value IS "force", and correcting a nixpkgs
+#                           literal no user chooses.
 #
 # The failure this prevents is documented rather than hypothetical: disko #441
 # and home-manager #5870 are both a module setting a scalar at plain priority

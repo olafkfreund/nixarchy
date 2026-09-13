@@ -1094,6 +1094,36 @@ in
       '';
     });
 
+    # ---- #660: the project environment, from inside the editor -------------
+    #
+    # devenv activates on `cd`, through a SHELL hook -- `devenv hook bash|zsh|
+    # fish` in interactiveShellInit, not direnv (the manual is explicit that
+    # running both would have each try to own the environment). So Neovim
+    # started from a terminal already inside the project inherits it, and
+    # Neovim started from the app launcher, or told to `:cd` into a project it
+    # was not launched from, does not: the LSP and the formatter then see the
+    # machine's toolchain rather than the project's, quietly and with no error.
+    #
+    # `:DevenvShell` is the half the shell hook cannot reach. Gated on the
+    # devenv service rather than on the editor, because a machine that never
+    # turned devenv on has no project environment for this to enter.
+    home.activation.nixarchyNeovimDevenv =
+      lib.mkIf (osConfig.programs.nixarchy.services.devenv.enable or false && cfg.neovim != "off")
+        (nvimSpec {
+          file = "nixarchy-devenv.lua";
+          because = "programs.nixarchy.services.devenv";
+          said = "gave Neovim :DevenvShell for this project's environment";
+          text = ''
+            return {
+              -- :DevenvShell enters this project's devenv in the running
+              -- instance, so the LSP and the formatter see the project's
+              -- toolchain. :NixDevelop and :NixShell come with it for flakes
+              -- that are not devenv projects.
+              { "figsoda/nix-develop.nvim", event = "VeryLazy" },
+            }
+          '';
+        });
+
     # ---- #658: sops files, from the editor ---------------------------------
     #
     # Gated on a secret being declared, not on the editor: the machine that

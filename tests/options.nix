@@ -540,6 +540,15 @@ let
     # #658: gated on a declared secret, not on the editor. `off` is the
     # default machine, which declares none -- the same machine the `sops`
     # case below asserts sops-nix is inert on.
+    # #660: :DevenvShell, for the half devenv's shell hook cannot reach.
+    # Gated on the devenv SERVICE, not the editor -- a machine that never
+    # turned devenv on has no project environment for this to enter, and the
+    # off state is the one a refactor breaks quietly.
+    devenvNeovim = {
+      on = (homeOn { services.devenv.enable = true; } { }).home.activation ? nixarchyNeovimDevenv;
+      off = (homeOn { } { }).home.activation ? nixarchyNeovimDevenv;
+    };
+
     sopsNeovim = {
       on = (homeBeside { sops = sopsDecl; } { }).home.activation ? nixarchyNeovimSops;
       off = (homeOn { } { }).home.activation ? nixarchyNeovimSops;

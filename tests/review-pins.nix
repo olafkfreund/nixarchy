@@ -120,6 +120,21 @@ pkgs.runCommand "nixarchy-review-pins"
       }
     done
 
+    # The board row flags any open issue without a milestone, and the review's
+    # own issue is an open issue: filed without one, it can never go green
+    # (#670). A floor of two, so a renamed call is not a loop over nothing.
+    filings=$(grep -E '^\s*gh issue (create|edit) ' ${../pkgs/review.sh})
+    n=$(printf '%s\n' "$filings" | grep -c . || true)
+    [ "$n" -ge 2 ] || {
+      echo "review: expected the create and edit calls, found $n" >&2
+      exit 1
+    }
+    if printf '%s\n' "$filings" | grep -v -- '--milestone'; then
+      echo "review: the call above files the review issue without a milestone" >&2
+      echo "  and the board row will then report that issue forever." >&2
+      exit 1
+    fi
+
     echo "all $want pins are readable, and every version looks like one"
     echo "and flake.lock still classifies tag, rev and ref pins apart"
     touch $out

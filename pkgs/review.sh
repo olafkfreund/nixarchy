@@ -476,9 +476,12 @@ $table
 Edited in place each night by \`review.yml\`, and closed automatically when
 everything is green. Run it yourself with \`nix run .#review\`."
 
+# A milestone on both paths, because the board row above flags any open issue
+# without one -- this one included, so it could never close itself (#670).
+milestone="Keeping the lights on"
 if [ -n "$existing" ]; then
-  gh issue edit "$existing" --body "$body"
+  gh issue edit "$existing" --milestone "$milestone" --body "$body"
   echo "updated #$existing"
 else
-  gh issue create --title "$title" --label dependencies --body "$body"
+  gh issue create --title "$title" --label dependencies --milestone "$milestone" --body "$body"
 fi

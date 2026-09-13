@@ -1,0 +1,43 @@
+# A bump PR that goes red is handed to Copilot's coding agent, which pushes
+# its fix to that PR's own branch. The bumps land at night; without this a
+# broken one waits for whoever next looks.
+#
+# Copilot answers only comments from someone with write access, which rules
+# out GITHUB_TOKEN -- so the comment is posted with COPILOT_AGENT_TOKEN, a PAT.
+# That token is broad. Everything below is shaped around holding it:
+#
+# - workflow_run runs main's copy of this file and checks out main. PR code
+#   is never checked out or executed while the secret is in scope.
+# - The same-repository test is not redundant with the branch prefix. A fork
+#   chooses its own branch names, and can call one update/anything.
+# - Only `build` is watched, not `install check`: its jobs are the tier
+#   copilot-setup-steps.yml provisions, so a fix can be verified. The comment
+#   tells Copilot to stop, not guess, when a failing job needs a VM.
+name: copilot handoff
+
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  handoff:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure'
+      && startsWith(github.event.workflow_run.head_branch, 'update/')
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Hand the failure to Copilot
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_AGENT_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.repository }}
+        run: .github/scripts/copilot-handoff.sh

@@ -584,7 +584,7 @@ let
     neovimSpecs = {
       on =
         (homeWith { programs.nixarchy.neovimSpecs.mine = "return {}"; }).home.activation
-        ? nixarchyNeovimSpecs;
+          ? nixarchyNeovimSpecs;
       off = (homeWith { }).home.activation ? nixarchyNeovimSpecs;
     };
     # ---- upstream's /etc overlay, the part of it that is installed ----------
@@ -684,7 +684,8 @@ let
               enable = true;
               menuEntry.enable = true;
             };
-          }).xdg.configFile ? "omarchy/extensions/omarchy-menu.jsonc"
+          }).xdg.configFile
+            ? "omarchy/extensions/omarchy-menu.jsonc"
         );
     };
 

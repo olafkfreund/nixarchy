@@ -652,7 +652,8 @@ somebody who only uses nixarchy, and that is the gap those posts fill.
 | epic | what it is for | |
 | --- | --- | --- |
 
-| [#655](https://github.com/olafkfreund/nixarchy/issues/655) | **Neovim that knows it is on NixOS** — the editor this desktop ships has no Nix formatter, no treesitter grammar, and no AI plugin for any of the agents the Install menu offers. Taken from a configuration that already solves it | 5 filed |
+*Nothing in flight.* The last epic landed; what is next is picked in
+[Discussions](https://github.com/olafkfreund/nixarchy/discussions).
 
 ### What is deliberately not planned
 

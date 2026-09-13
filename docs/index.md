@@ -175,6 +175,22 @@ See **[a reinstall image of this machine](manual/reinstall-image)**.
 ## Where this has got to
 
 **Recently finished:**
+[Neovim that knows it is on NixOS](https://github.com/olafkfreund/nixarchy/issues/655)
+— the editor this desktop ships could not highlight the language the desktop is
+configured in. Not for want of a grammar: a default machine had **no C compiler
+and no `tree-sitter` CLI**, so nvim-treesitter could compile no parser for any
+language at all. Both are on PATH now, with the Nix grammar, and format-on-save
+runs the same tool `nix fmt` does — derived from one string, so the editor and
+CI cannot disagree. Secrets are reachable from the buffer once a machine
+declares one, and the AI plugins follow the agents you actually selected in the
+Install menu, pointed at the endpoint `local-ai` already derives rather than a
+port typed twice. `:DevenvShell` covers the half devenv's shell hook cannot:
+Neovim started from the app launcher rather than from a project shell. The
+useful correction came out of building it — the nixd settings this was going to
+copy from a working configuration **are not in nixd's schema**, so they had been
+inert there all along; nixd drops unknown keys, which is exactly why they looked
+like they worked. Five children closed.
+Also
 [what upstream adds must be classified, not absorbed](https://github.com/olafkfreund/nixarchy/issues/640)
 — three manifests that fail until a human classifies what arrived, so an
 upstream bump cannot slip anything past us in silence. The bin ledger learns

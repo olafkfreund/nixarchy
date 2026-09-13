@@ -3144,7 +3144,7 @@ pkgs.runCommand "nixarchy-options"
         for want in .config/omarchy/shell.json .config/hypr/ \
           .config/omarchy/themes/ .local/state/omarchy/ \
           .config/omarchy/backup.list; do
-          echo "$allowlist" | grep -qxF "$want" || {
+          <<<"$allowlist" grep -qxF "$want" || {
             echo "the shipped allowlist no longer covers $want" >&2
             echo "$allowlist" >&2
             exit 1
@@ -3166,7 +3166,7 @@ pkgs.runCommand "nixarchy-options"
         for never in .local/state/omarchy/clipboard-history.json \
           .local/state/omarchy/current/theme/ \
           .local/state/omarchy/done/; do
-          echo "$allowlist" | grep -qxF "!$never" || {
+          <<<"$allowlist" grep -qxF "!$never" || {
             echo "the allowlist no longer excludes $never" >&2
             exit 1
           }
@@ -3581,7 +3581,7 @@ pkgs.runCommand "nixarchy-options"
         # dispatch, not prose.
         appremove=$(grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-app-remove")
         for needle in '#@pkg ' '#@opt ' '#@draft ' nixarchy-pkg-remove nixarchy-opt-remove nixarchy-pkg-undraft; do
-          printf '%s' "$appremove" | grep -qF -- "$needle" || {
+          <<<"$appremove" grep -qF -- "$needle" || {
             echo "nixarchy-app-remove does not handle $needle:" >&2
             echo "  the Remove menu is then blind to a kind the Install picker writes" >&2
             exit 1

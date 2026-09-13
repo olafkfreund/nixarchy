@@ -252,6 +252,18 @@ Two branches only these can reach, as illustration:
   which reads as a broken derivation rather than a shadowed variable. Cost one
   full build in `tests/android.nix` before the cause was obvious. `got` is the
   usual name for "what the thing under test printed".
+- **`printf '%s' "$x" | grep -q` is a race under `pipefail`, and a
+  `runCommand` script always has `pipefail`** (stdenv's setup sets it).
+  `grep -q` exits at its first match; if the writer is still writing, it dies
+  of SIGPIPE, the pipeline reports 141, and the `if` takes the *no match*
+  branch. `checks.channel` failed on a hosted runner with the line it wanted
+  printed in its own failure message. Reproduced with that 6 KB input: 172–200
+  of 200 runs report a miss when the pipe is starved, 0 of 200 on an idle
+  machine, which is why it passed locally. The inverted form is worse: a
+  `wantnot`, or `… | grep -q X && fail`, **passes** with X present. Use
+  `<<<"$x" grep -q`, or drop `-q` and send the output to `/dev/null` so grep
+  reads everything. The same holds for `pkgs/*.sh`, because
+  `writeShellApplication` sets `pipefail` too.
 - **`step`-style helpers truncate their capture file before running the
   command.** In `tests/install-iso.nix` a `grep` placed inside `step` reads the
   file `step` is about to write, so it always sees an empty one. Copy the

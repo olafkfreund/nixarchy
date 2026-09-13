@@ -66,7 +66,7 @@ pkgs.runCommand "nixarchy-patched-files"
     for want in bin/omarchy-plymouth-set bin/omarchy-refresh-sddm \
       bin/omarchy-version-channel config/hypr/xdph.conf \
       default/plymouth/omarchy.script; do
-      echo "$report" | grep -q "$want" || {
+      <<<"$report" grep -q "$want" || {
         echo "patched files: $want is a file this port touches and is missing" >&2
         fail=1
       }
@@ -90,21 +90,21 @@ pkgs.runCommand "nixarchy-patched-files"
     # which is the same as none.
     for noise in bin/omarchy-theme-bg-next install/omarchy-base.packages \
       themes/catppuccin/alacritty.toml README.md; do
-      echo "$report" | grep -q "$noise" && {
+      <<<"$report" grep -q "$noise" && {
         echo "patched files: $noise is untouched here and was reported anyway" >&2
         fail=1
       }
     done
 
     # The count in the prose is the count in the list.
-    echo "$report" | grep -q '^9 files changed' || {
+    <<<"$report" grep -q '^9 files changed' || {
       echo "patched files: the changed-file total is wrong or missing" >&2
       fail=1
     }
 
     # Attribution, which is the whole reason to read this section: a security
     # fix landing upstream in a file this port replaces with a stub.
-    echo "$report" | grep -q 'plymouth-publication-race' || {
+    <<<"$report" grep -q 'plymouth-publication-race' || {
       echo "patched files: the upstream commit subject was not rendered" >&2
       fail=1
     }
@@ -116,7 +116,7 @@ pkgs.runCommand "nixarchy-patched-files"
       echo "$listed" >&2
       fail=1
     }
-    echo "$listed" | grep -q ' ' && {
+    <<<"$listed" grep -q ' ' && {
       echo "patched files: --list printed prose, not bare paths" >&2
       fail=1
     }

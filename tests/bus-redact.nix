@@ -170,8 +170,8 @@ pkgs.runCommand "nixarchy-bus-redact" { nativeBuildInputs = [ pkgs.jq ]; } ''
   else
     echo "  ok      no consent -> refused"
   fi
-  echo "$ro" | grep -q "AGENT_BUS_CONSENT=public" || { echo "  FAILED  the refusal does not say how to consent"; fails=$((fails+1)); }
-  echo "$ro" | grep -qi "PUBLIC" || { echo "  FAILED  the refusal does not carry the disclosure"; fails=$((fails+1)); }
+  <<<"$ro" grep -q "AGENT_BUS_CONSENT=public" || { echo "  FAILED  the refusal does not say how to consent"; fails=$((fails+1)); }
+  <<<"$ro" grep -qi "PUBLIC" || { echo "  FAILED  the refusal does not carry the disclosure"; fails=$((fails+1)); }
   [ ! -e curl-called ] || { echo "  FAILED  the gate let a network request out before refusing"; fails=$((fails+1)); }
 
   # Consent given: the gate opens, and the run proceeds to the next real
@@ -180,7 +180,7 @@ pkgs.runCommand "nixarchy-bus-redact" { nativeBuildInputs = [ pkgs.jq ]; } ''
   if ro=$(printf "" | AGENT_BUS_CONSENT=public bash register.sh some-agent 2>&1); then
     echo "  FAILED  register.sh succeeded with no token?"; fails=$((fails+1))
   else
-    echo "$ro" | grep -q "no registration token" \
+    <<<"$ro" grep -q "no registration token" \
       && echo "  ok      consent -> proceeds to the token check" \
       || { echo "  FAILED  with consent, the failure is not the token check:"; echo "$ro" | sed 's/^/            /'; fails=$((fails+1)); }
   fi

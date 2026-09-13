@@ -116,7 +116,7 @@ pkgs.runCommand "nixarchy-offline-hardware-packages"
     fi
 
     for u in microcode-intel amd-ucode; do
-      if printf '%s' "$prepend" | grep -q -- "-$u"; then
+      if <<<"$prepend" grep -q -- "-$u"; then
         echo "  ok      the reference initrd prepends $u"
       else
         echo "  FAILED  the reference initrd does NOT prepend $u"

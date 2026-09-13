@@ -81,12 +81,12 @@ pkgs.runCommand "nixarchy-hardware-modules"
 
     fails=0
     want() {
-      if printf '%s\n' "$2" | grep -qx "$3"; then echo "  ok      $1"
+      if <<<"$2" grep -qx "$3"; then echo "  ok      $1"
       else echo "  FAILED  $1: no line /$3/ in:"; printf '%s\n' "$2" | sed 's/^/            /'
         fails=$((fails + 1)); fi
     }
     wantnot() {
-      if printf '%s\n' "$2" | grep -qx "$3"; then
+      if <<<"$2" grep -qx "$3"; then
         echo "  FAILED  $1: /$3/ present and should not be"; fails=$((fails + 1))
       else echo "  ok      $1"; fi
     }

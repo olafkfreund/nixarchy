@@ -66,7 +66,7 @@ pkgs.runCommand "nixarchy-doctor-wireless" { nativeBuildInputs = [ pkgs.gnugrep 
 
   fails=0
   want() {
-    if printf '%s' "$2" | grep -q "$3"; then echo "  ok      $1"
+    if <<<"$2" grep -q "$3"; then echo "  ok      $1"
     else
       echo "  FAILED  $1: no /$3/ in the output"
       # And WHAT it printed instead.
@@ -82,7 +82,7 @@ pkgs.runCommand "nixarchy-doctor-wireless" { nativeBuildInputs = [ pkgs.gnugrep 
     fi
   }
   wantnot() {
-    if printf '%s' "$2" | grep -q "$3"; then
+    if <<<"$2" grep -q "$3"; then
       echo "  FAILED  $1: /$3/ present and should not be"; fails=$((fails + 1))
     else echo "  ok      $1"; fi
   }
@@ -90,7 +90,7 @@ pkgs.runCommand "nixarchy-doctor-wireless" { nativeBuildInputs = [ pkgs.gnugrep 
   up=$(run working up)
   # Same guard as the graphics test: every assertion below fails identically
   # when the doctor printed nothing, which reads like every rule being wrong.
-  printf '%s' "$up" | grep -q 'Wireless' || {
+  <<<"$up" grep -q 'Wireless' || {
     echo "the doctor printed no Wireless section at all:"; printf '%s\n' "$up"; exit 1; }
   want    "a working card is named"    "$up" 'Wireless interface wlan0 is up'
   want    "and its driver with it"     "$up" 'Intel, driver iwlwifi'

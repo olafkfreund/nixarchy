@@ -50,16 +50,16 @@ pkgs.runCommand "nixarchy-explain"
     # then fails with "failed to produce output path" long after every
     # assertion has printed green, which reads as a store problem.
     want() { # <name> <text> <pattern>
-      if printf '%s' "$2" | grep -qF -- "$3"; then echo "  ok       $1"
+      if <<<"$2" grep -qF -- "$3"; then echo "  ok       $1"
       else echo "  FAILED   $1: no '$3' in the explanation"; fails=$((fails + 1)); fi
     }
     wantnot() {
-      if printf '%s' "$2" | grep -qF -- "$3"; then
+      if <<<"$2" grep -qF -- "$3"; then
         echo "  FAILED   $1: '$3' present and should not be"; fails=$((fails + 1))
       else echo "  ok       $1"; fi
     }
     raw() { # the fixture still produces the Nix message it was written for
-      if printf '%s' "$2" | grep -qF -- "$3"; then echo "  fixture  $1"
+      if <<<"$2" grep -qF -- "$3"; then echo "  fixture  $1"
       else
         echo "  FAILED   $1: the fixture no longer produces '$3' -- it printed:"
         printf '%s\n' "$2" | sed 's/^/           /' | tail -20

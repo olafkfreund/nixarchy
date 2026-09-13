@@ -104,25 +104,25 @@ pkgs.runCommand "nixarchy-config-delta"
 
     # The file walk, in all three directions.
     added_block=$(echo "$report" | sed -n '/\*\*Added\*\*/,/\*\*Removed\*\*/p')
-    echo "$added_block" | grep -q 'config/herdr/config.toml' || {
+    <<<"$added_block" grep -q 'config/herdr/config.toml' || {
       echo "config delta: a new file is missing from Added" >&2
       fail=1
     }
     removed_block=$(echo "$report" | sed -n '/\*\*Removed\*\*/,/\*\*Changed\*\*/p')
-    echo "$removed_block" | grep -q 'config/goes-away.conf' || {
+    <<<"$removed_block" grep -q 'config/goes-away.conf' || {
       echo "config delta: a deleted file is missing from Removed" >&2
       fail=1
     }
     changed_block=$(echo "$report" | sed -n '/\*\*Changed\*\*/,/newly name/p')
     for c in config/hypr/xdph.conf config/hypr/autostart.lua; do
-      echo "$changed_block" | grep -q "$c" || {
+      <<<"$changed_block" grep -q "$c" || {
         echo "config delta: edited file $c is missing from Changed" >&2
         fail=1
       }
     done
 
     # A file nobody touched belongs in no list at all.
-    echo "$report" | grep -q 'print-applet' && {
+    <<<"$report" grep -q 'print-applet' && {
       echo "config delta: an untouched file was reported as a change" >&2
       fail=1
     }
@@ -130,7 +130,7 @@ pkgs.runCommand "nixarchy-config-delta"
     # The half #202 turns on: names that are NEW, and only those.
     names=$(echo "$report" | sed -n '/newly name/,$p')
     for want in xdph-warmup omarchy-battery-monitor herdr-agent; do
-      echo "$names" | grep -q "$want" || {
+      <<<"$names" grep -q "$want" || {
         echo "config delta: newly named executable $want was not reported" >&2
         fail=1
       }
@@ -139,20 +139,20 @@ pkgs.runCommand "nixarchy-config-delta"
     # tensaku-edit's file did not change. Reporting either would bury the
     # three above in noise a reviewer has already read.
     for quiet in hypridle tensaku-edit hyprland-preview-share-picker; do
-      echo "$names" | grep -q "$quiet" && {
+      <<<"$names" grep -q "$quiet" && {
         echo "config delta: $quiet was named before this release and is not new" >&2
         fail=1
       }
     done
     # The commented sample in autostart.lua names nothing.
-    echo "$names" | grep -q 'my-service' && {
+    <<<"$names" grep -q 'my-service' && {
       echo "config delta: a commented-out sample was read as a reference" >&2
       fail=1
     }
 
     # Silence has to mean silence.
     quiet=$(bash "$delta" ${same} ${old} v1 v2)
-    echo "$quiet" | grep -q 'No change to the seeded config tree' || {
+    <<<"$quiet" grep -q 'No change to the seeded config tree' || {
       echo "config delta: an unchanged tree was reported as a change" >&2
       echo "$quiet" >&2
       fail=1

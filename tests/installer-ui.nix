@@ -78,7 +78,7 @@ pkgs.runCommand "nixarchy-installer-ui"
           local r
           r=$(script -qec "stty cols $1 rows 24; timeout 5 gum input --padding '0 0 0 '$2 \
                 --placeholder '${placeholder}' --prompt '${prompt}'" /dev/null 2>&1 || true)
-          ! printf '%s' "$r" | grep -qE 'Caught panic|len out of range|runtime error'
+          ! <<<"$r" grep -qE 'Caught panic|len out of range|runtime error'
         }
 
         # ---- every width a console might actually be -------------------------

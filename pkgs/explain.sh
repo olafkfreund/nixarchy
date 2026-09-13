@@ -112,8 +112,8 @@ err=$(
       -e "s/\`/'/g"
 )
 
-has() { printf '%s' "$err" | grep -qF -- "$1"; }
-hasre() { printf '%s' "$err" | grep -qE -- "$1"; }
+has() { <<<"$err" grep -qF -- "$1"; }
+hasre() { <<<"$err" grep -qE -- "$1"; }
 
 between() { # <before> <after> -- the first quoted name after the marker
   printf '%s' "$err" | sed -n "s/.*$1'\([^']*\)'$2.*/\1/p" | head -1

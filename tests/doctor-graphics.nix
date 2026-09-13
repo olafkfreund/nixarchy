@@ -94,15 +94,15 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   fails=0
   # Every case starts here: a doctor that did not finish has not answered.
   ran() { # ran <name> <output>
-    if printf '%s' "$2" | grep -q 'doctor exit status: 0'; then echo "  ok      $1: the doctor ran to completion"
+    if <<<"$2" grep -q 'doctor exit status: 0'; then echo "  ok      $1: the doctor ran to completion"
     else echo "  FAILED  $1: the doctor died -- the last lines say where"; printf '%s\n' "$2" | tail -5; fails=$((fails + 1)); fi
   }
   want() { # want <name> <output> <pattern>
-    if printf '%s' "$2" | grep -q "$3"; then echo "  ok      $1"
+    if <<<"$2" grep -q "$3"; then echo "  ok      $1"
     else echo "  FAILED  $1: no /$3/ in the output"; fails=$((fails + 1)); fi
   }
   wantnot() {
-    if printf '%s' "$2" | grep -q "$3"; then
+    if <<<"$2" grep -q "$3"; then
       echo "  FAILED  $1: /$3/ present and should not be"; fails=$((fails + 1))
     else echo "  ok      $1"; fi
   }
@@ -110,7 +110,7 @@ pkgs.runCommand "nixarchy-doctor-graphics" { nativeBuildInputs = [ pkgs.gnugrep 
   h=$(run hybrid vainfo nvidia)
   # Every `want` below fails identically when the doctor produced nothing, which
   # is indistinguishable from every rule being wrong. Say which it is.
-  printf '%s' "$h" | grep -q 'Graphics' || {
+  <<<"$h" grep -q 'Graphics' || {
     echo "the doctor printed no Graphics section at all:"; dump; exit 1; }
   ran  "hybrid"                      "$h"
   want "hybrid is detected"          "$h" 'Hybrid graphics'

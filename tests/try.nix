@@ -198,13 +198,13 @@ pkgs.runCommand "nixarchy-try" { } ''
     test -s ns.sh || { echo "next_step is not in nixarchy-try any more" >&2; exit 1; }
     bold() { echo "$1"; }
     . ./ns.sh
-    if next_step app helix | grep -q 'nixarchy-app-enable helix'; then
+    if next_step app helix | grep 'nixarchy-app-enable helix' >/dev/null; then
       echo "  ok      hand-off: catalogue row -> nixarchy-app-enable"
     else
       echo "  FAILED  hand-off for a catalogue row does not name nixarchy-app-enable"
       fails=1
     fi
-    if next_step raw ripgrep | grep -q 'nixarchy-pkg-add ripgrep'; then
+    if next_step raw ripgrep | grep 'nixarchy-pkg-add ripgrep' >/dev/null; then
       echo "  ok      hand-off: raw attr -> nixarchy-pkg-add"
     else
       echo "  FAILED  hand-off for a raw attribute does not name nixarchy-pkg-add"
@@ -236,7 +236,7 @@ pkgs.runCommand "nixarchy-try" { } ''
     # No call site says `nix run`: strip comment lines first, because the
     # script's own comments discuss `nix run` at length and a pattern that
     # reads prose would pass or fail on the wrong thing entirely.
-    if grep -vE '^[[:space:]]*#' ${tryScript} | grep -q 'nix run '; then
+    if grep -vE '^[[:space:]]*#' ${tryScript} | grep 'nix run ' >/dev/null; then
       echo "  FAILED  a call site invokes 'nix run' -- the mainProgram guess is back"
       fails=1
     else

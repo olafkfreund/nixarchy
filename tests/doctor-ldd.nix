@@ -50,11 +50,11 @@ pkgs.runCommandCC "nixarchy-doctor-ldd"
 
     fails=0
     want() { # <name> <output> <pattern>
-      if printf '%s' "$2" | grep -q "$3"; then echo "  ok      $1"
+      if <<<"$2" grep -q "$3"; then echo "  ok      $1"
       else echo "  FAILED  $1: no /$3/ in the output"; fails=$((fails + 1)); fi
     }
     wantnot() {
-      if printf '%s' "$2" | grep -q "$3"; then
+      if <<<"$2" grep -q "$3"; then
         echo "  FAILED  $1: /$3/ present and should not be"; fails=$((fails + 1))
       else echo "  ok      $1"; fi
     }

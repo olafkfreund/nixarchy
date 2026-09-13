@@ -114,7 +114,7 @@ pkgs.runCommand "nixarchy-release-notes"
     }
 
     has() { # pattern, what it is about
-      echo "$report" | grep -qF "$1" || {
+      <<<"$report" grep -qF "$1" || {
         echo "release-notes: missing $2" >&2
         echo "  looked for: $1" >&2
         fail=1
@@ -142,7 +142,7 @@ pkgs.runCommand "nixarchy-release-notes"
     has '`programs.nixarchy.retired`' "the removed option"
 
     # An option that did not move must appear in none of the three lists.
-    echo "$report" | grep -q 'programs.nixarchy.enable' && {
+    <<<"$report" grep -q 'programs.nixarchy.enable' && {
       echo "release-notes: an unchanged option was reported as a change" >&2
       fail=1
     }
@@ -155,7 +155,7 @@ pkgs.runCommand "nixarchy-release-notes"
 
     # 3. Packages. The one that moved, and not the one that did not.
     has '`once` 0.3.1 → 0.4.0' "the pinned package whose version moved"
-    echo "$report" | grep -q 'ttfx 0.3.2 →' && {
+    <<<"$report" grep -q 'ttfx 0.3.2 →' && {
       echo "release-notes: an unmoved pin was reported as having moved" >&2
       fail=1
     }
@@ -164,12 +164,12 @@ pkgs.runCommand "nixarchy-release-notes"
     # path, so this asserts the subject lands under the right heading rather
     # than merely appearing somewhere.
     installers=$(echo "$report" | sed -n '/^### Installing/,/^### /p')
-    echo "$installers" | grep -qF "The installer asks one more question (#900)" || {
+    <<<"$installers" grep -qF "The installer asks one more question (#900)" || {
       echo "release-notes: the installer commit is not under the installer heading" >&2
       fail=1
     }
     docsbucket=$(echo "$report" | sed -n '/^### Documentation/,/^### /p')
-    echo "$docsbucket" | grep -qF "Docs: the page that was missing (#901)" || {
+    <<<"$docsbucket" grep -qF "Docs: the page that was missing (#901)" || {
       echo "release-notes: the docs commit is not under the documentation heading" >&2
       fail=1
     }
@@ -178,13 +178,13 @@ pkgs.runCommand "nixarchy-release-notes"
     # Silence has to mean silence: two identical option maps produce a
     # sentence, not an absent section.
     quiet=$(NIXARCHY_OPTIONS_TO=${optsSame} bash "$notes" v-old main)
-    echo "$quiet" | grep -q 'No option was added, removed or given a different' || {
+    <<<"$quiet" grep -q 'No option was added, removed or given a different' || {
       echo "release-notes: an unchanged option set produced no sentence saying so" >&2
       fail=1
     }
     # ...except the NixOS default, which did move in this fixture and must
     # still be reported when nothing else did.
-    echo "$quiet" | grep -q 'services.printing.browsed.enable' || {
+    <<<"$quiet" grep -q 'services.printing.browsed.enable' || {
       echo "release-notes: a changed NixOS default vanished when no option changed" >&2
       fail=1
     }
@@ -205,7 +205,7 @@ pkgs.runCommand "nixarchy-release-notes"
         fail=1
         return
       }
-      echo "$refused" | grep -q "$3" || {
+      <<<"$refused" grep -q "$3" || {
         echo "release-notes: $1 -- refused, but not with the reason expected" >&2
         echo "  looked for: $3" >&2
         echo "$refused" >&2
@@ -241,7 +241,7 @@ pkgs.runCommand "nixarchy-release-notes"
       echo "$refused" >&2
       fail=1
     }
-    echo "$refused" | grep -q 'has stopped finding options' || {
+    <<<"$refused" grep -q 'has stopped finding options' || {
       echo "release-notes: an empty option set refused, but not for that reason" >&2
       echo "$refused" >&2
       fail=1

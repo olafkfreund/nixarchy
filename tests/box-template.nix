@@ -59,7 +59,7 @@ pkgs.runCommand "nixarchy-box-template"
 
       # The catalogue INI names an image. Breaking this looks like dropping
       # the `image =` line from a template.
-      if ! echo "$ini" | grep -qE '^image=.+'; then
+      if ! <<<"$ini" grep -qE '^image=.+'; then
         echo "${name}: ini has no non-empty 'image=' line" >&2
         fail=1
       fi
@@ -67,7 +67,7 @@ pkgs.runCommand "nixarchy-box-template"
       # The pin taken for this template is a real image name -- a
       # structural cross-check that the pin was not taken against the wrong
       # template.
-      if ! echo "$ini" | grep -q ${lib.escapeShellArg imagePins.${name}.imageName}; then
+      if ! <<<"$ini" grep -q ${lib.escapeShellArg imagePins.${name}.imageName}; then
         echo "${name}: ini does not mention pinned image '${imagePins.${name}.imageName}'" >&2
         fail=1
       fi

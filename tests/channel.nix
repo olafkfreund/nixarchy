@@ -35,7 +35,7 @@ pkgs.runCommand "nixarchy-channel"
 
     fails=0
     want() {
-      if printf '%s' "$2" | grep -q -- "$3"; then echo "  ok      $1"
+      if <<<"$2" grep -q -- "$3"; then echo "  ok      $1"
       else
         echo "  FAILED  $1: no /$3/ in the output"
         printf '%s\n' "$2" | sed 's/^/          | /'
@@ -43,7 +43,7 @@ pkgs.runCommand "nixarchy-channel"
       fi
     }
     wantnot() {
-      if printf '%s' "$2" | grep -q -- "$3"; then
+      if <<<"$2" grep -q -- "$3"; then
         echo "  FAILED  $1: /$3/ present and should not be"; fails=$((fails + 1))
       else echo "  ok      $1"; fi
     }

@@ -75,7 +75,7 @@ pkgs.runCommand "nixarchy-pkg-new"
 
     # -- refusals, before anything is touched ------------------------------
     if o=$(bash pkg-new.sh not-a-url 2>&1); then fail "a non-URL was accepted"
-    elif printf '%s' "$o" | grep -q "does not look like a URL"; then ok "a non-URL is refused, naming pkg add"
+    elif <<<"$o" grep -q "does not look like a URL"; then ok "a non-URL is refused, naming pkg add"
     else fail "the non-URL refusal does not say why"; fi
 
     if o=$(bash pkg-new.sh 2>&1); then fail "no argument was accepted"
@@ -96,7 +96,7 @@ pkgs.runCommand "nixarchy-pkg-new"
       grep -q 'sha256-GOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOTGOT=' "$draft" \
         && ok "the placeholder hash was filled in from the failed build" \
         || fail "the placeholder hash is still in the draft"
-      printf '%s' "$o" | grep -q "DRAFT" \
+      <<<"$o" grep -q "DRAFT" \
         && ok "the result is presented as a draft, not a package" \
         || fail "nothing in the output says DRAFT"
       grep -q '^    # (callPackage ./packages/tool.nix { })  #@draft tool$' "$cfg/apps.nix" \
@@ -112,7 +112,7 @@ pkgs.runCommand "nixarchy-pkg-new"
       fail "an existing draft was overwritten"
     else
       ok "an existing draft refuses a redraft"
-      printf '%s' "$o" | grep -q -- '--update' \
+      <<<"$o" grep -q -- '--update' \
         && ok "the refusal names --update as the deliberate way" \
         || fail "the refusal does not say how to redraft on purpose"
     fi
@@ -150,7 +150,7 @@ pkgs.runCommand "nixarchy-pkg-new"
       [ -f "$draft" ] \
         && ok "the failed draft is kept for editing" \
         || fail "the failed draft was discarded"
-      printf '%s' "$o" | grep -q "did NOT build" \
+      <<<"$o" grep -q "did NOT build" \
         && ok "the failure is named out loud" \
         || fail "the failure report does not say the draft did not build"
       grep -q '#@draft' "$cfg/apps.nix" \
@@ -166,7 +166,7 @@ pkgs.runCommand "nixarchy-pkg-new"
       [ "$before" = "$(cksum < "$cfg/apps.nix")" ] \
         && ok "a file without the marker is left alone" \
         || fail "a file without nixarchy-pkg-add's marker was edited"
-      printf '%s' "$o" | grep -q "add it to your configuration yourself" \
+      <<<"$o" grep -q "add it to your configuration yourself" \
         && ok "the edit is printed instead" \
         || fail "nothing told the user what to add by hand"
     else fail "a marker-less apps.nix broke the drafting"; fi

@@ -60,12 +60,12 @@ pkgs.runCommand "nixarchy-package-delta"
     report=$(bash "$delta" ${old} ${new} v4.0.1 v4.0.2)
 
     # The real 4.0.1 -> 4.0.2 change, which is what this fixture models.
-    echo "$report" | grep -q 'cups-pk-helper' || {
+    <<<"$report" grep -q 'cups-pk-helper' || {
       echo "delta: an added package is missing from the report" >&2
       fail=1
     }
     for gone in cups-browsed cups-pdf; do
-      echo "$report" | grep -q "$gone" || {
+      <<<"$report" grep -q "$gone" || {
         echo "delta: removed package $gone is missing from the report" >&2
         fail=1
       }
@@ -74,18 +74,18 @@ pkgs.runCommand "nixarchy-package-delta"
     # Added and removed must not be confused for each other -- the whole point
     # of reading a removal twice is knowing it was one.
     added_block=$(echo "$report" | sed -n '/\*\*Added\*\*/,/\*\*Removed\*\*/p')
-    echo "$added_block" | grep -q 'cups-pk-helper' || {
+    <<<"$added_block" grep -q 'cups-pk-helper' || {
       echo "delta: cups-pk-helper is not under Added" >&2
       fail=1
     }
-    echo "$added_block" | grep -q 'cups-browsed' && {
+    <<<"$added_block" grep -q 'cups-browsed' && {
       echo "delta: a removed package is listed under Added" >&2
       fail=1
     }
 
     # A package present in both must appear in neither list.
     for unchanged in base bat cups hyprland; do
-      echo "$report" | grep -qE "^- \`$unchanged\`$" && {
+      <<<"$report" grep -qE "^- \`$unchanged\`$" && {
         echo "delta: unchanged package $unchanged was reported as a change" >&2
         fail=1
       }
@@ -94,7 +94,7 @@ pkgs.runCommand "nixarchy-package-delta"
     # Silence has to mean silence. Order and blank lines are not changes, and
     # this is the case that would otherwise let a broken read look like calm.
     quiet=$(bash "$delta" ${old} ${reordered} v1 v2)
-    echo "$quiet" | grep -q 'No change to the package set' || {
+    <<<"$quiet" grep -q 'No change to the package set' || {
       echo "delta: reordering the same packages was reported as a change" >&2
       echo "$quiet" >&2
       fail=1

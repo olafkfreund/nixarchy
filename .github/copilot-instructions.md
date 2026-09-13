@@ -63,6 +63,26 @@ admitted gap, because the gap gets covered and the claim does not.
 - **Anything in another repository.** Upstream is `basecamp/omarchy`; a fix to
   how Omarchy itself behaves belongs there, not patched here.
 
+## When a red bump is handed to you
+
+`copilot-handoff.yml` mentions you on a pull request from an `update/` branch
+when its `build` run fails: a dependency bump broke something. The comment
+quotes the failing jobs and their errors. What it asks:
+
+- **Push the fix to that same branch.** It is the pull request's own branch,
+  and auto-merge is already armed on it, so your fix merges once the required
+  checks pass.
+- **Fix the cause; do not revert the bump or pin the dependency back.** The
+  bump is the point of the pull request.
+- **Reproduce first**, with the command the failing job runs, and show it
+  failing before your change and passing after (§1).
+- **If the failing job needs KVM or a self-hosted runner, say so and stop.**
+  You cannot verify that fix, and an unverified push onto a branch with
+  auto-merge armed is the worst version of the mistake this file is about.
+
+You get at most two handoffs per pull request. If the second fix is still
+red, a human takes it; do not open a third attempt yourself.
+
 ## What good work looks like here
 
 The shapes that fit your environment, because a cheap check proves them:

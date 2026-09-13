@@ -27,11 +27,12 @@ gh run watch                          # follow the newest run
 | `nightly.yml` | 03:00 UTC | **self-hosted** | the expensive VM checks |
 | `omarchy.yml` | 04:00 UTC | hosted | is there a new Omarchy? |
 | `update.yml` | 05:00 UTC | hosted | are the vendored tools behind? |
-| `review.yml` | 06:00 UTC | hosted | write the state into #195 |
+| `review.yml` | 06:00 UTC | hosted | write the state into the review issue |
 | `flake-update.yml` | 07:00 UTC | hosted | bump the flake inputs |
 | `release.yml` | a `v*` tag | **self-hosted** | build and publish the images |
 | `wiki.yml` | `docs/internals/**` | hosted | mirror these pages |
 | `copilot-setup-steps.yml` | Copilot | hosted | agent environment |
+| `copilot-handoff.yml` | `build` fails on `update/` | hosted | hand a red bump to Copilot |
 
 The clock is staggered on purpose: each one reports on the state the previous
 one left.
@@ -67,7 +68,7 @@ those two questions:
 | can it change an install? | **no** — nothing an install builds reads it |
 
 So a one-line edit to the README's roadmap table runs the count guard and
-**skips the 55-minute install**. Before that split it did both, twice in one
+**skips the install**. Before that split it did both, twice in one
 day, queued behind every other pull request on the single slot.
 `tests/install-gate.nix` asserts both halves, because one without the other is
 the bug.
@@ -113,9 +114,19 @@ its first step if the runner does not have it.
 **Runner:** chosen at runtime — `runs-on: ${{ fromJSON(needs.gate.outputs.runner) }}`
 — self-hosted when the change can affect an install, hosted otherwise.
 
-**Steps:** gate → *Install onto a blank disk, and into free space beside a
-neighbour* → *Push the proof, so nobody has to prove it twice* → *Report what
-it cost*.
+**Steps:** gate → *This host can finish what it is about to start* →
+*Install onto a blank disk, and into free space beside a neighbour* → *Push
+the proof, so nobody has to prove it twice* → *Report what it cost*.
+
+**The first step refuses a host with under 40 GB free** under the store (#672),
+before checkout. A full disk does not fail an install cleanly: the guest
+starves and `udevadm settle` times out eighty minutes in, on whoever's pull
+request was running — the same symptom as the concurrency limit below. The
+three VM images are only 14.3 GB; the floor is generous because each install
+also fetches and builds into the store, and a refusal in ten seconds costs a
+re-run where a starved job costs an afternoon. It measures the store path, not
+`/`, and prints the figure either way. The cause it cannot fix is the host's
+own garbage-collection floor, which is outside this repository (#663).
 
 ### Why it is slow, and why that is deliberate
 
@@ -224,6 +235,16 @@ break anything.
 Auto-merge is gated on the required checks, so a bump that breaks something
 stays open.
 
+**Both halves use `BUMP_TOKEN`, a person's token, not `GITHUB_TOKEN`** (the
+same applies to `flake-update.yml`). Anything `GITHUB_TOKEN` does starts no
+workflows. A pull request it opens gets no checks, so auto-merge waits forever;
+and GitHub performs an auto-merge *as whoever armed it*, so a merge it armed
+lands on `main` with no `build` and no install check. #671 did exactly that
+(#676). Without the secret both steps fall back to `GITHUB_TOKEN`, and the
+merge step fails saying so rather than arming a merge that can never fire.
+
+A bump that goes red is handed to Copilot — see `copilot-handoff.yml` below.
+
 ---
 
 ## `update.yml` — 05:00 UTC, the vendored tools
@@ -236,11 +257,14 @@ rather than weekly because these publish often.
 
 One step, *Review, and say so*: runs `pkgs/review.sh`, which reads every pin,
 every vendored version, every workflow's last result, and the board's hygiene
-— then **edits issue #195 in place** with the table and **closes it
-automatically when everything is green**.
+— then **edits the issue titled *Nightly review: what needs updating and
+fixing* in place** with the table, and **closes it automatically when
+everything is green**. Once closed, the next red night opens a new one, so the
+number changes (#195, then #670); find it by title.
 
-So an open #195 means something needs attention; a closed one means nothing
-does.
+So an open review issue means something needs attention; no open one means
+nothing does. It files with the *Keeping the lights on* milestone, because its
+own board row flags any open issue without one — itself included (#670).
 
 ```bash
 nix run .#review        # the same table, locally
@@ -250,7 +274,8 @@ nix run .#review        # the same table, locally
 
 *What the apps are on today* → *Move the pin* → *What the apps would be on* →
 *What actually moved* → *Both toplevels still evaluate* → PR with auto-merge
-armed. It says so explicitly when there was nothing to do.
+armed, both through `BUMP_TOKEN` for the reason given under `omarchy.yml`. It
+says so explicitly when there was nothing to do.
 
 ---
 
@@ -290,6 +315,45 @@ discards it.
 Installs the agent-bus MCP server for Copilot agents and proves it starts and
 serves the tools its allowlist names.
 
+## `copilot-handoff.yml` — a red bump, handed to Copilot
+
+**Trigger:** `workflow_run` on `build` completing. **Runs only when** the
+conclusion is `failure`, the branch starts `update/` (all three bump bots
+use that prefix), and the branch is in this repository.
+
+It runs `.github/scripts/copilot-handoff.sh`, which posts one `@copilot`
+comment on that branch's open pull request: the failed job names, the `error`
+lines from the log (post-job cleanup and nix trace frames cut, colour stripped
+in both spellings), and three constraints — fix the cause rather than revert
+the bump, show it failing then passing (§1), and **stop and say so** if the
+failing job needs KVM or a self-hosted runner. Copilot pushes its fix to that
+same branch, and `build` runs again.
+
+**It holds `COPILOT_AGENT_TOKEN`, a broad PAT**, because Copilot answers only
+comments from someone with write access and `GITHUB_TOKEN` is not that. The
+shape around it:
+
+| guard | what it stops |
+|---|---|
+| `workflow_run`, checking out `main` | pull request code never runs while the secret is in scope |
+| same-repository test | a fork naming its branch `update/anything` |
+| `permissions: {}` | nothing else rides on the job token |
+| values passed through `env:` | expression injection into `run:` |
+
+**What it will not do:**
+
+- **Hand off a `cancelled` run.** An eviction or a timeout has no failed job
+  (§6); an eviction needs nothing, and a timeout is a CI-gate change for a
+  human.
+- **Hand off the same commit twice.** Each comment carries a hidden
+  `copilot-handoff sha=<sha>` marker, so a re-run of that commit is skipped.
+- **Loop.** At most two handoffs per pull request; after that the step
+  summary says it is left for a human.
+- **Watch `install check`.** Those jobs need the self-hosted runners, which
+  Copilot cannot reach.
+
+`DRY_RUN=1` prints the comment instead of posting it.
+
 ---
 
 ## The composite action
@@ -310,8 +374,16 @@ because it is a restricted setting and you are not a trusted user
 
 and then compiled Hyprland from source.
 
+It also sets **`stalled-download-timeout = 60`** in the same file (#676).
+nix's default is 300 seconds, and when several downloads from cache.nixos.org
+stalled at once they cost one `omarchy` run about fifteen minutes and then
+its timeout.
+Not lower than 60, because a cache miss on a large file can take tens of
+seconds to start sending, which is slow rather than stalled.
+
 **On self-hosted runners nix is already installed, so the action skips and
-writes nothing** — those hosts need the keys in their own NixOS config.
+writes nothing** — those hosts need the keys, and the timeout, in their own
+NixOS config.
 
 ---
 

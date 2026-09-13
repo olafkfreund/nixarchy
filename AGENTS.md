@@ -343,7 +343,7 @@ your question:
 | `omarchy` (package) | the vendored tree assembles | minutes |
 | `installer-ui`, `installer-wizard` | the installer's screens and questions | minutes |
 | `session`, `coexist`, `integration`, `plugin` | booted VMs | ~10–20 min each |
-| `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | self-hosted, shares the one VM slot |
+| `install` | full install onto a blank disk, reboot, rebuild-builds-nothing | self-hosted, one of the two install slots |
 | `free-space` | install beside an existing OS, which survives | same job, same nix invocation |
 | `installer-refusal` | a dark substituter is refused, disk left intact | ~2–3 min, same job — a VM too |
 | `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
@@ -442,7 +442,10 @@ files carry the full reasoning and the failure history.
   `lib.mkDefault` on scalars; **plain assignment** on lists and attrsets
   (mkDefault on a merging type silently drops the whole contribution the
   moment the user adds an element — reproduced live, not hypothetical);
-  `mkForce` never.
+  `mkForce` never on anything a user would set. The two exceptions the tree
+  carries are where the user asked for force through an option
+  (`bootSplash = "force"`) and where it corrects nixpkgs' own literal that no
+  user chooses (the rootless Docker unit's `ConditionUser`).
 - **Mode A is real.** Someone importing `nixosModules.nixarchy` into a
   configuration they already run must be untouched by anything opt-in.
   `tests/options.nix` asserts every option in both states for this reason —

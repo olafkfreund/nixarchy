@@ -91,6 +91,27 @@ Turn all of it off with:
 programs.nixarchy.languageServer = false;
 ```
 
+### Neovim inside a project environment
+
+A [devenv](per-project-environments) project activates when your shell `cd`s
+into it. Neovim started from that shell inherits the environment. Neovim
+started from the app launcher, or one that `:cd`s into a project later, does
+not — and then the language server and the formatter quietly use the
+machine's toolchain rather than the project's.
+
+On a machine with devenv turned on, nixarchy adds
+`lua/plugins/nixarchy-devenv.lua`, which installs
+[nix-develop.nvim](https://github.com/figsoda/nix-develop.nvim):
+
+| command | enters |
+|---|---|
+| `:DevenvShell` | this project's devenv, in the running Neovim |
+| `:NixDevelop` | a flake's `devShell`, for a project that is not devenv |
+| `:NixShell nixpkgs#hello` | a `nix shell` of the packages you name |
+
+Restart the language server afterwards (`:LspRestart`) so it starts again
+with the project's toolchain on PATH.
+
 ## When a command is not found
 
 The Arch reflex is `pacman -S thing`, and on NixOS it is a dead end at exactly

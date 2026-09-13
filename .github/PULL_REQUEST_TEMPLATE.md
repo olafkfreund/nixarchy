@@ -24,7 +24,7 @@
 ## Checks run locally
 
 <!-- Which `nix build .#checks.x86_64-linux.<name>` you ran, by name.
-     `checks.install` costs ~25 min and only ONE install job runs at a time —
+     `checks.install` costs ~20 min and only TWO install jobs run at a time —
      p620 has four runners, but install-check.yml caps this job because the
      in-VM timeout is a guest-side one and contention turns "slower" into
      "failed". You don't need to have run it locally; say what you did run. -->

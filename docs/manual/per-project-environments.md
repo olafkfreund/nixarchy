@@ -217,6 +217,10 @@ that file is devenv's, not ours:
 `devenv update` moves the lock forward when you want it moved. Nothing about
 your project environments changes when the system updates.
 
+**Neovim opened from the app launcher does not get the environment**, because
+it is the shell that enters it on `cd`. Run `:DevenvShell` inside Neovim — see
+[Development tools](development-tools#neovim-inside-a-project-environment).
+
 ## If you already run direnv
 
 devenv ships its own direnvrc, so you do not need `nix-direnv` for this. A

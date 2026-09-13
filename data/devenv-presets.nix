@@ -146,9 +146,9 @@
   # environment. A python3 out of nixpkgs is patched to use Nix's own loader
   # and never consults either variable. Only an UNPATCHED interpreter -- the
   # CPython uv downloads for itself -- is in a position to read them. Hence
-  # `UV_PYTHON_PREFERENCE = "only-managed"` below, and no
-  # `languages.python.enable` at all: this preset is the case where uv's
-  # interpreter is the point, not an implementation detail.
+  # `UV_PYTHON_PREFERENCE = "only-managed"` below, forced over the
+  # "only-system" that `languages.python.uv.enable` sets: this preset is the
+  # case where uv's interpreter is the point, not an implementation detail.
   #
   # Not poetry2nix. It is legacy, and its own README points at uv2nix, which
   # self-describes as experimental with breaking API changes -- fine for a
@@ -168,7 +168,14 @@
       # reads NIX_LD, so nix-ld cannot help a wheel it imports. uv's own
       # downloaded CPython is an ordinary Linux binary, and is the one
       # interpreter here that can.
-      env.UV_PYTHON_PREFERENCE = "only-managed";
+      #
+      # mkForce, because `languages.python.uv.enable` sets this itself, to
+      # "only-system". Two plain definitions at equal priority are an
+      # evaluation error, not a last-one-wins -- devenv added its default
+      # under us and the preset stopped evaluating at the next nixpkgs bump.
+      # The override says which of the two this preset means, and keeps
+      # saying it if upstream changes its default again.
+      env.UV_PYTHON_PREFERENCE = lib.mkForce "only-managed";
 
       # The driver is the one piece no wheel can ship. On NixOS it is here.
       env.LD_LIBRARY_PATH = "/run/opengl-driver/lib:" + lib.makeLibraryPath [

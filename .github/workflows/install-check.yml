@@ -315,6 +315,52 @@ jobs:
           echo "Only paths the gate excludes changed; not building." \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # The host has to be able to finish what it is about to start.
+      #
+      # Three VM images plus their stores land on the runner's disk, and when
+      # there is not room the failure does not say so: the guest starves, the
+      # driver times out, and `udevadm settle` fails eighty minutes in on
+      # somebody's unrelated pull request. #663 measured p620 at 95% full --
+      # 45 GB of 916 -- while running exactly this job.
+      #
+      # 40 GB, not the 14.3 the envelope above quotes. That figure is the
+      # images alone; each install also fetches and builds into the store,
+      # which is the part that grew. The floor is deliberately generous
+      # because the cost of being wrong is asymmetric: a job refused in ten
+      # seconds costs a re-run, and a job starved at minute eighty costs
+      # somebody an afternoon establishing it was never their change.
+      #
+      # It reports rather than guesses. `df` on the store path, because /nix
+      # is not always the same filesystem as / and the number that matters is
+      # the one under the store.
+      - name: This host can finish what it is about to start
+        if: needs.gate.outputs.relevant == 'true'
+        run: |
+          need_gb=40
+          store=$(nix --extra-experimental-features nix-command eval --raw --impure \
+            --expr 'builtins.storeDir' 2>/dev/null || echo /nix/store)
+          free_kb=$(df -Pk "$store" | awk 'NR==2 {print $4}')
+          free_gb=$((free_kb / 1024 / 1024))
+          used_pct=$(df -P "$store" | awk 'NR==2 {print $5}')
+
+          echo "store: $store -- ${free_gb} GB free (${used_pct} used), need ${need_gb} GB"
+
+          if [ "$free_gb" -lt "$need_gb" ]; then
+            {
+              echo "### This host cannot finish an install check"
+              echo
+              echo "\`$store\` has **${free_gb} GB** free (${used_pct} used);"
+              echo "three install VMs and their stores need about **${need_gb} GB**."
+              echo
+              echo "Refused here rather than starved in the guest eighty minutes from now,"
+              echo "where it would read as a flaky test on an unrelated pull request."
+              echo
+              echo "See #663. The host collects garbage only below its \`min-free\` floor,"
+              echo "so a large store sits at the brink until something asks for room."
+            } | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
         if: needs.gate.outputs.relevant == 'true'
 

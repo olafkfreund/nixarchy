@@ -2932,12 +2932,10 @@ in
                 case "''${1:-}" in
                   search)   shift; exec nixarchy-search "$@" ;;
                   apply)    shift; exec nixarchy-apply "$@" ;;
-                  # Not installed on the system, on purpose: the doctor exists
-                  # to be run *before* nixarchy is an input anywhere, which is
-                  # the only entry point someone deciding whether to adopt it
-                  # actually has. Route to the command that works rather than to
-                  # a binary that is not there.
                   verify)   shift; exec nixarchy-verify "$@" ;;
+                  # Omarchy's `version` answers only "which Omarchy"; this prints
+                  # both, which is the question someone on nixarchy is asking.
+                  version)  shift; exec nixarchy-version "$@" ;;
                   explain)  shift; exec nixarchy-explain "$@" ;;
                   doctor)
                     if command -v nixarchy-doctor >/dev/null 2>&1; then
@@ -3052,6 +3050,8 @@ in
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                   nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                   nixarchy doctor             What this machine needs to run nixarchy
+                  nixarchy verify             Check the hardware nixarchy cannot test in a VM
+                  nixarchy version            The Omarchy version and the nixarchy revision
                   nixarchy explain            What a Nix error means -- pipe a failure into it
 
                 This machine:

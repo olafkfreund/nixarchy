@@ -2983,6 +2983,24 @@ pkgs.runCommand "nixarchy-options"
           fi
         done
 
+        # And each of those answers --help with its usage rather than running.
+        # nixarchy-unfreeze went straight to its rewrite prompt, and
+        # nixarchy-local-ai ran the whole setup.
+        for f in "$binDir"/nixarchy-*; do
+          grep -q '^# omarchy:examples=nixarchy ' "$f" || continue
+          helpout=$(HOME=$PWD/help-home NIXARCHY_FLAKE=$PWD/no-flake timeout 20 "$f" --help </dev/null 2>&1) || {
+            echo "::error::$(basename "$f") --help exited nonzero:" >&2
+            printf '%s\n' "$helpout" | tail -5 >&2
+            exit 1
+          }
+          grep -qi 'usage' <<<"$helpout" || {
+            echo "::error::$(basename "$f") --help printed no usage:" >&2
+            printf '%s\n' "$helpout" | head -5 >&2
+            exit 1
+          }
+        done
+        echo "every routed nixarchy command answers --help with its usage"
+
         # The floor this repository keeps arriving at: a loop that iterated
         # nothing satisfies every assertion above while proving nothing -- and
         # this check exists because that exact silence shipped ten broken

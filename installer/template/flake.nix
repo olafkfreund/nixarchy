@@ -105,7 +105,7 @@
         }
       );
 
-      # `nixarchy reinstall-iso` builds this: a bootable image carrying THIS
+      # `nixarchy reinstall iso` builds this: a bootable image carrying THIS
       # machine, so it can be rebuilt on new hardware after a disk is lost.
       #
       # Read the honesty in the command before you rely on it. The image

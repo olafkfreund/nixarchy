@@ -458,8 +458,9 @@ let
 
     # nixarchy-apply needs flakes. A user adding one feature of their own must
     # get theirs AND flakes -- under mkDefault the list was replaced outright.
-    # programs.nixarchy.flake reaches the commands that hard-code /etc/nixos
-    # as their fallback, and auto-update rebuilds the same directory.
+    # programs.nixarchy.flake reaches the session commands that fall back to
+    # /etc/nixos (modules/nixos.nix exports it), and the auto-update service,
+    # which is not in a session, rebuilds the same directory.
     flakeReachesCommands = {
       on =
         (configWith { flake = "/home/alice/cfg"; }).environment.sessionVariables.NIXARCHY_FLAKE or null

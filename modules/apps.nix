@@ -1035,10 +1035,6 @@ in
             this app to nixpkgs.config.allowUnfreePredicate.
           '';
 
-          # Every nixarchy command reads NIXARCHY_FLAKE; most live in the
-          # package, where this option cannot be baked in, so it is exported.
-          environment.sessionVariables.NIXARCHY_FLAKE = cfg.flake;
-
           # Exported so the Home Manager module can seed it, and so a user can
           # always diff their file against the current full list.
           environment.etc = {

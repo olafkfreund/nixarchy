@@ -381,8 +381,8 @@ Mechanism, and why this one:
   fork of three files that an Omarchy release would silently drift from.
 - **Driven by `data/etc-overlay.nix`, not by a second list.** The manifest's
   `installed` class is what installs a row, so the manifest cannot say
-  `installed` about a file that is not, and reclassifying one of the fourteen
-  `divergent` rows later is one edit. A list in the module beside a list in
+  `installed` about a file that is not, and reclassifying a row later is one
+  edit. A list in the module beside a list in
   the manifest is the §4 shape — two hand-maintained lists that fail open.
 - **No new option.** Mode A is the module imported with `enable = false`, and
   this sits inside the same `mkIf cfg.enable` as everything else — that
@@ -395,8 +395,54 @@ Mechanism, and why this one:
 
 Not `environment.etc` for the other fourteen. Those are behaviour changes
 (sysctls, sudoers, oomd thresholds) rather than files a program looks up by
-path, and each `divergent` row names the NixOS option that would carry it.
-That is #649's remaining work, decided per file.
+path; the next section is what #649 decided for each.
+
+<a id="the-rest-of-upstreams-etc-overlay-as-nixos-options"></a>
+### The rest of upstream's /etc overlay, as NixOS options
+
+Eleven of #642's fourteen `divergent` rows are now `native`: `modules/nixos.nix`
+sets the same value through the NixOS option that owns it, inside
+`mkIf cfg.enable`, so Mode A gains none of them.
+
+- **Options, not the files.** Installing `sysctl.d/99-omarchy-sysctl.conf`
+  through `environment.etc` would also work -- and would override a machine's
+  own `boot.kernel.sysctl`, since a `99-` file sorts after NixOS's `60-nixos`.
+  Through the option at `mkDefault`, the machine's value wins. The cost is that
+  an Omarchy release changing a value is no longer carried automatically;
+  `tests/etc-overlay.nix` still forces a decision when a file is added or
+  dropped, but not when one is edited.
+- **`mkDefault` on every scalar; plain assignment on the two merging types**
+  (`boot.extraModprobeConfig`, `security.sudo.extraConfig` are lines), per the
+  rule in `modules/services/default.nix`. Opting out of the USB autosuspend
+  line therefore means overriding the lines, not unsetting a default.
+- **Verified by evaluation, not by the diff.** One of upstream's values was
+  already on every NixOS machine: nixpkgs' `nixos/modules/config/sysctl.nix`
+  sets `fs.inotify.max_user_watches = 524288` by default, and a second
+  `mkDefault` of the same value is a conflicting definition. That row is
+  `covered`. The locate drop-in targets `plocate-updatedb`, which NixOS calls
+  `update-locatedb`.
+- **Both channels.** `systemd.user.settings` exists on unstable only;
+  nixos-26.05 has `systemd.user.extraConfig`, which unstable hides behind a
+  rename. #691's first push used `settings` flat and `checks.stable-eval`
+  failed on it, after `options`, `config-warnings` and every local evaluation
+  -- all against unstable -- had passed. The module picks the option by
+  `options.systemd.user ? settings`, the shape `modules/local-ai.nix` already
+  uses for `services.ollama`. An option new enough to be worth adopting from
+  upstream is new enough to be missing on stable: evaluate
+  `checks.stable-eval` before pushing.
+- **Two stay `divergent`: the passwordless sudoers rules** (`omarchy-dns`,
+  `omarchy-tzupdate`). Both name `/usr/bin/...`, and `/usr/bin` here is envfs,
+  which resolves a name through the calling process's PATH -- a NOPASSWD rule
+  on that path would run whatever the user's PATH puts first as root. And what
+  they unlock does not stick: `omarchy-dns` writes a `resolved.conf` that
+  `services.resolved` regenerates, and `timedatectl set-timezone` cannot change
+  a timezone that `time.timeZone` owns, which every installed machine sets.
+  Adopting them would need a rule on a store path *and* a mechanism that
+  survives a rebuild, which is a feature, not a port.
+
+`tests/options.nix` names each adopted value in both states (`etcNative*`),
+by value rather than by reading the manifest, for the reason the `installed`
+cases do.
 
 <a id="the-ownership-marker-for-the-shell-tools-that-cann"></a>
 ### The ownership marker, for the shell tools that cannot ask the module

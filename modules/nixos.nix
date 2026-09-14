@@ -1,6 +1,7 @@
 inputs:
 {
   config,
+  options,
   lib,
   pkgs,
   ...
@@ -1406,6 +1407,17 @@ in
       # they did not ask for.
       enable = lib.mkDefault (!config.virtualisation.docker.enable);
       setSocketVariable = lib.mkDefault (!config.virtualisation.docker.enable);
+
+      # etc/docker/daemon.json's log rotation. Its bip/dns half pairs with a
+      # bridge rootless Docker does not have.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      daemon.settings = {
+        log-driver = lib.mkDefault "json-file";
+        log-opts = {
+          max-size = lib.mkDefault "10m";
+          max-file = lib.mkDefault "5";
+        };
+      };
     };
 
     networking = {
@@ -1418,6 +1430,10 @@ in
         allowedUDPPorts = [ 53317 ];
       };
       networkmanager.enable = lib.mkDefault true;
+      # etc/NetworkManager/conf.d/omarchy-wifi-powersave.conf: false writes
+      # wifi.powersave = 2.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      networkmanager.wifi.powersave = lib.mkDefault false;
     };
 
     # Why: modules/AGENTS.md#install-config-lockscreen-pam-sh-whose-one-line-is
@@ -1437,7 +1453,48 @@ in
       omarchy-lock-fingerprint.unixAuth = false;
     };
 
+    # etc/sudoers.d/omarchy-passwd-tries.
+    # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+    security.sudo.extraConfig = "Defaults passwd_tries=10";
+
+    # upstream's user.conf.d/20-omarchy-nofile.conf. Outside the block below,
+    # which already has two `user.` keys.
+    # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+    # systemd.user.settings is unstable-only; nixos-26.05 has only extraConfig,
+    # which unstable hides behind a rename (checks.stable-eval).
+    systemd.user.${if options.systemd.user ? settings then "settings" else "extraConfig"} =
+      if options.systemd.user ? settings then
+        { Manager.DefaultLimitNOFILE = lib.mkDefault "65536:524288"; }
+      else
+        "DefaultLimitNOFILE=65536:524288";
+
     systemd = {
+      # upstream's system.conf.d: a 5s stop timeout and a raised descriptor
+      # soft limit.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      settings.Manager = {
+        DefaultTimeoutStopSec = lib.mkDefault "5s";
+        DefaultLimitNOFILE = lib.mkDefault "65536:524288";
+      };
+
+      # etc/systemd/oomd.conf.d/10-omarchy.conf.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      oomd.settings.OOM = {
+        DefaultMemoryPressureDurationSec = lib.mkDefault "20s";
+        DefaultMemoryPressureLimit = lib.mkDefault "50%";
+      };
+
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      services = {
+        # user@.service.d/10-faster-shutdown.conf, the user manager's half.
+        "user@".serviceConfig.TimeoutStopSec = lib.mkDefault "5s";
+        # plocate-updatedb.service.d/ac-only.conf, on the unit NixOS names
+        # update-locatedb.
+        update-locatedb.unitConfig.ConditionACPower = lib.mkIf config.services.locate.enable (
+          lib.mkDefault true
+        );
+      };
+
       # omarchy-theme-set-browser writes {"BrowserThemeColor": ...} into each
       # browser's policy directory on every theme switch, and skips any that
       # does not exist -- which on NixOS is all of them, so the accent silently
@@ -1726,6 +1783,26 @@ in
       initrd.availableKernelModules = allHardwareInitrdModules;
 
       kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+
+      # Upstream's sysctl.d, value for value. mkDefault on each, so a machine's
+      # own boot.kernel.sysctl wins.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      kernel.sysctl = lib.mapAttrs (_: lib.mkDefault) {
+        "net.ipv4.tcp_mtu_probing" = 1;
+        "vm.swappiness" = 150;
+        "vm.vfs_cache_pressure" = 50;
+        "vm.page-cluster" = 0;
+        "vm.watermark_boost_factor" = 0;
+        "vm.watermark_scale_factor" = 125;
+        "vm.dirty_background_bytes" = 67108864;
+        "vm.dirty_bytes" = 268435456;
+        "vm.dirty_writeback_centisecs" = 1500;
+      };
+
+      # etc/modprobe.d/omarchy-usb-autosuspend.conf. Lines merge, so plain
+      # assignment (§7).
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      extraModprobeConfig = "options usbcore autosuspend=-1";
 
       plymouth = lib.mkMerge [
         (lib.mkIf (cfg.bootSplash != "off") {

@@ -348,6 +348,14 @@ let
       off = declared loaderOff;
     };
 
+  # The same two machines, for the overlay rows carried as NixOS options: `on`
+  # is the upstream value on the desktop machine, `off` is anything else on
+  # Mode A.
+  etcNative = read: want: {
+    on = read adopter.config == want;
+    off = read loaderOff == want;
+  };
+
   # Each case is (what it should look like on, what it should look like off).
   cases = {
     # ---- #628: command-not-found that answers, and comma ----------------
@@ -597,6 +605,39 @@ let
     etcFastfetch = etcInstalled "fastfetch/config.jsonc";
     # The tool_alias `mise use -g cursor-agent` resolves through.
     etcMise = etcInstalled "mise/conf.d/omarchy.toml";
+
+    # ---- upstream's /etc overlay, the rows carried as NixOS options ----
+    #
+    # Named by value, not read from data/etc-overlay.nix, for the reason the
+    # three above are. `off` is Mode A: none of these may reach a machine that
+    # imported the module and asked for nothing.
+    etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
+    etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
+    etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;
+    etcNativeWifiPowersave = etcNative (c: c.networking.networkmanager.wifi.powersave) false;
+    etcNativeUsbAutosuspend = etcNative (
+      c: pkgs.lib.hasInfix "options usbcore autosuspend=-1" c.boot.extraModprobeConfig
+    ) true;
+    etcNativePasswdTries = etcNative (
+      c: pkgs.lib.hasInfix "Defaults passwd_tries=10" c.security.sudo.extraConfig
+    ) true;
+    etcNativeOomd = etcNative (c: c.systemd.oomd.settings.OOM.DefaultMemoryPressureLimit or null) "50%";
+    etcNativeStopTimeout = etcNative (c: c.systemd.settings.Manager.DefaultTimeoutStopSec or null) "5s";
+    etcNativeUserStopTimeout = etcNative (
+      c: c.systemd.services."user@".serviceConfig.TimeoutStopSec or null
+    ) "5s";
+    etcNativeNofile = etcNative (
+      c: c.systemd.settings.Manager.DefaultLimitNOFILE or null
+    ) "65536:524288";
+    etcNativeUserNofile = etcNative (
+      c: c.systemd.user.settings.Manager.DefaultLimitNOFILE or null
+    ) "65536:524288";
+    etcNativeLocateOnAc = etcNative (
+      c: c.systemd.services.update-locatedb.unitConfig.ConditionACPower or null
+    ) true;
+    etcNativeDockerLogs = etcNative (
+      c: c.virtualisation.docker.rootless.daemon.settings.log-opts.max-size or null
+    ) "10m";
 
     # ---- nixi, on for everyone, and provably gone when told ----
     #

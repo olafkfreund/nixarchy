@@ -33,11 +33,13 @@
 #   divergent   meaningful on NixOS, deliberately NOT adopted
 #
 # `divergent` is not in #642's four classes, and is the reason this file is
-# worth reading. Fourteen of these are neither native, nor covered, nor
-# inapplicable: they would do something here and we do not do it. Calling those
-# `na` would have made the inventory the rubber stamp #642 warns about. Each
-# `divergent` row names the NixOS option that would carry it, so adopting one
-# later is a rebuild rather than an investigation.
+# worth reading: a row that would do something here and that we deliberately do
+# not do, with the measured reason. #642 found fourteen. #649 adopted eleven as
+# NixOS options (`native`), found nixpkgs already sets the file-watcher limit
+# (`covered`), and kept the two passwordless sudoers rules `divergent` -- on
+# NixOS they name an envfs path resolved through the caller's PATH, and change
+# state a rebuild reverts. Calling any of them `na` would have made the
+# inventory the rubber stamp #642 warns about.
 #
 # No row is `seed`: modules/home.nix seeds `config/` and `default/`, never
 # `etc/`. Two files here (fastfetch and kitty) are the system half of a pair
@@ -45,8 +47,8 @@
 # `installed`; mise's alias went with them. Those three were the user-visible
 # symptoms -- a stub config pointing at a file that did not exist, an About
 # screen in fastfetch's stock layout, a `mise use` that could not resolve --
-# and reclassifying one of the fourteen is the same shape of change: turn the
-# row's class, and modules/nixos.nix installs it.
+# and a file whose program reads it by path is the same shape of change: turn
+# the row's class, and modules/nixos.nix installs it.
 #
 # ## What a reason is for
 #
@@ -60,8 +62,8 @@
 # this repository had only written down. The code here is ours.
 {
   "NetworkManager/conf.d/omarchy-wifi-powersave.conf" = {
-    class = "divergent";
-    reason = "wifi.powersave = 2 turns the driver's power saving off, which is what stops the multi-second stalls after an idle wifi link. networking.networkmanager.wifi.powersave is the option and nothing here sets it, so NetworkManager's own default stands.";
+    class = "native";
+    reason = "wifi.powersave = 2 turns the driver's power saving off, which stops the latency spikes and dropped links on idle wifi. modules/nixos.nix sets networking.networkmanager.wifi.powersave = false at mkDefault, which NetworkManager's module writes as that same value.";
   };
 
   "cups/cups-browsed.conf" = {
@@ -75,8 +77,8 @@
   };
 
   "docker/daemon.json" = {
-    class = "divergent";
-    reason = "Sets json-file log rotation and pins bip/dns to 172.17.0.1 to pair with the resolved stub listener. modules/nixos.nix runs docker ROOTLESS by default, whose network is slirp4netns and not that bridge, so neither half transfers; the log limits would, through virtualisation.docker.rootless.daemon.settings, and are not set.";
+    class = "native";
+    reason = "json-file log rotation at 10m x 5, set on the rootless daemon Docker runs as here through virtualisation.docker.rootless.daemon.settings at mkDefault. The bip/dns half pins the rooted bridge to the resolved stub, and rootless Docker (slirp4netns) has no such bridge, so that half is not carried.";
   };
 
   "fastfetch/config.jsonc" = {
@@ -115,8 +117,8 @@
   };
 
   "modprobe.d/omarchy-usb-autosuspend.conf" = {
-    class = "divergent";
-    reason = "`options usbcore autosuspend=-1` stops the kernel suspending USB devices, which is what keeps a keyboard or a dock from waking slowly or dropping. boot.extraModprobeConfig is the option and nothing here sets it.";
+    class = "native";
+    reason = "`options usbcore autosuspend=-1` stops the kernel suspending USB devices, which keeps a keyboard or dock from waking slowly or dropping. modules/nixos.nix writes the same line through boot.extraModprobeConfig; lines merge, so it is a plain assignment.";
   };
 
   "nsswitch.conf" = {
@@ -151,12 +153,12 @@
 
   "sudoers.d/omarchy-dns" = {
     class = "divergent";
-    reason = "NOPASSWD for `omarchy-dns Cloudflare|Google|DHCP`, so the DNS panel switches without a prompt. The rule names /usr/bin/omarchy-dns, which does not exist here; a security.sudo.extraRules entry would have to name the store path or /run/current-system/sw/bin. Unadopted, so `omarchy dns` asks for a password.";
+    reason = "NOPASSWD for `/usr/bin/omarchy-dns Cloudflare|Google|DHCP`. Not adopted, for two measured reasons: /usr/bin here is envfs, which resolves each name through the CALLING process's PATH, so a passwordless rule on that path would run whatever the user's PATH puts first as root; and the script writes /etc/systemd/resolved.conf, which services.resolved regenerates, so the switch does not survive a rebuild (data/bin-ledger.nix). `omarchy dns` keeps its password prompt.";
   };
 
   "sudoers.d/omarchy-passwd-tries" = {
-    class = "divergent";
-    reason = "`Defaults passwd_tries=10`, the sudo half of the lockout Omarchy loosens. security.sudo.extraConfig would carry it; nothing here does, so sudo's three attempts stand.";
+    class = "native";
+    reason = "`Defaults passwd_tries=10`, the sudo half of the lockout Omarchy loosens, so a mistyped password does not end the attempt at three. modules/nixos.nix carries the same line through security.sudo.extraConfig.";
   };
 
   "sudoers.d/omarchy-theme-browser" = {
@@ -166,17 +168,17 @@
 
   "sudoers.d/omarchy-tzupdate" = {
     class = "divergent";
-    reason = "NOPASSWD for `timedatectl set-timezone`, so the timezone picker applies without a prompt. Same shape as omarchy-dns: the rule names /usr/bin/timedatectl and no security.sudo.extraRules entry replaces it, so setting a timezone from the menu asks for a password.";
+    reason = "NOPASSWD for `timedatectl set-timezone`. Not adopted: every machine the installer writes sets time.timeZone (installer/template/host/configuration.nix), which makes /etc/localtime NixOS's to own, so the command cannot change it here and a passwordless root grant would buy nothing; and the rule names /usr/bin, which is envfs, resolved through the caller's PATH.";
   };
 
   "sysctl.d/90-omarchy-file-watchers.conf" = {
-    class = "divergent";
-    reason = "fs.inotify.max_user_watches=524288, which is what stops a file watcher in a large checkout failing with ENOSPC. boot.kernel.sysctl is the option and nothing here sets it, so the kernel's 8192-per-user default stands.";
+    class = "covered";
+    reason = "fs.inotify.max_user_watches=524288, the limit that stops a watcher in a large checkout failing with ENOSPC. nixpkgs' own nixos/modules/config/sysctl.nix already sets exactly 524288 by default, on every NixOS machine, so nothing here needs to.";
   };
 
   "sysctl.d/99-omarchy-sysctl.conf" = {
-    class = "divergent";
-    reason = "Desktop memory and writeback tuning. vm.swappiness=150 is the one that matters most here, because modules/nixos.nix turns zramSwap on for exactly the reason upstream raises it -- compressed swap in RAM is cheap to page to -- and then leaves swappiness at the kernel's 60. boot.kernel.sysctl would carry the whole file.";
+    class = "native";
+    reason = "Desktop memory and writeback tuning, value for value: tcp_mtu_probing, swappiness 150 for the zramSwap modules/nixos.nix enables, vfs_cache_pressure, page-cluster, watermarks and dirty bytes. modules/nixos.nix sets each through boot.kernel.sysctl at mkDefault, so a machine's own value wins.";
   };
 
   "sysusers.d/omarchy-cups-browsed.conf" = {
@@ -195,8 +197,8 @@
   };
 
   "systemd/oomd.conf.d/10-omarchy.conf" = {
-    class = "divergent";
-    reason = "Tightens systemd-oomd to kill at 50% memory pressure held for 20s. nixpkgs' oomd module sets DefaultMemoryPressureLimit to 60% and leaves the duration at systemd's 30s; modules/nixos.nix adds the app.slice ManagedOOM drop-in but not these defaults, so a desktop here is killed later than on Omarchy.";
+    class = "native";
+    reason = "systemd-oomd kills at 50% memory pressure held for 20s rather than nixpkgs' 60% and systemd's 30s, so one runaway app goes before the session thrashes. modules/nixos.nix sets both through systemd.oomd.settings.OOM at mkDefault.";
   };
 
   "systemd/resolved.conf.d/10-disable-multicast.conf" = {
@@ -210,13 +212,13 @@
   };
 
   "systemd/system.conf.d/10-faster-shutdown.conf" = {
-    class = "divergent";
-    reason = "DefaultTimeoutStopSec=5s, the difference between a desktop that powers off at once and one that waits out systemd's 90 seconds on a hung unit. systemd.settings.Manager would carry it and nothing here does.";
+    class = "native";
+    reason = "DefaultTimeoutStopSec=5s, so power-off does not wait out systemd's 90 seconds on a hung unit. modules/nixos.nix sets it through systemd.settings.Manager at mkDefault; a unit that declares its own TimeoutStopSec keeps it.";
   };
 
   "systemd/system.conf.d/20-omarchy-nofile.conf" = {
-    class = "divergent";
-    reason = "DefaultLimitNOFILE=65536:524288, raising the soft descriptor limit every system unit inherits from systemd's 1024. NixOS sets neither half, so a bundler, a watcher or a language server started by a system unit gets the low soft limit.";
+    class = "native";
+    reason = "DefaultLimitNOFILE=65536:524288, the descriptor limit every system unit inherits instead of systemd's soft 1024. modules/nixos.nix sets it through systemd.settings.Manager at mkDefault.";
   };
 
   "systemd/system/cups-browsed.service.d/10-omarchy.conf" = {
@@ -230,18 +232,18 @@
   };
 
   "systemd/system/plocate-updatedb.service.d/ac-only.conf" = {
-    class = "divergent";
-    reason = "ConditionACPower=true keeps the locate database rebuild off a laptop on battery. services.locate.enable is on in modules/nixos.nix and its timer runs the update unconditioned, so that rebuild can fire on battery here.";
+    class = "native";
+    reason = "ConditionACPower=true keeps the locate database rebuild off a laptop on battery. NixOS names the unit update-locatedb, not plocate-updatedb, so modules/nixos.nix sets the condition on that unit, only while services.locate.enable is on.";
   };
 
   "systemd/system/user@.service.d/10-faster-shutdown.conf" = {
-    class = "divergent";
-    reason = "TimeoutStopSec=5s on the user manager, the per-user half of system.conf.d/10-faster-shutdown.conf. A systemd.services.\"user@\" drop-in would carry it; unadopted, so logout and shutdown wait on a stuck user service.";
+    class = "native";
+    reason = "TimeoutStopSec=5s on the user manager, the per-user half of the faster shutdown, so logout and power-off do not wait on a stuck user service. modules/nixos.nix sets it on systemd.services.\"user@\" at mkDefault.";
   };
 
   "systemd/user.conf.d/20-omarchy-nofile.conf" = {
-    class = "divergent";
-    reason = "DefaultLimitNOFILE=65536:524288 for the user manager -- the limit every graphical application actually inherits, since the session's units are started by it. systemd.user.extraConfig would carry it and nothing here does.";
+    class = "native";
+    reason = "DefaultLimitNOFILE=65536:524288 for the user manager, the limit every graphical application actually inherits. modules/nixos.nix sets it through systemd.user.settings.Manager at mkDefault.";
   };
 
   "tmpfiles.d/omarchy-nopasswd-sudo.conf" = {

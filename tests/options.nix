@@ -1838,6 +1838,16 @@ let
     allowUnfree = false;
   });
 
+  # otherChannel.config's DEFAULT, every value forced, on the usual machine:
+  # allowUnfree and no predicate. `inherit (pkgs.config) allowUnfreePredicate`
+  # threw there, and tryEval cannot catch a missing attribute, so the release
+  # notes for v4.0.3-2 could not be derived. An eval error here is the failure.
+  otherChannelConfigKeys =
+    let
+      c = inputs.self.nixosConfigurations.vm.config.programs.nixarchy.otherChannel.config;
+    in
+    pkgs.lib.concatStringsSep " " (map (n: builtins.seq c.${n} n) (builtins.attrNames c));
+
   broken = pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) cases;
 
   report = pkgs.lib.concatStringsSep "\n" (
@@ -1866,6 +1876,7 @@ pkgs.runCommand "nixarchy-options"
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
+    inherit otherChannelConfigKeys;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
     fleetOn = pkgs.lib.boolToString fleet.onWhenAsked;
     fleetUrl = fleet.url;
@@ -2987,6 +2998,13 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "unfree help scaffolds the narrow grant, and the baked policy follows the option"
+
+        # Evaluating the default at all is the assertion; this pins what it carries.
+        test "$otherChannelConfigKeys" = allowUnfree || {
+          echo "otherChannel.config's default on vm carries '$otherChannelConfigKeys', expected 'allowUnfree'" >&2
+          exit 1
+        }
+        echo "otherChannel.config's default evaluates, and carries this machine's unfree answer"
 
         # ---- machines pull only when asked ---------------------------------
         test "$fleetOff" = false || {

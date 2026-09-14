@@ -921,7 +921,9 @@ in
 
       config = lib.mkOption {
         type = lib.types.attrs;
-        default = { inherit (pkgs.config) allowUnfree allowUnfreePredicate; };
+        # Only the keys this pkgs has: a machine with allowUnfree and no
+        # predicate (the usual one) made `inherit` throw on reading the default.
+        default = lib.filterAttrs (n: _: n == "allowUnfree" || n == "allowUnfreePredicate") pkgs.config;
         defaultText = lib.literalExpression "{ inherit (pkgs.config) allowUnfree allowUnfreePredicate; }";
         description = ''
           nixpkgs config for the other channel. Defaults to carrying this

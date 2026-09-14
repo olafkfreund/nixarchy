@@ -167,9 +167,13 @@ options_apply='o:
     isOpt = v: (v._type or "") == "option";
     go = path: v:
       if isOpt v then
+        # defaultText first, and not only for display: tryEval catches throw
+        # and assert but NOT a missing attribute, so a default that reads
+        # pkgs.config.<key> aborts the whole walk (v4.0.3-2 shipped no notes).
         (let d = builtins.tryEval (if v ? default then builtins.toJSON v.default else "");
          in { "${path}" =
-                if !(v ? default) then "(no default)"
+                if v ? defaultText then (v.defaultText.text or (builtins.toString v.defaultText))
+                else if !(v ? default) then "(no default)"
                 else if d.success then d.value
                 else "(not representable)"; })
       else if builtins.isAttrs v then

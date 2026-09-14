@@ -441,6 +441,20 @@ let
 
     # nixarchy-apply needs flakes. A user adding one feature of their own must
     # get theirs AND flakes -- under mkDefault the list was replaced outright.
+    # programs.nixarchy.flake reaches the commands that hard-code /etc/nixos
+    # as their fallback, and auto-update rebuilds the same directory.
+    flakeReachesCommands = {
+      on =
+        (configWith { flake = "/home/alice/cfg"; }).environment.sessionVariables.NIXARCHY_FLAKE or null
+        == "/home/alice/cfg";
+      off = loaderOff.environment.sessionVariables ? NIXARCHY_FLAKE;
+    };
+    autoUpdateFollowsFlake = {
+      on =
+        (configWith { flake = "/home/alice/cfg"; }).programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
+      off = (configWith { }).programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
+    };
+
     flakesSurviveUserFeature = {
       on = builtins.elem "flakes" (
         (configBeside { nix.settings.experimental-features = [ "ca-derivations" ]; })
@@ -2076,6 +2090,7 @@ pkgs.runCommand "nixarchy-options"
       # fixture, even though an encrypted fixture looks harmless.
       pkgs.sops
       pkgs.age
+      pkgs.git
     ];
   }
   (
@@ -3528,6 +3543,43 @@ pkgs.runCommand "nixarchy-options"
         }
         run nixarchy-pkg-remove hello cowsay >/dev/null
         echo "one bad name in a batch is reported without sinking the rest"
+
+        # ---- auto-update's dirty guard, run rather than read ----
+        #
+        # The installer stages the flake and never commits it, and the guard
+        # used `git diff HEAD`, which exits 128 with no HEAD -- so every
+        # installed machine that turned auto-update on refused every run. Its
+        # own `nix flake update` then dirtied flake.lock for the next day.
+        # nix and nixos-rebuild are stubs; git and the script are real.
+        export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+        mkdir -p au-stubs au-state
+        printf '#!/bin/sh\n[ "$1 $2" = "flake update" ] && echo "#" >> "$5/flake.lock"\nexit 0\n' > au-stubs/nix
+        printf '#!/bin/sh\necho rebuilt >> "%s/au-state/rebuilt"\n' "$PWD" > au-stubs/nixos-rebuild
+        chmod +x au-stubs/*
+        au() {
+          rm -f au-state/rebuilt
+          sed -e "s|/var/lib/nixarchy|$PWD/au-state|g" -e "s|^\([[:space:]]*\)flake=.*|\1flake=$1|" \
+            <<<"$autoUpdateScript" > au-run.sh
+          HOME=$PWD PATH="$PWD/au-stubs:$PATH" bash au-run.sh >au.out 2>&1
+        }
+        aurepo() {
+          rm -rf "$1"; mkdir -p "$1"
+          echo '{ }' > "$1/flake.nix"; echo '{ }' > "$1/flake.lock"
+          git -C "$1" init -q && git -C "$1" add -A
+        }
+        aurepo au-installed
+        au "$PWD/au-installed" || { echo "auto-update refused the installer's staged, never-committed flake:" >&2; cat au.out >&2; exit 1; }
+        [ -f au-state/rebuilt ] || { echo "auto-update exited 0 without rebuilding" >&2; exit 1; }
+        au "$PWD/au-installed" || { echo "auto-update refused its own flake.lock edit on the next run:" >&2; cat au.out >&2; exit 1; }
+        echo '{ edited = true; }' > au-installed/flake.nix
+        if au "$PWD/au-installed"; then echo "auto-update rebuilt a never-committed flake with an unstaged edit" >&2; exit 1; fi
+        aurepo au-committed
+        git -C au-committed commit -qm base
+        echo '#' >> au-committed/flake.lock
+        au "$PWD/au-committed" || { echo "auto-update refused a committed flake whose only change is flake.lock:" >&2; cat au.out >&2; exit 1; }
+        echo '{ edited = true; }' > au-committed/flake.nix
+        if au "$PWD/au-committed"; then echo "auto-update rebuilt a committed flake with an uncommitted edit" >&2; exit 1; fi
+        echo "auto-update rebuilds an installed flake and its own lock edit, and refuses real edits"
 
         # A name that exists but is not a package. tryEval does not catch the
         # missing `name` it has, so the whole batch evaluation used to abort

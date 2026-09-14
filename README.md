@@ -295,7 +295,7 @@ that runs the nightly checks. The large one is split, because GitHub will not
 take a single file that size:
 
 ```
-cat nixarchy-v*.iso.part-* > nixarchy.iso     # the 5.6 GB image only
+cat nixarchy-v*.iso.part-* > nixarchy.iso     # the 6.6 GB image only
 sha256sum -c --ignore-missing SHA256SUMS
 sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
@@ -307,7 +307,7 @@ There are two images, and the difference is what they carry:
 
 | | Size | Needs a network | |
 |---|---|---|---|
-| `#iso` | 5.6 GB | no | carries the desktop; installs by copying |
+| `#iso` | 6.6 GB | no | carries the desktop; installs by copying |
 | `#iso-net` | 1.5 GB | yes | downloads the desktop as it installs |
 
 Take `#iso` unless the download is the thing you mind. It is the one the tests
@@ -332,7 +332,7 @@ installer ISO a release ships, in a local UEFI VM, and you answer the wizard
 yourself:
 
 ```sh
-nix run github:olafkfreund/nixarchy#try            # offline image, ~5.6 GB download
+nix run github:olafkfreund/nixarchy#try            # offline image, ~6.6 GB download
 nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~1.9 GB download
 ```
 

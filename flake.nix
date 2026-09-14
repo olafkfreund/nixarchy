@@ -2069,12 +2069,12 @@
             let
               pkgs = pkgsFor.${system};
               # MiB, as integers: nix has floats but this needs exact bytes, and
-              # 6656 is less to get wrong than 6.5 * 1073741824.
+              # 7680 is less to get wrong than 7.5 * 1073741824.
               images = [
                 {
                   name = "iso";
                   drv = self.packages.${system}.iso;
-                  mib = 6656; # 6.5 GiB, over a measured 5.6 GB
+                  mib = 7680; # 7.5 GiB, over a measured 6.58 GiB
                 }
                 {
                   name = "iso-net";

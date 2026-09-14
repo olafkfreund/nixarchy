@@ -43,9 +43,13 @@ jobs:
 
       - name: Find the newest Omarchy release
         id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          latest=$(curl -fsSL https://api.github.com/repos/basecamp/omarchy/releases/latest |
-            jq -r .tag_name)
+          # Authenticated, and refuses an empty answer: a 403 once made `latest`
+          # empty, and the sed below pinned upstream's default branch.
+          latest=$(gh api repos/basecamp/omarchy/releases/latest --jq .tag_name)
+          [[ "$latest" =~ ^v[0-9] ]] || { echo "::error::no release tag from the API: '$latest'"; exit 1; }
           current=$(grep -oE 'github:basecamp/omarchy/[^"]+' flake.nix | cut -d/ -f3)
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           # The version being left behind, for the package delta below.

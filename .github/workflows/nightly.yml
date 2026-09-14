@@ -496,8 +496,12 @@ jobs:
           room does not fail cleanly, it wedges."
           existing=$(gh issue list --state open --search "$title in:title" \
             --json number --jq '.[0].number // empty')
+          # A milestone on both paths: the review's board row flags any open
+          # issue without one, and #683 held #684 red that way.
+          milestone="Keeping the lights on"
           if [ -n "$existing" ]; then
+            gh issue edit "$existing" --milestone "$milestone"
             gh issue comment "$existing" --body "Still failing ($what): $RUN"
           else
-            gh issue create --title "$title" --label installer --body "$body"
+            gh issue create --title "$title" --label installer --milestone "$milestone" --body "$body"
           fi

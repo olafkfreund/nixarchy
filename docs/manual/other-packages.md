@@ -42,7 +42,7 @@ edit rather than invent. The seeded scaffold stays commented: the picker knows
 the shape, not your value.
 
 The index comes from this machine's own nixpkgs and its own options rather than
-from search.nixos.org, which costs about a minute once per system generation and
+from search.nixos.org, which costs about a minute each time nixpkgs changes and
 means the picker can never offer something this machine cannot build.
 
 The same thing from a terminal:

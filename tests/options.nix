@@ -3029,6 +3029,27 @@ pkgs.runCommand "nixarchy-options"
         }
         echo "rollback warns that the configuration still describes the newer system"
 
+        # The search index is rebuilt when what it is built from changes, not
+        # after every apply. Keyed on the system generation, each rebuild cost
+        # a minute of reindexing an unchanged nixpkgs on the next search. The
+        # built script's own functions and variables, run against a cache.
+        search="$vm/sw/bin/nixarchy-search"
+        {
+          grep -E '^[[:space:]]*(nixpkgs|walk|optionsjson|appindex|apptable|flatpakrows|pkgnewrow)=/nix/store' "$search"
+          sed -n '/^[[:space:]]*stamp_key() {/,/^[[:space:]]*}$/p; /^[[:space:]]*index_stale() {/,/^[[:space:]]*}$/p' "$search"
+        } > stale.sh
+        grep -q 'index_stale()' stale.sh || { echo "nixarchy-search has no index_stale: what decides a reindex moved" >&2; exit 1; }
+        mkdir -p search-cache
+        (
+          . ./stale.sh
+          index=search-cache/index.tsv; stamp=search-cache/stamp
+          echo row > "$index"; stamp_key > "$stamp"
+          if index_stale; then echo "an index built from these exact inputs reads as stale" >&2; exit 1; fi
+          nixpkgs=/nix/store/another-nixpkgs
+          index_stale || { echo "a different nixpkgs did not make the index stale" >&2; exit 1; }
+        ) || exit 1
+        echo "the search index is rebuilt when nixpkgs changes, not after every apply"
+
         # The floor this repository keeps arriving at: a loop that iterated
         # nothing satisfies every assertion above while proving nothing -- and
         # this check exists because that exact silence shipped ten broken

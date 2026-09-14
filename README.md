@@ -185,7 +185,7 @@ Neither form can break a build — the scaffold is inert, and every edit is
 reverted as a unit if `nix-instantiate` cannot parse the result.
 
 **The index is built from this machine, not from search.nixos.org.** Its own
-nixpkgs and its own options — about a minute, once per system generation, and
+nixpkgs and its own options — about a minute, once each time nixpkgs changes, and
 it buys the one property that matters: the picker cannot offer you a package
 that this machine then refuses to build. The options half substitutes from
 `cache.nixos.org`, so only the nixpkgs half is real work.

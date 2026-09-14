@@ -2470,15 +2470,15 @@ in
 
                   # The system's own nixpkgs, not the flake registry: an index that offers a
                   # package this machine cannot build is worse than no index. Slow enough to
-                  # be worth saying so -- about a minute, once per system generation.
+                  # be worth saying so -- about a minute, once each time nixpkgs changes.
                   #
                   # Our own walk (modules/pkg-index.nix) rather than `nix search`:
                   # verified to produce the identical row set, and it carries the
                   # meta `nix search --json` does not -- homepage, licence, unfree,
                   # broken (#493).
                   echo "  indexing nixpkgs (this takes about a minute)..." >&2
-                  nix-instantiate --eval --strict --json \
-                    --arg nixpkgs "$nixpkgs" "$walk" 2>/dev/null |
+                  if ! nix-instantiate --eval --strict --json \
+                    --arg nixpkgs "$nixpkgs" "$walk" 2>"$cache/index-errors.log" |
                     jq -r '
                       .[] |
                       [ "pkg", .attr,
@@ -2500,7 +2500,14 @@ in
                           + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
                           + "\n\nctrl-t tries it now, without installing."
                         )
-                      ] | @tsv' >> "$tmp"
+                      ] | @tsv' >> "$tmp"; then
+                    # Said, not swallowed: out of memory looked like the script
+                    # simply stopping after "indexing nixpkgs".
+                    rm -f "$tmp"
+                    echo "  indexing nixpkgs failed; the end of $cache/index-errors.log:" >&2
+                    tail -5 "$cache/index-errors.log" >&2
+                    exit 1
+                  fi
 
                   # A raw attribute that the curated list already covers deserves a
                   # warning on its row: picking the APP gets the module, policies
@@ -2527,12 +2534,21 @@ in
                   cat "$pkgnewrow" >> "$tmp"
 
                   mv "$tmp" "$index"
-                  readlink -f /run/current-system > "$stamp"
+                  stamp_key > "$stamp"
                 }
 
-                if [ "$reindex" = 1 ] || [ ! -s "$index" ] ||
-                   [ "$(cat "$stamp" 2>/dev/null)" != "$(readlink -f /run/current-system)" ]; then
-                  echo "Building the search index. This happens once per system generation." >&2
+                # Keyed on what the index is built FROM, not on the system
+                # generation: every apply is a new generation, and reindexing
+                # an unchanged nixpkgs cost a minute on the next search.
+                stamp_key() {
+                  printf '%s\n' "$nixpkgs" "$walk" "$optionsjson" "$appindex" "$apptable" "$flatpakrows" "$pkgnewrow"
+                }
+                index_stale() {
+                  [ ! -s "$index" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$(stamp_key)" ]
+                }
+
+                if [ "$reindex" = 1 ] || index_stale; then
+                  echo "Building the search index. This happens when nixpkgs changes." >&2
                   build_index
                 fi
 

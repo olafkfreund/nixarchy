@@ -135,6 +135,19 @@ pkgs.runCommand "nixarchy-review-pins"
       exit 1
     fi
 
+    # The nightly files its own issue, and the same row reads it (#683).
+    nightly=$(grep -E '^\s*gh issue (create|edit) ' ${../.github/workflows/nightly.yml})
+    n=$(printf '%s\n' "$nightly" | grep -c . || true)
+    [ "$n" -ge 2 ] || {
+      echo "review: expected nightly.yml's create and edit calls, found $n" >&2
+      exit 1
+    }
+    if printf '%s\n' "$nightly" | grep -v -- '--milestone'; then
+      echo "review: nightly.yml files its issue without a milestone, and the" >&2
+      echo "  board row will then report that issue until someone adds one." >&2
+      exit 1
+    fi
+
     echo "all $want pins are readable, and every version looks like one"
     echo "and flake.lock still classifies tag, rev and ref pins apart"
     touch $out

@@ -38,12 +38,70 @@ mode=table
 case "${1-}" in
   --report) mode=report ;;
   --list-pins) mode=pins ;;
+  --main-install-verdict) mode=verdict ;;
   "") ;;
   *)
-    echo "usage: review [--report|--list-pins]" >&2
+    echo "usage: review [--report|--list-pins|--main-install-verdict]" >&2
     exit 2
     ;;
 esac
+
+# Was main's newest install-affecting commit ever installed (#652)? A burst of
+# merges evicts main's pending install job one after another, so main can carry
+# commits no booted machine has run, while every PR was green on its own head.
+#
+# Input, newest commit first, one line per install-check run (a commit with
+# none is one line of dashes):
+#   sha  run-status  gate-step  install-job
+# gate-step is the conclusion of "Nothing here can affect an install": success
+# means the gate judged the commit irrelevant, and the install job then reports
+# success having installed nothing -- so the job's conclusion alone cannot say
+# whether anything was installed. Output: verdict, sha, and for a verified
+# commit how many irrelevant ones sit above it.
+main_install_verdict() {
+  local sha status gate install cur="" above=0
+  local irrelevant=0 verified=0 running=0 runs=0 conclusions=""
+  decide() {
+    [ -n "$cur" ] || return 1
+    if [ "$irrelevant" -eq 1 ]; then
+      above=$((above + 1))
+      return 1
+    elif [ "$verified" -eq 1 ]; then
+      printf 'verified\t%s\t%s\n' "$cur" "$above"
+    elif [ "$running" -eq 1 ]; then
+      printf 'running\t%s\t%s\n' "$cur" "$above"
+    elif [ "$runs" -eq 0 ]; then
+      printf 'none\t%s\t%s\n' "$cur" "$above"
+    else
+      printf 'unverified\t%s\t%s\n' "$cur" "${conclusions# }"
+    fi
+  }
+  while IFS=$'\t' read -r sha status gate install; do
+    [ -n "$sha" ] || continue
+    if [ "$sha" != "$cur" ]; then
+      decide && return 0
+      cur=$sha irrelevant=0 verified=0 running=0 runs=0 conclusions=""
+    fi
+    [ "$status" = "-" ] && continue
+    runs=$((runs + 1))
+    if [ "$gate" = success ]; then
+      irrelevant=1
+    elif [ "$status" != completed ]; then
+      running=1
+    elif [ "$install" = success ]; then
+      verified=1
+    else
+      conclusions="$conclusions $install"
+    fi
+  done
+  decide && return 0
+  printf 'undecided\t-\t%s\n' "$above"
+}
+
+if [ "$mode" = verdict ]; then
+  main_install_verdict
+  exit 0
+fi
 
 # Every hand-pinned package: name, the file that pins it, the GitHub repo to
 # ask. Kept here rather than derived, because the point of the list is to be
@@ -424,6 +482,43 @@ ci nightly.yml 30
 ci omarchy.yml 30
 ci update.yml 200
 ci release.yml 8760
+
+# main's commits, newest first, against every install-check run on each. Walked
+# by commit rather than by run, because a commit that started no run at all --
+# a merge pushed by GITHUB_TOKEN, #671 -- is the case a run list cannot show.
+main_install_runs() {
+  local commits runs sha id status
+  commits=$(gh api "repos/{owner}/{repo}/commits?sha=main&per_page=30" --jq '.[].sha') || return 1
+  runs=$(gh run list --workflow install-check.yml --branch main --limit 100 \
+    --json databaseId,headSha,status --jq '.[] | "\(.headSha)\t\(.databaseId)\t\(.status)"') || return 1
+  for sha in $commits; do
+    if ! grep -q "^$sha	" <<<"$runs"; then
+      printf '%s\t-\t-\t-\n' "$sha"
+      continue
+    fi
+    grep "^$sha	" <<<"$runs" | while IFS=$'\t' read -r _ id status; do
+      # shellcheck disable=SC2016  # jq, not shell: nothing in it expands
+      gh api "repos/{owner}/{repo}/actions/runs/$id/jobs" --jq '
+        [.jobs[] | select(.name == "install")][0] as $j
+        | [ ($j.steps // [])[] | select(.name == "Nothing here can affect an install") ][0].conclusion as $g
+        | "\($g // "null")\t\($j.conclusion // "null")"' |
+        sed "s/^/$sha	$status	/"
+    done
+  done
+}
+
+if ! install_runs=$(main_install_runs); then
+  finding "main install" "-" "could not read" "gh could not list main's commits or install runs"
+else
+  IFS=$'\t' read -r verdict vsha vdetail <<<"$(main_install_verdict <<<"$install_runs")"
+  case "$verdict" in
+    verified) ok "main install" "${vsha:0:7}" "installed, success${vdetail:+ ($vdetail newer commit(s) cannot affect an install)}" ;;
+    running) ok "main install" "${vsha:0:7}" "still running" ;;
+    none) finding "main install" "${vsha:0:7}" "no install check ran" "gh workflow run install-check.yml --ref main" ;;
+    unverified) finding "main install" "${vsha:0:7}" "never installed: $vdetail" "gh workflow run install-check.yml --ref main" ;;
+    *) finding "main install" "-" "no install-affecting commit in the last 30" "read install-check.yml's runs on main" ;;
+  esac
+fi
 
 # -------------------------------------------------------------------- print --
 

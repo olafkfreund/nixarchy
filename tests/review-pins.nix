@@ -148,6 +148,55 @@ pkgs.runCommand "nixarchy-review-pins"
       exit 1
     fi
 
+    # main's install verdict (#652), from fixture runs rather than GitHub. The
+    # trap it exists for: a commit the gate judged irrelevant reports its
+    # install JOB as success having installed nothing, so a verdict read off
+    # the job alone calls an unverified main verified.
+    verdict() { # expected, then the TSV on stdin
+      local want=$1 got
+      got=$(bash ${../pkgs/review.sh} --main-install-verdict | cut -f1,2)
+      [ "$got" = "$want" ] || {
+        echo "review: main install verdict was '$got', expected '$want'" >&2
+        fail=1
+      }
+    }
+    fail=0
+    T=$(printf '\t')
+
+    # A burst: HEAD cannot affect an install, and the commit below it that
+    # can had its install evicted.
+    verdict "unverified''${T}bbb" <<EOF
+    aaa''${T}completed''${T}success''${T}success
+    bbb''${T}completed''${T}skipped''${T}cancelled
+    ccc''${T}completed''${T}skipped''${T}success
+    EOF
+
+    # Irrelevant commits above a real install: that install is the answer.
+    verdict "verified''${T}ccc" <<EOF
+    aaa''${T}completed''${T}success''${T}success
+    bbb''${T}completed''${T}success''${T}success
+    ccc''${T}completed''${T}skipped''${T}success
+    EOF
+
+    # A merge that started no run at all (#671's GITHUB_TOKEN push).
+    verdict "none''${T}aaa" <<EOF
+    aaa''${T}-''${T}-''${T}-
+    bbb''${T}completed''${T}skipped''${T}success
+    EOF
+
+    # Evicted, then re-run by hand: the re-run counts.
+    verdict "verified''${T}aaa" <<EOF
+    aaa''${T}completed''${T}skipped''${T}cancelled
+    aaa''${T}completed''${T}skipped''${T}success
+    EOF
+
+    # Still installing is not a finding.
+    verdict "running''${T}aaa" <<EOF
+    aaa''${T}in_progress''${T}skipped''${T}null
+    EOF
+
+    [ "$fail" -eq 0 ] || exit 1
+
     echo "all $want pins are readable, and every version looks like one"
     echo "and flake.lock still classifies tag, rev and ref pins apart"
     touch $out

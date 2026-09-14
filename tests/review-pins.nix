@@ -195,6 +195,30 @@ pkgs.runCommand "nixarchy-review-pins"
     aaa''${T}in_progress''${T}skipped''${T}null
     EOF
 
+    # One workflow's row, from fixture gh output (#690). The case that broke:
+    # a workflow with no runs, which a jq filter over an empty list turns into
+    # "null<TAB>null" -- date refused it and the row vanished from the table.
+    now=$(date -d 2026-09-14T12:00:00Z +%s)
+    cirow() { # wf hours none line, then the text the row must contain
+      local got
+      got=$(printf '%s' "$4" | bash ${../pkgs/review.sh} --ci-row "$1" "$2" "$3" "$now" 2>&1)
+      case "$got" in
+        *"$5"*) ;;
+        *)
+          echo "review: ci row for '$4' (none=$3) was: $got" >&2
+          echo "  expected it to contain: $5" >&2
+          fail=1
+          ;;
+      esac
+    }
+    cirow nightly.yml 30 finding "" "| nightly.yml | - | no runs at all | **is the workflow disabled?** |"
+    cirow nightly.yml 30 finding "null''${T}null" "| nightly.yml | - | no runs at all | **is the workflow disabled?** |"
+    cirow release.yml 8760 ok "null''${T}null" "| release.yml | - | no runs retained | ok |"
+    cirow build.yml 30 finding "success''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | success | ok |"
+    cirow build.yml 30 finding "success''${T}2026-09-12T12:00:00Z" "| build.yml | 48h ago | last run passed | **but nothing has run for 48h** |"
+    cirow build.yml 30 finding "failure''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | failure | **read the run** |"
+    cirow build.yml 30 finding "success''${T}yesterday-ish" "| build.yml | - | unreadable run |"
+
     [ "$fail" -eq 0 ] || exit 1
 
     echo "all $want pins are readable, and every version looks like one"

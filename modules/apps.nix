@@ -3155,15 +3155,29 @@ in
 
                 imports=""
                 copied=""
+                # What apply last wrote to each copy, so an edit made in the flake
+                # itself is told apart from a new pick -- and kept, not overwritten.
+                applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
+                mkdir -p "$applied"
                 for part in apps services advanced; do
                   src="$srcdir/$part.nix"
                   [ -f "$src" ] || continue
                   dst="$base/nixarchy/$part.nix"
                   imports="$imports ./nixarchy/$part.nix"
+                  record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
                   if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                    sha256sum <"$dst" >"$record"
                     continue
                   fi
+                  if [ -f "$dst" ] && [ -f "$record" ] && ! sha256sum <"$dst" | cmp -s - "$record"; then
+                    kept="$applied/$part.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)"
+                    cp "$dst" "$kept"
+                    echo "NOTE: $dst was edited in the flake since the last apply."
+                    echo "  Your version is kept at $kept -- move the change into"
+                    echo "  $src, which is the file apply copies from."
+                  fi
                   cp "$src" "$dst"
+                  sha256sum <"$dst" >"$record"
                   copied="$copied $part"
                 done
 
@@ -3218,7 +3232,9 @@ in
                 fi
 
                 # Why: modules/AGENTS.md#whether-anything-in-the-flake-actually-imports-it
-                importers=$(grep -rl 'nixarchy-apps\.nix' "$flake" \
+                # Uncommented mentions only: a `# imports = [ ./nixarchy-apps.nix ];`
+                # left in a file used to silence this warning.
+                importers=$(grep -rlE '^[^#]*nixarchy-apps\.nix' "$flake" \
                   --include='*.nix' 2>/dev/null |
                   grep -v '/nixarchy-apps\.nix$' || true)
 
@@ -3281,7 +3297,21 @@ in
                   # export at whatever configuration they usually work on -- and
                   # an app selection copied into one flake then switched into
                   # another is a failure that looks like nothing happening.
-                  [yY]*) exec nh os switch "$flake" ;;
+                  [yY]*)
+                    rc=0
+                    nh os switch "$flake" || rc=$?
+                    if [ "$rc" -ne 0 ]; then
+                      # The selection stays copied, so every later apply or update
+                      # fails the same way until the cause is taken out.
+                      echo
+                      echo "The rebuild failed (exit $rc). Nothing changed on this machine."
+                      echo "  What you picked is still in the selection, so the next"
+                      echo "  rebuild will fail the same way until it is removed:"
+                      echo "    nixarchy app remove                    take out what you just picked"
+                      echo "    nh os switch $flake 2>&1 | nixarchy explain   what the error means"
+                    fi
+                    exit "$rc"
+                    ;;
                   *) echo "Not switching. Run: nh os switch $flake" ;;
                 esac
               '';

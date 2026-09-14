@@ -3733,6 +3733,42 @@ pkgs.runCommand "nixarchy-options"
         cp "$rmhome/apps.before-missing" "$appfile"
         echo "picking an app newer than apps.nix adds its row and enables it"
 
+        # ---- apply keeps a hand edit, sees through a commented import, and
+        # says what to do when the rebuild fails ----
+        apflake=$PWD/apply-flake
+        mkdir -p "$apflake"
+        printf '{\n  # imports = [ ./nixarchy-apps.nix ];\n}\n' > "$apflake/configuration.nix"
+        aprun() {
+          printf '%s' "$1" | HOME=$rmhome XDG_CONFIG_HOME=$rmhome/.config XDG_STATE_HOME=$PWD/apply-state \
+            NIXARCHY_FLAKE=$apflake PATH="$vm/sw/bin:$PATH" timeout 120 nixarchy-apply 2>&1
+        }
+        ap=$(aprun $'n\nn\n') || true
+        grep -q 'WARNING: nothing in' <<<"$ap" || {
+          echo "a commented-out import silenced apply's 'nothing imports it' warning:" >&2
+          printf '%s\n' "$ap" | tail -5 >&2
+          exit 1
+        }
+        cp "$appfile" "$rmhome/apps.before-apply"
+        echo '# edited in the flake' >> "$apflake/nixarchy/apps.nix"
+        echo '# a new pick' >> "$appfile"
+        ap=$(aprun $'n\nn\n') || true
+        grep -q 'was edited in the flake since the last apply' <<<"$ap" || {
+          echo "apply overwrote a copy edited in the flake without keeping it:" >&2
+          printf '%s\n' "$ap" | tail -5 >&2
+          exit 1
+        }
+        grep -rqs '# edited in the flake' "$PWD/apply-state/nixarchy/applied" || {
+          echo "apply said it kept the flake edit, and nothing holds it" >&2; exit 1; }
+        cp "$rmhome/apps.before-apply" "$appfile"
+        ap=$(aprun $'n\ny\n') && aprc=0 || aprc=$?
+        [ "$aprc" -ne 0 ] || { echo "apply exited 0 when the rebuild could not run" >&2; exit 1; }
+        grep -q 'The rebuild failed' <<<"$ap" || {
+          echo "a failed rebuild from apply ends without saying what to do:" >&2
+          printf '%s\n' "$ap" | tail -5 >&2
+          exit 1
+        }
+        echo "apply keeps flake edits, sees through a commented import, and explains a failed rebuild"
+
         # A draft (#581). nixarchy-pkg-new needs a network to run for real,
         # so the add is simulated with the writer's own byte shape -- and the
         # grep below pins the WRITER's format string, so if pkg-new changes

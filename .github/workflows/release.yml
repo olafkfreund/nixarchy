@@ -410,8 +410,13 @@ jobs:
         run: |
           # --discussion-category, rather than posting the notes somewhere a
           # second time. GitHub opens an Announcements discussion carrying this
-          # release's body and links the two, so there is one text and no copy
-          # to drift: an edited release edits the discussion with it.
+          # release's body and links the two.
+          #
+          # It is a COPY taken at publish time, not a view: editing the release
+          # later leaves the discussion as it was. v4.0.3-2's notes were
+          # rewritten on the release and #680 kept "could not be derived" until
+          # its body was replaced by hand (gh api graphql, updateDiscussion).
+          # Fix a release's notes in both places.
           #
           # It also gives the notes a place that takes replies. A release page
           # cannot be asked a question; the thing someone wants to say after

@@ -439,6 +439,16 @@ let
       off = hasPackageNamed loaderOff "comma-with-db";
     };
 
+    # nixarchy-apply needs flakes. A user adding one feature of their own must
+    # get theirs AND flakes -- under mkDefault the list was replaced outright.
+    flakesSurviveUserFeature = {
+      on = builtins.elem "flakes" (
+        (configBeside { nix.settings.experimental-features = [ "ca-derivations" ]; })
+        .nix.settings.experimental-features or [ ]
+      );
+      off = builtins.elem "flakes" (loaderOff.nix.settings.experimental-features or [ ]);
+    };
+
     # ---- #623: the NixOS MCP server, in the agents that have one ---------
     #
     # All three in one case, because "off" has to be all of them and a

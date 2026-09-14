@@ -313,9 +313,13 @@ ui_failed() {
   local choice
   while :; do
     choice=$(printf '%s\n' \
-      "View the whole log" "Open a shell" "Reboot" "Power off" |
+      "Retry with the same answers" "View the whole log" "Open a shell" "Reboot" "Power off" |
       gum choose --padding "$(ui_gum_pad)" --header "What now?") || return 0
     case $choice in
+      # 3, not 0: install_attempts runs the phases again, having kept every
+      # answer in memory -- a failure late in the install used to mean typing
+      # them all again. Fix what the log names (a cable, the shell) first.
+      "Retry with the same answers") return 3 ;;
       "View the whole log")
         # gum's pager, not less: gum is already a dependency and less is not,
         # and a live medium is a poor place to discover a missing binary.

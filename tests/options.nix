@@ -325,6 +325,23 @@ let
       ];
     }).config;
 
+  # loaderOff's twin with the module not imported at all. Mode A's promise is
+  # that the two are the same system, and only a drvPath says so for all of it.
+  notImported =
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        {
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
   # By name rather than builtins.elem on the derivation: the nixosSystem
   # under test instantiates its own pkgs, and outPath equality across two
   # instantiations is a coincidence, not a property.
@@ -2045,6 +2062,9 @@ pkgs.runCommand "nixarchy-options"
     sopsOffSecrets = pkgs.lib.boolToString (sopsOff.sops.secrets == { });
     sopsOffTemplates = pkgs.lib.boolToString (sopsOff.sops.templates == { });
     sopsOnActive = pkgs.lib.boolToString (hasSops sopsOn);
+    modeAInert = pkgs.lib.boolToString (
+      loaderOff.system.build.toplevel.drvPath == notImported.system.build.toplevel.drvPath
+    );
     # The home seed's copy function, run below against a directory it cannot write.
     seedActivation = (homeWith { }).home.activation.nixarchySeed.data;
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
@@ -3611,6 +3631,53 @@ pkgs.runCommand "nixarchy-options"
         run nixarchy-pkg-remove hello cowsay >/dev/null
         echo "one bad name in a batch is reported without sinking the rest"
 
+        # ---- Mode A: imported and not enabled is the same system ----
+        [ "$modeAInert" = true ] || {
+          echo "importing nixosModules.nixarchy without enabling it changes the system:" >&2
+          echo "  its toplevel drvPath differs from a machine that never imported it." >&2
+          echo "  Something is set outside a cfg.enable guard (Mode A, AGENTS.md section 7)." >&2
+          exit 1
+        }
+        echo "importing the module and enabling nothing builds the same system"
+
+        # ---- services: enable then disable is byte-identical ----
+        # nixarchy-service-disable had no test of any kind.
+        svcfile=$rmhome/.config/nixarchy/services.nix
+        cp "$vm/etc/nixarchy/services-template.nix" "$svcfile"
+        chmod u+w "$svcfile"
+        svcid=$(grep -oE '#@ [a-z0-9_-]+' "$svcfile" | head -1 | cut -d' ' -f2)
+        test -n "$svcid" || { echo "the services template has no #@ marker to test with" >&2; exit 1; }
+        svcbefore=$(cksum < "$svcfile")
+        run nixarchy-service-enable "$svcid" >/dev/null
+        grep -qE "^[[:space:]]*[^#[:space:]].*#@ $svcid([[:space:]]|\$)" "$svcfile" || {
+          echo "nixarchy-service-enable $svcid left its line commented" >&2; exit 1; }
+        run nixarchy-service-disable "$svcid" >/dev/null
+        [ "$svcbefore" = "$(cksum < "$svcfile")" ] || {
+          echo "service enable then disable changed services.nix" >&2; exit 1; }
+        rm -f "$svcfile"
+        echo "a service can be enabled and disabled, byte for byte"
+
+        # ---- catalogue-diff finds a missing row and --add restores it ----
+        # nixarchy-catalogue-diff had no test of any kind either.
+        cp "$appfile" "$rmhome/apps.before-diff"
+        sed -i -E "/#@ $appid([[:space:]]|\$)/d" "$appfile"
+        cdout=$(NIXARCHY_TEMPLATES="$vm/etc/nixarchy" run nixarchy-catalogue-diff 2>&1) || true
+        grep -q "$appid" <<<"$cdout" || {
+          echo "nixarchy-catalogue-diff does not name the row missing from apps.nix:" >&2
+          printf '%s\n' "$cdout" >&2
+          exit 1
+        }
+        cdout=$(NIXARCHY_TEMPLATES="$vm/etc/nixarchy" run nixarchy-catalogue-diff --add 2>&1) || true
+        grep -qE "#@ $appid([[:space:]]|\$)" "$appfile" || {
+          echo "nixarchy-catalogue-diff --add did not put $appid's row back:" >&2
+          printf '%s\n' "$cdout" >&2
+          exit 1
+        }
+        run nix-instantiate --parse "$appfile" >/dev/null || {
+          echo "catalogue-diff --add left apps.nix unparseable" >&2; exit 1; }
+        cp "$rmhome/apps.before-diff" "$appfile"
+        echo "catalogue-diff names a missing row and --add restores it"
+
         # ---- auto-update's dirty guard, run rather than read ----
         #
         # The installer stages the flake and never commits it, and the guard
@@ -3723,7 +3790,7 @@ pkgs.runCommand "nixarchy-options"
         if grep -qE "#@ $appid([[:space:]]|\$)" "$appfile"; then
           echo "could not delete $appid's row to simulate an older apps.nix" >&2; exit 1
         fi
-        NIXARCHY_APPS_TEMPLATE="$vm/etc/nixarchy/apps-template.nix" \
+        NIXARCHY_TEMPLATES="$vm/etc/nixarchy" \
           run nixarchy-app-enable "$appid" >/dev/null 2>&1 || {
           echo "nixarchy-app-enable $appid failed when apps.nix predates the app" >&2; exit 1; }
         grep -q "^[[:space:]]*$appid\.enable" "$appfile" || {

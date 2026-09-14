@@ -1108,7 +1108,7 @@ in
 
                 for part in apps services advanced; do
                   user="$dir/$part.nix"
-                  tpl="/etc/nixarchy/$part-template.nix"
+                  tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/$part-template.nix"
                   [ -f "$user" ] && [ -f "$tpl" ] || continue
 
                   # Compared by marker, never by line: the file's own header
@@ -1296,7 +1296,7 @@ in
               ];
               text = ''
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                tpl="''${NIXARCHY_APPS_TEMPLATE:-/etc/nixarchy/apps-template.nix}"
+                tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                 id="''${1:?usage: nixarchy-app-enable <app-id>}"
 
                 # A menu pick has no terminal, so an error only on stderr is a

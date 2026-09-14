@@ -39,9 +39,10 @@ case "${1-}" in
   --report) mode=report ;;
   --list-pins) mode=pins ;;
   --main-install-verdict) mode=verdict ;;
+  --ci-row) mode=cirow ;;
   "") ;;
   *)
-    echo "usage: review [--report|--list-pins|--main-install-verdict]" >&2
+    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW]" >&2
     exit 2
     ;;
 esac
@@ -144,10 +145,64 @@ rows=""
 
 row() { rows="$rows| $1 | $2 | $3 | $4 |"$'\n'; }
 ok() { row "$1" "$2" "$3" "ok"; }
+
 finding() {
   row "$1" "$2" "$3" "**$4**"
   findings=$((findings + 1))
 }
+
+# One workflow's row, from gh's "<conclusion>\t<createdAt>" for its latest run.
+# No runs arrives as an empty line, or as "null\tnull" when a jq filter maps over
+# an empty list -- which is how release.yml's row vanished (#690): date refused
+# "null" and the arithmetic error abandoned the function with no row at all.
+# `none` says what no runs means: `finding` for a scheduled workflow, `ok` for
+# one that runs only when somebody pushes a tag.
+ci_row() {
+  local wf=$1 stale_hours=$2 none=$3 line=$4 now=$5 conclusion="" when="" started age
+  IFS=$'\t' read -r conclusion when <<<"$line"
+  if [ -z "$line" ] || [ "$when" = null ] || [ -z "$when" ]; then
+    if [ "$none" = ok ]; then
+      ok "$wf" "-" "no runs retained"
+    else
+      finding "$wf" "-" "no runs at all" "is the workflow disabled?"
+    fi
+    return
+  fi
+  if ! started=$(date -d "$when" +%s 2>/dev/null); then
+    finding "$wf" "-" "unreadable run" "gh returned createdAt '$when'"
+    return
+  fi
+  age=$(((now - started) / 3600))
+  case "$conclusion" in
+    success) : ;;
+    null | "")
+      # Still going. Not a finding -- this job runs at 06:00 and nightly can
+      # still be installing a desktop.
+      ok "$wf" "${age}h ago" "still running"
+      return
+      ;;
+    cancelled)
+      # The one that went unreported for two nights. Almost always a timeout.
+      finding "$wf" "${age}h ago" "cancelled" "timed out, most likely -- raise the budget or split the job"
+      return
+      ;;
+    *)
+      finding "$wf" "${age}h ago" "$conclusion" "read the run"
+      return
+      ;;
+  esac
+  if [ "$age" -gt "$stale_hours" ]; then
+    finding "$wf" "${age}h ago" "last run passed" "but nothing has run for ${age}h"
+  else
+    ok "$wf" "${age}h ago" "$conclusion"
+  fi
+}
+
+if [ "$mode" = cirow ]; then
+  ci_row "$2" "$3" "$4" "$(cat)" "$5"
+  printf '%s' "$rows"
+  exit 0
+fi
 
 # ---------------------------------------------------------------- upstream --
 
@@ -442,46 +497,20 @@ echo "${bold}Asking what CI did${off}" >&2
 # reports on its own last run has nothing to say on the night it is the thing
 # that broke.
 ci() {
-  local wf=$1 stale_hours=$2 line conclusion when age
-  line=$(gh run list --workflow "$wf" --limit 1 \
-    --json conclusion,createdAt --jq '.[0] | "\(.conclusion)\t\(.createdAt)"' \
+  local line
+  line=$(gh run list --workflow "$1" --limit 1 \
+    --json conclusion,createdAt --jq '.[0] // empty | "\(.conclusion)\t\(.createdAt)"' \
     2>/dev/null)
-  if [ -z "$line" ]; then
-    finding "$wf" "-" "no runs at all" "is the workflow disabled?"
-    return
-  fi
-  IFS=$'\t' read -r conclusion when <<<"$line"
-  age=$((($(date +%s) - $(date -d "$when" +%s)) / 3600))
-  case "$conclusion" in
-    success) : ;;
-    null | "")
-      # Still going. Not a finding -- this job runs at 06:00 and nightly can
-      # still be installing a desktop.
-      ok "$wf" "${age}h ago" "still running"
-      return
-      ;;
-    cancelled)
-      # The one that went unreported for two nights. Almost always a timeout.
-      finding "$wf" "${age}h ago" "cancelled" "timed out, most likely -- raise the budget or split the job"
-      return
-      ;;
-    *)
-      finding "$wf" "${age}h ago" "$conclusion" "read the run"
-      return
-      ;;
-  esac
-  if [ "$age" -gt "$stale_hours" ]; then
-    finding "$wf" "${age}h ago" "last run passed" "but nothing has run for ${age}h"
-  else
-    ok "$wf" "${age}h ago" "$conclusion"
-  fi
+  ci_row "$1" "$2" "${3:-finding}" "$line" "$(date +%s)"
 }
 
 ci build.yml 192
 ci nightly.yml 30
 ci omarchy.yml 30
 ci update.yml 200
-ci release.yml 8760
+# Tag-triggered, so no runs is not a disabled workflow. GitHub kept none for it
+# the day after it published v4.0.3-2 (#690).
+ci release.yml 8760 ok
 
 # main's commits, newest first, against every install-check run on each. Walked
 # by commit rather than by run, because a commit that started no run at all --
@@ -512,7 +541,13 @@ if ! install_runs=$(main_install_runs); then
 else
   IFS=$'\t' read -r verdict vsha vdetail <<<"$(main_install_verdict <<<"$install_runs")"
   case "$verdict" in
-    verified) ok "main install" "${vsha:0:7}" "installed, success${vdetail:+ ($vdetail newer commit(s) cannot affect an install)}" ;;
+    verified)
+      if [ "$vdetail" -gt 0 ]; then
+        ok "main install" "${vsha:0:7}" "installed, success ($vdetail newer commit(s) cannot affect an install)"
+      else
+        ok "main install" "${vsha:0:7}" "installed, success"
+      fi
+      ;;
     running) ok "main install" "${vsha:0:7}" "still running" ;;
     none) finding "main install" "${vsha:0:7}" "no install check ran" "gh workflow run install-check.yml --ref main" ;;
     unverified) finding "main install" "${vsha:0:7}" "never installed: $vdetail" "gh workflow run install-check.yml --ref main" ;;

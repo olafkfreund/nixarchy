@@ -3001,6 +3001,32 @@ pkgs.runCommand "nixarchy-options"
         done
         echo "every routed nixarchy command answers --help with its usage"
 
+        # Rollback moves the system and leaves the flake describing the newer
+        # one, so the next apply or update rebuilds what it left. Run for real
+        # with the switch stubbed, and it must say so after switching.
+        mkdir -p rb-stubs
+        echo '[{"generation":1,"date":"d","nixosVersion":"v","kernelVersion":"6.1","current":false},{"generation":2,"date":"d","nixosVersion":"v","kernelVersion":"6.1","current":true}]' > rb-gens.json
+        printf '#!/bin/sh\ncat %s/rb-gens.json\n' "$PWD" > rb-stubs/nixos-rebuild
+        printf '#!/bin/sh\ncase "$1" in choose) head -1 ;; confirm) exit 0 ;; esac\n' > rb-stubs/gum
+        printf '#!/bin/sh\necho 6.1.0\n' > rb-stubs/uname
+        printf '#!/bin/sh\nexit 0\n' > rb-stubs/sudo
+        chmod +x rb-stubs/*
+        rbout=$(PATH="$PWD/rb-stubs:$vm/sw/bin:$PATH" "$omarchyPath/bin/nixarchy-rollback" </dev/null 2>&1) || {
+          echo "nixarchy-rollback failed against stubbed generations:" >&2
+          printf '%s\n' "$rbout" | tail -8 >&2
+          exit 1
+        }
+        grep -q 'Now on generation 1' <<<"$rbout" || {
+          echo "the stubbed rollback never reached the switch:" >&2
+          printf '%s\n' "$rbout" | tail -8 >&2
+          exit 1
+        }
+        grep -q 'still describes the generation you left' <<<"$rbout" || {
+          echo "nixarchy-rollback does not warn that the next apply rebuilds what it left" >&2
+          exit 1
+        }
+        echo "rollback warns that the configuration still describes the newer system"
+
         # The floor this repository keeps arriving at: a loop that iterated
         # nothing satisfies every assertion above while proving nothing -- and
         # this check exists because that exact silence shipped ten broken

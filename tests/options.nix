@@ -2045,6 +2045,8 @@ pkgs.runCommand "nixarchy-options"
     sopsOffSecrets = pkgs.lib.boolToString (sopsOff.sops.secrets == { });
     sopsOffTemplates = pkgs.lib.boolToString (sopsOff.sops.templates == { });
     sopsOnActive = pkgs.lib.boolToString (hasSops sopsOn);
+    # The home seed's copy function, run below against a directory it cannot write.
+    seedActivation = (homeWith { }).home.activation.nixarchySeed.data;
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
     devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
     boxesOffPodman = pkgs.lib.boolToString boxesOff.virtualisation.podman.enable;
@@ -3624,6 +3626,36 @@ pkgs.runCommand "nixarchy-options"
         echo '{ edited = true; }' > au-committed/flake.nix
         if au "$PWD/au-committed"; then echo "auto-update rebuilt a committed flake with an uncommitted edit" >&2; exit 1; fi
         echo "auto-update rebuilds an installed flake and its own lock edit, and refuses real edits"
+
+        # ---- the home seed keeps edits and reports failures ----
+        #
+        # seed_dir copied with `cp -rn ... 2>/dev/null || true`, so a seed that
+        # failed (a full disk, a directory the user cannot write) said nothing
+        # and left a desktop missing its config. The real function, extracted.
+        sed -n '/^[[:space:]]*seed_dir() {/,/^[[:space:]]*}$/p' <<<"$seedActivation" > seed.sh
+        grep -q 'seed_dir()' seed.sh || { echo "seed_dir is gone from the home activation" >&2; exit 1; }
+        mkdir -p seed-src/a seed-dst/a
+        echo shipped > seed-src/a/f; echo mine > seed-dst/a/f; echo new > seed-src/g
+        (
+          run() { "$@"; }
+          . ./seed.sh
+          seed_dir "$PWD/seed-src" "$PWD/seed-dst"
+        ) 2>seed.err || true
+        [ "$(cat seed-dst/a/f)" = mine ] || { echo "the seed overwrote a file the user edited" >&2; exit 1; }
+        [ -f seed-dst/g ] || { echo "the seed did not copy a file the user did not have" >&2; exit 1; }
+        mkdir -p seed-ro; echo x > seed-src/h; chmod 500 seed-ro
+        (
+          run() { "$@"; }
+          . ./seed.sh
+          seed_dir "$PWD/seed-src" "$PWD/seed-ro"
+        ) 2>seed.err || true
+        chmod 700 seed-ro
+        grep -q 'could not seed' seed.err || {
+          echo "a seed into a directory it cannot write reported nothing:" >&2
+          cat seed.err >&2
+          exit 1
+        }
+        echo "the home seed keeps edited files and reports a copy it could not make"
 
         # A name that exists but is not a package. tryEval does not catch the
         # missing `name` it has, so the whole batch evaluation used to abort

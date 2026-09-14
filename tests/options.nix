@@ -3529,6 +3529,61 @@ pkgs.runCommand "nixarchy-options"
         run nixarchy-pkg-remove hello cowsay >/dev/null
         echo "one bad name in a batch is reported without sinking the rest"
 
+        # A name that exists but is not a package. tryEval does not catch the
+        # missing `name` it has, so the whole batch evaluation used to abort
+        # and every good name beside it was reported as "no match".
+        run nixarchy-pkg-add python3Packages hello >/dev/null 2>&1 || true
+        grep -q '#@pkg hello$' "$appfile" || {
+          echo "a non-package name (python3Packages) sank the good name beside it" >&2
+          exit 1
+        }
+        run nixarchy-pkg-remove hello >/dev/null
+        echo "a non-package name in a batch does not sink the rest"
+
+        # Remove must not report a prefix as removed: `rip` is not `ripgrep`.
+        run nixarchy-pkg-add cowsay >/dev/null
+        if prefixout=$(run nixarchy-pkg-remove cow 2>&1); then
+          echo "nixarchy-pkg-remove cow exited 0 with only cowsay selected:" >&2
+          printf '%s\n' "$prefixout" >&2
+          exit 1
+        fi
+        grep -q '#@pkg cowsay$' "$appfile" || {
+          echo "nixarchy-pkg-remove cow removed cowsay" >&2; exit 1; }
+        run nixarchy-pkg-remove cowsay >/dev/null
+        echo "a prefix of a selected package is refused, not reported removed"
+
+        # A package from the other channel is a package: removable, listed, and
+        # not written twice.
+        run nixarchy-pkg-add --unstable hello >/dev/null 2>&1
+        run nixarchy-pkg-add --unstable hello >/dev/null 2>&1
+        othercount=$(grep -c '#@pkg-other hello$' "$appfile" || true)
+        [ "$othercount" = 1 ] || {
+          echo "adding --unstable hello twice wrote $othercount lines" >&2; exit 1; }
+        run nixarchy-pkg-remove hello >/dev/null || {
+          echo "nixarchy-pkg-remove cannot remove a --unstable package" >&2; exit 1; }
+        if grep -q '#@pkg-other hello$' "$appfile"; then
+          echo "nixarchy-pkg-remove hello left the #@pkg-other line" >&2; exit 1
+        fi
+        echo "a package from the other channel can be removed, once"
+
+        # An app added to the catalogue after apps.nix was seeded has no row
+        # in the user's file. A menu pick of it must add the row, not fail
+        # silently.
+        cp "$appfile" "$rmhome/apps.before-missing"
+        sed -i -E "/#@ $appid([[:space:]]|\$)/d" "$appfile"
+        if grep -qE "#@ $appid([[:space:]]|\$)" "$appfile"; then
+          echo "could not delete $appid's row to simulate an older apps.nix" >&2; exit 1
+        fi
+        NIXARCHY_APPS_TEMPLATE="$vm/etc/nixarchy/apps-template.nix" \
+          run nixarchy-app-enable "$appid" >/dev/null 2>&1 || {
+          echo "nixarchy-app-enable $appid failed when apps.nix predates the app" >&2; exit 1; }
+        grep -q "^[[:space:]]*$appid\.enable" "$appfile" || {
+          echo "nixarchy-app-enable $appid did not enable a row missing from apps.nix" >&2; exit 1; }
+        run nix-instantiate --parse "$appfile" >/dev/null || {
+          echo "the row app-enable added leaves apps.nix unparseable" >&2; exit 1; }
+        cp "$rmhome/apps.before-missing" "$appfile"
+        echo "picking an app newer than apps.nix adds its row and enables it"
+
         # A draft (#581). nixarchy-pkg-new needs a network to run for real,
         # so the add is simulated with the writer's own byte shape -- and the
         # grep below pins the WRITER's format string, so if pkg-new changes
@@ -3649,7 +3704,7 @@ pkgs.runCommand "nixarchy-options"
         # different coat. Comments stripped first; match the greps and the
         # dispatch, not prose.
         appremove=$(grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-app-remove")
-        for needle in '#@pkg ' '#@opt ' '#@draft ' nixarchy-pkg-remove nixarchy-opt-remove nixarchy-pkg-undraft; do
+        for needle in '#@pkg(-other)? ' '#@opt ' '#@draft ' nixarchy-pkg-remove nixarchy-opt-remove nixarchy-pkg-undraft; do
           <<<"$appremove" grep -qF -- "$needle" || {
             echo "nixarchy-app-remove does not handle $needle:" >&2
             echo "  the Remove menu is then blind to a kind the Install picker writes" >&2

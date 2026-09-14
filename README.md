@@ -113,7 +113,8 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 59 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
+The 66 apps in the selection are the ones Omarchy's own menu lists, and a few
+it does not. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
 

@@ -12,10 +12,12 @@ pacman. None of that applies here, and the reasons are on the
 ## The apps the menu knows about
 
 The Install menu still exists and still has every row Omarchy ships. Each row
-has been mapped to how NixOS installs the thing: 56 apps in total, of which 41
-are plain nixpkgs packages, 5 are NixOS modules, 8 are built by nixarchy
-itself because nixpkgs does not carry them, and 2 have no equivalent and say
-so in the menu.
+has been mapped to how NixOS installs the thing, beside a few apps upstream does
+not list. There are 66 apps in total:
+50 are plain nixpkgs packages,
+5 are NixOS modules,
+9 are built by nixarchy itself because nixpkgs does not carry them,
+and 2 have no equivalent and say so in the menu.
 
 Picking a row does not install anything. It uncomments one line in
 `~/.config/nixarchy/apps.nix`, which is a file nixarchy writes for you, fully

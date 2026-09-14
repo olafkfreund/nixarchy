@@ -61,6 +61,25 @@ let
   # two package sets would be neither cheap nor honest about being cheap.
   paths = map (p: builtins.unsafeDiscardStringContext (baseNameOf p.outPath)) btops;
 
+  # The same, through the flake the installer writes. Its hosts see `inputs`
+  # only as specialArgs hands them over, and the template tells users to add
+  # `nixpkgs-other` -- a name nixarchy does not have, so using nixarchy's own
+  # nixpkgs-stable above could never notice the user's inputs being dropped.
+  templateSystem =
+    ((import ../installer/template/flake.nix).outputs {
+      self = {
+        outPath = ./fixtures/template-inputs;
+        inputs = {
+          nixarchy = inputs.self;
+          nixpkgs-other = inputs.nixpkgs-stable;
+        };
+      };
+      nixarchy = inputs.self;
+    }).nixosConfigurations.probe;
+  templatePaths = map (p: builtins.unsafeDiscardStringContext (baseNameOf p.outPath)) (
+    builtins.filter (p: (p.pname or "") == "btop") templateSystem.config.environment.systemPackages
+  );
+
   doctor = "${(pkgs.extend inputs.self.overlays.default).nixarchy-doctor}/bin/nixarchy-doctor";
 in
 pkgs.runCommand "nixarchy-other-channel"
@@ -70,6 +89,7 @@ pkgs.runCommand "nixarchy-other-channel"
     pathList = lib.concatStringsSep " " paths;
     pathCount = toString (builtins.length paths);
     distinct = toString (builtins.length (lib.unique paths));
+    templateDistinct = toString (builtins.length (lib.unique templatePaths));
   }
   ''
     echo "unconfigured pkgsOther throws: $unsetThrew"
@@ -96,6 +116,13 @@ pkgs.runCommand "nixarchy-other-channel"
       exit 1
     fi
     echo "the two are different derivations, which is the feature and its cost"
+
+    echo "through the installer's flake template: $templateDistinct distinct btop(s)"
+    if [ "$templateDistinct" != 2 ]; then
+      echo "::error::a host in the generated flake did not get pkgsOther from" >&2
+      echo "  the user's own nixpkgs-other input." >&2
+      exit 1
+    fi
 
     # The tools have to say what it costs, because nothing else will. A
     # duplicate closure is invisible until a disk fills.

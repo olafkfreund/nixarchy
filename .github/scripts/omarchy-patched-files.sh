@@ -20,15 +20,16 @@
 # states, never listed here. A hand-kept list is the thing that goes stale in
 # silence: it keeps naming a bin that was deleted and stops naming the one
 # added last week, and the report stays reassuring throughout. The four
-# statements it reads:
+# statements it reads (five, with sed -i):
 #
 #   pkgs/omarchy/nix-bin/*                     bins replaced by a stub
 #   substituteInPlace $out/share/omarchy/PATH  files patched in the package
+#   sed -i ... $out/share/omarchy/PATH         files edited in the package
 #   ${src}/PATH beside a sha256sum             a file copied here and pinned
 #   seed_dir "${omarchyPath}/config"           the tree seeded into ~/.config
 #
 # Each of those is a grep, and a grep that matches nothing passes quietly, so
-# all four must produce something or this refuses to print. tests/patched-
+# all five must produce something or this refuses to print. tests/patched-
 # files.nix runs it against the real repo files for that reason.
 #
 # Attribution is a second pass, because it needs a network and this does not:
@@ -76,6 +77,33 @@ patched=$(
       sed -E 's/^ *for f in //;s/; do$//' | tr ' ' '\n' | sed 's|^|bin/|' || true
   } | grep -vE '^$' | sort -u || true
 )
+# `sed -i` edits too, which name their target on a continuation line or through
+# a variable (`clone=$out/share/omarchy/bin/...; sed -i ... "$clone"`), so join
+# the continuations and resolve those assignments before reading the words.
+sedded=$(
+  awk '
+    { line = line $0 }
+    /\\$/ { sub(/\\$/, "", line); next }
+    {
+      if (match(line, /^[ \t]*[A-Za-z_][A-Za-z0-9_]*=\$out\/share\/omarchy\/[A-Za-z0-9._\/-]+[ \t]*$/)) {
+        split(line, kv, "="); gsub(/[ \t]/, "", kv[1]); gsub(/[ \t]/, "", kv[2])
+        vars[kv[1]] = substr(kv[2], length("$out/share/omarchy/") + 1)
+      }
+      if (line ~ /^[ \t]*sed -i/) {
+        n = split(line, w, /[ \t]+/)
+        for (i = 1; i <= n; i++) {
+          t = w[i]; gsub(/"/, "", t)
+          if (t ~ /^\$out\/share\/omarchy\//) print substr(t, length("$out/share/omarchy/") + 1)
+          else if (match(t, /^\$[A-Za-z_][A-Za-z0-9_]*/)) {
+            name = substr(t, 2, RLENGTH - 1)
+            if (name in vars) print vars[name] substr(t, RLENGTH + 1)
+          }
+        }
+      }
+      line = ""
+    }
+  ' "$pkg" 2>/dev/null | grep -E '^[A-Za-z0-9._/-]+$' | grep -vE '/$' | sort -u || true
+)
 pinned=$(
   grep -ohE '\$\{src\}/[A-Za-z0-9._/-]+' "$pkg" 2>/dev/null |
     sed 's|^\${src}/||' | sort -u || true
@@ -85,7 +113,7 @@ seeded=$(
     sed -E 's|.*omarchyPath\}/||;s|"$|/|' | sort -u || true
 )
 
-# See the header: four greps against files that move. All four have to find
+# See the header: five greps against files that move. All four have to find
 # something, or the intersection below is empty for a reason that has nothing
 # to do with this release.
 derived_or_die() {
@@ -98,12 +126,14 @@ derived_or_die() {
 }
 derived_or_die "$stubs" "pkgs/omarchy/nix-bin/"
 derived_or_die "$patched" "substituteInPlace in pkgs/omarchy/default.nix"
+derived_or_die "$sedded" "sed -i in pkgs/omarchy/default.nix"
 derived_or_die "$pinned" "\${src}/ in pkgs/omarchy/default.nix"
 derived_or_die "$seeded" "seed_dir in modules/home.nix"
 
 reasons() {
   echo "$stubs" | sed 's|$|\treplaced entirely by a NixOS stub in `pkgs/omarchy/nix-bin/`|'
   echo "$patched" | sed 's|$|\tpatched by `substituteInPlace` in `pkgs/omarchy/default.nix`|'
+  echo "$sedded" | sed 's|$|\tedited by `sed -i` in `pkgs/omarchy/default.nix`|'
   echo "$pinned" | sed 's|$|\tread straight out of the source by `pkgs/omarchy/default.nix` (copied, rewritten, or sha256-pinned)|'
   echo "$seeded" | sed 's|$|\tseeded into `~/.config` by `modules/home.nix`|'
 }

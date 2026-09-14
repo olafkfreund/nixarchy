@@ -837,9 +837,11 @@
               gnused
               coreutils
             ];
-            text = builtins.replaceStrings [ "@delta@" ] [ "${./.github/scripts/omarchy-package-delta.sh}" ] (
-              builtins.readFile ./.github/scripts/release-notes.sh
-            );
+            text =
+              builtins.replaceStrings
+                [ "@delta@" "@walk@" ]
+                [ "${./.github/scripts/omarchy-package-delta.sh}" "${./.github/scripts/release-notes-options.nix}" ]
+                (builtins.readFile ./.github/scripts/release-notes.sh);
           };
 
           # `nix run github:olafkfreund/nixarchy#doctor` -- reads the running

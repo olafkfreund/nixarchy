@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ inputs, pkgs }:
 # The release notes, against a repository with a known answer.
 #
 # `.github/scripts/release-notes.sh` derives what a release changed by grepping
@@ -40,6 +40,13 @@ let
   # The same map twice: nothing changed, and the script must say that in
   # words rather than by leaving the section out.
   optsSame = optsFrom;
+
+  # The fixture hands the option maps over, so it never runs the walk. This
+  # does, against the real option set: v4.0.3-2 shipped with no notes because
+  # one option default threw under it, and every fixture run stayed green.
+  realOptions = builtins.toJSON (
+    import ../.github/scripts/release-notes-options.nix inputs.self.nixosConfigurations.vm.options.programs.nixarchy
+  );
 in
 pkgs.runCommand "nixarchy-release-notes"
   {
@@ -53,8 +60,14 @@ pkgs.runCommand "nixarchy-release-notes"
       gnused
       coreutils
     ];
+    inherit realOptions;
+    passAsFile = [ "realOptions" ];
   }
   ''
+    [ "$(jq length "$realOptionsPath")" -gt 0 ] || {
+      echo "release-notes: the option walk over the real option set came back empty" >&2
+      exit 1
+    }
     export HOME=$TMPDIR
     export GIT_CONFIG_GLOBAL=$TMPDIR/gitconfig
     export GIT_CONFIG_SYSTEM=/dev/null

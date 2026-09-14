@@ -161,26 +161,7 @@ echo
 #
 # Submodule options stop here: `apps.<name>` is one option, not a tree. That is
 # deliberate -- the interesting default lives at the leaf that has one.
-# shellcheck disable=SC2016  # this is Nix source, not shell: nothing here expands
-options_apply='o:
-  let
-    isOpt = v: (v._type or "") == "option";
-    go = path: v:
-      if isOpt v then
-        # defaultText first, and not only for display: tryEval catches throw
-        # and assert but NOT a missing attribute, so a default that reads
-        # pkgs.config.<key> aborts the whole walk (v4.0.3-2 shipped no notes).
-        (let d = builtins.tryEval (if v ? default then builtins.toJSON v.default else "");
-         in { "${path}" =
-                if v ? defaultText then (v.defaultText.text or (builtins.toString v.defaultText))
-                else if !(v ? default) then "(no default)"
-                else if d.success then d.value
-                else "(not representable)"; })
-      else if builtins.isAttrs v then
-        builtins.foldl'"'"' (a: n: a // go (path + "." + n) v.${n}) { }
-          (builtins.filter (n: builtins.substring 0 1 n != "_") (builtins.attrNames v))
-      else { };
-  in go "programs.nixarchy" o'
+options_walk=${NIXARCHY_OPTIONS_WALK:-@walk@}
 
 # The fixture check has no network and cannot evaluate a flake inside a
 # sandbox, so it hands the two option maps over directly. Nothing else sets
@@ -196,7 +177,7 @@ options_at() { # rev outfile
     # allRefs, because a tag's commit need not be on the checked-out branch.
     nix eval --json \
       "git+file://$(git rev-parse --show-toplevel)?rev=$1&allRefs=1#nixosConfigurations.vm.options.programs.nixarchy" \
-      --apply "$options_apply" >"$2"
+      --apply "$(cat "$options_walk")" >"$2"
   fi
 
   # A store path in a default is the same package under a different hash on

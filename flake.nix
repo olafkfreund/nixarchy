@@ -1862,6 +1862,13 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The nightly's runner cache step: probe, rebuild and push what the
+          # cache dropped, and still fail when a push delivers nothing. Against
+          # a stubbed nix, curl and cachix. See tests/template-runners.nix.
+          template-runners = import ./tests/template-runners.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # Every option that adds something, checked with it turned off too --
           # see tests/options.nix for why that half is the one at risk.
           options = import ./tests/options.nix {

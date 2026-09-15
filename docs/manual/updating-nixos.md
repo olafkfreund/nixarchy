@@ -47,7 +47,7 @@ when something breaks you have no idea which input did it.
 writable by you. The installer chowns `/etc/nixos` to the user it creates, so
 this is already true on a machine it wrote. On a machine installed before that
 -- or one you chowned back to root -- `omarchy update` offers to fix it, and
-`omarchy doctor` says so before you get there.
+`nixarchy doctor` says so before you get there.
 
 ## switch, boot, test — pick the right one
 

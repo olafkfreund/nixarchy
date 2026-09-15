@@ -503,8 +503,17 @@ stdenvNoCC.mkDerivation {
                     #   Permission denied
                     #
                     # The clone never completes and nothing appears in the plugin list.
-                    sed -i 's/cp -aL /cp -aL --no-preserve=mode /g' \
-                      $out/share/omarchy/bin/omarchy-plugin-clone
+                    # A sed that stops matching changes nothing and says nothing: guard both ends.
+                    clone=$out/share/omarchy/bin/omarchy-plugin-clone
+                    grep -q 'cp -aL ' "$clone" || {
+                      echo "omarchy-plugin-clone no longer copies with cp -aL; the mode patch has nothing to fix" >&2
+                      exit 1
+                    }
+                    sed -i 's/cp -aL /cp -aL --no-preserve=mode /g' "$clone"
+                    ! grep -v -- '--no-preserve=mode' "$clone" | grep -q 'cp -aL ' || {
+                      echo "omarchy-plugin-clone still has a cp -aL without --no-preserve=mode" >&2
+                      exit 1
+                    }
 
                     # The third site of the same store-mode problem, and the expensive one.
                     #
@@ -598,7 +607,7 @@ stdenvNoCC.mkDerivation {
                     #   No RetroArch cores found   /usr/lib/libretro
                     for f in omarchy-games-retro-install omarchy-install-gaming-retroarch; do
                       substituteInPlace $out/share/omarchy/bin/$f \
-                        --replace-quiet '/usr/lib/libretro' '$(omarchy-retroarch-cores)'
+                        --replace-fail '/usr/lib/libretro' '$(omarchy-retroarch-cores)'
                     done
 
                     # `omarchy version` said "dev".
@@ -1352,14 +1361,33 @@ stdenvNoCC.mkDerivation {
                     # replaced separately: `setup_pam_config` is then a single occurrence in
                     # each file, so what is left is a one-line anchor that cannot be broken
                     # by how this Nix string happens to be indented.
+                    # A range that stops matching deletes nothing, and the --replace-fail
+                    # below would then rewrite the header instead: check both ends.
+                    pambin=$out/share/omarchy/bin
+                    for pair in \
+                      omarchy-setup-security-fido2:setup_pam_config \
+                      omarchy-setup-security-fingerprint:setup_pam_config \
+                      omarchy-setup-security-fingerprint:setup_lock_fingerprint_pam \
+                      omarchy-remove-security-fido2:remove_pam_config \
+                      omarchy-remove-security-fingerprint:remove_pam_config; do
+                      grep -q "^''${pair#*:}() {$" "$pambin/''${pair%%:*}" || {
+                        echo "''${pair%%:*} no longer defines ''${pair#*:}() where the PAM patch expects it" >&2
+                        exit 1
+                      }
+                    done
                     sed -i \
                       -e '/^setup_pam_config() {$/,/^}$/d' \
                       -e '/^setup_lock_fingerprint_pam() {$/,/^}$/d' \
-                      $out/share/omarchy/bin/omarchy-setup-security-fido2 \
-                      $out/share/omarchy/bin/omarchy-setup-security-fingerprint
+                      $pambin/omarchy-setup-security-fido2 \
+                      $pambin/omarchy-setup-security-fingerprint
                     sed -i '/^remove_pam_config() {$/,/^}$/d' \
-                      $out/share/omarchy/bin/omarchy-remove-security-fido2 \
-                      $out/share/omarchy/bin/omarchy-remove-security-fingerprint
+                      $pambin/omarchy-remove-security-fido2 \
+                      $pambin/omarchy-remove-security-fingerprint
+                    ! grep -q '^\(setup_pam_config\|setup_lock_fingerprint_pam\|remove_pam_config\)() {$' \
+                      $pambin/omarchy-{setup,remove}-security-{fido2,fingerprint} || {
+                      echo "a PAM-editing function survived its sed range delete" >&2
+                      exit 1
+                    }
 
                     # Only the PAM step goes. Everything before it works and is worth
                     # keeping: pamu2fcfg really does register a key into /etc/fido2/fido2,

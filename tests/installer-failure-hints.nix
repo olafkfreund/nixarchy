@@ -125,6 +125,45 @@ pkgs.runCommand "nixarchy-installer-failure-hints" { nativeBuildInputs = [ pkgs.
   fi
   [ "$fails" = 0 ] || exit 1
 
+  # Retry without re-answering. A failure late in the install used to offer
+  # only log, shell, reboot and power off, so the next attempt meant typing
+  # every answer again. The REAL loop and the REAL menu, with the phases and
+  # the drawing stubbed.
+  sed -n '/^install_attempts()/,/^}/p' ${installScript} > a.sh
+  sed -n '/^ui_failed()/,/^}/p' ${dashboardScript} > u.sh
+  test -s a.sh || { echo "install_attempts is gone from install.sh" >&2; exit 1; }
+  test -s u.sh || { echo "ui_failed is gone from dashboard.sh" >&2; exit 1; }
+  cat > r.sh <<'EOF'
+  . ./a.sh
+  . ./u.sh
+  log=lg; : > lg
+  for f in ui_init ui_clear ui_logo ui_centre ui_left ui_failure_hint ui_gum_pad; do eval "$f() { :; }"; done
+  ui_interactive() { return 0; }
+  gum() { [ "$1" = choose ] && echo "$GUM_PICK"; }
+
+  # The menu's Retry row returns the code install_attempts retries on.
+  GUM_PICK="Retry with the same answers"
+  ui_failed lg 1 && got=0 || got=$?
+  [ "$got" = 3 ] || { echo "  FAILED  Retry on the failure screen returns $got, not 3"; exit 1; }
+  echo "  ok      the failure screen offers a retry"
+
+  # Retry runs the phases again and finishes when they succeed.
+  attempts=0
+  install_once() { attempts=$((attempts + 1)); [ "$attempts" -ge 2 ] && rc=0 || rc=1; }
+  ( install_attempts; echo "attempts=$attempts" ) > r1 || { echo "  FAILED  a retried install that then succeeded exited nonzero"; exit 1; }
+  grep -qx 'attempts=2' r1 || { echo "  FAILED  retry did not run the phases again: $(cat r1)"; exit 1; }
+  echo "  ok      a retry runs the phases again with the same answers"
+
+  # Viewing the log and leaving still exits with the failure's status.
+  GUM_PICK="leave"
+  attempts=0
+  install_once() { attempts=$((attempts + 1)); rc=7; }
+  ( install_attempts ) && got=0 || got=$?
+  [ "$got" = 7 ] || { echo "  FAILED  declining to retry exited $got, not the failure's 7"; exit 1; }
+  echo "  ok      declining the retry keeps the failure's exit status"
+  EOF
+  ${pkgs.bash}/bin/bash r.sh
+
   echo "the installer says what went wrong, not only that something did"
   touch $out
 ''

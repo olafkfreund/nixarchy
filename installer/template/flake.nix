@@ -74,7 +74,9 @@
       # Directories only. A stray file under hosts/ -- a README, an editor's
       # backup -- is not a machine, and would otherwise become a configuration
       # that fails to evaluate for reasons nothing explains.
-      hosts = lib.attrNames (lib.filterAttrs (_: kind: kind == "directory") (builtins.readDir ./hosts));
+      hosts = lib.attrNames (
+        lib.filterAttrs (_: kind: kind == "directory") (builtins.readDir "${self}/hosts")
+      );
     in
     {
       nixosConfigurations = lib.genAttrs hosts (
@@ -84,21 +86,26 @@
           # The module takes `inputs` and reads inputs.self for its own outputs,
           # so hand it nixarchy's inputs with nixarchy standing in as self.
           # hosts/<name>/default.nix reaches installer/host.nix through it.
+          # This flake's own inputs are added underneath, so one you declare
+          # above (nixpkgs-other) reaches your hosts; nixarchy's names win a clash.
           specialArgs = {
-            inputs = nixarchy.inputs // {
-              self = nixarchy;
-            };
+            inputs =
+              self.inputs
+              // nixarchy.inputs
+              // {
+                self = nixarchy;
+              };
           };
           modules = [
             nixarchy.nixosModules.nixarchy
             nixarchy.inputs.home-manager.nixosModules.home-manager
             nixarchy.inputs.disko.nixosModules.disko
-            ./hosts/${name}
+            "${self}/hosts/${name}"
           ];
         }
       );
 
-      # `nixarchy reinstall-iso` builds this: a bootable image carrying THIS
+      # `nixarchy reinstall iso` builds this: a bootable image carrying THIS
       # machine, so it can be rebuilt on new hardware after a disk is lost.
       #
       # Read the honesty in the command before you rely on it. The image

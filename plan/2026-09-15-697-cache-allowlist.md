@@ -26,7 +26,14 @@ opening it.
     `.#checks.x86_64-linux.reference-toplevel`
   - `runners`: `.#microvm-<t>` and `.#microvm-<t>-tcg` for every template in
     `data/microvm-templates.nix`
-  - `apps`: every app in `data/apps.nix` with `ours = true`
+  - `apps`: every app in `data/apps.nix` with `ours = true` and not
+    `unfree = true`
+
+    **Deviation from the approved spec (step 5).** The spec listed every
+    `ours = true` app. `grok-bot` is `unfree = true`. nixarchy.cachix.org is
+    public, so pushing it there on purpose would be redistributing a
+    proprietary binary. Unfree apps are left out, and their users build them,
+    as nixpkgs users do. This also means no allowlist entry needs `--impure`.
   - no argument: all groups
 
   `cachix-push.sh` pushes closures only when `GITHUB_REF=refs/heads/main`.
@@ -67,7 +74,7 @@ file in the same commit.
    `apps` job already reads them). It exits 2 on an unknown group, and on a
    group that evaluates empty.
    → verify: run on p620; `runners` prints 10 lines, `system` prints 2, `apps`
-   prints at least 8, and `bogus` exits 2.
+   prints at least 8 (8 once `grok-bot` is excluded), and `bogus` exits 2.
 
 2. **`.github/scripts/cachix-push.sh`.** Adds the `main`-only guard for closures
    (D2) and `--proof` mode (D3). Closure mode is otherwise unchanged.

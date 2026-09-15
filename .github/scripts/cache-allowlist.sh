@@ -40,13 +40,15 @@ group() {
       ;;
     # Apps packaged here, which nixpkgs does not have: a user who enables one
     # downloads it from nowhere else. Read the way build.yml's apps job reads
-    # them, so the two cannot disagree.
+    # them, so the two cannot disagree -- except that an app data/apps.nix marks
+    # `unfree` is left out: this cache is public, and pushing a proprietary
+    # binary to it is redistributing it. Its users build it, as nixpkgs' do.
     apps)
       # shellcheck disable=SC2016 # a Nix expression, not shell
       nix eval --raw --impure --expr '
         let
           cat = import ./data/apps.nix;
-          ours = builtins.filter (n: (cat.${n}.ours or false)) (builtins.attrNames cat);
+          ours = builtins.filter (n: (cat.${n}.ours or false) && !(cat.${n}.unfree or false)) (builtins.attrNames cat);
         in builtins.concatStringsSep "\n" (map (n: ".#" + (cat.${n}.attr or n)) ours)
       '
       echo

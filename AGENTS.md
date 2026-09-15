@@ -362,6 +362,26 @@ your question:
 | `installer-refusal` | a dark substituter is refused, disk left intact | ~2–3 min, same job — a VM too |
 | `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
 
+**What nixarchy.cachix.org holds is a list, not whatever CI built.** It is the
+free tier: 5 GB, and when full it deletes what was *downloaded* longest ago. A
+push is not a download. Every job used to push its whole store diff, pull
+requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
+31 of 34 check proofs. Every PR then rebuilt every check and could not finish
+(#697). Now:
+
+- every `cachix-action` has `skipPush: true`, and a guard fails otherwise;
+- closures are pushed only from `main`, and only what
+  `.github/scripts/cache-allowlist.sh` names, each entry with the reason someone
+  downloads it;
+- check results are pushed from any ref by `cachix-push.sh --proof`, as a
+  single path, which is how `build-unless-proven.sh` skips what already passed;
+- `cache-budget.sh` fails the `system` job when the allowlist would cost more
+  than 2 GB.
+
+Adding something to the cache means adding it to the allowlist in the same PR,
+and the budget step tells you what it costs. Unfree packages stay off: the
+cache is public.
+
 `install`, `free-space` and `installer-refusal` are one job.
 `install-check.yml` builds all three in a single `nix build --max-jobs 3`,
 so they **overlap** rather than run in sequence — the old serial model, and

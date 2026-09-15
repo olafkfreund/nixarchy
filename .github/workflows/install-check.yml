@@ -460,12 +460,15 @@ jobs:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
           [ -n "$CACHIX_AUTH_TOKEN" ] || { echo "no cachix token; skipping"; exit 0; }
+          # The one proof push (#697): the result path alone, refused if it
+          # references anything. cachix through nix -- these runners have none
+          # on a step's PATH.
+          nix shell --inputs-from . nixpkgs#cachix -c \
+            .github/scripts/cachix-push.sh --proof install free-space installer-refusal ||
+            echo "a proof push failed; not fatal"
           for c in install free-space installer-refusal; do
             out=$(nix eval --raw ".#checks.x86_64-linux.$c" 2>/dev/null) || continue
             [ -e "$out" ] || continue
-            echo "pushing $c ($(du -sh "$out" | cut -f1))"
-            nix run --inputs-from . nixpkgs#cachix -- \
-              push nixarchy "$out" || echo "push of $c failed; not fatal"
 
             # And ask the cache whether it took it -- here, on this commit,
             # seconds later.

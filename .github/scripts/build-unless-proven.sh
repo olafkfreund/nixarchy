@@ -41,5 +41,14 @@ echo "building: ${todo[*]}"
 # first check and the shebang check inspects a different tree -- which is how
 # it failed once already. Nothing here wants an out-link; the build IS the
 # assertion.
+rc=0
 nix build --keep-going --no-link --print-build-logs \
-  "${todo[@]/#/.#checks.x86_64-linux.}"
+  "${todo[@]/#/.#checks.x86_64-linux.}" || rc=$?
+
+# The proof, so the next run -- this pull request's re-run, or main after it
+# merges -- skips what just passed (#697). Only checks whose result exists are
+# pushed: under --keep-going a failed check has no output, and cachix-push.sh
+# says so rather than pushing anything. Never the verdict: the exit status is
+# the build's.
+"$here/cachix-push.sh" --proof "${todo[@]}" || true
+exit "$rc"

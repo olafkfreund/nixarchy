@@ -1855,6 +1855,13 @@
             pkgs = pkgsFor.${system};
           };
 
+          # What reaches nixarchy.cachix.org and what it costs: the allowlist
+          # budget, proofs pushed alone, closures from main only (#697). Against
+          # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
+          cache-budget = import ./tests/cache-budget.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # The nightly's runner cache step: probe, rebuild and push what the
           # cache dropped, and still fail when a push delivers nothing. Against
           # a stubbed nix, curl and cachix. See tests/template-runners.nix.

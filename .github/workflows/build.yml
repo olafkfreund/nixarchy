@@ -125,6 +125,9 @@ jobs:
         # steps below still decide the result.
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
@@ -255,6 +258,9 @@ jobs:
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           extraPullNames: devenv
@@ -276,6 +282,9 @@ jobs:
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
@@ -295,7 +304,9 @@ jobs:
         continue-on-error: true
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-        run: .github/scripts/cachix-push.sh .#omarchy
+        run: |
+          mapfile -t entries < <(.github/scripts/cache-allowlist.sh omarchy)
+          .github/scripts/cachix-push.sh "${entries[@]}"
 
       - name: Verify the CLI sees its subcommands
         run: |
@@ -529,6 +540,34 @@ jobs:
           # What the next step builds: everything nobody claimed. Written to a
           # file rather than recomputed there, so the lists above are the single
           # place either step reads.
+          # Every cachix-action pulls only (#697). A block without skipPush
+          # pushes its job's whole store diff, and that is what filled the free
+          # tier: VM test runs and images nobody downloads, evicting what users
+          # do. Counted per block, so one missing line names its file.
+          pushers=""
+          for wf in .github/workflows/*.yml; do
+            while IFS= read -r line; do
+              pushers="$pushers $wf:$line"
+            done < <(awk '
+              /^      - uses: cachix\/cachix-action@/ { if (open) print start; open = 1; start = NR; next }
+              open && /^      - / { print start; open = 0 }
+              open && /^          skipPush: true$/ { open = 0 }
+              END { if (open) print start }
+            ' "$wf")
+          done
+          all=$(grep -hcE '^      - uses: cachix/cachix-action@' .github/workflows/*.yml | awk '{ n += $1 } END { print n + 0 }')
+          if [ "$all" -lt 5 ]; then
+            echo "::error::found $all cachix-action steps; expected at least 5 -- this guard is not reading the workflows" >&2
+            exit 1
+          fi
+          if [ -n "$pushers" ]; then
+            for p in $pushers; do
+              echo "::error::${p%%:*} line ${p##*:}: cachix-action without skipPush: true pushes its job's whole store diff" >&2
+            done
+            exit 1
+          fi
+          echo "cachix-action steps: $all, every one pull-only"
+
           : > /tmp/generated-checks
           for c in $names; do
             case " $claimed $exempt " in *" $c "*) continue ;; esac
@@ -801,7 +840,7 @@ jobs:
       # this was found: "Verify the browser lookup ignores $BROWSER" went red
       # for a change that never touched it.
       - name: Every command this port changes, classified
-        run: nix build .#checks.x86_64-linux.bin-ledger --no-link --print-build-logs
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.bin-ledger
 
       - name: Verify the browser lookup ignores $BROWSER
         run: |
@@ -1125,6 +1164,9 @@ jobs:
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
@@ -1155,6 +1197,17 @@ jobs:
           # and a pure evaluation cannot see it.
           nix build --impure --keep-going --no-link --print-build-logs \
             "${attrs[@]/#/.#}"
+
+      - name: Push the apps built here to cachix
+        if: needs.gate.outputs.relevant == 'true'
+        # Nowhere else serves them. Unfree ones are not on the allowlist: this
+        # cache is public, and pushing them would be redistributing them.
+        continue-on-error: true
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          mapfile -t entries < <(.github/scripts/cache-allowlist.sh apps)
+          .github/scripts/cachix-push.sh "${entries[@]}"
 
   system:
     needs: gate
@@ -1221,6 +1274,9 @@ jobs:
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
@@ -1254,9 +1310,8 @@ jobs:
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
-          .github/scripts/cachix-push.sh \
-            .#checks.x86_64-linux.vm-toplevel \
-            .#checks.x86_64-linux.reference-toplevel
+          mapfile -t entries < <(.github/scripts/cache-allowlist.sh system)
+          .github/scripts/cachix-push.sh "${entries[@]}"
 
       - name: Read a MicroVM runner without booting it
         if: needs.gate.outputs.relevant == 'true'
@@ -1267,6 +1322,17 @@ jobs:
         # reach nixarchy.cachix.org: cachix-action above pushes what this
         # job builds.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.microvm-template
+
+      - name: Push the MicroVM template runners to cachix
+        if: needs.gate.outputs.relevant == 'true'
+        # `nixarchy vm run` downloads the KVM runner; checks.microvm-boot the
+        # -tcg one. main only -- cachix-push.sh says so and exits 0 elsewhere.
+        continue-on-error: true
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          mapfile -t entries < <(.github/scripts/cache-allowlist.sh runners)
+          .github/scripts/cachix-push.sh "${entries[@]}"
 
       - name: Read a box template without pulling it online
         if: needs.gate.outputs.relevant == 'true'
@@ -1351,6 +1417,18 @@ jobs:
         # writable and the shell's IPC is reachable.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.plugin
 
+      - name: The cache allowlist fits its budget
+        if: needs.gate.outputs.relevant == 'true'
+        # nixarchy.cachix.org is the free tier: 5 GB, evicted by last download.
+        # This measures what one commit's allowlist costs there -- the union of
+        # its closures, minus what cache.nixos.org already serves -- and fails
+        # over budget, on the pull request that would have grown it (#697).
+        # NOT continue-on-error: this step is the gate, and a budget nobody
+        # enforces is how the cache filled the first time.
+        env:
+          CACHE_BUDGET_MIB: "2048"
+        run: .github/scripts/cache-budget.sh
+
   # PROPOSED CI-GATE CHANGE (AGENTS.md 4 and 11): this job is new gate wiring,
   # merged by a human, not an agent.
   #
@@ -1384,6 +1462,9 @@ jobs:
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 

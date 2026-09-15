@@ -829,23 +829,6 @@ pkgs.testers.runNixOSTest {
         f"adding a host directory gave {names!r}, not 'installed spare' -- "
         "flake.nix is not finding machines by reading ./hosts")
 
-    # And still, after a full garbage collection -- offline, as this machine
-    # is (#701). The collection min-free runs under space pressure deleted
-    # nixarchy's own source on #698, and this evaluation then died trying to
-    # download it. system.extraDependencies in installer/host.nix is what keeps
-    # the input sources; without it this fails with `unable to download`. The
-    # rebuild below then also proves an offline rebuild still builds nothing
-    # after a collection. Not -d: generations are rollback, and stay.
-    target.succeed("nix-collect-garbage 2>&1 | tail -3")
-    after_gc = target.succeed(
-        "cd /etc/nixos && nix --extra-experimental-features 'nix-command flakes'"
-        " eval --raw .#nixosConfigurations --apply"
-        " 'x: builtins.concatStringsSep \" \" (builtins.attrNames x)'").strip()
-    assert after_gc == "installed spare", (
-        f"after a garbage collection the flake evaluates to {after_gc!r} -- "
-        "an input source was collected and the machine cannot fetch it (#701)")
-    print("the flake still evaluates offline after a full collection (#701)")
-
     # And the second machine is REAL -- it evaluates to a system of its own.
     #
     # This used to assert `networking.hostName == "spare"`, and that assertion

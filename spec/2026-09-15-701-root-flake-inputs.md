@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 701
 intent: intent/2026-09-15-701-root-flake-inputs.md
 ---

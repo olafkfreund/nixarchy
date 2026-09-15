@@ -390,13 +390,14 @@ let
   ) cfg.plugins;
 in
 {
-  # Nixi: the guide that should come with nixarchy -- a live hands-on tour,
-  # an offline-first manual search, and an AI tutor grounded in this machine.
+  # Nixi: the guide that should come with nixarchy -- since 0.10 (#709) an
+  # Omarchy overlay card with a hands-on tour, a manual search grounded in this
+  # machine, and an AI tutor (Claude Code by default). No server, no port.
   #
   # Imported unconditionally, and TURNED ON for every nixarchy desktop below.
   # Upstream's whole config is `lib.mkIf cfg.enable`, so `false` really does
-  # leave nothing behind -- no unit, no timer, no plugin folder, no package,
-  # and therefore nothing listening on 8642. That is the half tests/options.nix
+  # leave nothing behind -- no timer, no plugin, no activation step, no
+  # package. That is the half tests/options.nix
   # spends most of its nixi cases on, because with a default of `true` it is
   # the half nobody exercises on purpose.
   #
@@ -559,22 +560,22 @@ in
     # above.
     services.nixi.enable = lib.mkDefault true;
 
-    # And the two defaults nixarchy deliberately does NOT change.
+    # And the three defaults nixarchy deliberately does NOT change.
     #
-    # `barWidget.enable` is true upstream, and stays true here -- which with
-    # the default above means every desktop gets the snowflake. It reads like
-    # "nixarchy silently puts a button on your bar", and on Arch it would be
-    # -- but not on this desktop. All it does is drop a plugin folder into
-    # ~/.config/omarchy/plugins/, and an installed plugin is not an enabled
-    # one: enablement lives in shell.json, which the running shell owns and
-    # nothing here writes. That is the same guarantee programs.nixarchy.plugins
-    # above makes, and tests/plugin.nix asserts it against a real session --
-    # a declaratively installed plugin comes up listed and NOT enabled, to be
-    # turned on once from Setup > Plugins. So the honest description of the
-    # default is "the guide is installed and offered", not "a button appeared".
-    # Re-defaulting it to false would not save anyone a button; it would hide
-    # the widget from the plugin picker and leave a server on 8642 with no way
-    # to reach it.
+    # `autoEnable` is true upstream and stays true here, and it is the one
+    # exception to the rule programs.nixarchy.plugins above keeps (and
+    # tests/plugin.nix asserts): an installed plugin is not an enabled one.
+    # Nixi's card is turned on for you, ONCE, on the first activation -- nixi
+    # adds it to shell.json and leaves a marker, so turning it off in Setup >
+    # Plugins sticks. Decided for #709, for a measured reason: the shell
+    # accepts a toggle for a plugin that is not enabled and does nothing, with
+    # exit status 0, so an installed-but-off card meant the snowflake and
+    # `nixi` silently did nothing. nixi writes that file, never nixarchy,
+    # and tests/options.nix fails (nixiEnablesCard) if a bump drops it.
+    #
+    # `barWidget.enable` is true upstream, and stays true here: the snowflake
+    # is a second small plugin beside the card (Omarchy gives a third-party
+    # plugin a bar widget or an overlay, never both), turned on with it.
     #
     # `menuEntry.enable` is false upstream and stays false, and #220 does not
     # change that. Nixi declines the Omarchy menu extension because owning it
@@ -585,8 +586,8 @@ in
     # spend the freedom the moment it arrived. Today it is worse than
     # unnecessary: nixarchy's own activation still relinks that path, so
     # turning nixi's menu entry on before #220 lands does nothing at all, in
-    # silence. Nixi does not need the row either way -- the bar widget is its
-    # front door.
+    # silence. Nixi does not need the row either way -- the bar button and
+    # `nixi` are its front doors.
     #
     # The default above sharpens this rather than softening it: nixi is now on
     # everywhere, so a future nixi that starts managing menu rows would be

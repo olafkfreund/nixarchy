@@ -85,18 +85,9 @@
 # need a desktop; importing the module would make it one, at several gigabytes,
 # to run a text installer for ninety seconds.
 let
-  # Every locked input, transitively, as a store path.
-  #
-  # Not the top-level inputs: hyprland does not follow nixpkgs, so it brings
-  # its own nixpkgs, aquamarine, hyprlang, hyprutils, hyprcursor, hyprgraphics,
-  # hyprwayland-scanner and xdph, and each of those brings more. Collected
-  # rather than listed, because a hand-written list goes stale on the next bump
-  # and the staleness only shows up as a network fetch on a machine that has no
-  # network.
-  collectInputs =
-    flake: [ flake.outPath ] ++ lib.concatMap collectInputs (lib.attrValues (flake.inputs or { }));
-
-  inputSources = lib.unique (collectInputs source.flake);
+  # Every locked input, transitively, as a store path -- the same walk the
+  # installed host roots its inputs with (#701); see lib.inputSources in flake.nix.
+  inputSources = inputs.self.lib.inputSources { inherit (source) flake; };
 
   # Both disk modes, because the installer offers both.
   #

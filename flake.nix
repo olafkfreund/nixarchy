@@ -1862,10 +1862,11 @@
             pkgs = pkgsFor.${system};
           };
 
-          # The nightly's runner cache step: probe, rebuild and push what the
-          # cache dropped, and still fail when a push delivers nothing. Against
-          # a stubbed nix, curl and cachix. See tests/template-runners.nix.
-          template-runners = import ./tests/template-runners.nix {
+          # The nightly's cache step: probe every allowlist entry, rebuild and
+          # push what the cache dropped, and still fail when a push delivers
+          # nothing. Against a stubbed nix, curl and cachix. See
+          # tests/cache-entries.nix.
+          cache-entries = import ./tests/cache-entries.nix {
             pkgs = pkgsFor.${system};
           };
 

@@ -225,9 +225,11 @@ jobs:
 
   cache:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 20, not 10: the entries probe evaluates both system toplevels, about two
+    # minutes on a warm p620 and several on a cold hosted runner (#697).
+    timeout-minutes: 20
     outputs:
-      runners-missing: ${{ steps.runners.outputs.missing }}
+      entries-missing: ${{ steps.entries.outputs.missing }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-nix
@@ -274,7 +276,7 @@ jobs:
           echo "the gate is what broke, not the token."
           exit 1
 
-      - name: Which MicroVM template runners the cache has dropped
+      - name: Which allowlist entries the cache has dropped
         # The "first launch is a download, not a build" half of #221's cache
         # promise, which no PR check can gate: cachix-action pushes in a
         # post-job step, AFTER build.yml's system job has already reported --
@@ -284,16 +286,18 @@ jobs:
         # Both variants per template: users download the KVM runner,
         # checks.microvm-boot downloads -tcg.
         #
+        # Every cache-allowlist.sh entry, not only the runners (#697): the
+        # cache evicts by last download, so anything nobody fetched goes.
         # Reported, not failed on: runners DROP OUT of the cache (2026-09-15,
         # every KVM runner 404 a day after main downloaded the same paths), and
-        # build.yml never pushes a runner it could substitute. The `runners`
-        # job below puts them back, and fails if one is still missing after.
+        # build.yml pushes an entry once per commit. The `repush` job below
+        # puts them back, and fails if one is still missing after.
         # always(): the omarchy probe above failing must not hide these.
-        id: runners
+        id: entries
         if: always()
         run: |
-          missing=$(.github/scripts/template-runners.sh probe) || {
-            echo "::error::could not probe the template runners"
+          missing=$(.github/scripts/cache-entries.sh probe) || {
+            echo "::error::could not probe the allowlist entries"
             exit 1
           }
           {
@@ -310,12 +314,12 @@ jobs:
   # token; ubuntu-latest has neither the room nor the secret in `cache`.
   # Fails only when a runner is STILL not served after the push -- which is
   # CACHIX_AUTH_TOKEN or cachix, since cachix exits 0 on a rejected token.
-  runners:
-    name: put dropped MicroVM template runners back in the cache
+  repush:
+    name: put dropped allowlist entries back in the cache
     needs: cache
     # main only: a runner evaluated on a branch is a branch's runner, and
     # pushing it would not put back what main's users download.
-    if: always() && github.ref == 'refs/heads/main' && needs.cache.outputs.runners-missing != ''
+    if: always() && github.ref == 'refs/heads/main' && needs.cache.outputs.entries-missing != ''
     runs-on: [self-hosted, nixos, kvm, big]
     timeout-minutes: 60
     steps:
@@ -323,13 +327,13 @@ jobs:
       - name: Build, push and probe again
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          MISSING: ${{ needs.cache.outputs.runners-missing }}
+          MISSING: ${{ needs.cache.outputs.entries-missing }}
         # cachix through nix, like curl in the script: the self-hosted runners
         # carry neither on a step's PATH (AGENTS.md section 4).
         run: |
           # shellcheck disable=SC2086 # one attr per word, by construction
           nix shell --inputs-from . nixpkgs#cachix -c \
-            .github/scripts/template-runners.sh repush $MISSING
+            .github/scripts/cache-entries.sh repush $MISSING
 
   # Tomorrow's user. build.yml's weekly cron re-runs the checks against the
   # COMMITTED lock, so on the flake inputs it proves nothing a merged PR did
@@ -436,7 +440,7 @@ jobs:
     # dependencies, and reported SUCCESS. The encrypted install is the DEFAULT
     # answer to the installer's own question, and it was the one failure that
     # filed no issue.
-    needs: [install, install-encrypted, install-iso, microvm, cache, runners, canary, pkg-new, reinstall-vm]
+    needs: [install, install-encrypted, install-iso, microvm, cache, repush, canary, pkg-new, reinstall-vm]
     # cancelled() too. On 2026-09-02 install-iso hit its 180-minute timeout,
     # which GitHub records as cancelled rather than failed, and this job --
     # the one whose whole purpose is that a 03:00 failure does not cost a day
@@ -462,7 +466,7 @@ jobs:
           # install issue. #236 was exactly that shape: a watchdog issue whose
           # title sent the reader at the wrong thing, and the duplicate hunt cost
           # more than the bug did.
-          if [ "${{ needs.cache.result }}" = "failure" ] || [ "${{ needs.runners.result }}" = "failure" ]; then
+          if [ "${{ needs.cache.result }}" = "failure" ] || [ "${{ needs.repush.result }}" = "failure" ]; then
             title="nightly: nothing is reaching the binary cache"
           elif [ "${{ needs.canary.result }}" = "failure" ] &&
             [ "${{ needs.install.result }}" = "success" ] &&

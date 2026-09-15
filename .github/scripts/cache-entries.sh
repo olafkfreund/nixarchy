@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# The MicroVM template runners in nixarchy.cachix.org: which are missing, and
-# putting them back.
+# What nixarchy.cachix.org should be serving and is not, and putting it back.
 #
-#   template-runners.sh probe             missing runner attrs, one per line
-#   template-runners.sh repush <attr>...  build, push, and probe again
+#   cache-entries.sh probe             missing allowlist entries, one per line
+#   cache-entries.sh repush <entry>...  build, push, and probe again
+#
+# The entries are cache-allowlist.sh's: omarchy, the system closures, the
+# MicroVM runners and the apps built here (#697). Everything on that list is
+# there because somebody downloads it, and the cache evicts by last download --
+# so anything nobody fetched for a while goes, and a user's next `nixarchy vm
+# run` or install builds what it should have downloaded.
 #
 # Why repush exists at all: the runners DROP OUT of the cache. On 2026-09-15
 # the nightly found every KVM runner 404 while main's system job had
@@ -11,13 +16,14 @@
 # nixarchy.cachix.org the afternoon before. Nothing had changed; the cache had
 # let go of paths nobody fetched. The -tcg runners survived because
 # checks.microvm-boot fetches one every night. build.yml cannot notice --
-# a runner it can substitute is not new to the store, so cachix-action's
-# store-diff push never offers it again (the #439 reason cachix-push.sh
-# exists). So the nightly puts back what it finds missing, and only fails
-# when a runner is STILL missing after that -- which is the token, or cachix.
+# it pushes an entry once per commit, and an entry evicted a week later is not
+# pushed again until something changes it. So the nightly puts back what it
+# finds missing, and only fails when an entry is STILL missing after that --
+# which is the token, or cachix.
 #
-# Evaluated, then built only when missing: the runner paths do not depend on
-# the flake's rev, so a path evaluated here is the path users download.
+# Evaluated, then built only when missing. Entries whose paths depend on the
+# flake's rev (omarchy, the toplevels) are evaluated from the checkout this
+# runs on, which is main -- the same tree build.yml pushed from.
 set -uo pipefail
 
 here=$(dirname "$0")
@@ -35,27 +41,21 @@ http_code() {
   fi
 }
 
-served() { # served <attr> -> 0 when the cache has its output
+served() { # served <installable> -> 0 when the cache has its output
   local path hash
-  path=$(nix eval --raw ".#$1.outPath") || return 2
+  path=$(nix eval --raw "$1.outPath") || return 2
   hash=$(basename "$path" | cut -d- -f1)
   [ "$(http_code "$cache/$hash.narinfo")" = 200 ]
 }
 
-runner_attrs() {
-  local name variant
-  for name in $(nix eval --impure --raw --expr \
-    'toString (builtins.attrNames (import ./data/microvm-templates.nix))'); do
-    for variant in "" "-tcg"; do
-      echo "microvm-$name$variant"
-    done
-  done
+entries() {
+  "$here/cache-allowlist.sh"
 }
 
 case "${1:-}" in
   probe)
-    attrs=$(runner_attrs)
-    [ -n "$attrs" ] || { echo "::error::no MicroVM templates evaluated; refusing to report none missing" >&2; exit 2; }
+    attrs=$(entries)
+    [ -n "$attrs" ] || { echo "::error::the allowlist came back empty; refusing to report nothing missing" >&2; exit 2; }
     for attr in $attrs; do
       if served "$attr"; then
         echo "$attr: in the cache" >&2
@@ -68,18 +68,18 @@ case "${1:-}" in
 
   repush)
     shift
-    [ $# -gt 0 ] || { echo "usage: $0 repush <attr>..." >&2; exit 2; }
+    [ $# -gt 0 ] || { echo "usage: $0 repush <entry>..." >&2; exit 2; }
     fail=0
     for attr in "$@"; do
       echo "building $attr"
-      nix build --no-link --print-build-logs ".#$attr" || {
+      nix build --no-link --print-build-logs "$attr" || {
         echo "::error::$attr did not build, so it cannot be put back in the cache" >&2
         fail=1
         continue
       }
       # Its own failure is not the verdict: cachix exits 0 on a rejected
       # token, so only the probe below says whether the path arrived.
-      "$push" ".#$attr" || true
+      "$push" "$attr" || true
 
       # Three tries, as the omarchy probe does: a push that landed seconds
       # ago may not be served yet, and one 404 is not evidence of anything.
@@ -100,7 +100,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "usage: $0 probe | repush <attr>..." >&2
+    echo "usage: $0 probe | repush <entry>..." >&2
     exit 2
     ;;
 esac

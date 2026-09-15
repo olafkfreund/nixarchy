@@ -160,6 +160,13 @@ file in the same commit.
    → verify: that check green, and its three existing breaks still red.
    `build.yml`'s report-needs guard passes, and fails without `repush`.
 
+   **Done after #699 and #696 merged (a62e715).** Two additions:
+   - The nightly `cache` job's `timeout-minutes` went from 10 to 20. The entries
+     probe evaluates both system toplevels, which took 1m53s on a warm p620 and
+     takes several minutes on a cold hosted runner.
+   - `checks.cache-entries` gained an evicted non-runner entry (`omarchy`), and a
+     fourth break, probing runners only as before, that goes red.
+
 9. **Budget on real paths.** On p620, run `cache-budget.sh` against this branch.
    → verify: total under 2048 MiB and close to the spec's estimate of about
    1.05 GB plus apps. The number and the ten largest paths go into the PR.

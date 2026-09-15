@@ -57,6 +57,7 @@ pkgs.runCommand "nixarchy-cache-budget"
     }
     case "\$1 \$2" in
       "build --no-link") closure_of "\$3" | grep -q . ;;
+      "build --keep-going") exit 0 ;;
       "eval --raw") jq -r --arg k "\$3" '.[\$k] | keys_unsorted[0]' "\$store" ;;
       "path-info -r")
         if [ "\$3" = --json ]; then closure_of "\$4" | jq -c 'map_values({ narSize: . })'
@@ -150,6 +151,29 @@ pkgs.runCommand "nixarchy-cache-budget"
       ok "main pushes the closure"
     else
       bad "main did not push the closure: $(tr '\n' ' ' < calls/pushed 2>/dev/null)"
+    fi
+
+    # (h) build-unless-proven.sh pushes proofs for what it built, and only
+    # that. "fresh" is not in the cache; "lonely" is, so it is skipped.
+    cat > bin/already-proven-stub <<'EOF'
+    #!${pkgs.bash}/bin/bash
+    for c in "$@"; do c=''${c#.#checks.x86_64-linux.}; [ "$c" = lonely ] || echo "$c"; done
+    EOF
+    chmod +x bin/already-proven-stub
+    mkdir -p scripts-under-test
+    cp $scripts/build-unless-proven.sh $scripts/cachix-push.sh scripts-under-test/
+    cp bin/already-proven-stub scripts-under-test/already-proven.sh
+    chmod +x scripts-under-test/*
+    # The real scripts say #!/usr/bin/env bash, which the sandbox has not got.
+    patchShebangs scripts-under-test >/dev/null
+    jq '. + { ".#checks.x86_64-linux.fresh": { "/nix/store/hhh-fresh": 64 } }' store.json > s.json && mv s.json store.json
+    rm -f calls/pushed
+    GITHUB_REF=refs/pull/1/merge bash scripts-under-test/build-unless-proven.sh \
+      .#checks.x86_64-linux.fresh .#checks.x86_64-linux.lonely >/dev/null 2>&1
+    if [ "$(cat calls/pushed 2>/dev/null)" = /nix/store/hhh-fresh ]; then
+      ok "a check that was built gets its proof pushed, and a proven one does not"
+    else
+      bad "build-unless-proven pushed: $(tr '\n' ' ' < calls/pushed 2>/dev/null)"
     fi
 
     [ "$fails" = 0 ] || { echo "$fails case(s) failed"; exit 1; }

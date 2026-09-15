@@ -129,6 +129,14 @@ file in the same commit.
    → verify: extend `checks.cache-budget` with a stubbed build: case (h), a
    built check gets a proof push and a skipped one does not.
 
+   **Added during implementation.** `build-unless-proven.sh` runs in jobs where
+   `cachix-action` wrote the token into cachix's config, and no
+   `CACHIX_AUTH_TOKEN` is exported, so `cachix-push.sh` would have skipped every
+   proof as "no token". Its token guard now also accepts
+   `~/.config/cachix/cachix.dhall`. The test's copies of the scripts are run
+   through `patchShebangs`, because `#!/usr/bin/env bash` does not resolve in
+   the Nix sandbox. That is why case (h) first failed only in the sandbox.
+
 7. **`install-check.yml`.** The "Push the proof" step calls
    `cachix-push.sh --proof install free-space installer-refusal`. Its probe
    that the cache now serves each result stays, unchanged.

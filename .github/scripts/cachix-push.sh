@@ -57,8 +57,12 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # A fork PR has no secret, and that is not a failure -- it is a PR that cannot
 # push and does not need to. Said out loud rather than failing obscurely deep
 # inside cachix.
-if [ -z "${CACHIX_AUTH_TOKEN:-}" ]; then
-  echo "no CACHIX_AUTH_TOKEN; not pushing (expected on a fork PR)"
+#
+# A job that ran cachix-action has the token in cachix's own config instead of
+# the environment, and build-unless-proven.sh is called from those jobs.
+if [ -z "${CACHIX_AUTH_TOKEN:-}" ] &&
+  [ ! -s "${XDG_CONFIG_HOME:-$HOME/.config}/cachix/cachix.dhall" ]; then
+  echo "no cachix token; not pushing (expected on a fork PR)"
   exit 0
 fi
 

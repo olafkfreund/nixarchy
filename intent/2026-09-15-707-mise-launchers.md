@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 707
 author: olafkfreund
 ---
@@ -58,7 +58,11 @@ The chain is `omarchy-provision-user` → `install/user/all.sh` →
 
 ## Open questions
 
-1. **Tools nixpkgs lacks** (omp, ghui, hunk, muse): drop the mise route
-   entirely, or keep only those lines?
-2. **Existing machines:** should activation delete old launchers that shadow a
-   Nix package, or should the release notes tell users to `rm` them?
+Resolved at approval (the owner accepted the recommendations):
+
+1. **Tools nixpkgs lacks:** keep the mise route only for tools nixpkgs does not
+   package (omp, ghui, hunk, muse). Drop it for everything nixarchy or nixpkgs
+   provides.
+2. **Existing machines:** activation removes existing launchers that shadow a
+   Nix-provided tool, because otherwise the fix never reaches a machine that is
+   already installed.

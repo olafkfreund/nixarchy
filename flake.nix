@@ -1855,6 +1855,13 @@
             pkgs = pkgsFor.${system};
           };
 
+          # What reaches nixarchy.cachix.org and what it costs: the allowlist
+          # budget, proofs pushed alone, closures from main only (#697). Against
+          # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
+          cache-budget = import ./tests/cache-budget.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # Every option that adds something, checked with it turned off too --
           # see tests/options.nix for why that half is the one at risk.
           options = import ./tests/options.nix {

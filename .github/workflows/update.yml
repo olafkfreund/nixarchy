@@ -33,6 +33,9 @@ jobs:
         # A cache upload failing must not fail a build that succeeded (#235).
         continue-on-error: true
         with:
+          # Pull only. What reaches the cache is pushed by name, from main, by
+          # cachix-push.sh -- the store diff filled the free tier (#697).
+          skipPush: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 

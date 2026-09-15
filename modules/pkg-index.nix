@@ -6,7 +6,7 @@
 # only where recurseForDerivations says to -- and produces the identical row
 # set (112,755 attrs on the nixpkgs it was written against, both ways).
 #
-# Evaluated by the built nixarchy-search script, once per system generation,
+# Evaluated by the built nixarchy-search script, once each time nixpkgs changes,
 # via `nix-instantiate --eval --strict --json --arg nixpkgs <path>`. Never
 # per keystroke: the picker inlines everything in the row for that reason.
 #

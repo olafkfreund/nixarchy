@@ -325,6 +325,23 @@ let
       ];
     }).config;
 
+  # loaderOff's twin with the module not imported at all. Mode A's promise is
+  # that the two are the same system, and only a drvPath says so for all of it.
+  notImported =
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        {
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
   # By name rather than builtins.elem on the derivation: the nixosSystem
   # under test instantiates its own pkgs, and outPath equality across two
   # instantiations is a coincidence, not a property.
@@ -358,6 +375,26 @@ let
 
   # Each case is (what it should look like on, what it should look like off).
   cases = {
+    # #701: an installed machine keeps its flake inputs' sources in its closure,
+    # or min-free's collection deletes them and an offline machine cannot
+    # evaluate itself. The vm configuration imports installer/host.nix, so it is
+    # the installed host; Mode A never imports host.nix and must gain nothing.
+    # checks.install proves the property (collect, then evaluate offline); this
+    # is the half that runs anywhere.
+    flakeInputsRooted =
+      let
+        rooted = cfg: map toString cfg.system.extraDependencies;
+        vmDeps = rooted inputs.self.nixosConfigurations.vm.config;
+      in
+      {
+        on =
+          builtins.elem (toString inputs.nixpkgs.outPath) vmDeps
+          && builtins.elem (toString inputs.self.outPath) vmDeps;
+        off =
+          builtins.elem (toString inputs.nixpkgs.outPath) (rooted loaderOff)
+          || builtins.elem (toString inputs.self.outPath) (rooted loaderOff);
+      };
+
     # ---- #628: command-not-found that answers, and comma ----------------
     #
     # Every pair here is "a default machine has it / a machine that said
@@ -437,6 +474,31 @@ let
     commandNotFoundLeavesAdopterAlone = {
       on = hasPackageNamed (configWith { }) "comma-with-db";
       off = hasPackageNamed loaderOff "comma-with-db";
+    };
+
+    # nixarchy-apply needs flakes. A user adding one feature of their own must
+    # get theirs AND flakes -- under mkDefault the list was replaced outright.
+    # programs.nixarchy.flake reaches the session commands that fall back to
+    # /etc/nixos (modules/nixos.nix exports it), and the auto-update service,
+    # which is not in a session, rebuilds the same directory.
+    flakeReachesCommands = {
+      on =
+        (configWith { flake = "/home/alice/cfg"; }).environment.sessionVariables.NIXARCHY_FLAKE or null
+        == "/home/alice/cfg";
+      off = loaderOff.environment.sessionVariables ? NIXARCHY_FLAKE;
+    };
+    autoUpdateFollowsFlake = {
+      on =
+        (configWith { flake = "/home/alice/cfg"; }).programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
+      off = (configWith { }).programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
+    };
+
+    flakesSurviveUserFeature = {
+      on = builtins.elem "flakes" (
+        (configBeside { nix.settings.experimental-features = [ "ca-derivations" ]; })
+        .nix.settings.experimental-features or [ ]
+      );
+      off = builtins.elem "flakes" (loaderOff.nix.settings.experimental-features or [ ]);
     };
 
     # ---- #623: the NixOS MCP server, in the agents that have one ---------
@@ -2021,6 +2083,11 @@ pkgs.runCommand "nixarchy-options"
     sopsOffSecrets = pkgs.lib.boolToString (sopsOff.sops.secrets == { });
     sopsOffTemplates = pkgs.lib.boolToString (sopsOff.sops.templates == { });
     sopsOnActive = pkgs.lib.boolToString (hasSops sopsOn);
+    modeAInert = pkgs.lib.boolToString (
+      loaderOff.system.build.toplevel.drvPath == notImported.system.build.toplevel.drvPath
+    );
+    # The home seed's copy function, run below against a directory it cannot write.
+    seedActivation = (homeWith { }).home.activation.nixarchySeed.data;
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
     devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
     boxesOffPodman = pkgs.lib.boolToString boxesOff.virtualisation.podman.enable;
@@ -2066,6 +2133,7 @@ pkgs.runCommand "nixarchy-options"
       # fixture, even though an encrypted fixture looks harmless.
       pkgs.sops
       pkgs.age
+      pkgs.git
     ];
   }
   (
@@ -2958,6 +3026,71 @@ pkgs.runCommand "nixarchy-options"
           fi
         done
 
+        # And each of those answers --help with its usage rather than running.
+        # nixarchy-unfreeze went straight to its rewrite prompt, and
+        # nixarchy-local-ai ran the whole setup.
+        for f in "$binDir"/nixarchy-*; do
+          grep -q '^# omarchy:examples=nixarchy ' "$f" || continue
+          helpout=$(HOME=$PWD/help-home NIXARCHY_FLAKE=$PWD/no-flake timeout 20 "$f" --help </dev/null 2>&1) || {
+            echo "::error::$(basename "$f") --help exited nonzero:" >&2
+            printf '%s\n' "$helpout" | tail -5 >&2
+            exit 1
+          }
+          grep -qi 'usage' <<<"$helpout" || {
+            echo "::error::$(basename "$f") --help printed no usage:" >&2
+            printf '%s\n' "$helpout" | head -5 >&2
+            exit 1
+          }
+        done
+        echo "every routed nixarchy command answers --help with its usage"
+
+        # Rollback moves the system and leaves the flake describing the newer
+        # one, so the next apply or update rebuilds what it left. Run for real
+        # with the switch stubbed, and it must say so after switching.
+        mkdir -p rb-stubs
+        echo '[{"generation":1,"date":"d","nixosVersion":"v","kernelVersion":"6.1","current":false},{"generation":2,"date":"d","nixosVersion":"v","kernelVersion":"6.1","current":true}]' > rb-gens.json
+        printf '#!/bin/sh\ncat %s/rb-gens.json\n' "$PWD" > rb-stubs/nixos-rebuild
+        printf '#!/bin/sh\ncase "$1" in choose) head -1 ;; confirm) exit 0 ;; esac\n' > rb-stubs/gum
+        printf '#!/bin/sh\necho 6.1.0\n' > rb-stubs/uname
+        printf '#!/bin/sh\nexit 0\n' > rb-stubs/sudo
+        chmod +x rb-stubs/*
+        rbout=$(PATH="$PWD/rb-stubs:$vm/sw/bin:$PATH" "$omarchyPath/bin/nixarchy-rollback" </dev/null 2>&1) || {
+          echo "nixarchy-rollback failed against stubbed generations:" >&2
+          printf '%s\n' "$rbout" | tail -8 >&2
+          exit 1
+        }
+        grep -q 'Now on generation 1' <<<"$rbout" || {
+          echo "the stubbed rollback never reached the switch:" >&2
+          printf '%s\n' "$rbout" | tail -8 >&2
+          exit 1
+        }
+        grep -q 'still describes the generation you left' <<<"$rbout" || {
+          echo "nixarchy-rollback does not warn that the next apply rebuilds what it left" >&2
+          exit 1
+        }
+        echo "rollback warns that the configuration still describes the newer system"
+
+        # The search index is rebuilt when what it is built from changes, not
+        # after every apply. Keyed on the system generation, each rebuild cost
+        # a minute of reindexing an unchanged nixpkgs on the next search. The
+        # built script's own functions and variables, run against a cache.
+        search="$vm/sw/bin/nixarchy-search"
+        {
+          grep -E '^[[:space:]]*(nixpkgs|walk|optionsjson|appindex|apptable|flatpakrows|pkgnewrow)=/nix/store' "$search"
+          sed -n '/^[[:space:]]*stamp_key() {/,/^[[:space:]]*}$/p; /^[[:space:]]*index_stale() {/,/^[[:space:]]*}$/p' "$search"
+        } > stale.sh
+        grep -q 'index_stale()' stale.sh || { echo "nixarchy-search has no index_stale: what decides a reindex moved" >&2; exit 1; }
+        mkdir -p search-cache
+        (
+          . ./stale.sh
+          index=search-cache/index.tsv; stamp=search-cache/stamp
+          echo row > "$index"; stamp_key > "$stamp"
+          if index_stale; then echo "an index built from these exact inputs reads as stale" >&2; exit 1; fi
+          nixpkgs=/nix/store/another-nixpkgs
+          index_stale || { echo "a different nixpkgs did not make the index stale" >&2; exit 1; }
+        ) || exit 1
+        echo "the search index is rebuilt when nixpkgs changes, not after every apply"
+
         # The floor this repository keeps arriving at: a loop that iterated
         # nothing satisfies every assertion above while proving nothing -- and
         # this check exists because that exact silence shipped ten broken
@@ -3519,6 +3652,211 @@ pkgs.runCommand "nixarchy-options"
         run nixarchy-pkg-remove hello cowsay >/dev/null
         echo "one bad name in a batch is reported without sinking the rest"
 
+        # ---- Mode A: imported and not enabled is the same system ----
+        [ "$modeAInert" = true ] || {
+          echo "importing nixosModules.nixarchy without enabling it changes the system:" >&2
+          echo "  its toplevel drvPath differs from a machine that never imported it." >&2
+          echo "  Something is set outside a cfg.enable guard (Mode A, AGENTS.md section 7)." >&2
+          exit 1
+        }
+        echo "importing the module and enabling nothing builds the same system"
+
+        # ---- services: enable then disable is byte-identical ----
+        # nixarchy-service-disable had no test of any kind.
+        svcfile=$rmhome/.config/nixarchy/services.nix
+        cp "$vm/etc/nixarchy/services-template.nix" "$svcfile"
+        chmod u+w "$svcfile"
+        svcid=$(grep -oE '#@ [a-z0-9_-]+' "$svcfile" | head -1 | cut -d' ' -f2)
+        test -n "$svcid" || { echo "the services template has no #@ marker to test with" >&2; exit 1; }
+        svcbefore=$(cksum < "$svcfile")
+        run nixarchy-service-enable "$svcid" >/dev/null
+        grep -qE "^[[:space:]]*[^#[:space:]].*#@ $svcid([[:space:]]|\$)" "$svcfile" || {
+          echo "nixarchy-service-enable $svcid left its line commented" >&2; exit 1; }
+        run nixarchy-service-disable "$svcid" >/dev/null
+        [ "$svcbefore" = "$(cksum < "$svcfile")" ] || {
+          echo "service enable then disable changed services.nix" >&2; exit 1; }
+        rm -f "$svcfile"
+        echo "a service can be enabled and disabled, byte for byte"
+
+        # ---- catalogue-diff finds a missing row and --add restores it ----
+        # nixarchy-catalogue-diff had no test of any kind either.
+        cp "$appfile" "$rmhome/apps.before-diff"
+        sed -i -E "/#@ $appid([[:space:]]|\$)/d" "$appfile"
+        cdout=$(NIXARCHY_TEMPLATES="$vm/etc/nixarchy" run nixarchy-catalogue-diff 2>&1) || true
+        grep -q "$appid" <<<"$cdout" || {
+          echo "nixarchy-catalogue-diff does not name the row missing from apps.nix:" >&2
+          printf '%s\n' "$cdout" >&2
+          exit 1
+        }
+        cdout=$(NIXARCHY_TEMPLATES="$vm/etc/nixarchy" run nixarchy-catalogue-diff --add 2>&1) || true
+        grep -qE "#@ $appid([[:space:]]|\$)" "$appfile" || {
+          echo "nixarchy-catalogue-diff --add did not put $appid's row back:" >&2
+          printf '%s\n' "$cdout" >&2
+          exit 1
+        }
+        run nix-instantiate --parse "$appfile" >/dev/null || {
+          echo "catalogue-diff --add left apps.nix unparseable" >&2; exit 1; }
+        cp "$rmhome/apps.before-diff" "$appfile"
+        echo "catalogue-diff names a missing row and --add restores it"
+
+        # ---- auto-update's dirty guard, run rather than read ----
+        #
+        # The installer stages the flake and never commits it, and the guard
+        # used `git diff HEAD`, which exits 128 with no HEAD -- so every
+        # installed machine that turned auto-update on refused every run. Its
+        # own `nix flake update` then dirtied flake.lock for the next day.
+        # nix and nixos-rebuild are stubs; git and the script are real.
+        export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+        mkdir -p au-stubs au-state
+        printf '#!/bin/sh\n[ "$1 $2" = "flake update" ] && echo "#" >> "$5/flake.lock"\nexit 0\n' > au-stubs/nix
+        printf '#!/bin/sh\necho rebuilt >> "%s/au-state/rebuilt"\n' "$PWD" > au-stubs/nixos-rebuild
+        chmod +x au-stubs/*
+        au() {
+          rm -f au-state/rebuilt
+          sed -e "s|/var/lib/nixarchy|$PWD/au-state|g" -e "s|^\([[:space:]]*\)flake=.*|\1flake=$1|" \
+            <<<"$autoUpdateScript" > au-run.sh
+          HOME=$PWD PATH="$PWD/au-stubs:$PATH" bash au-run.sh >au.out 2>&1
+        }
+        aurepo() {
+          rm -rf "$1"; mkdir -p "$1"
+          echo '{ }' > "$1/flake.nix"; echo '{ }' > "$1/flake.lock"
+          git -C "$1" init -q && git -C "$1" add -A
+        }
+        aurepo au-installed
+        au "$PWD/au-installed" || { echo "auto-update refused the installer's staged, never-committed flake:" >&2; cat au.out >&2; exit 1; }
+        [ -f au-state/rebuilt ] || { echo "auto-update exited 0 without rebuilding" >&2; exit 1; }
+        au "$PWD/au-installed" || { echo "auto-update refused its own flake.lock edit on the next run:" >&2; cat au.out >&2; exit 1; }
+        echo '{ edited = true; }' > au-installed/flake.nix
+        if au "$PWD/au-installed"; then echo "auto-update rebuilt a never-committed flake with an unstaged edit" >&2; exit 1; fi
+        aurepo au-committed
+        git -C au-committed commit -qm base
+        echo '#' >> au-committed/flake.lock
+        au "$PWD/au-committed" || { echo "auto-update refused a committed flake whose only change is flake.lock:" >&2; cat au.out >&2; exit 1; }
+        echo '{ edited = true; }' > au-committed/flake.nix
+        if au "$PWD/au-committed"; then echo "auto-update rebuilt a committed flake with an uncommitted edit" >&2; exit 1; fi
+        echo "auto-update rebuilds an installed flake and its own lock edit, and refuses real edits"
+
+        # ---- the home seed keeps edits and reports failures ----
+        #
+        # seed_dir copied with `cp -rn ... 2>/dev/null || true`, so a seed that
+        # failed (a full disk, a directory the user cannot write) said nothing
+        # and left a desktop missing its config. The real function, extracted.
+        sed -n '/^[[:space:]]*seed_dir() {/,/^[[:space:]]*}$/p' <<<"$seedActivation" > seed.sh
+        grep -q 'seed_dir()' seed.sh || { echo "seed_dir is gone from the home activation" >&2; exit 1; }
+        mkdir -p seed-src/a seed-dst/a
+        echo shipped > seed-src/a/f; echo mine > seed-dst/a/f; echo new > seed-src/g
+        (
+          run() { "$@"; }
+          . ./seed.sh
+          seed_dir "$PWD/seed-src" "$PWD/seed-dst"
+        ) 2>seed.err || true
+        [ "$(cat seed-dst/a/f)" = mine ] || { echo "the seed overwrote a file the user edited" >&2; exit 1; }
+        [ -f seed-dst/g ] || { echo "the seed did not copy a file the user did not have" >&2; exit 1; }
+        mkdir -p seed-ro; echo x > seed-src/h; chmod 500 seed-ro
+        (
+          run() { "$@"; }
+          . ./seed.sh
+          seed_dir "$PWD/seed-src" "$PWD/seed-ro"
+        ) 2>seed.err || true
+        chmod 700 seed-ro
+        grep -q 'could not seed' seed.err || {
+          echo "a seed into a directory it cannot write reported nothing:" >&2
+          cat seed.err >&2
+          exit 1
+        }
+        echo "the home seed keeps edited files and reports a copy it could not make"
+
+        # A name that exists but is not a package. tryEval does not catch the
+        # missing `name` it has, so the whole batch evaluation used to abort
+        # and every good name beside it was reported as "no match".
+        run nixarchy-pkg-add python3Packages hello >/dev/null 2>&1 || true
+        grep -q '#@pkg hello$' "$appfile" || {
+          echo "a non-package name (python3Packages) sank the good name beside it" >&2
+          exit 1
+        }
+        run nixarchy-pkg-remove hello >/dev/null
+        echo "a non-package name in a batch does not sink the rest"
+
+        # Remove must not report a prefix as removed: `rip` is not `ripgrep`.
+        run nixarchy-pkg-add cowsay >/dev/null
+        if prefixout=$(run nixarchy-pkg-remove cow 2>&1); then
+          echo "nixarchy-pkg-remove cow exited 0 with only cowsay selected:" >&2
+          printf '%s\n' "$prefixout" >&2
+          exit 1
+        fi
+        grep -q '#@pkg cowsay$' "$appfile" || {
+          echo "nixarchy-pkg-remove cow removed cowsay" >&2; exit 1; }
+        run nixarchy-pkg-remove cowsay >/dev/null
+        echo "a prefix of a selected package is refused, not reported removed"
+
+        # A package from the other channel is a package: removable, listed, and
+        # not written twice.
+        run nixarchy-pkg-add --unstable hello >/dev/null 2>&1
+        run nixarchy-pkg-add --unstable hello >/dev/null 2>&1
+        othercount=$(grep -c '#@pkg-other hello$' "$appfile" || true)
+        [ "$othercount" = 1 ] || {
+          echo "adding --unstable hello twice wrote $othercount lines" >&2; exit 1; }
+        run nixarchy-pkg-remove hello >/dev/null || {
+          echo "nixarchy-pkg-remove cannot remove a --unstable package" >&2; exit 1; }
+        if grep -q '#@pkg-other hello$' "$appfile"; then
+          echo "nixarchy-pkg-remove hello left the #@pkg-other line" >&2; exit 1
+        fi
+        echo "a package from the other channel can be removed, once"
+
+        # An app added to the catalogue after apps.nix was seeded has no row
+        # in the user's file. A menu pick of it must add the row, not fail
+        # silently.
+        cp "$appfile" "$rmhome/apps.before-missing"
+        sed -i -E "/#@ $appid([[:space:]]|\$)/d" "$appfile"
+        if grep -qE "#@ $appid([[:space:]]|\$)" "$appfile"; then
+          echo "could not delete $appid's row to simulate an older apps.nix" >&2; exit 1
+        fi
+        NIXARCHY_TEMPLATES="$vm/etc/nixarchy" \
+          run nixarchy-app-enable "$appid" >/dev/null 2>&1 || {
+          echo "nixarchy-app-enable $appid failed when apps.nix predates the app" >&2; exit 1; }
+        grep -q "^[[:space:]]*$appid\.enable" "$appfile" || {
+          echo "nixarchy-app-enable $appid did not enable a row missing from apps.nix" >&2; exit 1; }
+        run nix-instantiate --parse "$appfile" >/dev/null || {
+          echo "the row app-enable added leaves apps.nix unparseable" >&2; exit 1; }
+        cp "$rmhome/apps.before-missing" "$appfile"
+        echo "picking an app newer than apps.nix adds its row and enables it"
+
+        # ---- apply keeps a hand edit, sees through a commented import, and
+        # says what to do when the rebuild fails ----
+        apflake=$PWD/apply-flake
+        mkdir -p "$apflake"
+        printf '{\n  # imports = [ ./nixarchy-apps.nix ];\n}\n' > "$apflake/configuration.nix"
+        aprun() {
+          printf '%s' "$1" | HOME=$rmhome XDG_CONFIG_HOME=$rmhome/.config XDG_STATE_HOME=$PWD/apply-state \
+            NIXARCHY_FLAKE=$apflake PATH="$vm/sw/bin:$PATH" timeout 120 nixarchy-apply 2>&1
+        }
+        ap=$(aprun $'n\nn\n') || true
+        grep -q 'WARNING: nothing in' <<<"$ap" || {
+          echo "a commented-out import silenced apply's 'nothing imports it' warning:" >&2
+          printf '%s\n' "$ap" | tail -5 >&2
+          exit 1
+        }
+        cp "$appfile" "$rmhome/apps.before-apply"
+        echo '# edited in the flake' >> "$apflake/nixarchy/apps.nix"
+        echo '# a new pick' >> "$appfile"
+        ap=$(aprun $'n\nn\n') || true
+        grep -q 'was edited in the flake since the last apply' <<<"$ap" || {
+          echo "apply overwrote a copy edited in the flake without keeping it:" >&2
+          printf '%s\n' "$ap" | tail -5 >&2
+          exit 1
+        }
+        grep -rqs '# edited in the flake' "$PWD/apply-state/nixarchy/applied" || {
+          echo "apply said it kept the flake edit, and nothing holds it" >&2; exit 1; }
+        cp "$rmhome/apps.before-apply" "$appfile"
+        ap=$(aprun $'n\ny\n') && aprc=0 || aprc=$?
+        [ "$aprc" -ne 0 ] || { echo "apply exited 0 when the rebuild could not run" >&2; exit 1; }
+        grep -q 'The rebuild failed' <<<"$ap" || {
+          echo "a failed rebuild from apply ends without saying what to do:" >&2
+          printf '%s\n' "$ap" | tail -5 >&2
+          exit 1
+        }
+        echo "apply keeps flake edits, sees through a commented import, and explains a failed rebuild"
+
         # A draft (#581). nixarchy-pkg-new needs a network to run for real,
         # so the add is simulated with the writer's own byte shape -- and the
         # grep below pins the WRITER's format string, so if pkg-new changes
@@ -3639,7 +3977,7 @@ pkgs.runCommand "nixarchy-options"
         # different coat. Comments stripped first; match the greps and the
         # dispatch, not prose.
         appremove=$(grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-app-remove")
-        for needle in '#@pkg ' '#@opt ' '#@draft ' nixarchy-pkg-remove nixarchy-opt-remove nixarchy-pkg-undraft; do
+        for needle in '#@pkg(-other)? ' '#@opt ' '#@draft ' nixarchy-pkg-remove nixarchy-opt-remove nixarchy-pkg-undraft; do
           <<<"$appremove" grep -qF -- "$needle" || {
             echo "nixarchy-app-remove does not handle $needle:" >&2
             echo "  the Remove menu is then blind to a kind the Install picker writes" >&2

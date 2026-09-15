@@ -23,15 +23,79 @@
 # So this names what to push instead of inferring it. `-r` because the closure
 # is the point -- a narinfo hit on omarchy alone still leaves a user building
 # every one of its dependencies.
+#
+# ## What may be pushed, and from where (#697)
+#
+# The cache is the free tier: 5 GB, evicted by last download. So closures --
+# cache-allowlist.sh's entries -- are pushed from main only, and a check's
+# result is pushed from any ref with --proof:
+#
+#   cachix-push.sh --proof <check>...
+#
+# A proof is the result path ALONE. `cachix push` has no way to omit
+# dependencies, so a result that references anything would upload a closure;
+# that is refused (a warning, not a failure) rather than filling the cache.
 set -uo pipefail
 
-[ $# -gt 0 ] || { echo "usage: $0 <flake-attr>..." >&2; exit 2; }
+usage() {
+  echo "usage: $0 <flake-attr>...   (closures; main only)" >&2
+  echo "       $0 --proof <check>...  (one check result each; any ref)" >&2
+  exit 2
+}
+
+proof=false
+if [ "${1:-}" = --proof ]; then
+  proof=true
+  shift
+fi
+[ $# -gt 0 ] || usage
+
+# The largest result a proof may be. Measured results are 96 bytes to 12 KB.
+proof_max_bytes=${PROOF_MAX_BYTES:-1048576}
+system=${NIXARCHY_SYSTEM:-x86_64-linux}
 
 # A fork PR has no secret, and that is not a failure -- it is a PR that cannot
 # push and does not need to. Said out loud rather than failing obscurely deep
 # inside cachix.
-if [ -z "${CACHIX_AUTH_TOKEN:-}" ]; then
-  echo "no CACHIX_AUTH_TOKEN; not pushing (expected on a fork PR)"
+#
+# A job that ran cachix-action has the token in cachix's own config instead of
+# the environment, and build-unless-proven.sh is called from those jobs.
+if [ -z "${CACHIX_AUTH_TOKEN:-}" ] &&
+  [ ! -s "${XDG_CONFIG_HOME:-$HOME/.config}/cachix/cachix.dhall" ]; then
+  echo "no cachix token; not pushing (expected on a fork PR)"
+  exit 0
+fi
+
+if [ "$proof" = true ]; then
+  fail=0
+  for c in "$@"; do
+    c=${c#".#checks.$system."}
+    if ! out=$(nix eval --raw ".#checks.$system.$c" 2>/dev/null) ||
+      ! nix path-info "$out" >/dev/null 2>&1; then
+      echo "::warning::$c has no built result here; no proof pushed" >&2
+      fail=1
+      continue
+    fi
+    n=$(nix path-info -r "$out" 2>/dev/null | wc -l)
+    size=$(nix path-info -r --json "$out" 2>/dev/null | jq '[.[] | .narSize] | add // 0')
+    if [ "$n" -ne 1 ] || [ "$size" -gt "$proof_max_bytes" ]; then
+      echo "::warning::$c's result is $n paths and $size bytes; a proof is one path under $proof_max_bytes bytes, so it is not pushed" >&2
+      fail=1
+      continue
+    fi
+    echo "pushing the proof of $c ($size bytes)"
+    cachix push nixarchy "$out" || {
+      echo "::warning::pushing the proof of $c failed" >&2
+      fail=1
+    }
+  done
+  exit "$fail"
+fi
+
+# Closures come from main. A pull request, a bump branch or a tag pushing its
+# builds is what filled the cache with paths nobody would ever download.
+if [ "${GITHUB_REF:-}" != refs/heads/main ]; then
+  echo "not main; closures are pushed from main only (${GITHUB_REF:-no GITHUB_REF})"
   exit 0
 fi
 

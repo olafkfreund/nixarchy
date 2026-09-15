@@ -58,7 +58,8 @@ in
 
     flake = lib.mkOption {
       type = lib.types.str;
-      default = "/etc/nixos";
+      default = config.programs.nixarchy.flake;
+      defaultText = lib.literalExpression "config.programs.nixarchy.flake";
       description = "The machine's own flake directory. Rebuilt in place, never replaced.";
     };
 
@@ -135,10 +136,22 @@ in
             # unfinished edit, and rebuilding it unattended deploys that edit.
             # Reported rather than ignored: an unattended job that stops working
             # and says nothing looks exactly like one that is up to date.
-            if [ -d "$flake/.git" ] && ! git -C "$flake" diff --quiet HEAD 2>/dev/null; then
-              note "auto-update: $flake has uncommitted changes; not rebuilding"
-              echo "$flake is dirty; commit it or set autoUpdate.allowDirty" >&2
-              exit 1
+            if [ -d "$flake/.git" ]; then
+              # The installer stages and never commits, so with no HEAD the index
+              # is the baseline (git diff HEAD there exits 128, read as dirty).
+              if git -C "$flake" rev-parse -q --verify HEAD >/dev/null; then
+                changed=$(git -C "$flake" diff --name-only HEAD) ||
+                  { note "auto-update: git could not read $flake"; exit 1; }
+              else
+                changed=$(git -C "$flake" diff --name-only) ||
+                  { note "auto-update: git could not read $flake"; exit 1; }
+              fi
+              # flake.lock is this job's own edit from its previous run.
+              if [ -n "$(printf '%s\n' "$changed" | grep -vx -e flake.lock -e "" || true)" ]; then
+                note "auto-update: $flake has uncommitted changes; not rebuilding"
+                echo "$flake is dirty; commit it or set autoUpdate.allowDirty" >&2
+                exit 1
+              fi
             fi
           ''}
 

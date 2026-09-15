@@ -1301,6 +1301,22 @@
       # lint fails the build at three, and adding mkUserIso was the third.
       lib = {
 
+        # Every flake in `flakes`, and every input of theirs, transitively, as
+        # unique store paths. Not the top-level inputs: hyprland does not follow
+        # nixpkgs and brings its own tree, and each of its inputs brings more, so
+        # this is collected rather than listed -- a hand-written list goes stale
+        # on the next bump, and staleness shows up only as a fetch on a machine
+        # with no network. Shared by the install image (installer/cd.nix) and the
+        # installed host (installer/host.nix), so the two cannot drift (#701).
+        inputSources =
+          flakes:
+          let
+            collect =
+              flake:
+              [ flake.outPath ] ++ nixpkgs.lib.concatMap collect (nixpkgs.lib.attrValues (flake.inputs or { }));
+          in
+          nixpkgs.lib.unique (nixpkgs.lib.concatMap collect (nixpkgs.lib.attrValues flakes));
+
         # The installed machine, as the installer would produce it. Both disk
         # modes come from here so they cannot drift apart, and so installer/cd.nix
         # can bake each one onto the image without restating the host.
@@ -1852,6 +1868,21 @@
           # it can still see them. See tests/review-pins.nix.
           review-pins = import ./tests/review-pins.nix {
             inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # What reaches nixarchy.cachix.org and what it costs: the allowlist
+          # budget, proofs pushed alone, closures from main only (#697). Against
+          # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
+          cache-budget = import ./tests/cache-budget.nix {
+            pkgs = pkgsFor.${system};
+          };
+
+          # The nightly's cache step: probe every allowlist entry, rebuild and
+          # push what the cache dropped, and still fail when a push delivers
+          # nothing. Against a stubbed nix, curl and cachix. See
+          # tests/cache-entries.nix.
+          cache-entries = import ./tests/cache-entries.nix {
             pkgs = pkgsFor.${system};
           };
 

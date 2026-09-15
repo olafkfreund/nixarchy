@@ -99,6 +99,12 @@ Two mechanical traps that produced fake green results here, live:
   about a check, prove the break landed: `git diff`, or `grep` the file for
   what you meant to remove. A silent no-op break and a blind check are
   indistinguishable from the exit status alone.
+- **A break that stays green may be a property provided twice.** Removing a new
+  `NIXARCHY_FLAKE` export left its check green, because `modules/nixos.nix`
+  had exported the same variable for months -- and the review that asked for
+  the export had grepped scripts for `/etc/nixos` fallbacks without finding it
+  (§12: search for the behaviour). Before calling a green break a blind check,
+  grep the whole tree for a second place that already does the thing.
 
 And the same rule read backwards, for the day a check goes red on you: **ask
 whether it was testing the property or the arrangement.** #220 moved the menu
@@ -235,6 +241,15 @@ Two other ways a check stops checking, both found in one week:
   a regression and was a stale assertion. **When a check fails immediately
   after a deliberate change to how something works, ask what the check is
   asserting before asking what broke.**
+- **A path in the cache is not a path that stays there.** Every KVM MicroVM
+  runner went 404 on nixarchy.cachix.org a day after `main`'s `system` job had
+  *downloaded* the same paths from it. Nothing had changed; nobody had fetched
+  them since, and the -tcg runners, which the nightly boots every night,
+  survived. A probe that only reports a missing path cannot heal this, and
+  `build.yml` never re-pushes a path it could substitute. The nightly's
+  `repush` job builds and pushes every allowlist entry the probe finds
+  missing and fails only if it is still missing afterwards
+  (`.github/scripts/cache-entries.sh`).
 - **A hand-maintained list fails OPEN.** Found three times in one day, in
   three unrelated places: four manual pages published and reachable from no
   sidebar; a third page index (`docs/manual/index.md`) that nothing compared,
@@ -347,6 +362,26 @@ your question:
 | `free-space` | install beside an existing OS, which survives | same job, same nix invocation |
 | `installer-refusal` | a dark substituter is refused, disk left intact | ~2–3 min, same job — a VM too |
 | `install-iso`, `iso-budget` | the ISO installs offline, and fits | nightly only |
+
+**What nixarchy.cachix.org holds is a list, not whatever CI built.** It is the
+free tier: 5 GB, and when full it deletes what was *downloaded* longest ago. A
+push is not a download. Every job used to push its whole store diff, pull
+requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
+31 of 34 check proofs. Every PR then rebuilt every check and could not finish
+(#697). Now:
+
+- every `cachix-action` has `skipPush: true`, and a guard fails otherwise;
+- closures are pushed only from `main`, and only what
+  `.github/scripts/cache-allowlist.sh` names, each entry with the reason someone
+  downloads it;
+- check results are pushed from any ref by `cachix-push.sh --proof`, as a
+  single path, which is how `build-unless-proven.sh` skips what already passed;
+- `cache-budget.sh` fails the `system` job when the allowlist would cost more
+  than 2 GB.
+
+Adding something to the cache means adding it to the allowlist in the same PR,
+and the budget step tells you what it costs. Unfree packages stay off: the
+cache is public.
 
 `install`, `free-space` and `installer-refusal` are one job.
 `install-check.yml` builds all three in a single `nix build --max-jobs 3`,

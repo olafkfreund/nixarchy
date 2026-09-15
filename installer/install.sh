@@ -2735,162 +2735,6 @@ take_factory_snapshot() {
   return 0
 }
 
-# The phases, then the failure screen, again for as long as the person at it
-# asks to retry. In this process rather than by re-running the installer:
-# the answers, the LUKS passphrase among them, stay in memory and are never
-# written anywhere a shell on that screen could read them. format_disk already
-# copes with the /mnt a failed attempt leaves mounted.
-#
-# Uses main's locals (log, target_log, started, rc, elapsed).
-install_attempts() {
-  local choice_rc
-  while :; do
-    rc=0
-    target_log=""
-    install_once
-    [ "$rc" -ne 0 ] || return 0
-    choice_rc=0
-    ui_failed "$log" "$rc" "${target_log:-}" || choice_rc=$?
-    [ "$choice_rc" -eq 3 ] || exit "$rc"
-    echo "retrying the install with the same answers" >>"$log"
-  done
-}
-
-install_once() {
-  started=$(date +%s)
-
-  # How long this took, written down where something other than a person
-  # watching the screen can read it.
-  #
-  # "As fast as Omarchy, or faster" is a requirement, and a requirement nobody
-  # measures is a wish. checks.install reads this and fails above a budget, so
-  # the install getting slower is a red test rather than a thing somebody
-  # eventually notices.
-  #
-  # In /run: it describes this boot of the installer, not the machine being
-  # built, and it must not survive into the installed system.
-  mkdir -p /run/nixarchy-install
-  printf '{"started":%s,"phase":"installing"}\n' "$started" \
-    >/run/nixarchy-install/state.json
-
-  # An interrupt during the install has to land somewhere.
-  #
-  # Without this, Ctrl-C or a kill leaves the dashboard's redraw loop running,
-  # the cursor hidden and the screen owned by a program that is no longer
-  # there -- and the log, which is the only thing worth having at that point,
-  # unmentioned. The EXIT trap ui_dashboard_start sets restores the cursor;
-  # this adds the part that says what happened and where to read about it.
-  #
-  # The rm first: format_disk removes the passphrase file itself, but an
-  # interrupt between writing it and that rm used to leave the LUKS
-  # passphrase sitting in /tmp -- world-invisible, but readable from the
-  # "Open a shell" option on the very screen this trap draws.
-  trap 'rm -f /tmp/nixarchy-luks.key; ui_dashboard_stop; ui_failed "$log" 130; exit 130' INT TERM
-
-  # Handed the log so the drawer can tell "still working" from "stopped":
-  # the phases below write only to this file, so a log that stops growing is
-  # the one observable sign that the install has too.
-  ui_dashboard_start "$log"
-  # `&&` between the phases, not newlines, and it is load-bearing.
-  #
-  # This group's status is tested by `|| rc=$?`, and the comment on run_install
-  # already says what that means: inside a compound command whose status is
-  # tested, errexit does not fire. So with plain newlines a phase that returns
-  # non-zero does not stop the ones after it, and the group reports the status
-  # of the LAST command. run_install could fail, take_factory_snapshot could
-  # succeed, and rc stayed 0.
-  #
-  # What that looked like: "the system did not build; nothing was installed",
-  # then a factory baseline snapshotted off a disk with nothing on it, then the
-  # finish screen, then exit 0. An install that did nothing reported success --
-  # to the person watching, and to every check that trusts the exit status.
-  # checks.install only caught it because it goes on to look for an ESP, and
-  # the assertion it fails on is five frames from the cause.
-  #
-  # Chaining stops at the first failure and hands its status out, which is what
-  # `|| rc=$?` was always meant to receive.
-  {
-    format_disk &&
-      verify_subvolume_mounts &&
-      generate_hardware_config &&
-      install_flake_dir &&
-      write_password_hash &&
-      write_hostname &&
-      run_install &&
-      chown_flake_dir &&
-      carry_network_profiles &&
-      take_factory_snapshot
-  } >>"$log" 2>&1 || rc=$?
-  ui_dashboard_stop
-  # A frame already in flight when the drawer was killed can land AFTER the
-  # finish screen is drawn, painting a stale 99% dashboard back over it -- and
-  # a complete-looking dashboard that never changes again is indistinguishable
-  # from a hang. Let any such frame finish before taking the screen back.
-  sleep 1.2
-  elapsed=$(($(date +%s) - started))
-
-  # Written before the failure branch below, so a failed install is timed too:
-  # "it died after forty minutes" and "it died after forty seconds" are
-  # different bugs.
-  printf '{"started":%s,"finished":%s,"seconds":%s,"exit":%s}\n' \
-    "$started" "$(date +%s)" "$elapsed" "$rc" \
-    >/run/nixarchy-install/state.json
-
-  # The log, on the serial line, whatever happened. The dashboard deliberately
-  # hides it on screen, which is right for someone watching an install and
-  # useless for someone diagnosing one -- and a screen that stops updating
-  # looks identical to a screen that has finished.
-  if [ -w /dev/ttyS0 ]; then
-    {
-      echo "=============== nixarchy install log (exit $rc) ==============="
-      cat "$log" 2>/dev/null
-      echo "=============== end ==============================="
-    } >/dev/ttyS0 2>&1 || true
-  fi
-
-  # And onto the disk, where it survives the reboot the next screen offers.
-  #
-  # The log lives on the live ISO. That is fine while somebody is looking at
-  # it and useless the moment they do the thing the installer just told them
-  # to do: a user whose install failed rebooted, found no bootloader entry,
-  # went looking for a log and found two empty directories -- the target's
-  # /var/log, which is a freshly created btrfs subvolume with nothing in it,
-  # and nothing at all where the real log had been (#239). The serial dump
-  # above is how checks.install reads this, and a laptop has no serial port.
-  #
-  # /mnt is still mounted here; nothing unmounts it before the finish screen.
-  #
-  # Mode 0600 and root-owned, and NOT copied to the ESP. The ESP was the
-  # tempting place -- FAT32, readable from a live USB or another OS, exactly
-  # where you want a diagnostic when the root filesystem will not mount. But
-  # FAT32 has no permissions, so anything written there is readable by anyone
-  # who picks up the disk, and this installer handles a crypt hash that
-  # installer/template/host/configuration.nix already describes as
-  # "offline-crackable at leisure by anyone who reads it". Nothing is known to
-  # put a secret in this log -- write_password_hash writes to a file under
-  # umask 077 and disko takes the passphrase from a key file, so its trace
-  # shows a path rather than the secret -- but "nothing is known to" is not
-  # the standard for putting a file somewhere unreadable permissions cannot
-  # protect it.
-  if [ -d /mnt/var/log ]; then
-    ( umask 077 && cat "$log" >/mnt/var/log/nixarchy-install.log ) 2>/dev/null \
-      && chown 0:0 /mnt/var/log/nixarchy-install.log 2>/dev/null \
-      && target_log=/var/log/nixarchy-install.log
-
-    # And the incompleteness report, if the offline image had to fall back to
-    # the network. It goes onto the INSTALLED machine deliberately: the live
-    # medium is gone after the reboot, and this is the one artefact that says
-    # the image was missing something. Same umask as the log above, for the
-    # same reason -- it quotes a build plan and nothing should assume a build
-    # plan is free of anything sensitive.
-    if [ -f "$RESCUE_REPORT" ]; then
-      ( umask 077 && cat "$RESCUE_REPORT" >/mnt"$RESCUE_REPORT" ) 2>/dev/null \
-        && chown 0:0 /mnt"$RESCUE_REPORT" 2>/dev/null || true
-    fi
-  fi
-
-}
-
 main() {
   while [ $# -gt 0 ]; do
     case $1 in
@@ -3050,6 +2894,162 @@ main() {
   local started rc=0 elapsed
   install_attempts
   ui_finished "$elapsed" "$username"
+}
+
+# The phases, then the failure screen, again for as long as the person at it
+# asks to retry. In this process rather than by re-running the installer:
+# the answers, the LUKS passphrase among them, stay in memory and are never
+# written anywhere a shell on that screen could read them. format_disk already
+# copes with the /mnt a failed attempt leaves mounted.
+#
+# Uses main's locals (log, target_log, started, rc, elapsed).
+install_attempts() {
+  local choice_rc
+  while :; do
+    rc=0
+    target_log=""
+    install_once
+    [ "$rc" -ne 0 ] || return 0
+    choice_rc=0
+    ui_failed "$log" "$rc" "${target_log:-}" || choice_rc=$?
+    [ "$choice_rc" -eq 3 ] || exit "$rc"
+    echo "retrying the install with the same answers" >>"$log"
+  done
+}
+
+install_once() {
+  started=$(date +%s)
+
+  # How long this took, written down where something other than a person
+  # watching the screen can read it.
+  #
+  # "As fast as Omarchy, or faster" is a requirement, and a requirement nobody
+  # measures is a wish. checks.install reads this and fails above a budget, so
+  # the install getting slower is a red test rather than a thing somebody
+  # eventually notices.
+  #
+  # In /run: it describes this boot of the installer, not the machine being
+  # built, and it must not survive into the installed system.
+  mkdir -p /run/nixarchy-install
+  printf '{"started":%s,"phase":"installing"}\n' "$started" \
+    >/run/nixarchy-install/state.json
+
+  # An interrupt during the install has to land somewhere.
+  #
+  # Without this, Ctrl-C or a kill leaves the dashboard's redraw loop running,
+  # the cursor hidden and the screen owned by a program that is no longer
+  # there -- and the log, which is the only thing worth having at that point,
+  # unmentioned. The EXIT trap ui_dashboard_start sets restores the cursor;
+  # this adds the part that says what happened and where to read about it.
+  #
+  # The rm first: format_disk removes the passphrase file itself, but an
+  # interrupt between writing it and that rm used to leave the LUKS
+  # passphrase sitting in /tmp -- world-invisible, but readable from the
+  # "Open a shell" option on the very screen this trap draws.
+  trap 'rm -f /tmp/nixarchy-luks.key; ui_dashboard_stop; ui_failed "$log" 130; exit 130' INT TERM
+
+  # Handed the log so the drawer can tell "still working" from "stopped":
+  # the phases below write only to this file, so a log that stops growing is
+  # the one observable sign that the install has too.
+  ui_dashboard_start "$log"
+  # `&&` between the phases, not newlines, and it is load-bearing.
+  #
+  # This group's status is tested by `|| rc=$?`, and the comment on run_install
+  # already says what that means: inside a compound command whose status is
+  # tested, errexit does not fire. So with plain newlines a phase that returns
+  # non-zero does not stop the ones after it, and the group reports the status
+  # of the LAST command. run_install could fail, take_factory_snapshot could
+  # succeed, and rc stayed 0.
+  #
+  # What that looked like: "the system did not build; nothing was installed",
+  # then a factory baseline snapshotted off a disk with nothing on it, then the
+  # finish screen, then exit 0. An install that did nothing reported success --
+  # to the person watching, and to every check that trusts the exit status.
+  # checks.install only caught it because it goes on to look for an ESP, and
+  # the assertion it fails on is five frames from the cause.
+  #
+  # Chaining stops at the first failure and hands its status out, which is what
+  # `|| rc=$?` was always meant to receive.
+  {
+    format_disk &&
+      verify_subvolume_mounts &&
+      generate_hardware_config &&
+      install_flake_dir &&
+      write_password_hash &&
+      write_hostname &&
+      run_install &&
+      chown_flake_dir &&
+      carry_network_profiles &&
+      take_factory_snapshot
+  } >>"$log" 2>&1 || rc=$?
+  ui_dashboard_stop
+  # A frame already in flight when the drawer was killed can land AFTER the
+  # finish screen is drawn, painting a stale 99% dashboard back over it -- and
+  # a complete-looking dashboard that never changes again is indistinguishable
+  # from a hang. Let any such frame finish before taking the screen back.
+  sleep 1.2
+  elapsed=$(($(date +%s) - started))
+
+  # Written before the failure branch below, so a failed install is timed too:
+  # "it died after forty minutes" and "it died after forty seconds" are
+  # different bugs.
+  printf '{"started":%s,"finished":%s,"seconds":%s,"exit":%s}\n' \
+    "$started" "$(date +%s)" "$elapsed" "$rc" \
+    >/run/nixarchy-install/state.json
+
+  # The log, on the serial line, whatever happened. The dashboard deliberately
+  # hides it on screen, which is right for someone watching an install and
+  # useless for someone diagnosing one -- and a screen that stops updating
+  # looks identical to a screen that has finished.
+  if [ -w /dev/ttyS0 ]; then
+    {
+      echo "=============== nixarchy install log (exit $rc) ==============="
+      cat "$log" 2>/dev/null
+      echo "=============== end ==============================="
+    } >/dev/ttyS0 2>&1 || true
+  fi
+
+  # And onto the disk, where it survives the reboot the next screen offers.
+  #
+  # The log lives on the live ISO. That is fine while somebody is looking at
+  # it and useless the moment they do the thing the installer just told them
+  # to do: a user whose install failed rebooted, found no bootloader entry,
+  # went looking for a log and found two empty directories -- the target's
+  # /var/log, which is a freshly created btrfs subvolume with nothing in it,
+  # and nothing at all where the real log had been (#239). The serial dump
+  # above is how checks.install reads this, and a laptop has no serial port.
+  #
+  # /mnt is still mounted here; nothing unmounts it before the finish screen.
+  #
+  # Mode 0600 and root-owned, and NOT copied to the ESP. The ESP was the
+  # tempting place -- FAT32, readable from a live USB or another OS, exactly
+  # where you want a diagnostic when the root filesystem will not mount. But
+  # FAT32 has no permissions, so anything written there is readable by anyone
+  # who picks up the disk, and this installer handles a crypt hash that
+  # installer/template/host/configuration.nix already describes as
+  # "offline-crackable at leisure by anyone who reads it". Nothing is known to
+  # put a secret in this log -- write_password_hash writes to a file under
+  # umask 077 and disko takes the passphrase from a key file, so its trace
+  # shows a path rather than the secret -- but "nothing is known to" is not
+  # the standard for putting a file somewhere unreadable permissions cannot
+  # protect it.
+  if [ -d /mnt/var/log ]; then
+    ( umask 077 && cat "$log" >/mnt/var/log/nixarchy-install.log ) 2>/dev/null \
+      && chown 0:0 /mnt/var/log/nixarchy-install.log 2>/dev/null \
+      && target_log=/var/log/nixarchy-install.log
+
+    # And the incompleteness report, if the offline image had to fall back to
+    # the network. It goes onto the INSTALLED machine deliberately: the live
+    # medium is gone after the reboot, and this is the one artefact that says
+    # the image was missing something. Same umask as the log above, for the
+    # same reason -- it quotes a build plan and nothing should assume a build
+    # plan is free of anything sensitive.
+    if [ -f "$RESCUE_REPORT" ]; then
+      ( umask 077 && cat "$RESCUE_REPORT" >/mnt"$RESCUE_REPORT" ) 2>/dev/null \
+        && chown 0:0 /mnt"$RESCUE_REPORT" 2>/dev/null || true
+    fi
+  fi
+
 }
 
 # Guarded so the functions above can be sourced and exercised without running

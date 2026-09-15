@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 710
 intent: intent/2026-09-15-710-plugin-reloads.md
 ---

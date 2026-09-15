@@ -87,7 +87,7 @@
 let
   # Every locked input, transitively, as a store path -- the same walk the
   # installed host roots its inputs with (#701); see lib.inputSources in flake.nix.
-  inputSources = inputs.self.lib.inputSources { flake = source.flake; };
+  inputSources = inputs.self.lib.inputSources { inherit (source) flake; };
 
   # Both disk modes, because the installer offers both.
   #

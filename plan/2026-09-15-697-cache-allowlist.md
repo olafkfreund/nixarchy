@@ -114,8 +114,14 @@ file in the same commit.
    - Add the budget step at the end of `system`.
    - Move `bin-ledger` (`build.yml:804`) and `session` (`omarchy.yml:377`) from
      direct `nix build` to `build-unless-proven.sh`.
-   → verify: actionlint clean; the guard step's shell, run with the self-hosted
-   runner PATH, passes, and fails when `skipPush` is removed from one block.
+   → verify: actionlint clean; the guard step's shell passes, and fails when
+   `skipPush` is removed from one block.
+
+   **Verification changed.** This originally said to run the guard with the
+   self-hosted runner PATH. That was for the p620 move, which D6 drops: this
+   job stays on the hosted image, which has `bc`, so it runs with an ordinary
+   PATH. The guard's patterns are anchored to `      - uses:` steps, after the
+   first version counted its own `grep` line as a ninth `cachix-action`.
 
 6. **`.github/scripts/build-unless-proven.sh`.** After `nix build` succeeds, calls
    `cachix-push.sh --proof` with the checks it built. The push is non-fatal, so

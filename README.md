@@ -458,7 +458,7 @@ basename is what it stores.
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
 | **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](docs/manual/python.md). **On by default** |
 | Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
-| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a hands-on tour, an offline manual search and a tutor grounded in your machine, offered in the bar — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
+| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a card over the desktop with a hands-on tour and a tutor grounded in your machine (Claude Code by default), from the snowflake in the bar or `nixi` — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
 | **Agent skills** | from `nixarchy` and `nixos` to `nixos-gpu` and `nixos-android` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |

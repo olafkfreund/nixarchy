@@ -333,6 +333,12 @@ Two other ways a check stops checking, both found in one week:
   access already wrapped. If you are walking evaluated configuration, bound
   the root to a subtree you know rather than trusting `tryEval` to make an
   unbounded walk safe.
+- **`--impure` honours `NIXPKGS_ALLOW_UNFREE=1` from your shell.** An
+  `import nixpkgs { config.allowUnfree = false; }` under `nix build --impure`
+  still evaluates unfree packages if that variable is set, so "builds without
+  unfree" passes for the wrong reason. Found on #709, where every local
+  no-unfree build had been run that way. Prefix unfree-sensitive local builds
+  with `env -u NIXPKGS_ALLOW_UNFREE`, and prove the check fails first (§1).
 
 ## 6. How to run the checks, and what each one costs
 

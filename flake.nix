@@ -126,27 +126,26 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The guide that should come with nixarchy: a live hands-on tour, an
-    # offline-first manual search, and an AI tutor grounded in the machine it
-    # runs on. An input rather than a vendored copy, even though both
+    # The guide that should come with nixarchy: an Omarchy overlay card (since
+    # nixi 0.10, #709) with a hands-on tour, a manual search grounded in the
+    # machine it runs on, and an AI tutor (Claude Code by default). An input rather than a vendored copy, even though both
     # repositories have the same maintainer: nixi has its own release cadence,
     # its own two checks and its own Home Manager module, and copying the tree
     # in would mean maintaining that module twice and re-deriving the package
     # on every bump. zen-browser and hypr-rdp are already here on that argument.
     #
-    # `follows` is right here and wrong for hyprland above. Nixi is stdlib
-    # Python plus one QML file: `dontBuild = true`, and the derivation only
-    # places files and pins two interpreters. So overriding its nixpkgs
-    # rebuilds nothing and forfeits no binary cache -- it publishes none -- and
-    # what following buys is one node in every user's lock instead of two, and
-    # one python3 in the closure rather than a second.
+    # `follows` is right here and wrong for hyprland above. Nixi is QML, a
+    # small node bridge whose npm dependencies are a fixed-output fetch, and
+    # stdlib Python: nothing slow to build, and it publishes no binary cache to
+    # forfeit. What following buys is one node in every user's lock instead of
+    # two, and one nodejs and python3 in the closure rather than a second.
     #
     # Pinned to a COMMIT because nixi publishes no tags at all. Checked, not
     # assumed: `git ls-remote --tags` comes back empty and main is the release
     # channel, which is the same situation sops-nix above is in. Bump it
     # deliberately; never track a branch.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/a141b1689fb69f9f7462ba5cbbe1945abfa0901a";
+      url = "github:olafkfreund/nixi-nixarchy/569adeaa0bf19b22e432c0e8e461baa4b8eefcac";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -235,6 +235,14 @@ Two other ways a check stops checking, both found in one week:
   a regression and was a stale assertion. **When a check fails immediately
   after a deliberate change to how something works, ask what the check is
   asserting before asking what broke.**
+- **A path in the cache is not a path that stays there.** Every KVM MicroVM
+  runner went 404 on nixarchy.cachix.org a day after `main`'s `system` job had
+  *downloaded* the same paths from it. Nothing had changed; nobody had fetched
+  them since, and the -tcg runners, which the nightly boots every night,
+  survived. A probe that only reports a missing path cannot heal this, and
+  `build.yml` never re-pushes a path it could substitute. The nightly's
+  `runners` job builds and pushes what the probe finds missing and fails only
+  if it is still missing afterwards (`.github/scripts/template-runners.sh`).
 - **A hand-maintained list fails OPEN.** Found three times in one day, in
   three unrelated places: four manual pages published and reachable from no
   sidebar; a third page index (`docs/manual/index.md`) that nothing compared,

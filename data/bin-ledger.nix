@@ -309,6 +309,14 @@
     reason = "Upstream's 86 migration scripts use sudo, write under /usr and call pacman, and with no state directory every one counts as pending. --pending reports nothing to do; a bare run is told why.";
     pacman = "Ours, in pkgs/omarchy/nix-bin. The pacman line is heredoc prose or upstream code left dead after an early exit -- neither of which comment-stripping can see.";
   };
+  "omarchy-mise-install" = {
+    class = "patch";
+    reason = "Writes no launcher when a command outside ~/.local/bin already provides the tool. Upstream's launchers sit ahead of the Nix profiles on PATH, so a Nix-installed codex or claude never ran (#707).";
+  };
+  "omarchy-mise-unshadow" = {
+    class = "new";
+    reason = "Not in upstream. Run on every activation: removes upstream's exact mise wrapper from ~/.local/bin when a Nix profile has the same command, for launchers written before omarchy-mise-install's patch (#707).";
+  };
   "omarchy-openclaw-onboard" = {
     class = "vendor";
     reason = "Vendored unchanged, and read-only: reads MainPID off openclaw-gateway.service with `systemctl --user show`.";

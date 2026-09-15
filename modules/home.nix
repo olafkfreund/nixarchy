@@ -930,6 +930,14 @@ in
       ''
     );
 
+    # #707: first login's mise launchers in ~/.local/bin shadow the Nix package
+    # of the same name. New ones are no longer written for a Nix command; this
+    # removes the ones already there, and any a later Install-menu pick shadows.
+    home.activation.nixarchyMiseUnshadow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run ${omarchyPath}/bin/omarchy-mise-unshadow \
+        /etc/profiles/per-user/${config.home.username}/bin /run/current-system/sw/bin
+    '';
+
     # ---- #623: the NixOS MCP server, in the agents that have one --------
     #
     # Three agents, not the four this module seeds skills into. `~/.agents`

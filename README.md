@@ -13,7 +13,7 @@ menus rewired to Nix instead of pacman.
 **[Roadmap](#roadmap)** ·
 **[Discussions](https://github.com/olafkfreund/nixarchy/discussions)**
 
-Omarchy 4.x is not a dotfiles repo, it's an application: **444 shell commands**,
+Omarchy 4.x is not a dotfiles repo, it's an application: **445 shell commands**,
 a QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua
 API introduced in 0.55. Nixarchy packages that tree as a derivation and replaces
 the parts that assume Arch, rather than reimplementing it in Nix.
@@ -419,7 +419,7 @@ nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 Anything `nixarchy` does not own it `exec`s through to `omarchy`, so both names
 work and the exit status, terminal and signals stay the command's own.
 
-**Upstream's 444 commands keep upstream's name, deliberately.** `omarchy theme
+**Upstream's 445 commands keep upstream's name, deliberately.** `omarchy theme
 set` is the same script here as on Arch — a bug in it is a bug to report there,
 and renaming it would say otherwise. It would also cost the property this repo
 is built on: tracking a release is a source bump because nixarchy replaces 19
@@ -439,10 +439,10 @@ basename is what it stores.
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
-| `omarchy` CLI | all 444 subcommands, `omarchy commands --check` green |
+| `omarchy` CLI | all 445 subcommands, `omarchy commands --check` green |
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
-| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 444 |
+| **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
 | 66 apps in the selection | 50 from nixpkgs, 5 as NixOS modules, 9 built here, 2 with no equivalent |

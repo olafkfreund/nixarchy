@@ -99,7 +99,9 @@ pkgs.testers.runNixOSTest {
         # The installer refuses to run without /sys/firmware/efi, and is right
         # to; same reasoning as tests/install.nix.
         useEFIBoot = true;
-        emptyDiskImages = [ 2048 ];
+        # 32 GiB: a smaller disk is refused by the size floor (#708) before the
+        # substituter probe this node exists to reach.
+        emptyDiskImages = [ 32768 ];
       };
     };
 
@@ -129,7 +131,7 @@ pkgs.testers.runNixOSTest {
           keymap=us
         '';
       };
-      virtualisation.emptyDiskImages = [ 2048 ];
+      virtualisation.emptyDiskImages = [ 32768 ];
     };
 
   testScript = ''

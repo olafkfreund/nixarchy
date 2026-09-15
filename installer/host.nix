@@ -163,13 +163,23 @@
     #   application the user evaluated and rejected is pure garbage, and
     #   collecting it can never cost a rollback.
     #
-    # 5 GiB floor, 20 GiB target, sized for what this desktop does rather
-    # than for a server: an install VM image is 32 GiB and a box is a whole
-    # userland, so a floor that clears a few hundred megabytes is hit again
-    # during the same build.
-    min-free = 5 * 1024 * 1024 * 1024;
-    max-free = 20 * 1024 * 1024 * 1024;
+    # 3 GiB floor, 8 GiB target, sized for the smallest disk nixarchy supports,
+    # 32 GiB (#708): a 2 GiB ESP and about 14 GiB of closure leave about 16 GiB
+    # free on a fresh install, so neither number is reached from the start, and
+    # a collection that does run has a target it can reach. The old 5/20 on a
+    # small disk collected constantly toward a target it could never hit, and
+    # Nix 2.34 crashed doing it mid-switch (see nix.package below). The floor
+    # still leaves room for a switch to write a generation. checks.install
+    # asserts a fresh install keeps at least max-free free.
+    min-free = 3 * 1024 * 1024 * 1024;
+    max-free = 8 * 1024 * 1024 * 1024;
   };
+
+  # Nix 2.35 for its fix to NixOS/nix#15614: 2.34's automatic collection thread
+  # outlived the store that started it and segfaulted during
+  # `nixos-rebuild switch` (#701, #708). nixpkgs still defaults to 2.34.8; drop
+  # this line once `pkgs.nix` is 2.35 or later.
+  nix.package = pkgs.nixVersions.nix_2_35;
 
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or

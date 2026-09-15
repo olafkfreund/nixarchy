@@ -32,16 +32,19 @@ pkgs.testers.runNixOSTest {
 
     virtualisation = {
       memorySize = 2048;
-      # Below ask_device's 8 GiB floor, deliberately. The root disk is not an
+      # Below ask_device's 32 GiB floor, deliberately. The root disk is not an
       # install target and the wizard must not offer it; making it too small
       # to qualify turns "the list is right" into something this test can
       # assert without pressing arrow keys at an ordering it cannot pin.
       diskSize = 4096;
-      # 1 GiB is under the floor as well and 12 GiB is over it, so exactly
-      # one device -- /dev/vdc -- may appear on the disk screen.
+      # 1 GiB and 16 GiB are under the floor and 32 GiB is on it, so exactly
+      # one device -- /dev/vdd -- may appear on the disk screen. The 16 GiB disk
+      # was over the old 8 GiB floor: it is what proves the floor moved (#708),
+      # rather than merely that a number changed.
       emptyDiskImages = [
         1024
-        12288
+        16384
+        32768
       ];
     };
 
@@ -227,7 +230,7 @@ pkgs.testers.runNixOSTest {
     answer("\n")
 
     # ---- encrypt, then the summary -------------------------------------
-    screen("Everything on /dev/vdc will be overwritten")
+    screen("Everything on /dev/vdd will be overwritten")
     gum("confirm")
     answer("\n")
 
@@ -306,7 +309,7 @@ pkgs.testers.runNixOSTest {
     screen(r"Let's choose where to install nixarchy")
     gum("choose")
     answer("\n")
-    screen("Everything on /dev/vdc will be overwritten")
+    screen("Everything on /dev/vdd will be overwritten")
     gum("confirm")
     answer("\n")
 
@@ -349,16 +352,17 @@ pkgs.testers.runNixOSTest {
     row("Username", "wizard")
     row("Timezone", "Europe/London")
     row("Keyboard", "us")
-    row("Disk", "/dev/vdc")
+    row("Disk", "/dev/vdd")
     row("Encrypted", "true")
     row("Password", "********")
     # The disks the size floor was supposed to hide. /dev/vda is this machine's
-    # own root and /dev/vdb is a gigabyte; an installer offering either is the
-    # bug ask_device's floor exists for.
+    # own root, /dev/vdb is a gigabyte and /dev/vdc is 16 GiB -- over the old
+    # 8 GiB floor, under the supported 32 GiB (#708). An installer offering any
+    # of them is the bug ask_device's floor exists for.
     disk_screen = console_log[console_log.index("Let's choose where to install"):]
-    for hidden in ["/dev/vda", "/dev/vdb"]:
+    for hidden in ["/dev/vda", "/dev/vdb", "/dev/vdc"]:
         assert hidden not in disk_screen, (
-            f"{hidden} is under the 8 GiB floor and was offered as an install target")
+            f"{hidden} is under the 32 GiB floor and was offered as an install target")
 
     # ---- the answers reached the flake ---------------------------------
     #
@@ -384,7 +388,7 @@ pkgs.testers.runNixOSTest {
     for text, where, name in [
         ('hostname = "wizardbox"', default, "hostname"),
         ('username = "wizard"', default, "username"),
-        ('device = "/dev/vdc"', default, "device"),
+        ('device = "/dev/vdd"', default, "device"),
         ("encrypt = true", default, "encryption"),
         ('time.timeZone = "Europe/London"', configuration, "timezone"),
         ('console.keyMap = "us"', configuration, "keymap"),
@@ -399,7 +403,7 @@ pkgs.testers.runNixOSTest {
 
     # A dry run must not have touched anything. The disk it was pointed at is
     # the one to look at: still unpartitioned, still empty.
-    machine.fail("blkid /dev/vdc")
+    machine.fail("blkid /dev/vdd")
     print("the wizard asked six questions, rejected three bad answers, and "
           "wrote a flake carrying the rest")
   '';

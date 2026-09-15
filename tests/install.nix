@@ -460,7 +460,8 @@ pkgs.testers.runNixOSTest {
         # firmware at all, so the node has to be given some.
         useEFIBoot = true;
         # The blank target, which appears as /dev/vdb.
-        emptyDiskImages = [ 20480 ];
+        # 32 GiB, the smallest disk nixarchy supports (#708): test what is promised.
+        emptyDiskImages = [ 32768 ];
         # nixos-install copies the whole closure into the target, and the
         # default 1 GB store overlay is nowhere near enough.
         diskSize = 32768;
@@ -726,6 +727,19 @@ pkgs.testers.runNixOSTest {
     target.start()
     target.wait_for_unit("multi-user.target")
     print("the installed disk booted on its own bootloader")
+
+    # Free space on a fresh install of the smallest supported disk (#708). The
+    # target is 32 GiB; installer/host.nix collects garbage toward max-free
+    # (8 GiB), so a fresh install must already have that much, or the machine
+    # starts collecting on its first rebuild -- where Nix 2.34 crashed and #702
+    # was reverted. Printed every run so a change that grows the closure shows
+    # what it costs.
+    avail = int(target.succeed("df --output=avail -B1 / | tail -1").strip())
+    print(f"free after install on a 32 GiB target: {avail / 2**30:.1f} GiB")
+    assert avail >= 8 * 2**30, (
+        f"a fresh install leaves {avail / 2**30:.1f} GiB free on a 32 GiB disk, "
+        "under max-free (8 GiB): the machine would collect garbage from its first "
+        "rebuild. The closure grew; see #708.")
 
     # ---- the desktop comes up ------------------------------------------
     target.wait_for_unit("display-manager.service")

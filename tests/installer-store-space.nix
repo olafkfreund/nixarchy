@@ -658,5 +658,40 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   EOF
   bash esct.sh
   echo "escape at a prompt stops with words on the screen, not a black one"
+
+  # ------------------------------------------------------------------------
+  # The 32 GiB floor (#708): one comparison, shared by the disk menu and the
+  # answers file. The function and its constant on their own, lsblk stubbed to
+  # print a size -- including printing nothing, which must count as too small.
+  # ------------------------------------------------------------------------
+  grep -m1 '^MIN_DISK_GIB=' ${installScript} > floor.sh
+  sed -n '/^disk_under_floor()/,/^}/p' ${installScript} >> floor.sh
+  grep -q '^disk_under_floor()' floor.sh || { echo "disk_under_floor is not in install.sh any more" >&2; exit 1; }
+  cat > floort.sh <<'EOF'
+  . ./floor.sh
+  fails=0
+  GiB=$((1024 * 1024 * 1024))
+  f() { # f <want: under|ok> <name> <lsblk output>
+    out_size=$3
+    lsblk() { printf '%s' "$out_size"; }
+    if disk_under_floor /dev/stub; then got=under; else got=ok; fi
+    if [ "$got" = "$1" ]; then echo "  ok      $2"; else
+      echo "  FAILED  $2: wanted $1, got $got"; fails=$((fails + 1)); fi
+  }
+  f under "a 16 GiB disk is under the floor"     "$((16 * GiB))"
+  f ok    "exactly 32 GiB is on it, not under"   "$((32 * GiB))"
+  f ok    "a 1 TiB disk is over it"              "$((1024 * GiB))"
+  f under "a disk lsblk cannot size is refused"  ""
+  exit $fails
+  EOF
+  bash floort.sh
+  # And unattended installs use the same comparison: validate_answers must call
+  # it, or an answers file could still install onto an 8 GiB disk.
+  # To a file, not a pipe: grep -q exits on the first match and sed dies of
+  # SIGPIPE, which pipefail reports as no match (tests/AGENTS.md).
+  sed -n '/^validate_answers()/,/^}/p' ${installScript} > validate.sh
+  grep -q 'disk_under_floor "$device"' validate.sh || {
+    echo "validate_answers does not refuse a device under the floor (#708)" >&2; exit 1; }
+  echo "the 32 GiB floor refuses small and unsizable disks, in the menu and in answers files"
     touch $out
 ''

@@ -45,9 +45,10 @@ OVMF_VARS="@ovmf_vars@"
 
 DISK=nixarchy-try.qcow2
 VARS=nixarchy-try-efivars.fd
-# Matches installer/vm.nix's emptyDiskImages, for the same measured reason:
-# a 2G ESP plus ~14 GiB of closure, with room for a rebuild on top.
-DISK_MB=24576
+# Matches installer/vm.nix's emptyDiskImages: 32 GiB, the smallest disk
+# nixarchy supports (#708). A 2G ESP plus ~14 GiB of closure, and the rest is the
+# headroom the installed machine's garbage collection is sized for.
+DISK_MB=32768
 MEM_MB=8192
 MEM_MIN=4096
 

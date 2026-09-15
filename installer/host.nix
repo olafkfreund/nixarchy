@@ -178,7 +178,6 @@
   # sources `nix eval /etc/nixos` needs, kept safe from min-free above. `self`
   # here is nixarchy, never the user's flake, so editing /etc/nixos does not
   # change the closure (#701).
-  system.extraDependencies = inputs.self.lib.inputSources inputs;
 
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or

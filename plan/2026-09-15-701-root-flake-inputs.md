@@ -87,6 +87,10 @@ file in the same commit.
 
 5. **Seen red in CI, once.** Push a commit that removes the step 2 line, and
    let `install` run.
+
+   **Order changed during implementation.** `install` runs only on pull
+   requests, so the PR is opened as a **draft** here, not at step 7. Step 7
+   marks it ready once the evidence is in.
    → verify: `install` fails at the new step with `unable to download`. Capture
    the failing output.
 

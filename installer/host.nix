@@ -161,7 +161,10 @@
     #   under space pressure rather than on a timer. That is exactly what
     #   `nixarchy try` leaves behind: a tried package has no GC root, so an
     #   application the user evaluated and rejected is pure garbage, and
-    #   collecting it can never cost a rollback.
+    #   collecting it can never cost a rollback. The flake's input sources
+    #   would be garbage too -- nothing references them -- and an offline
+    #   machine could not evaluate itself after a collection (#701), so
+    #   system.extraDependencies below keeps them.
     #
     # 5 GiB floor, 20 GiB target, sized for what this desktop does rather
     # than for a server: an install VM image is 32 GiB and a box is a whole
@@ -170,6 +173,12 @@
     min-free = 5 * 1024 * 1024 * 1024;
     max-free = 20 * 1024 * 1024 * 1024;
   };
+
+  # Every input the host was given, transitively, in the system closure: the
+  # sources `nix eval /etc/nixos` needs, kept safe from min-free above. `self`
+  # here is nixarchy, never the user's flake, so editing /etc/nixos does not
+  # change the closure (#701).
+  system.extraDependencies = inputs.self.lib.inputSources inputs;
 
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or

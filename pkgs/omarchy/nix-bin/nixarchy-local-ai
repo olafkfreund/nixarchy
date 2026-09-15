@@ -20,7 +20,20 @@
 set -uo pipefail
 
 status_only=false
-[[ ${1:-} == "--status" ]] && status_only=true
+case "${1:-}" in
+  --status) status_only=true ;;
+  -h | --help)
+    cat <<'EOF'
+usage: nixarchy-local-ai [--status]
+
+  (no arguments)  pick and download a model that fits this GPU, then test it
+  --status        report what is configured and running, and change nothing
+EOF
+    exit 0
+    ;;
+  "") ;;
+  *) echo "nixarchy-local-ai: unknown option '$1'; --help lists them" >&2; exit 1 ;;
+esac
 
 say()  { echo -e "$1"; }
 step() { echo -e "\n\033[1;32m▸\033[0m \033[1m$1\033[0m"; }

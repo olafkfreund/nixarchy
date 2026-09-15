@@ -156,3 +156,13 @@ sudo "$profile/bin/switch-to-configuration" switch
 echo
 bold "Now on generation $target."
 dim "Your home directory was not touched. The generation you came from is still there."
+
+# A generation is the system, not the configuration it was built from. The
+# flake and ~/.config/nixarchy still describe the newer one, so the next Apply
+# or update rebuilds exactly what this just left.
+echo
+red "Your configuration still describes the generation you left."
+echo "  The next 'nixarchy apply', 'omarchy update' or auto-update rebuilds it."
+echo "  To stay here, undo the change in your selection first:"
+echo "    nixarchy app remove        take out the app or package that broke it"
+echo "    git -C \"${NIXARCHY_FLAKE:-/etc/nixos}\" log   or find the edit in your flake"

@@ -113,7 +113,8 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 59 apps are the ones Omarchy's own menu lists. Everything else in nixpkgs —
+The 66 apps in the selection are the ones Omarchy's own menu lists, and a few
+it does not. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
 
@@ -184,7 +185,7 @@ Neither form can break a build — the scaffold is inert, and every edit is
 reverted as a unit if `nix-instantiate` cannot parse the result.
 
 **The index is built from this machine, not from search.nixos.org.** Its own
-nixpkgs and its own options — about a minute, once per system generation, and
+nixpkgs and its own options — about a minute, once each time nixpkgs changes, and
 it buys the one property that matters: the picker cannot offer you a package
 that this machine then refuses to build. The options half substitutes from
 `cache.nixos.org`, so only the nixpkgs half is real work.

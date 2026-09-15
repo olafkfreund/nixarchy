@@ -147,6 +147,14 @@ let
   # brings policies and extensions with it, not a bare package in
   # systemPackages that does none of that. Both the app id and its attribute
   # are listed, because either is a plausible thing to type.
+  # The newest stable release, for a machine on unstable asking for --stable:
+  # unstable's oldest supported release is exactly that (2605 -> "26.05").
+  stableRelease =
+    let
+      r = toString lib.trivial.oldestSupportedRelease;
+    in
+    "${builtins.substring 0 2 r}.${builtins.substring 2 2 r}";
+
   appAttrTable = pkgs.writeText "nixarchy-app-attrs.tsv" (
     lib.concatStrings (
       lib.mapAttrsToList (
@@ -1096,7 +1104,7 @@ in
 
                 for part in apps services advanced; do
                   user="$dir/$part.nix"
-                  tpl="/etc/nixarchy/$part-template.nix"
+                  tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/$part-template.nix"
                   [ -f "$user" ] && [ -f "$tpl" ] || continue
 
                   # Compared by marker, never by line: the file's own header
@@ -1284,13 +1292,39 @@ in
               ];
               text = ''
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
                 id="''${1:?usage: nixarchy-app-enable <app-id>}"
 
-                [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
-
-                if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  echo "nixarchy: no app '$id' in $file" >&2
+                # A menu pick has no terminal, so an error only on stderr is a
+                # pick that silently did nothing. Say it on the desktop too.
+                fail() {
+                  echo "nixarchy: $1" >&2
+                  if command -v omarchy-notification-send >/dev/null 2>&1; then
+                    omarchy-notification-send -u critical "Could not select $id" "$1" || true
+                  fi
                   exit 1
+                }
+
+                case "$id" in
+                  *[!a-z0-9_-]* | "") fail "'$id' is not an app id" ;;
+                esac
+
+                [ -f "$file" ] || fail "no $file -- log in again to have it created"
+
+                # apps.nix is seeded once, so an app added to the catalogue later
+                # has no row in it. Take the row from the current template and
+                # put it at the top of the apps block, still commented out.
+                if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                  row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
+                  [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
+                  grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
+                    fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
+                  tmp=$(mktemp)
+                  awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
+                    "$file" >"$tmp"
+                  cat "$tmp" >"$file"
+                  rm -f "$tmp"
+                  echo "added $id's row from the current catalogue to $file"
                 fi
 
                 if grep -q "^[[:space:]]*$id\.enable" "$file"; then
@@ -1398,7 +1432,7 @@ in
                 while IFS= read -r name; do
                   [ -n "$name" ] || continue
                   entries+=("pkg"$'\t'"$name")
-                done < <(grep -oE '#@pkg [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@pkg //')
+                done < <(grep -oE '#@pkg(-other)? [A-Za-z0-9_.-]+$' "$file" | sed -E 's/^#@pkg(-other)? //')
                 while IFS= read -r name; do
                   [ -n "$name" ] || continue
                   entries+=("opt"$'\t'"$name")
@@ -1467,7 +1501,7 @@ in
                 [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
                 if [ $# -eq 0 ]; then
-                  mapfile -t attrs < <(grep -oE '#@pkg [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@pkg //')
+                  mapfile -t attrs < <(grep -oE '#@pkg(-other)? [A-Za-z0-9_.-]+$' "$file" | sed -E 's/^#@pkg(-other)? //')
                   if [ ''${#attrs[@]} -eq 0 ]; then
                     echo "No extra packages are selected. 'nixarchy pkg add' or the Search picker adds one."
                     exit 0
@@ -1498,14 +1532,18 @@ in
                       exit 1
                       ;;
                   esac
-                  if ! grep -qF -- "#@pkg $attr" "$file"; then
+                  # Anchored exactly as the delete below is: a prefix match here
+                  # reported "removed rip" while ripgrep's line stayed. Either
+                  # marker, because --stable/--unstable rows are packages too.
+                  re="#@pkg(-other)? ''${attr//./\\.}\$"
+                  if ! grep -qE -- "$re" "$file"; then
                     restore
                     echo "nixarchy: no package '$attr' in $file. Nothing was changed." >&2
                     exit 1
                   fi
                   # Exactly the marked line nixarchy-pkg-add wrote, wherever the
                   # user has moved it to.
-                  sed -i "/#@pkg $attr\$/d" "$file"
+                  sed -i -E "\|$re|d" "$file"
                   removed+=("$attr")
                 done
 
@@ -1517,7 +1555,7 @@ in
                   exit 1
                 fi
 
-                count=$(grep -c '#@pkg ' "$file" || true)
+                count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
                 if command -v omarchy-notification-send >/dev/null 2>&1; then
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "''${removed[*]} removed from your selection" \
@@ -1776,6 +1814,9 @@ in
                 # generation, so this cannot go stale without the script itself
                 # being replaced.
                 allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
+                # A predicate is a function of the package, so this script cannot
+                # answer for it; it says so rather than predicting a refusal.
+                haspredicate=${lib.boolToString (config.nixpkgs.config ? allowUnfreePredicate)}
 
                 # The picker is reachable through the session PATH rather than
                 # runtimeInputs (same route nixarchy-apply takes to
@@ -1903,7 +1944,7 @@ in
                 # system's evaluation down with it, not just this feature.
                 backup=$(mktemp)
                 cp "$file" "$backup"
-                trap 'rm -f "$backup"' EXIT
+                trap 'rm -f "$backup" "$backup.err"' EXIT
                 restore() { cp "$backup" "$file"; }
 
                 # The list this appends to does not exist in a freshly generated file: the
@@ -1979,7 +2020,7 @@ in
                     continue
                   fi
 
-                  if grep -q "#@pkg $attr\$" "$file"; then
+                  if grep -qE "#@pkg(-other)? ''${attr//./\\.}\$" "$file"; then
                     report+=("$attr"$'\t'"present"$'\t'"already in $file")
                     continue
                   fi
@@ -2011,6 +2052,9 @@ in
                         let
                           path = p.lib.splitString \".\" a;
                           q = p.lib.attrByPath path null p;
+                          # tryEval does not catch a missing attribute, so a
+                          # non-package (python3Packages) must never reach v.
+                          isPkg = p.lib.isDerivation q;
                           ls = if (q.meta or { }) ? license then
                                  (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
                                else [ ];
@@ -2022,13 +2066,20 @@ in
                             broken = q.meta.broken or false;
                           };
                           r = builtins.tryEval
-                            (if p.lib.hasAttrByPath path p
+                            (if isPkg
                              then { ok = true; } // builtins.deepSeq v v
                              else { ok = false; });
                         in if r.success then r.value else { ok = false; };
                     in builtins.listToAttrs
                       (map (a: { name = a; value = probe a; }) (builtins.fromJSON attrsJson))" \
-                    2>/dev/null) || batch='{}'
+                    2>"$backup.err") || {
+                    # Not "no match" for every name: an evaluation that failed
+                    # outright is a different answer, and the reason matters.
+                    restore
+                    echo "nixarchy: could not evaluate nixpkgs to check these names:" >&2
+                    tail -5 "$backup.err" >&2
+                    exit 1
+                  }
                   for attr in "''${to_eval[@]}"; do
                     evalinfo[$attr]=$(jq -c --arg a "$attr" '.[$a] // { ok: false }' <<<"$batch")
                   done
@@ -2083,6 +2134,8 @@ in
                   if [ "$(jq -r .unfree <<<"$info")" = true ]; then
                     if [ "$allowunfree" = true ]; then
                       flags=" [unfree -- fine here, this machine allows it]"
+                    elif [ "$haspredicate" = true ]; then
+                      flags=" [unfree -- allowed only if your allowUnfreePredicate accepts it]"
                     else
                       # The minority case (#497): allowUnfree defaults on, so
                       # reaching this line means somebody turned it off on
@@ -2248,7 +2301,7 @@ in
                   esac
                 fi
 
-                count=$(grep -c '#@pkg ' "$file" || true)
+                count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
 
                 # A menu pick runs with no terminal attached, so stdout goes nowhere. Say it
                 # on the desktop instead, clickable, because a rebuild is what is still owed.
@@ -2276,7 +2329,7 @@ in
                     echo "One more step, in your own flake.nix -- this tool does not edit it:"
                     echo
                     echo "  inputs.nixpkgs-other.url ="
-                    echo "    \"github:NixOS/nixpkgs/$( [ "$want_channel" = stable ] && echo nixos-26.05 || echo nixos-unstable )\";"
+                    echo "    \"github:NixOS/nixpkgs/$( [ "$want_channel" = stable ] && echo nixos-${stableRelease} || echo nixos-unstable )\";"
                     echo
                     echo "and, in your host configuration:"
                     echo
@@ -2346,8 +2399,13 @@ in
                 walk=${./pkg-index.nix}
                 flakedir="''${NIXARCHY_FLAKE:-${cfg.flake}}"
                 # This generation's licence policy, baked in like the index is:
-                # both are replaced together with the system generation.
-                allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
+                # both are replaced together with the system generation. A
+                # predicate may allow any given package, so it is not flagged.
+                allowunfree=${
+                  lib.boolToString (
+                    (config.nixpkgs.config.allowUnfree or false) || config.nixpkgs.config ? allowUnfreePredicate
+                  )
+                }
 
                 # The writers this picker calls fall back TO the picker on a miss
                 # (#492). A row that then misses would recurse into a second
@@ -2408,15 +2466,15 @@ in
 
                   # The system's own nixpkgs, not the flake registry: an index that offers a
                   # package this machine cannot build is worse than no index. Slow enough to
-                  # be worth saying so -- about a minute, once per system generation.
+                  # be worth saying so -- about a minute, once each time nixpkgs changes.
                   #
                   # Our own walk (modules/pkg-index.nix) rather than `nix search`:
                   # verified to produce the identical row set, and it carries the
                   # meta `nix search --json` does not -- homepage, licence, unfree,
                   # broken (#493).
                   echo "  indexing nixpkgs (this takes about a minute)..." >&2
-                  nix-instantiate --eval --strict --json \
-                    --arg nixpkgs "$nixpkgs" "$walk" 2>/dev/null |
+                  if ! nix-instantiate --eval --strict --json \
+                    --arg nixpkgs "$nixpkgs" "$walk" 2>"$cache/index-errors.log" |
                     jq -r '
                       .[] |
                       [ "pkg", .attr,
@@ -2438,7 +2496,14 @@ in
                           + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
                           + "\n\nctrl-t tries it now, without installing."
                         )
-                      ] | @tsv' >> "$tmp"
+                      ] | @tsv' >> "$tmp"; then
+                    # Said, not swallowed: out of memory looked like the script
+                    # simply stopping after "indexing nixpkgs".
+                    rm -f "$tmp"
+                    echo "  indexing nixpkgs failed; the end of $cache/index-errors.log:" >&2
+                    tail -5 "$cache/index-errors.log" >&2
+                    exit 1
+                  fi
 
                   # A raw attribute that the curated list already covers deserves a
                   # warning on its row: picking the APP gets the module, policies
@@ -2465,12 +2530,21 @@ in
                   cat "$pkgnewrow" >> "$tmp"
 
                   mv "$tmp" "$index"
-                  readlink -f /run/current-system > "$stamp"
+                  stamp_key > "$stamp"
                 }
 
-                if [ "$reindex" = 1 ] || [ ! -s "$index" ] ||
-                   [ "$(cat "$stamp" 2>/dev/null)" != "$(readlink -f /run/current-system)" ]; then
-                  echo "Building the search index. This happens once per system generation." >&2
+                # Keyed on what the index is built FROM, not on the system
+                # generation: every apply is a new generation, and reindexing
+                # an unchanged nixpkgs cost a minute on the next search.
+                stamp_key() {
+                  printf '%s\n' "$nixpkgs" "$walk" "$optionsjson" "$appindex" "$apptable" "$flatpakrows" "$pkgnewrow"
+                }
+                index_stale() {
+                  [ ! -s "$index" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$(stamp_key)" ]
+                }
+
+                if [ "$reindex" = 1 ] || index_stale; then
+                  echo "Building the search index. This happens when nixpkgs changes." >&2
                   build_index
                 fi
 
@@ -2870,12 +2944,10 @@ in
                 case "''${1:-}" in
                   search)   shift; exec nixarchy-search "$@" ;;
                   apply)    shift; exec nixarchy-apply "$@" ;;
-                  # Not installed on the system, on purpose: the doctor exists
-                  # to be run *before* nixarchy is an input anywhere, which is
-                  # the only entry point someone deciding whether to adopt it
-                  # actually has. Route to the command that works rather than to
-                  # a binary that is not there.
                   verify)   shift; exec nixarchy-verify "$@" ;;
+                  # Omarchy's `version` answers only "which Omarchy"; this prints
+                  # both, which is the question someone on nixarchy is asking.
+                  version)  shift; exec nixarchy-version "$@" ;;
                   explain)  shift; exec nixarchy-explain "$@" ;;
                   doctor)
                     if command -v nixarchy-doctor >/dev/null 2>&1; then
@@ -2990,6 +3062,8 @@ in
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                   nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                   nixarchy doctor             What this machine needs to run nixarchy
+                  nixarchy verify             Check the hardware nixarchy cannot test in a VM
+                  nixarchy version            The Omarchy version and the nixarchy revision
                   nixarchy explain            What a Nix error means -- pipe a failure into it
 
                 This machine:
@@ -3077,15 +3151,29 @@ in
 
                 imports=""
                 copied=""
+                # What apply last wrote to each copy, so an edit made in the flake
+                # itself is told apart from a new pick -- and kept, not overwritten.
+                applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
+                mkdir -p "$applied"
                 for part in apps services advanced; do
                   src="$srcdir/$part.nix"
                   [ -f "$src" ] || continue
                   dst="$base/nixarchy/$part.nix"
                   imports="$imports ./nixarchy/$part.nix"
+                  record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
                   if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                    sha256sum <"$dst" >"$record"
                     continue
                   fi
+                  if [ -f "$dst" ] && [ -f "$record" ] && ! sha256sum <"$dst" | cmp -s - "$record"; then
+                    kept="$applied/$part.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)"
+                    cp "$dst" "$kept"
+                    echo "NOTE: $dst was edited in the flake since the last apply."
+                    echo "  Your version is kept at $kept -- move the change into"
+                    echo "  $src, which is the file apply copies from."
+                  fi
                   cp "$src" "$dst"
+                  sha256sum <"$dst" >"$record"
                   copied="$copied $part"
                 done
 
@@ -3140,7 +3228,9 @@ in
                 fi
 
                 # Why: modules/AGENTS.md#whether-anything-in-the-flake-actually-imports-it
-                importers=$(grep -rl 'nixarchy-apps\.nix' "$flake" \
+                # Uncommented mentions only: a `# imports = [ ./nixarchy-apps.nix ];`
+                # left in a file used to silence this warning.
+                importers=$(grep -rlE '^[^#]*nixarchy-apps\.nix' "$flake" \
                   --include='*.nix' 2>/dev/null |
                   grep -v '/nixarchy-apps\.nix$' || true)
 
@@ -3203,7 +3293,21 @@ in
                   # export at whatever configuration they usually work on -- and
                   # an app selection copied into one flake then switched into
                   # another is a failure that looks like nothing happening.
-                  [yY]*) exec nh os switch "$flake" ;;
+                  [yY]*)
+                    rc=0
+                    nh os switch "$flake" || rc=$?
+                    if [ "$rc" -ne 0 ]; then
+                      # The selection stays copied, so every later apply or update
+                      # fails the same way until the cause is taken out.
+                      echo
+                      echo "The rebuild failed (exit $rc). Nothing changed on this machine."
+                      echo "  What you picked is still in the selection, so the next"
+                      echo "  rebuild will fail the same way until it is removed:"
+                      echo "    nixarchy app remove                    take out what you just picked"
+                      echo "    nh os switch $flake 2>&1 | nixarchy explain   what the error means"
+                    fi
+                    exit "$rc"
+                    ;;
                   *) echo "Not switching. Run: nh os switch $flake" ;;
                 esac
               '';

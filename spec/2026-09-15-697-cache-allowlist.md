@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 697
 intent: intent/2026-09-15-697-cache-allowlist.md
 ---

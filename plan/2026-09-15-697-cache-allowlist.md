@@ -142,8 +142,15 @@ file in the same commit.
    that the cache now serves each result stays, unchanged.
    → verify: actionlint; diff review.
 
-8. **After #696 merges: `nightly.yml` and `template-runners.sh`.** Rebase onto
-   `main`.
+8. **Moved to a follow-up on #696's branch.** `nightly.yml` and
+   `template-runners.sh`.
+
+   **Reordered during implementation.** This step waited for #696 to merge, but
+   #696 is blocked by the problem this PR fixes: its `omarchy` job builds 47
+   checks against an empty cache and dies. So this PR merges first. Then #696
+   is rebased onto `main`, and the changes below go into that branch, with this
+   plan's verification. Until then, #696's runner-only repush is the keep-alive
+   that exists, and D5 is incomplete. The PR says so.
    - `template-runners.sh` probes and repushes the output of every
      `cache-allowlist.sh` entry; rename it to `cache-entries.sh`.
    - The nightly job `runners` is renamed `repush`, and `report`'s `needs` and
@@ -167,8 +174,9 @@ file in the same commit.
     empty.
 
 11. **PR.** One PR from `ci/697-cache-allowlist` that links `intent/`, `spec/`
-    and `plan/`, closes #697, and includes the failing outputs from steps 4, 5
-    and 8 and the budget number from step 9. Workflow changes need maintainer
+    and `plan/`, and includes the failing outputs from steps 4, 5 and 6 and the
+    budget number from step 9. It uses `Refs #697`, not `Closes`, because D5
+    finishes in the step 8 follow-up. Workflow changes need maintainer
     review (§11), so it is not auto-merged.
 
 ## Tests

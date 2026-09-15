@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 710
 author: olafkfreund
 ---
@@ -55,6 +55,7 @@ activity and "destroyed during incubation" errors.
 
 ## Open questions
 
-1. **Other writers:** nixi and voice plugins, installed by input modules,
-   produced events in the first burst. Audit them in this task, or open a
-   separate issue per owner?
+Resolved at approval (the owner accepted the recommendations):
+
+1. **Other writers:** the nixi and voice plugin writers get a separate issue
+   each, owned by their input modules. #710 covers nixarchy's activation only.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 710
 spec: spec/2026-09-15-710-plugin-reloads.md
 ---

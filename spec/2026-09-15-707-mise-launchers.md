@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 707
 intent: intent/2026-09-15-707-mise-launchers.md
 ---

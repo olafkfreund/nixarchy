@@ -18,13 +18,15 @@
 # The changed-file list is a fixture, because that half comes from the network.
 let
   # The real 4.0.1 -> 4.0.2 compare, trimmed: two bins this port replaces with
-  # a stub, one it patches, one file it reads straight out of the source, one
-  # seeded config file, and four upstream changes that need no thought here.
+  # a stub, one it patches, one it edits only with `sed -i`, one file it reads
+  # straight out of the source, one seeded config file, and four upstream
+  # changes that need no thought here.
   changed = builtins.toFile "changed.txt" ''
     bin/omarchy-plymouth-set
     bin/omarchy-refresh-sddm
     bin/omarchy-version-channel
     bin/omarchy-theme-bg-next
+    bin/omarchy-plugin-clone
     config/hypr/xdph.conf
     default/plymouth/omarchy.script
     install/omarchy-base.packages
@@ -64,7 +66,7 @@ pkgs.runCommand "nixarchy-patched-files"
     # One line per source of "this port has its hands on it", so a single grep
     # that has stopped matching cannot hide behind the other three.
     for want in bin/omarchy-plymouth-set bin/omarchy-refresh-sddm \
-      bin/omarchy-version-channel config/hypr/xdph.conf \
+      bin/omarchy-version-channel bin/omarchy-plugin-clone config/hypr/xdph.conf \
       default/plymouth/omarchy.script; do
       <<<"$report" grep -q "$want" || {
         echo "patched files: $want is a file this port touches and is missing" >&2
@@ -76,6 +78,11 @@ pkgs.runCommand "nixarchy-patched-files"
     # reviewer whether upstream's fix reaches a machine here at all.
     echo "$report" | grep 'omarchy-plymouth-set' | grep -q 'nix-bin' || {
       echo "patched files: a stubbed bin is not described as stubbed" >&2
+      fail=1
+    }
+    # The one reached only by `sed -i`, through a variable on another line.
+    echo "$report" | grep 'omarchy-plugin-clone' | grep -q 'sed -i' || {
+      echo "patched files: a file edited only by sed -i is not described as such" >&2
       fail=1
     }
     echo "$report" | grep 'xdph.conf' | grep -q 'seeded' || {
@@ -97,7 +104,7 @@ pkgs.runCommand "nixarchy-patched-files"
     done
 
     # The count in the prose is the count in the list.
-    <<<"$report" grep -q '^9 files changed' || {
+    <<<"$report" grep -q '^10 files changed' || {
       echo "patched files: the changed-file total is wrong or missing" >&2
       fail=1
     }
@@ -111,8 +118,8 @@ pkgs.runCommand "nixarchy-patched-files"
 
     # --list is what the workflow asks before it goes to the network.
     listed=$(bash "$script" --list ${changed} root)
-    [ "$(echo "$listed" | wc -l)" = 5 ] || {
-      echo "patched files: --list printed $(echo "$listed" | wc -l) paths, expected 5" >&2
+    [ "$(echo "$listed" | wc -l)" = 6 ] || {
+      echo "patched files: --list printed $(echo "$listed" | wc -l) paths, expected 6" >&2
       echo "$listed" >&2
       fail=1
     }

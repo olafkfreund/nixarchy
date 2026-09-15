@@ -57,7 +57,7 @@ ISO, and that is on the same page.
 
 ## Search everything, install declaratively
 
-Omarchy's Install menu offers 64 applications. **Install ▸ Search** offers the
+The app selection carries 66 applications. **Install ▸ Search** offers the
 rest of NixOS — one fuzzy picker over **137,599 rows**: every nixpkgs package,
 every NixOS option, and the app selection, with each entry's type, default and
 documentation in a preview pane.

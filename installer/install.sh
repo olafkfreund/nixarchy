@@ -2892,6 +2892,32 @@ main() {
   # the failure screen can name a path that will still exist after a reboot.
   local target_log=""
   local started rc=0 elapsed
+  install_attempts
+  ui_finished "$elapsed" "$username"
+}
+
+# The phases, then the failure screen, again for as long as the person at it
+# asks to retry. In this process rather than by re-running the installer:
+# the answers, the LUKS passphrase among them, stay in memory and are never
+# written anywhere a shell on that screen could read them. format_disk already
+# copes with the /mnt a failed attempt leaves mounted.
+#
+# Uses main's locals (log, target_log, started, rc, elapsed).
+install_attempts() {
+  local choice_rc
+  while :; do
+    rc=0
+    target_log=""
+    install_once
+    [ "$rc" -ne 0 ] || return 0
+    choice_rc=0
+    ui_failed "$log" "$rc" "${target_log:-}" || choice_rc=$?
+    [ "$choice_rc" -eq 3 ] || exit "$rc"
+    echo "retrying the install with the same answers" >>"$log"
+  done
+}
+
+install_once() {
   started=$(date +%s)
 
   # How long this took, written down where something other than a person
@@ -3024,12 +3050,6 @@ main() {
     fi
   fi
 
-  if [ "$rc" -ne 0 ]; then
-    ui_failed "$log" "$rc" "${target_log:-}"
-    exit "$rc"
-  fi
-
-  ui_finished "$elapsed" "$username"
 }
 
 # Guarded so the functions above can be sourced and exercised without running

@@ -808,8 +808,9 @@ in
       in
       {
         # nixarchy-apply runs `nh os switch <flake>`, so flakes are not
-        # optional here. mkDefault leaves a user free to manage this themselves.
-        experimental-features = lib.mkDefault [
+        # optional here. Plainly assigned: a list merges, and under mkDefault a
+        # user adding one feature of their own silently replaced these (§7).
+        experimental-features = [
           "nix-command"
           "flakes"
         ];

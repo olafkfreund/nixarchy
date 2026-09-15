@@ -125,9 +125,10 @@ described in those files rather than done behind them.
 
 Three things to know first.
 
-**The image needs a network.** It downloads the closure rather than carrying it,
-so an install is as fast as your connection. Making it offline is the next phase
-of the work.
+**Only the net image needs a network.** It downloads the closure rather than
+carrying it, so an install is as fast as your connection. The offline image
+carries the whole closure and installs with no network at all — see
+[The ISO](#the-iso) above.
 
 **It is UEFI only.** The layout is an ESP with systemd-boot, and there is no BIOS
 path — the installer checks and refuses rather than failing at the end.
@@ -172,7 +173,7 @@ into your flake and runs `nh os switch`.
 
 ![Searching all of nixpkgs from the menu](../img/desktop/search-results.jpg)
 
-Omarchy's menu offers 56 applications. **Search** offers the rest of NixOS: one
+The app selection carries 66 applications. **Search** offers the rest of NixOS: one
 fuzzy picker over every nixpkgs package, every NixOS option and the app
 selection — 137,526 rows in that screenshot, 3,554 of them matching
 `tailscale` — with each entry's type, default and documentation in the preview.

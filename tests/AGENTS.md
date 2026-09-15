@@ -305,3 +305,29 @@ Two branches only these can reach, as illustration:
   the calls go through a wrapper whose name merely *ends* in `sops`. Both
   reported green on the broken code, and both were caught because §1's
   break-it-first contract was actually run rather than described.
+- **Run a unit's `script`, do not grep it.** `options` asserted the
+  auto-update service contained the words `uncommitted changes`, and passed
+  for as long as the guard refused every run on every installed machine: the
+  installer never commits, so `git diff HEAD` exited 128 and read as dirty. A
+  NixOS config hands you the unit's text as
+  `config.systemd.services.<name>.script`; `tests/options.nix` now runs it with
+  `nix` and `nixos-rebuild` stubbed on `PATH` against real `git` repositories in
+  each state the installer and the job itself leave behind.
+- **A command substitution that fails ends a `runCommand` with no message at
+  all.** `id=$(grep -oE '#@ [a-z0-9_-]+$' "$f" | head -1 | cut -d' ' -f2)` matched
+  nothing — service markers carry a trailing comment, app markers do not — and
+  under `errexit` plus `pipefail` the script stopped at the assignment. The last
+  line in the log was the *previous* section's success message, which reads as
+  that section having failed. When a check stops after a green line with no
+  error, the cause is the first `$(...)` after it; guard lookups that may miss
+  with `|| true` and a `test -n` that says what was missing.
+- **A line-order assertion checks where text sits, not the order anything runs
+  in, so moving a function breaks it.** `installer-store-space` and
+  `installer-from-repo` prove `preflight_build` runs before `format_disk` by
+  comparing line numbers in `install.sh`. Moving the install phases into a new
+  function defined *above* `main()` reversed the numbers while the runtime order
+  was unchanged, and both went red in CI on #693. A locally chosen set of
+  "relevant" checks had left both out. When you move code in `install.sh`, run
+  every `installer-*` check, not the ones that look related; they are seconds
+  each. And a line-order check also needs the call that reaches the moved code,
+  or it stays green when nothing calls it.

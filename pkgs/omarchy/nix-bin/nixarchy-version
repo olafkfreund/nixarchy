@@ -2,7 +2,7 @@
 
 # nixarchy:new
 # omarchy:summary=Print the Omarchy version and the nixarchy revision this machine was built from
-# omarchy:examples=nixarchy-version
+# omarchy:examples=nixarchy version
 
 # `omarchy --version` answers "which Omarchy", never "which nixarchy".
 #
@@ -26,6 +26,13 @@
 # dependency at all and the build can run it to check the splice worked.
 
 set -euo pipefail
+
+case "${1:-}" in
+  -h | --help)
+    echo "usage: nixarchy version    the Omarchy version and the nixarchy revision this machine runs"
+    exit 0
+    ;;
+esac
 
 printf 'Omarchy   %s\n' '@omarchyversion@'
 printf 'nixarchy  %s  %s\n' '@nixarchyrev@' '@nixarchydate@'

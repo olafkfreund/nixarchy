@@ -23,6 +23,21 @@
 
 set -euo pipefail
 
+case "${1:-}" in
+  -h | --help)
+    cat <<'EOF'
+usage: nixarchy-unfreeze
+
+  Rewrite a flake the old installer pinned to a commit, so updates move it
+  again. Shows the change and asks before writing. Reads $NIXARCHY_FLAKE
+  (default /etc/nixos).
+EOF
+    exit 0
+    ;;
+  "") ;;
+  *) echo "nixarchy-unfreeze takes no arguments; --help explains it" >&2; exit 1 ;;
+esac
+
 flake="${NIXARCHY_FLAKE:-/etc/nixos}"
 ref="release"
 

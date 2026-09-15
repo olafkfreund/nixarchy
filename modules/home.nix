@@ -655,9 +655,12 @@ in
                   local src="$1" dest="$2"
                   [ -d "$src" ] || return 0
                   run mkdir -p "$dest"
-                  # --no-clobber: a file the user has edited is theirs, not ours.
-                  run ${pkgs.coreutils}/bin/cp -rn --no-preserve=mode,ownership \
-                    "$src"/. "$dest"/ 2>/dev/null || true
+                  # --update=none: a file the user has edited is theirs, not ours.
+                  # A real failure (a full disk, a directory they cannot write)
+                  # is reported, not swallowed -- and does not stop the others.
+                  run ${pkgs.coreutils}/bin/cp -r --update=none --no-preserve=mode,ownership \
+                    "$src"/. "$dest"/ ||
+                    echo "nixarchy: could not seed $dest from $src; see the error above" >&2
                 }
 
                 # One shipped default, under a name of our choosing. A plain `cp -n` is

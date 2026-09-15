@@ -448,6 +448,14 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   [ -n "$fmt_line" ] && [ "$pf_line" -lt "$fmt_line" ] || {
     echo "preflight_build does not run before format_disk; #300 is back" >&2; exit 1;
   }
+  # Line order proves nothing if main() never reaches the function holding
+  # format_disk: the install phases live in install_once, which main() reaches
+  # only through install_attempts. So that call must exist, after the preflight.
+  ia_line=$(grep -n '^  install_attempts$' ${installScript} | cut -d: -f1 | head -1 || true)
+  [ -n "$ia_line" ] && [ "$pf_line" -lt "$ia_line" ] || {
+    echo "main() does not call install_attempts after preflight_build, so the install never runs" >&2
+    exit 1
+  }
 
   echo "preflight_build refuses before the wipe, and main runs it there"
 

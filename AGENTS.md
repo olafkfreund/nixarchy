@@ -99,6 +99,12 @@ Two mechanical traps that produced fake green results here, live:
   about a check, prove the break landed: `git diff`, or `grep` the file for
   what you meant to remove. A silent no-op break and a blind check are
   indistinguishable from the exit status alone.
+- **A break that stays green may be a property provided twice.** Removing a new
+  `NIXARCHY_FLAKE` export left its check green, because `modules/nixos.nix`
+  had exported the same variable for months -- and the review that asked for
+  the export had grepped scripts for `/etc/nixos` fallbacks without finding it
+  (§12: search for the behaviour). Before calling a green break a blind check,
+  grep the whole tree for a second place that already does the thing.
 
 And the same rule read backwards, for the day a check goes red on you: **ask
 whether it was testing the property or the arrangement.** #220 moved the menu

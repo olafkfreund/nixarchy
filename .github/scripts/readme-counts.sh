@@ -257,6 +257,9 @@ quantity "apps-indexed" "$a_indexed" \
 quantity "apps-nixpkgs-row" "$a_untouched" \
   '.*\| nixpkgs \(([0-9]+) of [0-9]+ apps\) \|.*' \
   "s/\| nixpkgs \([0-9]+ of [0-9]+ apps\) \|/| nixpkgs ($a_untouched of $a_total apps) |/"
+quantity "apps-menu-sentence" "$a_total" \
+  '^The ([0-9]+) apps in the selection are the ones.*' \
+  "s/^The [0-9]+ apps in the selection are the ones/The $a_total apps in the selection are the ones/"
 # The same number in two sentences, so each gets its own pattern: quantity
 # compares only the FIRST match, and one pattern over both lines would report
 # calm while the second line disagreed -- which is #557 verbatim.
@@ -289,6 +292,39 @@ readme="$root/docs/index.md"
 quantity "skills-index" "$skills_word" \
   '.*nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen), written for NixOS.*' \
   's/nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen), written for NixOS/nixarchy ships '"$skills_word"', written for NixOS/'
+
+# The app total, stated in four more places. It drifted to 56, 59 and 64 while
+# the README's checked copies said 66 -- the same #506 shape, for apps.
+readme="$root/docs/index.md"
+quantity "apps-index" "$a_total" \
+  '.*The app selection carries ([0-9]+) applications\..*' \
+  "s/The app selection carries [0-9]+ applications\./The app selection carries $a_total applications./"
+readme="$root/docs/manual/getting-started.md"
+quantity "apps-getting-started" "$a_total" \
+  '.*The app selection carries ([0-9]+) applications\..*' \
+  "s/The app selection carries [0-9]+ applications\./The app selection carries $a_total applications./"
+readme="$root/docs/manual/the-iso.md"
+quantity "apps-iso" "$a_total" \
+  '.*The ([0-9]+) selectable apps are the exception.*' \
+  "s/The [0-9]+ selectable apps are the exception/The $a_total selectable apps are the exception/"
+# The breakdown drifted as a whole -- the total and three of its parts at once
+# -- so each number is its own quantity, one per line of the paragraph.
+readme="$root/docs/manual/other-packages.md"
+quantity "apps-other-total" "$a_total" \
+  '^not list\. There are ([0-9]+) apps in total:$' \
+  "s/^not list\. There are [0-9]+ apps in total:$/not list. There are $a_total apps in total:/"
+quantity "apps-other-nixpkgs" "$a_nixpkgs" \
+  '^([0-9]+) are plain nixpkgs packages,$' \
+  "s/^[0-9]+ are plain nixpkgs packages,$/$a_nixpkgs are plain nixpkgs packages,/"
+quantity "apps-other-modules" "$a_mod" \
+  '^([0-9]+) are NixOS modules,$' \
+  "s/^[0-9]+ are NixOS modules,$/$a_mod are NixOS modules,/"
+quantity "apps-other-ours" "$a_ours" \
+  '^([0-9]+) are built by nixarchy itself.*' \
+  "s/^[0-9]+ are built by nixarchy itself/$a_ours are built by nixarchy itself/"
+quantity "apps-other-unavailable" "$a_un" \
+  '^and ([0-9]+) have no equivalent and say so in the menu\.$' \
+  "s/^and [0-9]+ have no equivalent and say so in the menu\.$/and $a_un have no equivalent and say so in the menu./"
 readme=$readme_saved
 
 # The count says a number moved; this says which skill a table forgot. Every
@@ -310,12 +346,12 @@ for f in "$readme" "$root/docs/manual/ai.md"; do
   done
 done
 
-# A floor. Eighteen quantities are declared above; a run that checked fewer
+# A floor. Twenty-seven quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 18 ]; then
-  echo "::error::only $checked of 18 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 27 ]; then
+  echo "::error::only $checked of 27 quantities were accounted for" >&2
   fail=1
 fi
 

@@ -144,3 +144,8 @@ hosting those binaries someone else's decision.
 ## Open questions
 
 None. The three above are settled.
+
+**Amended 2026-09-16:** Decision 1 is superseded — the owner chose to pin all
+three agents (`opencode`, `codex`, `claude`). The budget is brought under its
+ceiling by dropping `zen-browser` alone (2234 - 394 = 1840 MiB). The retained
+650 MiB and the public-cache consequence are recorded in the spec's Risks.

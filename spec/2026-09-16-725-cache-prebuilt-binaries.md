@@ -8,21 +8,41 @@ intent: intent/2026-09-16-725-cache-prebuilt-binaries.md
 
 ## Design
 
-### 1. opencode is the agent nixarchy pins (`modules/home.nix`)
+### 1. All three agents are pinned explicitly (`modules/home.nix`)
 
 ```nix
-services.nixi.agents = [ "opencode" ];
+services.nixi.agents = [
+  "opencode"
+  "codex"
+  "claude"
+];
 ```
+
+**Owner's decision, 2026-09-16, amending Decision 1 of the intent.** All three
+adapters are pinned rather than opencode alone. What this changes and what it
+costs is in Risks below; it is a deliberate trade, not an oversight.
+
+The consequence for this issue is that the `agents` line is **no longer the
+budget fix** — `claude` stays, so the 650 MiB stays. The budget is brought back
+under its ceiling by §2 alone:
+
+```
+2234 - 394 (zen-browser) = 1840 MiB, against an unchanged 2048
+```
+
+What the line still does is add `opencode` (free, served by `cache.nixos.org`,
+and it speaks ACP itself so it pins no adapter — expected cost to this budget:
+zero) and make the set explicit instead of conditional on `allowUnfree`.
 
 Plain assignment, not `lib.mkDefault`: `agents` is a `listOf`, and AGENTS.md §7
 is explicit that `mkDefault` on a merging type silently drops the whole
 contribution the moment a user adds an element.
 
-A `default` is not a definition, so one definition replaces upstream's default
-outright — the 650 MiB never enters. A user who writes
-`services.nixi.agents = [ "claude" ]` concatenates with ours and gets
-`[ "opencode" "claude" ]`, which is the right behaviour: their machine, their
-unfree binary, their disk.
+A `default` is not a definition, so this replaces upstream's conditional default
+outright. That matters even though the contents overlap: upstream's default
+*varies with `allowUnfree`*, so a machine that turns unfree off silently gets a
+different agent set. Stating the three makes the set a property of nixarchy
+rather than a side effect of a flag.
 
 The comment beside it belongs in the existing block at `modules/home.nix:563`
 ("the three defaults nixarchy deliberately does NOT change" — `autoEnable`,
@@ -30,11 +50,12 @@ The comment beside it belongs in the existing block at `modules/home.nix:563`
 *does* change, and the reason is not obvious from either side:
 
 > upstream's default is `lib.optional (pkgs.config.allowUnfree or false)
-> "claude" ++ [ "codex" ]`, and `modules/nixos.nix:795` sets `allowUnfree` true,
-> so inheriting it pins `claude-agent-acp` → unfree `claude-code`, 650 MiB, into
-> `reference-toplevel` and therefore into every installed machine and a public
-> cache. opencode speaks ACP itself, so it needs no adapter package at all, and
-> it is free, so `cache.nixos.org` serves it.
+> "claude" ++ [ "codex" ]` — conditional on a flag `modules/nixos.nix:795` sets,
+> so the agent set moved with `allowUnfree` and nobody chose it. nixarchy names
+> all three instead: opencode (speaks ACP itself, no adapter, free), codex
+> (Apache-2.0, `data/apps.nix:361`), and claude, whose adapter pulls the unfree
+> `claude-code` — 650 MiB into `reference-toplevel`, and so into every installed
+> machine and into a public cache. That cost is accepted deliberately (#725).
 
 The other agents stay reachable by both existing routes, unchanged:
 `omarchy-default-agent` installs one from the Install menu through
@@ -106,6 +127,33 @@ flag changes what enters the system closure, not merely what is permitted.
 
 ## Risks
 
+- **Cache headroom, knowingly spent.** The 2048 ceiling is a proxy: Cachix holds
+  several in-flight commits inside a 5 GB tier, so what matters is how many fit.
+
+  | pinned agents | per commit | commits before overflow |
+  |---|---|---|
+  | before this change | 2234 MiB | 2.2 |
+  | **this change** | **1840 MiB** | **2.7** |
+  | opencode + codex only | 1190 MiB | 4.2 |
+
+  #697's spec assumed the cache holds "the latest commit plus two or three
+  predecessors". At 1840 MiB the third predecessor overflows, and 16 commits
+  landed on `main` on 2026-09-16 alone. So the eviction that cost 31 of 34 proofs
+  on 2026-09-15 remains reachable on a busy day; this change buys margin without
+  removing the failure mode. If proofs are evicted again, this row is the first
+  place to look, and dropping `claude` from `agents` is the lever.
+
+- **An unfree binary is published to a public cache, deliberately.**
+  `claude-code` is `unfree = true` (`data/apps.nix:355`). Pinning its adapter
+  puts it in `reference-toplevel`, which `cachix-push.sh` pushes by closure, so
+  nixarchy hosts and serves Anthropic's proprietary binary. This **reverses**, for
+  the toplevels, the policy `cache-allowlist.sh` states for apps: *"this cache is
+  public, and pushing a proprietary binary to it is redistributing it. Its users
+  build it, as nixpkgs' do."* Recorded here rather than left to be rediscovered:
+  the reversal is the owner's decision of 2026-09-16, taken with the licence
+  question raised, and `cachix push` cannot exclude a path from a closure, so
+  there is no partial version of it. Revisit if Anthropic's terms are reviewed.
+
 - **A user relying on the pinned claude adapter.** nixi's own option
   documentation covers it: *"An agent not listed is still usable if its adapter
   is on `PATH`"*, and `defaultAgent = "claude"` installs the package. Behaviour
@@ -139,19 +187,21 @@ captured from #719's `system` job, step 22, on 2026-09-16.
 1. **The gate itself.** `cache-budget.sh` runs in `build.yml`'s `system` job on
    every pull request, *"so it fails before a large addition merges"*. Its
    passing output on this PR is the proof, and goes in the PR body.
-   Prediction, falsifiable: **≤ 1190 MiB** against an unchanged 2048 budget.
-   An upper bound — removing an entry can drop dependencies the failing run's
-   top-ten did not show, so a lower number confirms rather than contradicts.
+   Prediction, falsifiable: **≤ 1840 MiB** against an unchanged 2048 budget.
+   An upper bound — removing `zen-browser` can drop dependencies the failing
+   run's top-ten did not show, so a lower number confirms rather than
+   contradicts. A number at or above 2048 falsifies the design.
 2. **Watch it fail, in one tree** (§5's rule about closures): revert the
-   `agents` line alone, re-run `cache-budget.sh`, confirm ~2234 MiB returns,
+   `prebuilt` flag alone, re-run `cache-budget.sh`, confirm ~2234 MiB returns,
    restore. Proves the line is what moved the number, not something incidental.
    Verify the revert landed with `git diff` before reading the result — a
    silent no-op break and a blind check are indistinguishable from exit status.
 3. **`checks.options`** — cheap, evaluation only, runs locally: the new
    `agents` default in both Mode A states.
-4. **Absence, directly:** `nix eval` the reference closure and assert no
-   `claude-code` or `claude-agent-acp` path, so the 650 MiB claim is measured
-   rather than inferred from the budget total.
+4. **Presence and absence, directly:** `nix eval` the reference closure and
+   assert `opencode` is in it and no `zen-beta-bin-unwrapped` path is, so each
+   half of the change is measured rather than inferred from one total.
+   `claude-code` is expected to remain, by decision.
 5. **`nix fmt -- --ci`, `statix`, `deadnix`** before pushing.
 
 Not attempted here: `checks.session` and the install checks. They cannot vary

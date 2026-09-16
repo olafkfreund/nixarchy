@@ -1,0 +1,55 @@
+name: Feature or package request
+description: Something you want packaged, or something nixarchy should do that it does not.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        First: **is this about the desktop itself?** Themes, the shell, menus,
+        keybindings and the Hyprland configuration are Omarchy's, and a feature
+        idea for them belongs in upstream's discussions — the links on the
+        previous page route it. This form is for what nixarchy adds: the Nix
+        packaging, the installer, the modules, the `nixarchy-*` commands.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you want, and what you would do with it
+      description: >
+        The second half matters more than it sounds. "Package X" and "package X
+        because I need it for Y at work" lead to different answers, and
+        sometimes Y already has an answer.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream
+    attributes:
+      label: What Omarchy does today
+      description: >
+        Does upstream already do this on Arch? If it does, this is a porting
+        gap and belongs here. If it does not, it may belong upstream instead —
+        a change landed there arrives here for free.
+    validations:
+      required: true
+  - type: input
+    id: nixpkgs
+    attributes:
+      label: Is it in nixpkgs?
+      description: >
+        For a package request this is most of the answer. Search
+        https://search.nixos.org and paste the attribute name, or say "not
+        packaged" — a package nixpkgs lacks is a much larger job than a row in
+        the Install menu.
+      placeholder: "ghostty, or: not packaged"
+    validations:
+      required: true
+  - type: textarea
+    id: search
+    attributes:
+      label: Existing issues checked
+      description: >
+        Search both trackers, including closed issues — a closed-as-fixed
+        match that still reproduces is a regression, which is worth far more
+        than a duplicate.
+      placeholder: "gh search issues --repo olafkfreund/nixarchy \"…\""
+    validations:
+      required: false

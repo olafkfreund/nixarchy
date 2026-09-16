@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 714
 intent: intent/2026-09-16-714-install-fail-fast.md
 ---

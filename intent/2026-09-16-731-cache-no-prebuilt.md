@@ -98,42 +98,65 @@ into the common path, so they belong in one change.
   effect immediately.
 - No unfree binary is pushed to a public cache.
 
+## Constraint added by the owner, 2026-09-16
+
+**A user who has already chosen an agent must not lose it.** Not at the upgrade,
+not silently, and not with a "re-pick it from the menu" instruction. Whatever
+this change does to the default set, a machine that is using Claude today keeps
+using Claude with no action from its owner.
+
+That rules out the shape I first proposed, and it rules it out for a reason I
+had missed rather than the one I raised. The user at risk is not the one with
+`defaultAgent` set -- it is the one who picked Claude **from the Install menu**.
+Their `~/.config/omarchy/defaults/agent` says `claude`, which is an EXPLICIT
+choice, and nixi-nixarchy#13's new fallback deliberately does not override an
+explicit choice: it throws. Dropping the adapter from `agents` would break
+exactly those people, and the nixi fix does not catch them by design.
+
+## Decision: pin Claude's adapter when the machine is using Claude
+
+The machine already knows. A menu pick runs `nixarchy-pkg-add claude-code`,
+which writes `~/.config/nixarchy/apps.nix` -- declarative, persistent, and read
+at build time as `programs.nixarchy.apps.claude-code.enable`. `modules/home.nix`
+has the accessor for it already (`appEnabled`, line 72), beside the one for
+`defaultAgent` (line 42).
+
+```nix
+services.nixi.agents =
+  [ "opencode" "codex" ]
+  ++ lib.optional (appEnabled "claude-code" || defaultAgent == "claude") "claude";
+```
+
+| machine | claude pinned? |
+|---|---|
+| `checks.vm-toplevel`, `checks.reference-toplevel` | no -- **the 651 MiB leaves the cache** |
+| a user who picked Claude from the menu | **yes** -- `claude-code` is in their apps.nix |
+| `programs.nixarchy.defaultAgent = "claude"` | yes |
+| a user who has never asked for Claude | no |
+
+Nobody is asked to do anything. The adapter arrives exactly where Claude is
+wanted, and the closures CI pushes are the ones that never wanted it.
+
+**It also settles open question 2 without any code.** The issue proposed
+teaching `attr_for` to install `claude-agent-acp` beside `claude-code`. That is
+now unnecessary: enabling `claude-code` is what pins the adapter, through the
+existing menu flow, unchanged. One expression replaces two edits and a
+migration.
+
+**And it leaves `defaultAgent` alone**, so the option stays `null` by default and
+authoritative only when someone sets it -- a menu click still wins, which is the
+behaviour its description promises and the constraint above protects.
+
 ## Open questions
 
-1. **How does a default desktop get a working agent — the nixi fallback, or an
-   authoritative `defaultAgent`?** This is the real decision, and #731's
-   original proposal now looks wrong to me.
+1. **Bump the nixi pin to `1a7f9cbb` in this change, or separately?** It is not
+   required -- the decision above covers every machine that has chosen an agent,
+   and a machine that has chosen none has opencode and codex pinned for nixi to
+   find. The pin bump adds the fallback that makes a *missing* defaults file
+   safe too. In this change it is one line and one lock entry; separately it is
+   a routine bump. I lean including it, since the two were reasoned about
+   together.
 
-   The issue proposed defaulting `programs.nixarchy.defaultAgent` to
-   `"opencode"`. Reading the option, that has a cost I had not seen: it is
-   `null` today *deliberately*, and its description says the option **is
-   authoritative on the next activation**. Giving it a default makes the
-   configuration authoritative for everyone — so a user who picks Claude from
-   the Install menu would silently lose it at the next rebuild. That is a
-   regression in exactly the workflow the constraint above protects.
-
-   The alternative only became available tonight: nixi-nixarchy#13 merged, and
-   nixi now falls back to the first agent whose adapter actually resolves
-   instead of the literal name `claude`. So bumping the nixi pin to `1a7f9cbb`
-   and dropping `claude` from `agents` may be sufficient on its own — a default
-   desktop gets opencode because that is what is pinned, a menu click still
-   wins, and `defaultAgent` stays `null` and authoritative only when set.
-
-   - **A.** Bump the pin, drop claude from `agents`, leave `defaultAgent` alone.
-     Smallest surface, keeps the menu semantics, depends on the new nixi.
-   - **B.** Default `defaultAgent = "opencode"`. Works without the pin bump,
-     costs the menu-click-survives-rebuild behaviour for everyone.
-   - **C.** Both, as belt and braces — at the same cost as B.
-
-   I lean **A**. It is also the only one whose failure mode is "an older nixi
-   pin behaves as it does today" rather than "a user's menu choice vanished".
-
-2. **Where does the adapter get installed from — the menu, the option, or
-   both?** `attr_for` returning two packages is the smaller change;
-   `modules/apps.nix`'s `defaultAgent` mapping needs the same treatment either
-   way, or the declarative route stays broken while the menu is fixed.
-
-3. **Does `codex` stay pinned?** It is Apache-2.0 and did not appear in the
-   failing run's top ten, so its cost is under 51.8 MiB or zero. Keeping it is
-   nearly free; dropping it would make opencode the only pinned agent and the
-   set less useful. I assume it stays unless you say otherwise.
+2. **Does `codex` stay pinned?** Apache-2.0, absent from the failing run's top
+   ten, so its cost is under 51.8 MiB or zero. Assumed yes unless you say
+   otherwise.

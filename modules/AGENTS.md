@@ -1888,6 +1888,15 @@ the evaluator, so a fresh nixarchy/services.nix fails with "path
 does not exist" -- the trap installer/mkFlake.nix documents and
 the installer works around by staging at install time.
 
+Stage where the files were WRITTEN, not at the flake root. The
+destination is chosen at runtime -- hosts/<hostname>/ when that
+directory exists, the root otherwise -- so `git -C "$flake"` staged
+nothing on a per-host layout, and staged the wrong files where root
+copies happened to exist. Nobody saw it: the staging line ends in
+`2>/dev/null ||` and prints a note. A user reported it against
+v4.0.3-1 (#720); `checks.apply-staging` now runs apply against both
+layouts. Any second spelling of the destination is this bug again.
+
 Guarded, and still guarded after #356 chowned /etc/nixos to the
 installed user. This no longer fires on a machine this
 installer wrote -- staging succeeds there now -- but it is not

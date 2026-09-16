@@ -1758,6 +1758,12 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # Why: tests/apply-staging.nix
+          apply-staging = import ./tests/apply-staging.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           installer-ui = import ./tests/installer-ui.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

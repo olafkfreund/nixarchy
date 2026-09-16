@@ -3217,12 +3217,15 @@ in
 
                 # Why: modules/AGENTS.md#stage-what-was-written-or-a-flake-in-a-git-worktre
                 if [ -e "$flake/.git" ]; then
-                  git -C "$flake" add -A nixarchy nixarchy-apps.nix 2>/dev/null || {
+                  # -C "$base", not "$flake": the copies went to whichever
+                  # directory base names, and staging the root staged nothing on
+                  # a hosts/<hostname> layout (#720).
+                  git -C "$base" add -A -- nixarchy nixarchy-apps.nix 2>/dev/null || {
                     echo
                     echo "NOTE: could not stage the copies in $flake."
                     echo "  A flake in a git repository sees only tracked files,"
                     echo "  so the rebuild may fail with \"path does not exist\"."
-                    echo "  Fix with: sudo git -C $flake add -A"
+                    echo "  Fix with: sudo git -C $base add -A"
                     echo
                   }
                 fi

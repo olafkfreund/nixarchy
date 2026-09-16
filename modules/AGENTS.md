@@ -1032,6 +1032,20 @@ Only links this module planted are cleaned up, tracked in a
 `omarchy plugin add` is a real directory that this never touches, so
 the two ways of installing one live side by side.
 
+Activation **reconciles**; it does not relink. The shell watches this
+directory and reloads EVERY plugin on any event in it, so the earlier
+remove-all-then-relink cost a full reload on every rebuild, whether or
+not a plugin had changed (#710). A link whose target is already right
+is left alone, only a retired id is removed, and the manifest is staged
+in `~/.config/omarchy/` rather than in the watched directory -- a
+create and a delete there are events even though the name is hidden.
+
+`checks.plugin` proves it with `inotifywait`: a repeat activation must
+produce no event at all. The first version of that check compared the
+link's inode and passed with the bug fully present, because
+unlink-then-symlink in the same directory gets the freed inode straight
+back. Assert on what the watcher reacts to, not on what looks equivalent.
+
 <a id="the-first-run-theme-above-is-applied-headless-whic"></a>
 ### The first-run theme above is applied headless, which by design skips…
 

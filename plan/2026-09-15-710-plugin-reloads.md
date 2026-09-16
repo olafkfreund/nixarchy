@@ -26,7 +26,9 @@ block) moves from remove-all-then-relink to a reconcile.
   - if it equals the old manifest (`cmp -s`), remove `.new`;
   - otherwise, `run mv .new` over the manifest.
 
-  Hidden names are ignored by the shell's watcher. `.new` is written directly,
+  **Deviation:** the staging file is written to `~/.config/omarchy/`, not into
+  the plugins directory. Hidden names are ignored by the shell's watcher, but a
+  create and a delete there are still events, and the check asserts none. `.new` is written directly,
   as today's manifest append is, and the final `mv` goes through `run`.
 - **D4.** `tests/plugin.nix` checks two things:
   - the inode of the `remco.bar-toggle` link is unchanged after the test
@@ -36,6 +38,12 @@ block) moves from remove-all-then-relink to a reconcile.
     same target.
 
   There is no new check and no workflow edit.
+
+  **Deviation (found by the red run):** the first version compared the link's
+  inode, and it passed against the old block -- unlink-then-symlink in the same
+  directory gets the freed inode straight back. It now watches the directory
+  with `inotifywait` and asserts no events, which is the property the shell
+  reacts to. `pkgs.inotify-tools` is added to the test node.
 
 ## Steps
 

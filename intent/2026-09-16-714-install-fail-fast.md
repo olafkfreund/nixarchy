@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 714
 author: olafkfreund
 ---
@@ -67,9 +67,9 @@ Six checks create machines this way: `install`, `free-space`,
 
 ## Open questions
 
-1. **Where does the cleanup live?** A `try/finally` around each test body, or a
-   shared helper the six tests call? A helper is one place to fix; six
-   `finally` blocks are more obvious at the point of use.
-2. **How is it proven?** A deliberate always-failing assertion in a cheap
-   VM check, asserting the driver exits promptly, is one option; measuring the
-   wall-clock of a failing install in CI is another and costs a slot.
+Resolved at approval:
+
+1. **A `try`/`finally` at the point of use**, not a shared helper: a helper
+   would have to own machine creation to own its cleanup.
+2. **One local measurement**, recorded in the PR, plus a cheap check that the
+   cleanup is on the failure path. No install slot is spent.

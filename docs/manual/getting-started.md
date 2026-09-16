@@ -188,30 +188,36 @@ search.nixos.org.
 ## The guide
 
 Every nixarchy desktop ships with **[nixi](https://github.com/olafkfreund/nixi-nixarchy)**:
-a live hands-on tour, a manual search that works with the network off, and a
-tutor that answers about *your* machine rather than about Linux in general. It
-is what a first hour on an unfamiliar desktop should have.
+a card you summon over the desktop with a hands-on tour, answers grounded in the
+nixarchy manual on your disk, and a tutor that answers about *your* machine
+rather than about Linux in general. It is what a first hour on an unfamiliar
+desktop should have.
 
-It is **on by default**, which for a bar widget means one specific thing:
-nixarchy installs it into `~/.config/omarchy/plugins/`, so the snowflake is
-*offered* under **Setup ▸ Plugins**. Installing a plugin is not enabling one —
-that choice lives in `shell.json` and is yours, exactly as it is for any plugin
-you add yourself. Turn it on once and it stays on.
+It is **on by default**. Click the snowflake in the bar, or run `nixi`; bind a
+key if you like (`o.bind("SUPER + H", "Nixi", "nixi")` in
+`~/.config/hypr/bindings.lua`). The tutor uses **Claude Code** unless you pick
+another agent (SUPER + , in the card: Codex or OpenCode).
 
-The server it talks to listens on `127.0.0.1:8642` and nothing else. The one
-part that touches the network is a weekly refresh of its copy of the nixarchy
-and Omarchy manuals, from those two repositories.
+Unlike other plugins, the card is turned on for you — once, on your first
+rebuild, because a plugin that is installed but off does nothing when summoned.
+If you turn Nixi off under **Setup ▸ Plugins** it stays off, and `nixi` tells
+you where to turn it back on.
+
+There is no server and no port. The parts that touch the network are the agent
+you chose, talking to its own provider, and a weekly refresh of nixi's copy of
+the nixarchy and Omarchy manuals, from those two repositories.
 
 If you would rather not have it, one line in your Home Manager configuration
-takes all of it away — the widget, the server, the timer and the package:
+takes all of it away — the card, the button, the timer and the package:
 
 ```nix
 services.nixi.enable = false;
 ```
 
 That is nixi's own option, not a nixarchy alias, so everything else it
-documents (`services.nixi.watcher.enable`, `services.nixi.port`, and the rest)
-works the same way here.
+documents (`services.nixi.watcher.enable`, `services.nixi.agents`, and the rest)
+works the same way here. `services.nixi.port` and `services.nixi.voice` no longer
+exist; setting them stops the build with a message saying so.
 
 ## Or: add it to NixOS you already run
 

@@ -1214,6 +1214,40 @@ leave it off. `nixarchy box` (a later issue) is how a machine picks
 up a declared container -- by calling `distrobox-assemble` itself,
 by bare name, the way the module comment already requires.
 
+<a id="nixi-the-one-plugin-turned-on-for-you"></a>
+### nixi: the one plugin turned on for you, and two traps behind it
+
+```nix
+services.nixi.enable = lib.mkDefault true;   # autoEnable left at nixi's true
+```
+
+Everything else this module installs is *installed, not enabled*. nixi's card
+is the approved exception (#709), and both reasons it had to be are traps that
+will bite the next plugin too:
+
+- **A toggle for a plugin that is not enabled is a silent success.**
+  `omarchy-shell shell toggle <id>` exits 0 and prints nothing when `<id>` is
+  installed but off, or not installed at all. So a keybinding or menu row that
+  summons an installed-but-off plugin does nothing, and nothing anywhere says
+  why. Enabled means the id is referenced in `shell.json` (`plugins[]` for an
+  overlay, `bar.layout.*` for a bar widget; `PluginRegistry.qml`
+  `isEnabled`). Check with `omarchy-shell shell listPlugins`, whose JSON has
+  `"enabled"`.
+- **A user `shell.json` replaces the defaults; it is not merged.** `shell.qml`
+  `applyShellConfig` uses a valid user file *instead of* the defaults. Writing
+  a file that holds only `plugins` takes the whole bar away. Extend an existing
+  file, or create one from `$OMARCHY_PATH/config/omarchy/shell.json`, as the
+  shell does. The shell watches the file and reloads it, so an atomic replace
+  is picked up live, with no IPC.
+- **A Home Manager module that moves from per-file links to a
+  whole-directory link breaks every upgraded home.** nixi 0.9 linked its
+  plugin file by file, leaving a real directory; 0.10 links the directory.
+  `checkLinkTargets` refuses to replace a real directory -- even one holding
+  only Home Manager's own links -- and `home-manager-<user>.service` fails.
+  nixi removes that directory in an activation step before `checkLinkTargets`,
+  only when every entry is a link into `home-manager-files`. Any module here
+  making the same move needs the same step.
+
 ## `modules/apps.nix`
 
 <a id="the-command-each-app-puts-on-path-so-the-menu-can-"></a>

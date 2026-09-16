@@ -274,25 +274,26 @@ let
     builtins.attrNames neovimHome.home.activation
   );
 
-  # nixi's bar plugin, by the id in its own manifest.json. Named once: the
-  # "on" and "off" halves have to ask about the same path or the pair proves
-  # nothing.
-  nixiPluginFile = "omarchy/plugins/io.github.olafkfreund.nixi/manifest.json";
+  # nixi's overlay plugin, linked as one directory since nixi 0.10 (#709); the
+  # bar button is a second plugin beside it. Named once: the "on" and "off"
+  # halves have to ask about the same path or the pair proves nothing.
+  nixiPluginDir = "omarchy/plugins/io.github.olafkfreund.nixi";
 
   # The machine that said no. A plain definition, so it beats the mkDefault in
   # modules/home.nix without mkForce -- which is itself part of what is being
   # asserted: an ordinary user writing an ordinary `false` must win.
   nixiOff = homeWith { services.nixi.enable = false; };
 
-  # Everything the guide leaves in a home. The unit that binds the port, the
-  # weekly manual timer, the read-only assets, the bar plugin, and the package
-  # itself -- five different mechanisms, so a gate that came loose on any one
-  # of them shows up rather than hiding behind the other four.
+  # Everything the guide leaves in a home. The weekly manual timer, the
+  # grounding knowledge, the overlay plugin, the activation step that turns the
+  # card on, and the package itself -- five different mechanisms, so a gate that
+  # came loose on any one of them shows up rather than hiding behind the other
+  # four. nixi 0.10 has no server, unit or port any more (#709).
   nixiTracesIn = cfg: [
-    (cfg.systemd.user.services ? nixi)
     (cfg.systemd.user.timers ? nixi-manual)
-    (cfg.xdg.configFile ? "nixi/ui.html")
-    (cfg.xdg.configFile ? ${nixiPluginFile})
+    (cfg.xdg.configFile ? "nixi/KNOWLEDGE.md")
+    (cfg.xdg.configFile ? ${nixiPluginDir})
+    (cfg.home.activation ? nixiEnableCard)
     (builtins.any (p: (p.pname or "") == "nixi") cfg.home.packages)
   ];
 
@@ -689,14 +690,18 @@ let
     # sets `services.nixi.enable = lib.mkDefault true` -- so `off` is a state
     # a user has to ask for by hand, and therefore the state nothing else
     # exercises. It is also the state that has to be complete: a machine that
-    # says no to the guide must have no unit, no timer, no plugin folder, no
-    # assets and no package, and hence nothing listening on 8642.
+    # says no to the guide must have no timer, no plugin, no assets, no
+    # activation step and no package.
     #
     # `homeWith { }` is the default machine and `nixiOff` is the refusal, so
     # every pair below reads "the default has it / saying no removes it".
-    nixiUnit = {
-      on = (homeWith { }).systemd.user.services ? nixi;
-      off = nixiOff.systemd.user.services ? nixi;
+    #
+    # The card turned on for you, once (#709): an explicit exception to "installed,
+    # not enabled", pinned here by name so a nixi bump that drops it fails this
+    # case rather than a user's SUPER+H doing nothing.
+    nixiEnablesCard = {
+      on = (homeWith { }).home.activation ? nixiEnableCard;
+      off = nixiOff.home.activation ? nixiEnableCard;
     };
 
     # ---- the free-space floor is the installer's, never an adopter's ----
@@ -748,22 +753,20 @@ let
 
     # Everything the guide leaves in a home, in one case, because "off" has to
     # be all of them and a per-trace case would let one survivor hide behind
-    # four passes. The port is not probed directly: it exists only as
-    # NIXI_PORT in the unit's Environment and as the server the unit starts,
-    # so no unit is no listener.
+    # four passes.
     nixiTraces = {
       on = builtins.all (t: t) (nixiTracesIn (homeWith { }));
       off = builtins.any (t: t) (nixiTracesIn nixiOff);
     };
 
-    # The bar plugin on its own, which nixarchy deliberately leaves at nixi's
-    # own default of on -- so on a default machine the snowflake is offered in
-    # Setup > Plugins. Separate from the traces above so that a nixarchy that
-    # re-defaults barWidget fails HERE, with the name of the decision on it,
-    # rather than inside a five-way conjunction.
+    # The bar button on its own -- a separate plugin since nixi 0.10 -- which
+    # nixarchy deliberately leaves at nixi's own default of on, so on a default
+    # machine the snowflake is in the bar. Separate from the traces above so
+    # that a nixarchy that re-defaults barWidget fails HERE, with the name of
+    # the decision on it, rather than inside a five-way conjunction.
     nixiBarWidget = {
-      on = (homeWith { }).xdg.configFile ? ${nixiPluginFile};
-      off = nixiOff.xdg.configFile ? ${nixiPluginFile};
+      on = (homeWith { }).xdg.configFile ? "${nixiPluginDir}-button";
+      off = nixiOff.xdg.configFile ? "${nixiPluginDir}-button";
     };
 
     # And the menu extension, which nixarchy deliberately leaves at nixi's

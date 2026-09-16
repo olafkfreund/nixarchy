@@ -230,6 +230,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       entries-missing: ${{ steps.entries.outputs.missing }}
+      proofs-missing: ${{ steps.proofs.outputs.missing }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-nix
@@ -309,6 +310,44 @@ jobs:
             echo "::warning::not in nixarchy.cachix.org, to be rebuilt and pushed: ${missing//$'\n'/ }"
           fi
 
+      # The check proofs, which the allowlist keep-alive above never covered.
+      #
+      # A proof is one 112-byte path that exists only because its check PASSED,
+      # and `already-proven.sh` is what build.yml consults to skip a check it
+      # does not need to rebuild. Cachix evicts by last download and a push is
+      # not a use, so proofs go the same way runners do -- 31 of 34 went on
+      # 2026-09-15, nothing looked, and the next day every omarchy job was
+      # building 40 checks from scratch and dying (#728).
+      #
+      # main only, and for the same reason the entries probe is: the omarchy
+      # derivation depends on the flake's own rev, so a path evaluated on a
+      # branch is a DIFFERENT path and 404s by construction. #473 was filed
+      # that way against a cache that was serving main correctly throughout.
+      #
+      # Reported, not failed on: the repush step puts them back. The set comes
+      # from generated-checks.sh, so a check added to the flake is kept alive
+      # without anybody editing this file.
+      - name: The cache still holds main's check proofs
+        id: proofs
+        if: always() && github.ref == 'refs/heads/main'
+        run: |
+          mapfile -t targets < <(.github/scripts/generated-checks.sh) || {
+            echo "::error::could not derive the generated check list"
+            exit 1
+          }
+          missing=$(.github/scripts/already-proven.sh "${targets[@]}") || {
+            echo "::error::could not probe the check proofs"
+            exit 1
+          }
+          {
+            echo 'missing<<EOF'
+            printf '%s\n' "$missing"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$missing" ]; then
+            echo "::warning::proofs not in nixarchy.cachix.org, to be rebuilt and pushed: ${missing//$'\n'/ }"
+          fi
+
   # Builds and pushes whatever the cache job found missing, then probes again.
   # Self-hosted because a runner is a ~1-1.5 GB guest closure and needs the
   # token; ubuntu-latest has neither the room nor the secret in `cache`.
@@ -319,7 +358,10 @@ jobs:
     needs: cache
     # main only: a runner evaluated on a branch is a branch's runner, and
     # pushing it would not put back what main's users download.
-    if: always() && github.ref == 'refs/heads/main' && needs.cache.outputs.entries-missing != ''
+    if: >-
+      always() && github.ref == 'refs/heads/main'
+      && (needs.cache.outputs.entries-missing != ''
+          || needs.cache.outputs.proofs-missing != '')
     runs-on: [self-hosted, nixos, kvm, big]
     timeout-minutes: 60
     steps:
@@ -334,6 +376,30 @@ jobs:
           # shellcheck disable=SC2086 # one attr per word, by construction
           nix shell --inputs-from . nixpkgs#cachix -c \
             .github/scripts/cache-entries.sh repush $MISSING
+
+      - name: Put dropped check proofs back
+        if: needs.cache.outputs.proofs-missing != ''
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          MISSING: ${{ needs.cache.outputs.proofs-missing }}
+        # A proof is 112 bytes and exists only if its check passed, so this is
+        # the cheapest thing in the cache to keep and the most expensive to
+        # lose: without it the omarchy job builds every check from scratch. The
+        # allowlist had a keep-alive from #697 and the proofs did not, which is
+        # how 31 of 34 went missing on 2026-09-15 with nothing noticing, and
+        # why 2026-09-16 took a maintainer rebuilding 40 checks by hand (#728).
+        #
+        # Rebuild rather than re-push: the state that matters is the night
+        # AFTER an eviction, when no store here holds the result either.
+        #
+        # Only what generated-checks.sh names, never a nightly_only check --
+        # install-iso and reinstall-vm are ~3h builds and a keep-alive must not
+        # start one. build-unless-proven.sh does the rest: it skips whatever is
+        # already proven and pushes the rest in slices.
+        run: |
+          # shellcheck disable=SC2086 # one name per word, by construction
+          nix shell --inputs-from . nixpkgs#cachix -c \
+            .github/scripts/build-unless-proven.sh $MISSING
 
   # Tomorrow's user. build.yml's weekly cron re-runs the checks against the
   # COMMITTED lock, so on the flake inputs it proves nothing a merged PR did

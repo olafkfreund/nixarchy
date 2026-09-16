@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 731
 author: olafkfreund
 ---
@@ -147,7 +147,14 @@ migration.
 authoritative only when someone sets it -- a menu click still wins, which is the
 behaviour its description promises and the constraint above protects.
 
-## Open questions
+## Decisions (approved by @olafkfreund, 2026-09-16)
+
+1. **The nixi pin is bumped to `1a7f9cbb` in this change**, so a machine with a
+   missing or unreadable defaults file also lands on a startable agent. Both
+   halves were reasoned about together and land together.
+2. **`codex` stays pinned.** Apache-2.0, cost under 51.8 MiB or zero.
+
+## Answered
 
 1. **Bump the nixi pin to `1a7f9cbb` in this change, or separately?** It is not
    required -- the decision above covers every machine that has chosen an agent,

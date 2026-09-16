@@ -70,7 +70,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/v4.0.3";
+      url = "github:basecamp/omarchy/v4.0.4";
       flake = false;
     };
 
@@ -231,7 +231,7 @@
         }
       );
 
-      omarchyVersion = "4.0.3";
+      omarchyVersion = "4.0.4";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).

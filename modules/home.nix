@@ -560,6 +560,38 @@ in
     # above.
     services.nixi.enable = lib.mkDefault true;
 
+    # The one nixi default nixarchy DOES change, and the only one it needs to.
+    #
+    # Upstream's default is `lib.optional (pkgs.config.allowUnfree or false)
+    # "claude" ++ [ "codex" ]` -- conditional on a flag modules/nixos.nix sets,
+    # so the agent set moved with allowUnfree and nobody ever chose it. That is
+    # how claude-agent-acp, and the unfree claude-code under it, arrived in
+    # every system closure: 650 MiB nobody asked for, in every installed
+    # machine and in a public cache (#725).
+    #
+    # Named rather than inherited, so the set is a property of nixarchy instead
+    # of a side effect. opencode is added because it speaks ACP itself and pins
+    # no adapter at all; codex is Apache-2.0 (data/apps.nix); claude stays by
+    # decision, its 650 MiB and its licence consequence accepted in #725's spec.
+    #
+    # Plain assignment, not mkDefault: a list is a merging type, and mkDefault
+    # on one is dropped whole the moment a user adds an element (AGENTS.md 7).
+    # A user naming their own agents concatenates with these, which is right --
+    # their machine, their adapters.
+    #
+    # claude keeps upstream's allowUnfree guard, and it is a guard rather than a
+    # defaulting trick: nixi forces pkgs.claude-agent-acp whenever "claude" is
+    # in this list, and BOTH that adapter and claude-code throw under
+    # allowUnfree = false. An unconditional list is an evaluation failure on
+    # every machine that sets programs.nixarchy.allowUnfree = false -- measured,
+    # not guessed. nixarchy allows unfree by default, so the default machine
+    # gets all three.
+    services.nixi.agents = [
+      "opencode"
+      "codex"
+    ]
+    ++ lib.optional (pkgs.config.allowUnfree or false) "claude";
+
     # And the three defaults nixarchy deliberately does NOT change.
     #
     # `autoEnable` is true upstream and stays true here, and it is the one

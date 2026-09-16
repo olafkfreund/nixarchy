@@ -66,10 +66,10 @@ let
   # machine, because it is the cheaper of the two and it is also the harsher:
   # `osConfig` is null, which is the shape a nixarchy home module has to keep
   # working in anyway.
-  homeWith =
-    settings:
+  homeWithPkgs =
+    p: settings:
     (inputs.home-manager.lib.homeManagerConfiguration {
-      inherit pkgs;
+      pkgs = p;
       modules = [
         inputs.self.homeManagerModules.nixarchy
         {
@@ -83,6 +83,19 @@ let
         settings
       ];
     }).config;
+
+  homeWith = homeWithPkgs pkgs;
+
+  # This check's own pkgs, plus the one thing flake.nix's pkgsFor does not set.
+  #
+  # pkgsFor names overlays and no config, so `pkgs` above is an UNFREE-REFUSING
+  # machine -- worth saying out loud, because it makes the default half of the
+  # pair below the restrictive one, the reverse of most cases here (#725).
+  pkgsUnfree = import inputs.nixpkgs {
+    localSystem = system;
+    overlays = [ inputs.self.overlays.default ];
+    config.allowUnfree = true;
+  };
 
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
   # above deliberately is not.
@@ -722,6 +735,35 @@ let
     nixiEnablesCard = {
       on = (homeWith { }).home.activation ? nixiEnableCard;
       off = nixiOff.home.activation ? nixiEnableCard;
+    };
+
+    # claude's adapter is pinned only where unfree is allowed (#725).
+    #
+    # modules/home.nix names all three agents rather than inheriting nixi's
+    # default, which varied with allowUnfree and so was never chosen by anyone
+    # -- that is how claude-agent-acp, and the unfree claude-code beneath it,
+    # reached every system closure. But the flag it varied on is also a GUARD:
+    # nixi forces pkgs.claude-agent-acp for any agent named in the list, and
+    # both that adapter and claude-code throw when unfree is refused. So an
+    # unconditional list is an evaluation failure on every machine that says no
+    # to unfree -- and on this check, whose pkgs is exactly such a machine.
+    #
+    # Hence the reversal: `off` is the plain default here, and `on` needs a pkgs
+    # that allows unfree. If the guard is ever dropped, this case does not go
+    # red -- the whole check stops evaluating, which is louder still.
+    nixiPinsClaudeOnlyWhenUnfreeIsAllowed = {
+      on = builtins.elem "claude" (homeWithPkgs pkgsUnfree { }).services.nixi.agents;
+      off = builtins.elem "claude" (homeWith { }).services.nixi.agents;
+    };
+
+    # The two free adapters are pinned either way: opencode speaks ACP itself
+    # and pins nothing, codex is Apache-2.0, so neither depends on the flag.
+    nixiPinsTheFreeAgentsRegardless = {
+      on = builtins.all (a: builtins.elem a (homeWith { }).services.nixi.agents) [
+        "opencode"
+        "codex"
+      ];
+      off = builtins.elem "claude" (homeWith { }).services.nixi.agents;
     };
 
     # ---- the free-space floor is the installer's, never an adopter's ----

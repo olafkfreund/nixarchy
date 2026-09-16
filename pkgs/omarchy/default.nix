@@ -541,6 +541,15 @@ stdenvNoCC.mkDerivation {
                         'cp "$OMARCHY_PATH/default/alacritty/Alacritty.desktop"' \
                         'cp -f --no-preserve=mode "$OMARCHY_PATH/default/alacritty/Alacritty.desktop"'
 
+                    # A launcher in ~/.local/bin shadows the Nix package of the same name,
+                    # so a Nix codex never ran (#707). Write one only when nothing outside
+                    # ~/.local/bin provides the command; nix-bin/omarchy-mise-unshadow
+                    # removes the ones written before this.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-mise-install \
+                      --replace-fail \
+                        'rm -f "$HOME/.local/bin/$command"' \
+                        'nix_cmd=$(PATH=$(printf "%s" "$PATH" | tr ":" "\n" | grep -vx "$HOME/.local/bin" | paste -sd:) command -v "$command") && { echo "omarchy-mise-install: $command is provided by Nix ($nix_cmd), no mise launcher"; exit 0; }; rm -f "$HOME/.local/bin/$command"'
+
                     # Both launchers accept a handful of browser desktop-file names and fall
                     # back to "chromium.desktop" for anything else. nixpkgs ships chromium's
                     # entry as chromium-browser.desktop, so xdg-settings returns a name that

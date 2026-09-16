@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Remove mise launchers that shadow a Nix-installed command
+# omarchy:args=[profile-bin-dir...]
+
+# Upstream's first login writes mise launchers into ~/.local/bin, which sits
+# ahead of the Nix profiles on PATH, so a Nix-installed codex never ran (#707).
+# Removes only upstream's exact wrapper shape, and only when a profile has the
+# same command: a user's own script, or a tool Nix does not provide, stays.
+
+set -euo pipefail
+
+bin="$HOME/.local/bin"
+[ "$#" -gt 0 ] || set -- "/etc/profiles/per-user/$USER/bin" /run/current-system/sw/bin
+[ -d "$bin" ] || exit 0
+
+for f in "$bin"/*; do
+  if [ ! -f "$f" ] || [ -L "$f" ] ||
+    ! grep -q '^mise use -g --quiet ' "$f" || ! grep -q '^exec mise x ' "$f"; then
+    continue
+  fi
+  name=$(basename "$f")
+  for dir in "$@"; do
+    if [ -x "$dir/$name" ]; then
+      rm -f "$f"
+      echo "omarchy-mise-unshadow: removed $f, $dir/$name is used instead"
+      break
+    fi
+  done
+done

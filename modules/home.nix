@@ -586,11 +586,37 @@ in
     # every machine that sets programs.nixarchy.allowUnfree = false -- measured,
     # not guessed. nixarchy allows unfree by default, so the default machine
     # gets all three.
+    # claude is pinned where this machine actually USES claude, not wherever
+    # unfree happens to be allowed.
+    #
+    # The person this condition exists for is the menu-chooser. Picking Claude
+    # from Install runs omarchy-default-agent, which writes `claude` into
+    # ~/.config/omarchy/defaults/agent AND adds claude-code to
+    # ~/.config/nixarchy/apps.nix through nixarchy-pkg-add. nixi reads that
+    # defaults file and treats the name as an EXPLICIT choice -- its fallback
+    # (nixi-nixarchy#13) deliberately does not override one -- so a machine
+    # whose user chose Claude and no longer has claude-agent-acp gets an error
+    # at SUPER+H, not a different agent. Keying on the apps entry keeps them
+    # working with no action from them at all (#731).
+    #
+    # Keying on allowUnfree instead, as this did, put claude-agent-acp and the
+    # unfree claude-code -- 651 MiB, 42% of a public 5 GB cache, for two
+    # packages that are FETCHED rather than built -- into every closure CI
+    # pushes, including two that never wanted them.
+    #
+    # Both halves are needed: appEnabled catches the menu, defaultAgent catches
+    # the declarative user, whose modules/apps.nix mapping installs claude-code
+    # without going through the apps catalogue at all.
+    #
+    # It cannot pin an adapter on a machine that refuses unfree: claude-code is
+    # `unfree = true` in data/apps.nix, so it cannot be enabled there, and
+    # defaultAgent = "claude" already fails to evaluate with nixpkgs' own
+    # message naming the package (modules/apps.nix).
     services.nixi.agents = [
       "opencode"
       "codex"
     ]
-    ++ lib.optional (pkgs.config.allowUnfree or false) "claude";
+    ++ lib.optional (appEnabled "claude-code" || defaultAgent == "claude") "claude";
 
     # And the three defaults nixarchy deliberately does NOT change.
     #

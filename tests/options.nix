@@ -86,17 +86,6 @@ let
 
   homeWith = homeWithPkgs pkgs;
 
-  # This check's own pkgs, plus the one thing flake.nix's pkgsFor does not set.
-  #
-  # pkgsFor names overlays and no config, so `pkgs` above is an UNFREE-REFUSING
-  # machine -- worth saying out loud, because it makes the default half of the
-  # pair below the restrictive one, the reverse of most cases here (#725).
-  pkgsUnfree = import inputs.nixpkgs {
-    localSystem = system;
-    overlays = [ inputs.self.overlays.default ];
-    config.allowUnfree = true;
-  };
-
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
   # above deliberately is not.
   #
@@ -737,23 +726,35 @@ let
       off = nixiOff.home.activation ? nixiEnableCard;
     };
 
-    # claude's adapter is pinned only where unfree is allowed (#725).
+    # claude's adapter is pinned where this machine USES claude (#731).
     #
-    # modules/home.nix names all three agents rather than inheriting nixi's
-    # default, which varied with allowUnfree and so was never chosen by anyone
-    # -- that is how claude-agent-acp, and the unfree claude-code beneath it,
-    # reached every system closure. But the flag it varied on is also a GUARD:
-    # nixi forces pkgs.claude-agent-acp for any agent named in the list, and
-    # both that adapter and claude-code throw when unfree is refused. So an
-    # unconditional list is an evaluation failure on every machine that says no
-    # to unfree -- and on this check, whose pkgs is exactly such a machine.
+    # It keyed on allowUnfree until #731, which put claude-agent-acp and the
+    # unfree claude-code -- 651 MiB, 42% of a public 5 GB cache, both FETCHED
+    # rather than built -- into every closure CI pushes. Keying on the machine's
+    # own recorded choice instead takes them out of the two toplevels while
+    # leaving them wherever somebody asked for Claude.
     #
-    # Hence the reversal: `off` is the plain default here, and `on` needs a pkgs
-    # that allows unfree. If the guard is ever dropped, this case does not go
-    # red -- the whole check stops evaluating, which is louder still.
-    nixiPinsClaudeOnlyWhenUnfreeIsAllowed = {
-      on = builtins.elem "claude" (homeWithPkgs pkgsUnfree { }).services.nixi.agents;
-      off = builtins.elem "claude" (homeWith { }).services.nixi.agents;
+    # homeOn, never homeWith: homeWith passes osConfig = null, so appEnabled and
+    # defaultAgent are BOTH inert and every case here would answer
+    # [ opencode codex ] whatever the condition said -- a check that cannot vary
+    # with the thing it is written for (AGENTS.md 3).
+    #
+    # The `on` half is the load-bearing one. Asserting only that a default
+    # machine has no claude would pass with the condition hard-coded to `false`,
+    # which is exactly the bug that would break the people this change exists to
+    # protect: whoever picked Claude from the Install menu, whose defaults file
+    # names it explicitly and whose nixi therefore will not fall back.
+    nixiPinsClaudeWhenTheMachineUsesIt = {
+      on = builtins.elem "claude" (homeOn { apps.claude-code.enable = true; } { }).services.nixi.agents;
+      off = builtins.elem "claude" (homeOn { } { }).services.nixi.agents;
+    };
+
+    # And for the user who declared it rather than clicking it: modules/apps.nix
+    # installs claude-code for defaultAgent without going through the apps
+    # catalogue, so appEnabled alone would miss them.
+    nixiPinsClaudeForADeclaredDefaultAgent = {
+      on = builtins.elem "claude" (homeOn { defaultAgent = "claude"; } { }).services.nixi.agents;
+      off = builtins.elem "claude" (homeOn { } { }).services.nixi.agents;
     };
 
     # The two free adapters are pinned either way: opencode speaks ACP itself

@@ -144,8 +144,16 @@
     # assumed: `git ls-remote --tags` comes back empty and main is the release
     # channel, which is the same situation sops-nix above is in. Bump it
     # deliberately; never track a branch.
+    #
+    # 1a7f9cb is nixi-nixarchy#13: its default-agent fallback picks the first
+    # agent whose adapter RESOLVES rather than the literal name "claude". That
+    # matters here from #731 on, where claude's adapter is pinned only on a
+    # machine that uses claude -- a machine with no recorded choice at all (no
+    # ~/.config/omarchy/defaults/agent) would otherwise land on the one agent it
+    # cannot start. modules/home.nix covers every machine that HAS chosen; this
+    # covers the one that has not.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/569adeaa0bf19b22e432c0e8e461baa4b8eefcac";
+      url = "github:olafkfreund/nixi-nixarchy/1a7f9cbb62fa74dcff48725a46fb627253b6de74";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

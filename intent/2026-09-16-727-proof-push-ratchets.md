@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 727
 author: olafkfreund
 ---
@@ -104,18 +104,21 @@ discarded is not reporting anything.
 - AGENTS.md §1 applies to all three: each fix needs a check that has been
   watched failing, and the kill case has to be provoked, not assumed.
 
+## Decisions (approved by @olafkfreund, 2026-09-16)
+
+1. **Push in batches of 5.** Per-check is the purest ratchet, but today's 39
+   pushes were several minutes of almost pure `cachix` process startup. A batch
+   of 5 loses at most 4 proofs to a kill, against a build step that takes tens
+   of minutes -- so the ratchet still bites, at a fifth of the process overhead.
+2. **The nightly rebuilds what is missing**, following `repush`'s existing
+   shape, rather than assuming a warm store still holds the result. It works
+   from nothing, which is the state that matters: the night after an eviction.
+3. **`checks.nixi` is left alone.** It stays the whole package, because it is
+   cheap to build and catches a broken pin before a user's rebuild does. The
+   script learns that an unproofable check is a category, not an error; the
+   check does not change. A marker output for it may be worth doing later and
+   is not part of this.
+
 ## Open questions
 
-1. **Is incremental pushing per check, or in batches?** Per check is the
-   simplest ratchet and proofs are 112 bytes, so there is no size argument for
-   batching — but it is one `cachix` process per check, and today's 39 pushes
-   took several minutes of mostly process startup. A batch of N is a compromise
-   that loses at most N-1 proofs to a kill.
-2. **Should the nightly re-push proofs, or rebuild them?** A proof only exists
-   if its check passed, so re-pushing a proof from a store that still has it is
-   cheap and honest; rebuilding is expensive but works from nothing. #728
-   assumes rebuild-if-missing, following `repush`'s existing shape.
-3. **Does `checks.nixi` want a marker output instead** — a tiny derivation that
-   depends on the package — so it becomes proofable like every other check?
-   That would remove the special case entirely rather than teaching the script
-   about it. It is a larger change and may belong on its own.
+None. The three above are settled.

@@ -29,6 +29,26 @@ fi
 
 echo "building: ${todo[*]}"
 
+# In SLICES, so a job that is killed still leaves progress behind (#727).
+#
+# This used to be one `nix build` over everything followed by one push. A
+# partial FAILURE was handled -- --keep-going builds the rest, and the push
+# below runs anyway. A partial KILL was not: the script never reaches the push
+# at all. On 2026-09-16 three jobs died mid-build (14 min, 17 min, and 45m00s
+# at the timeout), every one of them having built checks successfully, and all
+# three pushed zero proofs. So each run began exactly where the last began, and
+# an eviction that should have been a bad night became a day-long outage that
+# took a maintainer rebuilding 40 checks by hand to end.
+#
+# Slicing makes the step a ratchet: whatever a run proves stays proved.
+#
+# The cost is evaluation. One `nix build` evaluates once; eight evaluate eight
+# times, and evaluation is not free here -- already-proven.sh spends about
+# eight minutes on 43 of them in CI. 5 is the compromise (a kill loses at most
+# 4 proofs), and PROOF_BATCH exists so the number can move from a workflow
+# without another PR if the measurement says so.
+batch=${PROOF_BATCH:-5}
+
 # --keep-going, because this replaced a step that had it and said why: report
 # every failure in one run rather than stopping at the first. That is what a
 # job matrix would have been bought for, and losing it silently while moving
@@ -42,13 +62,16 @@ echo "building: ${todo[*]}"
 # it failed once already. Nothing here wants an out-link; the build IS the
 # assertion.
 rc=0
-nix build --keep-going --no-link --print-build-logs \
-  "${todo[@]/#/.#checks.x86_64-linux.}" || rc=$?
+for ((i = 0; i < ${#todo[@]}; i += batch)); do
+  slice=("${todo[@]:i:batch}")
+  nix build --keep-going --no-link --print-build-logs \
+    "${slice[@]/#/.#checks.x86_64-linux.}" || rc=$?
 
-# The proof, so the next run -- this pull request's re-run, or main after it
-# merges -- skips what just passed (#697). Only checks whose result exists are
-# pushed: under --keep-going a failed check has no output, and cachix-push.sh
-# says so rather than pushing anything. Never the verdict: the exit status is
-# the build's.
-"$here/cachix-push.sh" --proof "${todo[@]}" || true
+  # The proof, so the next run -- this pull request's re-run, or main after it
+  # merges -- skips what just passed (#697). Only checks whose result exists
+  # are pushed: under --keep-going a failed check has no output, and
+  # cachix-push.sh counts that as skipped rather than failed. Never the
+  # verdict: the exit status is the build's.
+  "$here/cachix-push.sh" --proof "${slice[@]}" || true
+done
 exit "$rc"

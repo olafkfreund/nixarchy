@@ -67,29 +67,51 @@ if [ -z "${CACHIX_AUTH_TOKEN:-}" ] &&
 fi
 
 if [ "$proof" = true ]; then
-  fail=0
+  # Three outcomes, not two. Counting a refusal as a failure made this script
+  # exit 1 on EVERY run -- checks.nixi is the nixi package (flake.nix), so its
+  # result is 92 paths and 567 MB and can never be a proof -- and
+  # build-unless-proven.sh discards that with `|| true`. Measured on
+  # 2026-09-16: exit 1 with 39 of 40 pushed, which is indistinguishable from
+  # exit 1 with 0 of 40. A step whose failure is guaranteed and discarded
+  # reports nothing (#729).
+  #
+  # So: a result that cannot be a proof is a CATEGORY, not an error. Only
+  # `cachix push` itself failing is a failure, and only that sets the exit
+  # status.
+  pushed=0
+  skipped=0
+  failed=0
   for c in "$@"; do
     c=${c#".#checks.$system."}
     if ! out=$(nix eval --raw ".#checks.$system.$c" 2>/dev/null) ||
       ! nix path-info "$out" >/dev/null 2>&1; then
+      # Under --keep-going a failed check produces no output. The build's own
+      # exit status already reports that; saying it twice, as a push failure,
+      # points the reader at the cache instead of at the check.
       echo "::warning::$c has no built result here; no proof pushed" >&2
-      fail=1
+      skipped=$((skipped + 1))
       continue
     fi
     n=$(nix path-info -r "$out" 2>/dev/null | wc -l)
     size=$(nix path-info -r --json "$out" 2>/dev/null | jq '[.[] | .narSize] | add // 0')
     if [ "$n" -ne 1 ] || [ "$size" -gt "$proof_max_bytes" ]; then
       echo "::warning::$c's result is $n paths and $size bytes; a proof is one path under $proof_max_bytes bytes, so it is not pushed" >&2
-      fail=1
+      skipped=$((skipped + 1))
       continue
     fi
     echo "pushing the proof of $c ($size bytes)"
-    cachix push nixarchy "$out" || {
+    if cachix push nixarchy "$out"; then
+      pushed=$((pushed + 1))
+    else
       echo "::warning::pushing the proof of $c failed" >&2
-      fail=1
-    }
+      failed=$((failed + 1))
+    fi
   done
-  exit "$fail"
+  # One line, so the log states the outcome rather than leaving it to be
+  # inferred from an exit status that used to mean nothing.
+  echo "proofs: $pushed pushed, $skipped skipped (unproofable), $failed failed"
+  [ "$failed" -eq 0 ] || exit 1
+  exit 0
 fi
 
 # Closures come from main. A pull request, a bump branch or a tag pushing its

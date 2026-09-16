@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 731
 intent: intent/2026-09-16-731-cache-no-prebuilt.md
 ---

@@ -311,6 +311,10 @@
     # far more closely than we could.
     attr = "zen-browser";
     ours = true;
+    # Upstream ships a built binary and the derivation patches it, so a user
+    # who installs this downloads it either way -- from us or from Zen. The
+    # 394 MiB it costs nixarchy.cachix.org buys nobody a build (#725).
+    prebuilt = true;
     arch = "zen-browser-bin";
   };
   brave-origin = {

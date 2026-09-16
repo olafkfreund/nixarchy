@@ -99,6 +99,19 @@ Two mechanical traps that produced fake green results here, live:
   about a check, prove the break landed: `git diff`, or `grep` the file for
   what you meant to remove. A silent no-op break and a blind check are
   indistinguishable from the exit status alone.
+- **Your shell's environment can answer for the config you passed.** A check
+  that `claude-code` refuses to evaluate under `config.allowUnfree = false`
+  reported `EVALUATES` -- twice, for two different packages -- because
+  `NIXPKGS_ALLOW_UNFREE=1` was set in the interactive shell and `nix eval
+  --impure` honours the variable over the `config` in the expression. The
+  measurement described the machine it ran on, not the argument it was given,
+  and it could not have failed. `env -u NIXPKGS_ALLOW_UNFREE -u
+  NIXPKGS_ALLOW_INSECURE` before concluding anything about unfree or insecure
+  behaviour; more generally, `--impure` means the environment is an input, so
+  an impure check has to be run with the environment it is asserting about.
+  Both packages said `THROWS` the moment the variable was stripped, which was
+  the answer that mattered: the unconditional agent list it licensed would have
+  broken every machine with unfree turned off, `checks.options` included.
 - **A break that stays green may be a property provided twice.** Removing a new
   `NIXARCHY_FLAKE` export left its check green, because `modules/nixos.nix`
   had exported the same variable for months -- and the review that asked for

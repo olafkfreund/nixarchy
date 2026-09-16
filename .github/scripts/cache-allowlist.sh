@@ -10,7 +10,13 @@
 # cache holds this list and the check proofs -- nothing else -- and
 # cache-budget.sh fails when this list outgrows its share.
 #
-# An entry belongs here only if someone downloads it. Add the reason beside it.
+# An entry belongs here only if someone downloads it AND would otherwise build
+# it. Both halves matter: cache-budget.sh already subtracts everything
+# cache.nixos.org and hyprland.cachix.org serve, so anything reaching the budget
+# is something upstream will not serve -- but "unfree, so Hydra will not build
+# it" and "expensive to build" are different claims, and only the second is a
+# reason to pay for it here. A prebuilt binary is a download either way, so
+# caching it makes this a slower second mirror (#725). Add the reason beside it.
 set -uo pipefail
 
 group() {
@@ -43,12 +49,17 @@ group() {
     # them, so the two cannot disagree -- except that an app data/apps.nix marks
     # `unfree` is left out: this cache is public, and pushing a proprietary
     # binary to it is redistributing it. Its users build it, as nixpkgs' do.
+    # An app marked `prebuilt` is left out too, for the reason in the header:
+    # there is no build to save.
     apps)
       # shellcheck disable=SC2016 # a Nix expression, not shell
       nix eval --raw --impure --expr '
         let
           cat = import ./data/apps.nix;
-          ours = builtins.filter (n: (cat.${n}.ours or false) && !(cat.${n}.unfree or false)) (builtins.attrNames cat);
+          ours = builtins.filter (
+            n:
+            (cat.${n}.ours or false) && !(cat.${n}.unfree or false) && !(cat.${n}.prebuilt or false)
+          ) (builtins.attrNames cat);
         in builtins.concatStringsSep "\n" (map (n: ".#" + (cat.${n}.attr or n)) ours)
       '
       echo

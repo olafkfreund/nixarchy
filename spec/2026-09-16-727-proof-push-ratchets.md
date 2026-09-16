@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 727
 intent: intent/2026-09-16-727-proof-push-ratchets.md
 ---

@@ -154,11 +154,11 @@ flag changes what enters the system closure, not merely what is permitted.
   question raised, and `cachix push` cannot exclude a path from a closure, so
   there is no partial version of it. Revisit if Anthropic's terms are reviewed.
 
-- **A user relying on the pinned claude adapter.** nixi's own option
-  documentation covers it: *"An agent not listed is still usable if its adapter
-  is on `PATH`"*, and `defaultAgent = "claude"` installs the package. Behaviour
-  changes only for someone who had it pinned implicitly and never asked for it —
-  which is the 650 MiB this issue is about.
+- **A machine with `allowUnfree` off now names `claude` explicitly.** Upstream's
+  conditional default dropped `claude` when the flag was false; an explicit list
+  does not. `programs.nixarchy.allowUnfree = false` plus a pinned claude adapter
+  must not become an evaluation failure for a user who never asked for it —
+  `tests/options.nix` covers both states (Mode A), and this case belongs there.
 - **`tests/options.nix` asserts nixi's defaults** (`nixiEnablesCard`, and the
   comment warns "tests/options.nix fails if that default moves"). A case for
   `agents` is part of this change, not a follow-up.

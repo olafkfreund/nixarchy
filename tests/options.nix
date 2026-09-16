@@ -376,6 +376,26 @@ let
 
   # Each case is (what it should look like on, what it should look like off).
   cases = {
+    # #701: an installed machine keeps its flake inputs' sources in its closure,
+    # or min-free's collection deletes them and an offline machine cannot
+    # evaluate itself. The vm configuration imports installer/host.nix, so it is
+    # the installed host; Mode A never imports host.nix and must gain nothing.
+    # checks.install proves the property (collect, then evaluate offline); this
+    # is the half that runs anywhere.
+    flakeInputsRooted =
+      let
+        rooted = cfg: map toString cfg.system.extraDependencies;
+        vmDeps = rooted inputs.self.nixosConfigurations.vm.config;
+      in
+      {
+        on =
+          builtins.elem (toString inputs.nixpkgs.outPath) vmDeps
+          && builtins.elem (toString inputs.self.outPath) vmDeps;
+        off =
+          builtins.elem (toString inputs.nixpkgs.outPath) (rooted loaderOff)
+          || builtins.elem (toString inputs.self.outPath) (rooted loaderOff);
+      };
+
     # ---- #628: command-not-found that answers, and comma ----------------
     #
     # Every pair here is "a default machine has it / a machine that said

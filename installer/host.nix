@@ -161,7 +161,10 @@
     #   under space pressure rather than on a timer. That is exactly what
     #   `nixarchy try` leaves behind: a tried package has no GC root, so an
     #   application the user evaluated and rejected is pure garbage, and
-    #   collecting it can never cost a rollback.
+    #   collecting it can never cost a rollback. The flake's input sources
+    #   would be garbage too -- nothing references them -- and an offline
+    #   machine could not evaluate itself after a collection (#701), so
+    #   system.extraDependencies (beside system.name, below) keeps them.
     #
     # 3 GiB floor, 8 GiB target, sized for the smallest disk nixarchy supports,
     # 32 GiB (#708): a 2 GiB ESP and about 14 GiB of closure leave about 16 GiB
@@ -266,7 +269,15 @@
   # would put the machine's name in the store path of every system it ever
   # builds.
   networking.hostName = "";
-  system.name = "nixarchy";
+  system = {
+    name = "nixarchy";
+
+    # Every input the host was given, transitively, in the system closure: the
+    # sources `nix eval /etc/nixos` needs, kept safe from min-free's collection
+    # (nix.settings above). `self` here is nixarchy, never the user's flake, so
+    # editing /etc/nixos does not change the closure (#701).
+    extraDependencies = inputs.self.lib.inputSources inputs;
+  };
 
   # The name, applied once, from what the installer collected.
   #

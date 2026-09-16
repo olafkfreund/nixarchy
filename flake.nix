@@ -1300,6 +1300,22 @@
       # lint fails the build at three, and adding mkUserIso was the third.
       lib = {
 
+        # Every flake in `flakes`, and every input of theirs, transitively, as
+        # unique store paths. Not the top-level inputs: hyprland does not follow
+        # nixpkgs and brings its own tree, and each of its inputs brings more, so
+        # this is collected rather than listed -- a hand-written list goes stale
+        # on the next bump, and staleness shows up only as a fetch on a machine
+        # with no network. Shared by the install image (installer/cd.nix) and the
+        # installed host (installer/host.nix), so the two cannot drift (#701).
+        inputSources =
+          flakes:
+          let
+            collect =
+              flake:
+              [ flake.outPath ] ++ nixpkgs.lib.concatMap collect (nixpkgs.lib.attrValues (flake.inputs or { }));
+          in
+          nixpkgs.lib.unique (nixpkgs.lib.concatMap collect (nixpkgs.lib.attrValues flakes));
+
         # The installed machine, as the installer would produce it. Both disk
         # modes come from here so they cannot drift apart, and so installer/cd.nix
         # can bake each one onto the image without restating the host.

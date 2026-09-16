@@ -1,0 +1,102 @@
+name: Install or ISO failure
+description: The installer stopped, the ISO would not boot, or the installed machine did not come up.
+labels: ["iso"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        First: **would this happen on Arch?** An installer failure almost never
+        would — the installer is nixarchy's own — so this is usually the right
+        place. A desktop bug after a successful install belongs in the bug
+        report instead.
+
+
+        **The smallest supported disk is 32 GiB** (whole-disk installs, and
+        free space beside another OS alike). The installer refuses anything
+        smaller, by design, and says so.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and where it stopped
+      description: >
+        The installer's last screen or output is the single most useful thing
+        here. A photo of the screen is fine, and often better than retyping it.
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you installed
+      options:
+        - A release ISO from this repository
+        - An ISO built with nixarchy-reinstall-iso
+        - From an existing NixOS, with --from-repo
+        - Something else (say so below)
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: Which image
+      description: >
+        The release tag, or the ISO filename. An image older than the tree it
+        installs is a common cause, and this is what tells us.
+      placeholder: "v4.0.4-1, or nixarchy-2026-09-16.iso"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Disk mode
+      options:
+        - The whole disk
+        - Free space beside another OS
+    validations:
+      required: true
+  - type: dropdown
+    id: encrypted
+    attributes:
+      label: Encrypted?
+      options:
+        - "No"
+        - "Yes"
+    validations:
+      required: true
+  - type: textarea
+    id: machine
+    attributes:
+      label: The machine
+      description: >
+        Firmware, the disk, and whether this is a virtual machine. Every one of
+        these has produced a failure that no other machine reproduces.
+      placeholder: |
+        UEFI or BIOS?
+        lsblk
+        virtual machine, or real hardware?
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: >
+        These identify exactly what was built, and they are the first thing
+        anyone will ask for. From the installed machine if it came up at all;
+        from the ISO's shell if it did not.
+      placeholder: |
+        omarchy version
+        nixos-version
+        nix flake metadata "${NIXARCHY_FLAKE:-/etc/nixos}"   # the locked nixarchy and nixpkgs revisions
+    validations:
+      required: false
+  - type: textarea
+    id: search
+    attributes:
+      label: Existing issues checked
+      description: >
+        Search both trackers, including closed issues — a closed-as-fixed
+        match that still reproduces is a regression, which is worth far more
+        than a duplicate.
+      placeholder: "gh search issues --repo olafkfreund/nixarchy \"…\""
+    validations:
+      required: false

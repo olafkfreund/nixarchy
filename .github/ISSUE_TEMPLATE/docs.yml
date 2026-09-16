@@ -1,0 +1,43 @@
+name: Documentation
+description: A page is wrong, out of date, or missing.
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Documentation that is wrong costs more than documentation that is
+        missing, so this is worth filing even when the fix looks obvious.
+
+
+        The [wiki](https://github.com/olafkfreund/nixarchy/wiki) is a separate
+        git repository that no check in this one can see, so nothing
+        load-bearing lives there. A wiki page can be fixed there directly; the
+        manual, the README and `docs/` are fixed here.
+  - type: input
+    id: page
+    attributes:
+      label: Which page
+      description: A link, or the path — the manual page, a README section, or a wiki page.
+      placeholder: "docs/manual/the-iso.md, or https://github.com/olafkfreund/nixarchy/wiki/…"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What it says, and what it should say
+      description: >
+        Quoting the sentence that is wrong is the fastest possible version of
+        this. If the page is missing entirely, say what you went looking for.
+    validations:
+      required: true
+  - type: textarea
+    id: search
+    attributes:
+      label: Existing issues checked
+      description: >
+        Search both trackers, including closed issues — a closed-as-fixed
+        match that still reproduces is a regression, which is worth far more
+        than a duplicate.
+      placeholder: "gh search issues --repo olafkfreund/nixarchy \"…\""
+    validations:
+      required: false

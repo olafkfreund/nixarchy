@@ -15,7 +15,17 @@
 # system profile rather than being copied here, so it cannot drift from what the
 # module actually ships.
 let
-  vm = inputs.self.nixosConfigurations.vm.config.system.build.toplevel;
+  # The script alone, not the system profile it ships in. Taking it from
+  # `system.build.toplevel` pulled a whole desktop closure into build.yml's
+  # hosted `omarchy` job, whose runner has ~14 GB of disk: the job went quiet
+  # and the runner was killed with SIGTERM, which reads as nothing at all.
+  # Evaluating the module is unavoidable (the script is built by
+  # writeShellApplication inside it); BUILDING the system is not.
+  apply = builtins.head (
+    builtins.filter (
+      p: (p.pname or p.name or "") == "nixarchy-apply"
+    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
+  );
 in
 pkgs.runCommand "nixarchy-apply-staging"
   {
@@ -27,8 +37,8 @@ pkgs.runCommand "nixarchy-apply-staging"
   ''
     export HOME=$PWD/home
     mkdir -p "$HOME"
-    apply=${vm}/sw/bin/nixarchy-apply
-    [ -x "$apply" ] || { echo "nixarchy-apply is not in the system profile" >&2; exit 1; }
+    apply=${apply}/bin/nixarchy-apply
+    [ -x "$apply" ] || { echo "nixarchy-apply is not where the module builds it" >&2; exit 1; }
 
     host=$(uname -n)
     fails=0

@@ -85,6 +85,10 @@ pkgs.testers.runNixOSTest {
       displayManager = false;
     };
 
+    # inotifywait: the #710 assertion below watches the plugins directory for
+    # the events the shell reloads on.
+    environment.systemPackages = [ pkgs.inotify-tools ];
+
     boot.plymouth.enable = pkgs.lib.mkForce false;
     environment.sessionVariables.WLR_RENDERER_ALLOW_SOFTWARE = "1";
 
@@ -257,6 +261,29 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"readlink {decl} | grep -q '^/nix/store/'")
     print(f"{decl_id} is a store symlink, planted with no clone")
 
+    # #710: an activation that changes no plugin must not touch its link. The
+    # shell watches this directory and reloads EVERY plugin on any event in it,
+    # so relinking an unchanged plugin cost a full reload per rebuild.
+    #
+    # The events are the property, not the inode: unlink-then-symlink in the
+    # same directory usually gets the freed inode straight back, so an inode
+    # comparison passes with the bug fully present -- it did here, against the
+    # old block, which is AGENTS.md §1's "vary the variable that matters".
+    target = machine.succeed(f"readlink {decl}").strip()
+    plugdir = "/home/omarchy/.config/omarchy/plugins"
+    machine.succeed(
+        "systemd-run --unit=plugin-watch --collect "
+        f"inotifywait -m -e create,delete,moved_to,moved_from -o /tmp/events {plugdir}")
+    machine.wait_until_succeeds("test -e /tmp/events")
+    machine.succeed("systemctl restart home-manager-omarchy.service")
+    machine.sleep(2)
+    machine.succeed("systemctl stop plugin-watch.service || true")
+    events = machine.succeed("cat /tmp/events").strip()
+    assert events == "", (
+        "an activation that changed no plugin still wrote to the watched "
+        f"plugins directory, which reloads every plugin (#710):\n{events}")
+    print("an activation that changes no plugin leaves its link alone")
+
     seen = json.loads(user("omarchy-plugin-list --json"))
     assert any(q["id"] == decl_id for q in seen), (
         f"the shell did not discover the declaratively installed {decl_id}. "
@@ -298,6 +325,16 @@ pkgs.testers.runNixOSTest {
         f"remove did not take the symlink branch: {out!r}")
     machine.succeed(f"test ! -e {decl}")
     print("and `plugin remove` unlinks it rather than trying to delete /nix/store")
+
+    machine.succeed("systemctl restart home-manager-omarchy.service")
+    back = machine.succeed(f"readlink {decl}").strip()
+    assert back == target, (
+        f"activation did not restore the removed {decl_id} link (got {back!r})")
+    print("and the next activation puts a removed declared plugin back")
+    # Unlinked again: the add loop below clones this same plugin, and `plugin
+    # add` refuses an id that is already present.
+    user(f"omarchy plugin remove {decl_id} --yes 2>&1 || true")
+    machine.succeed(f"test ! -e {decl}")
 
     # ---- add each plugin --------------------------------------------------
     for p in PLUGINS:

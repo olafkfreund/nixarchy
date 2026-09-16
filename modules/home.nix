@@ -791,40 +791,50 @@ in
                   let
                     dir = "${config.xdg.configHome}/omarchy/plugins";
                     manifest = "${dir}/.nixarchy-managed";
+                    # Built OUTSIDE the watched directory: the shell reloads every
+                    # plugin on any event in `dir`, and a temp file there is an event
+                    # even though its name is hidden (#710).
+                    staging = "${config.xdg.configHome}/omarchy/.nixarchy-managed.new";
                   in
                   ''
-                    # Remove links from a previous generation before planting this
-                    # one's, so a plugin dropped from the configuration goes away.
-                    # Guarded on being a symlink: if you replaced one with a real
-                    # checkout, that is yours and is left alone.
+                    # Reconcile, never relink: the shell reloads every plugin on any
+                    # change in this directory, so a link whose target is already right
+                    # is left alone (#710). Only a missing or changed link is written.
+                    run rm -f "${staging}"
+                    : > "${staging}"
+                    ${lib.concatMapStringsSep "
+        " (drv: ''
+                      id=$(cat ${drv}/id)
+                      target=$(readlink -f ${drv}/plugin)
+                      if [ -e "${dir}/$id" ] && [ ! -L "${dir}/$id" ]; then
+                        echo "nixarchy: ${dir}/$id is your own directory, not replacing it"
+                      else
+                        if [ "$(readlink "${dir}/$id")" != "$target" ]; then
+                          run ln -sfn "$target" "${dir}/$id"
+                        fi
+                        echo "$id" >> "${staging}"
+                      fi
+                    '') (lib.attrValues validatedPlugins)}
+                    # A plugin dropped from the configuration goes away. Guarded on
+                    # being a symlink: if you replaced one with a real checkout, that
+                    # is yours and is left alone.
                     if [ -e "${manifest}" ]; then
                       while IFS= read -r stale; do
                         [ -n "$stale" ] || continue
-                        if [ -L "${dir}/$stale" ]; then
+                        if ! grep -qxF "$stale" "${staging}" && [ -L "${dir}/$stale" ]; then
                           run rm -f "${dir}/$stale"
                         fi
                       done < "${manifest}"
                     fi
-                    run rm -f "${manifest}"
-                    ${lib.concatMapStringsSep "
-        " (drv: ''
-                      id=$(cat ${drv}/id)
-                      if [ -e "${dir}/$id" ] && [ ! -L "${dir}/$id" ]; then
-                        echo "nixarchy: ${dir}/$id is your own directory, not replacing it"
-                      else
-                        run ln -sfn "$(readlink -f ${drv}/plugin)" "${dir}/$id"
-                        echo "$id" >> "${manifest}"
-                      fi
-                    '') (lib.attrValues validatedPlugins)}
-                    # Only when this module actually planted something. The file
-                    # exists to remember which links to clean up next time, and
-                    # creating it for a user who declares no plugins leaves an empty
-                    # file sitting in their plugins directory meaning nothing --
-                    # noticed on a real machine, where it was the only thing in there.
-                    if [ -s "${manifest}" ]; then
-                      :
+                    # The manifest exists only while this module planted something: an
+                    # empty file in a user's plugins directory means nothing to them.
+                    # Hidden names are ignored by the shell's watcher.
+                    if [ ! -s "${staging}" ]; then
+                      run rm -f "${manifest}" "${staging}"
+                    elif cmp -s "${staging}" "${manifest}"; then
+                      rm -f "${staging}"
                     else
-                      run rm -f "${manifest}"
+                      run mv "${staging}" "${manifest}"
                     fi
                   ''
                 }
@@ -930,6 +940,14 @@ in
         run mv "$tmp" "$agentfile"
       ''
     );
+
+    # #707: first login's mise launchers in ~/.local/bin shadow the Nix package
+    # of the same name. New ones are no longer written for a Nix command; this
+    # removes the ones already there, and any a later Install-menu pick shadows.
+    home.activation.nixarchyMiseUnshadow = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run ${omarchyPath}/bin/omarchy-mise-unshadow \
+        /etc/profiles/per-user/${config.home.username}/bin /run/current-system/sw/bin
+    '';
 
     # ---- #623: the NixOS MCP server, in the agents that have one --------
     #

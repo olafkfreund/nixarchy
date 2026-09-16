@@ -91,11 +91,39 @@ passed (#235); the size and path-count refusal stays exactly as strict (#725);
      `reinstall-vm` are ~3-hour builds and a keep-alive must never trigger one.
    → verify: step 3 of Tests, against the stub cache.
 
-5. **`tests/cache-entries.nix`** — extend with the four cases in Tests below,
-   following its existing stub shape (`stubs/`, `served/`, `calls/`,
-   `PUSH_WORKS`). No new `checks.*` entry, so no workflow coverage edit is
-   needed for the tests themselves (§4).
-   → verify: `nix build .#checks.x86_64-linux.cache-entries`.
+5. **`tests/proof-push.nix`** — a new check rather than cases bolted onto
+   `tests/cache-entries.nix`.
+   → verify: `nix build .#checks.x86_64-linux.proof-push`.
+
+   **DEVIATION, 2026-09-16, in the same commit as the code.** The plan chose to
+   extend `cache-entries.nix` to avoid a new `checks.*` entry needing a
+   workflow edit under §4. That constraint does not exist: step 3's whole point
+   is that the list is an **opt-out**, so an unclaimed check is built by the
+   generated step the moment it exists — *"adding a check now runs it, with no
+   YAML to write and nothing to forget"*. A separate file keeps two unrelated
+   scripts' tests apart, and costs nothing.
+
+   **Two findings from writing it, both bugs in shipped code rather than the
+   test:**
+
+   - `mapfile -t todo < <("$here/already-proven.sh" "$@")` cannot see that
+     `already-proven.sh` died. It came back empty, and
+     `build-unless-proven.sh` reported *"every requested check is already
+     proven in the cache; nothing to build"* and exited **0** — every check
+     green, none built (AGENTS.md §4). Surfaced by the sandbox having no
+     `/usr/bin/env`. Fixed in `build-unless-proven.sh`, recorded in AGENTS.md
+     §4, and then found again in the `nightly.yml` step written for step 4 of
+     this very plan.
+   - `${SIZE:-112}` in a stub never used its default, because `SIZE=size` is
+     set in this machine's interactive environment. The local run and the
+     sandboxed run disagreed for an invisible reason. Renamed to `NAR_SIZE`.
+     This is the same lesson as the `NIXPKGS_ALLOW_UNFREE` entry added to
+     AGENTS.md §1 earlier today, in a plain shell script rather than a
+     `nix eval --impure`.
+
+   The ratchet assertion is `= 5`, not `>= 5`: if the kill never lands both
+   slices push, and a `>=` assertion passes without testing the thing it is
+   named for.
 
 6. **Formatting and lint.** `nix fmt -- --ci`, `statix check .`,
    `deadnix --fail .`, and `shellcheck` on all three scripts.

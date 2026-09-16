@@ -331,11 +331,20 @@ jobs:
         id: proofs
         if: always() && github.ref == 'refs/heads/main'
         run: |
-          mapfile -t targets < <(.github/scripts/generated-checks.sh) || {
+          # Captured, not piped into mapfile: a process substitution hides the
+          # exit status, so a generated-checks.sh that died would leave an
+          # EMPTY list and this step would report nothing missing -- a green
+          # probe over zero proofs (AGENTS.md section 4).
+          targets=$(.github/scripts/generated-checks.sh) || {
             echo "::error::could not derive the generated check list"
             exit 1
           }
-          missing=$(.github/scripts/already-proven.sh "${targets[@]}") || {
+          mapfile -t names < <(printf '%s\n' "$targets" | grep .)
+          [ "${#names[@]}" -gt 0 ] || {
+            echo "::error::the generated check list came back empty"
+            exit 1
+          }
+          missing=$(.github/scripts/already-proven.sh "${names[@]}") || {
             echo "::error::could not probe the check proofs"
             exit 1
           }

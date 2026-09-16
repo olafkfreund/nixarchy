@@ -263,6 +263,18 @@ Two other ways a check stops checking, both found in one week:
   `repush` job builds and pushes every allowlist entry the probe finds
   missing and fails only if it is still missing afterwards
   (`.github/scripts/cache-entries.sh`).
+- **`mapfile < <(cmd)` cannot see that `cmd` failed**, and an empty list often
+  reads as success. `build-unless-proven.sh` did
+  `mapfile -t todo < <(already-proven.sh "$@")`: when that script died, `todo`
+  came back empty and the script printed *"every requested check is already
+  proven in the cache; nothing to build"* and exited 0. A transient failure in
+  the proof lookup would have marked every check green having built none of
+  them. A process substitution's exit status goes nowhere -- `|| { ... }` after
+  `mapfile` guards the `mapfile`, which succeeded. Capture first
+  (`out=$(cmd) || die`), then split; and if an empty list is not a legitimate
+  answer, say so rather than letting it mean "all done". Found by
+  tests/proof-push.nix, in a sandbox with no `/usr/bin/env`, and the same
+  pattern was written into nightly.yml an hour later by the person fixing it.
 - **A hand-maintained list fails OPEN.** Found three times in one day, in
   three unrelated places: four manual pages published and reachable from no
   sidebar; a third page index (`docs/manual/index.md`) that nothing compared,

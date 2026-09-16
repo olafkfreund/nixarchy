@@ -140,6 +140,15 @@ programs.nixarchy.allowUnfree = false;
 
 or `nixpkgs.config.allowUnfreePredicate` if you would rather list them.
 
+Worth knowing before you flip it either way: this is not only a permission. Some
+packages decide what they pull in by reading it, so turning it on can put unfree
+software in your system closure without you naming it. Nixi, the desktop guide,
+is the example that ships here — it pins an adapter per AI agent, and its Claude
+adapter depends on the unfree `claude-code`. nixarchy names its three agents
+explicitly (`opencode`, `codex`, and `claude` where unfree is allowed) rather
+than leaving that to the flag, so what you get is a decision rather than a side
+effect. A machine with `allowUnfree = false` gets the first two and still builds.
+
 ## Anything the menu does not offer
 
 Upstream answers "something else" with _Install > Package_ and a fuzzy list of

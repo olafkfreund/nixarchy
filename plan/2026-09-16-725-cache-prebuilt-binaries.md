@@ -61,8 +61,8 @@ published to a public cache, reversing for the toplevels the policy
    → verify: read it back; it must say why "upstream will not serve it" is not
    the same claim as "expensive to build".
 
-4. **`modules/home.nix`** — `services.nixi.agents = [ "opencode" "codex"
-   "claude" ];` beside `services.nixi.enable` (line 561), plain assignment
+4. **`modules/home.nix`** — the agent set beside `services.nixi.enable`
+   (line 561), plain assignment
    (AGENTS.md §7: `mkDefault` on a list is dropped the moment a user adds an
    element). Extend the comment block at line 563 — which currently names the
    three nixi defaults nixarchy does *not* change (`autoEnable`,
@@ -71,6 +71,42 @@ published to a public cache, reversing for the toplevels the policy
    `modules/nixos.nix:795` sets.
    → verify: `nix eval` the home config's `services.nixi.agents` and get the
    three, in both `allowUnfree` states.
+
+   **DEVIATION, 2026-09-16, in the same commit as the code.** The step as
+   approved specified an unconditional list:
+
+   ```nix
+   services.nixi.agents = [ "opencode" "codex" "claude" ];
+   ```
+
+   That is an evaluation failure on any machine with
+   `programs.nixarchy.allowUnfree = false`. nixi forces `pkgs.claude-agent-acp`
+   whenever `"claude"` is in the list, and measurement shows **both** that
+   adapter and `claude-code` throw with the flag off:
+
+   ```
+   claude-code        THROWS without allowUnfree
+   claude-agent-acp   THROWS without allowUnfree
+   ```
+
+   So upstream's `lib.optional (pkgs.config.allowUnfree or false)` is a *guard*,
+   not merely a defaulting trick; the spec read it as the latter. Implemented
+   as:
+
+   ```nix
+   services.nixi.agents = [ "opencode" "codex" ]
+     ++ lib.optional (pkgs.config.allowUnfree or false) "claude";
+   ```
+
+   The owner's decision is unaffected: nixarchy allows unfree by default, so the
+   default machine pins all three. Verified in both states —
+   `["opencode","codex","claude"]` and `["opencode","codex"]`.
+
+   A note on how this was nearly missed: the first test reported both packages
+   evaluating cleanly, because `NIXPKGS_ALLOW_UNFREE=1` was set in the shell and
+   `--impure` honours it over `config.allowUnfree = false`. The test could not
+   have failed. Strip that variable (`env -u NIXPKGS_ALLOW_UNFREE`) before
+   concluding anything about unfree behaviour on this machine.
 
 5. **`tests/options.nix`** — a case asserting the pinned set, in both Mode A
    states. The existing nixi cases are at 702+ (`nixiEnablesCard`), with
@@ -86,6 +122,15 @@ published to a public cache, reversing for the toplevels the policy
    off. Name the consequence: the flag changes what enters the system closure.
    No new page, so no sidebar row and no `readme-counts.sh` vocabulary change.
    → verify: the page renders; no count moves.
+
+   **DEVIATION, 2026-09-16.** The premise was wrong: `docs/manual/other-packages.md`
+   already has an "Unfree software" section saying *"nixarchy allows unfree
+   packages by default"* and giving the `programs.nixarchy.allowUnfree = false`
+   opt-out. A second section would have duplicated it -- the mistake AGENTS.md 12
+   warns about, filing work that is already done. The step reduces to the half
+   that was genuinely missing: that the flag decides what enters the closure,
+   with nixi's Claude adapter as the worked example. Nine lines added to the
+   existing section, no new section.
 
 7. **Formatting and lint, last.** `nix fmt -- --ci`, `statix check .`,
    `deadnix --fail .`.

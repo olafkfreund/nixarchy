@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 725
 author: olafkfreund
 ---
@@ -105,17 +105,42 @@ under the unchanged 2048 budget with #719's 184 MiB included.
 - `build.yml` is a CI gate (AGENTS.md §11) — proposed by this branch, merged
   by a human.
 
+## Decisions (approved by @olafkfreund, 2026-09-16)
+
+1. **opencode is the default agent.** nixarchy installs it by default; claude,
+   codex and the others stay installable from the Install menu and selectable
+   as `defaultAgent`, which `modules/apps.nix:1064` already does.
+
+   This is cheaper than it looks. `nixi`'s home module pins an ACP adapter per
+   agent, and opencode **speaks ACP itself** — no adapter package. opencode is
+   also free, so `cache.nixos.org` serves it and it costs this budget nothing.
+
+2. **`zen-browser` comes off the cache.** 394 MiB, a `-bin-` package; its users
+   fetch the same binary from the vendor.
+
+3. **Do what is needed to make it work now.** The mechanical enforcement of the
+   prebuilt criterion is desirable but not a blocker; it is carried as
+   follow-up unless it turns out to be cheap in the same change.
+
+## The cause, traced
+
+`modules/nixos.nix:795` sets `allowUnfree = true` by default. `nixi`'s
+`agents` option (`nix/hm-module.nix:73`) defaults to
+
+```nix
+lib.optional (pkgs.config.allowUnfree or false) "claude" ++ [ "codex" ]
+```
+
+so on nixarchy it evaluates to `[ "claude" "codex" ]`, pinning
+`claude-agent-acp`, which depends on the unfree `claude-code`. That is the
+650 MiB, and `modules/home.nix:561` turns nixi on by default for every user.
+
+Worth stating plainly, because it bears on how `allowUnfree` gets discussed:
+the flag is not a neutral permission. Setting it changes what lands in the
+closure, in every installed machine, and in a public cache. Documenting that
+unfree is allowed tells a user what their machine installs; it does not make
+hosting those binaries someone else's decision.
+
 ## Open questions
 
-1. **Are the AI CLIs meant to be in the default installed closure at all?**
-   Removing them from `reference-toplevel` fixes the budget, the licence
-   exposure and ~650 MiB of every install at once — but it changes what a
-   default install ships, which is a product decision, not a CI one. If they
-   should stay, the alternative is to stop pushing the toplevels wholesale,
-   which costs users the desktop closure download.
-2. **Does `zen-browser` keep its cache entry under a different rule?** It is
-   free and `ours`, so only the prebuilt criterion excludes it. Dropping it
-   saves 394 MiB; keeping it means finding that 394 MiB elsewhere.
-3. Should the prebuilt criterion be enforced mechanically — a check that fails
-   when an allowlist entry's largest path is a `-bin-` or unfree derivation —
-   rather than written in a comment? AGENTS.md prefers a check to a paragraph.
+None. The three above are settled.

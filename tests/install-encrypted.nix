@@ -348,7 +348,8 @@ pkgs.testers.runNixOSTest {
         memorySize = 6144;
         cores = 4;
         useEFIBoot = true;
-        emptyDiskImages = [ 20480 ];
+        # 32 GiB, the smallest disk nixarchy supports (#708): test what is promised.
+        emptyDiskImages = [ 32768 ];
         diskSize = 32768;
       };
     };

@@ -83,8 +83,10 @@ Type to filter. Return with nothing typed accepts `UTC`.
 ![Choosing the install disk](../img/installer/step-05-disk.png)
 
 Only disks big enough to hold a desktop, and never the medium you booted from.
-Anything under 8 GiB is left out — as are floppy controllers and compressed RAM
-devices, both of which `lsblk` cheerfully calls a disk.
+Anything under 32 GiB is left out — the smallest disk nixarchy supports, in both
+modes — as are floppy controllers and compressed RAM devices, both of which
+`lsblk` cheerfully calls a disk. An unattended install whose answers file names a
+smaller disk is refused the same way, before anything is formatted.
 
 ### 6. Encryption
 

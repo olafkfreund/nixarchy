@@ -355,7 +355,7 @@ pkgs.testers.runNixOSTest {
     try:
         disk = os.path.abspath("target.qcow2")
         subprocess.check_call(
-            ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "24G"])
+            ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "32G"])
 
         drives = (
             f" -drive file={disk},if=virtio,format=qcow2,werror=report"

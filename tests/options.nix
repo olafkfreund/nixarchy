@@ -725,6 +725,24 @@ let
       off = adopter.config.nix.settings ? min-free;
     };
 
+    # #708: sized for the 32 GiB minimum, and on the Nix that does not crash in
+    # an automatic collection mid-switch (NixOS/nix#15614, fixed in 2.35). The
+    # installed host only; an adopter keeps nixpkgs' Nix and has no thresholds.
+    installedHostDiskPolicy =
+      let
+        vmCfg = inputs.self.nixosConfigurations.vm.config;
+        GiB = 1024 * 1024 * 1024;
+      in
+      {
+        on =
+          builtins.compareVersions vmCfg.nix.package.version "2.35" >= 0
+          && vmCfg.nix.settings.min-free == 3 * GiB
+          && vmCfg.nix.settings.max-free == 8 * GiB;
+        off =
+          (adopter.config.nix.settings ? max-free)
+          || builtins.compareVersions adopter.config.nix.package.version "2.35" >= 0;
+      };
+
     # The boot menu is capped for the installer's machines only. A cap on the
     # MENU, not on the generations -- nh.clean owns those, and
     # `nixos-rebuild --rollback` still reaches the one before this.

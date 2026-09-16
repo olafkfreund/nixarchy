@@ -205,8 +205,9 @@ bootable stick at all.
 screen offers a free-space install -- it keeps what is already on the drive and
 takes only unallocated space, which is how you put this beside Windows -- and a
 full-disk install, which does exactly what it says. There is still no partition
-*editor*: free-space mode needs at least 32 GiB of contiguous unallocated space
-that you made beforehand, with Windows' own Disk Management or `gparted`, and
+*editor*: both modes need at least 32 GiB, the smallest disk nixarchy supports.
+A full-disk install needs a 32 GiB disk; free-space mode needs 32 GiB of
+contiguous unallocated space that you made beforehand, with Windows' own Disk Management or `gparted`, and
 it refuses rather than shrinking anything itself.
 
 Full-disk mode is one file, `installer/disk-config.nix`, run against the disk

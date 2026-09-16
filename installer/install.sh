@@ -766,8 +766,7 @@ ask_device() {
   # so a machine with a floppy controller -- which every qemu machine has by
   # default -- offered a 4K device as the install target, first in the list and
   # selected by default. Two presses of Return and the summary said
-  # "Disk: /dev/fd0". Anything that cannot hold the closure is not a target.
-  local min_bytes=$((8 * 1024 * 1024 * 1024))
+  # "Disk: /dev/fd0". Anything under the supported minimum is not a target.
   list=$(
     lsblk -dnpo NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}' | while read -r dev; do
       # zram is compressed RAM and fd is a floppy controller every qemu machine
@@ -776,8 +775,7 @@ ask_device() {
       case $dev in
         /dev/zram* | /dev/fd*) continue ;;
       esac
-      local_bytes=$(lsblk -bdno SIZE "$dev" 2>/dev/null) || continue
-      [ "${local_bytes:-0}" -ge "$min_bytes" ] || continue
+      disk_under_floor "$dev" && continue
       printf '%s %s %s\n' "$dev" \
         "$(lsblk -dno SIZE "$dev" 2>/dev/null | tr -d ' ')" \
         "$(lsblk -dno MODEL "$dev" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
@@ -788,7 +786,7 @@ ask_device() {
   fi
   if [ -z "$list" ]; then
     echo "nixarchy-install: no disk large enough to install onto." >&2
-    echo "nixarchy needs at least 8 GiB; nothing attached qualifies." >&2
+    echo "nixarchy needs at least ${MIN_DISK_GIB} GiB; nothing attached qualifies." >&2
     exit 1
   fi
   device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}') || ui_abort
@@ -815,11 +813,21 @@ ask_device() {
 #   Every refusal is a refusal. There is no "install anyway".
 # ---------------------------------------------------------------------------
 
-# Upstream's floor, and it is the whole region rather than what is left after
-# our ESP: 32 GiB is already tight for a desktop with a Nix store in it, and
-# subtracting 2 GiB from a number somebody chose as a minimum makes it not the
-# minimum any more.
-FREE_MIN_GIB=32
+# The smallest disk nixarchy supports, in both modes (#708): a whole disk under it
+# is not offered, a free region under it is refused, and an answers file naming
+# one is refused before anything is formatted. It is the whole disk or region,
+# not what is left after our ESP: 32 GiB is already tight for a desktop with a
+# Nix store in it (installer/host.nix sizes its garbage collection to it), and
+# subtracting 2 GiB from the minimum makes it not the minimum any more.
+MIN_DISK_GIB=32
+
+# The one place the floor is compared. True when $1 is under it -- including when
+# lsblk cannot say how big it is, because refusing is the safe answer.
+disk_under_floor() {
+  local bytes
+  bytes=$(lsblk -bdno SIZE "$1" 2>/dev/null) || return 0
+  [ "${bytes:-0}" -lt $((MIN_DISK_GIB * 1024 * 1024 * 1024)) ]
+}
 # Same 2 GiB as the whole-disk ESP, for the same reason: a NixOS /boot holds
 # every generation's kernel and initrd.
 FREE_ESP_MIB=2048
@@ -944,8 +952,8 @@ free_space_possible() {
   # kernel costs nothing and getting it wrong is a factor of eight.
   sector_bytes=$(blockdev --getss "$dev" 2>/dev/null || echo 512)
   region_bytes=$(((free_end - free_start + 1) * sector_bytes))
-  if [ "$region_bytes" -lt $((FREE_MIN_GIB * 1024 * 1024 * 1024)) ]; then
-    free_why="the largest free region on $dev is under ${FREE_MIN_GIB} GiB"
+  if [ "$region_bytes" -lt $((MIN_DISK_GIB * 1024 * 1024 * 1024)) ]; then
+    free_why="the largest free region on $dev is under ${MIN_DISK_GIB} GiB"
     free_start=""
     free_end=""
     return 1
@@ -1202,6 +1210,10 @@ validate_answers() {
     elif [ "$(lsblk -dno TYPE "$device" 2>/dev/null)" != "disk" ]; then
       # A partition here would be formatted as though it were the whole disk.
       problems+=("device: $device is not a whole disk")
+    elif disk_under_floor "$device"; then
+      # The interactive menu never offers such a disk; unattended must not
+      # install onto one either (#708).
+      problems+=("device: $device is under ${MIN_DISK_GIB} GiB")
     fi
   fi
 

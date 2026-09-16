@@ -339,7 +339,7 @@ nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~1.9 GB down
 
 The offline image installs with no network at all; the network image fetches
 the rest from binary caches during the install. Both write to a
-`nixarchy-try.qcow2` in the current directory (up to 24 GB), and when the
+`nixarchy-try.qcow2` in the current directory (up to 32 GB), and when the
 install finishes, `-- --boot` starts the installed system from that disk;
 `-- --fresh` wipes it and installs again. `-- --help` lists the rest.
 

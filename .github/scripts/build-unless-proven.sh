@@ -20,7 +20,19 @@ here=$(dirname "$0")
 
 # stdout is the list that still needs building; stderr is the narration, and
 # it is passed through so the log says which checks were skipped and why.
-mapfile -t todo < <("$here/already-proven.sh" "$@")
+#
+# Captured, not piped straight into mapfile: a process substitution hides the
+# exit status, so an already-proven.sh that DIED produced an empty list, which
+# this script then reported as "every requested check is already proven;
+# nothing to build" and exited 0 -- a green run over zero checks. Found by
+# tests/proof-push.nix, in a sandbox with no /usr/bin/env. AGENTS.md section 4:
+# a check that cannot RUN reads as one that passes.
+proven=$("$here/already-proven.sh" "$@") || {
+  echo "::error::could not work out which checks are already proven; refusing" \
+    "to report a pass having built nothing" >&2
+  exit 2
+}
+mapfile -t todo < <(printf '%s\n' "$proven" | grep . || true)
 
 if [ "${#todo[@]}" -eq 0 ]; then
   echo "every requested check is already proven in the cache; nothing to build"

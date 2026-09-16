@@ -1881,6 +1881,15 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The proof push: a killed job keeps what it proved, a result too
+          # large to BE a proof is skipped rather than failed, and a push that
+          # genuinely fails still exits non-zero. All three were false on
+          # 2026-09-16 (#727, #729). Against a stubbed nix and cachix. See
+          # tests/proof-push.nix.
+          proof-push = import ./tests/proof-push.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # Every option that adds something, checked with it turned off too --
           # see tests/options.nix for why that half is the one at risk.
           options = import ./tests/options.nix {

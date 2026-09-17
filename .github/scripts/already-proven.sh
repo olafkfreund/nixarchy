@@ -19,8 +19,21 @@
 # identical obs-studio path from a stalled cache.nixos.org, every build
 # already green. See build.yml's `system` timeout comment.
 #
-# Prints the checks that still need building, one per line, on stdout.
-# Everything else goes to stderr.
+# Prints the checks that still need building on stdout, one per line, as
+#
+#     <name><TAB><drvPath><TAB><outPath>
+#
+# The drvPath is the point. This script has to evaluate every check to learn
+# its output path, and `nix eval` INSTANTIATES -- the derivation is in the store
+# by the time the cache lookup happens. Throwing it away meant `nix build` and
+# `cachix-push.sh --proof` each evaluated the same attribute again: three full
+# evaluations per check, and on checks.options that is three minutes apiece
+# (measured 2026-09-17: `nix build .#checks...options` 3m05s against
+# `nix build "$drv^*"` 1.3s, both already built). Passing it on makes it one.
+#
+# A consumer that only wants the name takes the first field; build.yml's
+# coverage gate greps the WORKFLOWS for check names, not this output, so the
+# second field is invisible to it.
 set -uo pipefail
 
 CACHE="${NIXARCHY_CACHE:-https://nixarchy.cachix.org}"
@@ -42,18 +55,27 @@ for spec in "$@"; do
   # A check whose outPath will not evaluate is a check that needs building --
   # and the build is where that error belongs, with its stack trace, not here
   # behind a `2>/dev/null`.
-  out=$(nix eval --raw ".#checks.$SYSTEM.$c" 2>/dev/null) || {
+  # Both at once: `nix eval` on a derivation gives outPath, and drvPath comes
+  # from the same evaluation, so asking for the pair costs nothing extra.
+  # Captured, then split: `nix eval --raw` emits no trailing newline, so a
+  # `read` fed straight from it returns non-zero having read the data perfectly
+  # well -- which sent every check down the failure branch with an empty
+  # drvPath, silently, while still printing the right names.
+  if ! pair=$(nix eval --raw ".#checks.$SYSTEM.$c" \
+    --apply 'd: d.outPath + " " + d.drvPath' 2>/dev/null); then
     echo "  $c: does not evaluate here; leaving it to the build" >&2
-    echo "$c"
+    # No drvPath to offer, so the build falls back to the attribute.
+    printf '%s\t\t\n' "$c"
     needed=$((needed + 1))
     continue
-  }
+  fi
+  read -r out drv <<<"$pair"
 
   if nix path-info --store "$CACHE" "$out" >/dev/null 2>&1; then
     echo "  $c: already proven ($(basename "$out"))" >&2
     proven=$((proven + 1))
   else
-    echo "$c"
+    printf '%s\t%s\t%s\n' "$c" "$drv" "$out"
     needed=$((needed + 1))
   fi
 done
@@ -67,6 +89,9 @@ echo "proven: $proven   to build: $needed" >&2
 if [ "$((proven + needed))" -ne "$#" ]; then
   echo "ERROR: asked about $# checks, accounted for $((proven + needed))." >&2
   echo "Refusing to report anything as proven." >&2
-  printf '%s\n' "$@"
+  # Names with an EMPTY drvPath field: the refusal has no evaluation to offer,
+  # and a consumer that falls back to the attribute here is doing the safe
+  # thing -- building everything from scratch beats reporting a pass.
+  for c in "$@"; do printf '%s\t\t\n' "${c#".#checks.$SYSTEM."}"; done
   exit 1
 fi

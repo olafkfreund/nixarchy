@@ -40,7 +40,16 @@ pkgs.runCommand "nixarchy-proof-push"
         # is under test rather than the cache lookup.
         cat > sut/already-proven.sh <<'EOF'
     #!/usr/bin/env bash
-    printf '%s\n' "$@"
+    # The real script's contract: <name><TAB><drvPath><TAB><outPath>, saying
+    # everything needs building. A name in NO_DRV comes back with both path
+    # fields EMPTY -- the refusal path, and a check that would not evaluate --
+    # so the caller's fallback to the attribute is exercised, not assumed.
+    for c in "$@"; do
+      case " ''${NO_DRV:-} " in
+        *" $c "*) printf '%s\t\t\n' "$c" ;;
+        *) printf '%s\t/nix/store/drv-%s.drv\t/nix/store/out-%s\n' "$c" "$c" "$c" ;;
+      esac
+    done
     EOF
 
         # A nix stub whose `build` records the slice and, for the poisoned name,
@@ -58,7 +67,15 @@ pkgs.runCommand "nixarchy-proof-push"
         # or a timeout arriving mid-build looks from inside the script. Defaulted
         # to a name no test uses: an empty POISON would make `*".$POISON"` match
         # every argument and hang every build.
-        for a in "$@"; do case "$a" in *".''${POISON:-__no_such_check__}") sleep 300 ;; esac; done
+        # Both spellings: a slice is built by drvPath now (#738), and by attribute
+      # on the fallback path. Matching only ".<name>" stopped simulating the
+      # kill the moment the caller started passing derivations -- the ratchet
+      # case then "passed" with eight pushes instead of five.
+      for a in "$@"; do
+        case "$a" in
+          *".''${POISON:-__no_such_check__}" | *"drv-''${POISON:-__no_such_check__}.drv"*) sleep 300 ;;
+        esac
+      done
         ;;
       eval) printf '/nix/store/fake-%s' "''${last##*.}" ;;
       path-info)
@@ -161,6 +178,59 @@ pkgs.runCommand "nixarchy-proof-push"
           exit 1
         }
         echo "a push that actually fails still exits non-zero, and says so"
+
+    # ---- 4. one evaluation per check, not three (#738) ----
+    #
+    # already-proven.sh must evaluate every check to learn its output path, and
+    # `nix eval` INSTANTIATES -- the derivation is in the store before the cache
+    # lookup happens. Discarding it made `nix build` evaluate the same attribute
+    # again and `cachix-push.sh --proof` a third time. Measured 2026-09-17:
+    # building checks.options by attribute 3m05s, by drvPath 1.3s, both already
+    # built, both from a cold evaluation cache.
+    rm -f calls/*; : > calls/build; : > calls/push
+    bash sut/build-unless-proven.sh a b >/dev/null 2>&1
+    grep -q 'drv-a[.]drv^' calls/build || {
+      echo "the build ignored the drvPath already-proven.sh handed it, so nix" >&2
+      echo "evaluates the attribute a second time (#738):" >&2
+      cat calls/build >&2
+      exit 1
+    }
+    if grep -q '[.]#checks' calls/build; then
+      echo "the build still names an attribute although drvPaths were given:" >&2
+      cat calls/build >&2
+      exit 1
+    fi
+    echo "a slice builds by derivation, so nix does not evaluate it again"
+
+    # And the push takes the outPath rather than deriving it a third time.
+    grep -q 'out-a$' calls/push || {
+      echo "the proof push did not receive the outPath from its caller:" >&2
+      cat calls/push >&2
+      exit 1
+    }
+    echo "the proof push takes the path it was given, and evaluates nothing"
+
+    # ---- 5. an unknown drvPath falls back, and only for that check ----
+    #
+    # The refusal path emits both fields empty, and so does a check that would
+    # not evaluate. Falling back to the attribute is the SAFE direction: it
+    # builds rather than silently skipping, which is the failure this script had
+    # in another form a day earlier.
+    rm -f calls/*; : > calls/build
+    NO_DRV="b" bash sut/build-unless-proven.sh a b >/dev/null 2>&1
+    grep -q 'checks[.]x86_64-linux[.]b' calls/build || {
+      echo "a check with no drvPath was not built by attribute; an empty field" >&2
+      echo "must fall back rather than drop the check:" >&2
+      cat calls/build >&2
+      exit 1
+    }
+    grep -q 'drv-a[.]drv^' calls/build || {
+      echo "the fallback took the whole slice with it; a known drvPath beside an" >&2
+      echo "unknown one must still be used:" >&2
+      cat calls/build >&2
+      exit 1
+    }
+    echo "an empty drvPath falls back to the attribute, and only for that check"
 
         touch $out
   ''

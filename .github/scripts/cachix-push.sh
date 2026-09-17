@@ -82,9 +82,26 @@ if [ "$proof" = true ]; then
   skipped=0
   failed=0
   for c in "$@"; do
+    # `name=/nix/store/...` skips this script's own evaluation: the caller has
+    # already evaluated the check (already-proven.sh does, and `nix eval`
+    # instantiates), so re-deriving the path here was the third full evaluation
+    # of the same attribute in one step -- three minutes apiece on
+    # checks.options, measured 2026-09-17. A bare name still works and still
+    # evaluates, for anyone calling this by hand.
+    out=""
+    case "$c" in
+      *=*)
+        out=${c#*=}
+        c=${c%%=*}
+        ;;
+    esac
     c=${c#".#checks.$system."}
-    if ! out=$(nix eval --raw ".#checks.$system.$c" 2>/dev/null) ||
-      ! nix path-info "$out" >/dev/null 2>&1; then
+    if [ -z "$out" ] && ! out=$(nix eval --raw ".#checks.$system.$c" 2>/dev/null); then
+      echo "::warning::$c has no built result here; no proof pushed" >&2
+      skipped=$((skipped + 1))
+      continue
+    fi
+    if ! nix path-info "$out" >/dev/null 2>&1; then
       # Under --keep-going a failed check produces no output. The build's own
       # exit status already reports that; saying it twice, as a push failure,
       # points the reader at the cache instead of at the check.

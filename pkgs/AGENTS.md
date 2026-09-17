@@ -68,6 +68,40 @@ CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
 purpose; a fenced block is what an agent copies.
 
+### Aether's lockfile
+
+Kept because the patch it describes came off at 4.29.9 and may have to go back
+on, and because the shape generalises to any `buildNpmPackage` here.
+
+Upstream's `frontend/package-lock.json` was out of sync with its
+`package.json`, so `npm ci` — which `buildNpmPackage` uses, correctly, being
+the only npm mode that installs exactly what is locked — refused outright:
+
+    npm error `npm ci` can only install packages when your package.json and
+    package-lock.json ... are in sync.
+    npm error Missing: @emnapi/core@1.11.3 from lock file
+    npm error Missing: @emnapi/runtime@1.11.3 from lock file
+
+Those are optional native transitive dependencies npm omits when the lock is
+generated on another platform. Regenerating needs a network, which a sandboxed
+build has not got, so the corrected lock was carried as a patch, produced with
+`npm install --package-lock-only` against the tagged source.
+
+**The part worth keeping.** It was applied to the *source*, with
+`applyPatches`, and not inside `buildNpmPackage` — because `fetchNpmDeps` reads
+the lock from `src`. A patch applied within the package fetches against the old
+lock and builds against the new one, which surfaces as a hash mismatch that
+looks like a stale `npmDepsHash` and is not.
+
+**How it retired, and why that took a day.** The patch stops applying when
+upstream's lock changes, which is the notification working as designed — but it
+fails during `nix run .#update`, which bumps every pinned app in one pass, so
+the whole update looks broken rather than one app (#743). Before rewriting such
+a patch, check whether it is still needed at all: run `npm ci` against the new
+tag's unpatched lock, and against the old tag's as a control. Here the new one
+succeeded and the old one failed with the error above, which is what a fix
+being unnecessary looks like.
+
 ## Tests
 
 | check | covers |

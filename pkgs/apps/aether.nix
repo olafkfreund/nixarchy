@@ -3,7 +3,6 @@
   stdenv,
   buildGoModule,
   buildNpmPackage,
-  applyPatches,
   fetchFromGitHub,
   nodejs,
   wails,
@@ -18,13 +17,13 @@
 }:
 let
   pname = "aether";
-  version = "4.29.8";
+  version = "4.29.9";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "aether";
     tag = "v${version}";
-    hash = "sha256-gB6vRNoo309eAWhAhDFDiIzHjSBalKpOjafnx8wzZP0=";
+    hash = "sha256-7OkZ+V01sYgDhurfG7lgP05mFOVFCFPDXDFOrSHpBL0=";
   };
 
   # The Svelte frontend, built on its own and handed to the Go build finished.
@@ -37,47 +36,17 @@ let
   #
   # Two derivations also means the npm tree is fetched once and cached, rather
   # than re-fetched whenever a Go dependency moves.
-  # The frontend source with its lock file corrected.
   #
-  # Upstream's package-lock.json is out of sync with its package.json, and
-  # `npm ci` -- which buildNpmPackage uses, correctly, because it is the only
-  # npm mode that installs exactly what is locked -- refuses outright:
-  #
-  #   npm error `npm ci` can only install packages when your package.json and
-  #   package-lock.json ... are in sync.
-  #   npm error Missing: @emnapi/core@ from lock file
-  #   npm error Missing: @emnapi/runtime@ from lock file
-  #
-  # Those are optional native transitive dependencies npm omitted when the lock
-  # was generated on another platform. Regenerating needs a network, which a
-  # sandboxed build has not got, so the corrected lock is carried as a patch --
-  # produced with `npm install --package-lock-only` against the tagged source,
-  # 146 lines adding what npm was missing.
-  #
-  # Patched HERE rather than inside buildNpmPackage, and that is the point:
-  # fetchNpmDeps reads the lock from `src`, so a patch applied within the
-  # package fetches against the old lock and builds against the new one --
-  # which surfaces as a hash mismatch that looks like a stale npmDepsHash and
-  # is not.
-  #
-  # It comes off the moment upstream's lock is in sync: the build fails loudly
-  # if the patch stops applying, which is the notification.
-  frontendSrc = applyPatches {
-    # applyPatches cannot derive a name from a string src.
-    name = "${pname}-frontend-source";
-    src = "${src}/frontend";
-    patches = [ ./aether-lockfile.patch ];
-    # -p2: the patch was made against frontend/package-lock.json from the
-    # repository root, and this source IS frontend/.
-    patchFlags = [ "-p2" ];
-  };
-
+  # Upstream's package-lock.json used to be out of sync with its package.json,
+  # so `npm ci` refused and a corrected lock was carried here as a patch. It
+  # came off at 4.29.9, which is what the note here always said would happen.
+  # If it has to come back: Why: pkgs/AGENTS.md#aethers-lockfile
   frontend = buildNpmPackage {
     pname = "${pname}-frontend";
     inherit version;
-    src = frontendSrc;
+    src = "${src}/frontend";
 
-    npmDepsHash = "sha256-Ry8BEmGVVL+RjkLFZTdsC9/M37DtjGw3m5zDtAcPj7s=";
+    npmDepsHash = "sha256-5c4xSQaZQX/KQV28jKo2MnCRze10IEAnfr1Sg+o3V0s=";
 
     # `npm run build` writes dist/, which is what wails embeds.
     installPhase = ''
@@ -100,7 +69,7 @@ buildGoModule {
   # a Go backend and a Svelte frontend compiled into one binary and rendered
   # through webkitgtk, so there are two dependency graphs to pin.
 
-  vendorHash = "sha256-0cNNFCI/hFYM/BmuHEDDunKf7byj8JCb0lRElsWWaT0=";
+  vendorHash = "sha256-i8Tr4zKm+LaaZ/zKA8yoZC5mv2s4DUqaeT7Iq0uB+ME=";
 
   nativeBuildInputs = [
     nodejs

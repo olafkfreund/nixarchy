@@ -32,6 +32,13 @@ group() {
     system)
       echo ".#checks.x86_64-linux.vm-toplevel"
       echo ".#checks.x86_64-linux.reference-toplevel"
+      # checks.options compiles hypr-rdp otherwise -- 447 Rust crates, 5.5 to
+      # 8.5 minutes, every run, for a check that asserts in three seconds
+      # (#738). Nothing else serves it: it is a flake input, MIT, off by
+      # default so no toplevel carries it, and absent from cache.nixos.org.
+      # It was in this cache by accident until #699 stopped the store-diff
+      # pushes, and `system` started timing out the next day.
+      echo ".#hypr-rdp"
       ;;
     # `nixarchy vm run` downloads the KVM runner instead of building QEMU;
     # checks.microvm-boot downloads -tcg every night. From the data file, so a

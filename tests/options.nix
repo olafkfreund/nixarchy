@@ -86,6 +86,18 @@ let
 
   homeWith = homeWithPkgs pkgs;
 
+  # The three default fixtures, bound once each. Nix does not memoise a
+  # function call, so every `(configWith { })` written out below was another
+  # evaluation of the same machine -- 50 of them across this file, and one
+  # measured 2m51s and 10.6 GB of RSS on its own (#738).
+  #
+  # They stay three. `homeOn` supplies a named NixOS configuration and
+  # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
+  # distinction this file exists to assert.
+  defaultMachine = configWith { };
+  defaultHome = homeWith { };
+  defaultHomeOn = homeOn { } { };
+
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
   # above deliberately is not.
   #
@@ -405,7 +417,7 @@ let
     # exercises, and it is also the half that matters to somebody who already
     # runs nix-index their own way.
     commandNotFoundComma = {
-      on = hasPackageNamed (configWith { }) "comma-with-db";
+      on = hasPackageNamed defaultMachine "comma-with-db";
       off = hasPackageNamed (configWith { commandNotFound = false; }) "comma-with-db";
     };
 
@@ -413,14 +425,14 @@ let
     # than pkgs.nix-index. A machine carrying nix-index without it has a tool
     # that answers nothing until somebody spends an afternoon indexing.
     commandNotFoundDatabase = {
-      on = hasPackageNamed (configWith { }) "nix-index-with-full-db";
+      on = hasPackageNamed defaultMachine "nix-index-with-full-db";
       off = hasPackageNamed (configWith { commandNotFound = false; }) "nix-index-with-full-db";
     };
 
     # The handler reachable by name, which is what lets the runCommand below
     # actually RUN it rather than grep for it.
     commandNotFoundHandler = {
-      on = hasPackageNamed (configWith { }) "nixarchy-command-not-found";
+      on = hasPackageNamed defaultMachine "nixarchy-command-not-found";
       off = hasPackageNamed (configWith { commandNotFound = false; }) "nixarchy-command-not-found";
     };
 
@@ -434,9 +446,7 @@ let
     # existed to catch. Found by breaking it and watching it stay green, which
     # is the only way that shape is ever found (AGENTS.md §1).
     commandNotFoundBashHook = {
-      on =
-        pkgs.lib.hasInfix "command_not_found_handle()"
-          (configWith { }).programs.bash.interactiveShellInit;
+      on = pkgs.lib.hasInfix "command_not_found_handle()" defaultMachine.programs.bash.interactiveShellInit;
       off =
         pkgs.lib.hasInfix "command_not_found_handle()"
           (configWith {
@@ -475,7 +485,7 @@ let
     # shell's, no second nix-index, and no opinion about
     # programs.command-not-found.
     commandNotFoundLeavesAdopterAlone = {
-      on = hasPackageNamed (configWith { }) "comma-with-db";
+      on = hasPackageNamed defaultMachine "comma-with-db";
       off = hasPackageNamed loaderOff "comma-with-db";
     };
 
@@ -493,7 +503,7 @@ let
     autoUpdateFollowsFlake = {
       on =
         (configWith { flake = "/home/alice/cfg"; }).programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
-      off = (configWith { }).programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
+      off = defaultMachine.programs.nixarchy.autoUpdate.flake == "/home/alice/cfg";
     };
 
     flakesSurviveUserFeature = {
@@ -509,7 +519,7 @@ let
     # All three in one case, because "off" has to be all of them and a
     # per-agent case would let one survivor hide behind two passes.
     mcpServers = {
-      on = hasAll (homeOn { } { }) mcpActivationNames;
+      on = hasAll defaultHomeOn mcpActivationNames;
       off = hasAny (homeOn { mcp = false; } { }) mcpActivationNames;
     };
 
@@ -519,7 +529,7 @@ let
     # anything; what is IN it is asserted in the runCommand below, which
     # greps the file itself.
     mcpWiresGeneratedConfig = {
-      on = pkgs.lib.hasInfix "nixarchy-mcp-claude.json" (activationText (homeOn { } { }));
+      on = pkgs.lib.hasInfix "nixarchy-mcp-claude.json" (activationText defaultHomeOn);
       off = pkgs.lib.hasInfix "nixarchy-mcp-claude.json" (activationText (homeOn { mcp = false; } { }));
     };
 
@@ -528,13 +538,13 @@ let
     # blocks must be inert rather than disabled. That is the shape that breaks
     # when somebody replaces an `or false` with a bare attribute access.
     mcpInertWithoutOsConfig = {
-      on = hasAny (homeOn { } { }) mcpActivationNames;
-      off = hasAny (homeWith { }) mcpActivationNames;
+      on = hasAny defaultHomeOn mcpActivationNames;
+      off = hasAny defaultHome mcpActivationNames;
     };
 
     # ---- #630: nixd, in the editors the Install menu offers --------------
     nixdPackage = {
-      on = hasPackageNamed (configWith { }) "nixd";
+      on = hasPackageNamed defaultMachine "nixd";
       off = hasPackageNamed (configWith { languageServer = false; }) "nixd";
     };
 
@@ -548,14 +558,14 @@ let
     # it, from one they wrote themselves.
     nixdOnlyForSelectedEditors = {
       on = hasAny (homeOn everyEditor { }) nixdActivationNames;
-      off = hasAny (homeOn { } { }) nixdActivationNames;
+      off = hasAny defaultHomeOn nixdActivationNames;
     };
 
     # The Neovim spec, which rides on the neovim option rather than on an app
     # row -- Neovim is a runtime dependency of the omarchy package and is
     # never "selected".
     nixdNeovim = {
-      on = (homeOn { } { }).home.activation ? nixarchyNixdNeovim;
+      on = defaultHomeOn.home.activation ? nixarchyNixdNeovim;
       off = (homeOn { } { programs.nixarchy.neovim = "off"; }).home.activation ? nixarchyNixdNeovim;
     };
 
@@ -571,12 +581,12 @@ let
         builtins.toJSON (configNamed "testbox" { }).programs.nixarchy.nixdSettings
       );
       off = pkgs.lib.hasInfix "nixosConfigurations..options" (
-        builtins.toJSON (configWith { }).programs.nixarchy.nixdSettings
+        builtins.toJSON defaultMachine.programs.nixarchy.nixdSettings
       );
     };
 
     nixdLeavesAdopterAlone = {
-      on = hasPackageNamed (configWith { }) "nixd";
+      on = hasPackageNamed defaultMachine "nixd";
       off = hasPackageNamed loaderOff "nixd";
     };
 
@@ -586,7 +596,7 @@ let
     # it is the tool `nix fmt` runs is asserted in the runCommand below, by
     # running both.
     nixFormatterPackage = {
-      on = hasPackageNamed (configWith { }) "nixfmt";
+      on = hasPackageNamed defaultMachine "nixfmt";
       off = hasPackageNamed (configWith { languageServer = false; }) "nixfmt";
     };
 
@@ -594,19 +604,18 @@ let
     # nixarchy machine before this, so `ensure_installed` failed for EVERY
     # language, silently, with a notification nobody reads.
     nixTreesitterToolchain = {
-      on =
-        hasPackageNamed (configWith { }) "tree-sitter" && hasPackageNamed (configWith { }) "gcc-wrapper";
+      on = hasPackageNamed defaultMachine "tree-sitter" && hasPackageNamed defaultMachine "gcc-wrapper";
       off =
         hasPackageNamed (configWith { languageServer = false; }) "tree-sitter"
         || hasPackageNamed (configWith { languageServer = false; }) "gcc-wrapper";
     };
 
     nixNeovimSpec = {
-      on = (homeOn { } { }).home.activation ? nixarchyNeovimNix;
+      on = defaultHomeOn.home.activation ? nixarchyNeovimNix;
       off = (homeOn { } { programs.nixarchy.neovim = "off"; }).home.activation ? nixarchyNeovimNix;
     };
     nixNeovimSpecFollowsLanguageServer = {
-      on = (homeOn { } { }).home.activation ? nixarchyNeovimNix;
+      on = defaultHomeOn.home.activation ? nixarchyNeovimNix;
       off = (homeOn { languageServer = false; } { }).home.activation ? nixarchyNeovimNix;
     };
 
@@ -619,12 +628,12 @@ let
     # off state is the one a refactor breaks quietly.
     devenvNeovim = {
       on = (homeOn { services.devenv.enable = true; } { }).home.activation ? nixarchyNeovimDevenv;
-      off = (homeOn { } { }).home.activation ? nixarchyNeovimDevenv;
+      off = defaultHomeOn.home.activation ? nixarchyNeovimDevenv;
     };
 
     sopsNeovim = {
       on = (homeBeside { sops = sopsDecl; } { }).home.activation ? nixarchyNeovimSops;
-      off = (homeOn { } { }).home.activation ? nixarchyNeovimSops;
+      off = defaultHomeOn.home.activation ? nixarchyNeovimSops;
     };
     # And the binary the plugin execs, on the same predicate.
     sopsOnPath = {
@@ -649,7 +658,7 @@ let
       on =
         (aiPlain.environment.sessionVariables.OLLAMA_ENDPOINT or "")
         == aiPlain.programs.nixarchy.localAi.resolved.endpoint;
-      off = (configWith { }).environment.sessionVariables ? OLLAMA_ENDPOINT;
+      off = defaultMachine.environment.sessionVariables ? OLLAMA_ENDPOINT;
     };
 
     # The user's own specs, on a standalone home: this option has no NixOS
@@ -658,7 +667,7 @@ let
       on =
         (homeWith { programs.nixarchy.neovimSpecs.mine = "return {}"; }).home.activation
           ? nixarchyNeovimSpecs;
-      off = (homeWith { }).home.activation ? nixarchyNeovimSpecs;
+      off = defaultHome.home.activation ? nixarchyNeovimSpecs;
     };
     # ---- upstream's /etc overlay, the part of it that is installed ----------
     #
@@ -715,14 +724,14 @@ let
     # says no to the guide must have no timer, no plugin, no assets, no
     # activation step and no package.
     #
-    # `homeWith { }` is the default machine and `nixiOff` is the refusal, so
+    # `defaultHome` is the default machine and `nixiOff` is the refusal, so
     # every pair below reads "the default has it / saying no removes it".
     #
     # The card turned on for you, once (#709): an explicit exception to "installed,
     # not enabled", pinned here by name so a nixi bump that drops it fails this
     # case rather than a user's SUPER+H doing nothing.
     nixiEnablesCard = {
-      on = (homeWith { }).home.activation ? nixiEnableCard;
+      on = defaultHome.home.activation ? nixiEnableCard;
       off = nixiOff.home.activation ? nixiEnableCard;
     };
 
@@ -746,7 +755,7 @@ let
     # names it explicitly and whose nixi therefore will not fall back.
     nixiPinsClaudeWhenTheMachineUsesIt = {
       on = builtins.elem "claude" (homeOn { apps.claude-code.enable = true; } { }).services.nixi.agents;
-      off = builtins.elem "claude" (homeOn { } { }).services.nixi.agents;
+      off = builtins.elem "claude" defaultHomeOn.services.nixi.agents;
     };
 
     # And for the user who declared it rather than clicking it: modules/apps.nix
@@ -754,17 +763,17 @@ let
     # catalogue, so appEnabled alone would miss them.
     nixiPinsClaudeForADeclaredDefaultAgent = {
       on = builtins.elem "claude" (homeOn { defaultAgent = "claude"; } { }).services.nixi.agents;
-      off = builtins.elem "claude" (homeOn { } { }).services.nixi.agents;
+      off = builtins.elem "claude" defaultHomeOn.services.nixi.agents;
     };
 
     # The two free adapters are pinned either way: opencode speaks ACP itself
     # and pins nothing, codex is Apache-2.0, so neither depends on the flag.
     nixiPinsTheFreeAgentsRegardless = {
-      on = builtins.all (a: builtins.elem a (homeWith { }).services.nixi.agents) [
+      on = builtins.all (a: builtins.elem a defaultHome.services.nixi.agents) [
         "opencode"
         "codex"
       ];
-      off = builtins.elem "claude" (homeWith { }).services.nixi.agents;
+      off = builtins.elem "claude" defaultHome.services.nixi.agents;
     };
 
     # ---- the free-space floor is the installer's, never an adopter's ----
@@ -818,7 +827,7 @@ let
     # be all of them and a per-trace case would let one survivor hide behind
     # four passes.
     nixiTraces = {
-      on = builtins.all (t: t) (nixiTracesIn (homeWith { }));
+      on = builtins.all (t: t) (nixiTracesIn defaultHome);
       off = builtins.any (t: t) (nixiTracesIn nixiOff);
     };
 
@@ -828,7 +837,7 @@ let
     # that a nixarchy that re-defaults barWidget fails HERE, with the name of
     # the decision on it, rather than inside a five-way conjunction.
     nixiBarWidget = {
-      on = (homeWith { }).xdg.configFile ? "${nixiPluginDir}-button";
+      on = defaultHome.xdg.configFile ? "${nixiPluginDir}-button";
       off = nixiOff.xdg.configFile ? "${nixiPluginDir}-button";
     };
 
@@ -843,7 +852,7 @@ let
     # on every nixarchy machine, and it would arrive through a pin bump with
     # nothing else to notice it.
     nixiLeavesMenuAlone = {
-      on = !((homeWith { }).xdg.configFile ? "omarchy/extensions/omarchy-menu.jsonc");
+      on = !(defaultHome.xdg.configFile ? "omarchy/extensions/omarchy-menu.jsonc");
       off =
         !(
           (homeWith {
@@ -898,23 +907,23 @@ let
     # where nix-ld is off and the list is empty.
     nixLdLibraries = {
       on =
-        hasNixLdLib (configWith { }) "nss"
-        && hasNixLdLib (configWith { }) "alsa-lib"
-        && (configWith { }).programs.nix-ld.enable;
+        hasNixLdLib defaultMachine "nss"
+        && hasNixLdLib defaultMachine "alsa-lib"
+        && defaultMachine.programs.nix-ld.enable;
       off = hasNixLdLib loaderOff "nss" || loaderOff.programs.nix-ld.enable;
     };
 
     # envfs mounts a PATH-derived view over /bin and /usr/bin -- exactly the
     # kind of thing a Mode A machine must never grow unasked.
     envfs = {
-      on = (configWith { }).services.envfs.enable;
+      on = defaultMachine.services.envfs.enable;
       off = loaderOff.services.envfs.enable;
     };
 
     # Both halves of AppImage support: without binfmt the package is a
     # wrapper nobody knows to call, so double-clickability is the property.
     appimage = {
-      on = (configWith { }).programs.appimage.enable && (configWith { }).programs.appimage.binfmt;
+      on = defaultMachine.programs.appimage.enable && defaultMachine.programs.appimage.binfmt;
       off = loaderOff.programs.appimage.enable || loaderOff.programs.appimage.binfmt;
     };
 
@@ -1060,7 +1069,7 @@ let
     # value. So the assertion is that another module's mkDefault wins outright,
     # and that fcitx5 still lands on a host with no other opinion.
     inputMethod = {
-      on = (configWith { }).i18n.inputMethod.type == "fcitx5";
+      on = defaultMachine.i18n.inputMethod.type == "fcitx5";
       off =
         (configBeside {
           i18n.inputMethod.type = pkgs.lib.mkDefault "ibus";
@@ -1077,7 +1086,7 @@ let
     # nixpkgs receives a set where it wants a bool. Nothing else would have
     # caught that; the module still evaluated.
     allowUnfree = {
-      on = (configWith { }).nixpkgs.config.allowUnfree or false;
+      on = defaultMachine.nixpkgs.config.allowUnfree or false;
       off = (configWith { allowUnfree = false; }).nixpkgs.config.allowUnfree or false;
     };
 
@@ -1097,7 +1106,7 @@ let
       on = builtins.elem cudaUrl nvidiaHost.nix.settings.substituters;
       # A machine with no NVIDIA card declared. Same option, same default --
       # the gate is the hardware the configuration claims.
-      off = builtins.elem cudaUrl (configWith { }).nix.settings.substituters;
+      off = builtins.elem cudaUrl defaultMachine.nix.settings.substituters;
     };
     cudaCacheKey = {
       on = builtins.elem cudaKey nvidiaHost.nix.settings.trusted-public-keys;
@@ -1288,7 +1297,7 @@ let
     else
       "/plymouth-is-not-enabled";
 
-  installedSplash = configWith { };
+  installedSplash = defaultMachine;
   isoSplash = inputs.self.nixosConfigurations.iso.config;
 
   # ---- nixarchy does not delete software somebody installed ----
@@ -1303,8 +1312,8 @@ let
   # is what actually decides, and a passthrough that silently stopped passing
   # would leave the first reading false while the second did the deleting.
   flatpakDefaults = {
-    ours = (configWith { }).programs.nixarchy.flatpaks.uninstallUnmanaged;
-    theirs = (configWith { }).services.flatpak.uninstallUnmanaged;
+    ours = defaultMachine.programs.nixarchy.flatpaks.uninstallUnmanaged;
+    theirs = defaultMachine.services.flatpak.uninstallUnmanaged;
     # And that asking for it works, or the option is decoration.
     onWhenAsked =
       (configWith { flatpaks.uninstallUnmanaged = true; }).services.flatpak.uninstallUnmanaged;
@@ -1333,7 +1342,7 @@ let
   # nixarchy that can revert somebody's unpushed work, so a machine that did
   # not ask for it must not acquire a timer.
   fleet = rec {
-    offByDefault = (configWith { }).system.autoUpgrade.enable;
+    offByDefault = defaultMachine.system.autoUpgrade.enable;
     on = configWith {
       fleet = {
         enable = true;
@@ -1362,7 +1371,7 @@ let
   # leave a module that still works, still updates, and quietly acquires the
   # one behaviour it was written to prevent.
   autoUpdate = rec {
-    offByDefault = (configWith { }).systemd.timers ? nixarchy-auto-update;
+    offByDefault = defaultMachine.systemd.timers ? nixarchy-auto-update;
     on = configWith {
       autoUpdate = {
         enable = true;
@@ -1389,7 +1398,7 @@ let
   # zsh and fish are enabled explicitly here because the module gates their
   # hooks on the shell actually existing. Without that, the on case would read
   # the same as the off case for two of the three shells and prove nothing.
-  devenvOff = configWith { };
+  devenvOff = defaultMachine;
 
   devenvOn = configBeside {
     programs = {
@@ -1490,7 +1499,7 @@ let
   # bump can withdraw quietly, and the failure would be silent -- an
   # activation script and a systemd unit appearing on machines that never
   # asked for secrets. Nothing else in this repo would notice.
-  sopsOff = configWith { };
+  sopsOff = defaultMachine;
 
   # The other half, so that the case above measures inertness rather than an
   # import that never worked. validateSopsFiles is off because there is no
@@ -1813,7 +1822,7 @@ let
     };
     services.ollama.port = 21434;
   };
-  webuiOff = configWith { };
+  webuiOff = defaultMachine;
 
   # And the group the desktop user gets. This check used to assert the user WAS
   # in `docker`, which was right while the rooted daemon was the default: the
@@ -1858,7 +1867,7 @@ let
   #
   # The off case is the one that breaks quietly: a marker that arrives for
   # everybody makes every gate below it read as passing, and nothing says so.
-  managedModeA = (configWith { }).environment.etc ? "nixarchy/managed";
+  managedModeA = defaultMachine.environment.etc ? "nixarchy/managed";
 
   # ---- and the factory-reset unit, the same question in its sharpest form ---
   #
@@ -1873,7 +1882,7 @@ let
   # this asserts, because a later refactor that moved the unit into
   # modules/nixos.nix behind an `installerManaged` mkIf would still read as
   # correct in review and would be one typo away from arming every machine.
-  factoryUnitModeA = (configWith { }).systemd.services ? nixarchy-factory-reset;
+  factoryUnitModeA = defaultMachine.systemd.services ? nixarchy-factory-reset;
 
   # ---- enabling a custom remote must not remove Flathub ----
   #
@@ -2075,7 +2084,7 @@ pkgs.runCommand "nixarchy-options"
     # which is what lets the script below grep the files rather than the
     # expression that produced them.
     mcpActivations = pkgs.lib.concatStringsSep "\n" (
-      map (n: (homeOn { } { }).home.activation.${n}.data) mcpActivationNames
+      map (n: defaultHomeOn.home.activation.${n}.data) mcpActivationNames
     );
     nixdActivationScripts = pkgs.lib.concatStringsSep "\n" (
       map (n: (homeOn everyEditor { }).home.activation.${n}.data) nixdActivationNames
@@ -2088,7 +2097,7 @@ pkgs.runCommand "nixarchy-options"
     neovimSpecCount = builtins.toString (builtins.length neovimSpecNames);
     # The two formatters #657 is about: the one the editor is pointed at
     # (the LSP's, which conform's is read from) and the one `nix fmt` runs.
-    editorFormatter = builtins.head (configWith { }).programs.nixarchy.nixdSettings.formatting.command;
+    editorFormatter = builtins.head defaultMachine.programs.nixarchy.nixdSettings.formatting.command;
     flakeFormatter = pkgs.lib.getExe inputs.self.formatter.${system};
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
@@ -2104,8 +2113,8 @@ pkgs.runCommand "nixarchy-options"
     # here, and it is the quieter failure -- a trusted key for a cache you
     # never reach changes nothing you can see, and is still this machine
     # trusting a third party nobody asked it to trust.
-    plainSubstituters = pkgs.lib.concatStringsSep " " (configWith { }).nix.settings.substituters;
-    plainKeys = pkgs.lib.concatStringsSep " " (configWith { }).nix.settings.trusted-public-keys;
+    plainSubstituters = pkgs.lib.concatStringsSep " " defaultMachine.nix.settings.substituters;
+    plainKeys = pkgs.lib.concatStringsSep " " defaultMachine.nix.settings.trusted-public-keys;
     # The other two caches must survive the change that added a third.
     modelsDirMine = aiModels.services.ollama.modelsDir;
     modelsDirTheirs = aiModelsBeside.services.ollama.modelsDir;
@@ -2151,7 +2160,7 @@ pkgs.runCommand "nixarchy-options"
       loaderOff.system.build.toplevel.drvPath == notImported.system.build.toplevel.drvPath
     );
     # The home seed's copy function, run below against a directory it cannot write.
-    seedActivation = (homeWith { }).home.activation.nixarchySeed.data;
+    seedActivation = defaultHome.home.activation.nixarchySeed.data;
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
     devenvNoCachePackage = pkgs.lib.boolToString (hasDevenv devenvNoCache);
     boxesOffPodman = pkgs.lib.boolToString boxesOff.virtualisation.podman.enable;

@@ -1245,6 +1245,16 @@ jobs:
         # cannot rot unnoticed between releases.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.reference-toplevel
 
+      # hypr-rdp is off by default, so no toplevel above carries it and
+      # nothing here has built it -- but checks.options pulls it in further
+      # down, and the push below refuses a path that is not in the store.
+      # Without this the allowlist entry #739 added is never pushed, the cache
+      # stays empty, and every run compiles 447 crates again (#738). Free in
+      # this job, which builds it either way; the run after substitutes it.
+      - name: Build hypr-rdp, which nothing above this line needs
+        if: needs.gate.outputs.relevant == 'true'
+        run: nix build --no-link .#hypr-rdp
+
       # The two closures that decide whether somebody's rebuild downloads or
       # compiles. Same reason as the omarchy push above (#439); this is the
       # half users feel.

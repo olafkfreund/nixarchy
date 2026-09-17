@@ -32,7 +32,19 @@ proven=$("$here/already-proven.sh" "$@") || {
     "to report a pass having built nothing" >&2
   exit 2
 }
-mapfile -t todo < <(printf '%s\n' "$proven" | grep . || true)
+# already-proven.sh emits `<name><TAB><drvPath>`, so keep both: the names are
+# what the log and cachix-push.sh talk about, the drvPaths are what makes the
+# build skip a second evaluation.
+names=()
+drvs=()
+outs=()
+while IFS=$'\t' read -r name drv out; do
+  [ -n "$name" ] || continue
+  names+=("$name")
+  drvs+=("$drv")
+  outs+=("$out")
+done < <(printf '%s\n' "$proven" | grep . || true)
+todo=("${names[@]}")
 
 if [ "${#todo[@]}" -eq 0 ]; then
   echo "every requested check is already proven in the cache; nothing to build"
@@ -54,11 +66,12 @@ echo "building: ${todo[*]}"
 #
 # Slicing makes the step a ratchet: whatever a run proves stays proved.
 #
-# The cost is evaluation. One `nix build` evaluates once; eight evaluate eight
-# times, and evaluation is not free here -- already-proven.sh spends about
-# eight minutes on 43 of them in CI. 5 is the compromise (a kill loses at most
-# 4 proofs), and PROOF_BATCH exists so the number can move from a workflow
-# without another PR if the measurement says so.
+# The cost used to be evaluation: one `nix build` evaluates once, eight evaluate
+# eight times. That is gone -- the slices build by drvPath now, which skips
+# evaluation entirely (measured 2026-09-17: building checks.options by attribute
+# 3m05s, by drvPath 1.3s, both already built). 5 remains the compromise for the
+# ratchet itself (a kill loses at most 4 proofs), and PROOF_BATCH still moves it
+# from a workflow without another PR.
 batch=${PROOF_BATCH:-5}
 
 # --keep-going, because this replaced a step that had it and said why: report
@@ -75,15 +88,31 @@ batch=${PROOF_BATCH:-5}
 # assertion.
 rc=0
 for ((i = 0; i < ${#todo[@]}; i += batch)); do
-  slice=("${todo[@]:i:batch}")
-  nix build --keep-going --no-link --print-build-logs \
-    "${slice[@]/#/.#checks.x86_64-linux.}" || rc=$?
+  slice=("${names[@]:i:batch}")
+  # By derivation, not by attribute: already-proven.sh has evaluated these
+  # already and `nix eval` instantiates, so the drv is in the store and this
+  # costs no evaluation. A check whose drvPath is empty -- the refusal path, or
+  # one that would not evaluate -- falls back to its attribute, which is the
+  # safe direction: it builds rather than silently skipping.
+  targets=()
+  for j in "${!slice[@]}"; do
+    d=${drvs[i + j]}
+    if [ -n "$d" ]; then targets+=("$d^*"); else targets+=(".#checks.x86_64-linux.${slice[j]}"); fi
+  done
+  nix build --keep-going --no-link --print-build-logs "${targets[@]}" || rc=$?
 
   # The proof, so the next run -- this pull request's re-run, or main after it
   # merges -- skips what just passed (#697). Only checks whose result exists
   # are pushed: under --keep-going a failed check has no output, and
   # cachix-push.sh counts that as skipped rather than failed. Never the
   # verdict: the exit status is the build's.
-  "$here/cachix-push.sh" --proof "${slice[@]}" || true
+  # name=outPath, so the push does not evaluate a third time. A slice member
+  # with no known outPath is passed as a bare name and evaluated there.
+  proofs=()
+  for j in "${!slice[@]}"; do
+    o=${outs[i + j]}
+    if [ -n "$o" ]; then proofs+=("${slice[j]}=$o"); else proofs+=("${slice[j]}"); fi
+  done
+  "$here/cachix-push.sh" --proof "${proofs[@]}" || true
 done
 exit "$rc"

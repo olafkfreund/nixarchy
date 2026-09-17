@@ -140,20 +140,29 @@
     # forfeit. What following buys is one node in every user's lock instead of
     # two, and one nodejs and python3 in the closure rather than a second.
     #
-    # Pinned to a COMMIT because nixi publishes no tags at all. Checked, not
-    # assumed: `git ls-remote --tags` comes back empty and main is the release
-    # channel, which is the same situation sops-nix above is in. Bump it
-    # deliberately; never track a branch.
+    # Pinned to a COMMIT. Checked, not assumed: `git ls-remote --tags` returns
+    # exactly one tag (v0.10.0, 569adea) and every release since has landed on
+    # master, which is nixi's default and release branch. A single stale tag is
+    # no better than none here, so this stays the same situation sops-nix above
+    # is in. Bump it deliberately; never track a branch.
     #
-    # 1a7f9cb is nixi-nixarchy#13: its default-agent fallback picks the first
-    # agent whose adapter RESOLVES rather than the literal name "claude". That
-    # matters here from #731 on, where claude's adapter is pinned only on a
-    # machine that uses claude -- a machine with no recorded choice at all (no
-    # ~/.config/omarchy/defaults/agent) would otherwise land on the one agent it
-    # cannot start. modules/home.nix covers every machine that HAS chosen; this
-    # covers the one that has not.
+    # 6d7a61b is nixi-nixarchy#15: nixi's mark is sparkles rather than the pixel
+    # snowflake, on the bar button, the bar plugin's own description and the
+    # Omarchy menu entry. The bar widget drops its QML Canvas for the glyph at
+    # U+F0674, which is how omarchy's own bar indicators draw, so it picks up
+    # optical centring and theme colour from BarIconButton instead of painting
+    # them by hand. The menu entry stops being a generic help-circle.
+    #
+    # This is appearance only. It is a visible change on every machine that
+    # rebuilds, and it depends on the bar font being a Nerd Font -- already true
+    # of Style.font.family's default and of omarchy's own indicators.
+    #
+    # The previous pin, 1a7f9cb, was nixi-nixarchy#13: its default-agent
+    # fallback picks the first agent whose adapter RESOLVES rather than the
+    # literal name "claude". That still matters from #731 on and is carried
+    # forward here; see that issue for the reasoning.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/1a7f9cbb62fa74dcff48725a46fb627253b6de74";
+      url = "github:olafkfreund/nixi-nixarchy/6d7a61b9f3bbcf2f2d932a468a3ba01c1c76a59a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

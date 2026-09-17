@@ -376,6 +376,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build, push and probe again
+        # Guarded since #728 widened the JOB's condition to run for missing
+        # PROOFS as well as missing entries. This step had never needed a
+        # condition of its own -- the job only ran when entries were missing --
+        # and without one it fires with an empty $MISSING, which
+        # cache-entries.sh correctly refuses with a usage error. That failed the
+        # nightly on 2026-09-17 (#733) and, worse, skipped the proofs step below
+        # it, so the keep-alive #728 exists for never ran at all.
+        #
+        # Widening a condition means re-reading what depended on the narrow one.
+        if: needs.cache.outputs.entries-missing != ''
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
           MISSING: ${{ needs.cache.outputs.entries-missing }}

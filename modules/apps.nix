@@ -3233,13 +3233,34 @@ in
                 # Why: modules/AGENTS.md#whether-anything-in-the-flake-actually-imports-it
                 # Uncommented mentions only: a `# imports = [ ./nixarchy-apps.nix ];`
                 # left in a file used to silence this warning.
-                importers=$(grep -rlE '^[^#]*nixarchy-apps\.nix' "$flake" \
-                  --include='*.nix' 2>/dev/null |
-                  grep -v '/nixarchy-apps\.nix$' || true)
+                # Each mention is RESOLVED against the file it appears in and
+                # compared with what was just written, rather than matched by
+                # name anywhere in the flake (#734). A name match was satisfied
+                # by a STALE root-level import on a flake predating the
+                # hosts/<hostname> layout: apply wrote hosts/<name>/, nothing
+                # imported it, no warning appeared, and the app set FROZE -- the
+                # root copy kept serving the old selection, so apps enabled
+                # before the move went on working and new ones never appeared.
+                # Nothing looks broken, which is why it went unreported.
+                destreal=$(readlink -m "$dest")
+                importers=""
+                # Process substitution, not a pipe: a piped `while read` runs in
+                # a subshell and `importers` would be empty afterwards, so this
+                # would warn on every apply. Empty output is a legitimate answer
+                # here (nothing imports it) and is the safe direction to fail.
+                while IFS= read -r candidate; do
+                  case "$candidate" in */nixarchy-apps.nix) continue ;; esac
+                  while IFS= read -r ref; do
+                    [ "$(readlink -m "$(dirname "$candidate")/$ref")" = "$destreal" ] || continue
+                    importers="$importers $candidate"
+                    break
+                  done < <(grep -E '^[^#]*nixarchy-apps\.nix' "$candidate" |
+                    grep -oE '[^[:space:]"]*nixarchy-apps\.nix')
+                done < <(grep -rlE '^[^#]*nixarchy-apps\.nix' "$flake" --include='*.nix' 2>/dev/null)
 
                 if [ -z "$importers" ]; then
                   echo
-                  echo "WARNING: nothing in $flake imports nixarchy-apps.nix."
+                  echo "WARNING: nothing in $flake imports $dest."
                   echo
                   echo "  The selection has been copied, and a rebuild will"
                   echo "  ignore it: every app you enable will look installed"
@@ -3248,9 +3269,13 @@ in
                   echo "  Add it to this host's configuration:"
                   echo "    imports = [ ./nixarchy-apps.nix ];"
                   echo
-                  echo "  The path is relative to the file you put it in, so a"
-                  echo "  host under hosts/<name>/ needs ../../nixarchy-apps.nix"
-                  echo "  or however many levels up the flake root is."
+                  echo "  The path is relative to the file you put it in, and"
+                  echo "  must resolve to what apply just wrote:"
+                  echo "    $dest"
+                  echo
+                  echo "  A root-level nixarchy-apps.nix imported from elsewhere"
+                  echo "  does NOT count despite the matching name: this"
+                  echo "  selection would be ignored and the old one kept (#734)."
                   echo
                 fi
 

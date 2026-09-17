@@ -1905,6 +1905,16 @@
             pkgs = pkgsFor.${system};
           };
 
+          # #734: the "nothing imports it" warning resolves each mention against
+          # the file it appears in, so a stale root-level nixarchy-apps.nix no
+          # longer silences it on a hosts/<hostname> layout -- where the app set
+          # froze rather than breaking, and apply reported success throughout.
+          # See tests/apply-imports.nix.
+          apply-imports = import ./tests/apply-imports.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # The proof push: a killed job keeps what it proved, a result too
           # large to BE a proof is skipped rather than failed, and a push that
           # genuinely fails still exits non-zero. All three were false on

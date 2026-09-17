@@ -383,7 +383,7 @@ your question:
 
 | check | what it proves | cost |
 |---|---|---|
-| `options` | every option asserted in both states | cheap — evaluation only |
+| `options` | every option asserted in both states | evaluation only, but ~8 min and 11.5 GB of RSS |
 | `package-delta`, `config-delta`, `patched-files`, `release-notes`, `review-pins` | scripts against fixtures | seconds |
 | `vm-toplevel`, `reference-toplevel` | the closures build | eval plus a fetch |
 | `omarchy` (package) | the vendored tree assembles | minutes |
@@ -496,6 +496,16 @@ Six and a half minutes for a userspace boot that normally takes seconds.
 `udevadm settle` did not break; it was starved. This is §6's own lesson from
 the other side — **a guest-side timeout is a hidden concurrency limit**, and
 host-side timeouts scale with the box while guest-side ones do not.
+
+**And "I am only measuring it" is the same load.** The rule above reads as
+being about VM checks, so six runs of `checks.options` -- an *evaluation*
+check, the cheap row in the table -- were filed under measurement rather than
+under building, and started anyway. They peak at **11.5 GB of RSS each**, and
+an install job on the same host timed out at its 90-minute cap having passed
+in 25 minutes an hour earlier. What makes a local build disruptive is the
+memory and the cores it takes from the guests, not which row of the table it
+sits in; a benchmark that has to be run repeatedly is worse than a build,
+because one is a single cost and the other is a loop.
 
 Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
 

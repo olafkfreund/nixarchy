@@ -798,6 +798,17 @@
           # modules/home.nix instead.
           nixi = inputs.nixi.packages.${system}.nixi;
 
+          # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
+          # installables, and an overlay attribute is not one.
+          #
+          # checks.options COMPILES this otherwise -- 447 Rust crates, 5.5 to 8.5
+          # minutes, on every run of build.yml's `system` job, for a check whose
+          # own runCommand takes three seconds (#738). It is served by neither
+          # cache.nixos.org nor nixarchy.cachix.org; it was in ours by accident
+          # until #699 stopped every job pushing its whole store diff, and the
+          # first 45-minute timeout on that job is the next day.
+          hypr-rdp = pkgsFor.${system}.hypr-rdp;
+
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
 
           # Exposed at top level for the same reason as nixarchy-vm just

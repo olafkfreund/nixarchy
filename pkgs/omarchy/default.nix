@@ -472,6 +472,7 @@ stdenvNoCC.mkDerivation {
                     # the letters ARCHY are sliced from upstream's own logo.txt rather than
                     # redrawn, so only NIX is new.
                     install -Dm444 ${./branding/logo.txt} $out/share/omarchy/logo.txt
+                    python3 ${./check-logo.py} ${./branding/logo.txt} ${src}/logo.txt
 
                     # Omarchy ships wallpapers up to 7680px wide. Anything wider than
                     # GL_MAX_TEXTURE_SIZE cannot become a texture, and the background renders

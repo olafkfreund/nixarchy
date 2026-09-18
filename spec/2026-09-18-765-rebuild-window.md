@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 765
 intent: intent/2026-09-18-765-rebuild-window.md
 ---

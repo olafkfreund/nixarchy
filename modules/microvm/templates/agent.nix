@@ -48,6 +48,9 @@
 # `/mnt/host/allow-hosts`, one hostname per line, `#` comments allowed. No
 # file, or an empty one, means an empty filter -- which under
 # `FilterDefaultDeny` is deny-everything, the only safe way for this to fail.
+# A template that imports this one may also ship a closure-side list at
+# `/etc/nixarchy-agent/allow-hosts` (agent-claude does), read first and
+# beyond the reach of anything in the VM's directory; this template ships none.
 { pkgs, ... }:
 let
   proxy = "http://127.0.0.1:8888";
@@ -116,7 +119,14 @@ in
     script = ''
       install -d -m 0755 /run/nixarchy-agent
       : > ${filterFile}
-      if [ -r /mnt/host/allow-hosts ]; then
+      # Two sources, closure first. /etc/nixarchy-agent/allow-hosts is
+      # written by a template that imports this one (agent-claude) and so
+      # cannot be edited, emptied or deleted from the VM's directory:
+      # whatever it names is allowed on every VM of that template, and
+      # /mnt/host/allow-hosts only ever adds. This template writes no such
+      # file, so for `agent` the behaviour is unchanged.
+      for src in /etc/nixarchy-agent/allow-hosts /mnt/host/allow-hosts; do
+        [ -r "$src" ] || continue
         while read -r host; do
           case "$host" in
             "" | \#*) continue ;;
@@ -127,8 +137,8 @@ in
           # character, which is how an allowlist silently becomes wider than
           # it reads.
           printf '^(.*\.)?%s$\n' "$(printf '%s' "$host" | sed 's/\./\\./g')" >> ${filterFile}
-        done < /mnt/host/allow-hosts
-      fi
+        done < "$src"
+      done
       chmod 0444 ${filterFile}
     '';
   };

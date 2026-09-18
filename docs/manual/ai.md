@@ -211,6 +211,60 @@ Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.
 
+### If you installed Claude some other way
+
+Nixi's panel — the one `SUPER + H` opens — talks to agents over **ACP**. Claude
+and Codex each need a separate adapter package for that; OpenCode speaks it
+itself. nixarchy pins what the first two agents need on every machine, and
+Claude's conditionally:
+
+| agent | what it needs | pinned |
+|---|---|---|
+| opencode | no adapter — it speaks ACP itself, as `opencode acp` | always |
+| codex | `codex-acp` | always |
+| Claude | `claude-agent-acp` | only when `apps.claude-code` is enabled, **or** `defaultAgent = "claude"` |
+
+Claude's is conditional because `claude-agent-acp` and `claude-code` together
+are 651 MiB of a public 5 GB cache, for two packages that are fetched rather
+than built. A machine that does not use Claude should not carry them.
+
+The gap is a machine that uses Claude **without installing it through Nix** —
+from mise, npm, or the official installer into `~/.local/bin`. Nothing in the
+configuration records that, because the choice lives in
+`~/.config/omarchy/defaults/agent`, which is written at runtime. Both halves of
+the condition read false, no adapter is pinned, and the first sign of it is
+`SUPER + H` reporting:
+
+    Claude Code's ACP adapter (claude-agent-acp) is not on the system PATH.
+
+The rebuild says nothing, because from the configuration's point of view
+nothing is wrong.
+
+Ask for it explicitly, with nixi's own option, **in your Home Manager
+configuration** — `services.nixi` is a Home Manager option, not a top-level
+NixOS one:
+
+```nix
+services.nixi.agents = [ "claude" ];
+```
+
+That merges with what nixarchy already sets rather than replacing it, so
+opencode and codex stay.
+
+**Know what it brings.** This pulls nixpkgs' `claude-code` into the closure,
+and needs unfree allowed — nixarchy turns that on by default (see
+[Unfree software](other-packages.md#unfree-software)), and on a machine that
+refuses unfree the adapter cannot be pinned at all.
+
+**It does not replace the Claude you already have.** The adapter wraps itself
+with `--set-default CLAUDE_CODE_EXECUTABLE`, which only applies when nothing
+else set it, and nixi sets it explicitly from your `PATH`. So the `claude` in
+`~/.local/bin` is still the one that runs; the Nix copy is a dependency you
+carry, not a second Claude in use.
+
+And an activation does not reach a shell that is already running. After the
+rebuild, `omarchy-restart-shell` — or the panel keeps reporting the old state.
+
 ## In Neovim
 
 The agents you select in the Install menu follow you into the editor nixarchy

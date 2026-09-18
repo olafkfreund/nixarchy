@@ -143,11 +143,15 @@ or `nixpkgs.config.allowUnfreePredicate` if you would rather list them.
 Worth knowing before you flip it either way: this is not only a permission. Some
 packages decide what they pull in by reading it, so turning it on can put unfree
 software in your system closure without you naming it. Nixi, the desktop guide,
-is the example that ships here — it pins an adapter per AI agent, and its Claude
-adapter depends on the unfree `claude-code`. nixarchy names its three agents
-explicitly (`opencode`, `codex`, and `claude` where unfree is allowed) rather
-than leaving that to the flag, so what you get is a decision rather than a side
-effect. A machine with `allowUnfree = false` gets the first two and still builds.
+is the example that ships here — Claude's ACP adapter depends on the unfree
+`claude-code`. nixarchy names its agents explicitly rather than leaving that to
+the flag, so what you get is a decision rather than a side effect: `opencode`
+and `codex` always, and `claude` only where the machine gives some sign it uses
+Claude — `apps.claude-code` enabled, or `defaultAgent = "claude"`. Allowing
+unfree is a prerequisite for that third one, not a trigger for it. A machine
+with `allowUnfree = false` gets the first two and still builds; a machine that
+uses a Claude installed outside Nix has to
+[ask for the adapter](ai.md#if-you-installed-claude-some-other-way).
 
 ## Anything the menu does not offer
 

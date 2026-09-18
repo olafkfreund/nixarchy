@@ -68,6 +68,7 @@ is the same catalogue, `data/microvm-templates.nix`.
 | `podman` | rootless-capable podman, Docker-compatible | `/var/lib/containers` is a 20 GiB volume that survives a restart; the rest of the root filesystem does not |
 | `agent` | `shell` plus git, curl, and an egress allowlist | nothing in the guest reaches the network except through a local proxy that only permits hosts you name — see [Running an agent that cannot phone home](#running-an-agent-that-cannot-phone-home) |
 | `persistent` | `shell` plus `/home` on its own volume | the volume goes when the VM does; the root filesystem is still thrown away every boot |
+| `node` | `nodejs` (LTS), `pnpm`, 3 GiB RAM | ephemeral — `pnpm install` inside `/mnt/host` if `node_modules` should outlive the VM |
 
 Every template is a plain NixOS module — nothing here invents nixarchy
 vocabulary. If you outgrow one, copy `module` out of the catalogue entry

@@ -67,6 +67,12 @@
     note = "Rootless-capable podman with Docker compatibility. /var/lib/containers is a 20 GiB volume that survives a restart; the rest of the root filesystem does not.";
   };
 
+  node = {
+    label = "Node";
+    module = ../modules/microvm/templates/node.nix;
+    note = "nodejs (LTS) and pnpm, 3 GiB of RAM. Ephemeral like Shell -- run 'pnpm install' inside /mnt/host if node_modules should outlive the VM.";
+  };
+
   # The one template whose point is what it CANNOT do. Note says so in the
   # same register as every other note here: what you get, and what it costs.
   agent = {

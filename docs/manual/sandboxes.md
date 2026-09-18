@@ -69,6 +69,7 @@ is the same catalogue, `data/microvm-templates.nix`.
 | `agent` | `shell` plus git, curl, and an egress allowlist | nothing in the guest reaches the network except through a local proxy that only permits hosts you name — see [Running an agent that cannot phone home](#running-an-agent-that-cannot-phone-home) |
 | `persistent` | `shell` plus `/home` on its own volume | the volume goes when the VM does; the root filesystem is still thrown away every boot |
 | `node` | `nodejs` (LTS), `pnpm`, 3 GiB RAM | ephemeral — `pnpm install` inside `/mnt/host` if `node_modules` should outlive the VM |
+| `k3s` | single-node k3s server, 4 GiB RAM, 2 vCPU | `/var/lib/rancher` is a 20 GiB volume, so the cluster and its generated token survive a restart; traefik and servicelb off; `kubectl` inside the guest only |
 
 Every template is a plain NixOS module — nothing here invents nixarchy
 vocabulary. If you outgrow one, copy `module` out of the catalogue entry

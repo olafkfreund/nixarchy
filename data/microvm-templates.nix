@@ -86,4 +86,10 @@
     module = ../modules/microvm/templates/persistent.nix;
     note = "Shell, plus /home on a 10 GiB volume. The volume goes when the VM does ('nixarchy vm rm'); the root filesystem is still thrown away every boot.";
   };
+
+  k3s = {
+    label = "k3s";
+    module = ../modules/microvm/templates/k3s.nix;
+    note = "A single-node k3s server, 4 GiB of RAM and 2 vCPUs. /var/lib/rancher is a 20 GiB volume that survives a restart, so the cluster and its token do; traefik and servicelb are off, and the API is reachable only from inside the guest ('kubectl get nodes' at the console).";
+  };
 }

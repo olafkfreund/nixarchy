@@ -35,6 +35,7 @@ let
   volumeImages = {
     podman = "var-lib-containers.img";
     persistent = "home.img";
+    k3s = "var-lib-rancher.img";
   };
 
   # The CLI as a machine built from a DIRTY checkout evaluates it: no

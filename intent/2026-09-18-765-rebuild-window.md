@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 765
 author: olafkfreund
 ---
@@ -77,13 +77,16 @@ vendored tree (`pkgs/omarchy/`).
 - Every new check is proven to fail first (§1). A new `checks.<name>` needs a
   workflow edit by a human (§4, §11).
 
+## Decisions (owner, on approval)
+
+- **The first PR is pkexec only.** The rebuild's elevation goes through the
+  Omarchy polkit dialog, and nothing else changes in it. The `--yes` and
+  `--no-preview` flags, the failure message, the supervised unit, the spinner's
+  log and the panel follow in later PRs, in that order.
+- **The panel replaces the terminal** for Install > Apply and the per-app rows
+  once it ships. The terminal path stays only as `nixarchy apply` typed in a
+  shell, and as the panel's "Open full log in terminal".
+
 ## Open questions
 
-- **Scope of the first PR.** Recommended order: pkexec and the `--yes`/
-  `--no-preview` flags and the message fix, then the supervised unit, then the
-  panel. The first slice fixes the password prompt and nixarchy-pkg's Apply
-  without any QML. Or do all three at once?
-- **Does the menu still open a terminal at all?** Options: the panel replaces
-  the floating terminal for Install > Apply and the per-app rows, or the panel
-  is added and the terminal stays the default until the panel has proven
-  itself.
+None.

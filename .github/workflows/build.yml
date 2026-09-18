@@ -1309,9 +1309,52 @@ jobs:
       # gap they exist to close stayed open a second time.
       - name: Check every option both ways
         if: needs.gate.outputs.relevant == 'true'
-        # Cheap: evaluated, not booted. Each option here does its work by
-        # putting a package in a list, so evaluation is where the answer is.
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options
+        # Evaluated, not booted -- each option here does its work by putting a
+        # package in a list, so evaluation is where the answer is. Not cheap
+        # though, and the expensive axis is MEMORY: a developer machine
+        # measured this check peaking at 11.5 GB against this runner's 16 GB
+        # (#747). A runner that runs out does not fail with a message about
+        # memory; the job reports `cancelled` with no failed step, which
+        # AGENTS.md section 6 already lists three other causes for.
+        #
+        # So the peak is recorded on every run, into the step summary where it
+        # can be read without opening a log. /usr/bin/time, not the shell
+        # builtin: only GNU time reports maximum resident set size, and it
+        # reports the largest of the process and everything it waited for, so
+        # the nix evaluation is included. Asserted present rather than guarded
+        # with `if`, because a measurement that silently stops running reads as
+        # one that found nothing (section 4).
+        run: |
+          # `|| rc=$?`, not a bare call followed by `rc=$?`: the step runs
+          # under `bash -e`, so a failing check would exit at the call and the
+          # measurement would be lost on exactly the runs where the number
+          # matters most.
+          #
+          # A missing /usr/bin/time annotates and does not fail. The check is
+          # the point and the measurement rides along; turning a vanished tool
+          # into a red `system` job would be a self-inflicted outage. An
+          # annotation is the "loud somewhere else" section 4 asks for.
+          rc=0
+          if command -v /usr/bin/time >/dev/null; then
+            /usr/bin/time -v -o options-time.txt \
+              .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options || rc=$?
+            peak=$(awk '/Maximum resident set size/ { print $NF }' options-time.txt)
+            wall=$(awk -F': ' '/Elapsed .wall clock/ { print $NF }' options-time.txt)
+            {
+              echo "### checks.options"
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| peak RSS | $(( ${peak:-0} / 1024 )) MiB of 16384 MiB |"
+              echo "| wall clock | ${wall:-unknown} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::/usr/bin/time is gone from this image, so the" \
+              "options memory measurement (#747) did not happen. The check" \
+              "below still ran."
+            .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options || rc=$?
+          fi
+          exit $rc
 
       - name: Build onto a config that already exists
         if: needs.gate.outputs.relevant == 'true'

@@ -2249,6 +2249,13 @@ pkgs.runCommand "nixarchy-options"
     modeAInert = pkgs.lib.boolToString (
       loaderOff.system.build.toplevel.drvPath == notImported.system.build.toplevel.drvPath
     );
+    # #765: the rebuild elevates through pkexec, so the wrapper has to exist, the
+    # keep-rule has to be there, and neither may reach a Mode A machine.
+    pkexecWrapperOn = pkgs.lib.boolToString defaultMachine.security.polkit.enablePkexecWrapper;
+    pkexecWrapperModeA = pkgs.lib.boolToString loaderOff.security.polkit.enablePkexecWrapper;
+    pkexecKeepRule = pkgs.lib.boolToString (
+      pkgs.lib.hasInfix "org.freedesktop.policykit.exec" defaultMachine.security.polkit.extraConfig
+    );
     # The home seed's copy function, run below against a directory it cannot write.
     seedActivation = defaultHome.home.activation.nixarchySeed.data;
     devenvNoCacheCache = pkgs.lib.boolToString (hasCache devenvNoCache);
@@ -3823,6 +3830,32 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "importing the module and enabling nothing builds the same system"
+
+        # ---- #765: the rebuild asks through the Omarchy polkit dialog ----
+        [ "$pkexecWrapperOn" = true ] || {
+          echo "security.polkit.enablePkexecWrapper is off on an enabled machine:" >&2
+          echo "  the rebuild's NH_ELEVATION_STRATEGY points at /run/wrappers/bin/pkexec," >&2
+          echo "  so nh falls back to sudo in a terminal and the dialog never appears (#765)" >&2
+          exit 1
+        }
+        [ "$pkexecKeepRule" = true ] || {
+          echo "no polkit rule for org.freedesktop.policykit.exec: every switch asks" >&2
+          echo "  for the password three times, once per elevated step nh runs (#765)" >&2
+          exit 1
+        }
+        [ "$pkexecWrapperModeA" = false ] || {
+          echo "the pkexec wrapper reaches a Mode A machine -- a setuid binary added to" >&2
+          echo "  a configuration that only imported the module (#765, AGENTS.md section 7)" >&2
+          exit 1
+        }
+        for script in nixarchy-apply omarchy-update; do
+          grep -q 'NH_ELEVATION_STRATEGY' "$vm/sw/bin/$script" || {
+            echo "$script runs the switch without NH_ELEVATION_STRATEGY:" >&2
+            echo "  nh auto-selects sudo, which asks in the terminal, not the dialog (#765)" >&2
+            exit 1
+          }
+        done
+        echo "the rebuild elevates through pkexec, once per switch, and not in Mode A"
 
         # ---- services: enable then disable is byte-identical ----
         # nixarchy-service-disable had no test of any kind.

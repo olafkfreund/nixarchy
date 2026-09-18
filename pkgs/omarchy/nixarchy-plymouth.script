@@ -14,13 +14,13 @@
 Window.SetBackgroundTopColor(0.101, 0.105, 0.149);
 Window.SetBackgroundBottomColor(0.101, 0.105, 0.149);
 
-global.frame_count = 33;
+global.frame_count = 31;
 global.anim_index = 0;
 global.anim_tick = 0;
 global.anim_done = 0;
 
 # Every frame is loaded up front. Loading one per tick instead would read from
-# the initrd 33 times during the two seconds the CPU is busiest, and the images
+# the initrd 31 times during the two seconds the CPU is busiest, and the images
 # are small enough that holding them all is the cheaper trade.
 frames.images = [];
 for (i = 0; i < global.frame_count; i++)
@@ -69,7 +69,7 @@ fun refresh_callback() {
   global.animation_frame++;
 
   # The wordmark, one frame every second tick. The refresh runs at 50 FPS, so
-  # 33 frames at half that is a little over a second and a quarter -- short
+  # 31 frames at half that is just under a second and a quarter -- short
   # enough that a fast machine still finishes it before the disk is ready, and
   # slow enough to read as motion rather than a flicker.
   #

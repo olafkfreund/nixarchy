@@ -1724,11 +1724,11 @@ stdenvNoCC.mkDerivation {
                     # count asserted below: a ttfx bump that changes the effect, or drops
                     # the flag, fails the build instead of quietly shipping something else.
                     ttfx --parity-dump --seed 1 \
-                      --canvas-width 90 --canvas-height 12 --ignore-terminal-dimensions \
+                      --canvas-width 84 --canvas-height 12 --ignore-terminal-dimensions \
                       --no-color expand \
                       < ${./branding/logo.txt} > frames.dump 2> frames.log
-                    if ! grep -qx 'frames=128' frames.log; then
-                      echo "plymouth: ttfx produced $(cat frames.log), expected frames=128" >&2
+                    if ! grep -qx 'frames=119' frames.log; then
+                      echo "plymouth: ttfx produced $(cat frames.log), expected frames=119" >&2
                       echo "plymouth: the effect changed -- re-check the animation before" >&2
                       echo "plymouth: moving the number, the theme script plays what is here" >&2
                       exit 1
@@ -1739,13 +1739,13 @@ stdenvNoCC.mkDerivation {
 
                     # Set in DejaVu Sans Mono because it has the box-drawing glyphs the
                     # banner is built from and it is already the font NixOS puts in the
-                    # initrd. -pointsize 15 lands the 90-column canvas within a few pixels
-                    # of logo.png's width, so the handoff at the end of the animation does
-                    # not jump.
+                    # initrd. The 84-column canvas is the 81-column banner plus the margin
+                    # the effect had before #764, and -pointsize 16.4 lands its ink on
+                    # logo.png's -- asserted below, because that is what the handoff shows.
                     for f in frames/frame-*.txt; do
                       magick -background none -fill '#a8cd76' \
                         -font ${dejavu_fonts}/share/fonts/truetype/DejaVuSansMono.ttf \
-                        -pointsize 15 label:@"$f" \
+                        -pointsize 16.4 label:@"$f" \
                         png32:$out/share/plymouth/themes/omarchy/"$(basename "$f" .txt)".png
                     done
 
@@ -1757,6 +1757,21 @@ stdenvNoCC.mkDerivation {
                       $out/share/plymouth/themes/omarchy/frame-*.png | sort -u | wc -l)
                     if [ "$sizes" -ne 1 ]; then
                       echo "plymouth: animation frames are not all the same size" >&2
+                      exit 1
+                    fi
+
+                    # The last frame hands off to logo.png, and the script centres each on its
+                    # own width -- so the INK has to match, in width and in where its middle
+                    # falls, or the wordmark jumps at the end of the animation (#764).
+                    theme=$out/share/plymouth/themes/omarchy
+                    last=$theme/frame-$((kept - 1)).png
+                    ink() { echo "$(identify -format %w "$1") $(magick "$1" -trim -format '%w %X' info: | tr -d +)"; }
+                    read -r fw fiw fix < <(ink "$last")
+                    read -r lw liw lix < <(ink $theme/logo.png)
+                    dw=$((fiw - liw)); dc=$(((2 * fix + fiw - fw) / 2 - (2 * lix + liw - lw) / 2))
+                    if [ "''${dw#-}" -gt 16 ] || [ "''${dc#-}" -gt 16 ]; then
+                      echo "plymouth: last frame's ink is ''${fiw}px, centred ''${dc}px off logo.png's ''${liw}px" >&2
+                      echo "plymouth: the handoff would jump -- retune -pointsize/--canvas-width" >&2
                       exit 1
                     fi
 

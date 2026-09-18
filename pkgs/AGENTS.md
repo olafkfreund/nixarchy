@@ -57,6 +57,24 @@ failures is one where every path is that path — so exercise the packaged
 binary, not the source file. The bug survived a green check suite because
 every assertion fed the script on stdin, and stdin never fails.
 
+## A long build phase is one indented string, and it strips one indent
+
+`pkgs/omarchy/default.nix`'s `installPhase` is a single `'' ... ''` string, and
+Nix removes the *smallest* indentation shared by every line in it, once, for
+the whole string. One line anywhere with less indent (a multi-line
+`--replace-fail` argument sitting at four spaces) means everything else keeps
+sixteen. So a heredoc added at the phase's usual depth fails twice: its
+`EOF` is never at column 0, so it never ends, and inline Python gets
+indentation it did not ask for (#764). Put anything more than a line or two of
+code in its own file beside `default.nix`, as `check-logo.py` and
+`nixarchy-plymouth-frames.py` are, and call it with `python3 ${./file.py}`.
+That also avoids escaping `\n` and `${` inside the string.
+
+**Counting columns of the banner art counts bytes in the builder.** Every block
+glyph is three bytes of UTF-8, and the sandbox's locale is C, so `awk
+length()` and `wc -c` read an 87-column banner as roughly 250. Count
+characters (`len()` in Python with `encoding="utf-8"`).
+
 ## Patching upstream
 
 Everything is patched with `--replace-fail`, so an Omarchy bump that rewords a

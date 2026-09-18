@@ -1877,6 +1877,40 @@ stdenvNoCC.mkDerivation {
                       '[ "Dictation", "ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake" ]' \
                       '[ "SystemSwitch", "Dictation", "ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake" ]'
 
+                    # The shell can open a panel and cannot say whether one is
+                    # open, so anything driving the desktop -- a script, or an
+                    # agent -- finds out by taking a screenshot, which is
+                    # expensive enough that callers skip it and proceed on
+                    # assumption. That is how a mis-aimed keystroke queued a
+                    # package removal into apps.nix with nothing surfacing it
+                    # (#749). shell.qml already knows: isPluginOpen() is what
+                    # toggle() consults. The fragment only exposes it.
+                    #
+                    # CARRIED, and meant to be dropped. AGENTS.md section 11 is
+                    # right that a fix to how Omarchy behaves belongs upstream,
+                    # and this is re-applied at every source bump until it
+                    # lands there. Delete it the moment upstream has the verbs.
+                    #
+                    # The anchor is asserted before the insert: awk inserting
+                    # nothing would leave a shell that still works and silently
+                    # lacks the verbs, which is the shape AGENTS.md section 4
+                    # warns about.
+                    shellQml=$out/share/omarchy/shell/shell.qml
+                    anchor='    function togglePanelAt(section: string, index: string): string {'
+                    grep -qF "$anchor" "$shellQml" || {
+                      echo "shell-state-ipc: anchor gone from shell.qml; upstream moved it" >&2
+                      exit 1
+                    }
+                    awk -v snippet="$(cat ${./shell-state-ipc.qml})" -v anchor="$anchor" '
+                      $0 == anchor && !inserted { print snippet; inserted = 1 }
+                      { print }
+                    ' "$shellQml" > "$shellQml.new"
+                    mv "$shellQml.new" "$shellQml"
+                    grep -qF 'function openPanels(): string {' "$shellQml" || {
+                      echo "shell-state-ipc: insert produced nothing" >&2
+                      exit 1
+                    }
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

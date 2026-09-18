@@ -523,12 +523,27 @@ host-side timeouts scale with the box while guest-side ones do not.
 **And "I am only measuring it" is the same load.** The rule above reads as
 being about VM checks, so six runs of `checks.options` -- an *evaluation*
 check, the cheap row in the table -- were filed under measurement rather than
-under building, and started anyway. They peak at **11.5 GB of RSS each**, and
-an install job on the same host timed out at its 90-minute cap having passed
-in 25 minutes an hour earlier. What makes a local build disruptive is the
-memory and the cores it takes from the guests, not which row of the table it
-sits in; a benchmark that has to be run repeatedly is worse than a build,
-because one is a single cost and the other is a loop.
+under building, and started anyway. They peak at **11.5 GB of RSS each**.
+What makes a local build disruptive is the memory and the cores it takes from
+the guests, not which row of the table it sits in; a benchmark that has to be
+run repeatedly is worse than a build, because one is a single cost and the
+other is a loop.
+
+**This paragraph originally blamed those runs for an install timeout, and the
+evidence does not support it.** Written 2026-09-17 and checked the next day
+against `/nix/var/log/nix/drvs` mtimes: the install job that timed out started
+at 13:46:35, the last of those runs finished at **13:45:44**, and there is not
+one `nixarchy-options` build inside its 90-minute window. Three sit in the 46
+minutes before it. The causal claim was written from plausibility, at a moment
+when owning a mistake felt like the rigorous thing to do, and plausibility is
+not evidence in the direction that flatters you either.
+
+It is corrected here rather than deleted, because that is the more useful
+lesson: **a rule whose stated reason does not survive checking is a rule the
+next reader discards entirely**, and this file's whole premise is that the
+reason travels with the rule. The rule stands on its own -- 11.5 GB is 72% of
+a hosted runner and a large bite out of this workstation, whoever it collides
+with. What was never established is that it collided with anything that day.
 
 And **"this one is small" is the same exemption wearing a different coat.** The
 paragraph above was written on 2026-09-18 by an agent who, later the same day,

@@ -196,6 +196,41 @@ Run `omarchy --help` for the full list. The most common groups:
 | `omarchy setup` | Interactive setup wizards | `omarchy setup security fingerprint` |
 | `omarchy update` | `nix flake update` + `nixos-rebuild switch` | `omarchy update` |
 
+## Ask The Shell What Is Open — Do Not Screenshot To Find Out
+
+If you toggle a panel, **check the result instead of assuming it**. Two
+read-only IPC calls answer it directly, and both are cheap:
+
+```bash
+omarchy-shell shell isOpen nixarchy.pkg   # true | false | unknown
+omarchy-shell shell openPanels            # ["id", ...], every open panel
+```
+
+`unknown` means **no panel answers to that id** — a typo, or a variable that
+was never set. It is not `false`. Treating it as "the panel did not open" is
+the mistake these calls exist to prevent: a click that missed, followed by
+keystrokes aimed at a panel that was never there, once queued a package
+removal into `~/.config/nixarchy/apps.nix` with nothing surfacing it.
+
+So, after any `toggle` or `summon`:
+
+```bash
+omarchy-shell shell toggle nixarchy.pkg '{}'
+case "$(omarchy-shell shell isOpen nixarchy.pkg)" in
+  true)    ;;                                   # proceed
+  false)   echo "it did not open" >&2; exit 1 ;;
+  unknown) echo "no such panel; check the id" >&2; exit 1 ;;
+esac
+```
+
+**Do not use `listPlugins`'s `active` field for this.** It reports which clone
+owns a singleton slot — in practice, which bar is live — and reads `false` for
+every panel and overlay in every state, including immediately after a
+successful toggle. It will never say yes.
+
+Taking a screenshot to find out what happened is the fallback, not the method:
+it costs a capture and a model call to answer what one IPC call answers exactly.
+
 ## Configuration Locations
 
 Hyprland config lives in `~/.config/hypr/` — see [`hyprland.md`](hyprland.md).

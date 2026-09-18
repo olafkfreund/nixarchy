@@ -89,15 +89,33 @@ Apply both change there.
 - Every new check is proven to fail first (§1). A new `checks.<name>` needs a
   workflow edit by a human (§4, §11).
 
+## Decisions (owner, 2026-09-18)
+
+- **Bar:** all four widgets go in the **right** section of the bar.
+- **Keybindings:** new installs get the plugins' suggested binds in the seeded
+  `bindings.lua`: Super+Alt+N (pkg), Super+Alt+O (podman), Super+Alt+D
+  (distrobox), Super+Alt+V (microvm). Existing installs get the menu rows only,
+  because nixarchy seeds `~/.config/hypr` once and never edits it afterwards.
+  The spec checks each bind against what Omarchy and nixarchy already bind.
+- **`nixarchy box` is retired** once the distrobox plugin creates boxes from
+  nixarchy's templates. The CLI (`pkgs/box.nix`, `nixarchy-box`), its menu rows
+  and the `box` verb in the `nixarchy` dispatcher go. What stays, and what that
+  means:
+  - `data/box-templates.nix` stays the single source of templates. A command
+    being retired cannot export it, so nixarchy generates it as a file the
+    plugin reads (for example `/etc/nixarchy/box-templates.json`).
+  - `services.boxes.machines` (declared boxes) does not go through the CLI and
+    is unaffected.
+  - `checks.box-template` and `checks.box-boot` test through the CLI today
+    (`tests/box-boot.nix:95` runs `nixarchy box create`). They are retargeted
+    at the path the plugin takes (distrobox with a template from the generated
+    file), so box creation stays tested end to end. Renaming or dropping a
+    `checks.<name>` is named in workflows (`build.yml:1504`), so that edit is
+    raised for a human, not made by an agent (AGENTS.md §4, §11).
+  - The manual (`docs/manual/boxes.md`, README, `docs/index.md`) moves from
+    the CLI to the panel.
+
 ## Open questions
 
-- **Bar space.** Four new bar widgets on a default desktop, three of them only
-  when their service is on. Is a fixed bar position per plugin wanted (all in
-  one section, and which), or wherever each plugin's manifest asks?
-- **Keybindings.** nixarchy seeds `~/.config/hypr` once and never manages it.
-  Should new installs get the plugins' suggested binds (Super+Alt+N/O/D/V) in
-  the seeded `bindings.lua`, with existing installs getting only menu rows? Or
-  menu rows only everywhere?
-- **The distrobox cut-over.** Nothing happens until the plugin reads nixarchy's
-  templates (`nixarchy box templates --json`). Does the `nixarchy box` CLI stay
-  as the terminal interface afterwards, or is it retired too?
+None. The owner answered the three open questions (bar, keybindings,
+`nixarchy box`) above.

@@ -73,6 +73,16 @@ spec: spec/2026-09-18-765-rebuild-window.md
      and a user's rules still merge in.
    - A one-line `# Why: modules/AGENTS.md#the-rebuild-asks-through-polkit`.
 
+   - **gpu-screen-recorder side effect.** `modules/nixos.nix:866` says that
+     recorder has no fallback because its fallback is pkexec, "which wants a
+     setuid helper that NixOS' polkit does not ship". This step ships that
+     helper, so the fallback now exists: without its own setcap wrapper, the
+     recorder asks for a password through the polkit dialog instead of
+     exiting 127. Correct the comment to say so. The setcap wrapper stays the
+     path that works without a prompt. Check with
+     `grep -rn pkexec modules/ pkgs/` that nothing else changes behaviour
+     because pkexec now exists.
+
    → Verify: `nix eval .#nixosConfigurations.reference.config.security.polkit.enablePkexecWrapper`
    is `true`, and the rule text appears in
    `...security.polkit.extraConfig`.
@@ -95,8 +105,12 @@ spec: spec/2026-09-18-765-rebuild-window.md
 
    Restore after each with `git checkout HEAD -- <file>`, from a committed
    baseline (§5: HEAD, not the index). Keep each red log.
-5. **The session probe.** In `tests/session.nix`, after the shell is known to
-   be alive (the `pgrep -a quickshell` block, `:414`):
+5. **The session probe.** *Revised after drafting:* `tests/session.nix` has no
+   hyprctl or `HYPRLAND_INSTANCE_SIGNATURE` setup and no `shell.json` fixture.
+   The only hyprctl setup is in `tests/plugin.nix:184`, which also already
+   writes the user's shell state. So the probe goes in **`tests/plugin.nix`**
+   (still no new `checks.<name>`), after its shell-alive wait, reusing that
+   setup:
    - Wait until the Omarchy shell's journal says
      `omarchy polkit agent registered`
      (`wait_until_succeeds` on `journalctl -b -t omarchy-shell`).
@@ -116,8 +130,15 @@ spec: spec/2026-09-18-765-rebuild-window.md
    Capture that output, then remove the break. A second break: comment out
    `enablePkexecWrapper`. The wrapper path does not exist, the exec fails, and
    the root-owned file never appears.
-   Run `checks.session` only when `gh run list` shows 0 in flight. It is a
-   10-20 minute VM.
+   Run `checks.plugin` only when `gh run list` shows 0 in flight. It is a
+   booted VM.
+
+   The probe does **not** prove the spec's "one dialog per switch" (polkit
+   keeping the authorisation across nh's three elevated calls): it runs pkexec
+   once. That stays a by-hand check in step 8, and a hole recorded in
+   `tests/AGENTS.md` (§3). The dialog text is matched on `Authenticat`, which
+   both the agent's default message and pkexec's own action message contain;
+   OCR at the VM's resolution is proven only by the red/green pair above.
 6. **Docs.**
    - `modules/AGENTS.md`: a section "The rebuild asks through polkit",
      covering why pkexec and not askpass, why `KEEP` and not `YES`, why the

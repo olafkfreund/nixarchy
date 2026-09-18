@@ -445,6 +445,14 @@ p620's one nix store** through its daemon, so a re-run starts warm. The
 install jobs at a time** (#555, #587), and with every runner on one host that
 cap matters more, not less. Two is the measurement, not a guess: 2 concurrent
 installs both succeed, 3–4 all fail at the in-guest timeout (2026-09-09).
+**That measurement assumed an idle box, and p620 is not one** — it is also
+somebody's desktop. On 2026-09-18 two installs ran concurrently, which the
+line above says is fine, and both crawled: 5516 s and 2967 s against the 1526 s
+the same job takes alone. The first hit the 90-minute cap having *finished* its
+steps at minute 88. p620 was carrying a logged-in Hyprland session, k3s and a
+browser at load 5, and an agent was running small `nix build`s alongside. Two
+is the cap for two installs and *nothing else*; a desktop in use is a third
+tenant that the number never counted.
 **Four runners do not mean four installs** — the runners also serve `build`,
 the nightly and releases, and raising the cap needs a new measurement on this
 host, not a runner count. A ref is assigned its slot by
@@ -521,6 +529,16 @@ in 25 minutes an hour earlier. What makes a local build disruptive is the
 memory and the cores it takes from the guests, not which row of the table it
 sits in; a benchmark that has to be run repeatedly is worse than a build,
 because one is a single cost and the other is a loop.
+
+And **"this one is small" is the same exemption wearing a different coat.** The
+paragraph above was written on 2026-09-18 by an agent who, later the same day,
+ran `skill-parity`, `actionlint` and `yq` while two installs were in flight, on
+the grounds that they are seconds rather than minutes. Both installs then ran
+2–3.5× slow and one died at the cap. The small builds were probably not the
+largest weight — the desktop and the second install were — but "probably not
+the largest weight" is a judgement made *after* starting, which is exactly the
+reasoning the rule exists to stop. The check is `gh run list`, not an estimate
+of your own footprint.
 
 Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
 

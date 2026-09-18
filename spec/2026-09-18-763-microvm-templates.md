@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 763
 intent: intent/2026-09-18-763-microvm-templates.md
 ---

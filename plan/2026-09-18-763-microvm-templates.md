@@ -548,7 +548,14 @@ boot proof and says so.
 
 ### Deviations
 
-(none yet)
+- **Step 3 / step 8: `k3s.nix` is a plain attribute set with one `microvm`
+  block.** `statix check` (step 8) flagged the plan's `{ ... }:` header (W10,
+  empty pattern) and the three separate `microvm.*` keys (W20, repeated key).
+  The module now takes no arguments, like podman.nix, and writes
+  `microvm = { volumes = …; mem = 4096; vcpu = 2; }`. Same options, same
+  values; the runner's `-m 4096`, `-smp 2` and `file=var-lib-rancher.img`
+  were re-verified after the change. Folded into step 7's commit with the
+  formatter's re-indent of the check file, per step 8.
 
 ### Test results
 

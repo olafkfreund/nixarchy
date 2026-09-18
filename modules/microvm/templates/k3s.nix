@@ -16,7 +16,6 @@
 # The firewall is off for the same reason the owner's hand-kept flake turned
 # it off: SLiRP already answers inbound, and nixos-fw only ever stood between
 # pods on cni0 and the node's own services.
-{ ... }:
 {
   services.k3s = {
     enable = true;
@@ -36,19 +35,21 @@
 
   networking.firewall.enable = false;
 
-  microvm.volumes = [
-    {
-      image = "var-lib-rancher.img";
-      mountPoint = "/var/lib/rancher";
-      size = 20 * 1024;
-      fsType = "ext4";
-      autoCreate = true;
-    }
-  ];
+  microvm = {
+    volumes = [
+      {
+        image = "var-lib-rancher.img";
+        mountPoint = "/var/lib/rancher";
+        size = 20 * 1024;
+        fsType = "ext4";
+        autoCreate = true;
+      }
+    ];
 
-  # The control plane alone idles near 1 GiB; 4 GiB leaves room for
-  # workloads, and a second vCPU is the difference between a scheduler that
-  # keeps up and one that does not.
-  microvm.mem = 4096;
-  microvm.vcpu = 2;
+    # The control plane alone idles near 1 GiB; 4 GiB leaves room for
+    # workloads, and a second vCPU is the difference between a scheduler that
+    # keeps up and one that does not.
+    mem = 4096;
+    vcpu = 2;
+  };
 }

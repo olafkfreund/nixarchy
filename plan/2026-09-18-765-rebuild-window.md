@@ -176,7 +176,7 @@ spec: spec/2026-09-18-765-rebuild-window.md
 | check | expected green | §1 break, and the expected red |
 |---|---|---|
 | `nix build .#checks.x86_64-linux.options --print-build-logs` | passes, `modeAInert` included | no `mkDefault true` gives `pkexecWrapperOn`; no rule gives `pkexecKeepRule`; no export gives the script grep; the setting outside `cfg.enable` gives `pkexecWrapperModeA` |
-| `nix build .#checks.x86_64-linux.session --print-build-logs` | the dialog appears, the password is accepted, and `/tmp/pkexec-ok` is owned by root | the agent disabled means no dialog or registration line, and a timeout; the wrapper off means no root-owned file |
+| `nix build .#checks.x86_64-linux.plugin --print-build-logs` | the dialog appears, the password is accepted, and `/tmp/pkexec-ok` is owned by root | the agent disabled means no dialog or registration line, and a timeout; the wrapper off means no root-owned file |
 | `nix eval ...security.polkit.enablePkexecWrapper` on `reference` | `true` | `false` before step 2 |
 | hand test on the owner's machine | one dialog per Apply; text over SSH; sudo with `auto` | none (manual; the hole is recorded in `tests/AGENTS.md`) |
 | `nix fmt -- --ci`, statix, deadnix | clean | none |

@@ -727,7 +727,7 @@ Do not retry-until-green. A flaky pass is a bug report you deleted.
 - **Repository settings**: anything under `gh api` that mutates the repo —
   labels, protection, merge settings.
 - **Posting to other people's repositories.** Upstream is
-  `basecamp/omarchy`, and the routing rules in
+  `omacom/omarchy`, and the routing rules in
   `pkgs/omarchy/skills/nixarchy/contributing.md` apply to you exactly as to a
   human: never file anywhere unprompted, and a fix to how Omarchy itself
   behaves belongs upstream, not patched here — a patch carried here is

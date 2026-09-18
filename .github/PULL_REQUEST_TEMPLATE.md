@@ -6,7 +6,7 @@
 ## What this changes, and why
 
 <!-- One paragraph. If it fixes a bug: what broke, and would it also break on
-     Arch? If yes, it belongs at basecamp/omarchy, not here — see
+     Arch? If yes, it belongs at omacom/omarchy, not here — see
      CONTRIBUTING.md. -->
 
 ## How I proved the check fails

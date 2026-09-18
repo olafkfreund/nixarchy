@@ -19,7 +19,7 @@ What follows is the code-contribution process itself.
 ## The one rule that outranks the others
 
 A change to how *Omarchy* behaves belongs upstream at
-[basecamp/omarchy](https://github.com/basecamp/omarchy), not here. Nixarchy
+[omacom/omarchy](https://github.com/omacom/omarchy), not here. Nixarchy
 tracks Omarchy releases as a source bump; a fix landed upstream arrives here
 for free, while a patch carried here has to be re-applied at every bump. If
 your fix would also fix Arch, it is not a nixarchy PR.

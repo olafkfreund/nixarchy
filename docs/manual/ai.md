@@ -211,6 +211,53 @@ Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.
 
+### If you installed Claude some other way
+
+Nixi's panel — the one `SUPER + H` opens — talks to an agent through an **ACP
+adapter**, a separate package from the agent's own CLI. nixarchy pins two of
+them on every machine, and the third conditionally:
+
+| agent | adapter pinned |
+|---|---|
+| opencode | always |
+| codex | always |
+| Claude | only when `apps.claude-code` is enabled, **or** `defaultAgent = "claude"` |
+
+Claude's is conditional because `claude-agent-acp` and `claude-code` together
+are 651 MiB of a public 5 GB cache, for two packages that are fetched rather
+than built. A machine that does not use Claude should not carry them.
+
+The gap is a machine that uses Claude **without installing it through Nix** —
+from mise, npm, or the official installer into `~/.local/bin`. Nothing in the
+configuration records that, because the choice lives in
+`~/.config/omarchy/defaults/agent`, which is written at runtime. Both halves of
+the condition read false, no adapter is pinned, and the first sign of it is
+`SUPER + H` reporting:
+
+    Claude Code's ACP adapter (claude-agent-acp) is not on the system PATH.
+
+The rebuild says nothing, because from the configuration's point of view
+nothing is wrong.
+
+Ask for it explicitly, with nixi's own option:
+
+```nix
+services.nixi.agents = [ "claude" ];
+```
+
+That merges with what nixarchy already sets rather than replacing it, so
+opencode and codex stay.
+
+**Know what it brings.** `claude-agent-acp` sets `CLAUDE_CODE_EXECUTABLE` to
+nixpkgs' `claude-code` by default, so this pulls that package in too — it does
+*not* leave your mise-installed `claude` as the executable, and you will have
+two. It also needs unfree allowed, which nixarchy turns on by default (see
+[Unfree software](other-packages.md#unfree-software)); on a machine that
+refuses unfree the adapter cannot be pinned at all.
+
+And an activation does not reach a shell that is already running. After the
+rebuild, `omarchy-restart-shell` — or the panel keeps reporting the old state.
+
 ## In Neovim
 
 The agents you select in the Install menu follow you into the editor nixarchy

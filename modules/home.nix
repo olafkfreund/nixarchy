@@ -324,6 +324,13 @@ let
       ''
     );
 
+  # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
+  # Standalone Home Manager has no osConfig, so it resolves nothing (Mode A).
+  resolvedDefaults = lib.filterAttrs (
+    name: p: (osConfig.programs.nixarchy.enable or false) && p.gate && (cfg.defaultPlugins.${name} or true)
+  ) cfg.defaultPluginSet;
+  defaultIds = lib.mapAttrsToList (_: p: p.id) resolvedDefaults;
+
   # Why: modules/AGENTS.md#each-declared-plugin-checked-at-build-time-against
   validatedPlugins = lib.mapAttrs (
     name: plugin:
@@ -383,6 +390,15 @@ let
         fi
 
         id=$(jq -r '.id' "$src/manifest.json")
+        ${lib.optionalString (builtins.elem name defaultIds) ''
+          # A default is named by id in menu rows and binds, so a pin that
+          # renames it must fail here, not leave those rows opening nothing.
+          if [ "$id" != ${lib.escapeShellArg name} ]; then
+            echo "default plugin ${name}: its manifest.json now says id '$id'." >&2
+            echo "Menu rows and key binds name it '${name}'; update them with the pin." >&2
+            exit 1
+          fi
+        ''}
         mkdir -p $out
         echo -n "$id" > $out/id
         ln -s "$src" $out/plugin
@@ -538,7 +554,60 @@ in
         persists, because the shell records it in shell.json rather than in the
         plugin folder. `omarchy plugin add` still works alongside this for
         anything you would rather not pin.
+
+        The exception is nixarchy's own default plugins
+        (`programs.nixarchy.defaultPlugins`), which are also turned on, once.
       '';
+    };
+
+    defaultPlugins = lib.mkOption {
+      type = lib.types.attrsOf lib.types.bool;
+      default = {
+        pkg = true;
+        podman = true;
+        distrobox = true;
+        microvm = true;
+      };
+      example = lib.literalExpression "{ podman = false; }";
+      description = ''
+        nixarchy's own shell plugins, installed and turned on for you: the
+        package manager panel always, podman when podman is on, distrobox when
+        Boxes is on, microvms always. A name left out counts as on.
+
+        Each is turned on once, at the first login that has it, and a marker
+        in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
+        Setup > Plugins and it stays off. Setting a name to `false` here stops
+        nixarchy installing and enabling it; it never edits your shell.json,
+        so a plugin you already have on stays on until you turn it off there.
+      '';
+    };
+
+    # The defaults' sources, by the name `defaultPlugins` uses. Filled in by
+    # the PRs that add each plugin's input; tests put a fixture here.
+    defaultPluginSet = lib.mkOption {
+      internal = true;
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            id = lib.mkOption { type = lib.types.str; };
+            src = lib.mkOption { type = lib.types.path; };
+            gate = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+            };
+          };
+        }
+      );
+      default = { };
+    };
+
+    # The build-time validation of each declared plugin, exposed so
+    # tests/options.nix can assert that a bad one fails to build.
+    pluginChecks = lib.mkOption {
+      internal = true;
+      readOnly = true;
+      type = lib.types.attrsOf lib.types.package;
+      default = validatedPlugins;
     };
 
   };
@@ -1404,6 +1473,56 @@ in
             fi
           ''
         );
+
+    # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
+    programs.nixarchy.plugins = lib.mapAttrs' (
+      _: p: lib.nameValuePair p.id { src = lib.mkDefault p.src; }
+    ) resolvedDefaults;
+
+    # Turned on through the running shell's own writer, never by editing
+    # shell.json: the shell rewrites that whole file from memory, so a second
+    # writer loses updates. The marker is written only once the enable worked.
+    xdg.configFile."omarchy/hooks/post-boot.d/default-plugins" = lib.mkIf (resolvedDefaults != { }) {
+      executable = true;
+      text = ''
+        #!/usr/bin/env bash
+        export PATH=${
+          lib.makeBinPath [
+            cfg.package
+            pkgs.jq
+            pkgs.coreutils
+            pkgs.systemd
+          ]
+        }:$PATH
+        state="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/enabled-once"
+
+        todo=()
+        for id in ${lib.escapeShellArgs defaultIds}; do
+          [ -e "$state/$id" ] || todo+=("$id")
+        done
+        [ ''${#todo[@]} -gt 0 ] || exit 0
+
+        # The shell may still be starting. No answer means next login.
+        for _ in $(seq 30); do
+          omarchy-shell shell ping >/dev/null 2>&1 && break
+          sleep 1
+        done
+        omarchy-shell shell ping >/dev/null 2>&1 || exit 0
+        omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+
+        mkdir -p "$state"
+        list=$(omarchy-plugin-list --json 2>/dev/null) || list='[]'
+        for id in "''${todo[@]}"; do
+          if jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' <<<"$list" >/dev/null; then
+            : >"$state/$id"
+          elif out=$(omarchy-plugin-enable "$id" right 2>&1); then
+            : >"$state/$id"
+          else
+            printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins
+          fi
+        done
+      '';
+    };
 
     # Why: modules/AGENTS.md#same-extension-point-on-the-other-hook-omarchy-alr
     xdg.configFile."omarchy/hooks/post-boot.d/config-repo" = {

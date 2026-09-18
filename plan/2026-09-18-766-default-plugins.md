@@ -118,10 +118,21 @@ spec: spec/2026-09-18-766-default-plugins.md
    `plugins` option description (`home.nix:535-540`), which today says "does
    not enable it". It keeps saying that for plugins you declare, and names the
    defaults as the exception.
+   *Deviation, made during implementation:* `nixarchy-plugin` is
+   `pkgs/nixarchy-plugin.nix`, called from `apps.nix`, not inline. This is
+   the `pkgs/secret.nix` precedent: `tests/options.nix` runs the real command
+   against fixture `shell.json` files.
 8. `git add` every new file before any evaluation (§5).
 9. `tests/options.nix`, with a fixture plugin (a `runCommand` directory holding
    a valid `manifest.json`, id `nixarchy.fixture`) injected through a
-   test-only `_module.args` or a `defaultPluginSet` override. The cases:
+   test-only `_module.args` or a `defaultPluginSet` override.
+   *Deviation, as settled during implementation:* it goes through an
+   **internal** option, `programs.nixarchy.defaultPluginSet` (id, src, gate),
+   following the `installerManaged`/`tree` precedent in `nixos.nix`. Later PRs
+   fill that same option with the real inputs. A read-only internal
+   `pluginChecks` exposes the validation derivations, so the renamed-id case
+   is a `testers.testBuildFailure` inside `checks.options` and needs no new
+   check name. The cases:
    - `homeWith {}`: no fixture src and no hook file;
    - `homeOn {} {}`: both present;
    - `homeOn` with `defaultPlugins.fixture = false`: both absent;

@@ -2928,6 +2928,10 @@ in
             # declaration line is printed rather than written.
             (pkgs.callPackage ../pkgs/secret.nix { })
 
+            # `nixarchy-plugin <id>`, what the default plugins' rows and binds
+            # call. Its own file so tests/options.nix runs the real command.
+            (pkgs.callPackage ../pkgs/nixarchy-plugin.nix { omarchy = cfg.package; })
+
             # Why: modules/AGENTS.md#one-name-for-the-commands-this-repo-adds-and-a-way
             (pkgs.writeShellApplication {
               name = "nixarchy";

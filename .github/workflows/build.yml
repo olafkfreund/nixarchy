@@ -1340,6 +1340,13 @@ jobs:
               .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options || rc=$?
             peak=$(awk '/Maximum resident set size/ { print $NF }' options-time.txt)
             wall=$(awk -F': ' '/Elapsed .wall clock/ { print $NF }' options-time.txt)
+            # stdout AS WELL as the summary. A step summary is readable only
+            # by opening the run in a browser -- `gh run view --log` and the
+            # jobs API both omit it -- so a number written only there cannot be
+            # compared across runs by anything that is not a person looking.
+            # Trending it was half of #747's point.
+            echo "options: peak RSS $(( ${peak:-0} / 1024 )) MiB of 16384 MiB," \
+              "wall ${wall:-unknown}"
             {
               echo "### checks.options"
               echo ""

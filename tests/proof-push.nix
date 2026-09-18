@@ -232,5 +232,33 @@ pkgs.runCommand "nixarchy-proof-push"
     }
     echo "an empty drvPath falls back to the attribute, and only for that check"
 
+    # ---- 6. a store path is refused as a check name ----
+    #
+    # #742 widened already-proven.sh's output to three tab-separated fields.
+    # nightly.yml expanded a whole row unquoted into this script's arguments,
+    # so one check became three and nix was asked to build
+    # `checks.x86_64-linux./nix/store/...-nixi.drv`. Nix's error for that names
+    # three attribute paths and never the caller, so it read as a broken flake.
+    #
+    # Refused by name here rather than diagnosed later, because the useful
+    # sentence -- a caller passed the whole row -- is knowable only here.
+    rm -f calls/*; : > calls/build
+    if bash sut/build-unless-proven.sh a /nix/store/zzzz-a.drv >/dev/null 2>err; then
+      echo "a store path was accepted as a check name; the nightly's unquoted" >&2
+      echo "expansion of already-proven.sh's rows would go undiagnosed again" >&2
+      exit 1
+    fi
+    grep -q 'store path, not a check name' err || {
+      echo "refused, but not with the reason a reader needs:" >&2
+      cat err >&2
+      exit 1
+    }
+    [ ! -s calls/build ] || {
+      echo "refused and built anyway:" >&2
+      cat calls/build >&2
+      exit 1
+    }
+    echo "a store path passed as a check name is refused, and nothing is built"
+
         touch $out
   ''

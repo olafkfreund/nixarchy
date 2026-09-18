@@ -18,6 +18,23 @@ set -euo pipefail
 
 here=$(dirname "$0")
 
+# Check NAMES, never store paths. #742 widened already-proven.sh's output to
+# `<name><TAB><drvPath><TAB><outPath>`, and nightly.yml expanded that whole
+# row unquoted into this script's arguments -- so one check became three, and
+# nix was asked for `checks.x86_64-linux./nix/store/...-nixi.drv`. The error
+# it prints for that names three attribute paths and not the caller, which is
+# why it read as a flake problem rather than a wrong argument.
+for a in "$@"; do
+  case $a in
+    /nix/store/*)
+      echo "::error::$a is a store path, not a check name. A caller has passed" \
+        "already-proven.sh's whole row (<name><TAB><drvPath><TAB><outPath>)" \
+        "instead of its first field." >&2
+      exit 2
+      ;;
+  esac
+done
+
 # stdout is the list that still needs building; stderr is the narration, and
 # it is passed through so the log says which checks were skipped and why.
 #
@@ -32,9 +49,10 @@ proven=$("$here/already-proven.sh" "$@") || {
     "to report a pass having built nothing" >&2
   exit 2
 }
-# already-proven.sh emits `<name><TAB><drvPath>`, so keep both: the names are
-# what the log and cachix-push.sh talk about, the drvPaths are what makes the
-# build skip a second evaluation.
+# already-proven.sh emits `<name><TAB><drvPath><TAB><outPath>`, so keep all
+# three: the names are what the log and cachix-push.sh talk about, the drvPaths
+# are what makes the build skip a second evaluation, and the outPaths are what
+# lets the push skip a third.
 names=()
 drvs=()
 outs=()

@@ -275,6 +275,21 @@ Two other ways a check stops checking, both found in one week:
   answer, say so rather than letting it mean "all done". Found by
   tests/proof-push.nix, in a sandbox with no `/usr/bin/env`, and the same
   pattern was written into nightly.yml an hour later by the person fixing it.
+- **Widening a FORMAT breaks whoever read the narrow one, silently.** #742
+  changed `already-proven.sh` from printing a bare check name to printing
+  `<name><TAB><drvPath><TAB><outPath>`. Every caller inside the scripts was
+  updated. `nightly.yml` was not: it stores that output in `$MISSING` and
+  expands it **unquoted** into `build-unless-proven.sh`, under a comment
+  saying *"one name per word, by construction"* — which had been true for
+  months and stopped being true without the comment changing. One check became
+  three arguments, and the nightly asked nix to build
+  `checks.x86_64-linux./nix/store/…-nixi.drv`. Nix's error for that names
+  three attribute paths and never the caller, so it reads as a broken flake.
+  The same file already carried this lesson one job higher up, about a
+  condition rather than a format: **widening anything means re-reading what
+  depended on it being narrow.** Grep for the producer by name before changing
+  what it emits, workflows included — `grep -rn <script> .github/` is the
+  whole check, and a shell script's output format has no type to fail on.
 - **A hand-maintained list fails OPEN.** Found three times in one day, in
   three unrelated places: four manual pages published and reachable from no
   sidebar; a third page index (`docs/manual/index.md`) that nothing compared,

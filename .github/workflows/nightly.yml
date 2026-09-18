@@ -344,10 +344,22 @@ jobs:
             echo "::error::the generated check list came back empty"
             exit 1
           }
-          missing=$(.github/scripts/already-proven.sh "${names[@]}") || {
+          rows=$(.github/scripts/already-proven.sh "${names[@]}") || {
             echo "::error::could not probe the check proofs"
             exit 1
           }
+          # Field 1 only. #742 widened already-proven.sh's output from a bare
+          # name to `<name><TAB><drvPath><TAB><outPath>`, and the repush step
+          # below expands $MISSING unquoted -- one NAME per word, which a
+          # three-field row silently turns into three. The nightly then asked
+          # nix to build `checks.x86_64-linux./nix/store/...-nixi.drv` and
+          # died. Widening a format means re-reading what consumed the narrow
+          # one, which is the same lesson the entries repush above records.
+          #
+          # Cut after capturing, never `script | cut`: a pipeline reports the
+          # LAST command's status, so the guard above would be reading cut's
+          # (AGENTS.md section 1).
+          missing=$(printf '%s\n' "$rows" | cut -f1)
           {
             echo 'missing<<EOF'
             printf '%s\n' "$missing"

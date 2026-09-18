@@ -217,11 +217,11 @@ Nixi's panel — the one `SUPER + H` opens — talks to an agent through an **AC
 adapter**, a separate package from the agent's own CLI. nixarchy pins two of
 them on every machine, and the third conditionally:
 
-| agent | adapter pinned |
-|---|---|
-| opencode | always |
-| codex | always |
-| Claude | only when `apps.claude-code` is enabled, **or** `defaultAgent = "claude"` |
+| agent | what it needs | pinned |
+|---|---|---|
+| opencode | no adapter — it speaks ACP itself, as `opencode acp` | always |
+| codex | `codex-acp` | always |
+| Claude | `claude-agent-acp` | only when `apps.claude-code` is enabled, **or** `defaultAgent = "claude"` |
 
 Claude's is conditional because `claude-agent-acp` and `claude-code` together
 are 651 MiB of a public 5 GB cache, for two packages that are fetched rather
@@ -239,7 +239,9 @@ the condition read false, no adapter is pinned, and the first sign of it is
 The rebuild says nothing, because from the configuration's point of view
 nothing is wrong.
 
-Ask for it explicitly, with nixi's own option:
+Ask for it explicitly, with nixi's own option, **in your Home Manager
+configuration** — `services.nixi` is a Home Manager option, not a top-level
+NixOS one:
 
 ```nix
 services.nixi.agents = [ "claude" ];
@@ -248,12 +250,16 @@ services.nixi.agents = [ "claude" ];
 That merges with what nixarchy already sets rather than replacing it, so
 opencode and codex stay.
 
-**Know what it brings.** `claude-agent-acp` sets `CLAUDE_CODE_EXECUTABLE` to
-nixpkgs' `claude-code` by default, so this pulls that package in too — it does
-*not* leave your mise-installed `claude` as the executable, and you will have
-two. It also needs unfree allowed, which nixarchy turns on by default (see
-[Unfree software](other-packages.md#unfree-software)); on a machine that
+**Know what it brings.** This pulls nixpkgs' `claude-code` into the closure,
+and needs unfree allowed — nixarchy turns that on by default (see
+[Unfree software](other-packages.md#unfree-software)), and on a machine that
 refuses unfree the adapter cannot be pinned at all.
+
+**It does not replace the Claude you already have.** The adapter wraps itself
+with `--set-default CLAUDE_CODE_EXECUTABLE`, which only applies when nothing
+else set it, and nixi sets it explicitly from your `PATH`. So the `claude` in
+`~/.local/bin` is still the one that runs; the Nix copy is a dependency you
+carry, not a second Claude in use.
 
 And an activation does not reach a shell that is already running. After the
 rebuild, `omarchy-restart-shell` — or the panel keeps reporting the old state.

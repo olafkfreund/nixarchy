@@ -596,4 +596,55 @@ boot proof and says so.
 
 ### Test results
 
-(none yet)
+Run on p620 (KVM), 2026-09-18/19, from this worktree at 9459411.
+
+- **Checks.** `checks.microvm-template` green on the final tree, with the
+  `agent`, `agent-claude` and `agent-claude: default hosts` banners.
+  `cache-allowlist.sh runners` lists 16 entries; all 16 runners build.
+  `CACHE_BUDGET_MIB=2048 cache-budget.sh`: 27 entries, 3089 paths,
+  **1247 MiB of 2048** in nixarchy.cachix.org; the largest new-runner path is
+  the shared 394 MiB QEMU, as before. `nix fmt -- --ci`, statix, deadnix
+  clean. `microvm-boot` not run here (nightly's job).
+- **Watch it fail** (Tests §2): dropping `codeload.github.com` →
+  `agent-claude: codeload.github.com is not in the closure-side allowlist`;
+  absolute k3s image path → `k3s: var-lib-rancher.img is on the drive line
+  with an absolute path`; `nixpkgs.config.allowUnfree = true` in
+  agent-claude → `agent-claude: claude-code is in the runner CI builds -- it
+  must never reach the public cache`. Each restored; check green after.
+- **Unfree off/on** (Tests §3): pure build
+  `/nix/store/bggb03lw…-microvm-qemu-nixos` (no `claude`); `--impure` with
+  `NIXPKGS_ALLOW_UNFREE=1`: `/nix/store/cp9yfzi9…-microvm-qemu-nixos`, a
+  different derivation, `sw/bin/claude` present. Built locally, pushed nowhere.
+- **Smoke** (Tests §4), branch-local runners under
+  `~/.local/state/nixarchy/microvm/t763-*`, driven over the serial console
+  with expect, all dirs removed afterwards:
+  - `node`: `node --version` v24.20.0, `pnpm --version` 11.27.0, `free -m`
+    total 2975 MiB.
+  - `podman`: `free -m` total 3918 MiB; `podman pull docker.io/library/alpine`
+    and `podman run --rm … cat /etc/alpine-release` → 3.24.2.
+  - `k3s`: first boot `kubectl get nodes` → `t763-k3s Ready control-plane
+    v1.35.8+k3s1` within ~60 s, `nproc` 2, `/dev/vda on /var/lib/rancher`,
+    generated token `K10094f1c…::server:3a2f…` in
+    `/var/lib/rancher/k3s/server/token`; shut down and booted again: same
+    node Ready, byte-identical token; `var-lib-rancher.img` (20 GiB) in the
+    VM dir. coredns/local-path/metrics-server pods were still
+    ContainerCreating at the first check (image pulls over SLiRP), not
+    waited for.
+  - `agent-claude`, public runner, no `allow-hosts`: `codex-cli 0.154.0`,
+    `opencode 1.18.30`, no `claude`; filter holds the four defaults;
+    `curl -sI https://example.com` → `403 Filtered`. Before step 4b the
+    allowed hosts answered `500 Unable to connect` (see Deviations); after
+    it, with `example.com` in `allow-hosts`: api.anthropic.com, github.com
+    and example.com → `200 Connection established`, nixos.org → `403
+    Filtered`, `getent ahosts github.com` as `dev` → nothing,
+    `systemctl --failed` empty. Garbage line `garbage((` plus `example.com`:
+    tinyproxy active, journal `allow-hosts: skipping 'garbage((' from
+    /mnt/host/allow-hosts: not a hostname`, all defaults and example.com
+    allowed. Local unfree runner in the same dir: `claude --version` →
+    `2.1.272 (Claude Code)`.
+  - `agent` from `github:olafkfreund/nixarchy/main` (t763-agentmain):
+    `500 Unable to connect` and `Temporary failure in name resolution` --
+    the pre-existing failure step 4b fixes.
+- **Permanent path** (Tests §5): not run; the module path was verified by
+  reading microvm.nix's `host/options.nix` (host `pkgs` passed through) at
+  spec time, not by an eval here.

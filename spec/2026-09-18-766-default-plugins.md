@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 766
 intent: intent/2026-09-18-766-default-plugins.md
 ---

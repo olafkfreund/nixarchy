@@ -234,14 +234,22 @@ writeShellApplication {
           # rev and an unpushed local commit both fail here. Falling back to
           # main, with a word about it, beats nix's bare fetch error, which
           # says nothing a user can act on.
-          if ! nix build "$flakeUrl#$attr" --out-link "$dir/current"; then
+          #
+          # A pure `nix build github:...` cannot see this system's
+          # allowUnfree, and nixpkgs' own override for that case
+          # (NIXPKGS_ALLOW_UNFREE=1) is read by getEnv, which pure
+          # evaluation returns empty. So the variable buys --impure, and
+          # nothing else does: the runner then differs from the public one
+          # by exactly the unfree packages a template probes for
+          # (modules/microvm/templates/agent-claude.nix), and is built here.
+          if ! nix build ''${NIXPKGS_ALLOW_UNFREE:+--impure} "$flakeUrl#$attr" --out-link "$dir/current"; then
             [ "$flakeUrl" != "$fallbackUrl" ] || exit 1
             echo "nixarchy-vm: could not build $flakeUrl#$attr." >&2
             echo "This machine was built from a commit GitHub does not have" >&2
             echo "(a dirty checkout, or one never pushed). Falling back to" >&2
             echo "$fallbackUrl -- the template may differ from the commit" >&2
             echo "this system was built from." >&2
-            nix build "$fallbackUrl#$attr" --out-link "$dir/current"
+            nix build ''${NIXPKGS_ALLOW_UNFREE:+--impure} "$fallbackUrl#$attr" --out-link "$dir/current"
           fi
 
           echo "$name" > "$dir/hostname"

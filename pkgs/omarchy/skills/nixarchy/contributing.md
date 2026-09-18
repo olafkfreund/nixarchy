@@ -10,7 +10,7 @@ everybody's time.**
   NixOS. Its sphere is the NixOS module, the app catalogue, the replacement
   `omarchy-*` commands, the declarative Install/Remove/Update menus, and anything
   that behaves differently here than on Arch.
-- **Omarchy** — <https://github.com/basecamp/omarchy> — the desktop itself. Its
+- **Omarchy** — <https://github.com/omacom/omarchy> — the desktop itself. Its
   sphere is the shell, themes, Hyprland configuration, menus, and the `omarchy-*`
   commands Nixarchy does not replace.
 
@@ -37,14 +37,14 @@ and it misbehaves in a way that has nothing to do with Nix, it is Omarchy's.
 
 **When genuinely unsure, file it against Nixarchy.** The port is the newer and
 thinner layer, and its maintainer can route it upstream with the NixOS detail
-already attached. Filing a Nix-specific bug on `basecamp/omarchy` is asking people
+already attached. Filing a Nix-specific bug on `omacom/omarchy` is asking people
 to debug a distribution they do not run.
 
 ## Before Filing
 
 Issues are for verified bugs, not support questions.
 
-- **Omarchy feature ideas** -> <https://github.com/basecamp/omarchy/discussions/categories/suggestions>
+- **Omarchy feature ideas** -> <https://github.com/omacom/omarchy/discussions/categories/suggestions>
 - **Omarchy support / "is this a bug?"** -> the Discord at <https://omarchy.org/discord>
 - **Nixarchy questions** -> a GitHub issue is fine; the project is small enough
 
@@ -52,11 +52,20 @@ Search first — a duplicate costs a maintainer more time than no report at all.
 
 ```bash
 gh search issues --repo olafkfreund/nixarchy "<terms>"
-gh search issues --repo basecamp/omarchy "<terms>"
+gh search issues --repo omacom/omarchy "<terms>"
 ```
 
 Include closed issues. A matching issue closed as fixed, where the bug still
 reproduces, is a regression — worth far more than another duplicate.
+
+**The repository is `omacom/omarchy`.** It used to be `basecamp/omarchy`, and
+the old name is not harmlessly stale: `gh api` and flake fetches follow the
+redirect, so most things still work, but **`gh search` does not** — it refuses
+with *"the listed users and repositories cannot be searched"*. So a duplicate
+search against the old name does not quietly return nothing, it errors, and a
+reader skimming past it files the duplicate anyway. If a search here returns
+that message, check the repository name before concluding anything about the
+results.
 
 ## Gathering Diagnostics
 

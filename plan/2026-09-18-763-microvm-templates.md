@@ -556,6 +556,43 @@ boot proof and says so.
   values; the runner's `-m 4096`, `-smp 2` and `file=var-lib-rancher.img`
   were re-verified after the change. Folded into step 7's commit with the
   formatter's re-indent of the check file, per step 8.
+- **Step 4, a second commit (4b): the proxy could never resolve a name, and
+  `agent.nix` now makes it able to.** Tests §4's allowlist-positive case
+  failed on the first boot: every allowed host answered `500 Unable to
+  connect`, and tinyproxy's journal said `Could not retrieve address info
+  ...: Temporary failure in name resolution`. Proven pre-existing by booting
+  `github:olafkfreund/nixarchy/main#microvm-agent` (t763-agentmain) with
+  `example.com` in `allow-hosts`: same 500, same journal line. Root cause,
+  read from the evaluated guest: microvm.nix's `optimization.nix` sets
+  `networking.useNetworkd = true`; nixpkgs' `networkd.nix` then defaults
+  `services.resolved.enable = true`; the guest's nsswitch `hosts:` line is
+  `mymachines resolve [!UNAVAIL=return] files myhostname dns`, so every
+  lookup -- the proxy's included -- is made by systemd-resolved's uid and
+  dropped by the output chain (only uid 399 may use 53/udp). nscd would be
+  the same hole one step later (nsncd resolves as `nscd`). The fix keeps the
+  ruleset and the guarantee and moves resolution into the calling process:
+  `services.resolved.enable = false`, `services.nscd.enable = false`,
+  `system.nssModules = lib.mkForce [ ]` (NixOS requires it with nscd off),
+  `networking.nameservers = [ "10.0.2.3" ]` (SLiRP's fixed DNS forwarder,
+  the same on every VM of every template that keeps guest.nix's user
+  interface; with resolved off nothing else writes a nameserver). Rebooted
+  agent-claude: allowed hosts `200 Connection established`, an unlisted host
+  `403 Filtered`, `dev`'s own `getent ahosts` returns nothing, no failed
+  units. Not a nixarchy option, still plain NixOS; `agent` gains the same fix
+  since agent-claude imports it.
+- **Step 4b also: a non-hostname line in `allow-hosts` is skipped, not
+  compiled.** Tests §4's garbage case (`printf '\0\0garbage((\n'`) found
+  that bash's `read` drops the NULs and `garbage((` becomes an invalid regex,
+  on which tinyproxy refuses to start -- fail-closed, but the closure-side
+  defaults die with a single typo in the per-VM file, which is what the
+  defaults were for. The oneshot now skips a line containing anything
+  outside `[A-Za-z0-9.-]` and logs `allow-hosts: skipping '...' from <src>:
+  not a hostname` to the journal. Re-tested with `garbage((` plus
+  `example.com`: tinyproxy active, the skip line in the journal, all four
+  defaults and example.com allowed, nixos.org refused.
+- **Step 4b, cosmetic:** statix W20 asked for one `services = { ... }` block,
+  so `services.tinyproxy` moved inside it with the two new `enable = false`
+  lines; `{ lib, pkgs, ... }:` because of the `mkForce`.
 
 ### Test results
 

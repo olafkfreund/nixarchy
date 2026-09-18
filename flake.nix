@@ -146,7 +146,20 @@
     # no better than none here, so this stays the same situation sops-nix above
     # is in. Bump it deliberately; never track a branch.
     #
-    # 6d7a61b is nixi-nixarchy#15: nixi's mark is sparkles rather than the pixel
+    # 6b5878a is nixi-nixarchy#17: the missing-adapter message names the route a
+    # nixarchy user actually has. It used to say only "add pkgs.claude-agent-acp
+    # to your configuration", which works and is not what this distribution
+    # provides; it now names `services.nixi.agents`, says that is a Home Manager
+    # option, states the unfree prerequisite for Claude's adapter alone (measured:
+    # claude-agent-acp throws without unfree, codex-acp does not), and gives the
+    # sequence -- rebuild, THEN omarchy-restart-shell, because a rebuild does not
+    # reach a shell already running (#710).
+    #
+    # This is the runtime half of #741. The build-time half cannot exist: a
+    # Claude installed by mise into ~/.local/bin is recorded only in
+    # ~/.config/omarchy/defaults/agent, which no module can read.
+    #
+    # The previous pin, 6d7a61b, was nixi-nixarchy#15: nixi's mark is sparkles rather than the pixel
     # snowflake, on the bar button, the bar plugin's own description and the
     # Omarchy menu entry. The bar widget drops its QML Canvas for the glyph at
     # U+F0674, which is how omarchy's own bar indicators draw, so it picks up
@@ -162,7 +175,7 @@
     # literal name "claude". That still matters from #731 on and is carried
     # forward here; see that issue for the reasoning.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/6d7a61b9f3bbcf2f2d932a468a3ba01c1c76a59a";
+      url = "github:olafkfreund/nixi-nixarchy/6b5878a427e0bb007fa7c673b4786ad80bf270fd";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

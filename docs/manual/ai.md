@@ -213,9 +213,10 @@ here a rebuild sits in between, so it asks whether the command exists.
 
 ### If you installed Claude some other way
 
-Nixi's panel — the one `SUPER + H` opens — talks to an agent through an **ACP
-adapter**, a separate package from the agent's own CLI. nixarchy pins two of
-them on every machine, and the third conditionally:
+Nixi's panel — the one `SUPER + H` opens — talks to agents over **ACP**. Claude
+and Codex each need a separate adapter package for that; OpenCode speaks it
+itself. nixarchy pins what the first two agents need on every machine, and
+Claude's conditionally:
 
 | agent | what it needs | pinned |
 |---|---|---|

@@ -101,10 +101,14 @@ Under standalone Home Manager `osConfig` is null, so nothing is installed
 side, and `modeAInert` keeps covering the NixOS side.
 
 Installation reuses `programs.nixarchy.plugins`: validation
-(`home.nix:327-390`), symlink and reconcile (`:846-895`). One addition: the
-validation step asserts that `manifest.json`'s `id` equals the attribute name.
-Otherwise a pin that renames an id would pass validation and break every row
-that names it (Codex, finding 4).
+(`home.nix:327-390`), symlink and reconcile (`:846-895`). One addition: for
+the **default set only**, the validation step asserts that `manifest.json`'s
+`id` equals the attribute name. Otherwise a pin that renames an id would pass
+validation and break every row that names it (Codex, finding 4). It is not
+asserted for plugins a user declares, whose attribute names are free: the
+option installs under the manifest's own id (`home.nix:533`), and
+`tests/plugin.nix:146` declares `bar-toggle`. This was corrected while
+planning, and the correction was approved with the plan.
 
 ### D3 — one helper for rows and keys: `nixarchy-plugin`
 
@@ -249,7 +253,7 @@ only when `gh run list` shows no install in flight (§6).
 | `plugin` (VM) | fresh home, first login: resolved ids `enabled` in `omarchy-plugin-list --json`, widgets in `bar.layout.right` | hook exits before enabling |
 | `plugin` (VM) | pre-seeded user `shell.json`: the hook enables in a live session | write `shell.json` directly instead of IPC |
 | `plugin` (VM) | `omarchy plugin disable nixarchy.pkg`, then re-login: stays disabled | write the marker before the enable, or ignore it |
-| `plugin` (build) | a manifest id that differs from its attribute name fails validation | remove the id assertion |
+| `plugin` (build) | a **default** plugin whose manifest id differs from its attribute name fails validation | remove the id assertion |
 | `menu-verbs` | new scan: every `nixarchy-plugin <id>` in the menu is an installed manifest id; floor ≥ 2 | rename a row's id |
 | `box-template`, `box-boot` | retargeted as in D7 | point a template at an unpinned image; create via a store-path distrobox |
 

@@ -26,4 +26,10 @@
       autoCreate = true;
     }
   ];
+
+  # microvm.nix's default is 512 MiB (nixos-modules/microvm/options.nix), and
+  # guest.nix does not raise it. An image pull decompresses layers in memory
+  # and a build runs whatever the Dockerfile runs; 4 GiB is what stops
+  # either from being the thing that kills a VM whose point is containers.
+  microvm.mem = 4096;
 }

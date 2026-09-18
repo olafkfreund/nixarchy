@@ -48,7 +48,10 @@
 # `/mnt/host/allow-hosts`, one hostname per line, `#` comments allowed. No
 # file, or an empty one, means an empty filter -- which under
 # `FilterDefaultDeny` is deny-everything, the only safe way for this to fail.
-{ pkgs, ... }:
+# A template that imports this one may also ship a closure-side list at
+# `/etc/nixarchy-agent/allow-hosts` (agent-claude does), read first and
+# beyond the reach of anything in the VM's directory; this template ships none.
+{ lib, pkgs, ... }:
 let
   proxy = "http://127.0.0.1:8888";
 
@@ -68,29 +71,35 @@ in
     pkgs.curl
   ];
 
-  services.tinyproxy = {
-    enable = true;
-    settings = {
-      Listen = "127.0.0.1";
-      Port = 8888;
-      Allow = "127.0.0.1";
-      Timeout = 600;
-      # Filter is typed `nullOr path` upstream, and this string is an
-      # absolute path that is deliberately NOT a Nix path literal: a path
-      # literal would be copied into the store at build time, and the whole
-      # point is that this file is written at boot from the per-VM share.
-      Filter = filterFile;
-      # The line that makes this an allowlist rather than a blocklist. Without
-      # it a filter file matches hosts to REFUSE and everything else goes
-      # through, which is the opposite of what this template promises.
-      FilterDefaultDeny = true;
-      FilterExtended = true;
-      FilterCaseSensitive = false;
-      # CONNECT to 443 and nothing else. Without this, an allowed hostname is
-      # a tunnel to any port on that host, ssh included.
-      ConnectPort = 443;
-      LogLevel = "Connect";
+  services = {
+    tinyproxy = {
+      enable = true;
+      settings = {
+        Listen = "127.0.0.1";
+        Port = 8888;
+        Allow = "127.0.0.1";
+        Timeout = 600;
+        # Filter is typed `nullOr path` upstream, and this string is an
+        # absolute path that is deliberately NOT a Nix path literal: a path
+        # literal would be copied into the store at build time, and the whole
+        # point is that this file is written at boot from the per-VM share.
+        Filter = filterFile;
+        # The line that makes this an allowlist rather than a blocklist. Without
+        # it a filter file matches hosts to REFUSE and everything else goes
+        # through, which is the opposite of what this template promises.
+        FilterDefaultDeny = true;
+        FilterExtended = true;
+        FilterCaseSensitive = false;
+        # CONNECT to 443 and nothing else. Without this, an allowed hostname is
+        # a tunnel to any port on that host, ssh included.
+        ConnectPort = 443;
+        LogLevel = "Connect";
+      };
     };
+
+    # See the comment above networking.nameservers for why both are off.
+    resolved.enable = false;
+    nscd.enable = false;
   };
 
   users.users.tinyproxy.uid = proxyUid;
@@ -116,10 +125,26 @@ in
     script = ''
       install -d -m 0755 /run/nixarchy-agent
       : > ${filterFile}
-      if [ -r /mnt/host/allow-hosts ]; then
+      # Two sources, closure first. /etc/nixarchy-agent/allow-hosts is
+      # written by a template that imports this one (agent-claude) and so
+      # cannot be edited, emptied or deleted from the VM's directory:
+      # whatever it names is allowed on every VM of that template, and
+      # /mnt/host/allow-hosts only ever adds. This template writes no such
+      # file, so for `agent` the behaviour is unchanged.
+      for src in /etc/nixarchy-agent/allow-hosts /mnt/host/allow-hosts; do
+        [ -r "$src" ] || continue
         while read -r host; do
           case "$host" in
             "" | \#*) continue ;;
+            # Not a hostname, not a filter line. tinyproxy compiles every
+            # line as a regex and refuses to start on a bad one -- which is
+            # fail-closed, and also takes the closure-side defaults down
+            # with a single typo in the per-VM file. Skipped, and said so
+            # in the journal.
+            *[!A-Za-z0-9.-]*)
+              echo "allow-hosts: skipping '$host' from $src: not a hostname" >&2
+              continue
+              ;;
           esac
           # Anchored, with the dots escaped and one optional subdomain label
           # group: `github.com` allows api.github.com and refuses
@@ -127,8 +152,8 @@ in
           # character, which is how an allowlist silently becomes wider than
           # it reads.
           printf '^(.*\.)?%s$\n' "$(printf '%s' "$host" | sed 's/\./\\./g')" >> ${filterFile}
-        done < /mnt/host/allow-hosts
-      fi
+        done < "$src"
+      done
       chmod 0444 ${filterFile}
     '';
   };
@@ -145,6 +170,23 @@ in
     no_proxy = "localhost,127.0.0.1";
     NO_PROXY = "localhost,127.0.0.1";
   };
+
+  # Name resolution has to happen INSIDE tinyproxy's process, or the ruleset
+  # below drops it. microvm.nix's optimization module turns on networkd, and
+  # nixpkgs' networkd module then defaults systemd-resolved on, which puts
+  # `resolve` first in nsswitch's hosts line: every lookup, the proxy's
+  # included, is made by resolved's uid and refused at 53/udp -- measured as
+  # "Could not retrieve address info ... Temporary failure in name
+  # resolution" from tinyproxy on every CONNECT, on the `agent` runner main
+  # shipped. nscd is the same hole one step later (nsncd resolves as `nscd`),
+  # and NixOS requires the NSS module list to be empty when nscd is off. With
+  # both gone glibc resolves in the calling process: tinyproxy's lookups
+  # leave under its own uid, and anything else's are dropped, which is what
+  # the ruleset promised all along. 10.0.2.3 is SLiRP's own DNS forwarder,
+  # the same on every VM of every template that keeps guest.nix's user
+  # interface -- without resolved nothing else writes a nameserver.
+  system.nssModules = lib.mkForce [ ];
+  networking.nameservers = [ "10.0.2.3" ];
 
   networking.nftables = {
     enable = true;

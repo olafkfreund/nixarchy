@@ -67,6 +67,12 @@
     note = "Rootless-capable podman with Docker compatibility. /var/lib/containers is a 20 GiB volume that survives a restart; the rest of the root filesystem does not.";
   };
 
+  node = {
+    label = "Node";
+    module = ../modules/microvm/templates/node.nix;
+    note = "nodejs (LTS) and pnpm, 3 GiB of RAM. Ephemeral like Shell -- run 'pnpm install' inside /mnt/host if node_modules should outlive the VM.";
+  };
+
   # The one template whose point is what it CANNOT do. Note says so in the
   # same register as every other note here: what you get, and what it costs.
   agent = {
@@ -75,9 +81,24 @@
     note = "Shell plus git and curl, and an egress allowlist: nothing in the guest can reach the network except through a local proxy, which only permits the hosts named one per line in the VM's own 'allow-hosts' file. HTTPS only -- an ssh:// git remote does not pass.";
   };
 
+  # Agent, with the agents. The unfree one is the reason the note has a
+  # second sentence: what you get depends on whether the evaluation that
+  # built the runner allowed it.
+  agent-claude = {
+    label = "Agent (Claude)";
+    module = ../modules/microvm/templates/agent-claude.nix;
+    note = "Agent's egress fence with codex and opencode preinstalled, and api.anthropic.com, api.openai.com, github.com and codeload.github.com allowed without listing them; 'allow-hosts' adds to that. claude-code is included only when unfree is allowed -- NIXPKGS_ALLOW_UNFREE=1 before 'nixarchy vm run', or allowUnfree on a permanent machine -- and is never served by the public cache.";
+  };
+
   persistent = {
     label = "Persistent";
     module = ../modules/microvm/templates/persistent.nix;
     note = "Shell, plus /home on a 10 GiB volume. The volume goes when the VM does ('nixarchy vm rm'); the root filesystem is still thrown away every boot.";
+  };
+
+  k3s = {
+    label = "k3s";
+    module = ../modules/microvm/templates/k3s.nix;
+    note = "A single-node k3s server, 4 GiB of RAM and 2 vCPUs. /var/lib/rancher is a 20 GiB volume that survives a restart, so the cluster and its token do; traefik and servicelb are off, and the API is reachable only from inside the guest ('kubectl get nodes' at the console).";
   };
 }

@@ -35,6 +35,7 @@ let
   volumeImages = {
     podman = "var-lib-containers.img";
     persistent = "home.img";
+    k3s = "var-lib-rancher.img";
   };
 
   # The CLI as a machine built from a DIRTY checkout evaluates it: no
@@ -212,114 +213,139 @@ pkgs.runCommand "nixarchy-microvm-template"
       fi
     done
 
-    ${lib.optionalString (templates ? agent) ''
-      echo "== the agent template cannot reach what it was not allowed =="
+    ${lib.concatMapStrings (
+      name:
+      lib.optionalString (lib.hasPrefix "agent" name) ''
+        echo "== ${name}: cannot reach what it was not allowed =="
 
-      # Everything below reads the guest CLOSURE rather than the qemu command
-      # line: an egress policy lives inside the guest, so the assertions the
-      # rest of this file makes against bin/microvm-run cannot see any of it.
-      # Nothing here boots -- see the header for why that matters.
-      sys=$(readlink -f ${templates.agent.kvm}/share/microvm/system)
-      units=$sys/etc/systemd/system
+        # Everything below reads the guest CLOSURE rather than the qemu command
+        # line: an egress policy lives inside the guest, so the assertions the
+        # rest of this file makes against bin/microvm-run cannot see any of it.
+        # Nothing here boots -- see the header for why that matters.
+        sys=$(readlink -f ${templates.${name}.kvm}/share/microvm/system)
+        units=$sys/etc/systemd/system
 
-      for unit in nftables.service tinyproxy.service nixarchy-agent-allowlist.service; do
-        if [ ! -e "$units/$unit" ]; then
-          echo "agent: $unit is not in the guest closure -- the egress restriction is not there" >&2
+        for unit in nftables.service tinyproxy.service nixarchy-agent-allowlist.service; do
+          if [ ! -e "$units/$unit" ]; then
+            echo "${name}: $unit is not in the guest closure -- the egress restriction is not there" >&2
+            fail=1
+          fi
+        done
+
+        # The allowlist generator runs BEFORE tinyproxy, and tinyproxy does not
+        # start without it. tinyproxy reads its filter file once, at start: a
+        # tinyproxy that came up first would be enforcing the previous boot's
+        # allowlist, or none.
+        if [ ! -e "$units/tinyproxy.service.requires/nixarchy-agent-allowlist.service" ]; then
+          echo "${name}: tinyproxy does not require nixarchy-agent-allowlist -- it can start without an allowlist" >&2
+          fail=1
+        fi
+
+        rules=$(grep -oE '/nix/store/[a-z0-9]+-nftables-rules' "$units/nftables.service" | head -1)
+        if [ -z "$rules" ] || [ ! -r "$rules" ]; then
+          echo "${name}: could not find the nftables ruleset the guest loads at boot" >&2
+          fail=1
+        else
+          if ! grep -q 'table inet nixarchy-agent' "$rules"; then
+            echo "${name}: the guest's ruleset has no nixarchy-agent table" >&2
+            fail=1
+          fi
+          # The whole restriction in one line. Without `policy drop` this is an
+          # ordinary machine with some accept rules on it.
+          if ! grep -qE 'hook output .*policy drop' "$rules"; then
+            echo "${name}: the output chain does not default to drop -- egress is unrestricted" >&2
+            fail=1
+          fi
+
+          # And the accepts are all uid-qualified. An unqualified `dport 53
+          # accept` would hand every process in the guest a DNS socket, which is
+          # an exfiltration channel needing no allowed host at all -- and it
+          # would still LOOK like a locked-down ruleset.
+          bare=$(grep -vE '^[[:space:]]*#' "$rules" \
+            | grep -E 'dport[^#]*(53|80|443)' \
+            | grep -v skuid || true)
+          if [ -n "$bare" ]; then
+            echo "${name}: these ruleset lines accept traffic from any uid, not just the proxy's:" >&2
+            echo "$bare" >&2
+            fail=1
+          fi
+
+          # The uid in the ruleset is the uid tinyproxy actually gets. Dropping
+          # `users.users.tinyproxy.uid` is the quiet version of this bug: the
+          # rules still read correctly and permit a uid nothing runs as.
+          ruleUid=$(grep -oE 'skuid [0-9]+' "$rules" | head -1 | cut -d' ' -f2)
+          usersJson=$(grep -oE '/nix/store/[a-z0-9]+-users-groups.json' "$sys/activate" | head -1)
+          realUid=$(jq -r '.users[] | select(.name == "tinyproxy") | .uid' "$usersJson")
+          if [ "$ruleUid" != "$realUid" ]; then
+            echo "${name}: the ruleset permits uid '$ruleUid' and tinyproxy runs as uid '$realUid'" >&2
+            echo "-- the proxy cannot egress, so nothing in this guest can" >&2
+            fail=1
+          fi
+        fi
+
+        conf=$(grep -oE '\-c /nix/store/[^ ]+' "$units/tinyproxy.service" | head -1 | cut -d' ' -f2)
+        if [ -z "$conf" ] || [ ! -r "$conf" ]; then
+          echo "${name}: could not find tinyproxy's generated configuration" >&2
+          fail=1
+        else
+          # FilterDefaultDeny is what makes the filter file an ALLOWlist. Without
+          # it the same file names hosts to refuse and everything else goes
+          # through -- the exact inversion of what this template promises, with
+          # no other visible difference.
+          if ! grep -q '^FilterDefaultDeny yes' "$conf"; then
+            echo "${name}: tinyproxy has no FilterDefaultDeny -- the allowlist is a blocklist" >&2
+            fail=1
+          fi
+          # The filter is a runtime path, not a store path: the allowlist is
+          # per-VM (data/microvm-templates.nix's rule -- one closure serves every
+          # VM of a template), written at boot from /mnt/host/allow-hosts.
+          if ! grep -q '^Filter "/run/nixarchy-agent/allow.filter"' "$conf"; then
+            echo "${name}: tinyproxy's Filter is not the per-VM file written at boot:" >&2
+            grep '^Filter' "$conf" >&2 || echo "  (no Filter line at all)" >&2
+            fail=1
+          fi
+          if ! grep -q '^ConnectPort 443' "$conf"; then
+            echo "${name}: tinyproxy does not restrict CONNECT to 443 -- an allowed host is a tunnel to any port on it" >&2
+            fail=1
+          fi
+          if ! grep -q '^Listen 127.0.0.1' "$conf"; then
+            echo "${name}: tinyproxy does not listen on loopback only" >&2
+            fail=1
+          fi
+        fi
+
+        # And the guest tells its own processes where the proxy is, in both
+        # spellings -- a tool reading only the uppercase pair would otherwise get
+        # a dropped connection and no explanation.
+        for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; do
+          if ! grep -q "^export $var=\"http://127.0.0.1:8888\"" "$sys/etc/set-environment"; then
+            echo "${name}: the guest does not export $var -- nothing in it will find the proxy" >&2
+            fail=1
+          fi
+        done
+      ''
+    ) names}
+    ${lib.optionalString (templates ? agent-claude) ''
+      echo "== agent-claude: default hosts in the closure, nothing unfree in it =="
+      sys=$(readlink -f ${templates.agent-claude.kvm}/share/microvm/system)
+      for host in api.anthropic.com api.openai.com github.com codeload.github.com; do
+        if ! grep -qx "$host" "$sys/etc/nixarchy-agent/allow-hosts"; then
+          echo "agent-claude: $host is not in the closure-side allowlist" >&2
           fail=1
         fi
       done
-
-      # The allowlist generator runs BEFORE tinyproxy, and tinyproxy does not
-      # start without it. tinyproxy reads its filter file once, at start: a
-      # tinyproxy that came up first would be enforcing the previous boot's
-      # allowlist, or none.
-      if [ ! -e "$units/tinyproxy.service.requires/nixarchy-agent-allowlist.service" ]; then
-        echo "agent: tinyproxy does not require nixarchy-agent-allowlist -- it can start without an allowlist" >&2
-        fail=1
-      fi
-
-      rules=$(grep -oE '/nix/store/[a-z0-9]+-nftables-rules' "$units/nftables.service" | head -1)
-      if [ -z "$rules" ] || [ ! -r "$rules" ]; then
-        echo "agent: could not find the nftables ruleset the guest loads at boot" >&2
-        fail=1
-      else
-        if ! grep -q 'table inet nixarchy-agent' "$rules"; then
-          echo "agent: the guest's ruleset has no nixarchy-agent table" >&2
-          fail=1
-        fi
-        # The whole restriction in one line. Without `policy drop` this is an
-        # ordinary machine with some accept rules on it.
-        if ! grep -qE 'hook output .*policy drop' "$rules"; then
-          echo "agent: the output chain does not default to drop -- egress is unrestricted" >&2
-          fail=1
-        fi
-
-        # And the accepts are all uid-qualified. An unqualified `dport 53
-        # accept` would hand every process in the guest a DNS socket, which is
-        # an exfiltration channel needing no allowed host at all -- and it
-        # would still LOOK like a locked-down ruleset.
-        bare=$(grep -vE '^[[:space:]]*#' "$rules" \
-          | grep -E 'dport[^#]*(53|80|443)' \
-          | grep -v skuid || true)
-        if [ -n "$bare" ]; then
-          echo "agent: these ruleset lines accept traffic from any uid, not just the proxy's:" >&2
-          echo "$bare" >&2
-          fail=1
-        fi
-
-        # The uid in the ruleset is the uid tinyproxy actually gets. Dropping
-        # `users.users.tinyproxy.uid` is the quiet version of this bug: the
-        # rules still read correctly and permit a uid nothing runs as.
-        ruleUid=$(grep -oE 'skuid [0-9]+' "$rules" | head -1 | cut -d' ' -f2)
-        usersJson=$(grep -oE '/nix/store/[a-z0-9]+-users-groups.json' "$sys/activate" | head -1)
-        realUid=$(jq -r '.users[] | select(.name == "tinyproxy") | .uid' "$usersJson")
-        if [ "$ruleUid" != "$realUid" ]; then
-          echo "agent: the ruleset permits uid '$ruleUid' and tinyproxy runs as uid '$realUid'" >&2
-          echo "-- the proxy cannot egress, so nothing in this guest can" >&2
-          fail=1
-        fi
-      fi
-
-      conf=$(grep -oE '\-c /nix/store/[^ ]+' "$units/tinyproxy.service" | head -1 | cut -d' ' -f2)
-      if [ -z "$conf" ] || [ ! -r "$conf" ]; then
-        echo "agent: could not find tinyproxy's generated configuration" >&2
-        fail=1
-      else
-        # FilterDefaultDeny is what makes the filter file an ALLOWlist. Without
-        # it the same file names hosts to refuse and everything else goes
-        # through -- the exact inversion of what this template promises, with
-        # no other visible difference.
-        if ! grep -q '^FilterDefaultDeny yes' "$conf"; then
-          echo "agent: tinyproxy has no FilterDefaultDeny -- the allowlist is a blocklist" >&2
-          fail=1
-        fi
-        # The filter is a runtime path, not a store path: the allowlist is
-        # per-VM (data/microvm-templates.nix's rule -- one closure serves every
-        # VM of a template), written at boot from /mnt/host/allow-hosts.
-        if ! grep -q '^Filter "/run/nixarchy-agent/allow.filter"' "$conf"; then
-          echo "agent: tinyproxy's Filter is not the per-VM file written at boot:" >&2
-          grep '^Filter' "$conf" >&2 || echo "  (no Filter line at all)" >&2
-          fail=1
-        fi
-        if ! grep -q '^ConnectPort 443' "$conf"; then
-          echo "agent: tinyproxy does not restrict CONNECT to 443 -- an allowed host is a tunnel to any port on it" >&2
-          fail=1
-        fi
-        if ! grep -q '^Listen 127.0.0.1' "$conf"; then
-          echo "agent: tinyproxy does not listen on loopback only" >&2
-          fail=1
-        fi
-      fi
-
-      # And the guest tells its own processes where the proxy is, in both
-      # spellings -- a tool reading only the uppercase pair would otherwise get
-      # a dropped connection and no explanation.
-      for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; do
-        if ! grep -q "^export $var=\"http://127.0.0.1:8888\"" "$sys/etc/set-environment"; then
-          echo "agent: the guest does not export $var -- nothing in it will find the proxy" >&2
+      for bin in codex opencode; do
+        if [ ! -e "$sys/sw/bin/$bin" ]; then
+          echo "agent-claude: $bin is not on the guest's PATH" >&2
           fail=1
         fi
       done
+      # CI is a pure evaluation, so this is the public runner. A `claude`
+      # here means an unfree package is about to be pushed to a public cache.
+      if [ -e "$sys/sw/bin/claude" ]; then
+        echo "agent-claude: claude-code is in the runner CI builds -- it must never reach the public cache" >&2
+        fail=1
+      fi
     ''}
 
     echo "== nixarchy vm: launch and locking =="

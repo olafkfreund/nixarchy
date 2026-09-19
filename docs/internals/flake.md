@@ -431,6 +431,37 @@ its 71.0 MiB closure, `jq` and `iproute2` are already in the reference system.
    a **nixpkgs** bump too, since herdr can rename a subcommand from that side.
 5. Build `checks.options` and `checks.plugin`.
 
+### The Distrobox panel, wherever Boxes are (#766)
+
+```nix
+nixarchy-distrobox = {
+```
+
+The fifth default plugin, gated like distrobox itself on
+`programs.nixarchy.services.boxes.enable`. Its templates come from nixarchy:
+`boxes.nix` writes `data/box-templates.nix` to `/etc/nixarchy/box-templates.ini`
+as a `distrobox assemble` file, and modules/home.nix's `distroboxPanel` points
+the manifest's **default** `templatesFile` at it with `jq`. A path the user
+sets in Setup → Plugins still wins, and nothing writes `shell.json`.
+`checks.options` reads the pinned plugin's own accepted-key lists
+(`ASSEMBLE_BOOLS`, `ASSEMBLE_SINGLE`, `ASSEMBLE_CUMULATIVE` in `Model.js`) and
+fails if a template sets a key the panel refuses. The package ships its
+LICENSE. `nixarchy box` stays until the panel can promote and list (#801).
+
+Measured at f68ac27 (2026-09-19): the plugin output is **128 KiB**. The source
+tree on the ISO is **2.9 MiB**, mostly its docs site's screenshots.
+
+**Bumping the pin:**
+
+1. Pick the commit on `main` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-distrobox/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches
+   `nixarchy-distrobox` alone.
+3. The manifest id must still be `nixarchy.distrobox`, and
+   `.barWidget.defaults.templatesFile` must still be the setting's key.
+   `checks.options` fails if either moved.
+4. Build `checks.options` (the accepted-key read) and `checks.menu-verbs`.
+
 ### The MicroVMs panel, on by default (#766)
 
 ```nix

@@ -29,7 +29,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P |
 | [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H |
 | [MicroVMs](#microvms) | disposable and permanent VMs, one list | **on by default** | Trigger ▸ Sandbox · Super+Alt+V |
-| [Distrobox](#distrobox) | boxes, created from nixarchy's templates | coming | today: Trigger ▸ Boxes |
+| [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D |
 | [GitHub Actions](#github-actions) | workflow runs, jobs and steps | coming | — |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | coming | — |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
@@ -129,7 +129,6 @@ and `nixarchy vm` is still there in a terminal.
 ## Distrobox
 
 [nixarchy-distrobox](https://github.com/olafkfreund/nixarchy-distrobox) · [its own site](https://olafkfreund.github.io/nixarchy-distrobox/)
-· **coming**
 
 **What it solves.** [Boxes](boxes) are for software NixOS will not run, and
 looking after them meant remembering `distrobox` subcommands. A multi-minute
@@ -137,9 +136,9 @@ image pull or upgrade also tied up a terminal.
 
 **What it does.** Every box with its image and home directory. Enter one in a
 terminal; start, stop, restart, upgrade or delete it. Create a box from a form,
-and watch create and upgrade stream into the panel. It replaces the Boxes menu
-once it creates boxes from nixarchy's own templates. Until then, use
-**Trigger ▸ Boxes**.
+and watch create and upgrade stream into the panel. It is **Trigger ▸ Boxes**
+wherever [Boxes](boxes) are on, and its templates are nixarchy's own, from
+`/etc/nixarchy/box-templates.ini`.
 
 ![The Distrobox panel: two demo boxes, filtered to one](../img/plugins/distrobox.gif)
 

@@ -208,6 +208,13 @@
       flake = false;
     };
 
+    # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-distrobox = {
+      url = "github:olafkfreund/nixarchy-distrobox/f68ac276dc05cd06f053900d419e1fd6ff30eaff";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
@@ -896,6 +903,7 @@
           nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
           nixarchy-podman = inputs.nixarchy-podman.packages.${system}.default;
           nixarchy-microvm = inputs.nixarchy-microvm.packages.${system}.default;
+          nixarchy-distrobox = inputs.nixarchy-distrobox.packages.${system}.default;
 
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.

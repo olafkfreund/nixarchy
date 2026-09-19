@@ -17,7 +17,6 @@ let
   # The Podman panel's row, by the same rule: podman is on through the
   # Services row or through Boxes, and without it the row must not exist.
   podmanEnabled = cfg.enable && config.virtualisation.podman.enable;
-  boxTemplates = import ../data/box-templates.nix;
 
   # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
   appBinary =
@@ -655,49 +654,23 @@ let
           ];
         };
       }
-      // lib.optionalAttrs boxesEnabled (
-        {
-          # A new parent under Trigger, appended after upstream's own rows --
-          # the same precedent system.recovery above already set for this
-          # file (#542), and the one #226 set for sandboxes.
-          # `when` is the runtime half of the gate: whether podman is
-          # actually usable THIS login is only knowable now, not at rebuild
-          # time -- the Nix-level half is `boxesEnabled` just above, which
-          # keeps the row from existing at all when the feature is off.
-          "trigger.box" = {
-            icon = "󰆧";
-            label = "Boxes";
-            aliases = [
-              "box"
-              "distrobox"
-            ];
-            when = "nixarchy box --check";
-          };
-
-          "trigger.box.enter" = {
-            icon = "󰆍";
-            label = "Enter a box";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box enter";
-            description = "Pick a box you already have and get a shell in it";
-          };
-
-          "trigger.box.rm" = {
-            icon = "󰩹";
-            label = "Remove a box";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box rm";
-            description = "Pick a box and delete it";
-          };
-        }
-        // lib.mapAttrs' (
-          name: template:
-          lib.nameValuePair "trigger.box.create.${name}" {
-            icon = "󰐕";
-            label = "New: ${template.label}";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box create --template ${name}";
-            description = template.note;
-          }
-        ) boxTemplates
-      )
+      // lib.optionalAttrs boxesEnabled {
+        # The Boxes group is the Distrobox panel now (#766 PR D): it enters,
+        # removes and creates -- from nixarchy's own templates, which boxes.nix
+        # writes where the panel reads them. `nixarchy box` stays for the
+        # terminal until the panel can also promote and list (#801).
+        "trigger.box" = {
+          icon = "󰆧";
+          label = "Boxes";
+          aliases = [
+            "box"
+            "distrobox"
+          ];
+          action = "nixarchy-plugin nixarchy.distrobox";
+          when = "nixarchy-plugin --enabled nixarchy.distrobox";
+          description = "Your boxes, and new ones from a template · Super+Alt+D";
+        };
+      }
       // lib.optionalAttrs cfg.enable {
         # Why: modules/AGENTS.md#the-sandboxes-group-226
         # The panel is the Sandbox group now (#766): its five child rows are

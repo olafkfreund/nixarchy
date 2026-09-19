@@ -1950,6 +1950,7 @@ stdenvNoCC.mkDerivation {
                       'o.bind("SUPER + CTRL + ALT + P", "GitLab Pipelines keybindings", "python3 $HOME/.config/omarchy/plugins/olafkfreund.gitlab-pipelines/menu.py keys")' \
                       'o.bind("SUPER + ALT + H", "Herdr", "nixarchy-plugin nixarchy.herdr")' \
                       'o.bind("SUPER + ALT + V", "MicroVMs", "nixarchy-plugin nixarchy.microvm")' \
+                      'o.bind("SUPER + ALT + D", "Distrobox", "nixarchy-plugin nixarchy.distrobox")' \
                       >>"$binds"
 
                     runHook postInstall

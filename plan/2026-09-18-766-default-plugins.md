@@ -454,6 +454,18 @@ assemble syntax. Both templates use only `image`, `pull`, `replace=false` and
 `checks.box-template` and `checks.box-boot` are unchanged, because the CLI
 stays.
 
+**PR D deviations (made while implementing, 2026-09-19, on `feat/batch-766-800-772`):**
+- **Step 5: there was no box-specific floor to lower.** `menu-verbs` has one
+  shared `checked >= 12`, and it still holds (the box rows' verbs go, and the
+  count stays above 12). The plugin-row floor rises from 5 to 6 (Boxes).
+- **`boxTemplatesIni` is two halves:** an eval case, `boxTemplatesIniPresent`
+  (the file exists with Boxes on and not with them off), plus the runtime check
+  in the options builder. The runtime check compares the section count to the
+  catalogue and every key to the lists read out of the pinned `Model.js`.
+- **`trigger.box` has no fallback row,** unlike Sandbox (PR E): the step says
+  `when = nixarchy-plugin --enabled`, and `nixarchy box` stays in the terminal.
+- **`apps.nix` loses `boxTemplates`,** which only the removed create rows used.
+
 ## Outlines, in order
 
 - **C — podman.** Stepped above ("PR C — podman").

@@ -139,6 +139,7 @@ let
       gitlab = false;
       herdr = false;
       microvm = false;
+      distrobox = false;
     };
   };
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
@@ -859,6 +860,22 @@ let
         noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || defaultHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.herdr";
+    };
+    # #766 PR D: the Distrobox panel follows Boxes, like distrobox itself:
+    # on with Boxes, off without them, off standalone and when opted out.
+    distroboxIsADefault = {
+      on =
+        (homeOfBoxes boxesOn).programs.nixarchy.plugins ? "nixarchy.distrobox"
+        && hookLists "nixarchy.distrobox" (homeOfBoxes boxesOn);
+      off =
+        (homeOfBoxes boxesOff).programs.nixarchy.plugins ? "nixarchy.distrobox"
+        || fixtureStandalone.programs.nixarchy.plugins ? "nixarchy.distrobox"
+        || noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.distrobox";
+    };
+    # The templates file exists exactly where Boxes are (the panel reads it).
+    boxTemplatesIniPresent = {
+      on = boxesOn.environment.etc ? "nixarchy/box-templates.ini";
+      off = boxesOff.environment.etc ? "nixarchy/box-templates.ini";
     };
     # #766 PR E: the MicroVMs panel is a default wherever nixarchy is on, and
     # nowhere else: opted out, standalone or with nixarchy off, it is gone.
@@ -2229,6 +2246,11 @@ pkgs.runCommand "nixarchy-options"
     # that tells its menu.py nixarchy owns the rows, and the MIT notice.
     gitlabSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
+    # #766 PR D: the Distrobox panel nixarchy installs, and the templates file
+    # boxes.nix writes for it, both from the Boxes-on machine.
+    distroboxSrc = ((homeOfBoxes boxesOn).programs.nixarchy.defaultPluginSet.distrobox).src;
+    boxTemplatesIni = pkgs.writeText "box-templates.ini" boxesOn.environment.etc."nixarchy/box-templates.ini".text;
+    boxTemplateCount = builtins.length (builtins.attrNames (import ../data/box-templates.nix));
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
     herdrSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
@@ -4987,6 +5009,34 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "the GitLab panel carries menu.managed and its licence"
+
+        # ---- #766 PR D: distroboxTemplatesFile, boxTemplatesIni ----
+        # The panel's default templates file is the one boxes.nix writes, and a
+        # user's own path in Setup > Plugins still overrides it (a default only).
+        grep -q '"templatesFile": *"/etc/nixarchy/box-templates.ini"' "$distroboxSrc/manifest.json" || {
+          echo "distroboxTemplatesFile: the Distrobox panel does not default to /etc/nixarchy/box-templates.ini ($distroboxSrc)" >&2
+          exit 1
+        }
+        # One section per template, and every key one the pinned plugin's parser
+        # accepts -- read from its own Model.js, so a key it drops fails here.
+        sections=$(grep -c '^\[' "$boxTemplatesIni")
+        [ "$sections" = "$boxTemplateCount" ] || {
+          echo "boxTemplatesIni: $sections sections for $boxTemplateCount templates" >&2
+          exit 1
+        }
+        sed -n '/^var ASSEMBLE_\(BOOLS\|SINGLE\|CUMULATIVE\) *=/,/\]/p' "$distroboxSrc/Model.js" \
+          | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u > accepted-keys
+        [ "$(wc -l < accepted-keys)" -ge 10 ] || {
+          echo "boxTemplatesIni: read only $(wc -l < accepted-keys) accepted keys from the plugin's Model.js" >&2
+          exit 1
+        }
+        while read -r key; do
+          grep -qx -- "$key" accepted-keys || {
+            echo "boxTemplatesIni: a template sets '$key', which the Distrobox panel refuses" >&2
+            exit 1
+          }
+        done < <(grep -oE '^[a-z_]+=' "$boxTemplatesIni" | tr -d = | sort -u)
+        echo "the Distrobox panel reads nixarchy's templates: $sections sections, every key accepted"
 
         # ---- #771: herdrPackaged ----
         # Its scripts are run by path, and upstream's `#!/bin/bash` only works

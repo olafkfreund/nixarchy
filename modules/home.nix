@@ -273,6 +273,18 @@ let
     [ -f $out/LICENSE ] || cp ${inputs.nixarchy-gltui}/LICENSE $out/LICENSE
   '';
 
+  # The Distrobox panel as nixarchy installs it (#766 PR D): upstream's copy with
+  # its manifest's default templatesFile pointed at the file boxes.nix writes
+  # from data/box-templates.nix. A default, not a setting: a path the user sets
+  # in Setup > Plugins still wins, and nothing here writes shell.json.
+  distroboxPanel = pkgs.runCommand "nixarchy-distrobox" { nativeBuildInputs = [ pkgs.jq ]; } ''
+    cp -r ${inputs.nixarchy-distrobox.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    jq '.barWidget.defaults.templatesFile = "/etc/nixarchy/box-templates.ini"' \
+      $out/manifest.json > manifest.json
+    mv manifest.json $out/manifest.json
+  '';
+
   # The herdr sessions widget as nixarchy installs it (#771). Upstream has no
   # flake, so this is the package: the plugin without its design documents, and
   # its scripts' `#!/bin/bash` pointed into the store -- they run by path, and
@@ -1549,6 +1561,13 @@ in
             pkgs.jq
             pkgs.iproute2
           ];
+        };
+        # The Distrobox panel wherever Boxes are on, which is also where
+        # distrobox itself and the templates file are (#766 PR D).
+        distrobox = {
+          id = "nixarchy.distrobox";
+          src = distroboxPanel;
+          gate = osConfig.programs.nixarchy.services.boxes.enable or false;
         };
         # The MicroVMs panel, on wherever nixarchy is: gated like the Sandbox
         # rows it replaces, whose `nixarchy-vm --check` always succeeds (#766).

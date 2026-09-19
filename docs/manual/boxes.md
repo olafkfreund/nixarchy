@@ -84,9 +84,22 @@ nixarchy box enter dev
 
 ![nixarchy box templates listing archlinux and debian, box create pulling the Arch image with podman, distrobox enter, /etc/os-release answering Arch Linux, pacman installing fastfetch inside the box, and fastfetch printing "OS: Arch Linux x86_64" with "WM: Hyprland (Wayland)"](../img/features/boxes.gif)
 
-`nixarchy box` is also reachable from the menu -- `Trigger ▸ Boxes`, or
-search for "box" or "distrobox" -- as one row per template, plus "Enter a
-box" and "Remove a box", which prompt for which one.
+**`Trigger ▸ Boxes` opens the Distrobox panel** (Super+Alt+D on a new
+install; search "box" or "distrobox"). It lists every box, enters one in a
+terminal, starts, stops, upgrades and deletes them, and creates new ones from
+a form. Its **Start from** list is these same templates: nixarchy writes them
+to `/etc/nixarchy/box-templates.ini`, and the panel reads that file by
+default. Two things to know:
+- A templates file of your own, `~/.config/distrobox/boxes.ini`, is no longer
+  read unless you point the panel's **Your templates** setting at it (Setup →
+  Plugins). The panel reads one file.
+- The panel refuses `exported_apps` and `exported_bins`, which run commands
+  inside the box. A template that needs them still works through
+  `nixarchy box create`.
+
+`nixarchy box` stays for the terminal, and for `promote`, which the panel
+cannot do yet (#801). `programs.nixarchy.defaultPlugins.distrobox = false`
+stops nixarchy installing the panel.
 
 Templates are distrobox's own `distrobox-assemble` INI, verbatim: `image`,
 and whatever else the template needs -- `additional_packages`, `init_hooks`,

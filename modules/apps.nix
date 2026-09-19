@@ -369,6 +369,28 @@ let
           description = "All pipeline panel controls · Super+Ctrl+Alt+P";
         };
 
+        # The herdr sessions widget (#771): its sessions in the bar, and the
+        # sheet of keys that only exist while its menu has the keyboard.
+        "apps.herdr" = {
+          icon = "";
+          label = "Herdr";
+          action = "nixarchy-plugin nixarchy.herdr";
+          when = "nixarchy-plugin --enabled nixarchy.herdr";
+          aliases = [
+            "herdr"
+            "sessions"
+            "agents"
+          ];
+          description = "Your herdr sessions and their agents · Super+Alt+H";
+        };
+        "learn.herdr-keybindings" = {
+          icon = "";
+          label = "Herdr keybindings";
+          action = "$HOME/.config/omarchy/plugins/nixarchy.herdr/bin/herdr-menu-keys";
+          when = "nixarchy-plugin --enabled nixarchy.herdr";
+          description = "The keys of the herdr sessions menu";
+        };
+
         # The Secrets group (#611). A new parent with no action of its own,
         # which is legitimate for a submenu -- Menu.qml renders the children.
         # Every row here is a new id upstream does not ship, so every one of

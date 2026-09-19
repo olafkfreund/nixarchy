@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 783
 spec: spec/2026-09-19-783-plugin-layout-wait.md
 ---

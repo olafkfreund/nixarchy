@@ -3168,17 +3168,20 @@ in
                 # that anything is happening. It is also the smaller closure of
                 # the two, by about 200 MiB.
                 pkgs.nh
+                # systemd-run and systemctl, for --detach (#765).
+                pkgs.systemd
               ];
               text = ''
                 # The two answers as flags, for a caller with no terminal (#765).
                 # Anything else exits 2: an unknown flag must never mean "switch".
-                yes="" nopreview=""
+                yes="" nopreview="" detach=""
                 while [ $# -gt 0 ]; do
                   case "$1" in
                     --yes) yes=1 ;;
                     --no-preview) nopreview=1 ;;
+                    --detach) detach=1 ;;
                     *)
-                      echo "usage: nixarchy-apply [--yes] [--no-preview]" >&2
+                      echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
                       exit 2
                       ;;
                   esac
@@ -3187,6 +3190,43 @@ in
 
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                 flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
+
+                # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+                # A supervised user unit, so a closed window or a shell restart
+                # cannot kill a switch halfway; its state and log are the unit's.
+                if [ -n "$detach" ]; then
+                  [ -n "$yes" ] || {
+                    echo "nixarchy-apply: --detach needs --yes: a unit has no terminal to answer" >&2
+                    exit 2
+                  }
+                  # SubState, not ActiveState: RemainAfterExit keeps a finished
+                  # rebuild "active" (SubState exited) so its result stays readable.
+                  case "$(systemctl --user show -p SubState --value nixarchy-rebuild 2>/dev/null || true)" in
+                    running | start*)
+                      echo "nixarchy-apply: a rebuild is already running." >&2
+                      echo "  Follow it with: journalctl --user -fu nixarchy-rebuild" >&2
+                      exit 3
+                      ;;
+                    "" | dead) ;;
+                    *)
+                      systemctl --user stop nixarchy-rebuild 2>/dev/null || true
+                      systemctl --user reset-failed nixarchy-rebuild 2>/dev/null || true
+                      ;;
+                  esac
+                  # No NoNewPrivileges: elevation goes through the setuid pkexec.
+                  # Rate limit off: a build log is bursty, and it is the log a
+                  # failure needs. No --collect: it unloads a FAILED unit at once,
+                  # which then reads Result=success -- the one result that matters.
+                  systemd-run --user --unit=nixarchy-rebuild \
+                    -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
+                    --setenv=NIXARCHY_FLAKE="$flake" \
+                    --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
+                    --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
+                    -- "$(readlink -f "$0")" --yes --no-preview
+                  echo "Rebuilding in the background. Follow it with:"
+                  echo "  journalctl --user -fu nixarchy-rebuild"
+                  exit 0
+                fi
 
                 # Why: modules/AGENTS.md#where-the-selection-lands
                 base="$flake"
@@ -3397,7 +3437,10 @@ in
                     rc=0
                     # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
                     export NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}"
-                    nh os switch "$flake" || rc=$?
+                    # nom draws with escape codes, unreadable in a journal or a pipe.
+                    nomflag=""
+                    [ -t 1 ] || nomflag=--no-nom
+                    nh os switch ''${nomflag:+"$nomflag"} "$flake" || rc=$?
                     if [ "$rc" -ne 0 ]; then
                       # The selection stays copied, so every later apply or update
                       # fails the same way until the cause is taken out. No claim

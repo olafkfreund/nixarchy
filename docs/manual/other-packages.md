@@ -35,6 +35,13 @@ For scripts and panels with no terminal, `nixarchy apply --yes --no-preview`
 answers both questions: switch, and skip the VM preview. With no flags and no
 terminal it declines to switch.
 
+`nixarchy apply --detach --yes` runs the rebuild in the background, as the user
+service `nixarchy-rebuild`, so closing the window doesn't stop it. Follow it
+with `journalctl --user -fu nixarchy-rebuild`. The password still comes up in
+the same dialog. A second detached rebuild is refused while one is running.
+Once its log says "Activating", let it finish: stopping it then can leave the
+system partly changed.
+
 ## Finding it in the first place
 
 _Install > Packages_ (Super+Alt+N on a new install) is the same work in a

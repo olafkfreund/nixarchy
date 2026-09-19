@@ -137,11 +137,13 @@ let
     programs.nixarchy.defaultPlugins = {
       pkg = false;
       gitlab = false;
+      github = false;
       herdr = false;
       microvm = false;
       distrobox = false;
     };
   };
+  hasGh = h: builtins.any (p: (p.pname or "") == "gh") h.home.packages;
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
 
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
@@ -849,6 +851,22 @@ let
         defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines"
         && hookLists "olafkfreund.gitlab-pipelines" defaultHomeOn;
       off = noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines";
+    };
+    # #772: the GitHub Actions panel is a default wherever nixarchy is on, and
+    # nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    githubIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.github-actions"
+        && hookLists "olafkfreund.github-actions" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.github-actions"
+        || defaultHome.programs.nixarchy.plugins ? "olafkfreund.github-actions"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "olafkfreund.github-actions";
+    };
+    # Its CLI comes with it, and only where it resolves.
+    githubPackages = {
+      on = hasGh defaultHomeOn;
+      off = hasGh noDefaultsHome || hasGh defaultHome;
     };
     # #771: the herdr sessions widget is a default wherever nixarchy is on,
     # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
@@ -2245,6 +2263,9 @@ pkgs.runCommand "nixarchy-options"
     # that tells its menu.py nixarchy owns the rows, and the MIT notice.
     gitlabSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
+    # #772: the same, for the GitHub Actions panel.
+    githubSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.github or { src = "/nonexistent"; }).src;
     # #766 PR D: the Distrobox panel nixarchy installs, and the templates file
     # boxes.nix writes for it, both from the Boxes-on machine.
     distroboxSrc = (homeOfBoxes boxesOn).programs.nixarchy.defaultPluginSet.distrobox.src;
@@ -5010,6 +5031,15 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "the GitLab panel carries menu.managed and its licence"
+
+        # ---- #772: githubMenuManaged ----
+        for f in menu.managed LICENSE; do
+          [ -f "$githubSrc/$f" ] || {
+            echo "githubMenuManaged: the GitHub panel nixarchy installs has no $f ($githubSrc)" >&2
+            exit 1
+          }
+        done
+        echo "the GitHub panel carries menu.managed and its licence"
 
         # ---- #766 PR D: distroboxTemplatesFile, boxTemplatesIni ----
         # The panel's default templates file is the one boxes.nix writes, and a

@@ -56,6 +56,13 @@ seed-bind `printf` list. So:
 - rebase the batch branch onto `origin/main` before pushing (§9), and never
   merge `main` in (§8).
 
+*Deviation, made during implementation:* the batch branch merged as #803
+before this started, so #772 is its own PR, based on `main` at `8d9733e`,
+which already carries PR D, PR E and #800's entries in every shared block.
+Each step adds to those blocks, as planned. `tests/plugin.nix`'s `machine` node
+also gets `github = false`, as #770 did for `gitlab`, to keep its empty plugin
+directory.
+
 ## Steps
 
 Rules for every step:

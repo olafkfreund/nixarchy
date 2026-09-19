@@ -61,3 +61,11 @@ saved. No host switch is involved.
 
 Approval source: the user's explicit approval of all #788 stages and work;
 record this plan's approval in its own commit before implementation.
+
+## Execution adjustment
+
+The coordinating agent directed that a duplicate local box-boot VM is not
+needed after proving the old and new Arch output paths identical and passing
+box-template. Existing CI still runs box-boot. Public cache publication stays
+main-only; the pre-merge cold-store proof uses a local binary cache and must
+not be described as proof that nixarchy.cachix.org already serves the image.

@@ -364,6 +364,37 @@ manifest.
 **`master`**, not `main`, and the id to confirm in step 3 is
 `nixarchy.podman`.
 
+### The GitLab pipelines panel, on by default (#770)
+
+```nix
+nixarchy-gltui = {
+```
+
+Another of nixarchy's own default plugins, for the same reasons as
+nixarchy-pkg above: same maintainer, its own cadence and checks, and
+`follows` because it is QML plus python with nothing to build. modules/home.nix
+installs nixarchy's copy rather than upstream's output as-is: a `runCommand`
+that adds `menu.managed` (nixarchy declares the menu rows) and takes the MIT
+`LICENSE` from the source tree, because upstream's package leaves it out.
+
+Measured at 0b827c6 (2026-09-19): the plugin output is **58 KiB**, and the
+source tree `lib.inputSources` carries onto the ISO is **208 KiB**. Its
+runtime tools cost more: `glab` is **49.9 MiB** (its 88.6 MiB closure is
+otherwise glibc and friends every system already has), and `python3` and
+`xdg-utils` are already in the reference closure.
+
+**Bumping the pin**, as for nixarchy-pkg:
+
+1. Pick the commit on `main` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-gltui/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches `nixarchy-gltui`
+   alone.
+3. The manifest id must still be `olafkfreund.gitlab-pipelines`; the build
+   fails if not.
+4. If upstream's `menu.py` changed how it decides to `register`, re-read it:
+   `menu.managed` only works if it still checks for that file.
+5. Build `checks.options`, `checks.menu-verbs` and `checks.plugin`.
+
 <a id="221-222"></a>
 ### #221/#222
 

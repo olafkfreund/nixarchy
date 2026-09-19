@@ -927,6 +927,15 @@ How, and why this way:
   default by id, so the build fails if a pin's manifest id stops matching.
   Plugins you declare keep free attribute names (the option installs under
   the manifest's id).
+- **A default brings its own tools (#770).** `defaultPluginSet.<name>.packages`
+  goes into `home.packages` from `resolvedDefaults`, so it follows the
+  plugin's gate exactly and Mode A installs nothing. It is for the CLIs a
+  plugin shells out to (`glab` for the GitLab panel). Services, credentials
+  and MCP registration are not fields here; they get their own options.
+- **A panel needs no placement.** The hook always passes `right`, and
+  upstream's `setEnabled` (`PluginRegistry.qml:486-489`) reads it only for
+  `bar-widget` kinds, so a `panel` lands in `plugins[]`. checks.plugin's
+  panel fixture holds that.
 - **Rows and binds call `nixarchy-plugin <id>`, not `omarchy-shell shell
   toggle`.** A toggle for an installed but disabled plugin exits 0 and does
   nothing. The helper checks shell.json first and names where to turn the

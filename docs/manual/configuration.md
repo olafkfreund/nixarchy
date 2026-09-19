@@ -169,6 +169,11 @@ the Podman panel, follows podman rather than nixarchy: it comes with the Podman
 service row or with boxes, opens from **Apps ▸ Podman** or **Super+Alt+O**, and
 is absent where podman is off (the key then says the panel is not installed).
 
+The GitLab pipelines panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui))
+is the same: installed with `glab`, on at your first login, opened from
+**Apps ▸ GitLab Pipelines** or **Super+Alt+P** (its keys: **Super+Ctrl+Alt+P**).
+It needs `glab auth login` once; until then it says so and stops polling.
+
 "Once" is the point. A marker in `~/.local/state/nixarchy/enabled-once/` records
 that it was turned on, so if you turn it off in Setup → Plugins it stays off. To
 stop nixarchy installing one at all:
@@ -176,6 +181,7 @@ stop nixarchy installing one at all:
 ```nix
 programs.nixarchy.defaultPlugins.pkg = false;
 programs.nixarchy.defaultPlugins.podman = false;
+programs.nixarchy.defaultPlugins.gitlab = false;
 ```
 
 That never edits your `shell.json`, so a plugin you already have on stays on

@@ -443,6 +443,7 @@ basename is what it stores.
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Install ▸ Packages** | the same catalogue in a panel ([nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg)): search, add, draft and apply without a terminal. **On by default**, Super+Alt+N on a new install; `programs.nixarchy.defaultPlugins.pkg = false` removes it |
+| **Apps ▸ GitLab Pipelines** | project pipelines, stages and jobs in a panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui)), with `glab`. **On by default**, Super+Alt+P on a new install; `programs.nixarchy.defaultPlugins.gitlab = false` removes it |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |

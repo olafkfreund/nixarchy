@@ -509,6 +509,11 @@ the five ship in one release, so all five are in the one #762 PR.
    exists, then `stop` and wait for the unit to go. Nightly only, so a PR cannot
    see a real detach. That hole is written into `tests/AGENTS.md` (§3), not
    papered over.
+    *Deviation, made while implementing #762:* not done. That host has no
+    session user (`user = null`, `tests/microvm-boot.nix:73`), so no `systemd
+    --user`, and no network for `run`'s `nix build github:...`. A real detach
+    there needs a redesign of the test, not a step. The hole is recorded in
+    `tests/AGENTS.md` as uncovered, nightly included, with the by-hand check.
 10. `docs/manual/sandboxes.md`: the new verbs, the detach key and the JSON shapes
     as a stable contract ("fields are only ever added").
 

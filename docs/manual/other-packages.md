@@ -31,6 +31,10 @@ administrator prompt, once per switch, rather than in the terminal. Over SSH
 or on a text console it asks as text instead. To get the old sudo prompt for
 one run, use `NH_ELEVATION_STRATEGY=auto nixarchy apply`.
 
+For scripts and panels with no terminal, `nixarchy apply --yes --no-preview`
+answers both questions: switch, and skip the VM preview. With no flags and no
+terminal it declines to switch.
+
 ## Finding it in the first place
 
 _Install > Packages_ (Super+Alt+N on a new install) is the same work in a

@@ -381,6 +381,22 @@ let
           ];
           description = "Repository workflow runs, jobs and steps · Super+Alt+A";
         };
+        # The Dev environments panel (#802), wherever the devenv service is
+        # on. The helper rather than a bare toggle, and `when` hides the row
+        # once the panel is turned off, as for every other plugin row.
+        "apps.devenv" = {
+          icon = "󱄅";
+          label = "Dev environments";
+          action = "nixarchy-plugin nixarchy.devenv";
+          when = "nixarchy-plugin --enabled nixarchy.devenv";
+          aliases = [
+            "devenv"
+            "environments"
+            "projects"
+            "dev shell"
+          ];
+          description = "List, create, enter and manage devenv projects · Super+Alt+E";
+        };
         "learn.github-actions-keybindings" = {
           icon = "";
           label = "GitHub Actions keybindings";

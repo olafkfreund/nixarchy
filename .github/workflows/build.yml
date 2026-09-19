@@ -1309,6 +1309,8 @@ jobs:
       # gap they exist to close stayed open a second time.
       - name: Check every option both ways
         if: needs.gate.outputs.relevant == 'true'
+        env:
+          NIX_SHOW_STATS: "1"
         # Evaluated, not booted -- each option here does its work by putting a
         # package in a list, so evaluation is where the answer is. Not cheap
         # though, and the expensive axis is MEMORY: a developer machine

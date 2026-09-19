@@ -457,6 +457,29 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("test \"$(stat -c %U /tmp/unit-pkexec-ok)\" = root", timeout=60)
     print("pkexec from a user unit reaches the Omarchy polkit dialog")
 
+    # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
+    # Not a real switch: this VM is offline and cannot evaluate its flake. A
+    # detach at a missing flake still proves the unit, its kept result and its
+    # journal; a real unit of the same name proves the refusal.
+    def as_user(cmd):
+        return ("su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus " + cmd + "'")
+    machine.succeed(as_user("NIXARCHY_FLAKE=/nonexistent nixarchy-apply --detach --yes"))
+    machine.wait_until_succeeds(
+        as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),
+        timeout=60)
+    machine.succeed(
+        "journalctl -b _SYSTEMD_USER_UNIT=nixarchy-rebuild.service --no-pager"
+        " | grep -q 'does not exist'")
+    print("a detached apply runs as nixarchy-rebuild, keeps its result, and logs to the journal")
+    machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
+    machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+    machine.succeed(as_user("systemd-run --user --unit=nixarchy-rebuild --collect sleep 300"))
+    busy = machine.execute(as_user("NIXARCHY_FLAKE=/nonexistent nixarchy-apply --detach --yes"))[0]
+    assert busy == 3, f"a detach while nixarchy-rebuild runs exited {busy}, want 3"
+    machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+    print("a second detached apply is refused while one runs")
+
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it
     # reads it as `2>/dev/null` with a fallback: with no UPower the call fails

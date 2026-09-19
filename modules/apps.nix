@@ -3232,8 +3232,9 @@ in
                   esac
                   # No NoNewPrivileges: elevation goes through the setuid pkexec.
                   # Rate limit off: a build log is bursty, and it is the log a
-                  # failure needs.
-                  systemd-run --user --unit=nixarchy-rebuild --collect \
+                  # failure needs. No --collect: it unloads a FAILED unit at once,
+                  # which then reads Result=success -- the one result that matters.
+                  systemd-run --user --unit=nixarchy-rebuild \
                     -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
                     --setenv=NIXARCHY_FLAKE="$flake" \
                     --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \

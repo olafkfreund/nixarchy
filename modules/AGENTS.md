@@ -2055,3 +2055,13 @@ changed until it was told.
   second prompt -- the same shape as sudo's timestamp.
 - **Without a graphical session** (SSH, a text console) pkexec's own text
   agent prompts, as sudo did. With no agent and no tty it fails, as sudo does.
+- **`--detach` runs it as the user unit `nixarchy-rebuild`** (#765 PR 3), so
+  a closed window or a restarted shell can't kill a rebuild halfway. The PR's
+  first check proved pkexec from a user unit still reaches this agent.
+  - **No `--collect`:** it unloads a *failed* unit at once, which then reads
+    `Result=success`.
+  - **Rate limiting off:** a build log is bursty, and dropped lines are the
+    ones a failure needs.
+  - **No cancel verb:** SIGTERM to nh can land mid-activation. Don't stop the
+    unit by hand once its log says "Activating"; PR 5 decides whether a panel
+    offers cancel, and only during the build.

@@ -179,7 +179,7 @@ pkgs.runCommand "nixarchy-apply-staging"
     if [ "$rc" -eq 0 ] && ! calls \
       && grep -q -- "--unit=nixarchy-rebuild" "$sdcalls" 2>/dev/null \
       && grep -q -- "RemainAfterExit=yes" "$sdcalls" \
-      && grep -q -- "--collect" "$sdcalls" \
+      && ! grep -q -- "--collect" "$sdcalls" \
       && grep -q -- "--yes --no-preview" "$sdcalls"; then
       ok "--detach --yes starts the nixarchy-rebuild unit and does not rebuild in-process"
     else

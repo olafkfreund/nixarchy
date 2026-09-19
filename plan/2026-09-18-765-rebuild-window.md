@@ -454,6 +454,28 @@ Revert the PR. `--detach` goes away, and nothing yet depends on it (PR 5 is
 its first user). A unit left over from a run survives until logout, or until
 it is stopped by hand. It holds no state beyond its log.
 
+### Deviations found while implementing PR 3
+
+- **No `--collect`.** It was measured on a real systemd user manager before
+  shipping. With `--collect`, a unit that fails is unloaded at once and then
+  reports `LoadState=not-found … Result=success`. Without it, the unit stays
+  `failed`, `Result=exit-code`, and `reset-failed` clears it. A success stays
+  loaded either way, because of `RemainAfterExit`. So the unit is started
+  without `--collect`, and the "clear a finished unit" step (already `stop`
+  plus `reset-failed`) covers both outcomes. Case (e) now asserts that
+  `--collect` is **absent**, so bringing it back fails the check.
+- **Step 4 runs against real systemd, without a real rebuild.** The session VM
+  is offline and cannot evaluate its own flake, so a successful detached
+  rebuild can't be staged there. Instead:
+  - a detach at a missing flake proves the unit is created, keeps
+    `Result=exit-code`, and logs to the journal;
+  - a real unit of the same name (a `sleep`) proves a second detach exits 3.
+  A successful detached rebuild is the by-hand check on real hardware, and the
+  gap is recorded in `tests/AGENTS.md` (§3).
+- **Case (h) could not fail on the old script**, since `--detach` was an
+  unknown flag and exited 2 anyway. It was proven instead by removing the new
+  "needs `--yes`" guard, which it then catches ("exited 0 (want 2)").
+
 ## Later PRs (outline; each is stepped when reached)
 
 3. *(Stepped above: "PR 3 — draft, awaiting approval".)*

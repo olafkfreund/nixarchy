@@ -160,6 +160,21 @@ a redesign. A detached VM that stops starting is found by hand, on real
 hardware: `nixarchy vm run --detach <n>`, then `nixarchy vm list --json`
 shows `running: true`, and `nixarchy vm console <n>` attaches.
 
+## A detached rebuild is proven failing, never succeeding
+
+`checks.session` runs `nixarchy-apply --detach --yes` against **real**
+systemd, but aims it at a missing flake. The session VM is offline and can't
+evaluate its own flake, so a rebuild that *succeeds* inside a detached unit
+can't be staged there. What the check does prove:
+- the unit exists;
+- it keeps `Result=exit-code`;
+- its output reaches the journal;
+- a second detach is refused while one runs.
+
+What only a person can prove: `nixarchy apply --detach --yes` on real
+hardware, then `journalctl --user -fu nixarchy-rebuild` shows the build, the
+dialog asks once, and the unit ends `Result=success`.
+
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
 The network reinstall image (#483) is only honest for a closure the caches

@@ -179,6 +179,19 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The package manager panel that ships on by default (#766): search, add,
+    # draft and apply packages, services and options from the shell instead of
+    # a terminal. An input for nixi's reasons above -- same maintainer, its own
+    # release cadence and checks -- and `follows` for the same one: it is QML
+    # and a bash adapter, nothing to build, no cache to forfeit.
+    #
+    # Pinned to a COMMIT on main; the repo has no tags. Bump it the way
+    # docs/internals/flake.md says, never by tracking the branch.
+    nixarchy-pkg = {
+      url = "github:olafkfreund/nixarchy-pkg/dd937f2cb289e81c51a7358152835879ef47bf96";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #
@@ -819,6 +832,11 @@
           # alone gives a server nothing starts. It reaches users through
           # modules/home.nix instead.
           nixi = inputs.nixi.packages.${system}.nixi;
+
+          # Re-exported for the same reasons as nixi: `nix build .#nixarchy-pkg`
+          # works, and it is built against our nixpkgs through the `follows`.
+          # modules/home.nix names it as a default plugin (#766).
+          nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
 
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.

@@ -1475,6 +1475,12 @@ in
           ''
         );
 
+    # The package manager panel, on wherever nixarchy is (#766).
+    programs.nixarchy.defaultPluginSet.pkg = {
+      id = "nixarchy.pkg";
+      src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    };
+
     # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
     programs.nixarchy.plugins = lib.mapAttrs' (
       _: p: lib.nameValuePair p.id { src = lib.mkDefault p.src; }

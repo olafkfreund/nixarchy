@@ -2536,7 +2536,7 @@ pkgs.runCommand "nixarchy-options"
             done
             # The animation is invisible to the scrape above: the script names
             # its frames by building the string, Image("frame-" + i + ".png"),
-            # so sed sees nothing to pull out and 33 files could go missing
+            # so sed sees nothing to pull out and 31 files could go missing
             # without a word. What the script declares and what the theme ships
             # are checked against each other instead.
             frames=$(sed -n 's/^global\.frame_count = \([0-9]*\);.*/\1/p' \

@@ -17,7 +17,7 @@ terminal emulation to render -- ImageMagick can set it as a label. And the
 virtual clock is what makes the build reproducible: the same seed gives the
 same frames on a fast machine and a slow one.
 
-Frames are kept one in every STEP, because 128 of them is more animation than a
+Frames are kept one in every STEP, because 119 of them is more animation than a
 boot has time for and more images than the initrd wants to carry. The theme
 script plays what is kept at a matching rate; the two numbers are related and
 neither is free to change alone.

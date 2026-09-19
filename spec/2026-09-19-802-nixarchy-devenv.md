@@ -8,20 +8,20 @@ intent: intent/2026-09-19-802-nixarchy-devenv.md
 
 ## Design
 
-### Blocked until the plugin is on its `main`
+### The pin, now unblocked
 
 nixarchy pins the plugin by commit, following the nixi precedent: commit pin,
-`inputs.nixpkgs.follows = "nixpkgs"`. The plugin's code currently lives only on
-`feat/1-devenv-plugin` (head `2f9299b`), and olafkfreund/nixarchy-devenv#1 is
-open. **A PR for #802 is merge-ready only when:**
-- nixarchy-devenv#1 has merged to its `main`;
-- the pin is a commit on that `main`;
-- the pinned plugin still exposes what this design uses: `packages.plugin`,
-  `packages.cli`, `apps.templates-check`, and template ids that include the
-  eight former presets.
+`inputs.nixpkgs.follows = "nixpkgs"`.
 
-Implementation can start against the feature-branch commit, but the pin moves
-before merge.
+**The condition this spec was written under is met.** olafkfreund/nixarchy-devenv#1
+merged on 2026-09-19, and its `main` is **`e003f00`**, which is the pin. Checked
+against that commit:
+- `packages.x86_64-linux` is `{ cli, default, plugin }`; `default` is `plugin`;
+- `templates-check` is an **app**, not a package, so the runner below reads
+  `apps.<sys>.templates-check.program`;
+- `homeManagerModules.default` exists, and nixarchy does not import it;
+- the template ids include all eight former presets, plus dotnet, flutter,
+  java, java-maven, kotlin, php, ruby and the `cloud` generator.
 
 ### The plugin, on by default when devenv is
 

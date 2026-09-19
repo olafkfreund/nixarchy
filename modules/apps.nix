@@ -3363,9 +3363,14 @@ in
                     nh os switch "$flake" || rc=$?
                     if [ "$rc" -ne 0 ]; then
                       # The selection stays copied, so every later apply or update
-                      # fails the same way until the cause is taken out.
+                      # fails the same way until the cause is taken out. No claim
+                      # about what changed: nh activates before it sets the profile
+                      # and the bootloader, so a late failure leaves it switched.
                       echo
-                      echo "The rebuild failed (exit $rc). Nothing changed on this machine."
+                      echo "The rebuild failed (exit $rc). The log above says where."
+                      echo "  If it stopped while building, the running system is unchanged."
+                      echo "  If it stopped while activating, it may be partly switched --"
+                      echo "  'nixarchy rollback' lists the earlier generations to go back to."
                       echo "  What you picked is still in the selection, so the next"
                       echo "  rebuild will fail the same way until it is removed:"
                       echo "    nixarchy app remove                    take out what you just picked"

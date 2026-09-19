@@ -741,6 +741,8 @@ pkgs.runCommand "nixarchy-microvm-template"
     printf '%s\n' "$help" | grep -qE '\bset-template\b' ||
       { echo "(h) vmSetTemplate pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
 
+    bash ${./microvm-mutations.sh} ${nixarchyVm}/bin/nixarchy-vm
+
     [ "$fail" -eq 0 ] || exit 1
     echo "every template's runner is qemu, shares the host store read-only," \
          "uses user networking, and the KVM/-tcg pair share one guest --" \

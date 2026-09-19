@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 766
 spec: spec/2026-09-18-766-default-plugins.md
 ---
@@ -245,7 +245,7 @@ spec: spec/2026-09-18-766-default-plugins.md
 - **The package output omits the plugin's LICENSE** (its flake copies an
   explicit file list). An upstream fix, like the wave-2 plugins (#770-#774).
 
-## PR C — podman (draft, awaiting approval)
+## PR C — podman (approved 2026-09-19)
 
 Branch `feat/766-pr-c-podman`, off `main` after A (#775). It follows PR B's shapes
 (#780): the `defaultPluginSet` entry, the helper-driven row, the seeded bind
@@ -446,3 +446,5 @@ matters (§1, §5). Before each: the `gh run list` queue check (§6). Then
     plain distrobox containers, which the CLI lists anyway.
 - **To opt out without reverting,** set
   `programs.nixarchy.defaultPlugins.<name> = false`.
+
+**PR C decisions (owner, 2026-09-19):** podman-tui is not installed. The panel's `d` key stays dead, and the docs say so; the plugin hiding the key when podman-tui is missing is an upstream change we don't file. The helper's "not installed on this machine" message ships in PR C.

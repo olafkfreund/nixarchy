@@ -425,7 +425,9 @@ pkgs.testers.runNixOSTest {
         "cat > /tmp/pkexec-probe.sh <<'PROBE_EOF'\n"
         "export XDG_RUNTIME_DIR=/run/user/1000\n"
         "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
-        "hyprctl dispatch exec '/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok'\n"
+        # Lua-era Hyprland: dispatch takes a Lua expression, as upstream's own
+        # omarchy-restart-shell does.
+        "hyprctl dispatch 'hl.dsp.exec_cmd(\"/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok\")'\n"
         "PROBE_EOF")
     machine.succeed("su omarchy -c 'bash /tmp/pkexec-probe.sh'")
     machine.wait_for_text("Authenticat", timeout=90)

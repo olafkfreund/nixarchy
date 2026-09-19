@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 765
 spec: spec/2026-09-18-765-rebuild-window.md
 ---
@@ -321,10 +321,142 @@ already wired (`flake.nix:1819`). No workflow names it; `build.yml`'s `omarchy`
 job builds it in its catch-all step, "Build every check no other job claims".
 So there is no new `checks.<name>` and no workflow edit (§4). Build it under bash, never piped (§1).
 
+## PR 3 — draft, awaiting approval
+
+*Revision:* PRs 1 (#776) and 2 (#778) are merged. This section steps PR 3 only,
+which is why the frontmatter is back to `draft`. Branch:
+`feat/765-pr3-supervised-rebuild`, from `main`.
+
+**Scope** (the spec's outline, item 3): the rebuild can run as a supervised
+`systemd-run --user` unit named `nixarchy-rebuild`, with its output in the
+user journal. The future panel (PR 5) then only has to *view* the unit, and a
+shell restart or a closed window can't kill a switch halfway.
+
+Nothing a user runs today changes in this PR. The menu rows still open the
+terminal until PR 5 swaps them, and `nixarchy apply` at a terminal behaves
+exactly as before.
+
+**Decisions:**
+- **`--detach`**, the same word `nixarchy vm run --detach` uses (#762). It
+  requires `--yes`, because a unit has no stdin to answer a question with.
+  `--detach` alone exits 2.
+- **What it does:** `nixarchy-apply --detach --yes` re-runs itself as
+  `systemd-run --user --unit=nixarchy-rebuild --collect
+  -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0
+  --setenv=NIXARCHY_FLAKE=… --setenv=XDG_CONFIG_HOME=… --
+  <itself> --yes --no-preview`, prints where to follow it
+  (`journalctl --user -fu nixarchy-rebuild`), and exits 0 once the unit
+  exists. Rate limiting is off because a nix build log is bursty and
+  journald would otherwise drop lines, which is the one log a failure needs.
+- **`--no-nom` when stdout is not a terminal.** nom draws with escape codes,
+  which are unreadable in a journal. At a terminal nothing changes.
+- **State lives in the unit.** `ActiveState`/`SubState`, `Result` and
+  `ExecMainStatus` are what a viewer reads, and `RemainAfterExit` keeps the
+  result after the process exits.
+- **One at a time.** A detached start while the unit is running refuses:
+  exit 3, "a rebuild is already running", and the journalctl line. A
+  *finished* unit, still present because of `RemainAfterExit`, is cleared
+  (`systemctl --user stop`, or `reset-failed`) before the new start.
+  Otherwise `systemd-run` refuses with "Unit already exists".
+- **No NoNewPrivileges, no sandboxing on the unit.** Elevation goes through
+  the setuid pkexec wrapper, which `NoNewPrivileges` would break (Codex's
+  review of #765).
+- **Cancellation: none in this PR.** Stopping the unit sends SIGTERM to nh,
+  which could land mid-activation. No verb here should make that one
+  keypress away. PR 5 decides whether a panel offers cancel, and only while
+  the log shows the build phase. The docs say not to stop the unit by hand
+  once it has passed "Activating".
+
+### Steps
+
+1. **Prove the elevation path first (the gate).** A user unit runs in
+   `user@.service`, outside the login session's scope. polkit may then find
+   no session for pkexec's subject and never reach the Omarchy agent. If so,
+   this whole design is wrong, so it is tested before anything is built on it.
+   `tests/session.nix`, next to #776's pkexec probe (same logind session, and
+   the same `polkit-agent-helper@*` wait and password entry): start
+   `systemd-run --user --wait --collect -- /run/wrappers/bin/pkexec env touch /tmp/unit-pkexec-ok`
+   as the session user, wait for the agent's helper unit, type the password,
+   and assert that `/tmp/unit-pkexec-ok` is owned by root.
+   → Verify: `checks.session` through `heavy-build.sh`.
+   **Red first:** the same probe with no password typed times out with no
+   root-owned file. **If the green run fails** (polkit refuses the unit's
+   subject), stop and revise this plan before step 2. The fallback to weigh
+   is `systemd-run --user --scope`, which keeps the caller's session but
+   doesn't survive a shell restart. The owner decides.
+2. **Tests for the new path, against today's script (§1).**
+   `tests/apply-staging.nix` adds `systemd-run` and `systemctl` as exported
+   bash functions, the same pattern as the `nh` stub (`:60`), because
+   `writeShellApplication` puts real tools first on `PATH`. They record argv
+   to files, and `systemctl show` prints what `$UNIT_STATE` says. New cases:
+   - (e) `--detach --yes </dev/null`: `systemd-run` was called with
+     `--unit=nixarchy-rebuild`, `-p RemainAfterExit=yes` and `--collect`, and
+     re-invokes with `--yes --no-preview`. `nh` was not called in-process.
+     Exit 0.
+   - (f) `UNIT_STATE=running` with `--detach --yes`: exit 3, the output says
+     "already running", and `systemd-run` was not called.
+   - (g) `UNIT_STATE=exited` (a finished unit): it is cleared, then
+     `systemd-run` is called.
+   - (h) `--detach` without `--yes`: exit 2, no `systemd-run`.
+   - (i) `--yes --no-preview </dev/null` with stdout not a terminal (always
+     true in the sandbox): `nh.calls` contains `--no-nom`.
+   → Verify: build `checks.apply-staging`. **(e) through (i) all fail** on
+   today's script (`--detach` is an unknown flag and exits 2, and there's no
+   `--no-nom`). Keep the red log.
+3. **`modules/apps.nix`, `nixarchy-apply`:**
+   - `--detach` in the existing flag loop (`:3175`).
+   - A detach block right after it: the state check, the clear, `systemd-run`
+     with `--setenv` for `NIXARCHY_FLAKE`, `XDG_CONFIG_HOME` and
+     `NH_ELEVATION_STRATEGY` (a user unit doesn't inherit the caller's
+     environment), and the "follow it with" line, then `exit`.
+   - `nomflag` set from `[ -t 1 ]` and passed to nh.
+   - `pkgs.systemd` added to `runtimeInputs` (pkgs/AGENTS.md: an undeclared
+     command is a runtime failure no build catches).
+   - Comments stay 1-3 lines at the lines they protect (§7).
+
+   → Verify: `checks.apply-staging` green, (a) through (i). `checks.session`
+   is unchanged: `echo n | nixarchy-apply` still declines.
+4. **A real detached apply in the session VM** (after step 1 passes):
+   `checks.session` runs `nixarchy-apply --detach --yes` against the VM's own
+   flake with no change selected. It waits for the unit's `Result=success`,
+   asserts `journalctl --user -u nixarchy-rebuild` holds nh's output, then
+   asserts a second `--detach` *while* the first is running exits 3. Because
+   the switch is a no-op, the time is spent evaluating, not building.
+   **Red first:** point the unit at a flake path that doesn't exist, so
+   `Result=exit-code` and the assertion on `success` fails with the journal
+   excerpt.
+5. **Docs:**
+   - `docs/manual/other-packages.md`: one paragraph on `--detach`, and how to
+     follow the rebuild.
+   - `modules/AGENTS.md`: under the existing "the rebuild asks through
+     polkit" anchor, add three lines on why it is a unit, why rate limiting
+     is off, and why there's no cancel verb.
+6. **Lint:** `nix fmt -- --ci`, statix, deadnix.
+7. **PR:** rebase onto `main`. Link intent, spec and plan. Paste the red
+   outputs from steps 1, 2 and 4. `Refs #765`, not Closes, because PRs 4 and 5
+   remain.
+
+### Tests
+
+| check | what it proves | red first by |
+|---|---|---|
+| `checks.session`, step 1 | pkexec from a user unit reaches the Omarchy agent and authenticates | no password typed: timeout, no root-owned file |
+| `checks.apply-staging` (e)-(i) | detach starts the right unit, refuses while one runs, clears a finished one, needs `--yes`; `--no-nom` off a terminal | all fail on today's script |
+| `checks.session`, step 4 | a real detached apply completes, logs to the journal, and a concurrent one is refused | nonexistent flake: `Result=exit-code` |
+| `checks.apply-staging` (a)-(d), `checks.session` `echo n` | PR 2's behaviour is unchanged | unchanged, green before and after |
+
+No new `checks.<name>`, so no workflow edit (§4). Heavy builds go only through
+`/mnt/data/vmtest/heavy-build.sh`, never piped (§1).
+
+### Rollback
+
+Revert the PR. `--detach` goes away, and nothing yet depends on it (PR 5 is
+its first user). A unit left over from a run survives until logout, or until
+it is stopped by hand. It holds no state beyond its log.
+
 ## Later PRs (outline; each is stepped when reached)
 
-3. The rebuild runs as a `systemd-run --user` unit, `nixarchy-rebuild`, with
-   `--no-nom`, and its output goes to the journal.
+3. *(Stepped above: "PR 3 — draft, awaiting approval".)*
 4. The spinner opens `journalctl --user -fu nixarchy-rebuild`.
 5. The Quickshell panel replaces the floating terminal for Install > Apply and
    the per-app rows.

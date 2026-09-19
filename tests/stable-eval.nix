@@ -60,10 +60,17 @@ let
   # after the floor in flake.nix has been applied -- asking nixpkgs directly
   # would ask a question whose answer is 0.3.0 and always was.
   quickshellVersion = cfg.programs.nixarchy.package.passthru.quickshell.version;
+
+  # #790: dropping the default widget would also make evaluation pass. Check
+  # its CLI really reaches each configured user's profile on stable.
+  homes = builtins.attrValues cfg.home-manager.users;
+  herdrInstalled =
+    homes != [ ] && lib.all (home: lib.any (p: lib.getName p == "herdr") home.home.packages) homes;
 in
 pkgs.runCommand "nixarchy-stable-eval"
   {
     inherit toplevel release;
+    herdrOk = lib.boolToString herdrInstalled;
 
     # Named so the log says which stable this was, not merely "stable".
     stableRev = inputs.nixpkgs-stable.rev or "unlocked";
@@ -110,6 +117,12 @@ pkgs.runCommand "nixarchy-stable-eval"
     fi
 
     echo "the share picker is present on this nixpkgs: $pickerPresent"
+
+    if [ "$herdrOk" != "true" ]; then
+      echo "::error::the stable desktop is missing the default Herdr CLI" >&2
+      exit 1
+    fi
+    echo "the default Herdr CLI is installed on stable"
 
     echo "the session's quickshell: $quickshellVersion (floor $quickshellFloor)"
     if [ "$quickshellOk" != "true" ]; then

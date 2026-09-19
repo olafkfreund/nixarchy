@@ -707,6 +707,21 @@ pkgs.runCommand "nixarchy-microvm-template"
     fi
     unset -f systemd-run dtach
 
+    # (k) The handoff gap: detach has let go of the lock, and the unit has
+    # not taken it yet. The unit being up is what keeps `rm` and a second
+    # run out then.
+    systemctl() { [ "$*" = "--user is-active nixarchy-vm-racer" ] && echo activating; }
+    export -f systemctl
+    if $vm rm racer > /dev/null 2>&1; then
+      echo "(k) 'rm' deleted a VM whose detached unit was still activating" >&2
+      fail=1
+    fi
+    if $vm run racer > /dev/null 2>&1; then
+      echo "(k) 'run' started a VM whose detached unit was still activating" >&2
+      fail=1
+    fi
+    unset -f systemctl
+
     # (h) The plugin reads what this CLI can do from `help` alone, with these
     # three patterns (nixarchy-microvm Model.js:973-975 at 481e6c5). A help
     # line reworded is a feature silently switched off in the panel.

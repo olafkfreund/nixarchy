@@ -150,15 +150,35 @@ writeShellApplication {
           echo "kvm"
         }
 
-        # "running" or "stopped", from the same flock the runner holds.
-        vm_status() {
-          local status=stopped
-          if [ -e "$1/.lock" ]; then
-            exec 8>"$1/.lock"
-            flock -n 8 || status=running
+        # Whether anything holds the VM's lock: a runner, or a detach mid-build.
+        lock_held() {
+          [ -e "$1/.lock" ] || return 1
+          exec 8>"$1/.lock"
+          if flock -n 8; then
             exec 8>&-
+            return 1
           fi
-          echo "$status"
+          exec 8>&-
+          return 0
+        }
+
+        # A detached VM's unit, from its start until its runner takes the
+        # lock. The lock cannot be handed to it (systemd-run inherits no fd),
+        # so the unit itself covers that gap for everything that refuses.
+        unit_busy() {
+          case "$(systemctl --user is-active "nixarchy-vm-$(basename "$1")" 2>/dev/null)" in
+            active|activating|reloading) return 0 ;;
+          esac
+          return 1
+        }
+
+        # "running" or "stopped": the lock, or a unit about to take it.
+        vm_status() {
+          if lock_held "$1" || unit_busy "$1"; then
+            echo running
+          else
+            echo stopped
+          fi
         }
 
         list_vms() {
@@ -295,39 +315,48 @@ writeShellApplication {
 
         run_vm() {
           need_vm "usage: nixarchy vm run [--detach] <name>" "$@"
+          if unit_busy "$dir"; then
+            echo "nixarchy-vm: '$name' is already running." >&2
+            exit 1
+          fi
           take_lock -n
           build_vm
           exec_vm
         }
 
         # The half a detached unit runs: already built, so lock and launch.
-        # `-w 5`, not `-n`: detach_vm's start-up poll takes this same lock for
-        # an instant, and a refusal then would read as "already running".
+        # Waits rather than refusing: detach_vm still holds the lock when the
+        # unit starts, and its start-up poll takes it for an instant after.
         launch_vm() {
           need_vm "usage: nixarchy vm run --prebuilt <name>" "$@"
-          take_lock -w 5
+          take_lock -w 30
           exec_vm
         }
 
         # Build here, so the build log and a build failure are the caller's;
         # then a user unit owns the runner, inside dtach so `console` can
-        # attach later. The unit's process takes the lock, so `rm` still
-        # refuses and a second `run` still does. Back only once it holds it.
+        # attach later. The lock is held from before the build until the unit
+        # exists (#784's review: `rm` or a second detach used to win the
+        # build window), and the unit's own launch waits for it. From then
+        # on the unit is busy to everything that refuses, until its runner
+        # holds the lock itself. Back only once it does.
         detach_vm() {
           need_vm "usage: nixarchy vm run --detach <name>" "$@"
-          if [ "$(vm_status "$dir")" = running ]; then
+          if unit_busy "$dir"; then
             echo "nixarchy-vm: '$name' is already running." >&2
             exit 1
           fi
+          take_lock -n
           build_vm
           rm -f "$dir/console.sock"
           systemd-run --user --unit="nixarchy-vm-$name" --collect --quiet \
             --setenv=XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
             -- "$(command -v dtach)" -N "$dir/console.sock" -z \
             "$(readlink -f "$0")" run --prebuilt "$name"
+          exec 9>&-
           timeout=''${NIXARCHY_VM_DETACH_TIMEOUT:-30}
           for _ in $(seq 1 $((timeout * 5))); do
-            if [ "$(vm_status "$dir")" = running ]; then
+            if lock_held "$dir"; then
               echo "'$name' is running in the background. 'nixarchy vm console $name' to attach."
               return 0
             fi
@@ -368,7 +397,7 @@ writeShellApplication {
             exit 1
           fi
           exec 9>"$dir/.lock"
-          if ! flock -n 9; then
+          if unit_busy "$dir" || ! flock -n 9; then
             echo "nixarchy-vm: '$name' is running -- 'nixarchy vm stop $name' first." >&2
             exit 1
           fi
@@ -405,6 +434,10 @@ writeShellApplication {
           dir="$stateDir/$name"
           if [ ! -d "$dir" ]; then
             echo "nixarchy-vm: no VM named '$name'." >&2
+            exit 1
+          fi
+          if unit_busy "$dir"; then
+            echo "nixarchy-vm: '$name' is running -- 'nixarchy vm stop $name' first." >&2
             exit 1
           fi
           if [ -e "$dir/.lock" ]; then

@@ -327,7 +327,8 @@ let
   # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
   # Standalone Home Manager has no osConfig, so it resolves nothing (Mode A).
   resolvedDefaults = lib.filterAttrs (
-    name: p: (osConfig.programs.nixarchy.enable or false) && p.gate && (cfg.defaultPlugins.${name} or true)
+    name: p:
+    (osConfig.programs.nixarchy.enable or false) && p.gate && (cfg.defaultPlugins.${name} or true)
   ) cfg.defaultPluginSet;
   defaultIds = lib.mapAttrsToList (_: p: p.id) resolvedDefaults;
 
@@ -1482,76 +1483,78 @@ in
     # Turned on through the running shell's own writer, never by editing
     # shell.json: the shell rewrites that whole file from memory, so a second
     # writer loses updates. The marker is written only once the enable worked.
-    xdg.configFile."omarchy/hooks/post-boot.d/default-plugins" = lib.mkIf (resolvedDefaults != { }) {
-      executable = true;
-      text = ''
-        #!/usr/bin/env bash
-        export PATH=${
-          lib.makeBinPath [
-            cfg.package
-            pkgs.jq
-            pkgs.coreutils
-            pkgs.systemd
-          ]
-        }:$PATH
-        state="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/enabled-once"
-        # Enabling makes the shell reload its plugins, which can outlast
-        # upstream's 2 s IPC budget; this runs in the background, so wait.
-        export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
+    xdg.configFile = {
+      "omarchy/hooks/post-boot.d/default-plugins" = lib.mkIf (resolvedDefaults != { }) {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          export PATH=${
+            lib.makeBinPath [
+              cfg.package
+              pkgs.jq
+              pkgs.coreutils
+              pkgs.systemd
+            ]
+          }:$PATH
+          state="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/enabled-once"
+          # Enabling makes the shell reload its plugins, which can outlast
+          # upstream's 2 s IPC budget; this runs in the background, so wait.
+          export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
 
-        todo=()
-        for id in ${lib.escapeShellArgs defaultIds}; do
-          [ -e "$state/$id" ] || todo+=("$id")
-        done
-        [ ''${#todo[@]} -gt 0 ] || exit 0
+          todo=()
+          for id in ${lib.escapeShellArgs defaultIds}; do
+            [ -e "$state/$id" ] || todo+=("$id")
+          done
+          [ ''${#todo[@]} -gt 0 ] || exit 0
 
-        # The shell may still be starting. No answer means next login.
-        for _ in $(seq 120); do
-          omarchy-shell shell ping >/dev/null 2>&1 && break
-          sleep 1
-        done
-        omarchy-shell shell ping >/dev/null 2>&1 || exit 0
-        omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+          # The shell may still be starting. No answer means next login.
+          for _ in $(seq 120); do
+            omarchy-shell shell ping >/dev/null 2>&1 && break
+            sleep 1
+          done
+          omarchy-shell shell ping >/dev/null 2>&1 || exit 0
+          omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 
-        mkdir -p "$state"
-        list=$(omarchy-plugin-list --json 2>/dev/null) || list='[]'
-        for id in "''${todo[@]}"; do
-          if jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' <<<"$list" >/dev/null; then
-            : >"$state/$id"
-          elif out=$(omarchy-plugin-enable "$id" right 2>&1); then
-            : >"$state/$id"
-          else
-            printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins
+          mkdir -p "$state"
+          list=$(omarchy-plugin-list --json 2>/dev/null) || list='[]'
+          for id in "''${todo[@]}"; do
+            if jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' <<<"$list" >/dev/null; then
+              : >"$state/$id"
+            elif out=$(omarchy-plugin-enable "$id" right 2>&1); then
+              : >"$state/$id"
+            else
+              printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins
+            fi
+          done
+        '';
+      };
+
+      # Why: modules/AGENTS.md#same-extension-point-on-the-other-hook-omarchy-alr
+      "omarchy/hooks/post-boot.d/config-repo" = {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+
+          # --exec makes these clickable, which is the whole reason a notification
+          # works here at all: acting on it is one click when the user is ready,
+          # and ignoring it costs them nothing.
+          if ${cfg.package}/bin/nixarchy-config-repo --check; then
+            ${cfg.package}/bin/omarchy-notification-send \
+              -u normal \
+              "Back up your NixOS configuration" \
+              "Everything this machine is lives in one uncommitted directory. Click to set up a backup." \
+              --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
+                ${cfg.package}/bin/nixarchy-config-repo
+          elif ${cfg.package}/bin/nixarchy-config-repo --check-drift; then
+            ${cfg.package}/bin/omarchy-notification-send \
+              -u normal \
+              "Your configuration has drifted from its backup" \
+              "Changes made here have not been pushed for a while. Click to commit and push them." \
+              --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
+                ${cfg.package}/bin/nixarchy-config-repo --drift
           fi
-        done
-      '';
-    };
-
-    # Why: modules/AGENTS.md#same-extension-point-on-the-other-hook-omarchy-alr
-    xdg.configFile."omarchy/hooks/post-boot.d/config-repo" = {
-      executable = true;
-      text = ''
-        #!/usr/bin/env bash
-
-        # --exec makes these clickable, which is the whole reason a notification
-        # works here at all: acting on it is one click when the user is ready,
-        # and ignoring it costs them nothing.
-        if ${cfg.package}/bin/nixarchy-config-repo --check; then
-          ${cfg.package}/bin/omarchy-notification-send \
-            -u normal \
-            "Back up your NixOS configuration" \
-            "Everything this machine is lives in one uncommitted directory. Click to set up a backup." \
-            --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
-              ${cfg.package}/bin/nixarchy-config-repo
-        elif ${cfg.package}/bin/nixarchy-config-repo --check-drift; then
-          ${cfg.package}/bin/omarchy-notification-send \
-            -u normal \
-            "Your configuration has drifted from its backup" \
-            "Changes made here have not been pushed for a while. Click to commit and push them." \
-            --exec ${cfg.package}/bin/omarchy-launch-floating-terminal-with-presentation \
-              ${cfg.package}/bin/nixarchy-config-repo --drift
-        fi
-      '';
+        '';
+      };
     };
 
     # No systemd unit for the shell. Upstream starts it from Hyprland itself:

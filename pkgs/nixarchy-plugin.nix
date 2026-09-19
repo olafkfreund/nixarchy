@@ -9,10 +9,10 @@
 # exits 0 (modules/home.nix, the nixi comment). A row that silently does
 # nothing is the failure #766's intent rules out, so an off plugin is named
 # instead, with where to turn it on.
-{ writeShellApplication
-, jq
-, omarchy
-,
+{
+  writeShellApplication,
+  jq,
+  omarchy,
 }:
 writeShellApplication {
   name = "nixarchy-plugin";

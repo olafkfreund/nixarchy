@@ -124,7 +124,8 @@ let
   defaultHook = "omarchy/hooks/post-boot.d/default-plugins";
   installsFixture = h: h.programs.nixarchy.plugins ? "nixarchy.fixture";
   hookLists =
-    id: h: h.xdg.configFile ? ${defaultHook} && pkgs.lib.hasInfix id h.xdg.configFile.${defaultHook}.text;
+    id: h:
+    h.xdg.configFile ? ${defaultHook} && pkgs.lib.hasInfix id h.xdg.configFile.${defaultHook}.text;
   fixtureHome = homeOn { } (fixtureDefaults { });
 
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
@@ -782,7 +783,9 @@ let
     # the other where it was: a name set to false is not every name dropped.
     defaultPluginsOptOut =
       let
-        h = homeOn { } (fixtureDefaults { programs.nixarchy.defaultPlugins.fixture = false; });
+        h = homeOn { } (fixtureDefaults {
+          programs.nixarchy.defaultPlugins.fixture = false;
+        });
       in
       {
         on = hookLists "nixarchy.other" h && h.programs.nixarchy.plugins ? "nixarchy.other";
@@ -792,7 +795,9 @@ let
     defaultPluginsGate = {
       on = installsFixture fixtureHome;
       off = installsFixture (
-        homeOn { } (fixtureDefaults { programs.nixarchy.defaultPluginSet.fixture.gate = false; })
+        homeOn { } (fixtureDefaults {
+          programs.nixarchy.defaultPluginSet.fixture.gate = false;
+        })
       );
     };
     # With nothing resolved there is no hook at all, which is PR A's state on
@@ -2113,13 +2118,14 @@ pkgs.runCommand "nixarchy-options"
       inherit ((pkgs.extend inputs.self.overlays.default)) omarchy;
     };
     # A default whose pinned manifest renamed its id must fail its build.
-    renamedDefault = pkgs.testers.testBuildFailure
-      (homeOn { } {
-        programs.nixarchy.defaultPluginSet.fixture = {
-          id = "nixarchy.fixture";
-          src = fixturePlugin "nixarchy.renamed";
-        };
-      }).programs.nixarchy.pluginChecks."nixarchy.fixture";
+    renamedDefault =
+      pkgs.testers.testBuildFailure
+        (homeOn { } {
+          programs.nixarchy.defaultPluginSet.fixture = {
+            id = "nixarchy.fixture";
+            src = fixturePlugin "nixarchy.renamed";
+          };
+        }).programs.nixarchy.pluginChecks."nixarchy.fixture";
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
     # The menu the shell actually renders on this machine, which is NOT the
     # package's own: modules/apps.nix rewrites the rows that would run pacman

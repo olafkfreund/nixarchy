@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 802
 author: olafkfreund
 ---
@@ -107,3 +107,5 @@ one goes.
 3. **The `cloud` template** draws on `cloud-projects-templates` as a flake
    source. Does creating a project from it need network access at create time
    (offline installs)? Not verified.
+
+**Decided on approval (owner, 2026-09-19):** the panel is gated on `services.devenv.enable`, the way Podman follows podman. nixarchy keeps a check under the required name `devenv-presets`, so branch protection does not change. Pinning waits for the plugin's code to reach its `main`.

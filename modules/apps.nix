@@ -2963,12 +2963,12 @@ in
             })
 
             # `nixarchy vm <subcommand>`. Its own file for the same reason as
-            # dev-init.nix above: `checks.microvm-template` (#224) has to run
+            # box.nix below: `checks.microvm-template` (#224) has to run
             # the real command. See pkgs/microvm.nix for what it does and why.
             (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
 
             # `nixarchy box <subcommand>`. Its own file for the same reason as
-            # dev-init.nix and microvm.nix above: `checks.box-template` (#258)
+            # microvm.nix above: `checks.box-template` (#258)
             # has to run the real command. See pkgs/box.nix for what it does
             # and why -- in particular why it never resolves distrobox through
             # a /nix/store path.

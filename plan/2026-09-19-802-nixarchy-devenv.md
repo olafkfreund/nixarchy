@@ -147,6 +147,18 @@ Copied from the spec so this file stands alone.
     only they should clear (`devenv revoke`, or editing
     `~/.local/share/devenv/allowed`).
 
+## Deviations
+
+- **Step 7: `tests/demo/default.nix:441` needs no change.** `("devenv-presets",
+  8, 9)` is a capture's label and its timings, not a citation of the deleted
+  file. The demo scene itself still works: its node enables
+  `services.devenv` (`:737`), so the plugin's CLI is installed there and
+  `nixarchy dev init python` still scaffolds.
+- **Step 7: `.github/workflows/build.yml` is left untouched**, including its
+  comment naming `data/devenv-presets.nix` (`:223`). The plan promised no
+  workflow edit, and a workflow file is a human's (AGENTS.md 4, 11). The PR
+  points the comment out for the owner.
+
 ## Tests
 
 | Command | Expected |

@@ -6,7 +6,7 @@
 # this command never does is apply that option itself -- it only prints the
 # snippet, the same way `nixarchy dev init` never edits a flake for you.
 #
-# Its own file for the same reason as pkgs/dev-init.nix and pkgs/microvm.nix:
+# Its own file for the same reason as pkgs/microvm.nix:
 # `checks.box-template` has to exercise the real command, not a copy of it.
 #
 # THE RULE THIS FILE MUST NOT BREAK (from #256, verified there with
@@ -34,7 +34,7 @@ let
   templates = import ../data/box-templates.nix;
 
   # One file per template's raw INI body plus a tab-separated index -- same
-  # shape as pkgs/dev-init.nix's presetDir and pkgs/microvm.nix's
+  # shape as pkgs/microvm.nix's
   # templateDir, for the same reason: the script then knows nothing about the
   # catalogue beyond "read this directory", so a new template (#259) is a
   # change to data/box-templates.nix and nothing else.

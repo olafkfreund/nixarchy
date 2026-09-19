@@ -6,7 +6,7 @@
 # `programs.nixarchy.services.microvm` (modules/services/microvm.nix, #223).
 #
 # Its own file rather than another entry in modules/apps.nix's package list,
-# same reason as pkgs/dev-init.nix: `checks.microvm-template` has to exercise
+# same reason as pkgs/box.nix: `checks.microvm-template` has to exercise
 # the real command, not a copy of it.
 #
 # Two behaviours here are load-bearing, both from #221 and both asserted by
@@ -67,7 +67,7 @@ let
   fallbackUrl = "github:olafkfreund/nixarchy/main";
 
   # One file per template plus a tab-separated index -- same shape as
-  # pkgs/dev-init.nix's presetDir, and for the same reason: the script then
+  # pkgs/box.nix's templateDir, and for the same reason: the script then
   # knows nothing about the catalogue beyond "read this directory", so a new
   # template is a change to data/microvm-templates.nix and nothing else.
   templateDir = runCommandLocal "nixarchy-vm-templates" { } ''

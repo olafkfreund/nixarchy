@@ -1,7 +1,7 @@
 # `nixarchy secret <verb>` -- the five manual steps in
 # docs/manual/remote-desktop.md, as one command.
 #
-# Its own file for the same reason as pkgs/dev-init.nix, pkgs/microvm.nix and
+# Its own file for the same reason as pkgs/microvm.nix and
 # pkgs/box.nix: tests/menu-verbs.nix has to read the verbs out of the command
 # the menu actually execs, which means the command has to be a package.
 #

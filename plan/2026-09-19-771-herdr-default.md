@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 771
 spec: spec/2026-09-19-771-herdr-default.md
 ---

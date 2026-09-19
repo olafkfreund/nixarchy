@@ -514,6 +514,17 @@ the five ship in one release, so all five are in the one #762 PR.
     --user`, and no network for `run`'s `nix build github:...`. A real detach
     there needs a redesign of the test, not a step. The hole is recorded in
     `tests/AGENTS.md` as uncovered, nightly included, with the by-hand check.
+    *Deviation, after #784's first review (codex-p620-858273, agent bus):*
+    step 4 as written built with the lock free, so `rm` could delete a VM
+    mid-build and a second detach could unlink the first's console socket.
+    Now `run --detach` takes the lock (`-n`) before the build and holds it
+    until the unit exists. `--prebuilt` waits for it (`-w 30`), since
+    systemd-run passes on no fd. `systemctl --user is-active
+    nixarchy-vm-<name>` (active/activating) counts as busy for run, detach,
+    rm and set-template, which covers the handoff. `console.sock` is only
+    removed under the lock. New cases: (i) rm during the build refuses,
+    (j) a second detach refuses, (k) rm refuses while the unit is activating
+    and the lock is free.
 10. `docs/manual/sandboxes.md`: the new verbs, the detach key and the JSON shapes
     as a stable contract ("fields are only ever added").
 

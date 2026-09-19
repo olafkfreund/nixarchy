@@ -368,6 +368,27 @@ let
           description = "All pipeline panel controls · Super+Ctrl+Alt+P";
         };
 
+        # The GitHub Actions panel (#772), the same way.
+        "apps.github-actions" = {
+          icon = "";
+          label = "GitHub Actions";
+          action = "nixarchy-plugin olafkfreund.github-actions";
+          when = "nixarchy-plugin --enabled olafkfreund.github-actions";
+          aliases = [
+            "github"
+            "actions"
+            "workflows"
+          ];
+          description = "Repository workflow runs, jobs and steps · Super+Alt+A";
+        };
+        "learn.github-actions-keybindings" = {
+          icon = "";
+          label = "GitHub Actions keybindings";
+          action = "python3 $HOME/.config/omarchy/plugins/olafkfreund.github-actions/menu.py keys";
+          when = "nixarchy-plugin --enabled olafkfreund.github-actions";
+          description = "All workflow panel controls · Super+Ctrl+Alt+A";
+        };
+
         # The herdr sessions widget (#771): its sessions in the bar, and the
         # sheet of keys that only exist while its menu has the keyboard.
         "apps.herdr" = {

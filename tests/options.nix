@@ -805,14 +805,14 @@ let
     # joined the set -- the property is "nothing resolved, no hook".
     defaultPluginsNoHookWhenEmpty = {
       on = fixtureHome.xdg.configFile ? ${defaultHook};
-      off = (homeOn { } { programs.nixarchy.defaultPlugins.pkg = false; }).xdg.configFile ? ${defaultHook};
+      off =
+        (homeOn { } { programs.nixarchy.defaultPlugins.pkg = false; }).xdg.configFile ? ${defaultHook};
     };
     # The real package manager panel is a default wherever nixarchy is on, and
     # nowhere else: standalone Home Manager gets nothing (Mode A).
     pkgIsADefault = {
       on =
-        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg"
-        && hookLists "nixarchy.pkg" defaultHomeOn;
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg" && hookLists "nixarchy.pkg" defaultHomeOn;
       off = defaultHome.programs.nixarchy.plugins ? "nixarchy.pkg";
     };
 

@@ -218,6 +218,33 @@ spec: spec/2026-09-18-766-default-plugins.md
    the failing outputs, and the ISO number.
 10. Then a Discussions post: added, changed, coming.
 
+### PR B — as implemented (deviations)
+
+- **Step 3's options case for the row is covered by step 5 instead.** The
+  menu-verbs plugin scan fails if no row opens a plugin (floor 1), and fails
+  if a row names an id that is not installed, which is strictly more than
+  "the row is present". No separate options case.
+- **Two PR A cases moved, both retargeted, not weakened.**
+  `defaultPluginsNoHookWhenEmpty` read the default home, which was empty
+  only until `nixarchy.pkg` joined the set; it now reads a home with
+  `defaultPlugins.pkg = false`. `tests/plugin.nix` sets `pkg = false`
+  beside `services.nixi.enable = false`, for the reason recorded there: its
+  empty-directory state has to stay reachable.
+- **The seed bind is appended with `printf`, not a heredoc.** A heredoc's
+  column-0 lines would drop the whole `installPhase` string's common indent
+  to 0 and break the exact-whitespace `--replace-fail` strings elsewhere in
+  it (`pkgs/AGENTS.md`).
+- **The input's reasoning lives in `docs/internals/flake.md`** behind a
+  `# Why:` pointer, as that file's convention requires, rather than as a
+  long comment in `flake.nix`.
+- **The plugin's Apply is not fixed here.** Its adapter still pipes
+  `printf 'n\ny\n'` into `nixarchy-apply`, which declines the switch on a
+  machine without `nixarchy-preview` (every nixarchy machine has it, since
+  it ships in the omarchy package). #765 PR 2's `--yes`/`--no-preview`
+  retires it.
+- **The package output omits the plugin's LICENSE** (its flake copies an
+  explicit file list). An upstream fix, like the wave-2 plugins (#770-#774).
+
 ## Outlines, in order
 
 - **C — podman.**

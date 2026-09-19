@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 766
 spec: spec/2026-09-18-766-default-plugins.md
 ---
@@ -379,6 +379,7 @@ machine binds it.
   - The V bind.
   - nixarchy#762 stays separate; the plugin hides the keys that need it.
   - Blocker: none beyond A.
+  - **Stepped below** in "#762 and PR E — draft, awaiting approval".
   - Check: its `Model.js:988` path to `nixarchy.pkg`'s script resolves on a
     default install, since that plugin is linked by id.
 - **D — distrobox, and retiring `nixarchy box`.**
@@ -405,6 +406,180 @@ machine binds it.
     in its body, and the owner commits it. The check names stay, so no gate
     changes.
   - This PR closes #766 (`Closes #766`, alone on its line).
+
+## #762 and PR E — draft, awaiting approval
+
+### What the research found (2026-09-19, read-only)
+
+- **The plugin reads capabilities from `nixarchy-vm help`, nothing else.**
+  `Model.js:971-976` (plugin main `481e6c5`):
+  `vmDetach: /\brun\b[^\n]*--detach/`, `vmConsole: /\bvm console\b/`,
+  `vmSetTemplate: /\bset-template\b/`. JSON listing is detected from the output
+  itself, with a text-parsing fallback (`Model.js:192-246`). Today `list` and
+  `templates` ignore `--json` (`pkgs/microvm.nix:296`), so the plugin runs on
+  text, and hides console, detach and edit, saying why (`Model.js:1208-1210`).
+  **The help text is the contract.** Rewording a help line silently turns a
+  feature off in the plugin, so a check pins those three patterns.
+- **The plugin calls these argvs** (`Model.js:997-1042`): `list --json`,
+  `templates --json`, `help`, `console <n>`, `run <n>`, `run --detach <n>`,
+  `stop <n>`, `rm <n>`, `create <n> --template <t>`, `set-template <n> <t>`.
+- **The Sandbox rows this PR retires are already broken.** Every child row calls
+  a verb with no name (`modules/apps.nix:636-671`, e.g. `nixarchy-vm create`).
+  The CLI's `${1:?usage…}` exits 1. Measured on the owner's machine:
+  `nixarchy-vm create` gives "usage: nixarchy vm create <name>" and exit=1, and
+  `run` does the same. `checks.menu-verbs` checks that the verb exists, never
+  that the call can succeed. Retiring the rows fixes it for users. The lesson
+  ("a verb check is not an arity check") goes into `tests/AGENTS.md` in PR E.
+- **`Model.js:988`'s hardcoded `…/plugins/nixarchy.pkg/bin/nixarchy-pkg`**
+  resolves once PR B (#780) is merged: nixarchy.pkg is a default, linked by its
+  id. The permanent-VM features need it. The detached/disposable ones don't.
+- **`dtach` is in nixpkgs** (0.9-unstable-2025-06-20), a single small binary.
+  It is the whole "detachable console" mechanism below.
+
+### Decision: #762 is its own PR, landing before E
+
+#762 is five changes to a 324-line CLI, each with its own test. E is an input,
+a default and a menu swap. Kept apart, a red check names its half. #762 lands
+first, so the panel is complete on day one of E. E is **not blocked** on it,
+because the plugin degrades to text and a terminal `run`. The issue asks that
+the five ship in one release, so all five are in the one #762 PR.
+
+### #762: steps (branch `feat/762-nixarchy-vm-contract`, off main)
+
+1. `pkgs/microvm.nix`: `runtimeInputs += [ jq dtach systemd ]`. `systemd-run`
+   resolves through the strict PATH, and an undeclared command reads as a
+   wrong answer (§7). → verify by `checks.microvm-template` building the CLI.
+2. `pkgs/microvm.nix`: `list --json` prints `[{name,template,running,dir}]`,
+   built with `jq -n` (never string concatenation), `[]` when there are none.
+   `running` comes from the same `flock -n` probe as the text output. `dir` is
+   absolute. `templates --json` prints `[{name,label,note}]` from `index.tsv`
+   through `jq -R`. Text output byte-identical. → verify by step 8's cases (a),
+   (b), (c).
+3. `pkgs/microvm.nix`: split `run_vm` into `build_vm <name>` (today's
+   `nix build … --out-link "$dir/current"` with its fallback, unchanged) and
+   `launch_vm <name>` (the lock, the `hostname` write, the
+   `exec ./current/bin/microvm-run`). `run <n>` is both, as today. The internal
+   `run --prebuilt <n>` is `launch_vm` only, for the unit in step 4. It stays
+   out of `help`, so the plugin never sees it. → verify by the existing
+   "launch and locking" block (`tests/microvm-template.nix:351-440`) passing
+   unchanged.
+4. `pkgs/microvm.nix`: `run --detach <n>` runs `build_vm` in the caller, so
+   stdout is the build log and a build failure is the exit status. Then:
+   `systemd-run --user --unit="nixarchy-vm-$name" --collect --quiet --
+   dtach -N "$dir/console.sock" -z nixarchy-vm run --prebuilt "$name"`.
+   The unit's process takes the flock, so the lock rule is unchanged and `rm`
+   still refuses. It waits up to 30 s for the lock to be held, then exits 0. On
+   timeout it exits 1 and names `journalctl --user -u nixarchy-vm-<name>`.
+   Refuses up front if already running. → verify by (e), (f).
+5. `pkgs/microvm.nix`: `console <n>` refuses unless `$dir/console.sock` is a
+   socket ("not detached; `nixarchy vm run <n>` attaches directly"). Otherwise
+   `exec dtach -a "$dir/console.sock" -e '^]' -r winch`. Ctrl-] detaches and
+   Ctrl-A X still stops the guest. `stop` and `rm` are unchanged:
+   `microvm-shutdown` ends the runner, the unit ends with it, and `--collect`
+   removes it. → verify by (g).
+6. `pkgs/microvm.nix`: `set-template <n> <t>` takes `flock -n` on `$dir/.lock`
+   (refuses while running), validates `<t>` with `template_exists` and `<n>`
+   with the name rule, and rewrites `$dir/template`. It leaves volumes alone,
+   and the help line says the next run rebuilds. → verify by (d).
+7. `pkgs/microvm.nix`: the `help` text gains
+   `nixarchy vm run [--detach] <name>`, `nixarchy vm console <name>` and
+   `nixarchy vm set-template <name> <template>`, worded so the three plugin
+   patterns match. → verify by (h).
+8. `tests/microvm-template.nix`, "nixarchy vm" section (cheap; PR-gated by
+   `build.yml:1278`). The stubs are **exported bash functions**, not PATH files:
+   `writeShellApplication` puts runtimeInputs first, so a stub file is never
+   reached (the #778 lesson), while a function beats PATH. Cases:
+   - (a) `list --json` with none is `[]`;
+   - (b) after `create`, exactly the four keys, `running=false`, and
+     `running=true` while the existing stub runner holds the lock;
+   - (c) `templates --json` names equal `cut -f1 index.tsv`;
+   - (d) `set-template` rewrites when stopped, refuses while locked, refuses
+     an unknown template or a missing name;
+   - (e) `run --detach` calls the `systemd-run` stub with
+     `--unit nixarchy-vm-sandbox`, and the stub runs its command in the
+     background, so the lock-wait path runs for real. Exit 0;
+   - (f) a stub that never runs its command gives exit 1 with the journalctl
+     hint;
+   - (g) `console` without a socket refuses, and with one it execs the `dtach`
+     stub with `-a <dir>/console.sock -e ^]`;
+   - (h) the three plugin regexes, copied from `Model.js:973-975` with a
+     comment naming the plugin commit, all match `nixarchy-vm help`.
+9. `tests/microvm-boot.nix` (nightly, KVM): after today's boot, a real
+   `run --detach`, then `list --json` shows `running: true`, the console socket
+   exists, then `stop` and wait for the unit to go. Nightly only, so a PR cannot
+   see a real detach. That hole is written into `tests/AGENTS.md` (§3), not
+   papered over.
+10. `docs/manual/sandboxes.md`: the new verbs, the detach key and the JSON shapes
+    as a stable contract ("fields are only ever added").
+
+**#762 §1 breaks:**
+
+| case | break | must go red with |
+|---|---|---|
+| (a) | print the text output under `--json` | jq parse error |
+| (b) | drop the `dir` key | key-set mismatch |
+| (d) | skip the lock in `set-template` | "rewrote a running VM's template" |
+| (e) | `exit 0` before the lock wait | the stub saw no lock taken |
+| (f) | treat a timeout as success | exit 0 where 1 was expected |
+| (h) | reword the help line to `attach` | "vmConsole pattern no longer matches" |
+
+### PR E: steps (branch `feat/766-pr-e-microvm`, after #762 and #780)
+
+1. `flake.nix`: input `nixarchy-microvm`, pinned to a commit on main (at least
+   `481e6c5`), with `inputs.nixpkgs.follows = "nixpkgs"`. Re-export
+   `packages.<sys>.nixarchy-microvm`. The reasoning, sizes and pin-bump
+   procedure go in `docs/internals/flake.md`, as PR B did. → verify by
+   `nix flake metadata`: one new node, no second nixpkgs.
+2. `modules/home.nix`: `defaultPluginSet.microvm = { id = "nixarchy.microvm";
+   src = inputs.nixarchy-microvm.packages.${system}.default; }`, the gate being
+   nixarchy on (the approved spec: gated like the Sandbox rows, whose
+   `nixarchy-vm --check` is always 0). Add `microvm` to the `defaultPlugins`
+   default. → verify by (i).
+3. `modules/apps.nix`: `trigger.vm` keeps its key, label, icon and aliases,
+   gains `action = "nixarchy-plugin nixarchy.microvm"`, and its `when` becomes
+   `nixarchy-vm --check && nixarchy-plugin --enabled nixarchy.microvm`. Remove
+   `.new/.open/.stop/.destroy/.list` (the broken rows above). → verify by (j).
+4. `pkgs/omarchy/default.nix`: Super+Alt+V appended to the seeded
+   `bindings.lua` with PR B's `printf` after the same asserted anchor. The
+   plugin's own Home Manager module is **not** imported, because its bind file
+   would duplicate this. → verify by the anchor assertion.
+5. `tests/menu-verbs.nix`: **retargeted, and said so in the PR (§1)**. The two
+   vm row scans (`:115-116`, floors 2 and 3) have nothing left to scan once the
+   rows go, so they are removed. In their place, a contract scan: every
+   `"nixarchy-vm", "<verb>"` in the pinned plugin's `Model.js` must be in
+   `vm-verbs`, with a floor of 7. That checks the calls that still exist.
+   → verify by (k).
+6. `tests/options.nix`: `microvmIsADefault` in both states, `sandboxRowsRetired`
+   (no `trigger.vm.*` child in the generated menu, and the parent's action is
+   the plugin), and
+   `microvmNeedsPkg`: with both defaults on, both ids resolve. That is the
+   `Model.js:988` path. `tests/plugin.nix` sets `microvm = false` beside
+   PR B's `pkg = false` (the tests use stand-ins). → verify by (i).
+7. `tests/AGENTS.md`: the verb-versus-arity lesson.
+   `modules/AGENTS.md#the-sandboxes-group-226`: the group is now the panel;
+   the CLI stays for the terminal. `docs/manual/sandboxes.md`: the menu section.
+   README feature row, and `readme-counts.sh --check`.
+8. Before pushing, rebase onto main with #780 and #762 in. menu-verbs and the
+   plan are edited by both, and #780's plan edit sits in the PR B section.
+
+**PR E §1 breaks:**
+
+| case | break | must go red with |
+|---|---|---|
+| (i) | remove `defaultPluginSet.microvm` | only `microvmIsADefault` fails |
+| (j) | leave `trigger.vm.open` in | `sandboxRowsRetired` (options): "trigger.vm.open still exists". menu-verbs alone would pass, because it checks verbs, not arity |
+| (k) | rename a plugin argv verb to `attach` in a copy of `Model.js` | "plugin calls nixarchy-vm 'attach', which it does not accept" |
+| bind | point the anchor at a missing line | the omarchy build fails |
+
+`Refs #766` on both PRs. #762's PR says `Closes #762`, alone on its line (§8).
+
+### Open questions for the owner
+
+1. With the plugin turned off, the Sandbox row hides, and the CLI is the only
+   way in. Should there be a fallback row that opens a terminal with
+   `nixarchy vm list` instead?
+2. `set-template` leaves the VM's volumes, which a different template may not
+   expect (k3s vs node). Should it refuse when the VM has volumes, or just warn?
 
 ## Tests
 

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 770
 spec: spec/2026-09-19-770-gltui-default.md
 ---

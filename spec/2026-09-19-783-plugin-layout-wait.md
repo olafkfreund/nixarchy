@@ -11,11 +11,13 @@ intent: intent/2026-09-19-783-plugin-layout-wait.md
 Keep the enabled-IPC wait in the defaults node of `tests/plugin.nix`. Add
 one bounded `machine.wait_until_succeeds` immediately before its existing
 `shell.json` read. The command reads
-`/home/omarchy/.config/omarchy/shell.json` with `${pkgs.jq}/bin/jq`, uses
+`/home/omarchy/.config/omarchy/shell.json` with `${pkgs.jq}/bin/jq -e`, uses
 `--arg id` for the existing `tele` id, and succeeds only when
 `any(.bar.layout.right[]?; .id == $id)` is true. Use a 60-second timeout.
 Missing files, invalid JSON, absent layout sections and an absent id return
 nonzero and remain unsuccessful until the timeout or a correct write.
+The `-e` flag is required: plain jq exits zero even when its result is false,
+which would make the wait accept the stale layout immediately.
 
 Retain the subsequent Python layout assertion and its diagnostic, the
 enable-once marker check, and the disable/re-login check. The added wait
@@ -79,7 +81,9 @@ AGENTS.md section 6; a pending check is reported as pending, never passed.
    producer even when the old assertion raises.
 3. Run the corrected predicate/wait with no producer update, and separately
    with the id only under `bar.layout.left`. Both must exhaust a short
-   replay timeout and fail. An already-correct right section must pass
+   replay timeout and fail. Assert the jq command's nonzero exit status in
+   both cases, not merely its printed `false`; removing `-e` must fail this
+   verification. An already-correct right section must exit zero and pass
    immediately. These negative cases prevent a wait that merely sees valid
    JSON or an enabled plugin from counting as success.
 4. Record that this replay controls delayed persistence; it does not claim

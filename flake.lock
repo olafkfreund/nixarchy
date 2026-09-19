@@ -552,6 +552,27 @@
         "type": "github"
       }
     },
+    "nixarchy-devenv": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789841008,
+        "narHash": "sha256-A8KRj6LkuszYEO3pPOYkyjFZWfLXJNSKOvlrV9iTq8Y=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-devenv",
+        "rev": "e003f004fc1b5ec63ee654bb53dcff2645e8110d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-devenv",
+        "rev": "e003f004fc1b5ec63ee654bb53dcff2645e8110d",
+        "type": "github"
+      }
+    },
     "nixarchy-distrobox": {
       "inputs": {
         "nixpkgs": [
@@ -834,6 +855,7 @@
         "microvm": "microvm",
         "nix-flatpak": "nix-flatpak",
         "nix-index-database": "nix-index-database",
+        "nixarchy-devenv": "nixarchy-devenv",
         "nixarchy-distrobox": "nixarchy-distrobox",
         "nixarchy-ghtui": "nixarchy-ghtui",
         "nixarchy-gltui": "nixarchy-gltui",

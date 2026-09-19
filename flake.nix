@@ -222,6 +222,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-dev-environments-panel-wherever-devenv-is-802
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-devenv = {
+      url = "github:olafkfreund/nixarchy-devenv/e003f004fc1b5ec63ee654bb53dcff2645e8110d";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {

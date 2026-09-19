@@ -1,9 +1,9 @@
-{
-  inputs,
-  pkgs,
-  # The doctor is a package, not part of the module, so the test has to be
+{ inputs
+, pkgs
+, # The doctor is a package, not part of the module, so the test has to be
   # handed it rather than finding it in the system profile.
-  doctor,
+  doctor
+,
 }:
 let
   # A real published Omarchy theme, pinned. `omarchy theme install` is the
@@ -45,17 +45,17 @@ let
       '';
 in
 # Drives a real Omarchy session and reports what it logged.
-#
-# This exists because the failure that matters -- "the panel shows for a few
-# seconds then dies" -- leaves its reason in a *user* journal that nobody can
-# reach without logging in, and the session that would let you log in is the
-# broken thing. Reading it over a serial console does not work either: once a
-# GPU device is present the kernel moves its console to tty0 and the serial
-# log ends at the login prompt.
-#
-# No GPU is needed. Hyprland always registers the headless aquamarine backend
-# as MANDATORY and only adds DRM if available (src/Compositor.cpp), so the
-# compositor comes up on a machine with no display hardware whatsoever.
+  #
+  # This exists because the failure that matters -- "the panel shows for a few
+  # seconds then dies" -- leaves its reason in a *user* journal that nobody can
+  # reach without logging in, and the session that would let you log in is the
+  # broken thing. Reading it over a serial console does not work either: once a
+  # GPU device is present the kernel moves its console to tty0 and the serial
+  # log ends at the login prompt.
+  #
+  # No GPU is needed. Hyprland always registers the headless aquamarine backend
+  # as MANDATORY and only adds DRM if available (src/Compositor.cpp), so the
+  # compositor comes up on a machine with no display hardware whatsoever.
 pkgs.testers.runNixOSTest {
   name = "nixarchy-session";
 
@@ -438,6 +438,24 @@ pkgs.testers.runNixOSTest {
     machine.send_chars("omarchy\n")
     machine.wait_until_succeeds("test \"$(stat -c %U /tmp/pkexec-ok)\" = root", timeout=60)
     print("the rebuild's elevation reaches the Omarchy polkit dialog")
+
+    # The same, from a `systemd-run --user` unit, which is where a detached
+    # rebuild runs (#765 PR 3): it lives under user@.service, outside the
+    # login session, so this proves polkit still reaches the agent from there.
+    # `pkexec touch`, not `env`: #776's rule keeps an `env` authorisation, and
+    # a kept one would pass without a dialog.
+    machine.wait_until_succeeds(
+        "! systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=60)
+    machine.succeed(
+        "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+        " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+        " systemd-run --user --collect --unit=unit-pkexec-probe --"
+        " /run/wrappers/bin/pkexec touch /tmp/unit-pkexec-ok'")
+    machine.wait_until_succeeds(
+        "systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)
+    machine.send_chars("omarchy\n")
+    machine.wait_until_succeeds("test \"$(stat -c %U /tmp/unit-pkexec-ok)\" = root", timeout=60)
+    print("pkexec from a user unit reaches the Omarchy polkit dialog")
 
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it

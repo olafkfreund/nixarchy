@@ -86,6 +86,9 @@ pkgs.testers.runNixOSTest rec {
   # `machine` is shut down, so the two never compete for the runner.
   nodes.defaults = {
     imports = [ nodes.machine ];
+    # The real herdr default (#771), back on over `machine`'s opt-out: its
+    # probe needs the herdr binary the entry brings, not a stand-in.
+    home-manager.users.omarchy.programs.nixarchy.defaultPlugins.herdr = pkgs.lib.mkForce true;
     home-manager.users.omarchy.programs.nixarchy.defaultPluginSet = {
       teleprompt = {
         inherit (builtins.elemAt plugins 0) id src;
@@ -169,6 +172,7 @@ pkgs.testers.runNixOSTest rec {
           defaultPlugins = {
             pkg = false;
             gitlab = false;
+            herdr = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,
@@ -622,6 +626,17 @@ pkgs.testers.runNixOSTest rec {
     machine.wait_until_succeeds("su omarchy -c 'python3 /tmp/panel.py'", timeout=120)
     user("test -e ~/.local/state/nixarchy/enabled-once/nixarchy.panelfixture")
     print("a panel default is in plugins[], with its marker")
+
+    # #771: herdr is on the session's PATH -- the one the shell, and so the
+    # widget's herdr-sessions, inherits -- and with no sessions the widget's
+    # backend answers ok rather than "herdr is not installed".
+    sessions = user(
+        "p=$(systemctl --user show-environment | sed -n 's/^PATH=//p')\n"
+        "PATH=$p command -v herdr >&2\n"
+        "PATH=$p ~/.config/omarchy/plugins/nixarchy.herdr/bin/herdr-sessions list")
+    assert json.loads(sessions).get("ok") is True, (
+        f"herdr-sessions list did not answer ok on the session PATH: {sessions}")
+    print("herdr is on the session PATH, and the widget's backend answers ok")
 
     # IPC enablement precedes the asynchronous shell.json write.
     machine.wait_until_succeeds(

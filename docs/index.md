@@ -102,9 +102,9 @@ panel on a key, keyboard-first, in the desktop's own look:
 Four are on by default. MicroVMs, Distrobox, GitHub Actions and ai-mirror are
 on their way, and Voice will be opt-in.
 
-![The package manager panel: curated apps and services, and what each one turns on](img/plugins/pkg-apps.png)
+![The package manager panel: curated apps and services, and what each one turns on](img/plugins/pkg-apps.jpg)
 
-<video src="img/plugins/podman-tour.webm" controls muted loop playsinline width="100%"></video>
+![The Podman panel, open from the bar: three of four containers running, one needing attention](img/plugins/podman-containers.jpg)
 
 See **[nixarchy's plugins](manual/plugins)** for what each one does and
 solves.

@@ -141,6 +141,7 @@ let
       herdr = false;
       microvm = false;
       distrobox = false;
+      devenv = false;
     };
   };
   hasGh = h: builtins.any (p: (p.pname or "") == "gh") h.home.packages;
@@ -905,6 +906,35 @@ let
         noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.microvm"
         || defaultHome.programs.nixarchy.plugins ? "nixarchy.microvm"
         || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.microvm";
+    };
+    # #802: the Dev environments panel follows the devenv service, the way
+    # Podman follows podman -- with devenv off there is nothing to list and
+    # nothing it could create. Off standalone, off when nixarchy is off, and
+    # off when opted out.
+    devenvIsADefault = {
+      on =
+        (homeOfDevenv devenvPanelOn).programs.nixarchy.plugins ? "nixarchy.devenv"
+        && hookLists "nixarchy.devenv" (homeOfDevenv devenvPanelOn)
+        && hasDevenvCli (homeOfDevenv devenvPanelOn);
+      off =
+        (homeOfDevenv devenvPanelOff).programs.nixarchy.plugins ? "nixarchy.devenv"
+        || hasDevenvCli (homeOfDevenv devenvPanelOff)
+        || fixtureStandalone.programs.nixarchy.plugins ? "nixarchy.devenv"
+        || noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.devenv"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.devenv";
+    };
+    # nixarchy ships the plugin to other people's machines, so the package it
+    # ships has to carry the licence that allows it.
+    devenvLicence = {
+      on = builtins.pathExists "${inputs.nixarchy-devenv.packages.${system}.plugin}/LICENSE";
+      # The negative half is the plugin folder itself: a file that is not the
+      # licence must not satisfy it.
+      off = builtins.pathExists "${inputs.nixarchy-devenv.packages.${system}.plugin}/COPYING";
+    };
+    # The Apps row exists exactly where the panel does.
+    devenvRow = {
+      on = menuSpec devenvPanelOn ? "apps.devenv";
+      off = menuSpec devenvPanelOff ? "apps.devenv";
     };
     # The Sandbox group is the panel: no trigger.vm.* child is left (each one
     # called a verb with no name, #781), the parent opens the plugin, and the
@@ -1687,6 +1717,48 @@ let
 
   boxesOff = boxesConfig false;
   boxesOn = boxesConfig true;
+
+  # #802: the Dev environments panel follows the devenv service, so the pair
+  # that proves it needs a home-manager user on both sides. Bound once each
+  # (#747): every machine here is a full NixOS evaluation.
+  devenvPanelUser = "devtester";
+  devenvPanelConfig =
+    enable:
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
+        {
+          programs.nixarchy = {
+            enable = true;
+            services.devenv.enable = enable;
+          };
+          users.users.${devenvPanelUser}.isNormalUser = true;
+          home-manager.users.${devenvPanelUser} = {
+            imports = [ inputs.self.homeManagerModules.nixarchy ];
+            home.stateVersion = "25.05";
+            programs.nixarchy.enable = true;
+          };
+        }
+        {
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
+  devenvPanelOff = devenvPanelConfig false;
+  devenvPanelOn = devenvPanelConfig true;
+  homeOfDevenv = cfg: cfg.home-manager.users.${devenvPanelUser};
+  # The CLI `nixarchy dev` dispatches to, on the session PATH exactly where
+  # the panel is.
+  hasDevenvCli =
+    h: builtins.any (p: (p.pname or p.name or "") == "nixarchy-devenv") h.home.packages;
   # #766 PR C: the two machines podman adds, bound once each (#747 -- every
   # machine here is a full NixOS eval inside the 11.5 GB check). Podman on by
   # itself, and Boxes on with podman forced back off.
@@ -4425,6 +4497,57 @@ pkgs.runCommand "nixarchy-options"
             ;;
         esac
         echo "nixarchy pkg remove routes to nixarchy-pkg-remove"
+
+        # ---- #802: `nixarchy dev` routes to the plugin's CLI, and says what
+        # to enable when it is absent.
+        #
+        # The route is what #498 taught: a verb advertised and unreachable
+        # ships green. This one has a second half the others do not -- the
+        # command it routes to is installed only where the devenv service is,
+        # so the branch a machine without devenv takes has to be an answer
+        # rather than "command not found", which is what nixarchy-dev-init
+        # printed before the plugin replaced it.
+        grep -q 'nixarchy dev init' "$vm/sw/bin/nixarchy" || {
+          echo "the dispatcher's usage does not advertise 'nixarchy dev init'" >&2
+          exit 1
+        }
+
+        mkdir -p devstub
+        cat >devstub/nixarchy-devenv <<'STUB'
+#!/bin/sh
+echo "stub got: $*"
+STUB
+        chmod +x devstub/nixarchy-devenv
+        if ! r=$(PATH="$PWD/devstub:$vm/sw/bin:$PATH" HOME=$rmhome "$vm/sw/bin/nixarchy" dev init ml 2>&1); then
+          echo "nixarchy dev init failed with the CLI on PATH:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"stub got: init ml"*) ;;
+          *)
+            echo "nixarchy dev did not forward its arguments to nixarchy-devenv; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy dev routes to nixarchy-devenv, arguments and all"
+
+        # Without it: a paragraph naming the switch, and a non-zero status.
+        if r=$(env PATH="$vm/sw/bin" HOME=$rmhome "$vm/sw/bin/nixarchy" dev init ml 2>&1); then
+          echo "nixarchy dev init succeeded on a machine with no nixarchy-devenv:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"services.devenv.enable"*) ;;
+          *)
+            echo "nixarchy dev does not name the switch that installs devenv; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy dev without the CLI names services.devenv.enable"
 
         # Same shape for `pkg new` (#581): advertised in the usage, routed by
         # the dispatcher, and the route proven by reaching the command's own

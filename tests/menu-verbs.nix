@@ -28,7 +28,15 @@ let
   # reference, plus boxes -- the box group is gated on services.boxes.enable
   # and would otherwise contribute no rows, quietly halving what is checked.
   eval = inputs.self.nixosConfigurations.reference.extendModules {
-    modules = [ { programs.nixarchy.services.boxes.enable = true; } ];
+    modules = [
+      {
+        programs.nixarchy.services.boxes.enable = true;
+        # Same reason as boxes: the Dev environments row and its panel exist
+        # only where devenv is, so without this the row contributes nothing
+        # and the plugin-row floor below would be checking one row less (#802).
+        programs.nixarchy.services.devenv.enable = true;
+      }
+    ];
   };
 
   menu = eval.config.environment.etc."nixarchy/omarchy-menu.jsonc".source;

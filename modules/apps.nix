@@ -17,6 +17,9 @@ let
   # The Podman panel's row, by the same rule: podman is on through the
   # Services row or through Boxes, and without it the row must not exist.
   podmanEnabled = cfg.enable && config.virtualisation.podman.enable;
+  # #802: the Dev environments row exists where its panel does, which is
+  # where the devenv service is -- the same shape as podmanEnabled.
+  devenvEnabled = cfg.enable && cfg.services.devenv.enable;
 
   # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
   appBinary =
@@ -381,22 +384,6 @@ let
           ];
           description = "Repository workflow runs, jobs and steps · Super+Alt+A";
         };
-        # The Dev environments panel (#802), wherever the devenv service is
-        # on. The helper rather than a bare toggle, and `when` hides the row
-        # once the panel is turned off, as for every other plugin row.
-        "apps.devenv" = {
-          icon = "󱄅";
-          label = "Dev environments";
-          action = "nixarchy-plugin nixarchy.devenv";
-          when = "nixarchy-plugin --enabled nixarchy.devenv";
-          aliases = [
-            "devenv"
-            "environments"
-            "projects"
-            "dev shell"
-          ];
-          description = "List, create, enter and manage devenv projects · Super+Alt+E";
-        };
         "learn.github-actions-keybindings" = {
           icon = "";
           label = "GitHub Actions keybindings";
@@ -670,6 +657,24 @@ let
           label = "Apply changes";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-apply";
           description = "Copy the selection into your flake and nixos-rebuild switch";
+        };
+      }
+      // lib.optionalAttrs devenvEnabled {
+        # The Dev environments panel (#802). The helper rather than a bare
+        # toggle, as install.packages: an off plugin is named, not toggled,
+        # and `when` hides the row once it is turned off.
+        "apps.devenv" = {
+          icon = "󱄅";
+          label = "Dev environments";
+          action = "nixarchy-plugin nixarchy.devenv";
+          when = "nixarchy-plugin --enabled nixarchy.devenv";
+          aliases = [
+            "devenv"
+            "environments"
+            "projects"
+            "dev shell"
+          ];
+          description = "List, create, enter and manage devenv projects · Super+Alt+E";
         };
       }
       // lib.optionalAttrs podmanEnabled {

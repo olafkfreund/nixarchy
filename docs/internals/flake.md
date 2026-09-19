@@ -395,6 +395,42 @@ otherwise glibc and friends every system already has), and `python3` and
    `menu.managed` only works if it still checks for that file.
 5. Build `checks.options`, `checks.menu-verbs` and `checks.plugin`.
 
+### The herdr sessions widget, on by default (#771)
+
+```nix
+nixarchy-herdr = {
+```
+
+The third default plugin, with one difference: upstream has **no flake**, so
+the input is `flake = false` and there is nothing to `follows`. nixarchy is
+the packager. modules/home.nix's `herdrSessions` is a `runCommand` that
+copies the tree without its design documents (`intent/`, `spec/`, `plan/`,
+`tests/`, `preview.png`) and runs `patchShebangs` on `bin/`. Upstream's two
+scripts say `#!/bin/bash` and are run by path, which works today only through
+envfs. The build fails unless `LICENSE` still names both holders, Jankees van
+Woezik and olafkfreund.
+
+`herdr` itself comes from nixpkgs (0.9.0 at the pin). `herdr update`
+downloads a new binary into the path it runs from, so it cannot update a
+store copy. Update herdr by bumping nixpkgs, or install your own build ahead
+of it on `PATH`, as the maintainer's machine does.
+
+Measured at 6bb0a4c (2026-09-19): the plugin output is **681 KiB**, and the
+source tree on the ISO is **983 KiB**. `herdr` adds **25.0 MiB**; the rest of
+its 71.0 MiB closure, `jq` and `iproute2` are already in the reference system.
+
+**Bumping the pin:**
+
+1. Pick the commit on `master` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-herdr/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches `nixarchy-herdr`
+   alone.
+3. The manifest id must still be `nixarchy.herdr`; the build fails if not.
+4. Build `checks.menu-verbs`: every `herdr <level> <sub>` the new
+   `herdr-sessions` sends must be one the pinned herdr lists. Re-run it on
+   a **nixpkgs** bump too, since herdr can rename a subcommand from that side.
+5. Build `checks.options` and `checks.plugin`.
+
 <a id="221-222"></a>
 ### #221/#222
 

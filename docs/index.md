@@ -90,6 +90,25 @@ you own, and only then a rebuild:
 
 See **[other packages](manual/other-packages)** for the whole flow.
 
+## Panels, not terminals
+
+The jobs nixarchy adds to Omarchy now live in the shell itself. Each is a
+panel on a key, keyboard-first, in the desktop's own look:
+- search and install packages, set NixOS options, and apply;
+- look after Podman containers;
+- follow GitLab pipelines;
+- see which coding agent in your herdr sessions needs you.
+
+Four are on by default. MicroVMs, Distrobox, GitHub Actions and ai-mirror are
+on their way, and Voice will be opt-in.
+
+![The package manager panel: curated apps and services, and what each one turns on](img/plugins/pkg-apps.png)
+
+<video src="img/plugins/podman-tour.webm" controls muted loop playsinline width="100%"></video>
+
+See **[nixarchy's plugins](manual/plugins)** for what each one does and
+solves.
+
 ## The binary you just downloaded runs
 
 NixOS deliberately has no `/usr/lib`, so a prebuilt Linux binary — a pip

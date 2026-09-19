@@ -161,6 +161,8 @@ at clone time; both behaviours are intact here.
 
 ### nixarchy's own plugins
 
+What each one does, what it solves, and screenshots: [nixarchy's plugins](plugins).
+
 A few plugins are part of nixarchy itself, and those are the exception to "it
 installs, it does not enable". **nixarchy.pkg**, the package manager panel, is
 installed wherever nixarchy is, turned on at your first login, and opened from

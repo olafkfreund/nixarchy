@@ -952,6 +952,12 @@ How, and why this way:
   gated defaults do not. So the helper checks the plugin's directory before
   anything else and says "not installed on this machine" -- pointing such a
   user at `omarchy plugin enable` would send them to a command that fails.
+- **A user's menu extension overrides these rows, key by key.** Upstream
+  merges `~/.config/omarchy/extensions/omarchy-menu.jsonc` over the defaults
+  (`Menu.qml:243-247`), so a row a plugin once wrote there under the same key
+  (gltui's own `register` did) keeps its `action` over nixarchy's. Nix cannot
+  see that file, so no check can either; the manual tells users to delete the
+  stale keys.
 
 Nixi's own turn-on is separate and stays nixi's: its module does it, with its
 own marker (#709).

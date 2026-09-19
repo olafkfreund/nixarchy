@@ -134,6 +134,15 @@ switch from inside a session. It is checked by hand on real hardware: one
 Install > Apply, count the dialogs. More than one means retention did not
 hold; the answer is not a wider rule.
 
+Two things the probe cost, both general. **polkit needs a logind session**:
+it resolves the subject (`local`, `active`) and the agent's registration
+through it, so a VM that starts the desktop with `systemd-run --uid=1000`
+(`tests/plugin.nix`) cannot exercise anything polkit decides -- a probe there
+is red on a correct build. Log in through the greeter, as `session.nix` does.
+And **OCR cannot read the Omarchy theme's dialogs** any better than its
+greeter: wait on a system fact the dialog causes (here, a
+`polkit-agent-helper@*` unit) rather than on its text.
+
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
 The network reinstall image (#483) is only honest for a closure the caches

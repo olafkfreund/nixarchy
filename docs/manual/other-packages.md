@@ -33,6 +33,10 @@ one run, use `NH_ELEVATION_STRATEGY=auto nixarchy apply`.
 
 ## Finding it in the first place
 
+_Install > Packages_ (Super+Alt+N on a new install) is the same work in a
+panel: search, add, draft and apply without a terminal. It drives the commands
+this page describes, so everything below holds for both.
+
 `nixarchy-search`, or _Install > Search_, is one fzf picker over every nixpkgs
 package, every NixOS option and the curated app list, with each entry's type,
 default and description in a preview pane. Picking a row routes it: an app is

@@ -1933,6 +1933,20 @@ stdenvNoCC.mkDerivation {
                       --subst-var-by snowflake \
                       "${nixos-icons}/share/icons/hicolor/256x256/apps/nix-snowflake.png"
 
+                    # The default plugins' binds (#766), in the SEED, so new homes get
+                    # them and nobody's edited bindings.lua is touched. Appended after
+                    # upstream's last line, asserted first so a reworded seed fails here.
+                    binds=$out/share/omarchy/config/hypr/bindings.lua
+                    [ "$(tail -n1 "$binds")" = '-- o.bind("SUPER + PERIOD", nil, "omarchy-shell shell toggle omarchy.emojis")' ] || {
+                      echo "default-plugin binds: upstream's seed bindings.lua no longer ends where it did" >&2
+                      exit 1
+                    }
+                    # printf, not a heredoc: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    printf '%s\n' "" \
+                      "-- nixarchy's own plugins (#766). The helper says so if one is turned off." \
+                      'o.bind("SUPER + ALT + N", "Packages", "nixarchy-plugin nixarchy.pkg")' \
+                      >>"$binds"
+
                     runHook postInstall
   '';
 

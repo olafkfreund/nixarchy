@@ -179,6 +179,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-pkg = {
+      url = "github:olafkfreund/nixarchy-pkg/dd937f2cb289e81c51a7358152835879ef47bf96";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #
@@ -819,6 +826,11 @@
           # alone gives a server nothing starts. It reaches users through
           # modules/home.nix instead.
           nixi = inputs.nixi.packages.${system}.nixi;
+
+          # Re-exported for the same reasons as nixi: `nix build .#nixarchy-pkg`
+          # works, and it is built against our nixpkgs through the `follows`.
+          # modules/home.nix names it as a default plugin (#766).
+          nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
 
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.

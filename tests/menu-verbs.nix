@@ -40,12 +40,20 @@ let
   # nixarchy-channel ships in the omarchy tree rather than as its own package,
   # so it is reached through the built tree the same way the menu reaches it.
   omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
+
+  # Every plugin Home Manager installs on this machine, by source. A row that
+  # names a plugin id is checked against these manifests (#766): attribute
+  # names are free, so the id has to come from the manifest itself.
+  pluginSources = pkgs.lib.concatMap (
+    u: pkgs.lib.mapAttrsToList (_: p: "${p.src}") u.programs.nixarchy.plugins
+  ) (builtins.attrValues eval.config.home-manager.users);
 in
 pkgs.runCommand "nixarchy-menu-verbs"
   {
     nativeBuildInputs = [
       pkgs.gnugrep
       pkgs.gnused
+      pkgs.jq
     ];
   }
   ''
@@ -77,11 +85,15 @@ pkgs.runCommand "nixarchy-menu-verbs"
     verbs_of ${boxcli}/bin/nixarchy-box > box-verbs
     verbs_of ${secretcli}/bin/nixarchy-secret > secret-verbs
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
+    for m in ${pkgs.lib.escapeShellArgs pluginSources}; do
+      jq -r .id "$m/manifest.json"
+    done | sort -u > plugin-ids
 
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
     echo "nixarchy-box accepts: $(tr '\n' ' ' < box-verbs)"
     echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
+    echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
 
     # A floor. An empty verb list makes every row below pass, turning "the
     # dispatch stopped parsing" into a green check -- the exact shape of failure
@@ -129,6 +141,16 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # found by a tester.
     scan '\bnixarchy-channel +[-a-z]+'  2 nixarchy-channel channel-verbs
     scan '\bnixarchy +channel +[-a-z]+' 3 nixarchy-channel channel-verbs
+
+    # The plugin rows (#766): a row opening a plugin that is not installed
+    # does nothing at all, so each id has to be one this machine installs.
+    scan '\bnixarchy-plugin +[a-z][-a-z.]*'               2 nixarchy-plugin plugin-ids
+    scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
+    pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
+    test "$pluginrows" -ge 1 || {
+      echo "ERROR: no menu row opens a nixarchy plugin; the Packages row is gone" >&2
+      exit 1
+    }
 
     # The second floor: if the menu stopped carrying these rows, every scan
     # above would run zero times and the check would pass having read nothing.

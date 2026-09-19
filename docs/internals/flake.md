@@ -299,6 +299,43 @@ the ed25519 keys from services.openssh.hostKeys upstream -- so the
 mkDefault rule in modules/services/default.nix never even arises here.
 tests/options.nix asserts the inertness rather than trusting this note.
 
+<a id="the-package-manager-panel-on-by-default-766"></a>
+### The package manager panel, on by default (#766)
+
+```nix
+nixarchy-pkg = {
+```
+
+nixarchy-pkg is the first of nixarchy's own shell plugins in
+`programs.nixarchy.defaultPlugins`. It is installed and turned on, once,
+wherever nixarchy is enabled (modules/AGENTS.md has the reversal of
+"plugins present, never on" and its reasoning). It is an input for nixi's
+reasons: same maintainer, its own release cadence and checks, and a copy
+here would be a second place to maintain it. It uses `follows` because it
+is QML plus a bash adapter, so there is nothing to build and no binary
+cache to forfeit, and one nixpkgs in the lock beats two.
+
+Measured at dd937f2 (2026-09-19): the plugin output is **120 KiB**. The
+input's source tree, which `lib.inputSources` carries onto the offline ISO
+and the installed host, is **6.0 MiB**, mostly its docs images.
+
+It is not in `checks`. modules/home.nix's `validatedPlugins` runs
+`omarchy-plugin-validate` on it in every home that installs it, the
+reference machine included, so a pin that moves to a broken manifest fails
+there. A separate `checks.nixarchy-pkg` would need a workflow edit (AGENTS.md
+section 4) and would check nothing more.
+
+**Bumping the pin.** The repo has no tags, so there is nothing to track:
+
+1. Pick the commit on `main`, and read what changed since the current pin
+   (`gh api repos/olafkfreund/nixarchy-pkg/compare/<old>...<new>`).
+2. Edit the rev in the URL, then `nix flake lock`. The lock diff must
+   touch `nixarchy-pkg` alone; a second nixpkgs means `follows` broke.
+3. Check that the manifest id is still `nixarchy.pkg`. The build fails if
+   it is not, because the default set is keyed by it.
+4. Build `checks.menu-verbs`, `checks.options` and `checks.plugin`. The
+   row, the default and the enable-once hook all name the plugin.
+
 <a id="221-222"></a>
 ### #221/#222
 

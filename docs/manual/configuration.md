@@ -159,6 +159,25 @@ Plugins run unsandboxed inside your long-lived shell process. Upstream warns
 about this at the prompt and refuses `ext::`-style URLs that would run a command
 at clone time; both behaviours are intact here.
 
+### nixarchy's own plugins
+
+A few plugins are part of nixarchy itself, and those are the exception to "it
+installs, it does not enable". **nixarchy.pkg**, the package manager panel, is
+installed wherever nixarchy is, turned on at your first login, and opened from
+**Install ▸ Packages** or, on a new install, **Super+Alt+N**.
+
+"Once" is the point. A marker in `~/.local/state/nixarchy/enabled-once/` records
+that it was turned on, so if you turn it off in Setup → Plugins it stays off. To
+stop nixarchy installing it at all:
+
+```nix
+programs.nixarchy.defaultPlugins.pkg = false;
+```
+
+That never edits your `shell.json`, so a plugin you already have on stays on
+until you turn it off there. If you already declare it yourself through
+`programs.nixarchy.plugins`, your `src` wins.
+
 ## RetroArch cores
 
 `pkgs.retroarch` is `retroarch-with-cores` built with an **empty** core list,

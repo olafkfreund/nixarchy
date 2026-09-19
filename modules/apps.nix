@@ -332,6 +332,16 @@ let
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-search";
           description = "Every package, NixOS option and Omarchy app, in one picker";
         };
+        # The panel that ships on by default (#766). The helper, never a bare
+        # `omarchy-shell shell toggle`: toggling a plugin that is off exits 0
+        # and does nothing, and `when` hides the row once it is turned off.
+        "install.packages" = {
+          icon = "󰏖";
+          label = "Packages";
+          action = "nixarchy-plugin nixarchy.pkg";
+          when = "nixarchy-plugin --enabled nixarchy.pkg";
+          description = "Browse, add and apply packages in a panel";
+        };
 
         # The Secrets group (#611). A new parent with no action of its own,
         # which is legitimate for a submenu -- Menu.qml renders the children.

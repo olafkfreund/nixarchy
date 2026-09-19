@@ -1475,10 +1475,18 @@ in
           ''
         );
 
-    # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
-    programs.nixarchy.plugins = lib.mapAttrs' (
-      _: p: lib.nameValuePair p.id { src = lib.mkDefault p.src; }
-    ) resolvedDefaults;
+    programs.nixarchy = {
+      # The package manager panel, on wherever nixarchy is (#766).
+      defaultPluginSet.pkg = {
+        id = "nixarchy.pkg";
+        src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      };
+
+      # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
+      plugins = lib.mapAttrs' (
+        _: p: lib.nameValuePair p.id { src = lib.mkDefault p.src; }
+      ) resolvedDefaults;
+    };
 
     # Turned on through the running shell's own writer, never by editing
     # shell.json: the shell rewrites that whole file from memory, so a second

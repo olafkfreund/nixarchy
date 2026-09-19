@@ -148,3 +148,22 @@ already enabled the panel keep it in `shell.json`, pointing at a plugin
 directory that reconcile removes. The shell then skips an id it cannot find,
 and the user can disable it in Setup > Plugins. `packages` goes too, and it's
 harmless because nothing else uses it yet.
+
+## Deviations (recorded in the commits that make them)
+
+- **Step 3, the wrapper.** It is a `pkgs.runCommand` in `modules/home.nix`, not
+  a `packages.<sys>.nixarchy-gltui` flake output. `modules/home.nix:258-263`
+  says home-side packages go through the user's nixpkgs, not
+  `inputs.self.packages`. So there is no `.#nixarchy-gltui`; the `gitlabMenuManaged`
+  case in `checks.options` checks the resolved src instead of `ls result/`.
+- **Step 3, `LICENSE`.** The wrapper copies `LICENSE` from the input's source
+  tree when upstream's package omits it. The repo carries the MIT file at
+  `0b827c6`; only its package leaves it out. So the notice ships now, and the
+  upstream `runtimeFiles` gate becomes tidying rather than a blocker. The
+  `menu.managed` gate still blocks merge: the sentinel does nothing until
+  upstream's `menu.py register` reads it.
+- **Step 4, `tests/plugin.nix`.** Its bare `machine` node sets
+  `defaultPlugins.gitlab = false` alongside `pkg`. Otherwise the panel lands
+  in the empty plugin directory that node asserts. `defaultPluginsNoHookWhenEmpty`
+  and `gitlabIsADefault` share one home with both opted out (#747: one
+  evaluation, not two).

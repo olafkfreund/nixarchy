@@ -151,7 +151,10 @@ pkgs.testers.runNixOSTest rec {
           # Same reasoning, for #766's default set: nixarchy.pkg is on wherever
           # nixarchy is, so the empty plugin directory needs it off here too.
           # The `defaults` node below adds its own stand-in on top of this.
-          defaultPlugins.pkg = false;
+          defaultPlugins = {
+            pkg = false;
+            gitlab = false;
+          };
 
           # The declarative half. Same plugin the imperative flow adds below,
           # so the two paths can be compared directly -- except this one is

@@ -263,6 +263,16 @@ let
   # the next person copying this line will be packaging something that does.
   omarchyNvimConfig = (pkgs.extend inputs.self.overlays.default).omarchy-nvim-config;
 
+  # The GitLab pipelines panel as nixarchy installs it (#770): upstream's copy
+  # plus `menu.managed`, which tells its menu.py that nixarchy owns the rows,
+  # and the MIT notice from the source tree when upstream's package omits it.
+  gitlabPipelines = pkgs.runCommand "nixarchy-gltui" { } ''
+    cp -r ${inputs.nixarchy-gltui.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    touch $out/menu.managed
+    [ -f $out/LICENSE ] || cp ${inputs.nixarchy-gltui}/LICENSE $out/LICENSE
+  '';
+
   # Omarchy's Neovim configuration, appended to the seed activation rather than
   # wrapped around it: this is a string the activation interpolates, so adding
   # it costs the diff it is worth instead of re-indenting three hundred lines
@@ -565,6 +575,7 @@ in
       type = lib.types.attrsOf lib.types.bool;
       default = {
         pkg = true;
+        gitlab = true;
         podman = true;
         distrobox = true;
         microvm = true;
@@ -572,7 +583,8 @@ in
       example = lib.literalExpression "{ podman = false; }";
       description = ''
         nixarchy's own shell plugins, installed and turned on for you: the
-        package manager panel always, podman when podman is on, distrobox when
+        package manager panel and the GitLab pipelines panel always, podman
+        when podman is on, distrobox when
         Boxes is on, microvms always. A name left out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
@@ -1497,6 +1509,17 @@ in
           src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
           gate = osConfig.virtualisation.podman.enable or false;
         };
+      };
+      # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
+      # drives and the python its actions.py runs on (#770).
+      defaultPluginSet.gitlab = {
+        id = "olafkfreund.gitlab-pipelines";
+        src = gitlabPipelines;
+        packages = [
+          pkgs.glab
+          pkgs.python3
+          pkgs.xdg-utils
+        ];
       };
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login

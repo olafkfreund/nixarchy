@@ -193,6 +193,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-gltui = {
+      url = "github:olafkfreund/nixarchy-gltui/0b827c62cfb2839e0b930becfe94008b689623cc";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #

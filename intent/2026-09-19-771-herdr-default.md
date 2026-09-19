@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 771
 author: olafkfreund
 ---
@@ -60,3 +60,5 @@ plugin directory and a `herdr` binary that comes from a different flake input.
 - **Which `herdr` binary does the owner's machine keep?** Today it comes from
   `github:ogulcancelik/herdr` in `/etc/nixos`, while the default would install
   the nixpkgs one. The two can coexist on PATH, but only one wins.
+
+**Decided on approval (2026-09-19):** nixarchy ships nixpkgs' `herdr`. On the owner's machine, the `/etc/nixos` input keeps priority until the owner removes it.

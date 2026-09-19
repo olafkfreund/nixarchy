@@ -114,6 +114,8 @@ let
       fixture = {
         id = "nixarchy.fixture";
         src = fixturePlugin "nixarchy.fixture";
+        # #770: a default's runtime tools ride with it, behind the same gate.
+        packages = [ pkgs.hello ];
       };
       other = {
         id = "nixarchy.other";
@@ -127,6 +129,17 @@ let
     id: h:
     h.xdg.configFile ? ${defaultHook} && pkgs.lib.hasInfix id h.xdg.configFile.${defaultHook}.text;
   fixtureHome = homeOn { } (fixtureDefaults { });
+  # Bound once each: every homeOn is a NixOS evaluation (#747).
+  fixtureStandalone = homeWith (fixtureDefaults { });
+  fixtureNixarchyOff = homeOn { enable = false; } (fixtureDefaults { });
+  # Every real default opted out: the home with nothing resolved.
+  noDefaultsHome = homeOn { } {
+    programs.nixarchy.defaultPlugins = {
+      pkg = false;
+      gitlab = false;
+    };
+  };
+  hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
 
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
   # above deliberately is not.
@@ -767,17 +780,11 @@ let
     # off, get neither the plugin nor the hook.
     defaultPluginsNeedAnOsConfig = {
       on = installsFixture fixtureHome && hookLists "nixarchy.fixture" fixtureHome;
-      off =
-        installsFixture (homeWith (fixtureDefaults { }))
-        || hookLists "nixarchy.fixture" (homeWith (fixtureDefaults { }));
+      off = installsFixture fixtureStandalone || hookLists "nixarchy.fixture" fixtureStandalone;
     };
     defaultPluginsNeedNixarchyOn = {
       on = installsFixture fixtureHome;
-      off =
-        let
-          h = homeOn { enable = false; } (fixtureDefaults { });
-        in
-        installsFixture h || h.xdg.configFile ? ${defaultHook};
+      off = installsFixture fixtureNixarchyOff || fixtureNixarchyOff.xdg.configFile ? ${defaultHook};
     };
     # Opting one out removes it from both the install and the hook, and leaves
     # the other where it was: a name set to false is not every name dropped.
@@ -805,8 +812,7 @@ let
     # joined the set -- the property is "nothing resolved, no hook".
     defaultPluginsNoHookWhenEmpty = {
       on = fixtureHome.xdg.configFile ? ${defaultHook};
-      off =
-        (homeOn { } { programs.nixarchy.defaultPlugins.pkg = false; }).xdg.configFile ? ${defaultHook};
+      off = noDefaultsHome.xdg.configFile ? ${defaultHook};
     };
     # The real package manager panel is a default wherever nixarchy is on, and
     # nowhere else: standalone Home Manager gets nothing (Mode A).
@@ -833,6 +839,19 @@ let
     podmanRow = {
       on = hasPodmanRow boxesOn && hasPodmanRow podmanOnly;
       off = hasPodmanRow boxesOff || hasPodmanRow boxesNoPodman;
+    };
+    # #770: the GitLab pipelines panel is a default, and opting out removes it.
+    gitlabIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines"
+        && hookLists "olafkfreund.gitlab-pipelines" defaultHomeOn;
+      off = noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines";
+    };
+    # #770: a default's runtime tools are installed only where the default
+    # resolves -- never standalone, never with nixarchy off (Mode A).
+    defaultPluginPackages = {
+      on = hasHello fixtureHome;
+      off = hasHello fixtureStandalone || hasHello fixtureNixarchyOff;
     };
 
     nixiEnablesCard = {
@@ -2160,6 +2179,9 @@ pkgs.runCommand "nixarchy-options"
     pluginHelper = pkgs.callPackage ../pkgs/nixarchy-plugin.nix {
       inherit ((pkgs.extend inputs.self.overlays.default)) omarchy;
     };
+    # #770: the source nixarchy installs for the panel carries the sentinel
+    # that tells its menu.py nixarchy owns the rows, and the MIT notice.
+    gitlabSrc = (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
     # A default whose pinned manifest renamed its id must fail its build.
     renamedDefault =
       pkgs.testers.testBuildFailure
@@ -4906,6 +4928,15 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "default plugins: the helper reads shell.json as the shell does, and a renamed id fails the build"
+
+        # ---- #770: gitlabMenuManaged ----
+        for f in menu.managed LICENSE; do
+          [ -f "$gitlabSrc/$f" ] || {
+            echo "gitlabMenuManaged: the GitLab panel nixarchy installs has no $f ($gitlabSrc)" >&2
+            exit 1
+          }
+        done
+        echo "the GitLab panel carries menu.managed and its licence"
 
           touch $out
       ''

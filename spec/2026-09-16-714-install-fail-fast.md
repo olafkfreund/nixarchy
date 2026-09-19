@@ -11,7 +11,8 @@ Replaces the unsafe shutdown()/release() fallback identified in the issue.
 
 ## Design
 
-The six install-class test scripts run inside one generated try/finally.
+Three install-class scripts gain a generated try/finally; the three ISO tests
+keep their existing try/finally and machine lists. All six share bounded cleanup.
 A factory records each dynamically created machine before start(), including
 partial starts. Its command starts with exec: the pinned driver launches via
 Popen(shell=True), so process.kill() must target qemu, not a waiting shell.
@@ -23,7 +24,7 @@ An unreapable process or reader forces a failing exit after printing the origina
 exception, preventing a non-daemon reader from hanging interpreter shutdown.
 No graceful shutdown is needed after the final assertion on disposable disks.
 
-One shared implementation replaces the three monitor-based reap() copies and
+One shared cleanup implementation replaces the three monitor-based reap() copies and
 covers the three tests with success-only cleanup. This reverses the earlier
 no-helper decision: bounded process and thread cleanup is too subtle to copy
 six times, and all nine creation sites need the same ownership contract.
@@ -39,8 +40,8 @@ six times, and all nine creation sites need the same ownership contract.
 ## Risks
 
 The implementation reads process/serial_thread fields from the pinned driver.
-The check uses the actual pinned driver source to assert those assumptions and
-exercises real subprocess/thread cleanup without qemu. A normal VM run remains
+The pinned driver source was inspected to establish those assumptions. The
+check exercises real subprocess/thread cleanup without qemu. A normal VM run remains
 necessary CI integration evidence; the cheap check cannot prove QEMU behavior.
 
 ## Verification

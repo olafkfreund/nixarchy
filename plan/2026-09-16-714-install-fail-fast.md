@@ -19,7 +19,8 @@ Prefix direct qemu commands with exec so the driver's Popen owns qemu.
 Finally kill all owned processes, bounded wait and serial join, no guest RPC.
 If cleanup cannot complete, print the original exception and fail with os._exit
 rather than hanging in interpreter thread shutdown. Keep restart shutdowns.
-All six tests use this wrapper; replace the three existing monitor reapers.
+Three tests use the wrapper; the three ISO tests retain their existing lists
+and finally blocks, calling the same helper instead of monitor reapers.
 No driver/job timeout, deployment, or installed-system behavior changes.
 
 ## Steps

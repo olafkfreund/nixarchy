@@ -1378,6 +1378,10 @@ jobs:
         # README tells people with an existing Hyprland to use.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.coexist
 
+      - name: Failed install assertions reap unresponsive dynamic VMs
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.install-teardown
+
       - name: The installer's screens draw at every width
         if: needs.gate.outputs.relevant == 'true'
         # checks.installer-ui was added with #133 and then run by nothing: it

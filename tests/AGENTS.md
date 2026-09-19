@@ -277,6 +277,18 @@ Two branches only these can reach, as illustration:
 
 ## Working here
 
+- **Dynamic VMs need bounded cleanup on failure (#714).** The pinned driver's
+  `create_machine` does not register its result. `shutdown()` waits on the
+  process without a timeout, `release()` joins the non-daemon serial reader
+  without a timeout, and a monitor `quit` can block too. The install tests use
+  `vm-cleanup.py` from `finally`: kill every owned process, then bounded waits
+  for children and serial readers. On an unreapable reader, print the original
+  assertion and force a failing exit rather than hang in Python's exit joins.
+  Register before `start()` so partial starts are covered. The driver uses
+  `Popen(shell=True)`: prefix our direct qemu commands with `exec` so the
+  process handle owns qemu, not a shell. `install-teardown` drives real
+  SIGTERM-ignoring subprocesses and a stuck reader; it does not boot qemu.
+
 - **A check in `flake.nix` and in no workflow is not a check.** `build.yml` has
   a step asserting every check is run by some workflow, because
   `checks.installer-ui` shipped that way once and its PR went green without it

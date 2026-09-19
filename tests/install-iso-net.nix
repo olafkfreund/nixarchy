@@ -314,7 +314,7 @@ pkgs.testers.runNixOSTest {
       };
     };
 
-  testScript = ''
+  testScript = builtins.readFile ./vm-cleanup.py + ''
     import os
     import shutil
     import subprocess
@@ -345,13 +345,6 @@ pkgs.testers.runNixOSTest {
 
     vms = []
 
-    def reap():
-        for m in vms:
-            try:
-                m.send_monitor_command("quit")
-            except Exception:
-                pass
-
     try:
         disk = os.path.abspath("target.qcow2")
         subprocess.check_call(
@@ -362,7 +355,7 @@ pkgs.testers.runNixOSTest {
             " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
 
         installer = create_machine(
-            "${installerCommand}" + efi + net + drives, name="installer")
+            "exec ${installerCommand}" + efi + net + drives, name="installer")
         vms.append(installer)
         installer.start()
 
@@ -420,7 +413,7 @@ pkgs.testers.runNixOSTest {
         time.sleep(3)
 
         target = create_machine(
-            "${targetCommand}"
+            "exec ${targetCommand}"
             + efi
             + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
             name="target")
@@ -447,6 +440,6 @@ pkgs.testers.runNixOSTest {
         target.wait_for_console_text(r'starting Boot.*"Linux Boot Manager"', timeout=300)
         print("the bootloader the installer wrote boots, from the disk the fetch filled")
     finally:
-        reap()
+        reap_owned_vms(vms)
   '';
 }

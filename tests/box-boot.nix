@@ -34,15 +34,9 @@
   inputs,
   pkgs,
   imagePin,
+  image,
 }:
 let
-  # The same pin checks.box-template builds -- one entry, the default
-  # template's. finalImageTag matters: the tarball's RepoTags must say
-  # `latest` so the tag below can name it.
-  image = pkgs.dockerTools.pullImage {
-    inherit (imagePin) imageName imageDigest sha256;
-    finalImageTag = imagePin.tag or "latest";
-  };
   fullImage = "docker.io/library/${imagePin.imageName}:${imagePin.tag or "latest"}";
 in
 pkgs.testers.runNixOSTest {

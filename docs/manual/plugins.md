@@ -49,11 +49,11 @@ package, and set NixOS options through a form. Everything is written to the
 same files nixarchy's own commands write, then applied with one key. The
 rebuild asks for your password through the Omarchy dialog.
 
-![The package manager's Apps tab: curated apps and services, with what each one turns on](../img/plugins/pkg-apps.png)
+![The package manager's Apps tab: curated apps and services, with what each one turns on](../img/plugins/pkg-apps.jpg)
 
-![Searching nixpkgs for a package](../img/plugins/pkg-search.png)
+![Searching nixpkgs for a package](../img/plugins/pkg-search.jpg)
 
-![Searching NixOS options, then setting one through a form](../img/plugins/pkg-options.png)
+![Searching NixOS options, then setting one through a form](../img/plugins/pkg-options.jpg)
 
 ## Podman
 
@@ -73,9 +73,7 @@ attention.
 where podman is off. nixarchy's container engine is still rootless Docker, so
 `docker` keeps meaning Docker.
 
-<video src="../img/plugins/podman-tour.webm" controls muted loop playsinline width="100%"></video>
-
-![The Podman panel's Containers tab: three of four running, one needing attention](../img/plugins/podman-containers.png)
+![The Podman panel's Containers tab: three of four running, one needing attention](../img/plugins/podman-containers.jpg)
 
 ## GitLab pipelines
 
@@ -105,7 +103,7 @@ the popup. `herdr` itself comes with it from nixpkgs, so update it through
 nixpkgs (`herdr update` cannot write to the Nix store), or put your own build
 ahead of it on `PATH`.
 
-![The herdr popup: three sessions, one agent needing you, two done](../img/plugins/herdr-sessions.png)
+![The herdr popup: three sessions, one agent needing you, two done](../img/plugins/herdr-sessions.jpg)
 
 ## MicroVMs
 
@@ -123,9 +121,7 @@ it builds on (`list --json`, `run --detach`, `console`) has already landed. The
 panel replaces the Sandbox menu when it ships. Until then, use
 **Trigger ▸ Sandbox** and `nixarchy vm`.
 
-<video src="../img/plugins/microvm-create.webm" controls muted loop playsinline width="100%"></video>
-
-![The MicroVMs panel: disposable and permanent VMs in one list](../img/plugins/microvm-panel.png)
+![The MicroVMs panel: disposable and permanent VMs in one list](../img/plugins/microvm-panel.jpg)
 
 ## Distrobox
 
@@ -142,9 +138,7 @@ and watch create and upgrade stream into the panel. It replaces the Boxes menu
 once it creates boxes from nixarchy's own templates. Until then, use
 **Trigger ▸ Boxes**.
 
-<video src="../img/plugins/distrobox-create.webm" controls muted loop playsinline width="100%"></video>
-
-![The Distrobox panel: one box running, one exited, one created](../img/plugins/distrobox-popup.png)
+![The Distrobox panel: one box running, one exited, one created](../img/plugins/distrobox-popup.jpg)
 
 ## GitHub Actions
 
@@ -169,9 +163,7 @@ moment. When it ships in nixarchy it is installed, but **no agent is connected
 to it automatically**, and an agent will not take control without you saying
 yes first.
 
-[![A frame from the nixarchy desktop showcase, which ai-mirror recorded (the package manager's Options tab)](../img/plugins/ai-mirror-poster.jpg)](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)
-
-*The desktop showcase video, recorded with ai-mirror. Click to play.*
+**[Watch the nixarchy desktop showcase](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)**, recorded by an agent through ai-mirror.
 
 ## Voice
 

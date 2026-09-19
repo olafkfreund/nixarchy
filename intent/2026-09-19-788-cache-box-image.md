@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 788
 author: olafkfreund
 ---
@@ -52,13 +52,15 @@ cache allowlist and its budget. Nothing changes on any installed machine.
 - Changing the allowlist is not a CI-gate change (§11): no workflow trigger,
   required check or timeout moves.
 
+## Decisions (owner, on approval, 2026-09-19)
+
+1. **Availability is a reason for the cache list.** It's an explicit exception
+   to the #725 rule, written into `cache-allowlist.sh`'s header and next to
+   the entry.
+2. **Every pinned box template image is cached,** not only the default: today
+   archlinux and debian, and each new template adds one. The budget measures
+   them.
+
 ## Open questions
 
-1. **Is availability a reason for the allowlist?** Yes means caching the
-   pinned images: two now, one more with each new box template, measured by
-   the budget. No leaves only weaker options: retries on the pull (fewer red
-   runs, not none), or accepting occasional red runs and re-running them by
-   hand.
-2. **All templates or only the default?** `box-boot` boots one image
-   (archlinux), while `box-template` pulls every pinned template's image.
-   Caching only archlinux removes most of the exposure for less cache space.
+None.

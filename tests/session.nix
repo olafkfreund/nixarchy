@@ -430,7 +430,11 @@ pkgs.testers.runNixOSTest {
         "hyprctl dispatch 'hl.dsp.exec_cmd(\"/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok\")'\n"
         "PROBE_EOF")
     machine.succeed("su omarchy -c 'bash /tmp/pkexec-probe.sh'")
-    machine.wait_for_text("Authenticat", timeout=90)
+    # Only a polkit agent starts polkit-agent-helper, and only once it is asking
+    # for the password -- so this is the dialog being up, deterministically.
+    # OCR was tried first and cannot read this theme's dialog (see the greeter).
+    machine.wait_until_succeeds(
+        "systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)
     machine.send_chars("omarchy\n")
     machine.wait_until_succeeds("test \"$(stat -c %U /tmp/pkexec-ok)\" = root", timeout=60)
     print("the rebuild's elevation reaches the Omarchy polkit dialog")

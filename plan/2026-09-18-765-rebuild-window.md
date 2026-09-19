@@ -145,6 +145,16 @@ spec: spec/2026-09-18-765-rebuild-window.md
    `wait_for_text("Authenticat")` times out. That also proves the OCR match
    does not fire on something else on screen. The second break (the wrapper
    off) is unchanged.
+
+   *Second deviation, made during implementation:* `wait_for_text("Authenticat")`
+   timed out on a correct build. The journal showed `Created slice Slice
+   /system/polkit-agent-helper` at that moment, so the dialog was up, but OCR
+   read only the desktop behind it (this theme OCRs badly; see the greeter
+   block). The probe now waits for a `polkit-agent-helper@*` unit instead. Only
+   a polkit agent starts that helper, and only once it is asking for the
+   password, so it is the same fact, read deterministically. The `true` break
+   still proves it: no pkexec, no helper, timeout. The dispatch also changed
+   to `hl.dsp.exec_cmd(...)`: this Hyprland takes Lua expressions.
    Run `checks.session` only when `gh run list` shows 0 in flight. It is a
    booted VM.
 

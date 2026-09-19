@@ -596,6 +596,12 @@ in
               type = lib.types.bool;
               default = true;
             };
+            # Runtime tools the plugin shells out to (glab, gh, ...), on the
+            # session PATH wherever the plugin itself is installed (#770).
+            packages = lib.mkOption {
+              type = lib.types.listOf lib.types.package;
+              default = [ ];
+            };
           };
         }
       );
@@ -764,7 +770,8 @@ in
       packages = [
         cfg.package
       ]
-      ++ lib.optionals (!(osConfig.programs.nixarchy.enable or false)) cfg.package.passthru.runtimeDeps;
+      ++ lib.optionals (!(osConfig.programs.nixarchy.enable or false)) cfg.package.passthru.runtimeDeps
+      ++ lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults);
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 

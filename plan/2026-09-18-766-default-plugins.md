@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 766
 spec: spec/2026-09-18-766-default-plugins.md
 ---
@@ -365,7 +365,7 @@ machine binds it.
 - The Docker menu (lazydocker) and the Podman panel sit side by side. Nothing
   merges them; they are different engines.
 
-## PR D — distrobox (draft, awaiting approval)
+## PR D — distrobox (approved 2026-09-19)
 
 **What changed since the outline:** the plugin (`nixarchy.distrobox`, MIT,
 LICENSE shipped in its package) gained templates on 2026-09-18

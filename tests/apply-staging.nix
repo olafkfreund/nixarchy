@@ -52,9 +52,10 @@ pkgs.runCommand "nixarchy-apply-staging"
     EOF
 
     # A fake nh: apply ends by rebuilding, which this check has no business
-    # doing. Everything asserted here happens before that.
+    # doing. It records each call and exits $NH_STUB_RC, so the flag cases
+    # below can tell "switched" from "declined" and fake a failed rebuild.
     mkdir -p "$PWD/stub"
-    printf '#!${pkgs.runtimeShell}\nexit 0\n' > "$PWD/stub/nh"
+    printf '#!${pkgs.runtimeShell}\necho "$*" >> %s/nh.calls\nexit "''${NH_STUB_RC:-0}"\n' "$PWD" > "$PWD/stub/nh"
     chmod +x "$PWD/stub/nh"
     export PATH=$PWD/stub:$PATH
 
@@ -112,6 +113,35 @@ pkgs.runCommand "nixarchy-apply-staging"
       ok "a second apply leaves it staged"
     else
       bad "a second apply unstaged the copy"
+    fi
+
+    # ---- answers as flags (#765 PR 2) -----------------------------------
+    # A panel or script has no terminal; it must be able to say "switch" and
+    # "no preview" without feeding answers on stdin, and EOF must still decline.
+    calls() { [ -s "$PWD/nh.calls" ]; }
+
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root $apply --yes --no-preview </dev/null >/dev/null 2>&1 || rc=$?
+    if calls && [ "$rc" -eq 0 ]; then
+      ok "--yes --no-preview switches with no stdin"
+    else
+      bad "--yes --no-preview did not switch (exit $rc, nh calls: $(cat "$PWD/nh.calls" 2>/dev/null))"
+    fi
+
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root $apply </dev/null >/dev/null 2>&1 || rc=$?
+    if calls; then
+      bad "EOF on stdin switched; it must decline"
+    else
+      ok "EOF on stdin still declines"
+    fi
+
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root $apply --frobnicate </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] && ! calls; then
+      ok "an unknown flag exits 2 and never switches"
+    else
+      bad "an unknown flag exited $rc (want 2), nh calls: $(cat "$PWD/nh.calls" 2>/dev/null)"
     fi
 
     [ "$fails" -eq 0 ] || exit 1

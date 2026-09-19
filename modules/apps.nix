@@ -2946,16 +2946,6 @@ in
               '';
             })
 
-            # `nixarchy dev init <preset>`. Its own file because flake.nix's
-            # devenv-presets check runs THIS command rather than a copy of it --
-            # see pkgs/dev-init.nix.
-            #
-            # Installed unconditionally, unlike devenv itself, which is an opt-in
-            # catalogue entry. The command's first act is to check for devenv and
-            # name the entry that installs it, and that answer is only useful on a
-            # machine that has not enabled it yet.
-            (pkgs.callPackage ../pkgs/dev-init.nix { })
-
             # `nixarchy vm <subcommand>`. Its own file for the same reason as
             # dev-init.nix above: `checks.microvm-template` (#224) has to run
             # the real command. See pkgs/microvm.nix for what it does and why.
@@ -3026,10 +3016,30 @@ in
                       remove)  shift 2; exec nixarchy-app-remove "$@" ;;
                     esac
                     ;;
+                  # `nixarchy dev ...` is the terminal half of the Dev
+                  # environments panel (#802): the plugin's own CLI, which
+                  # comes with the panel and so is here wherever the devenv
+                  # service is on. Every subcommand is forwarded, not just
+                  # init, because the CLI grew list, templates, status and
+                  # remove and a second list here would drift from it.
+                  #
+                  # Where devenv is off the CLI is absent, and this says what
+                  # to turn on -- the same answer `nixarchy dev init` gave on
+                  # such a machine before the plugin replaced it.
                   dev)
-                    case "''${2:-}" in
-                      init) shift 2; exec nixarchy-dev-init "$@" ;;
-                    esac
+                    shift
+                    if command -v nixarchy-devenv >/dev/null 2>&1; then
+                      exec nixarchy-devenv "$@"
+                    fi
+                    echo "nixarchy: devenv is not enabled on this machine, so there is" >&2
+                    echo "nothing for 'nixarchy dev' to drive." >&2
+                    echo >&2
+                    echo "  nixarchy-service-enable devenv && nixarchy apply" >&2
+                    echo >&2
+                    echo "or, in your own configuration:" >&2
+                    echo >&2
+                    echo "  programs.nixarchy.services.devenv.enable = true;" >&2
+                    exit 1
                     ;;
                   # Without this row `nixarchy try foo` falls through to
                   # `exec omarchy try ...` and dies as "Unknown Omarchy command"
@@ -3109,6 +3119,8 @@ in
                   nixarchy app remove         Pick apps, packages and options to remove
                   nixarchy apply              Copy the selection into your flake and rebuild
                   nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
+                  nixarchy dev list --json    Every devenv project under your roots
+                                              The panel is Super+Alt+E, or Apps > Dev environments
                   nixarchy try <app|attr>     Run something once without installing it
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                   nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'

@@ -395,6 +395,25 @@ otherwise glibc and friends every system already has), and `python3` and
    `menu.managed` only works if it still checks for that file.
 5. Build `checks.options`, `checks.menu-verbs` and `checks.plugin`.
 
+### The GitHub Actions panel, on by default (#772)
+
+```nix
+nixarchy-ghtui = {
+```
+
+gltui's origin, installed the same way and for the same reasons (#770 above):
+a `runCommand` in modules/home.nix adds `menu.managed` and takes the MIT
+`LICENSE` from the source tree when upstream's package omits it.
+
+Measured at dfba799 (2026-09-19): the plugin output is **84 KiB**, and the
+source tree on the ISO is **304 KiB**. `gh` is **40.1 MiB** (its 80.6 MiB
+closure is otherwise glibc and friends every system already has); `python3`
+and `xdg-utils` are already in the reference closure.
+
+**Bumping the pin:** as for nixarchy-gltui above, with
+`olafkfreund/nixarchy-ghtui`, the id `olafkfreund.github-actions`, and the same
+`menu.py` `register` check.
+
 ### The herdr sessions widget, on by default (#771)
 
 ```nix

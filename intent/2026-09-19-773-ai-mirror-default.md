@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 773
 author: olafkfreund
 ---
@@ -77,3 +77,5 @@ licence and notice files in the package.
 - **Does observation need its own grant, or only a visible indicator?** Screen
   and clipboard reads work with control off today. This is the owner's call,
   made with ai-mirror's change.
+
+**On approval (2026-09-19):** whether observation (screenshots, clipboard, a11y) needs its own grant is decided in the spec and brought back to the owner. The default proposal is a visible indicator whenever it is observing.

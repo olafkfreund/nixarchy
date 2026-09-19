@@ -419,7 +419,8 @@ requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
 - every `cachix-action` has `skipPush: true`, and a guard fails otherwise;
 - closures are pushed only from `main`, and only what
   `.github/scripts/cache-allowlist.sh` names, each entry with the reason someone
-  downloads it;
+  downloads it. One entry is there for availability rather than build cost:
+  the box checks' pinned base images, because Docker Hub is not ours (#788, #800);
 - check results are pushed from any ref by `cachix-push.sh --proof`, as a
   single path, which is how `build-unless-proven.sh` skips what already passed;
 - `cache-budget.sh` fails the `system` job when the allowlist would cost more

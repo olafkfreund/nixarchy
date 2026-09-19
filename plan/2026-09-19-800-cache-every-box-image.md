@@ -77,6 +77,26 @@ naming Debian separately would need a second workflow edit. So this plan keeps
    `/mnt/data/vmtest/heavy-build.sh`.
 9. The PR links #788's intent and spec plus this plan, with `Closes #800`.
 
+**Deviations and findings (made while implementing, 2026-09-19, on `feat/batch-766-800-772`):**
+- **Step 2's "box-boot drvPath unchanged" cannot be measured that way.** The
+  flake's own source path is inside the test script, so the drvPath differs
+  with every tree (AGENTS.md §5). Its inputs were compared instead, and they are
+  identical. So was the image it gets, which is fixed-output and so comparable
+  across commits: `zvv6ynjc…-docker-image-archlinux-latest.tar` before (main
+  `aa39670`'s `box-test-image`) and after (`images.archlinux`).
+- **Step 3's same-path assertion is a Nix `assert`** in `tests/box-template.nix`,
+  given the package as `cached`. It fails evaluation, naming each pin, rather
+  than failing at runtime.
+- **The docs line (step 7) went into the root AGENTS.md §6,** where the
+  allowlist is described. `docs/internals/workflows.md` does not describe it.
+- **Budget (step 5):** `.#box-test-image` alone is 507 MiB of the 2048 MiB share
+  (archlinux 389.5, debian 118.2), so this change adds +118 MiB over #796's
+  Arch-only entry. The full-list figure comes from CI's `system` job.
+- **Step 6, red half:** in an empty store with only nixarchy.cachix.org and
+  `--max-jobs 0`, debian fails ("local builds are disabled (max-jobs = 0)").
+  arch, as the control, substitutes from the cache. So the method tells the two
+  apart.
+
 ## Tests
 
 | command | expected |

@@ -1599,7 +1599,7 @@ let
   hasPodmanRow =
     cfg:
     builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text
-    ? "apps.podman";
+      ? "apps.podman";
 
   homeOfBoxes = cfg: cfg.home-manager.users.${boxesUser};
   hasDistrobox = list: builtins.any (p: (p.pname or "") == "distrobox") list;

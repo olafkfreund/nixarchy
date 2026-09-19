@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 766
 spec: spec/2026-09-18-766-default-plugins.md
 ---
@@ -379,7 +379,7 @@ machine binds it.
   - The V bind.
   - nixarchy#762 stays separate; the plugin hides the keys that need it.
   - Blocker: none beyond A.
-  - **Stepped below** in "#762 and PR E — draft, awaiting approval".
+  - **Stepped below** in "#762 and PR E — approved 2026-09-19".
   - Check: its `Model.js:988` path to `nixarchy.pkg`'s script resolves on a
     default install, since that plugin is linked by id.
 - **D — distrobox, and retiring `nixarchy box`.**
@@ -407,7 +407,7 @@ machine binds it.
     changes.
   - This PR closes #766 (`Closes #766`, alone on its line).
 
-## #762 and PR E — draft, awaiting approval
+## #762 and PR E — approved 2026-09-19
 
 ### What the research found (2026-09-19, read-only)
 
@@ -625,3 +625,5 @@ matters (§1, §5). Before each: the `gh run list` queue check (§6). Then
 **PR C decisions (owner, 2026-09-19):** podman-tui is not installed. The panel's `d` key stays dead, and the docs say so; the plugin hiding the key when podman-tui is missing is an upstream change we don't file. The helper's "not installed on this machine" message ships in PR C.
 
 **PR C deviation (recorded after implementation, 2026-09-19):** the plan's `homeOnMod` wrapper became `boxesConfigWith extra enable`. `boxesConfig` already nests Home Manager like a real machine, and reusing `boxesOn`/`boxesOff` keeps the new NixOS evaluations at the two the plan budgeted (#747). The menu spec is read at eval time via `...source.overrideSpec.text`, which is new here. This should have gone in the same commit as the code; it didn't, so it follows as its own commit. The local `checks.plugin` failure is PR A's race, filed as #783, and not caused by PR C.
+
+**PR E and #762 decisions (owner, 2026-09-19):** with the plugin off, a fallback Sandbox row opens `nixarchy vm list` in a terminal. `set-template` refuses when the VM has volumes, unless `--keep-volumes` is passed. The rows retired here also fix #781.

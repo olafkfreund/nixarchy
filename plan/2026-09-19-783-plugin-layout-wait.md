@@ -72,9 +72,11 @@ until green do not establish the required persisted condition.
   missing-id/wrong-section timeouts, immediate correct-layout success, and
   a detected failure when `-e` is removed. Capture output for the PR.
 - Before any build, run
-  `gh run list --repo olafkfreund/nixarchy --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`
-  and inspect active jobs as needed. Do not start local builds or VM tests
-  while CI installs run; report pending verification honestly.
+  `gh run list --repo olafkfreund/nixarchy --workflow install-check.yml --status in_progress --limit 100 --json databaseId,status`
+  and inspect the returned runs' jobs. If the result reaches the limit,
+  paginate rather than assuming older runs are idle. Do not infer inactivity
+  from the latest few runs across all workflows. Do not start local builds
+  or VM tests while CI installs run; report pending verification honestly.
 - `nix fmt -- --ci`: formatting passes when build capacity permits.
 - `git diff --check`: no whitespace errors.
 - `/mnt/data/vmtest/heavy-build.sh /mnt/data/vmtest/codex-783-plugin.log .#checks.x86_64-linux.plugin --print-build-logs`:

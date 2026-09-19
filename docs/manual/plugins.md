@@ -30,7 +30,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H |
 | [MicroVMs](#microvms) | disposable and permanent VMs, one list | **on by default** | Trigger ▸ Sandbox · Super+Alt+V |
 | [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D |
-| [GitHub Actions](#github-actions) | workflow runs, jobs and steps | coming | — |
+| [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | coming | — |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
 
@@ -146,11 +146,19 @@ wherever [Boxes](boxes) are on, and its templates are nixarchy's own, from
 
 ## GitHub Actions
 
-[nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui) · **coming**
+[nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)
 
-The GitHub counterpart of [GitLab pipelines](#gitlab-pipelines): repositories →
-workflow runs → jobs → steps, with running workflows first, through `gh`. It
-ships on by default once its licence is in place.
+**What it solves.** The same as [GitLab pipelines](#gitlab-pipelines), for
+GitHub: CI across your repositories without a browser tab for each.
+
+**What it does.** Repositories → workflow runs → jobs → steps, with running
+workflows first, through `gh`, which nixarchy installs with it. Run
+`gh auth login` once; until you do, the panel says so and stops polling. Its
+keys are on **Super+Ctrl+Alt+A**.
+
+**If you installed it by hand before,** remove your copy before switching:
+`rm -rf ~/.config/omarchy/plugins/olafkfreund.github-actions`. nixarchy won't
+replace a real directory. It stays enabled, and the managed copy takes over.
 
 ## ai-mirror
 

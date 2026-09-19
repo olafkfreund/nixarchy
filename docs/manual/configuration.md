@@ -179,6 +179,11 @@ If you ran the panel before nixarchy shipped it, its own `register` may have
 written `apps.gitlab-pipelines` and `learn.gitlab-pipelines-keybindings` into
 `~/.config/omarchy/extensions/omarchy-menu.jsonc`. Your file wins over
 nixarchy's rows, so delete those two keys to get nixarchy's.
+The GitHub Actions panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui))
+is its GitHub twin: installed with `gh`, opened from **Apps ▸ GitHub Actions**
+or **Super+Alt+A** (its keys: **Super+Ctrl+Alt+A**), and it needs
+`gh auth login` once. The same two keys apply, as `apps.github-actions` and
+`learn.github-actions-keybindings`.
 The herdr sessions widget ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr))
 sits in the bar's right section with `herdr` itself, on at your first login,
 and opens from **Apps ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
@@ -193,6 +198,7 @@ stop nixarchy installing one at all:
 programs.nixarchy.defaultPlugins.pkg = false;
 programs.nixarchy.defaultPlugins.podman = false;
 programs.nixarchy.defaultPlugins.gitlab = false;
+programs.nixarchy.defaultPlugins.github = false;
 programs.nixarchy.defaultPlugins.herdr = false;
 ```
 

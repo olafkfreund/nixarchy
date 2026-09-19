@@ -96,11 +96,11 @@ The jobs nixarchy adds to Omarchy now live in the shell itself. Each is a
 panel on a key, keyboard-first, in the desktop's own look:
 - search and install packages, set NixOS options, and apply;
 - look after Podman containers;
-- follow GitLab pipelines;
-- see which coding agent in your herdr sessions needs you.
+- follow GitLab pipelines and GitHub Actions;
+- see which coding agent in your herdr sessions needs you;
+- manage MicroVMs and Distrobox boxes.
 
-Four are on by default. MicroVMs, Distrobox, GitHub Actions and ai-mirror are
-on their way, and Voice will be opt-in.
+Seven are on by default. ai-mirror is on its way, and Voice will be opt-in.
 
 ![The package manager panel: curated apps and services, and what each one turns on](img/plugins/pkg-apps.jpg)
 

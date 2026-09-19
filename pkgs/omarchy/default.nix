@@ -1948,6 +1948,8 @@ stdenvNoCC.mkDerivation {
                       'o.bind("SUPER + ALT + O", "Podman", "nixarchy-plugin nixarchy.podman")' \
                       'o.bind("SUPER + ALT + P", "GitLab Pipelines", "nixarchy-plugin olafkfreund.gitlab-pipelines")' \
                       'o.bind("SUPER + CTRL + ALT + P", "GitLab Pipelines keybindings", "python3 $HOME/.config/omarchy/plugins/olafkfreund.gitlab-pipelines/menu.py keys")' \
+                      'o.bind("SUPER + ALT + A", "GitHub Actions", "nixarchy-plugin olafkfreund.github-actions")' \
+                      'o.bind("SUPER + CTRL + ALT + A", "GitHub Actions keybindings", "python3 $HOME/.config/omarchy/plugins/olafkfreund.github-actions/menu.py keys")' \
                       'o.bind("SUPER + ALT + H", "Herdr", "nixarchy-plugin nixarchy.herdr")' \
                       'o.bind("SUPER + ALT + V", "MicroVMs", "nixarchy-plugin nixarchy.microvm")' \
                       'o.bind("SUPER + ALT + D", "Distrobox", "nixarchy-plugin nixarchy.distrobox")' \

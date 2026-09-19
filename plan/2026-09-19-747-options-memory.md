@@ -147,3 +147,56 @@ diff is empty; never reset or alter another agent's worktree. Preserve captures
 for review even when an experiment fails. Revert this task's documentation
 commit if needed. There is no deployed system state or CI configuration to
 roll back.
+
+## Execution record — 2026-09-19
+
+The plan was approved in commit `2915660`. Steps 1 and 4 have read-only
+results; step 3's full profile is pending a coordinated quiet window.
+
+- Baseline: `2915660d9ccf1fe3bbbd0fe2fea225dc84174a35`, clean worktree,
+  Nix 2.34.8 and GNU time 1.10. `flake.lock` SHA-256:
+  `00669a64319178c6badacd71ef1cbe359db365287ad208b8ede7b8f94e5e1194`.
+- Local captures: `/mnt/data/vmtest/747-profile-20260919T083537Z/` contains
+  `preflight.json` (revision, hashes, explicit environment allowlist, host/load,
+  command), `options-baseline.nix`, schema-check captures, and
+  `source-attribution.md`. These are local diagnostic artifacts, not CI proof.
+- Workflow-specific, paginated queries returned install workflows 35431361043
+  and 35431290840 in progress. The coordinator confirmed active build steps;
+  no full options evaluation was started. Host load and competing processes
+  were recorded, not assumed idle.
+- A lightweight `NIX_SHOW_STATS=1 nix eval --expr 1` exited 0 and produced JSON
+  fields for `gc`, `values`, `envs`, `sets`, `list`, and `time`. This verifies
+  the output schema only; the literal expression measures none of the option
+  check. Aggregate allocations/heap size do not identify retained references.
+
+### Source-grounded hypotheses, not measured causes
+
+- `tests/options.nix:97-99` binds three default configurations. `homeOn`
+  at line 141 passes a newly evaluated named `osConfig` into Home Manager.
+  Shared defaults may extend object lifetime, but their contribution to peak
+  RSS is unmeasured.
+- The editor home expression `homeOn everyEditor { }` appears in cases at
+  lines 582 and 590, and inside the four-element activation-script map at
+  line 2180. Each function call can repeat evaluation. Sharing could also
+  retain more memory, so it is not yet an approved solution.
+- `aiHomeWith`/`aiCase` at lines 285-289 evaluates each selected app home and
+  its neighbor for opposite-state assertions. Four app configurations recur;
+  this is another repeated-evaluation candidate, not a measured saving.
+- `modeAInert` at line 2248 forces two complete system toplevel derivation
+  paths, a wider workload than individual option reads. Removing it would
+  delete the Mode A equivalence proof and is not an acceptable improvement.
+- The `runCommand` attributes beginning at line 2112 also force generated
+  files, scripts, package paths, and runtime-test values. A cases-only profile
+  would miss those consumers and could not represent the actual check.
+
+### Next single diagnostic question
+
+First capture the complete baseline with the approved pair expression and
+shared lock. If aggregate statistics leave attribution unresolved, ask whether
+the repeated editor-home evaluations account for a material part of the
+allocation and peak cost. Specify one temporary variant and its expected
+observation before running; retain the full source diff and restore it after.
+Do not promote that experiment to an optimization or claim the 15%/10% target
+without complete-workload comparisons and the subsequent design approval.
+
+No memory reduction, retained-state cause, or issue closure is claimed.

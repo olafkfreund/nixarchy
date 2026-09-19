@@ -69,6 +69,15 @@ let
   # a path instead. Deliberately the *other* plugin from the one added first,
   # so the two never race for the same id.
   declarative = (builtins.elemAt plugins 1).src;
+
+  # A panel-kind default (#770), to hold upstream's setEnabled to what the
+  # hook relies on: a panel ignores the `right` placement and lands in
+  # plugins[]. A valid manifest is all it needs; the panel never opens.
+  panelFixture = pkgs.runCommand "nixarchy-panel-fixture" { } ''
+    mkdir -p $out
+    echo 'import QtQuick' > $out/Panel.qml
+    echo '{"schemaVersion":1,"id":"nixarchy.panelfixture","name":"panel fixture","version":"0.0.0","kinds":["panel"],"entryPoints":{"panel":"Panel.qml"}}' > $out/manifest.json
+  '';
 in
 pkgs.testers.runNixOSTest rec {
   name = "nixarchy-plugin";
@@ -77,8 +86,14 @@ pkgs.testers.runNixOSTest rec {
   # `machine` is shut down, so the two never compete for the runner.
   nodes.defaults = {
     imports = [ nodes.machine ];
-    home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.teleprompt = {
-      inherit (builtins.elemAt plugins 0) id src;
+    home-manager.users.omarchy.programs.nixarchy.defaultPluginSet = {
+      teleprompt = {
+        inherit (builtins.elemAt plugins 0) id src;
+      };
+      panel = {
+        id = "nixarchy.panelfixture";
+        src = panelFixture;
+      };
     };
   };
 
@@ -151,7 +166,10 @@ pkgs.testers.runNixOSTest rec {
           # Same reasoning, for #766's default set: nixarchy.pkg is on wherever
           # nixarchy is, so the empty plugin directory needs it off here too.
           # The `defaults` node below adds its own stand-in on top of this.
-          defaultPlugins.pkg = false;
+          defaultPlugins = {
+            pkg = false;
+            gitlab = false;
+          };
 
           # The declarative half. Same plugin the imperative flow adds below,
           # so the two paths can be compared directly -- except this one is
@@ -591,6 +609,19 @@ pkgs.testers.runNixOSTest rec {
         + enabled_probe + "\nPROBE_EOF")
     machine.wait_until_succeeds("su omarchy -c 'bash /tmp/enabled.sh'", timeout=300)
     print(f"the default plugin {tele} came up enabled, with no one asking")
+
+    # #770: a panel-kind default lands in plugins[], not on the bar. Waited
+    # for on disk, because the shell writes shell.json after IPC answers (#783).
+    machine.succeed(
+        "cat > /tmp/panel.py <<'PROBE_EOF'\n"
+        "import json, os, sys\n"
+        "c = json.load(open(os.path.expanduser('~/.config/omarchy/shell.json')))\n"
+        "ids = [p if isinstance(p, str) else p.get('id') for p in c.get('plugins', [])]\n"
+        "sys.exit(0 if 'nixarchy.panelfixture' in ids else 1)\n"
+        "PROBE_EOF")
+    machine.wait_until_succeeds("su omarchy -c 'python3 /tmp/panel.py'", timeout=120)
+    user("test -e ~/.local/state/nixarchy/enabled-once/nixarchy.panelfixture")
+    print("a panel default is in plugins[], with its marker")
 
     # IPC enablement precedes the asynchronous shell.json write.
     machine.wait_until_succeeds(

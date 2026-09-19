@@ -552,6 +552,27 @@
         "type": "github"
       }
     },
+    "nixarchy-gltui": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789720376,
+        "narHash": "sha256-YtSHXKn6fy1yzSrLIBZsk9I7ubOG/yRBKo0uIAEBges=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-gltui",
+        "rev": "0b827c62cfb2839e0b930becfe94008b689623cc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-gltui",
+        "rev": "0b827c62cfb2839e0b930becfe94008b689623cc",
+        "type": "github"
+      }
+    },
     "nixarchy-pkg": {
       "inputs": {
         "nixpkgs": [
@@ -733,6 +754,7 @@
         "microvm": "microvm",
         "nix-flatpak": "nix-flatpak",
         "nix-index-database": "nix-index-database",
+        "nixarchy-gltui": "nixarchy-gltui",
         "nixarchy-pkg": "nixarchy-pkg",
         "nixarchy-podman": "nixarchy-podman",
         "nixi": "nixi",

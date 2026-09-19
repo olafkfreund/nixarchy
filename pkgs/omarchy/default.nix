@@ -1946,6 +1946,8 @@ stdenvNoCC.mkDerivation {
                       "-- nixarchy's own plugins (#766). The helper says so if one is turned off." \
                       'o.bind("SUPER + ALT + N", "Packages", "nixarchy-plugin nixarchy.pkg")' \
                       'o.bind("SUPER + ALT + O", "Podman", "nixarchy-plugin nixarchy.podman")' \
+                      'o.bind("SUPER + ALT + P", "GitLab Pipelines", "nixarchy-plugin olafkfreund.gitlab-pipelines")' \
+                      'o.bind("SUPER + CTRL + ALT + P", "GitLab Pipelines keybindings", "python3 $HOME/.config/omarchy/plugins/olafkfreund.gitlab-pipelines/menu.py keys")' \
                       >>"$binds"
 
                     runHook postInstall

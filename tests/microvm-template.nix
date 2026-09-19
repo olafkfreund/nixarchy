@@ -660,6 +660,53 @@ pkgs.runCommand "nixarchy-microvm-template"
     fi
     unset -f systemd-run dtach
 
+    # (i), (j): a detached run's build is not a window. The first review of
+    # #784 (codex, on the agent bus) found detach building with the lock
+    # free: `rm` in that window deleted the VM mid-build, and a second
+    # detach passed the status check and unlinked the first one's socket.
+    # A nix that blocks mid-build, until told, makes both deterministic.
+    mkdir -p bin4
+    cat > bin4/nix <<STUB4
+    #!${pkgs.bash}/bin/bash
+    touch "$T/building"
+    while [ ! -e "$T/release" ]; do sleep 0.1; done
+    exec $PWD/bin/nix "\$@"
+    STUB4
+    chmod +x bin4/nix
+    systemd-run() {
+      while [ "$1" != -- ]; do shift; done
+      shift 2
+      dtach "$@" 9>&- > "$T/racer.log" 2>&1 &
+      echo $! > "$T/racer.pid"
+    }
+    dtach() { [ "$1" = -N ] && { shift 3; "$@"; }; }
+    export -f systemd-run dtach
+    $vm create racer > /dev/null
+    rm -f "$T/building" "$T/release"
+    ( PATH="$PWD/bin4:$PATH" $vm run --detach racer > racer-detach.log 2>&1; echo $? > racer.status ) &
+    racer=$!
+    for _ in $(seq 1 100); do [ -e "$T/building" ] && break; sleep 0.1; done
+    if $vm rm racer > racer-rm.log 2>&1; then
+      echo "(i) 'rm' deleted a VM while its detached run was still building:" >&2
+      cat racer-rm.log >&2
+      fail=1
+    fi
+    if timeout 10 env PATH="$PWD/bin4:$PATH" $vm run --detach racer > racer-second.log 2>&1; then
+      echo "(j) a second 'run --detach' of a VM already detaching was not refused" >&2
+      fail=1
+    elif ! grep -q 'already running' racer-second.log; then
+      echo "(j) a second 'run --detach' did not refuse as 'already running' (it built, or hung):" >&2
+      cat racer-second.log >&2
+      fail=1
+    fi
+    touch "$T/release"
+    wait "$racer" 2>/dev/null || true
+    if [ -s "$T/racer.pid" ]; then
+      pkill -P "$(cat "$T/racer.pid")" 2>/dev/null || true
+      kill "$(cat "$T/racer.pid")" 2>/dev/null || true
+    fi
+    unset -f systemd-run dtach
+
     # (h) The plugin reads what this CLI can do from `help` alone, with these
     # three patterns (nixarchy-microvm Model.js:973-975 at 481e6c5). A help
     # line reworded is a feature silently switched off in the panel.

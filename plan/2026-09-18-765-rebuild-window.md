@@ -250,7 +250,13 @@ terminal, and EOF on stdin still declines.
 
 1. **Tests first, against today's script (§1).** In `tests/apply-staging.nix`,
    make the stub `nh` record each call (`echo "$@" >> $PWD/nh.calls`) and exit
-   with `$NH_STUB_RC` (default 0). Add three cases after the existing ones:
+   with `$NH_STUB_RC` (default 0).
+   *Deviation, made during implementation:* the stub is an **exported bash
+   function**, not a file on `PATH`. `writeShellApplication` prepends its
+   `runtimeInputs`, so the real `nh` shadowed the old stub file. The first
+   green attempt at (a) ran the real nh and exited 1. The existing comment
+   ("A fake nh") had never been true; it didn't matter while no case answered
+   yes. Bash resolves functions before `PATH`. Add three cases after the existing ones:
    - (a) `nixarchy-apply --yes --no-preview </dev/null`: `nh.calls` is non-empty
      and the exit is 0;
    - (b) `nixarchy-apply </dev/null`: `nh.calls` stays empty (EOF still

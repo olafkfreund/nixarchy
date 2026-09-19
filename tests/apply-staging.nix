@@ -52,12 +52,14 @@ pkgs.runCommand "nixarchy-apply-staging"
     EOF
 
     # A fake nh: apply ends by rebuilding, which this check has no business
-    # doing. It records each call and exits $NH_STUB_RC, so the flag cases
-    # below can tell "switched" from "declined" and fake a failed rebuild.
-    mkdir -p "$PWD/stub"
-    printf '#!${pkgs.runtimeShell}\necho "$*" >> %s/nh.calls\nexit "''${NH_STUB_RC:-0}"\n' "$PWD" > "$PWD/stub/nh"
-    chmod +x "$PWD/stub/nh"
-    export PATH=$PWD/stub:$PATH
+    # doing. An exported FUNCTION, not a file on PATH: writeShellApplication
+    # prepends its runtimeInputs, so the real nh would shadow any stub file.
+    # Bash resolves functions before PATH. It records each call and returns
+    # $NH_STUB_RC, so the cases below can tell "switched" from "declined".
+    nhcalls=$PWD/nh.calls
+    nh() { echo "$*" >> "$nhcalls"; return "''${NH_STUB_RC:-0}"; }
+    export nhcalls
+    export -f nh
 
     # A flake with one tracked file of the user's own, so "did apply stage
     # anything it should not have" is answerable.
@@ -142,6 +144,17 @@ pkgs.runCommand "nixarchy-apply-staging"
       ok "an unknown flag exits 2 and never switches"
     else
       bad "an unknown flag exited $rc (want 2), nh calls: $(cat "$PWD/nh.calls" 2>/dev/null)"
+    fi
+
+    # A failed rebuild keeps nh's exit code and makes no claim about what
+    # changed: nh activates before it sets the profile and the bootloader, so
+    # it can fail with the live system already switched. It points at rollback.
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root NH_STUB_RC=3 $apply --yes --no-preview </dev/null >"$PWD/fail.out" 2>&1 || rc=$?
+    if [ "$rc" -eq 3 ] && grep -q "nixarchy rollback" "$PWD/fail.out" && ! grep -q "Nothing changed" "$PWD/fail.out"; then
+      ok "a failed rebuild exits with nh's code and points at rollback"
+    else
+      bad "a failed rebuild exited $rc (want 3), or claimed nothing changed, or named no rollback: $(tail -6 "$PWD/fail.out")"
     fi
 
     [ "$fails" -eq 0 ] || exit 1

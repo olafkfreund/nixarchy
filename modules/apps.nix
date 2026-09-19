@@ -3133,6 +3133,21 @@ in
                 pkgs.nh
               ];
               text = ''
+                # The two answers as flags, for a caller with no terminal (#765).
+                # Anything else exits 2: an unknown flag must never mean "switch".
+                yes="" nopreview=""
+                while [ $# -gt 0 ]; do
+                  case "$1" in
+                    --yes) yes=1 ;;
+                    --no-preview) nopreview=1 ;;
+                    *)
+                      echo "usage: nixarchy-apply [--yes] [--no-preview]" >&2
+                      exit 2
+                      ;;
+                  esac
+                  shift
+                done
+
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                 flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
 
@@ -3318,14 +3333,20 @@ in
                 # Treating EOF as an empty answer is also the right behaviour
                 # rather than a test accommodation: a piped or non-interactive
                 # apply should decline to switch, not die halfway through.
-                if command -v nixarchy-preview >/dev/null 2>&1; then
+                # --no-preview and --yes answer the two questions instead; EOF
+                # still declines when they are not given.
+                if [ -z "$nopreview" ] && command -v nixarchy-preview >/dev/null 2>&1; then
                   read -r -p "Preview in a VM first? [y/N] " reply || reply=""
                   case "$reply" in
                     [yY]*) nixarchy-preview || true ;;
                   esac
                 fi
 
-                read -r -p "Build and switch now? [y/N] " reply || reply=""
+                if [ -n "$yes" ]; then
+                  reply=y
+                else
+                  read -r -p "Build and switch now? [y/N] " reply || reply=""
+                fi
                 case "$reply" in
                   # No sudo: nh elevates itself, and wrapping it means the
                   # elevation happens before nh can decide how to do it.

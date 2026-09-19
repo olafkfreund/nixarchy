@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 788
 intent: intent/2026-09-19-788-cache-box-test-image.md
 ---

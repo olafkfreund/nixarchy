@@ -346,6 +346,29 @@ let
           description = "Browse, add and apply packages in a panel";
         };
 
+        # The GitLab pipelines panel (#770). nixarchy declares these rows and
+        # its copy carries `menu.managed`, so the panel does not also write
+        # them into the user's menu extension file.
+        "apps.gitlab-pipelines" = {
+          icon = "";
+          label = "GitLab Pipelines";
+          action = "nixarchy-plugin olafkfreund.gitlab-pipelines";
+          when = "nixarchy-plugin --enabled olafkfreund.gitlab-pipelines";
+          aliases = [
+            "gitlab"
+            "pipelines"
+            "ci"
+          ];
+          description = "Project pipelines, stages and jobs · Super+Alt+P";
+        };
+        "learn.gitlab-pipelines-keybindings" = {
+          icon = "";
+          label = "GitLab Pipelines keybindings";
+          action = "python3 $HOME/.config/omarchy/plugins/olafkfreund.gitlab-pipelines/menu.py keys";
+          when = "nixarchy-plugin --enabled olafkfreund.gitlab-pipelines";
+          description = "All pipeline panel controls · Super+Ctrl+Alt+P";
+        };
+
         # The Secrets group (#611). A new parent with no action of its own,
         # which is legitimate for a submenu -- Menu.qml renders the children.
         # Every row here is a new id upstream does not ship, so every one of

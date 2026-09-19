@@ -167,3 +167,15 @@ harmless because nothing else uses it yet.
   in the empty plugin directory that node asserts. `defaultPluginsNoHookWhenEmpty`
   and `gitlabIsADefault` share one home with both opted out (#747: one
   evaluation, not two).
+- **Step 5, the extension overlap (spec open question 1).** Answered by reading
+  upstream rather than by evaluating: the merge happens at runtime in
+  `Menu.qml:243-247` (`mergeMenuSources(defaults, user)`, where "later entries
+  override earlier ones on a per-key basis"). A user extension that already
+  carries `apps.gitlab-pipelines` (written by the panel's own `register`)
+  wins key by key. Its `python3 .../menu.py` action replaces
+  `nixarchy-plugin ...`: the panel still opens, but without the helper's
+  "turned off" message. There are no duplicate rows. Owners who want nixarchy's
+  row delete the two keys from their extension file. Nix cannot evaluate this,
+  since `menuDefaults` builds only the defaults.
+- **Step 5, icons.** Upstream's `menu.example.json` has an empty `icon`; the
+  rows use Nerd Fonts' GitLab glyph (U+F296) instead of rendering none.

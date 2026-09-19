@@ -1455,27 +1455,29 @@ in
       omarchy-lock-fingerprint.unixAuth = false;
     };
 
-    # etc/sudoers.d/omarchy-passwd-tries.
-    # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
-    security.sudo.extraConfig = "Defaults passwd_tries=10";
+    security = {
+      # etc/sudoers.d/omarchy-passwd-tries.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      sudo.extraConfig = "Defaults passwd_tries=10";
 
-    # The rebuild elevates through pkexec so the Omarchy polkit dialog asks (#765).
-    # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
-    # Unstable made the setuid wrapper opt-in; stable ships it and has no option.
-    security.polkit = {
-      extraConfig = ''
-        // nh elevates each step of a switch as `pkexec env ...`: one password, kept.
-        polkit.addRule(function (action, subject) {
-          if (action.id == "org.freedesktop.policykit.exec" &&
-              subject.local && subject.active && subject.isInGroup("wheel") &&
-              (action.lookup("program") || "").split("/").pop() == "env") {
-            return polkit.Result.AUTH_ADMIN_KEEP;
-          }
-        });
-      '';
-    }
-    // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
-      enablePkexecWrapper = lib.mkDefault true;
+      # The rebuild elevates through pkexec so the Omarchy polkit dialog asks (#765).
+      # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+      # Unstable made the setuid wrapper opt-in; stable ships it and has no option.
+      polkit = {
+        extraConfig = ''
+          // nh elevates each step of a switch as `pkexec env ...`: one password, kept.
+          polkit.addRule(function (action, subject) {
+            if (action.id == "org.freedesktop.policykit.exec" &&
+                subject.local && subject.active && subject.isInGroup("wheel") &&
+                (action.lookup("program") || "").split("/").pop() == "env") {
+              return polkit.Result.AUTH_ADMIN_KEEP;
+            }
+          });
+        '';
+      }
+      // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
+        enablePkexecWrapper = lib.mkDefault true;
+      };
     };
 
     # upstream's user.conf.d/20-omarchy-nofile.conf. Outside the block below,

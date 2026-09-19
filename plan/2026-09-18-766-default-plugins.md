@@ -448,3 +448,5 @@ matters (§1, §5). Before each: the `gh run list` queue check (§6). Then
   `programs.nixarchy.defaultPlugins.<name> = false`.
 
 **PR C decisions (owner, 2026-09-19):** podman-tui is not installed. The panel's `d` key stays dead, and the docs say so; the plugin hiding the key when podman-tui is missing is an upstream change we don't file. The helper's "not installed on this machine" message ships in PR C.
+
+**PR C deviation (recorded after implementation, 2026-09-19):** the plan's `homeOnMod` wrapper became `boxesConfigWith extra enable`. `boxesConfig` already nests Home Manager like a real machine, and reusing `boxesOn`/`boxesOff` keeps the new NixOS evaluations at the two the plan budgeted (#747). The menu spec is read at eval time via `...source.overrideSpec.text`, which is new here. This should have gone in the same commit as the code; it didn't, so it follows as its own commit. The local `checks.plugin` failure is PR A's race, filed as #783, and not caused by PR C.

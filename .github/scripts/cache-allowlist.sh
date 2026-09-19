@@ -39,6 +39,10 @@ group() {
       # It was in this cache by accident until #699 stopped the store-diff
       # pushes, and `system` started timing out the next day.
       echo ".#hypr-rdp"
+      # #788: official Arch base image used by both box checks. An explicit
+      # availability exception to the prebuilt rule: a Docker Hub 502 must
+      # not turn a cold CI runner red. Keep the pinned image unmodified.
+      echo ".#box-test-image"
       ;;
     # `nixarchy vm run` downloads the KVM runner instead of building QEMU;
     # checks.microvm-boot downloads -tcg every night. From the data file, so a

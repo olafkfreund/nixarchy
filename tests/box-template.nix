@@ -30,19 +30,11 @@
   # with no entry here fails loudly (missingPins below) rather than being
   # silently skipped, so #259 adding `debian` cannot forget this half.
   imagePins,
+  images,
 }:
 let
   names = builtins.attrNames templates;
   missingPins = lib.subtractLists (builtins.attrNames imagePins) names;
-
-  pulledImages = lib.mapAttrs (
-    _: pin:
-    pkgs.dockerTools.pullImage {
-      inherit (pin) imageName imageDigest;
-      finalImageTag = pin.tag or "latest";
-      inherit (pin) sha256;
-    }
-  ) imagePins;
 in
 assert
   missingPins == [ ] || throw "checks.box-template: no imagePins entry for: ${toString missingPins}";
@@ -74,9 +66,9 @@ pkgs.runCommand "nixarchy-box-template"
 
       # The pinned image is a fixed-output derivation that actually landed
       # in the store -- non-empty tarball, no container ever started.
-      size=$(stat -c%s ${pulledImages.${name}} 2>/dev/null || echo 0)
+      size=$(stat -c%s ${images.${name}} 2>/dev/null || echo 0)
       if [ "$size" -le 0 ]; then
-        echo "${name}: pulled image ${pulledImages.${name}} is empty or missing" >&2
+        echo "${name}: pulled image ${images.${name}} is empty or missing" >&2
         fail=1
       fi
     '') names}

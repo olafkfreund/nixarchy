@@ -1251,9 +1251,11 @@ jobs:
       # Without this the allowlist entry #739 added is never pushed, the cache
       # stays empty, and every run compiles 447 crates again (#738). Free in
       # this job, which builds it either way; the run after substitutes it.
-      - name: Build hypr-rdp, which nothing above this line needs
+      # The box image also needs realizing before this push on a cold store;
+      # its tests run later, and cachix-push deliberately does not build (#788).
+      - name: Build the allowlisted tools and box image before publishing
         if: needs.gate.outputs.relevant == 'true'
-        run: nix build --no-link .#hypr-rdp
+        run: nix build --no-link .#hypr-rdp .#box-test-image
 
       # The two closures that decide whether somebody's rebuild downloads or
       # compiles. Same reason as the omarchy push above (#439); this is the

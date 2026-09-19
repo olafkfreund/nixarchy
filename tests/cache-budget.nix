@@ -30,6 +30,14 @@ pkgs.runCommand "nixarchy-cache-budget"
     scripts = ../.github/scripts;
   }
   ''
+    # #788: cold box checks must be able to fetch the pinned image from our
+    # cache, not only Docker Hub. Exercise the real publication allowlist.
+    allowed=$(bash "$scripts/cache-allowlist.sh" system)
+    if [ "$(grep -cxF '.#box-test-image' <<<"$allowed" || true)" -ne 1 ]; then
+      echo 'box-test-image is missing or duplicated in the system cache allowlist' >&2
+      exit 1
+    fi
+
     mkdir -p bin calls
     work=$PWD
     MiB=1048576

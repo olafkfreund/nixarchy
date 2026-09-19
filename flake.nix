@@ -290,6 +290,40 @@
         }
       );
 
+      # `imagePins` for the box checks, taken by hand against
+      # registry-1.docker.io, once per template, the same way a `fetchurl`
+      # sha256 is -- a new template (data/box-templates.nix) adds an entry
+      # here too, or checks.box-template fails loudly with "no imagePins
+      # entry for". One table, shared: checks.box-template reads every
+      # entry structurally, checks.box-boot creates a real container from
+      # the default template's -- two checks disagreeing about which image
+      # is pinned would be the #288/#289 failure shape again.
+      boxImagePins = {
+        archlinux = {
+          imageName = "archlinux";
+          imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
+          tag = "latest";
+          sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
+        };
+        debian = {
+          imageName = "debian";
+          imageDigest = "sha256:f324c7ff54321e8d9c588493a20244965938ce0aa50bbd1022d38010e9ffc4b1";
+          tag = "trixie";
+          sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
+        };
+      };
+
+      boxImages = eachSystem (
+        system:
+        lib.mapAttrs (
+          _: pin:
+          pkgsFor.${system}.dockerTools.pullImage {
+            inherit (pin) imageName imageDigest sha256;
+            finalImageTag = pin.tag or "latest";
+          }
+        ) boxImagePins
+      );
+
       omarchyVersion = "4.0.4";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
@@ -872,6 +906,9 @@
           # above: checks.box-template builds and reads the exact command
           # `nixarchy box` execs.
           nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
+
+          # Named so the main-only cache publisher can serve cold box checks.
+          box-test-image = boxImages.${system}.archlinux;
 
           # Same reason again: tests/menu-verbs.nix reads the verbs out of the
           # command the Secrets menu rows exec, and it can only do that if the
@@ -1559,28 +1596,7 @@
       checks = eachSystem (
         system:
         let
-          # `imagePins` for the box checks, taken by hand against
-          # registry-1.docker.io, once per template, the same way a `fetchurl`
-          # sha256 is -- a new template (data/box-templates.nix) adds an entry
-          # here too, or checks.box-template fails loudly with "no imagePins
-          # entry for". One table, shared: checks.box-template reads every
-          # entry structurally, checks.box-boot creates a real container from
-          # the default template's -- two checks disagreeing about which image
-          # is pinned would be the #288/#289 failure shape again.
-          boxImagePins = {
-            archlinux = {
-              imageName = "archlinux";
-              imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
-              tag = "latest";
-              sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
-            };
-            debian = {
-              imageName = "debian";
-              imageDigest = "sha256:f324c7ff54321e8d9c588493a20244965938ce0aa50bbd1022d38010e9ffc4b1";
-              tag = "trixie";
-              sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
-            };
-          };
+          images = boxImages.${system};
         in
         {
           omarchy = self.packages.${system}.omarchy;
@@ -2179,13 +2195,14 @@
 
           # Reads the box catalogue and `nixarchy box` structurally -- see
           # tests/box-template.nix for what that can and cannot prove. The
-          # pins live in `boxImagePins` above, shared with checks.box-boot.
+          # pins and images are shared with checks.box-boot and the cache output.
           box-template = import ./tests/box-template.nix {
             pkgs = pkgsFor.${system};
             inherit lib;
             templates = import ./data/box-templates.nix;
             nixarchyBox = self.packages.${system}.nixarchy-box;
             imagePins = boxImagePins;
+            inherit images;
           };
 
           # The half checks.box-template deliberately leaves alone: create a
@@ -2195,6 +2212,7 @@
             inherit inputs;
             pkgs = pkgsFor.${system};
             imagePin = boxImagePins.archlinux;
+            image = self.packages.${system}.box-test-image;
           };
 
           # The other disk mode, built so the cache has it: installer/cd.nix

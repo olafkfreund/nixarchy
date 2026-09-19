@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 747
 intent: intent/2026-09-19-747-options-memory.md
 ---

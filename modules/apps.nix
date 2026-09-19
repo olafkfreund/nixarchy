@@ -14,6 +14,9 @@ let
   # same "Nix-level: lib.optionalAttrs cfg.enable" #226 already established
   # for sandboxes.
   boxesEnabled = cfg.enable && cfg.services.boxes.enable;
+  # The Podman panel's row, by the same rule: podman is on through the
+  # Services row or through Boxes, and without it the row must not exist.
+  podmanEnabled = cfg.enable && config.virtualisation.podman.enable;
   boxTemplates = import ../data/box-templates.nix;
 
   # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
@@ -586,6 +589,25 @@ let
           label = "Apply changes";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-apply";
           description = "Copy the selection into your flake and nixos-rebuild switch";
+        };
+      }
+      // lib.optionalAttrs podmanEnabled {
+        # The helper, as install.packages: an off plugin is named, not toggled.
+        # No `docker` alias, unlike the plugin's own snippet: where the engine is
+        # Docker, searching "docker" must not open a podman panel.
+        "apps.podman" = {
+          icon = "";
+          label = "Podman";
+          action = "nixarchy-plugin nixarchy.podman";
+          when = "nixarchy-plugin --enabled nixarchy.podman";
+          description = "Containers, images, volumes and networks in a panel";
+          aliases = [
+            "podman"
+            "containers"
+            "images"
+            "volumes"
+            "networks"
+          ];
         };
       }
       // lib.optionalAttrs boxesEnabled (

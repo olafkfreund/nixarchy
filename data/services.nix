@@ -141,6 +141,20 @@
     note = "Android apps in a container on your own kernel. No CPU emulation, so it is fast -- and ARM-only apps will not run without a translation layer (libhoudini/libndk) that Waydroid does not ship and nixpkgs does not package. Needs the binder kernel module, which mainline has and a custom kernel may not, and ships without the Play Store. For apps that refuse to run in a container at all, scrcpy mirrors a real phone instead.";
   };
 
+  podman = {
+    label = "Podman";
+    category = "Development";
+    # Plain: NixOS's virtualisation.podman module is the whole integration,
+    # so the user gets the line every wiki page shows. dockerCompat stays off
+    # -- `docker` keeps meaning the rootless Docker nixos.nix turns on.
+    kind = "plain";
+    option = [
+      "virtualisation"
+      "podman"
+    ];
+    note = "Rootless containers next to Docker, which stays the default engine -- the `docker` command keeps meaning Docker. Brings the Podman panel with it (Super+Alt+O); Boxes turns podman on as well.";
+  };
+
   devenv = {
     label = "devenv";
     category = "Development";

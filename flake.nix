@@ -186,6 +186,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-podman-panel-wherever-podman-is-on-766
+    # A commit on master (that repo's default branch, no tags).
+    nixarchy-podman = {
+      url = "github:olafkfreund/nixarchy-podman/03d9f02d2be454f8592901d93890f4854912a814";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #
@@ -831,6 +838,7 @@
           # works, and it is built against our nixpkgs through the `follows`.
           # modules/home.nix names it as a default plugin (#766).
           nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
+          nixarchy-podman = inputs.nixarchy-podman.packages.${system}.default;
 
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.

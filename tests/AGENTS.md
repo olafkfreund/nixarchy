@@ -143,6 +143,23 @@ And **OCR cannot read the Omarchy theme's dialogs** any better than its
 greeter: wait on a system fact the dialog causes (here, a
 `polkit-agent-helper@*` unit) rather than on its text.
 
+## The stub-only detach: `run --detach` never runs a real unit on a PR
+
+`checks.microvm-template` proves `nixarchy vm run --detach` against **stub**
+`systemd-run` and `dtach` (exported bash functions, because
+`writeShellApplication` puts its runtimeInputs first on PATH, and a stub file
+is never reached). The stubs run the launch for real, so the lock hand-off
+and the timeout are real. But a real `systemd --user` unit, a real dtach
+socket and a real guest behind them are not: a sandboxed derivation has no
+user manager.
+
+**Nothing exercises a real detach yet, nightly included.** `microvm-boot`
+boots a *declared* machine as root, with no session user (`user = null`) and
+no network for `run`'s `nix build github:...`, so it cannot host this without
+a redesign. A detached VM that stops starting is found by hand, on real
+hardware: `nixarchy vm run --detach <n>`, then `nixarchy vm list --json`
+shows `running: true`, and `nixarchy vm console <n>` attaches.
+
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
 The network reinstall image (#483) is only honest for a closure the caches

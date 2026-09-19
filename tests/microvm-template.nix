@@ -61,6 +61,8 @@ pkgs.runCommand "nixarchy-microvm-template"
       util-linux # flock, for the CLI half below
       bash
       jq # reads the guest's users-groups.json, for the uid cross-check below
+      python3Minimal # binds a unix socket for the console case (#762)
+      procps # pkill, to end a detached stub runner and its children
     ];
   }
   ''
@@ -506,6 +508,238 @@ pkgs.runCommand "nixarchy-microvm-template"
     fi
     kill "$third" 2>/dev/null || true
     wait "$third" 2>/dev/null || true
+
+    echo "== nixarchy vm: the plugin's contract (#762) =="
+
+    # nixarchy.microvm reads this CLI and nothing else: JSON listings, a
+    # detached run with a console to attach to later, and a template swap.
+    # systemd-run and dtach are runtimeInputs, so a stub FILE on PATH is never
+    # reached (writeShellApplication puts runtimeInputs first -- the #778
+    # lesson). Exported bash functions win over PATH, so they are stubs.
+    export HOME=$PWD/home3
+    export XDG_STATE_HOME=$HOME/.local/state
+    export PATH="$PWD/bin:$PATH"
+    export T=$PWD
+    mkdir -p "$HOME"
+    vm=${nixarchyVm}/bin/nixarchy-vm
+    vmdir=$XDG_STATE_HOME/nixarchy/microvm
+
+    # (a) No VMs is an empty array, not the text line.
+    got=$($vm list --json 2>&1 || true)
+    if ! printf '%s' "$got" | jq -e 'type == "array" and length == 0' > /dev/null 2>&1; then
+      echo "(a) 'list --json' with no VMs is not []: $got" >&2
+      fail=1
+    fi
+
+    # (b) Exactly the four keys, and running follows the lock.
+    $vm create sandbox > /dev/null
+    keys=$($vm list --json 2>/dev/null | jq -c '[.[0] | keys[]]' 2>/dev/null || echo unparseable)
+    if [ "$keys" != '["dir","name","running","template"]' ]; then
+      echo "(b) 'list --json' keys are $keys, not dir, name, running, template" >&2
+      fail=1
+    fi
+    if [ "$($vm list --json 2>/dev/null | jq -r '.[0].running' 2>/dev/null)" != false ]; then
+      echo "(b) a stopped VM does not read running=false" >&2
+      fail=1
+    fi
+    exec 7>"$vmdir/sandbox/.lock"
+    flock -n 7
+    if [ "$($vm list --json 2>/dev/null | jq -r '.[0].running' 2>/dev/null)" != true ]; then
+      echo "(b) a VM whose lock is held does not read running=true" >&2
+      fail=1
+    fi
+
+    # (d) set-template: never under a running VM, never onto a missing
+    # template, never without a name, and never over volumes unless told.
+    if $vm set-template sandbox persistent > sett.log 2>&1; then
+      echo "(d) set-template rewrote a running VM's template" >&2
+      fail=1
+    fi
+    exec 7>&-
+    if ! $vm set-template sandbox persistent > sett.log 2>&1; then
+      echo "(d) set-template refused a stopped VM:" >&2
+      cat sett.log >&2
+      fail=1
+    elif [ "$(cat "$vmdir/sandbox/template")" != persistent ]; then
+      echo "(d) set-template succeeded but the template file says $(cat "$vmdir/sandbox/template")" >&2
+      fail=1
+    fi
+    if $vm set-template sandbox no-such-template > /dev/null 2>&1; then
+      echo "(d) set-template accepted a template that does not exist" >&2
+      fail=1
+    fi
+    if $vm set-template > /dev/null 2>&1; then
+      echo "(d) set-template with no name succeeded" >&2
+      fail=1
+    fi
+    touch "$vmdir/sandbox/home.img"
+    if $vm set-template sandbox shell > /dev/null 2>&1; then
+      echo "(d) set-template swapped the template under an existing volume" >&2
+      fail=1
+    fi
+    if ! $vm set-template sandbox shell --keep-volumes > sett.log 2>&1; then
+      echo "(d) set-template --keep-volumes refused:" >&2
+      cat sett.log >&2
+      fail=1
+    fi
+    rm -f "$vmdir/sandbox/home.img"
+
+    # (c) templates --json is the catalogue, name for name.
+    idx=$(grep -o 'templates=/nix/store/[^ ]*' "$vm" | head -1 | cut -d= -f2)/index.tsv
+    if [ "$($vm templates --json 2>/dev/null | jq -r '.[].name' 2>/dev/null)" != "$(cut -f1 "$idx")" ]; then
+      echo "(c) 'templates --json' names do not match the catalogue ($idx)" >&2
+      fail=1
+    fi
+    if [ "$($vm templates --json 2>/dev/null | jq -c '[.[0] | keys[]]' 2>/dev/null)" != '["label","name","note"]' ]; then
+      echo "(c) 'templates --json' entries are not {name, label, note}" >&2
+      fail=1
+    fi
+
+    # (e) run --detach builds here, hands the launch to a user unit wrapped in
+    # dtach, and returns only once that unit holds the VM's lock. The stub
+    # unit runs its command in the background, so the wait is real.
+    systemd-run() {
+      echo "$*" > "$T/systemd-run.args"
+      while [ "$1" != -- ]; do shift; done
+      shift
+      shift # the dtach binary
+      dtach "$@" > "$T/detached.log" 2>&1 &
+      echo $! > "$T/detached.pid"
+    }
+    dtach() {
+      case "$1" in
+        -N) shift 3; "$@" ;;
+        -a) echo "$*" > "$T/dtach-attach.args" ;;
+      esac
+    }
+    export -f systemd-run dtach
+    $vm create detached > /dev/null
+    if ! $vm run --detach detached > detach.log 2>&1; then
+      echo "(e) 'run --detach' failed:" >&2
+      cat detach.log >&2
+      fail=1
+    fi
+    if [ "$($vm list --json 2>/dev/null | jq -r '.[] | select(.name == "detached") | .running' 2>/dev/null)" != true ]; then
+      echo "(e) 'run --detach' returned, and the stub saw no lock taken" >&2
+      fail=1
+    fi
+    if ! grep -q 'nixarchy-vm-detached' "$T/systemd-run.args" 2>/dev/null; then
+      echo "(e) the user unit is not named nixarchy-vm-detached: $(cat "$T/systemd-run.args" 2>/dev/null)" >&2
+      fail=1
+    fi
+    if [ -s "$T/detached.pid" ]; then
+      pkill -P "$(cat "$T/detached.pid")" 2>/dev/null || true
+      kill "$(cat "$T/detached.pid")" 2>/dev/null || true
+    fi
+
+    # (f) A unit that never takes the lock is a failure, and says where to look.
+    systemd-run() { echo "$*" > "$T/systemd-run.args"; }
+    export -f systemd-run
+    $vm create neverup > /dev/null
+    if NIXARCHY_VM_DETACH_TIMEOUT=2 $vm run --detach neverup > neverup.log 2>&1; then
+      echo "(f) 'run --detach' exited 0 where 1 was expected: the unit never started" >&2
+      fail=1
+    elif ! grep -q 'journalctl --user -u nixarchy-vm-neverup' neverup.log; then
+      echo "(f) the timeout does not name the unit's journal:" >&2
+      cat neverup.log >&2
+      fail=1
+    fi
+
+    # (g) console: refuses without a socket, attaches to it when there is one.
+    $vm create quiet > /dev/null
+    if $vm console quiet > con.log 2>&1; then
+      echo "(g) 'console' succeeded on a VM that was never detached" >&2
+      fail=1
+    fi
+    python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$vmdir/quiet/console.sock"
+    rm -f "$T/dtach-attach.args"
+    $vm console quiet > con.log 2>&1 || true
+    if ! grep -qF -- "-a $vmdir/quiet/console.sock -e ^]" "$T/dtach-attach.args" 2>/dev/null; then
+      echo "(g) 'console' did not attach with dtach -a <sock> -e ^]: $(cat "$T/dtach-attach.args" 2>/dev/null)" >&2
+      fail=1
+    fi
+    unset -f systemd-run dtach
+
+    # (i), (j): a detached run's build is not a window. The first review of
+    # #784 (codex, on the agent bus) found detach building with the lock
+    # free: `rm` in that window deleted the VM mid-build, and a second
+    # detach passed the status check and unlinked the first one's socket.
+    # A nix that blocks mid-build, until told, makes both deterministic.
+    mkdir -p bin4
+    cat > bin4/nix <<STUB4
+    #!${pkgs.bash}/bin/bash
+    touch "$T/building"
+    while [ ! -e "$T/release" ]; do sleep 0.1; done
+    exec $PWD/bin/nix "\$@"
+    STUB4
+    chmod +x bin4/nix
+    systemd-run() {
+      while [ "$1" != -- ]; do shift; done
+      shift 2
+      dtach "$@" 9>&- > "$T/racer.log" 2>&1 &
+      echo $! > "$T/racer.pid"
+    }
+    dtach() { [ "$1" = -N ] && { shift 3; "$@"; }; }
+    export -f systemd-run dtach
+    $vm create racer > /dev/null
+    rm -f "$T/building" "$T/release"
+    ( PATH="$PWD/bin4:$PATH" $vm run --detach racer > racer-detach.log 2>&1; echo $? > racer.status ) &
+    racer=$!
+    for _ in $(seq 1 100); do [ -e "$T/building" ] && break; sleep 0.1; done
+    if $vm rm racer > racer-rm.log 2>&1; then
+      echo "(i) 'rm' deleted a VM while its detached run was still building:" >&2
+      cat racer-rm.log >&2
+      fail=1
+    fi
+    if timeout 10 env PATH="$PWD/bin4:$PATH" $vm run --detach racer > racer-second.log 2>&1; then
+      echo "(j) a second 'run --detach' of a VM already detaching was not refused" >&2
+      fail=1
+    elif ! grep -q 'already running' racer-second.log; then
+      echo "(j) a second 'run --detach' did not refuse as 'already running' (it built, or hung):" >&2
+      cat racer-second.log >&2
+      fail=1
+    fi
+    touch "$T/release"
+    wait "$racer" 2>/dev/null || true
+    if [ -s "$T/racer.pid" ]; then
+      pkill -P "$(cat "$T/racer.pid")" 2>/dev/null || true
+      kill "$(cat "$T/racer.pid")" 2>/dev/null || true
+    fi
+    unset -f systemd-run dtach
+
+    # (k) The handoff gap: detach has let go of the lock, and the unit has
+    # not taken it yet. The unit being up is what keeps `rm` and a second
+    # run out then.
+    # A fresh VM, lock provably free, so only the unit can make it refuse.
+    $vm create gap > /dev/null
+    exec 6>"$vmdir/gap/.lock"
+    if ! flock -n 6; then
+      echo "(k) the fixture is wrong: gap's lock is already held" >&2
+      fail=1
+    fi
+    exec 6>&-
+    systemctl() { [ "$*" = "--user is-active nixarchy-vm-gap" ] && echo activating; }
+    export -f systemctl
+    if $vm rm gap > /dev/null 2>&1; then
+      echo "(k) 'rm' deleted a VM whose detached unit was still activating" >&2
+      fail=1
+    fi
+    if timeout 10 $vm run gap > /dev/null 2>&1 || [ -e "$vmdir/gap/current" ]; then
+      echo "(k) 'run' started a VM whose detached unit was still activating" >&2
+      fail=1
+    fi
+    unset -f systemctl
+
+    # (h) The plugin reads what this CLI can do from `help` alone, with these
+    # three patterns (nixarchy-microvm Model.js:973-975 at 481e6c5). A help
+    # line reworded is a feature silently switched off in the panel.
+    help=$($vm help)
+    printf '%s\n' "$help" | grep -qE '\brun\b.*--detach' ||
+      { echo "(h) vmDetach pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
+    printf '%s\n' "$help" | grep -qE '\bvm console\b' ||
+      { echo "(h) vmConsole pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
+    printf '%s\n' "$help" | grep -qE '\bset-template\b' ||
+      { echo "(h) vmSetTemplate pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
 
     [ "$fail" -eq 0 ] || exit 1
     echo "every template's runner is qemu, shares the host store read-only," \

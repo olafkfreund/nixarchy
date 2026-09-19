@@ -75,6 +75,18 @@ glyph is three bytes of UTF-8, and the sandbox's locale is C, so `awk
 length()` and `wc -c` read an 87-column banner as roughly 250. Count
 characters (`len()` in Python with `encoding="utf-8"`).
 
+## `writeShellApplication`'s bash has no `compgen`, and an `if` hides that
+
+The shell it wraps is nixpkgs' plain `bash`, not `bashInteractive`, and that
+build has no programmable completion, so `compgen` does not exist. A script
+that works in your terminal fails when packaged. Inside an `if`, the failure
+does not even stop the script under `errexit`: `if compgen -G "$dir/*"` reads
+"command not found" as a false condition. #762's volume guard did exactly that,
+so it let every case through, and only the check saw it. Use a glob loop
+(`for f in "$dir"/*; do [ -e "$f" ] && ...`) or `find`. The same goes for any
+builtin you learned in an interactive shell: run the packaged binary, not the
+source file.
+
 ## Patching upstream
 
 Everything is patched with `--replace-fail`, so an Omarchy bump that rewords a

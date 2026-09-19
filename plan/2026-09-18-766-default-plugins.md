@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 766
 spec: spec/2026-09-18-766-default-plugins.md
 ---
@@ -365,6 +365,95 @@ machine binds it.
 - The Docker menu (lazydocker) and the Podman panel sit side by side. Nothing
   merges them; they are different engines.
 
+## PR D — distrobox (draft, awaiting approval)
+
+**What changed since the outline:** the plugin (`nixarchy.distrobox`, MIT,
+LICENSE shipped in its package) gained templates on 2026-09-18
+(`feat/8-assemble-templates`, main at `f68ac27`), but in a different shape. It
+reads a **`distrobox assemble` INI file**, set by the plugin setting
+`templatesFile` (manifest default `~/.config/distrobox/boxes.ini`), not
+`/etc/nixarchy/box-templates.json`. It still has **no `promote`, no `--check`
+and no `list`**.
+
+**Departure for the owner to approve:** retiring `nixarchy box` is **split out**
+of PR D into a new issue, filed on approval. It stays blocked on those three
+plugin features. PR D ships the panel as the default Boxes UI, and the
+`nixarchy box` CLI stays as the terminal interface (`checks.box-template`,
+`checks.box-boot` and `build.yml` are untouched). So PR D closes #766 only
+together with PR E, and the retirement lives on in its own issue.
+
+**Templates stay single-sourced, and nixarchy never writes `shell.json`.**
+`data/box-templates.nix` already holds each template's `ini` as verbatim
+assemble syntax. Both templates use only `image`, `pull`, `replace=false` and
+`start_now=false`, all of which the plugin's parser accepts (`Model.js:1060,
+1180-1206`). So:
+- NixOS writes the file (`modules/services/boxes.nix`, when boxes are on):
+  `environment.etc."nixarchy/box-templates.ini"`, one `[<name>]` section per
+  template, containing its `ini` block.
+- The plugin finds it through its **manifest default**, not a user setting:
+  nixarchy's wrapper (like #786's `gitlabPipelines`) copies upstream's package
+  and rewrites `barWidget.defaults.templatesFile` in `manifest.json` to
+  `/etc/nixarchy/box-templates.ini` with `jq`. A user who sets their own path
+  in Setup → Plugins still wins, because `shell.json` overrides the manifest.
+- **Cost:** a user's own `~/.config/distrobox/boxes.ini` is no longer read by
+  default. The plugin reads one file. The fix belongs upstream: let
+  `templatesFile` take a list, or read the system file plus the user's. It's
+  documented in `boxes.md` and noted in the PR, not filed by us.
+
+### Steps
+
+1. `flake.nix`: input `nixarchy-distrobox` at `f68ac276dc05`, with `follows`,
+   and a `# Why:` pointer to a new `docs/internals/flake.md` entry.
+   → verify: `nix flake metadata` shows one node and no second nixpkgs.
+2. `modules/services/boxes.nix`:
+   `environment.etc."nixarchy/box-templates.ini".text` built from
+   `data/box-templates.nix` (sorted names, `[name]` then `ini`), inside the
+   existing `mkIf boxes.enable`.
+   → verify: eval on `boxesOn` shows `[archlinux]` and `[debian]`; absent on
+   `boxesOff`.
+3. `modules/home.nix`: a `distroboxPanel` wrapper that copies the package and
+   runs `jq '.barWidget.defaults.templatesFile = "/etc/nixarchy/box-templates.ini"'`
+   on `manifest.json` (the key path is `barWidget.defaults.templatesFile`, read from the manifest).
+   Plus `defaultPluginSet.distrobox`:
+   - `id = "nixarchy.distrobox"`;
+   - gate `osConfig.programs.nixarchy.services.boxes.enable or false`;
+   - `packages = [ ]`, since distrobox itself is installed by `boxes.nix`.
+
+   `defaultPlugins.distrobox` already exists.
+   → verify: the installed manifest names the `/etc` path.
+4. `modules/apps.nix` (`boxesEnabled` block, `:658-700`): `trigger.box` gets
+   `action = "nixarchy-plugin nixarchy.distrobox"` and
+   `when = "nixarchy-plugin --enabled nixarchy.distrobox"`, and the
+   `.enter`, `.rm` and `.create.<name>` children go. The panel does all three
+   (the create form lists the templates).
+   → verify: the generated menu has no `trigger.box.` child keys.
+5. `tests/menu-verbs.nix`: the box scan (`:117-118`) loses those rows, so lower
+   its floor deliberately and say so in the PR (§1: a retargeted check is
+   named as such). The plugin-row floor rises by one.
+6. `pkgs/omarchy/default.nix` (the seed `printf` block): **Super+Alt+D** →
+   `nixarchy-plugin nixarchy.distrobox`. Nothing upstream or nixarchy binds it
+   (checked in the #766 spec).
+7. Docs:
+   - `docs/manual/boxes.md`: the panel is the Boxes UI; `nixarchy box` is the
+     terminal interface; the templatesFile note;
+   - `docs/manual/plugins.md`: Distrobox moves to "on wherever boxes are";
+   - the README feature row, and `docs/internals/flake.md`.
+8. Lints; heavy builds only through `/mnt/data/vmtest/heavy-build.sh`; PR with
+   `Refs #766`, plus `Closes #766` only if PR E has landed.
+
+### Tests (each broken first, §1)
+
+| check | case | break |
+|---|---|---|
+| `checks.options` | `distroboxIsADefault`: on with boxes; off without boxes, off when opted out, off on standalone Home Manager | gate forced true |
+| `checks.options` | `distroboxTemplatesFile`: the installed `manifest.json` names `/etc/nixarchy/box-templates.ini` | drop the `jq` |
+| `checks.options` | `boxTemplatesIni`: the etc file has one section per `data/box-templates.nix` entry, and no key outside the plugin's accepted list | add an `exported_apps=x` line to a template in a scratch copy |
+| `checks.menu-verbs` | no `trigger.box.` child rows, and the panel row names an installed id | row id `nixarchy.distroboxx` |
+| `.#omarchy` | the seed ends with the D line | anchor moved |
+
+`checks.box-template` and `checks.box-boot` are unchanged, because the CLI
+stays.
+
 ## Outlines, in order
 
 - **C — podman.** Stepped above ("PR C — podman").
@@ -382,7 +471,7 @@ machine binds it.
   - **Stepped below** in "#762 and PR E — approved 2026-09-19".
   - Check: its `Model.js:988` path to `nixarchy.pkg`'s script resolves on a
     default install, since that plugin is linked by id.
-- **D — distrobox, and retiring `nixarchy box`.**
+- **D — distrobox, and retiring `nixarchy box`.** *Superseded by "PR D — distrobox" above: the panel ships, and retirement is split into its own issue. What follows is kept as the retirement issue's starting point.*
   - **Blocked** on the plugin repo shipping templates read from
     `/etc/nixarchy/box-templates.json`, `promote`, a `--check` equivalent and
     `list`.

@@ -140,3 +140,15 @@ Revert the squash commit. The input, wrapper, entry, rows and bind go, and
 `herdr`, `jq` and `iproute2` leave the profile. Homes that already enabled the
 widget keep an id in `shell.json` whose directory reconcile removes. The shell
 skips it, and the user disables it in Setup > Plugins.
+
+## Deviations (recorded during implementation)
+
+- **Steps 2-3, where the wrapper lives:** in `modules/home.nix` as the
+  `herdrSessions` runCommand, not a flake `packages.<sys>.nixarchy-herdr`
+  output. Same place and reason as #770's gltui wrapper: `home.nix:258-263`
+  says home-side packages go through the user's nixpkgs. Step 2's check reads
+  the resolved `defaultPluginSet.herdr.src` instead of `.#nixarchy-herdr`.
+- **Step 1, `herdrPackaged`:** a runtime assertion in the options check's
+  script, reached only once every option case passes. Step 1's red run
+  shows `herdrIsADefault` alone; `herdrPackaged` is proven red by step 3's
+  breaks.

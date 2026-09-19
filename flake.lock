@@ -573,6 +573,23 @@
         "type": "github"
       }
     },
+    "nixarchy-herdr": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789589328,
+        "narHash": "sha256-V78UBKH2Qq8wmLvuEoFoASjgh3HoN8z88OOAyKG2iXs=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-herdr",
+        "rev": "6bb0a4c52bc65ea6c104acaebfcd47a9df4d9cc1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-herdr",
+        "rev": "6bb0a4c52bc65ea6c104acaebfcd47a9df4d9cc1",
+        "type": "github"
+      }
+    },
     "nixarchy-pkg": {
       "inputs": {
         "nixpkgs": [
@@ -755,6 +772,7 @@
         "nix-flatpak": "nix-flatpak",
         "nix-index-database": "nix-index-database",
         "nixarchy-gltui": "nixarchy-gltui",
+        "nixarchy-herdr": "nixarchy-herdr",
         "nixarchy-pkg": "nixarchy-pkg",
         "nixarchy-podman": "nixarchy-podman",
         "nixi": "nixi",

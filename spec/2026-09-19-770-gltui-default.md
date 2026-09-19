@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 770
 intent: intent/2026-09-19-770-gltui-default.md
 ---

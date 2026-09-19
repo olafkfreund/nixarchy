@@ -815,6 +815,25 @@ let
         defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg" && hookLists "nixarchy.pkg" defaultHomeOn;
       off = defaultHome.programs.nixarchy.plugins ? "nixarchy.pkg";
     };
+    # #766 PR C: the Podman panel follows podman itself, not nixarchy. "off" is
+    # the default machine, where podman is off, plus standalone Home Manager.
+    podmanPluginGate = {
+      on = installsPodman podmanOnly && hookLists "nixarchy.podman" (homeOfBoxes podmanOnly);
+      off =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.podman"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.podman";
+    };
+    # Boxes turns podman on, so it brings the panel -- but the gate is podman,
+    # not Boxes: Boxes with podman forced back off gets no panel.
+    podmanViaBoxes = {
+      on = installsPodman boxesOn;
+      off = installsPodman boxesNoPodman;
+    };
+    # The row exists exactly where podman does (Nix-level, like the box rows).
+    podmanRow = {
+      on = hasPodmanRow boxesOn && hasPodmanRow podmanOnly;
+      off = hasPodmanRow boxesOff || hasPodmanRow boxesNoPodman;
+    };
 
     nixiEnablesCard = {
       on = defaultHome.home.activation ? nixiEnableCard;
@@ -1529,8 +1548,12 @@ let
   # the unit is STILL absent, not just that "off" is quiet.
   boxesUser = "tester";
 
-  boxesConfig =
-    enable:
+  # `extra` is one more NixOS module, for #766 PR C's podman machines: they need
+  # `virtualisation.podman`, which configNamed cannot set, and this builder
+  # already nests Home Manager the way a real machine does.
+  boxesConfig = boxesConfigWith { };
+  boxesConfigWith =
+    extra: enable:
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
@@ -1561,11 +1584,22 @@ let
           };
           system.stateVersion = "25.05";
         }
+        extra
       ];
     }).config;
 
   boxesOff = boxesConfig false;
   boxesOn = boxesConfig true;
+  # #766 PR C: the two machines podman adds, bound once each (#747 -- every
+  # machine here is a full NixOS eval inside the 11.5 GB check). Podman on by
+  # itself, and Boxes on with podman forced back off.
+  podmanOnly = boxesConfigWith { virtualisation.podman.enable = true; } false;
+  boxesNoPodman = boxesConfigWith { virtualisation.podman.enable = pkgs.lib.mkForce false; } true;
+  installsPodman = cfg: (homeOfBoxes cfg).programs.nixarchy.plugins ? "nixarchy.podman";
+  hasPodmanRow =
+    cfg:
+    builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text
+      ? "apps.podman";
 
   homeOfBoxes = cfg: cfg.home-manager.users.${boxesUser};
   hasDistrobox = list: builtins.any (p: (p.pname or "") == "distrobox") list;
@@ -4854,6 +4888,18 @@ pkgs.runCommand "nixarchy-options"
         ! enabled nixarchy.fixture || { echo "nixarchy-plugin: a disabled plugin reads as on" >&2; exit 1; }
         echo '{"plugins":[{"id":"nixarchy.other"}]}' > $shelljson
         ! enabled nixarchy.fixture || { echo "nixarchy-plugin: an absent plugin reads as on" >&2; exit 1; }
+        # A gated default that is not installed here says so, rather than sending
+        # the user to `omarchy plugin enable`, which would fail (#766 PR C). The
+        # notifier is an exported function: writeShellApplication puts its own
+        # runtimeInputs first on PATH, so a stub file there would never be reached.
+        omarchy-notification-send() { printf '%s\n' "$*" >> notes; }
+        export -f omarchy-notification-send
+        ! XDG_CONFIG_HOME=$PWD/cfg "$pluginHelper/bin/nixarchy-plugin" nixarchy.fixture 2>/dev/null
+        grep -q "is not installed on this machine" notes || {
+          echo "nixarchy-plugin: a plugin that is not installed is not reported as such:" >&2
+          cat notes >&2 || true
+          exit 1
+        }
         grep -q "now says id 'nixarchy.renamed'" $renamedDefault/testBuildFailure.log || {
           echo "a default plugin whose manifest renamed its id did not fail for that reason:" >&2
           cat $renamedDefault/testBuildFailure.log >&2

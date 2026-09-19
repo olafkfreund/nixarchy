@@ -245,19 +245,129 @@ spec: spec/2026-09-18-766-default-plugins.md
 - **The package output omits the plugin's LICENSE** (its flake copies an
   explicit file list). An upstream fix, like the wave-2 plugins (#770-#774).
 
+## PR C — podman (approved 2026-09-19)
+
+Branch `feat/766-pr-c-podman`, off `main` after A (#775). It follows PR B's shapes
+(#780): the `defaultPluginSet` entry, the helper-driven row, the seeded bind
+behind the asserted anchor, and the menu-verbs id scan. If #780 has not merged
+when C starts, C rebases onto it, because both append to the same seed-bind
+`printf` and the same `defaultPluginSet` block.
+
+Approved decisions it carries: podman is a Services catalogue row of
+`kind = "plain"` (the real line `virtualisation.podman.enable = true;`, no
+nixarchy option, per `data/services.nix:10-27`). Rootless Docker stays the
+default engine (`modules/nixos.nix:1403-1420`). The plugin is on wherever
+podman is on, through that row or through Boxes (`boxes.nix:86` sets it at
+`mkDefault`). The bind is Super+Alt+O, and nothing upstream or on the owner's
+machine binds it.
+
+1. `data/services.nix`: a `podman` row with `kind = "plain"`,
+   `option = [ "virtualisation" "podman" ]`, category Development, and a note:
+   "Rootless containers next to Docker, which stays the default. The
+   `docker` command keeps meaning Docker (`dockerCompat` is left off)."
+   → verify: the generated menu has `install.service.podman` with action
+   `nixarchy-service-enable podman`, and `nixarchy-service-enable podman`
+   writes the plain upstream line (the existing catalogue path, unchanged).
+2. `flake.nix`: input `nixarchy-podman` =
+   `github:olafkfreund/nixarchy-podman/<commit on master>` (03d9f02 at
+   drafting) with `inputs.nixpkgs.follows = "nixpkgs"`, plus the house "why"
+   pointer. Re-export `packages.<sys>.nixarchy-podman` beside `nixarchy-pkg`.
+   → verify: the lock diff adds one node and no second nixpkgs. The package
+   output already carries `LICENSE` (its `flake.nix:15-17` lists it in `files`),
+   and a `test -f $out/LICENSE` in step 7's check proves it stays.
+3. `modules/home.nix` `defaultPluginSet.podman`:
+   `{ id = "nixarchy.podman"; src = inputs.nixarchy-podman.packages.<sys>.default;
+   gate = osConfig.virtualisation.podman.enable or false; }`. `or false` holds
+   for a null `osConfig` (checked: `null.a.b or false` is `false`), so
+   standalone Home Manager stays inert on top of `resolvedDefaults`' own
+   nixarchy gate. → verify by step 6's cases.
+4. `modules/apps.nix`:
+   - `podmanEnabled = cfg.enable && config.virtualisation.podman.enable`,
+     beside `boxesEnabled` (`:16`), with the same reason: the row must not
+     exist at all when podman is off.
+   - `lib.optionalAttrs podmanEnabled { "apps.podman" = { … }; }` with icon
+     ``, label "Podman", `action = "nixarchy-plugin nixarchy.podman"`,
+     `when = "nixarchy-plugin --enabled nixarchy.podman"`, a description, and
+     aliases `podman containers images volumes networks`. **No `docker`
+     alias**, unlike the plugin's own snippet (`share/omarchy-menu.jsonc:11`):
+     on a machine whose engine is Docker, searching "docker" must not open a
+     podman panel.
+
+   → verify: the row is present in the menu on a podman machine and absent on
+   the reference one (step 6).
+5. `pkgs/omarchy/default.nix`, the seed-bind `printf` from PR B: append
+   `'o.bind("SUPER + ALT + O", "Podman", "nixarchy-plugin nixarchy.podman")'`.
+   → verify: the anchor assertion from B still guards the block, and the built
+   seed ends with the N and O lines.
+6. `pkgs/nixarchy-plugin.nix`: when the plugin **directory** is missing from
+   `~/.config/omarchy/plugins/<id>`, say "not installed on this machine"
+   instead of "turned off … omarchy plugin enable". The O bind is seeded for
+   every new home but the plugin exists only where podman is on, so today's
+   message would send a user to a command that fails. One `[ -d … ]` test, no
+   other change. → verify with a runtime case in `options` next to the
+   existing helper cases.
+7. `tests/options.nix`: cases across the fixture split. Podman-on machines need
+   a NixOS module outside `programs.nixarchy`, which `configNamed` cannot take
+   (`:167-189` merges settings into `programs.nixarchy` only). Add one small
+   wrapper, `homeOnMod = osModule: hmSettings:` building `osConfig` from
+   `configNamed` plus `osModule`, and leave existing callers alone.
+   - `podmanPluginGate`:
+     - `on`: `homeOnMod { virtualisation.podman.enable = true; } { }` has
+       `nixarchy.podman` and the hook lists it;
+     - `off`: `defaultHomeOn` has neither.
+   - `podmanViaBoxes`:
+     - `on`: `homeOn { services.boxes.enable = true; } { }` has it;
+     - `off`: boxes on plus `homeOnMod { virtualisation.podman.enable = lib.mkForce false; }`
+       lacks it.
+   - `podmanRow`: `apps.podman` is in the generated menu exactly when podman is
+     on (reuse the `podmanViaBoxes` machines).
+   - `pluginNotInstalledMessage`: the helper's not-installed path (step 6).
+   - Standalone: `defaultHome` (no `osConfig`) has no `nixarchy.podman`.
+
+   **Cost (#747):** each new machine is a full NixOS eval inside the 11.5 GB
+   check. Two new ones only (podman-on, boxes-with-podman-forced-off), each
+   bound once and reused, never inlined per case. Record `checks.options`'
+   peak RSS before and after in the PR.
+8. `tests/menu-verbs.nix`: its eval is reference plus Boxes, so podman is on
+   there, and `apps.podman`'s id is checked against the installed manifests by
+   B's scan with no change. Raise the plugin-row floor from 1 to 2, so losing
+   either row fails.
+9. Docs:
+   - `docs/manual/development-tools.md`, beside rootless Docker: the Services
+     row, the panel, Super+Alt+O, and that `docker` stays Docker;
+   - `docs/manual/boxes.md`: one line saying Boxes also brings the Podman panel;
+   - `docs/manual/configuration.md` Plugins (`defaultPlugins.podman = false`);
+   - `docs/internals/flake.md`: the input's why, measured size and pin-bump
+     procedure (the `master` branch, not `main`);
+   - `modules/AGENTS.md`'s default-plugins section: the podman gate and why it
+     reads `virtualisation.podman.enable` rather than a nixarchy option;
+   - the README feature row, and `readme-counts.sh` if a count moves.
+10. `git add`, fmt, statix and deadnix. Run `checks.options`, `menu-verbs`,
+    `plugin` and `omarchy` through `heavy-build.sh`.
+11. Open the PR with a real subject, `Refs #766`, links to the three
+    artifacts, the red outputs, the ISO/input size and the RSS numbers.
+
+**Tests and their §1 breaks** (each red captured before green; restore with
+`git checkout HEAD -- <path>`):
+
+| check | expected | break that must go red |
+|---|---|---|
+| `options` `podmanPluginGate` | pass | gate read as `true` |
+| `options` `podmanViaBoxes` off-half | pass | gate read from `services.boxes.enable` instead of podman |
+| `options` `podmanRow` | pass | drop `lib.optionalAttrs podmanEnabled` |
+| `options` `pluginNotInstalledMessage` | pass | remove the `[ -d … ]` branch |
+| `menu-verbs` floor 2 | pass | delete the `apps.podman` row |
+| `menu-verbs` id scan | pass | rename the row's id to `nixarchy.podmanx` |
+
+**Known limits, named in the PR, not fixed here:**
+- The panel's `d` key opens `podman-tui`, which nixarchy does not install
+  (`PodmanState.qml:235`). Without it the key fails. See the open question.
+- The Docker menu (lazydocker) and the Podman panel sit side by side. Nothing
+  merges them; they are different engines.
+
 ## Outlines, in order
 
-- **C — podman.**
-  - `data/services.nix`: a `podman` row, `kind = "plain"`,
-    `option = [ "virtualisation" "podman" ]`, category Development. Its note
-    says podman sits next to rootless Docker, which stays the default, and
-    what `dockerCompat` would collide with. Leave it off.
-  - Input `nixarchy-podman`, pinned to a commit on **master**.
-  - The default entry, gated on `osConfig.virtualisation.podman.enable`.
-  - An `apps.podman` row, and the O bind.
-  - `options` cases: podman on through the row; boxes on with podman forced
-    false (plugin absent); podman on with boxes off (plugin present).
-  - Blockers: none beyond A.
+- **C — podman.** Stepped above ("PR C — podman").
 - **E — microvm.**
   - Input `nixarchy-microvm` at a commit on main (PR #2 merged). The default
     entry, gated on nixarchy enabled.
@@ -336,3 +446,7 @@ matters (§1, §5). Before each: the `gh run list` queue check (§6). Then
     plain distrobox containers, which the CLI lists anyway.
 - **To opt out without reverting,** set
   `programs.nixarchy.defaultPlugins.<name> = false`.
+
+**PR C decisions (owner, 2026-09-19):** podman-tui is not installed. The panel's `d` key stays dead, and the docs say so; the plugin hiding the key when podman-tui is missing is an upstream change we don't file. The helper's "not installed on this machine" message ships in PR C.
+
+**PR C deviation (recorded after implementation, 2026-09-19):** the plan's `homeOnMod` wrapper became `boxesConfigWith extra enable`. `boxesConfig` already nests Home Manager like a real machine, and reusing `boxesOn`/`boxesOff` keeps the new NixOS evaluations at the two the plan budgeted (#747). The menu spec is read at eval time via `...source.overrideSpec.text`, which is new here. This should have gone in the same commit as the code; it didn't, so it follows as its own commit. The local `checks.plugin` failure is PR A's race, filed as #783, and not caused by PR C.

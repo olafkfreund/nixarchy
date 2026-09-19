@@ -147,8 +147,9 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy-plugin +[a-z][-a-z.]*'               2 nixarchy-plugin plugin-ids
     scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
     pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
-    test "$pluginrows" -ge 1 || {
-      echo "ERROR: no menu row opens a nixarchy plugin; the Packages row is gone" >&2
+    # Two: Packages, and Podman (this machine has Boxes, so podman is on).
+    test "$pluginrows" -ge 2 || {
+      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages and Podman" >&2
       exit 1
     }
 

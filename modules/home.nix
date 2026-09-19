@@ -1477,9 +1477,19 @@ in
 
     programs.nixarchy = {
       # The package manager panel, on wherever nixarchy is (#766).
-      defaultPluginSet.pkg = {
-        id = "nixarchy.pkg";
-        src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      defaultPluginSet = {
+        pkg = {
+          id = "nixarchy.pkg";
+          src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+        # Wherever podman is on -- the Services row or Boxes -- and nowhere
+        # else: a podman panel with no podman behind it is a broken panel.
+        # `or false` also covers standalone Home Manager, whose osConfig is null.
+        podman = {
+          id = "nixarchy.podman";
+          src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          gate = osConfig.virtualisation.podman.enable or false;
+        };
       };
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login

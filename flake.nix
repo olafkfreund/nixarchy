@@ -179,14 +179,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The package manager panel that ships on by default (#766): search, add,
-    # draft and apply packages, services and options from the shell instead of
-    # a terminal. An input for nixi's reasons above -- same maintainer, its own
-    # release cadence and checks -- and `follows` for the same one: it is QML
-    # and a bash adapter, nothing to build, no cache to forfeit.
-    #
-    # Pinned to a COMMIT on main; the repo has no tags. Bump it the way
-    # docs/internals/flake.md says, never by tracking the branch.
+    # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
+    # A commit on main (no tags); bump it the way that page says.
     nixarchy-pkg = {
       url = "github:olafkfreund/nixarchy-pkg/dd937f2cb289e81c51a7358152835879ef47bf96";
       inputs.nixpkgs.follows = "nixpkgs";

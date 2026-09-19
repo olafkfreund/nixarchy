@@ -209,17 +209,125 @@ spec: spec/2026-09-18-765-rebuild-window.md
 Never pipe a build whose exit status is the result (§1). Run the scripts
 under bash (§1).
 
-## Later PRs (not stepped here; see the spec's "PRs 2-5")
+## PR 2 — approved 2026-09-19
 
-2. `nixarchy-apply --yes` and `--no-preview`, the honest failure message, and
-   moving nixarchy-pkg off `printf 'n\ny\n'`.
+*Revision:* PR 1 (#776) is stepped above and approved. This section steps PR 2
+only, which is why the frontmatter is back to `draft`. The branch is
+`feat/765-pr2-apply-flags`, stacked on #776. When #776 squash-merges, cherry-pick
+this branch's own commits onto `main` (AGENTS.md §8).
+
+**Scope** (the spec's outline, item 2):
+- `nixarchy-apply` takes its two answers as flags;
+- the failure message stops claiming that nothing changed.
+
+Nothing else changes. The interactive prompts stay for a person at a
+terminal, and EOF on stdin still declines.
+
+**Flag semantics:**
+- `--no-preview` skips the "Preview in a VM first?" offer.
+- `--yes` answers "Build and switch now?" with yes. It does not imply
+  `--no-preview`, because a caller that has a terminal may still want the offer.
+- Anything else prints a usage line and exits 2. An unknown flag must never
+  mean "switch".
+- `nixarchy apply` forwards `"$@"` already (`modules/apps.nix`, the dispatcher's
+  `apply)` arm), so both spellings work.
+
+**Callers** (from grep):
+- 7 menu and enable paths launch it with no arguments. Unchanged.
+- `checks.session` (`tests/session.nix:206`) runs `echo n | nixarchy-apply`.
+  Unchanged; it keeps proving "EOF/`n` declines".
+- `tests/demo/default.nix:402`. Unchanged.
+- `tests/apply-staging.nix` and `tests/apply-imports.nix` run the real binary
+  with a stub `nh`. These are where the flags get tested.
+- nixarchy-pkg's adapter (`bin/nixarchy-pkg:937-955`, issue nixarchy-pkg#19)
+  pipes `printf 'n\ny\n'`. Where `nixarchy-preview` is absent, the preview
+  question is never asked (`apps.nix:3311`), so its `n` answers the switch and
+  declines it. After this PR it should call `nixarchy-apply --yes --no-preview
+  </dev/null`. That change is upstream's to make; we file nothing there unless
+  the owner asks (§11).
+
+### Steps
+
+1. **Tests first, against today's script (§1).** In `tests/apply-staging.nix`,
+   make the stub `nh` record each call (`echo "$@" >> $PWD/nh.calls`) and exit
+   with `$NH_STUB_RC` (default 0).
+   *Deviation, made during implementation:* the stub is an **exported bash
+   function**, not a file on `PATH`. `writeShellApplication` prepends its
+   `runtimeInputs`, so the real `nh` shadowed the old stub file. The first
+   green attempt at (a) ran the real nh and exited 1. The existing comment
+   ("A fake nh") had never been true; it didn't matter while no case answered
+   yes. Bash resolves functions before `PATH`. Add three cases after the existing ones:
+   - (a) `nixarchy-apply --yes --no-preview </dev/null`: `nh.calls` is non-empty
+     and the exit is 0;
+   - (b) `nixarchy-apply </dev/null`: `nh.calls` stays empty (EOF still
+     declines);
+   - (c) `nixarchy-apply --frobnicate`: exit 2, and `nh.calls` stays empty.
+
+   → Verify: build `checks.apply-staging` against unchanged `modules/apps.nix`.
+   **(a) and (c) must fail**; today the script ignores arguments, so (a) never
+   switches and (c) exits 0. Keep the red log. (b) passes before and after, and
+   it guards the EOF rule.
+2. **`modules/apps.nix`, `nixarchy-apply`:** a `while [ $# -gt 0 ]; case` at the
+   top that sets `yes=1` and `nopreview=1`, and does `*) usage; exit 2`. The
+   preview block becomes `if [ -z "$nopreview" ] && command -v
+   nixarchy-preview ...`. The switch question is skipped when `yes=1`
+   (`reply=y`). Nothing else moves. Carry both flags in the 1-3 line comment
+   above the reads that explains EOF, not in a new block (§7).
+
+   → Verify: `checks.apply-staging` is green; (a), (b) and (c) all pass.
+3. **The failure message** (`apps.nix:3337`). Replace "Nothing changed on this
+   machine." with:
+   ```
+   The rebuild failed (exit $rc). The log above says where.
+     If it stopped while building, the running system is unchanged.
+     If it stopped while activating, it may be partly switched --
+     'nixarchy rollback' lists the earlier generations to go back to.
+   ```
+   The two hint lines below it (`nixarchy app remove`, `... | nixarchy
+   explain`) stay. Why no claim: nh runs `switch-to-configuration test`, then
+   sets the profile, then runs `switch-to-configuration boot`
+   (`nh-nixos/src/nixos.rs:383,428,435`, nh 4.4.2). A failure after the first
+   of those leaves the live system changed. `nixarchy rollback` is a picker
+   (`pkgs/omarchy/nix-bin/nixarchy-rollback`, `--list`) and never rolls back on
+   its own, so pointing at it is safe in both cases.
+
+   → Verify: add case (d) to `tests/apply-staging.nix`. With `NH_STUB_RC=3`,
+   `--yes --no-preview` exits 3, the output contains `nixarchy rollback`, and it
+   does **not** contain `Nothing changed`. **Red first:** run it against
+   step 2's tree before step 3 lands; it fails on "Nothing changed".
+4. **Docs:** `docs/manual/other-packages.md`, where it describes Apply, gets one
+   line on the two flags "for scripts and panels". `modules/AGENTS.md` gets no
+   new section: the EOF rationale already lives in the script comment.
+5. **Lint:** `nix fmt -- --ci`, statix, deadnix.
+6. **Rebase and PR:**
+   - Once #776 has merged, cherry-pick onto `main`.
+   - Push, and open a PR with the template: link intent, spec and plan, paste
+     the red outputs from steps 1 and 3, `Refs #765`.
+   - The PR notes, for the owner, the one-line change nixarchy-pkg can then
+     make (`--yes --no-preview </dev/null`).
+
+### Tests
+
+| check | what it proves | red first by |
+|---|---|---|
+| `checks.apply-staging` (a) | `--yes --no-preview` switches with no stdin | running it against today's script |
+| `checks.apply-staging` (b) | EOF still declines | none needed; green before and after, it guards a rule |
+| `checks.apply-staging` (c) | an unknown flag exits 2 and never switches | running it against today's script (exits 0) |
+| `checks.apply-staging` (d) | failure exits with nh's code, points at rollback, makes no "nothing changed" claim | running it before step 3 |
+| `checks.session` | `echo n \| nixarchy-apply` still declines in a real session | unchanged; CI runs it |
+
+`checks.apply-staging` is cheap: a `runCommand` with a stub `nh`. It is
+already wired (`flake.nix:1819`). No workflow names it; `build.yml`'s `omarchy`
+job builds it in its catch-all step, "Build every check no other job claims".
+So there is no new `checks.<name>` and no workflow edit (§4). Build it under bash, never piped (§1).
+
+## Later PRs (outline; each is stepped when reached)
+
 3. The rebuild runs as a `systemd-run --user` unit, `nixarchy-rebuild`, with
    `--no-nom`, and its output goes to the journal.
 4. The spinner opens `journalctl --user -fu nixarchy-rebuild`.
-5. The Quickshell panel replaces the floating terminal for Install > Apply
-   and the per-app rows.
-
-Each gets its own plan update when it is reached.
+5. The Quickshell panel replaces the floating terminal for Install > Apply and
+   the per-app rows.
 
 ## Rollback
 

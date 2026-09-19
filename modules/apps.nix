@@ -3327,6 +3327,8 @@ in
                   # another is a failure that looks like nothing happening.
                   [yY]*)
                     rc=0
+                    # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+                    export NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}"
                     nh os switch "$flake" || rc=$?
                     if [ "$rc" -ne 0 ]; then
                       # The selection stays copied, so every later apply or update

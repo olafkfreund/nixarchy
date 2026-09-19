@@ -413,6 +413,26 @@ pkgs.testers.runNixOSTest {
     print("=========== is the shell alive? ===========")
     print(machine.succeed("pgrep -a quickshell || echo 'NO QUICKSHELL PROCESS'"))
 
+    # ---- the rebuild's password goes through the Omarchy dialog (#765) ----
+    # Here and not in tests/plugin.nix: polkit resolves the subject and the
+    # agent through the logind session, and only this file logs in through the
+    # greeter. pkexec is started by Hyprland so it sits in that session, as a
+    # menu-launched rebuild does.
+    machine.wait_until_succeeds(
+        "journalctl -b -t omarchy-shell --no-pager"
+        " | grep -q 'omarchy polkit agent registered'", timeout=120)
+    machine.succeed(
+        "cat > /tmp/pkexec-probe.sh <<'PROBE_EOF'\n"
+        "export XDG_RUNTIME_DIR=/run/user/1000\n"
+        "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+        "hyprctl dispatch exec '/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok'\n"
+        "PROBE_EOF")
+    machine.succeed("su omarchy -c 'bash /tmp/pkexec-probe.sh'")
+    machine.wait_for_text("Authenticat", timeout=90)
+    machine.send_chars("omarchy\n")
+    machine.wait_until_succeeds("test \"$(stat -c %U /tmp/pkexec-ok)\" = root", timeout=60)
+    print("the rebuild's elevation reaches the Omarchy polkit dialog")
+
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it
     # reads it as `2>/dev/null` with a fallback: with no UPower the call fails

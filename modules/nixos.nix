@@ -862,9 +862,10 @@ in
       #
       #   kms server died or never started, exit code: 127
       #
-      # -- and there is no fallback, because gpu-screen-recorder then tries
-      # pkexec, which wants a setuid helper that NixOS' polkit does not ship.
-      # A tester hit exactly this.
+      # -- and pkexec, which gpu-screen-recorder then tries, was no fallback:
+      # NixOS' polkit shipped no setuid helper for it. A tester hit exactly this.
+      # #765 ships that helper, so without this wrapper recording would now ask
+      # for a password in the polkit dialog; this wrapper is the no-prompt path.
       #
       # Enabling the module is enough, and it is worth writing down why the
       # package in our wrapper picks the privileged binary up rather than the
@@ -1457,6 +1458,25 @@ in
     # etc/sudoers.d/omarchy-passwd-tries.
     # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
     security.sudo.extraConfig = "Defaults passwd_tries=10";
+
+    # The rebuild elevates through pkexec so the Omarchy polkit dialog asks (#765).
+    # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+    # Unstable made the setuid wrapper opt-in; stable ships it and has no option.
+    security.polkit = {
+      extraConfig = ''
+        // nh elevates each step of a switch as `pkexec env ...`: one password, kept.
+        polkit.addRule(function (action, subject) {
+          if (action.id == "org.freedesktop.policykit.exec" &&
+              subject.local && subject.active && subject.isInGroup("wheel") &&
+              (action.lookup("program") || "").split("/").pop() == "env") {
+            return polkit.Result.AUTH_ADMIN_KEEP;
+          }
+        });
+      '';
+    }
+    // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
+      enablePkexecWrapper = lib.mkDefault true;
+    };
 
     # upstream's user.conf.d/20-omarchy-nofile.conf. Outside the block below,
     # which already has two `user.` keys.

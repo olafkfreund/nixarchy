@@ -26,6 +26,11 @@ have five uncommented lines. Then _Install > Apply changes_ runs
 `nixarchy-apply`, which copies that file to `nixarchy-apps.nix` in your flake
 directory and offers to run `nh os switch <flake>`.
 
+The switch asks for your password in the same Omarchy dialog as any other
+administrator prompt, once per switch, rather than in the terminal. Over SSH
+or on a text console it asks as text instead. To get the old sudo prompt for
+one run, use `NH_ELEVATION_STRATEGY=auto nixarchy apply`.
+
 ## Finding it in the first place
 
 `nixarchy-search`, or _Install > Search_, is one fzf picker over every nixpkgs

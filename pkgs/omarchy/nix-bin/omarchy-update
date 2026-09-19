@@ -222,6 +222,8 @@ echo "==> nh os switch ${update_flags[*]} $flake"
 #
 # Not exec'd: upstream's presentation wrapper prints a completion banner after
 # this returns, and exec would take that away.
+# Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+export NH_ELEVATION_STRATEGY="${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}"
 nh os switch "${update_flags[@]}" "$flake"
 
 echo

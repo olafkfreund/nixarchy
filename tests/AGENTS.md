@@ -121,6 +121,19 @@ Non-gating, per-night, filed as its own issue by the report job — a job
 rather than a check for the same reason devenv-presets is (see build.yml's
 comment on that job).
 
+## The one-dialog one: no VM here runs a whole switch through polkit
+
+`checks.session` proves the rebuild's elevation reaches the Omarchy polkit
+dialog: it starts `pkexec env touch` inside the greeter-logged-in Hyprland
+session, reads the dialog by OCR, types the password and finds a root-owned
+file (#765). It runs pkexec **once**. The promise the design rests on -- one
+password per switch, because the `AUTH_ADMIN_KEEP` rule lets polkit keep the
+authorisation across the three elevations nh makes -- is a claim about
+retention across separate pkexec processes, and nothing here drives a real
+switch from inside a session. It is checked by hand on real hardware: one
+Install > Apply, count the dialogs. More than one means retention did not
+hold; the answer is not a wider rule.
+
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
 The network reinstall image (#483) is only honest for a closure the caches

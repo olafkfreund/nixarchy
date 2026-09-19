@@ -1982,3 +1982,41 @@ installed anything to notice.
 
 Excludes the copy itself, which of course contains its own name
 nowhere but is matched by the filename glob.
+
+## The rebuild asks through polkit
+
+`nixarchy-apply` and `omarchy-update` export
+`NH_ELEVATION_STRATEGY=/run/wrappers/bin/pkexec` (unless the caller already
+set one) before running the switch, so the password is asked by the Omarchy
+shell's polkit agent (`shell/plugins/polkit`), not by sudo in the terminal
+(#765). nh's own `auto` finds sudo before pkexec, which is why nothing
+changed until it was told.
+
+- **pkexec, not an askpass helper.** The polkit agent is already running on
+  every nixarchy desktop; an askpass helper would be a second dialog and a
+  second password path to secure.
+- **The script, not the session.** Only the rebuild changes. Every other sudo,
+  SSH and the console included, keeps its own prompt. A user's own
+  `NH_ELEVATION_STRATEGY` wins, and `auto` gives sudo back for one run.
+- **The setuid wrapper** is opt-in on unstable
+  (`security.polkit.enablePkexecWrapper`) and unconditional on stable, which
+  has no such option -- hence the `options ? ...` guard. A path makes nh
+  *prefer* pkexec: if the wrapper is missing it warns and falls back to sudo.
+  It also gives gpu-screen-recorder the pkexec fallback it never had; its own
+  setcap wrapper stays the no-prompt path. And five upstream scripts that call
+  pkexec -- `omarchy-dns`, `omarchy-update-stay-awake`,
+  `omarchy-theme-set-browser-policy`, `omarchy-windows-vm`,
+  `omarchy-launch-docker-tui` -- had no setuid pkexec on unstable and failed;
+  they now ask through the same dialog. `omarchy-launch-docker-tui` elevates
+  as `pkexec /usr/bin/env ...`, so the keep-rule below covers it too.
+- **`AUTH_ADMIN_KEEP`, never `YES`.** One switch elevates three times
+  (activate, profile, bootloader), each as `pkexec env ...`. Without keeping,
+  that is three dialogs. The rule matches `org.freedesktop.policykit.exec` for
+  a local, active wheel subject whose program's basename is `env` -- the
+  basename because `env`'s path depends on the caller's PATH. It is still one
+  password; a passwordless switch would be passwordless root, since activation
+  runs code from a configuration the user controls. The price: for polkit's
+  retention window, any `pkexec env ...` from that session passes without a
+  second prompt -- the same shape as sudo's timestamp.
+- **Without a graphical session** (SSH, a text console) pkexec's own text
+  agent prompts, as sudo did. With no agent and no tty it fails, as sudo does.

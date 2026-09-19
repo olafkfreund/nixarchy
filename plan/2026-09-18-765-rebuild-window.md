@@ -130,7 +130,22 @@ spec: spec/2026-09-18-765-rebuild-window.md
    Capture that output, then remove the break. A second break: comment out
    `enablePkexecWrapper`. The wrapper path does not exist, the exec fails, and
    the root-owned file never appears.
-   Run `checks.plugin` only when `gh run list` shows 0 in flight. It is a
+
+   *Deviation, made during implementation:* the probe is back in
+   **`tests/session.nix`**, not `tests/plugin.nix`. `plugin.nix` starts
+   Hyprland with `systemd-run --uid=1000`, a service outside any logind
+   session. polkit resolves both the subject (`local`, `active`) and the
+   agent's registration through the logind session, so there pkexec could not
+   reach the agent even on a correct build: the probe would be red for the
+   wrong reason. `session.nix` logs in through the greeter, a real session,
+   and already has `enableOCR = true`. It gains the three lines of hyprctl
+   environment it lacked, copied from `plugin.nix:179-186`.
+   Because it has no `shell.json` fixture, the first break becomes: the
+   probe's command runs `true` instead of pkexec, so no dialog is drawn and
+   `wait_for_text("Authenticat")` times out. That also proves the OCR match
+   does not fire on something else on screen. The second break (the wrapper
+   off) is unchanged.
+   Run `checks.session` only when `gh run list` shows 0 in flight. It is a
    booted VM.
 
    The probe does **not** prove the spec's "one dialog per switch" (polkit
@@ -176,7 +191,7 @@ spec: spec/2026-09-18-765-rebuild-window.md
 | check | expected green | §1 break, and the expected red |
 |---|---|---|
 | `nix build .#checks.x86_64-linux.options --print-build-logs` | passes, `modeAInert` included | no `mkDefault true` gives `pkexecWrapperOn`; no rule gives `pkexecKeepRule`; no export gives the script grep; the setting outside `cfg.enable` gives `pkexecWrapperModeA` |
-| `nix build .#checks.x86_64-linux.plugin --print-build-logs` | the dialog appears, the password is accepted, and `/tmp/pkexec-ok` is owned by root | the agent disabled means no dialog or registration line, and a timeout; the wrapper off means no root-owned file |
+| `nix build .#checks.x86_64-linux.session --print-build-logs` | the dialog appears, the password is accepted, and `/tmp/pkexec-ok` is owned by root | `true` in place of pkexec means no dialog, and a timeout; the wrapper off means no root-owned file |
 | `nix eval ...security.polkit.enablePkexecWrapper` on `reference` | `true` | `false` before step 2 |
 | hand test on the owner's machine | one dialog per Apply; text over SSH; sudo with `auto` | none (manual; the hole is recorded in `tests/AGENTS.md`) |
 | `nix fmt -- --ci`, statix, deadnix | clean | none |

@@ -476,7 +476,7 @@ pkgs.testers.runNixOSTest {
       };
     };
 
-  testScript = ''
+  testScript = import ./with-vm-cleanup.nix pkgs.lib ''
     installer.wait_for_unit("multi-user.target")
 
     # ---- build the machine we are not allowed to break --------------------
@@ -702,7 +702,7 @@ pkgs.testers.runNixOSTest {
     variables = os.path.abspath("OVMF_VARS.fd")
     shutil.copyfile("${ovmfVariables}", variables)
     os.chmod(variables, 0o644)
-    target = create_machine(
+    target = create_owned_machine(
         "${targetCommand}"
         + f" -drive if=pflash,format=raw,unit=1,file={variables}"
         + f" -drive file={disk},if=virtio,werror=report",
@@ -752,10 +752,5 @@ pkgs.testers.runNixOSTest {
         f"installed {before_sys}: the free-space layout does not describe the "
         "machine it produced (Invariant 1).")
     print("a rebuild straight after a free-space install builds nothing")
-
-    # Or this check never finishes: a machine from create_machine is not reaped
-    # for us the way a declared node is, and the derivation sits with a live
-    # qemu until the timeout. See tests/install.nix, which paid for this once.
-    target.shutdown()
   '';
 }

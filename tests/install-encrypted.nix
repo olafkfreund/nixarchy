@@ -354,7 +354,7 @@ pkgs.testers.runNixOSTest {
       };
     };
 
-  testScript = ''
+  testScript = import ./with-vm-cleanup.nix pkgs.lib ''
     installer.wait_for_unit("multi-user.target")
 
     # ---- install -------------------------------------------------------
@@ -630,7 +630,7 @@ pkgs.testers.runNixOSTest {
     assert os.path.exists(disk), f"the installer's target disk is not at {disk}"
     print(subprocess.run(["ls", "vm-state-installer"],
                          capture_output=True, text=True).stdout)
-    target = create_machine(
+    target = create_owned_machine(
         "${targetCommand}" + f" -drive file={disk},if=virtio,werror=report",
         name="target")
     target.start()
@@ -692,9 +692,5 @@ pkgs.testers.runNixOSTest {
         f"installed {before}: the encrypted layout does not describe the "
         "machine it produced (Invariant 1).")
     print("a rebuild straight after an encrypted install builds nothing")
-
-    # Or this check never finishes; see tests/install.nix, which paid for
-    # this once.
-    target.shutdown()
   '';
 }

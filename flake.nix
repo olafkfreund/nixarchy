@@ -2080,6 +2080,10 @@
           # bootloader the installer wrote, and asserts a rebuild builds
           # nothing. See tests/install.nix for why the second machine is not a
           # normal test node.
+          install-teardown = import ./tests/install-teardown.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           install = import ./tests/install.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

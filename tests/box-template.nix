@@ -31,13 +31,22 @@
   # silently skipped, so #259 adding `debian` cannot forget this half.
   imagePins,
   images,
+  # packages.box-test-image: the one cache-allowlist entry that has to carry
+  # every pinned image, byte for byte the ones checked here (#800).
+  cached,
 }:
 let
   names = builtins.attrNames templates;
   missingPins = lib.subtractLists (builtins.attrNames imagePins) names;
+  uncached = builtins.filter (
+    n: !(cached.images ? ${n}) || cached.images.${n}.outPath != images.${n}.outPath
+  ) (builtins.attrNames images);
 in
 assert
   missingPins == [ ] || throw "checks.box-template: no imagePins entry for: ${toString missingPins}";
+assert
+  uncached == [ ]
+  || throw "checks.box-template: box-test-image does not carry the pinned image for: ${toString uncached}";
 pkgs.runCommand "nixarchy-box-template"
   {
     nativeBuildInputs = [ pkgs.gnugrep ];

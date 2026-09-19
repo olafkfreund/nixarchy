@@ -109,5 +109,12 @@ in
     # list it in a writeShellApplication's runtimeInputs, which would put its
     # own store bin/ on PATH ahead of the profile and reintroduce this.
     environment.systemPackages = [ pkgs.distrobox ];
+
+    # The Distrobox panel's templates, in the `distrobox assemble` shape its
+    # templatesFile reads (#766): one section per template, from the same
+    # catalogue `nixarchy box` uses, so the two cannot drift apart.
+    environment.etc."nixarchy/box-templates.ini".text = lib.concatStrings (
+      lib.mapAttrsToList (name: t: "[${name}]\n${t.ini}\n") (import ../../data/box-templates.nix)
+    );
   };
 }

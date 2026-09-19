@@ -173,6 +173,8 @@ pkgs.testers.runNixOSTest rec {
             pkg = false;
             gitlab = false;
             herdr = false;
+            microvm = false;
+            distrobox = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

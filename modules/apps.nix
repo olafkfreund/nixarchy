@@ -17,7 +17,6 @@ let
   # The Podman panel's row, by the same rule: podman is on through the
   # Services row or through Boxes, and without it the row must not exist.
   podmanEnabled = cfg.enable && config.virtualisation.podman.enable;
-  boxTemplates = import ../data/box-templates.nix;
 
   # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
   appBinary =
@@ -655,51 +654,27 @@ let
           ];
         };
       }
-      // lib.optionalAttrs boxesEnabled (
-        {
-          # A new parent under Trigger, appended after upstream's own rows --
-          # the same precedent system.recovery above already set for this
-          # file (#542), and the one #226 set for sandboxes.
-          # `when` is the runtime half of the gate: whether podman is
-          # actually usable THIS login is only knowable now, not at rebuild
-          # time -- the Nix-level half is `boxesEnabled` just above, which
-          # keeps the row from existing at all when the feature is off.
-          "trigger.box" = {
-            icon = "󰆧";
-            label = "Boxes";
-            aliases = [
-              "box"
-              "distrobox"
-            ];
-            when = "nixarchy box --check";
-          };
-
-          "trigger.box.enter" = {
-            icon = "󰆍";
-            label = "Enter a box";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box enter";
-            description = "Pick a box you already have and get a shell in it";
-          };
-
-          "trigger.box.rm" = {
-            icon = "󰩹";
-            label = "Remove a box";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box rm";
-            description = "Pick a box and delete it";
-          };
-        }
-        // lib.mapAttrs' (
-          name: template:
-          lib.nameValuePair "trigger.box.create.${name}" {
-            icon = "󰐕";
-            label = "New: ${template.label}";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box create --template ${name}";
-            description = template.note;
-          }
-        ) boxTemplates
-      )
+      // lib.optionalAttrs boxesEnabled {
+        # The Boxes group is the Distrobox panel now (#766 PR D): it enters,
+        # removes and creates -- from nixarchy's own templates, which boxes.nix
+        # writes where the panel reads them. `nixarchy box` stays for the
+        # terminal until the panel can also promote and list (#801).
+        "trigger.box" = {
+          icon = "󰆧";
+          label = "Boxes";
+          aliases = [
+            "box"
+            "distrobox"
+          ];
+          action = "nixarchy-plugin nixarchy.distrobox";
+          when = "nixarchy-plugin --enabled nixarchy.distrobox";
+          description = "Your boxes, and new ones from a template · Super+Alt+D";
+        };
+      }
       // lib.optionalAttrs cfg.enable {
         # Why: modules/AGENTS.md#the-sandboxes-group-226
+        # The panel is the Sandbox group now (#766): its five child rows are
+        # gone -- each called a verb with no name, so none could succeed (#781).
         "trigger.vm" = {
           icon = "󰦛";
           label = "Sandbox";
@@ -708,43 +683,17 @@ let
             "sandbox"
             "microvm"
           ];
-          when = "nixarchy-vm --check";
+          action = "nixarchy-plugin nixarchy.microvm";
+          when = "nixarchy-vm --check && nixarchy-plugin --enabled nixarchy.microvm";
+          description = "Disposable and permanent VMs in a panel · Super+Alt+V";
         };
-        "trigger.vm.new" = {
-          icon = "󰕍";
-          label = "New sandbox";
-          # `create`, not `new`. The menu KEY is trigger.vm.new and the action
-          # was written to match the key instead of the CLI, so every click
-          # printed "nixarchy-vm: unknown subcommand 'new'" and closed. The
-          # sibling rows only work because run/stop/rm happen to be spelled the
-          # same on both sides; checks.menu-verbs now asserts that rather than
-          # leaving it to coincidence.
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm create";
-          description = "Name one, pick a template, and open it";
-        };
-        "trigger.vm.open" = {
-          icon = "󰁯";
-          label = "Open a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm run";
-          description = "Attach to one you already created";
-        };
-        "trigger.vm.stop" = {
-          icon = "󰉉";
-          label = "Stop a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm stop";
-          description = "Ask a running sandbox to shut down";
-        };
-        "trigger.vm.destroy" = {
-          icon = "󱄅";
-          label = "Destroy a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm rm";
-          description = "Delete it and its state -- cannot be undone";
-        };
-        "trigger.vm.list" = {
+        # With the panel turned off, the terminal is still a way in.
+        "trigger.vm-list" = {
           icon = "󰆓";
-          label = "List sandboxes";
+          label = "Sandbox";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm list";
-          description = "What you have created, and which are running";
+          when = "nixarchy-vm --check && ! nixarchy-plugin --enabled nixarchy.microvm";
+          description = "The panel is off: what you have created, in a terminal";
         };
       }
       // lib.listToAttrs (

@@ -55,6 +55,12 @@ let
   herdrSrc =
     (builtins.head (builtins.attrValues eval.config.home-manager.users))
     .programs.nixarchy.defaultPluginSet.herdr.src;
+
+  # The MicroVMs panel as installed (#766). It drives nixarchy-vm through
+  # argv arrays in Model.js, so those are the calls this CLI has to accept.
+  microvmSrc =
+    (builtins.head (builtins.attrValues eval.config.home-manager.users))
+    .programs.nixarchy.defaultPluginSet.microvm.src;
 in
 pkgs.runCommand "nixarchy-menu-verbs"
   {
@@ -155,11 +161,30 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy-plugin +[a-z][-a-z.]*'               2 nixarchy-plugin plugin-ids
     scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
     pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
-    # Packages, Podman (Boxes is on), GitLab Pipelines, and Herdr.
-    test "$pluginrows" -ge 4 || {
-      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, GitLab Pipelines and Herdr" >&2
+    # Packages, Podman and Boxes (Boxes is on), GitLab Pipelines, Herdr, and Sandbox.
+    test "$pluginrows" -ge 6 || {
+      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, Boxes, GitLab Pipelines, Herdr and Sandbox" >&2
       exit 1
     }
+
+    # MicroVMs (#766): the Sandbox rows are the panel now, so the verbs that
+    # matter are the ones its Model.js runs, as `"nixarchy-vm", "<verb>"`.
+    vmcalls=0
+    while read -r verb; do
+      vmcalls=$((vmcalls + 1))
+      grep -qx -- "$verb" vm-verbs || {
+        echo "ERROR: the MicroVMs plugin calls nixarchy-vm '$verb', which it does not accept" >&2
+        echo "       it accepts: $(tr '\n' ' ' < vm-verbs)" >&2
+        fail=1
+      }
+    done < <(grep -hoE '"nixarchy-vm", *"[-a-z]+"' ${microvmSrc}/Model.js \
+               | grep -oE '"[-a-z]+"$' | tr -d '"' | sort -u)
+    # list, templates, help, console, run, stop, rm, create, set-template.
+    test "$vmcalls" -ge 7 || {
+      echo "ERROR: found $vmcalls nixarchy-vm calls in the MicroVMs plugin, expected 7" >&2
+      exit 1
+    }
+    echo "nixarchy-vm verbs the MicroVMs panel runs: $vmcalls, all accepted"
 
     # herdr (#771): every `<level> <sub>` herdr-sessions sends, spelled either
     # `herdr ...` or through its `"''${base[@]}"` array, must be a subcommand

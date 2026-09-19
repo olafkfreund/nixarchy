@@ -1686,6 +1686,14 @@ below -- same as `nixarchy dev init`), so there is no
 #221 designed the disposable half to need no root and no rebuild,
 so nothing about it is opt-in.
 
+**Since #766 PR E the group is the MicroVMs panel.** `trigger.vm` opens
+`nixarchy.microvm`, and its five child rows are gone. Each one called a verb
+with no name (`nixarchy-vm create`, `run`...), so none could ever succeed
+(#781). `checks.menu-verbs` never saw that: it checks that a verb exists, not
+that the call can work. While the plugin is off, `trigger.vm-list` stands in
+and opens `nixarchy vm list` in a terminal. The CLI stays, for the terminal
+and for the panel itself.
+
 <a id="dim-when-the-app-is-in-the-selection-or-already-on"></a>
 ### Dim when the app is in the selection *or* already on PATH
 

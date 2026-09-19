@@ -208,6 +208,20 @@
       flake = false;
     };
 
+    # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-distrobox = {
+      url = "github:olafkfreund/nixarchy-distrobox/f68ac276dc05cd06f053900d419e1fd6ff30eaff";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-microvm = {
+      url = "github:olafkfreund/nixarchy-microvm/481e6c5c135c1edd9c624c3361b56fe7bee5d750";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #
@@ -888,6 +902,8 @@
           # modules/home.nix names it as a default plugin (#766).
           nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
           nixarchy-podman = inputs.nixarchy-podman.packages.${system}.default;
+          nixarchy-microvm = inputs.nixarchy-microvm.packages.${system}.default;
+          nixarchy-distrobox = inputs.nixarchy-distrobox.packages.${system}.default;
 
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.
@@ -907,8 +923,12 @@
           # `nixarchy box` execs.
           nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
 
-          # Named so the main-only cache publisher can serve cold box checks.
-          box-test-image = boxImages.${system}.archlinux;
+          # Every pinned box image in one entry, so the main-only cache publisher
+          # serves them all to cold box checks (#788, #800): its closure is each
+          # tarball. `images` is the set, for checks.box-template's same-path check.
+          box-test-image = pkgsFor.${system}.linkFarm "box-test-images" boxImages.${system} // {
+            images = boxImages.${system};
+          };
 
           # Same reason again: tests/menu-verbs.nix reads the verbs out of the
           # command the Secrets menu rows exec, and it can only do that if the
@@ -2207,6 +2227,7 @@
             nixarchyBox = self.packages.${system}.nixarchy-box;
             imagePins = boxImagePins;
             inherit images;
+            cached = self.packages.${system}.box-test-image;
           };
 
           # The half checks.box-template deliberately leaves alone: create a
@@ -2216,7 +2237,7 @@
             inherit inputs;
             pkgs = pkgsFor.${system};
             imagePin = boxImagePins.archlinux;
-            image = self.packages.${system}.box-test-image;
+            image = images.archlinux;
           };
 
           # The other disk mode, built so the cache has it: installer/cd.nix

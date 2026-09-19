@@ -17,6 +17,12 @@
 # it" and "expensive to build" are different claims, and only the second is a
 # reason to pay for it here. A prebuilt binary is a download either way, so
 # caching it makes this a slower second mirror (#725). Add the reason beside it.
+#
+# One exception, for availability rather than build cost (#788, #800): the box
+# checks' pinned base images. They are a download either way, but Docker Hub is
+# not ours, and a 502 from it turned main red on a cold runner. They are cached
+# so the checks never depend on it -- every pinned template image, not only the
+# default one, through the single .#box-test-image entry in `system`.
 set -uo pipefail
 
 group() {
@@ -39,9 +45,10 @@ group() {
       # It was in this cache by accident until #699 stopped the store-diff
       # pushes, and `system` started timing out the next day.
       echo ".#hypr-rdp"
-      # #788: official Arch base image used by both box checks. An explicit
-      # availability exception to the prebuilt rule: a Docker Hub 502 must
-      # not turn a cold CI runner red. Keep the pinned image unmodified.
+      # #788, #800: every pinned box template image (archlinux, debian), which
+      # the box checks pull -- the availability exception in the header. One
+      # entry, so a new template brings its image with no second edit here or
+      # in build.yml's producer step. Keep the pinned images unmodified.
       echo ".#box-test-image"
       ;;
     # `nixarchy vm run` downloads the KVM runner instead of building QEMU;

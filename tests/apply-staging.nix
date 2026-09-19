@@ -22,18 +22,20 @@ let
   # Evaluating the module is unavoidable (the script is built by
   # writeShellApplication inside it); BUILDING the system is not.
   apply = builtins.head (
-    builtins.filter (
-      p: (p.pname or p.name or "") == "nixarchy-apply"
-    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
+    builtins.filter
+      (
+        p: (p.pname or p.name or "") == "nixarchy-apply"
+      )
+      inputs.self.nixosConfigurations.vm.config.environment.systemPackages
   );
 in
 pkgs.runCommand "nixarchy-apply-staging"
-  {
-    nativeBuildInputs = [
-      pkgs.git
-      pkgs.nix
-    ];
-  }
+{
+  nativeBuildInputs = [
+    pkgs.git
+    pkgs.nix
+  ];
+}
   ''
     export HOME=$PWD/home
     mkdir -p "$HOME"
@@ -155,6 +157,65 @@ pkgs.runCommand "nixarchy-apply-staging"
       ok "a failed rebuild exits with nh's code and points at rollback"
     else
       bad "a failed rebuild exited $rc (want 3), or claimed nothing changed, or named no rollback: $(tail -6 "$PWD/fail.out")"
+    fi
+
+    # ---- detached, as a supervised user unit (#765 PR 3) -------------------
+    # Stubbed like nh, and for the same reason. `systemctl show` answers with
+    # $UNIT_STATE as the unit's SubState; everything else is recorded.
+    sdcalls=$PWD/sdrun.calls sccalls=$PWD/sctl.calls
+    systemd-run() { echo "$*" >> "$sdcalls"; }
+    systemctl() {
+      case " $* " in
+        *" show "*) echo "''${UNIT_STATE:-}" ;;
+        *) echo "$*" >> "$sccalls" ;;
+      esac
+    }
+    export sdcalls sccalls
+    export -f systemd-run systemctl
+    fresh() { rm -f "$PWD/nh.calls" "$sdcalls" "$sccalls"; rc=0; }
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root $apply --detach --yes </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && ! calls \
+      && grep -q -- "--unit=nixarchy-rebuild" "$sdcalls" 2>/dev/null \
+      && grep -q -- "RemainAfterExit=yes" "$sdcalls" \
+      && grep -q -- "--collect" "$sdcalls" \
+      && grep -q -- "--yes --no-preview" "$sdcalls"; then
+      ok "--detach --yes starts the nixarchy-rebuild unit and does not rebuild in-process"
+    else
+      bad "--detach --yes exited $rc; systemd-run: $(cat "$sdcalls" 2>/dev/null); nh: $(cat "$PWD/nh.calls" 2>/dev/null)"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root UNIT_STATE=running $apply --detach --yes </dev/null >"$PWD/busy.out" 2>&1 || rc=$?
+    if [ "$rc" -eq 3 ] && grep -q "already running" "$PWD/busy.out" && [ ! -s "$sdcalls" ]; then
+      ok "a detached start refuses while a rebuild is running"
+    else
+      bad "a detached start during a rebuild exited $rc (want 3): $(cat "$PWD/busy.out")"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root UNIT_STATE=exited $apply --detach --yes </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && [ -s "$sccalls" ] && [ -s "$sdcalls" ]; then
+      ok "a finished unit is cleared before the next detached start"
+    else
+      bad "a finished unit was not cleared, or no start followed (exit $rc; systemctl: $(cat "$sccalls" 2>/dev/null))"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root $apply --detach </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] && [ ! -s "$sdcalls" ]; then
+      ok "--detach without --yes exits 2: a unit has no terminal to answer"
+    else
+      bad "--detach without --yes exited $rc (want 2)"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root $apply --yes --no-preview </dev/null >/dev/null 2>&1 || rc=$?
+    if grep -q -- "--no-nom" "$PWD/nh.calls" 2>/dev/null; then
+      ok "off a terminal, nh runs with --no-nom"
+    else
+      bad "off a terminal nh ran without --no-nom: $(cat "$PWD/nh.calls" 2>/dev/null)"
     fi
 
     [ "$fails" -eq 0 ] || exit 1

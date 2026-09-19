@@ -69,6 +69,15 @@ let
   # a path instead. Deliberately the *other* plugin from the one added first,
   # so the two never race for the same id.
   declarative = (builtins.elemAt plugins 1).src;
+
+  # A panel-kind default (#770), to hold upstream's setEnabled to what the
+  # hook relies on: a panel ignores the `right` placement and lands in
+  # plugins[]. A valid manifest is all it needs; the panel never opens.
+  panelFixture = pkgs.runCommand "nixarchy-panel-fixture" { } ''
+    mkdir -p $out
+    echo 'import QtQuick' > $out/Panel.qml
+    echo '{"schemaVersion":1,"id":"nixarchy.panelfixture","name":"panel fixture","version":"0.0.0","kinds":["panel"],"entryPoints":{"panel":"Panel.qml"}}' > $out/manifest.json
+  '';
 in
 pkgs.testers.runNixOSTest rec {
   name = "nixarchy-plugin";
@@ -77,8 +86,14 @@ pkgs.testers.runNixOSTest rec {
   # `machine` is shut down, so the two never compete for the runner.
   nodes.defaults = {
     imports = [ nodes.machine ];
-    home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.teleprompt = {
-      inherit (builtins.elemAt plugins 0) id src;
+    home-manager.users.omarchy.programs.nixarchy.defaultPluginSet = {
+      teleprompt = {
+        inherit (builtins.elemAt plugins 0) id src;
+      };
+      panel = {
+        id = "nixarchy.panelfixture";
+        src = panelFixture;
+      };
     };
   };
 
@@ -605,6 +620,19 @@ pkgs.testers.runNixOSTest rec {
     assert tele in right, f"{tele} is enabled but not in the bar's right section: {right}"
     user(f"test -e ~/.local/state/nixarchy/enabled-once/{tele}")
     print("in the right section, and its marker is written")
+
+    # #770: a panel-kind default lands in plugins[], not on the bar. Waited
+    # for on disk, because the shell writes shell.json after IPC answers (#783).
+    machine.succeed(
+        "cat > /tmp/panel.py <<'PROBE_EOF'\n"
+        "import json, os, sys\n"
+        "c = json.load(open(os.path.expanduser('~/.config/omarchy/shell.json')))\n"
+        "ids = [p if isinstance(p, str) else p.get('id') for p in c.get('plugins', [])]\n"
+        "sys.exit(0 if 'nixarchy.panelfixture' in ids else 1)\n"
+        "PROBE_EOF")
+    machine.wait_until_succeeds("su omarchy -c 'python3 /tmp/panel.py'", timeout=120)
+    user("test -e ~/.local/state/nixarchy/enabled-once/nixarchy.panelfixture")
+    print("a panel default is in plugins[], with its marker")
 
     # Off in Setup > Plugins must survive the next login. The hook is run
     # again by hand, which is exactly what the next login does.

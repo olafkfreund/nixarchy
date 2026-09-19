@@ -273,6 +273,14 @@ let
     [ -f $out/LICENSE ] || cp ${inputs.nixarchy-gltui}/LICENSE $out/LICENSE
   '';
 
+  # The GitHub Actions panel, the same way (#772): gltui is its fork.
+  githubActions = pkgs.runCommand "nixarchy-ghtui" { } ''
+    cp -r ${inputs.nixarchy-ghtui.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    touch $out/menu.managed
+    [ -f $out/LICENSE ] || cp ${inputs.nixarchy-ghtui}/LICENSE $out/LICENSE
+  '';
+
   # The Distrobox panel as nixarchy installs it (#766 PR D): upstream's copy with
   # its manifest's default templatesFile pointed at the file boxes.nix writes
   # from data/box-templates.nix. A default, not a setting: a path the user sets
@@ -604,6 +612,7 @@ in
       default = {
         pkg = true;
         gitlab = true;
+        github = true;
         herdr = true;
         podman = true;
         distrobox = true;
@@ -612,9 +621,9 @@ in
       example = lib.literalExpression "{ podman = false; }";
       description = ''
         nixarchy's own shell plugins, installed and turned on for you: the
-        package manager panel and the GitLab pipelines panel always, podman
-        when podman is on, distrobox when
-        Boxes is on, microvms always. A name left out counts as on.
+        package manager, GitLab pipelines, GitHub Actions and herdr panels
+        always, podman when podman is on, distrobox when Boxes is on,
+        microvms always. A name left out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -1545,6 +1554,16 @@ in
           src = gitlabPipelines;
           packages = [
             pkgs.glab
+            pkgs.python3
+            pkgs.xdg-utils
+          ];
+        };
+        # The GitHub Actions panel, the same way, with gh (#772).
+        github = {
+          id = "olafkfreund.github-actions";
+          src = githubActions;
+          packages = [
+            pkgs.gh
             pkgs.python3
             pkgs.xdg-utils
           ];

@@ -200,6 +200,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-github-actions-panel-on-by-default-772
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-ghtui = {
+      url = "github:olafkfreund/nixarchy-ghtui/dfba799b51536982343f596993acfbaace4f308f";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-herdr-sessions-widget-on-by-default-771
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.

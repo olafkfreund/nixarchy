@@ -172,6 +172,7 @@ pkgs.testers.runNixOSTest rec {
           defaultPlugins = {
             pkg = false;
             gitlab = false;
+            github = false;
             herdr = false;
             microvm = false;
             distrobox = false;

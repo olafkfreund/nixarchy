@@ -1543,7 +1543,9 @@ in
           id = "nixarchy.herdr";
           src = herdrSessions;
           packages = [
-            pkgs.herdr
+            # Stable lacks herdr. Prefer the consumer's CLI when it exists;
+            # only the missing standalone tool comes from our pinned nixpkgs.
+            (pkgs.herdr or inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.herdr)
             pkgs.jq
             pkgs.iproute2
           ];

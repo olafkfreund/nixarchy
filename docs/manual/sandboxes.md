@@ -196,6 +196,31 @@ A second `run` of a name that is already attached refuses rather than racing
 a second qemu over the same shared directory — you get "already running",
 not a wedged guest.
 
+### In the background, and back in later
+
+```sh
+nixarchy vm run --detach shell-1  # build here, then run it with no terminal
+nixarchy vm console shell-1       # attach — Ctrl-] leaves it running
+nixarchy vm set-template shell-1 python   # a stopped VM, rebuilt next run
+```
+
+`--detach` builds in front of you, so a build error is yours to read. Then a
+user unit, `nixarchy-vm-<name>`, owns the guest, and the command returns once
+the guest holds its lock. If it never does, the command says so and names
+`journalctl --user -u nixarchy-vm-<name>`. Ctrl-A X still stops the guest
+from its console.
+
+`set-template` refuses while the VM runs, and refuses if the VM has volume
+images (`*.img`) the old template made — a k3s disk under a node VM helps
+nobody. Pass `--keep-volumes` to switch anyway.
+
+### For scripts: `--json`
+
+`nixarchy vm list --json` prints `[{"name", "template", "running", "dir"}]`,
+and `nixarchy vm templates --json` prints `[{"name", "label", "note"}]`. The
+text output is unchanged. Fields are only ever added, never renamed or
+removed: the nixarchy.microvm panel reads these.
+
 ## On-disk layout, and the GC root
 
 Everything a VM has lives at

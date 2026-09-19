@@ -710,13 +710,21 @@ pkgs.runCommand "nixarchy-microvm-template"
     # (k) The handoff gap: detach has let go of the lock, and the unit has
     # not taken it yet. The unit being up is what keeps `rm` and a second
     # run out then.
-    systemctl() { [ "$*" = "--user is-active nixarchy-vm-racer" ] && echo activating; }
+    # A fresh VM, lock provably free, so only the unit can make it refuse.
+    $vm create gap > /dev/null
+    exec 6>"$vmdir/gap/.lock"
+    if ! flock -n 6; then
+      echo "(k) the fixture is wrong: gap's lock is already held" >&2
+      fail=1
+    fi
+    exec 6>&-
+    systemctl() { [ "$*" = "--user is-active nixarchy-vm-gap" ] && echo activating; }
     export -f systemctl
-    if $vm rm racer > /dev/null 2>&1; then
+    if $vm rm gap > /dev/null 2>&1; then
       echo "(k) 'rm' deleted a VM whose detached unit was still activating" >&2
       fail=1
     fi
-    if $vm run racer > /dev/null 2>&1; then
+    if timeout 10 $vm run gap > /dev/null 2>&1 || [ -e "$vmdir/gap/current" ]; then
       echo "(k) 'run' started a VM whose detached unit was still activating" >&2
       fail=1
     fi

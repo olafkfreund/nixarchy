@@ -2181,7 +2181,8 @@ pkgs.runCommand "nixarchy-options"
     };
     # #770: the source nixarchy installs for the panel carries the sentinel
     # that tells its menu.py nixarchy owns the rows, and the MIT notice.
-    gitlabSrc = (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
+    gitlabSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
     # A default whose pinned manifest renamed its id must fail its build.
     renamedDefault =
       pkgs.testers.testBuildFailure

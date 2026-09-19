@@ -52,7 +52,8 @@ let
   # is upstream's and herdr is nixpkgs', so a bump on either side can rename a
   # subcommand out from under the other -- and the widget would only say
   # "error" in the bar.
-  herdrSrc = (builtins.head (builtins.attrValues eval.config.home-manager.users))
+  herdrSrc =
+    (builtins.head (builtins.attrValues eval.config.home-manager.users))
     .programs.nixarchy.defaultPluginSet.herdr.src;
 in
 pkgs.runCommand "nixarchy-menu-verbs"

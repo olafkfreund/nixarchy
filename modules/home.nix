@@ -1512,8 +1512,8 @@ in
         );
 
     programs.nixarchy = {
-      # The package manager panel, on wherever nixarchy is (#766).
       defaultPluginSet = {
+        # The package manager panel, on wherever nixarchy is (#766).
         pkg = {
           id = "nixarchy.pkg";
           src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
@@ -1526,28 +1526,28 @@ in
           src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
           gate = osConfig.virtualisation.podman.enable or false;
         };
-      };
-      # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
-      # drives and the python its actions.py runs on (#770).
-      defaultPluginSet.gitlab = {
-        id = "olafkfreund.gitlab-pipelines";
-        src = gitlabPipelines;
-        packages = [
-          pkgs.glab
-          pkgs.python3
-          pkgs.xdg-utils
-        ];
-      };
-      # The herdr sessions widget, with herdr itself and the tools its
-      # herdr-sessions script calls (#771).
-      defaultPluginSet.herdr = {
-        id = "nixarchy.herdr";
-        src = herdrSessions;
-        packages = [
-          pkgs.herdr
-          pkgs.jq
-          pkgs.iproute2
-        ];
+        # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
+        # drives and the python its actions.py runs on (#770).
+        gitlab = {
+          id = "olafkfreund.gitlab-pipelines";
+          src = gitlabPipelines;
+          packages = [
+            pkgs.glab
+            pkgs.python3
+            pkgs.xdg-utils
+          ];
+        };
+        # The herdr sessions widget, with herdr itself and the tools its
+        # herdr-sessions script calls (#771).
+        herdr = {
+          id = "nixarchy.herdr";
+          src = herdrSessions;
+          packages = [
+            pkgs.herdr
+            pkgs.jq
+            pkgs.iproute2
+          ];
+        };
       };
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login

@@ -851,7 +851,9 @@ let
     # #771: the herdr sessions widget is a default wherever nixarchy is on,
     # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
     herdrIsADefault = {
-      on = defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.herdr" && hookLists "nixarchy.herdr" defaultHomeOn;
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.herdr"
+        && hookLists "nixarchy.herdr" defaultHomeOn;
       off =
         noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || defaultHome.programs.nixarchy.plugins ? "nixarchy.herdr"
@@ -2194,7 +2196,8 @@ pkgs.runCommand "nixarchy-options"
     gitlabSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
-    herdrSrc = (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
+    herdrSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
     # A default whose pinned manifest renamed its id must fail its build.
     renamedDefault =
       pkgs.testers.testBuildFailure

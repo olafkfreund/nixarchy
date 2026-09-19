@@ -47,6 +47,14 @@ let
   pluginSources = pkgs.lib.concatMap (
     u: pkgs.lib.mapAttrsToList (_: p: "${p.src}") u.programs.nixarchy.plugins
   ) (builtins.attrValues eval.config.home-manager.users);
+
+  # The herdr widget as installed, and the herdr it drives (#771). Its script
+  # is upstream's and herdr is nixpkgs', so a bump on either side can rename a
+  # subcommand out from under the other -- and the widget would only say
+  # "error" in the bar.
+  herdrSrc =
+    (builtins.head (builtins.attrValues eval.config.home-manager.users))
+    .programs.nixarchy.defaultPluginSet.herdr.src;
 in
 pkgs.runCommand "nixarchy-menu-verbs"
   {
@@ -147,11 +155,43 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy-plugin +[a-z][-a-z.]*'               2 nixarchy-plugin plugin-ids
     scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
     pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
-    # Packages, Podman (Boxes is on), and GitLab Pipelines.
-    test "$pluginrows" -ge 3 || {
-      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman and GitLab Pipelines" >&2
+    # Packages, Podman (Boxes is on), GitLab Pipelines, and Herdr.
+    test "$pluginrows" -ge 4 || {
+      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, GitLab Pipelines and Herdr" >&2
       exit 1
     }
+
+    # herdr (#771): every `<level> <sub>` herdr-sessions sends, spelled either
+    # `herdr ...` or through its `"''${base[@]}"` array, must be a subcommand
+    # the pinned herdr lists under that level, and its two flags must be in
+    # the top-level usage. A floor, because a pattern that stopped matching
+    # would check nothing and pass.
+    export HOME=$TMPDIR
+    herdrcalls=0
+    while read -r level sub; do
+      herdrcalls=$((herdrcalls + 1))
+      ${pkgs.herdr}/bin/herdr "$level" --help 2>&1 \
+        | sed -n '/^Commands:/,/^$/p' | awk '{print $1}' | grep -qx -- "$sub" || {
+        echo "ERROR: herdr-sessions runs 'herdr $level $sub', which herdr ${pkgs.herdr.version} does not list" >&2
+        fail=1
+      }
+    done < <(grep -hoE '(\bherdr|"\$\{base\[@\]\}") +(session|api|agent) +[a-z-]+' \
+               ${herdrSrc}/bin/herdr-sessions \
+             | awk '{print $(NF-1), $NF}' | sort -u)
+    test "$herdrcalls" -ge 8 || {
+      echo "ERROR: found $herdrcalls herdr subcommands in herdr-sessions, expected 8" >&2
+      exit 1
+    }
+    # Captured first: under pipefail, `herdr --help | grep -q` fails whenever
+    # grep matches early and herdr takes the SIGPIPE (tests/AGENTS.md).
+    herdrusage=$(${pkgs.herdr}/bin/herdr --help 2>&1)
+    for flag in --session --remote; do
+      grep -q -- "herdr $flag " <<<"$herdrusage" || {
+        echo "ERROR: herdr ${pkgs.herdr.version} no longer takes $flag, which herdr-sessions uses" >&2
+        fail=1
+      }
+    done
+    echo "herdr subcommands the widget sends: $herdrcalls, all in herdr ${pkgs.herdr.version}"
 
     # The second floor: if the menu stopped carrying these rows, every scan
     # above would run zero times and the check would pass having read nothing.

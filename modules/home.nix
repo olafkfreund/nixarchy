@@ -273,6 +273,22 @@ let
     [ -f $out/LICENSE ] || cp ${inputs.nixarchy-gltui}/LICENSE $out/LICENSE
   '';
 
+  # The herdr sessions widget as nixarchy installs it (#771). Upstream has no
+  # flake, so this is the package: the plugin without its design documents, and
+  # its scripts' `#!/bin/bash` pointed into the store -- they run by path, and
+  # today that only works through envfs.
+  herdrSessions = pkgs.runCommand "nixarchy-herdr" { } ''
+    cp -r ${inputs.nixarchy-herdr} $out
+    chmod -R u+w $out
+    rm -rf $out/intent $out/spec $out/plan $out/tests $out/preview.png
+    chmod +x $out/bin/*
+    patchShebangs $out/bin
+    grep -q "Jankees van Woezik" $out/LICENSE && grep -q olafkfreund $out/LICENSE || {
+      echo "nixarchy-herdr: LICENSE must keep both copyright holders" >&2
+      exit 1
+    }
+  '';
+
   # Omarchy's Neovim configuration, appended to the seed activation rather than
   # wrapped around it: this is a string the activation interpolates, so adding
   # it costs the diff it is worth instead of re-indenting three hundred lines
@@ -576,6 +592,7 @@ in
       default = {
         pkg = true;
         gitlab = true;
+        herdr = true;
         podman = true;
         distrobox = true;
         microvm = true;
@@ -1495,8 +1512,8 @@ in
         );
 
     programs.nixarchy = {
-      # The package manager panel, on wherever nixarchy is (#766).
       defaultPluginSet = {
+        # The package manager panel, on wherever nixarchy is (#766).
         pkg = {
           id = "nixarchy.pkg";
           src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
@@ -1509,17 +1526,28 @@ in
           src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
           gate = osConfig.virtualisation.podman.enable or false;
         };
-      };
-      # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
-      # drives and the python its actions.py runs on (#770).
-      defaultPluginSet.gitlab = {
-        id = "olafkfreund.gitlab-pipelines";
-        src = gitlabPipelines;
-        packages = [
-          pkgs.glab
-          pkgs.python3
-          pkgs.xdg-utils
-        ];
+        # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
+        # drives and the python its actions.py runs on (#770).
+        gitlab = {
+          id = "olafkfreund.gitlab-pipelines";
+          src = gitlabPipelines;
+          packages = [
+            pkgs.glab
+            pkgs.python3
+            pkgs.xdg-utils
+          ];
+        };
+        # The herdr sessions widget, with herdr itself and the tools its
+        # herdr-sessions script calls (#771).
+        herdr = {
+          id = "nixarchy.herdr";
+          src = herdrSessions;
+          packages = [
+            pkgs.herdr
+            pkgs.jq
+            pkgs.iproute2
+          ];
+        };
       };
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login

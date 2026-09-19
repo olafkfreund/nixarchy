@@ -137,6 +137,7 @@ let
     programs.nixarchy.defaultPlugins = {
       pkg = false;
       gitlab = false;
+      herdr = false;
     };
   };
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
@@ -846,6 +847,17 @@ let
         defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines"
         && hookLists "olafkfreund.gitlab-pipelines" defaultHomeOn;
       off = noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines";
+    };
+    # #771: the herdr sessions widget is a default wherever nixarchy is on,
+    # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    herdrIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.herdr"
+        && hookLists "nixarchy.herdr" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.herdr"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.herdr"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.herdr";
     };
     # #770: a default's runtime tools are installed only where the default
     # resolves -- never standalone, never with nixarchy off (Mode A).
@@ -2183,6 +2195,9 @@ pkgs.runCommand "nixarchy-options"
     # that tells its menu.py nixarchy owns the rows, and the MIT notice.
     gitlabSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
+    # #771: the herdr widget nixarchy installs, whose scripts run by path.
+    herdrSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
     # A default whose pinned manifest renamed its id must fail its build.
     renamedDefault =
       pkgs.testers.testBuildFailure
@@ -4938,6 +4953,23 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "the GitLab panel carries menu.managed and its licence"
+
+        # ---- #771: herdrPackaged ----
+        # Its scripts are run by path, and upstream's `#!/bin/bash` only works
+        # through envfs; the notice names two holders, and both must travel.
+        for f in bin/herdr-sessions bin/herdr-menu-keys; do
+          head -1 "$herdrSrc/$f" | grep -q '^#!/nix/store/' || {
+            echo "herdrPackaged: $f in the herdr widget nixarchy installs has no store shebang ($herdrSrc)" >&2
+            exit 1
+          }
+        done
+        for holder in "Jankees van Woezik" "olafkfreund"; do
+          grep -q "$holder" "$herdrSrc/LICENSE" 2>/dev/null || {
+            echo "herdrPackaged: the herdr widget's LICENSE does not name $holder ($herdrSrc)" >&2
+            exit 1
+          }
+        done
+        echo "the herdr widget has store shebangs and both copyright holders"
 
           touch $out
       ''

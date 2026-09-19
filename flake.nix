@@ -200,6 +200,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-herdr-sessions-widget-on-by-default-771
+    # No flake upstream, so nothing to follow; a commit on master, bumped the
+    # way that page says.
+    nixarchy-herdr = {
+      url = "github:olafkfreund/nixarchy-herdr/6bb0a4c52bc65ea6c104acaebfcd47a9df4d9cc1";
+      flake = false;
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #

@@ -177,6 +177,11 @@ If you ran the panel before nixarchy shipped it, its own `register` may have
 written `apps.gitlab-pipelines` and `learn.gitlab-pipelines-keybindings` into
 `~/.config/omarchy/extensions/omarchy-menu.jsonc`. Your file wins over
 nixarchy's rows, so delete those two keys to get nixarchy's.
+The herdr sessions widget ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr))
+sits in the bar's right section with `herdr` itself, on at your first login,
+and opens from **Apps ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
+write to the Nix store: update herdr with nixpkgs, or put your own build ahead
+of it on `PATH`.
 
 "Once" is the point. A marker in `~/.local/state/nixarchy/enabled-once/` records
 that it was turned on, so if you turn it off in Setup → Plugins it stays off. To
@@ -186,6 +191,7 @@ stop nixarchy installing one at all:
 programs.nixarchy.defaultPlugins.pkg = false;
 programs.nixarchy.defaultPlugins.podman = false;
 programs.nixarchy.defaultPlugins.gitlab = false;
+programs.nixarchy.defaultPlugins.herdr = false;
 ```
 
 That never edits your `shell.json`, so a plugin you already have on stays on

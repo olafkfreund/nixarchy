@@ -247,6 +247,13 @@ untestable until the first of them landed. What the stand-ins cannot show is
 that a real plugin's panel opens. That belongs to the PR that adds each
 plugin, and the build asserts each default's manifest id.
 
+One exception, about a plugin's *tools* rather than the plugin: the
+`defaults` node turns the real herdr default back on (#771). What it proves is
+that the `herdr` binary the entry brings is on the session's PATH and the
+widget's backend reaches it, and a stand-in herdr would prove only that a
+stand-in is there. It asserts the backend's answer (`"ok":true`), never the
+widget's rendering, so a pin bump that changes the widget does not move it.
+
 The `defaults` node boots only after `machine` shuts down. Two VMs up at once
 is a load the runners were never measured for (AGENTS.md §6).
 

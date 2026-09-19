@@ -1,8 +1,9 @@
 inputs:
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 let
   cfg = config.programs.nixarchy;
@@ -84,25 +85,21 @@ let
   # which options a module defines in order to evaluate those options, so that
   # is a cycle. Static structure, lazy values.
   appModuleConfig = lib.mkMerge (
-    lib.mapAttrsToList
-      (
-        name: app:
-          lib.optionalAttrs (app ? option) (
-            lib.mkIf cfg.apps.${name}.enable (
-              lib.setAttrByPath app.option ({ enable = true; } // cfg.apps.${name}.settings)
-            )
-          )
+    lib.mapAttrsToList (
+      name: app:
+      lib.optionalAttrs (app ? option) (
+        lib.mkIf cfg.apps.${name}.enable (
+          lib.setAttrByPath app.option ({ enable = true; } // cfg.apps.${name}.settings)
+        )
       )
-      available
+    ) available
   );
 
   # A value, not a structure, so this one may read config freely.
   appPackages = lib.concatLists (
-    lib.mapAttrsToList
-      (
-        name: app: lib.optional ((app ? attr) && cfg.apps.${name}.enable) cfg.apps.${name}.package
-      )
-      available
+    lib.mapAttrsToList (
+      name: app: lib.optional ((app ? attr) && cfg.apps.${name}.enable) cfg.apps.${name}.package
+    ) available
   );
 
   needsUnfree = lib.any (name: (available.${name}.unfree or false) && cfg.apps.${name}.enable) (
@@ -162,14 +159,12 @@ let
 
   appAttrTable = pkgs.writeText "nixarchy-app-attrs.tsv" (
     lib.concatStrings (
-      lib.mapAttrsToList
-        (
-          name: app:
-            lib.concatMapStrings (key: "${key}\t${name}\n") (
-              lib.unique ([ name ] ++ lib.optional (app ? attr) app.attr)
-            )
+      lib.mapAttrsToList (
+        name: app:
+        lib.concatMapStrings (key: "${key}\t${name}\n") (
+          lib.unique ([ name ] ++ lib.optional (app ? attr) app.attr)
         )
-        available
+      ) available
     )
   );
 
@@ -182,21 +177,19 @@ let
 
   appIndexTable = pkgs.writeText "nixarchy-app-index.tsv" (
     lib.concatStrings (
-      lib.mapAttrsToList
-        (
-          name: app:
-            let
-              flat = lib.replaceStrings [ "\n" "\t" ] [ " " " " ];
-            in
-            # The fifth field marks the rows `nixarchy try` can run: only an app
-              # backed by a package attribute is runnable. A module app (firefox,
-              # docker) has nothing to execute, so its preview must not sell a key
-              # that would only print a refusal.
-            "${name}\t${app.label}\t${app.category}\t${flat (app.note or "")}\t${
+      lib.mapAttrsToList (
+        name: app:
+        let
+          flat = lib.replaceStrings [ "\n" "\t" ] [ " " " " ];
+        in
+        # The fifth field marks the rows `nixarchy try` can run: only an app
+        # backed by a package attribute is runnable. A module app (firefox,
+        # docker) has nothing to execute, so its preview must not sell a key
+        # that would only print a refusal.
+        "${name}\t${app.label}\t${app.category}\t${flat (app.note or "")}\t${
           if app ? attr then "try" else ""
         }\n"
-        )
-        available
+      ) available
     )
   );
 
@@ -213,16 +206,13 @@ let
 
   # Why: modules/AGENTS.md#flatpaks-go-in-services-nix-rather-than-a-fourth-f
   flatpakIndexRows = pkgs.writeText "nixarchy-flatpak-rows.tsv" (
-    lib.concatStrings
-      (
-        lib.mapAttrsToList
-          (name: fp: ''
-            flatpak	${name}	${fp.label} -- flatpak, from ${
-              if fp ? remote then fp.remote.name else "Flathub"
-            }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;
-          '')
-          flatpakCatalogue
-      )
+    lib.concatStrings (
+      lib.mapAttrsToList (name: fp: ''
+        flatpak	${name}	${fp.label} -- flatpak, from ${
+          if fp ? remote then fp.remote.name else "Flathub"
+        }		FLATPAK  ${name}\n\n${fp.label}\n${fp.note}\n\nDeclared, not reproducible: the id travels to your next machine, the version does not. Enabling this writes a line in your services selection:\n  programs.nixarchy.flatpaks.apps.${name}.enable = true;
+      '') flatpakCatalogue
+    )
     # The way out of the catalogue. A row rather than a flag, because a flag
     # nobody knows about is not a search anyone finds -- and this is precisely
     # the row someone needs when the other three sources have failed them.
@@ -728,60 +718,54 @@ let
         };
       }
       // lib.listToAttrs (
-        lib.mapAttrsToList
-          (
-            name: app:
-              lib.nameValuePair app.menuId (
-                if app ? unavailable then
-                  {
-                    disabled = "true";
-                    description = "Not available on NixOS — ${app.unavailable}";
-                  }
-                else
-                  {
-                    action = "nixarchy-app-enable ${name}";
-                    # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
-                    disabled =
-                      "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
-                      + " || command -v ${appBinary name app} >/dev/null 2>&1";
-                    description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
-                  }
-              )
+        lib.mapAttrsToList (
+          name: app:
+          lib.nameValuePair app.menuId (
+            if app ? unavailable then
+              {
+                disabled = "true";
+                description = "Not available on NixOS — ${app.unavailable}";
+              }
+            else
+              {
+                action = "nixarchy-app-enable ${name}";
+                # Why: modules/AGENTS.md#dim-when-the-app-is-in-the-selection-or-already-on
+                disabled =
+                  "grep -qE '^[[:space:]]*${name}\\.enable' $HOME/.config/nixarchy/apps.nix"
+                  + " || command -v ${appBinary name app} >/dev/null 2>&1";
+                description = "Enable in ~/.config/nixarchy/apps.nix, then Apply changes";
+              }
           )
-          (lib.filterAttrs (_: a: a ? menuId) apps)
+        ) (lib.filterAttrs (_: a: a ? menuId) apps)
       )
       # Why: modules/AGENTS.md#the-services-catalogue-as-menu-rows
       // lib.listToAttrs (
-        lib.mapAttrsToList
-          (
-            name: fp:
-              lib.nameValuePair "install.flatpak.${name}" {
-                icon = "󰏓";
-                inherit (fp) label;
-                action = "nixarchy-service-enable ${name}";
-                disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
-                description = "Flatpak — declared in your configuration, but updated by Flathub rather than by a rebuild";
-              }
-          )
-          flatpakCatalogue
+        lib.mapAttrsToList (
+          name: fp:
+          lib.nameValuePair "install.flatpak.${name}" {
+            icon = "󰏓";
+            inherit (fp) label;
+            action = "nixarchy-service-enable ${name}";
+            disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+            description = "Flatpak — declared in your configuration, but updated by Flathub rather than by a rebuild";
+          }
+        ) flatpakCatalogue
       )
       // lib.listToAttrs (
-        lib.mapAttrsToList
-          (
-            name: svc:
-              lib.nameValuePair (svc.menuId or "install.service.${name}") {
-                icon = svc.icon or "󰒓";
-                inherit (svc) label;
-                action = "nixarchy-service-enable ${name}";
-                # Dim when the marked line is live, which is the same question
-                # nixarchy-service-enable asks. Not the app rows' test: a plain
-                # entry's line begins with services.openssh, not with the id, so
-                # matching on the id would never fire.
-                disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
-                description = svc.note;
-              }
-          )
-          serviceCatalogue
+        lib.mapAttrsToList (
+          name: svc:
+          lib.nameValuePair (svc.menuId or "install.service.${name}") {
+            icon = svc.icon or "󰒓";
+            inherit (svc) label;
+            action = "nixarchy-service-enable ${name}";
+            # Dim when the marked line is live, which is the same question
+            # nixarchy-service-enable asks. Not the app rows' test: a plain
+            # entry's line begins with services.openssh, not with the id, so
+            # matching on the id would never fire.
+            disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ ${name}([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+            description = svc.note;
+          }
+        ) serviceCatalogue
       )
       // cfg.menu.extraEntries
     )
@@ -932,16 +916,14 @@ in
     # all: evaluating an outer submodule's _module.freeformType forces config,
     # and config here defines programs.* for the module-backed apps, which is
     # a cycle. One option per app has no such wrapper to evaluate.
-    apps = lib.mapAttrs
-      (
-        name: app:
-          lib.mkOption {
-            type = lib.types.submodule { options = appModule name app; };
-            default = { };
-            description = "${app.label} (${app.category}).";
-          }
-      )
-      available;
+    apps = lib.mapAttrs (
+      name: app:
+      lib.mkOption {
+        type = lib.types.submodule { options = appModule name app; };
+        default = { };
+        description = "${app.label} (${app.category}).";
+      }
+    ) available;
 
     # ---- the per-package escape (#530) --------------------------------
     #
@@ -1131,17 +1113,18 @@ in
           # message naming the package. That is the right failure: the
           # alternative is a missing agent and an Ask menu that never appears.
           ++
-          lib.optional (cfg.defaultAgent != null)
-            {
-              # Three of the seven are named after their own command, which is
-              # the whole reason omarchy-agent can look for `$agent` on PATH.
-              inherit (pkgs) codex opencode crush;
+            lib.optional (cfg.defaultAgent != null)
+              {
+                # Three of the seven are named after their own command, which is
+                # the whole reason omarchy-agent can look for `$agent` on PATH.
+                inherit (pkgs) codex opencode crush;
 
-              claude = pkgs.claude-code;
-              gemini = pkgs.gemini-cli;
-              copilot = pkgs.github-copilot-cli;
-              grok = pkgs.grok-cli;
-            }.${cfg.defaultAgent}
+                claude = pkgs.claude-code;
+                gemini = pkgs.gemini-cli;
+                copilot = pkgs.github-copilot-cli;
+                grok = pkgs.grok-cli;
+              }
+              .${cfg.defaultAgent}
           ++ [
 
             # Why: modules/AGENTS.md#uncomments-one-app-in-config-nixarchy-apps-nix

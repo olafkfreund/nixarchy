@@ -1,9 +1,9 @@
-{ inputs
-, pkgs
-, # The doctor is a package, not part of the module, so the test has to be
+{
+  inputs,
+  pkgs,
+  # The doctor is a package, not part of the module, so the test has to be
   # handed it rather than finding it in the system profile.
-  doctor
-,
+  doctor,
 }:
 let
   # A real published Omarchy theme, pinned. `omarchy theme install` is the
@@ -45,17 +45,17 @@ let
       '';
 in
 # Drives a real Omarchy session and reports what it logged.
-  #
-  # This exists because the failure that matters -- "the panel shows for a few
-  # seconds then dies" -- leaves its reason in a *user* journal that nobody can
-  # reach without logging in, and the session that would let you log in is the
-  # broken thing. Reading it over a serial console does not work either: once a
-  # GPU device is present the kernel moves its console to tty0 and the serial
-  # log ends at the login prompt.
-  #
-  # No GPU is needed. Hyprland always registers the headless aquamarine backend
-  # as MANDATORY and only adds DRM if available (src/Compositor.cpp), so the
-  # compositor comes up on a machine with no display hardware whatsoever.
+#
+# This exists because the failure that matters -- "the panel shows for a few
+# seconds then dies" -- leaves its reason in a *user* journal that nobody can
+# reach without logging in, and the session that would let you log in is the
+# broken thing. Reading it over a serial console does not work either: once a
+# GPU device is present the kernel moves its console to tty0 and the serial
+# log ends at the login prompt.
+#
+# No GPU is needed. Hyprland always registers the headless aquamarine backend
+# as MANDATORY and only adds DRM if available (src/Compositor.cpp), so the
+# compositor comes up on a machine with no display hardware whatsoever.
 pkgs.testers.runNixOSTest {
   name = "nixarchy-session";
 

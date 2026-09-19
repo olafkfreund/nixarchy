@@ -22,20 +22,18 @@ let
   # Evaluating the module is unavoidable (the script is built by
   # writeShellApplication inside it); BUILDING the system is not.
   apply = builtins.head (
-    builtins.filter
-      (
-        p: (p.pname or p.name or "") == "nixarchy-apply"
-      )
-      inputs.self.nixosConfigurations.vm.config.environment.systemPackages
+    builtins.filter (
+      p: (p.pname or p.name or "") == "nixarchy-apply"
+    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
   );
 in
 pkgs.runCommand "nixarchy-apply-staging"
-{
-  nativeBuildInputs = [
-    pkgs.git
-    pkgs.nix
-  ];
-}
+  {
+    nativeBuildInputs = [
+      pkgs.git
+      pkgs.nix
+    ];
+  }
   ''
     export HOME=$PWD/home
     mkdir -p "$HOME"

@@ -610,17 +610,6 @@ pkgs.testers.runNixOSTest rec {
     machine.wait_until_succeeds("su omarchy -c 'bash /tmp/enabled.sh'", timeout=300)
     print(f"the default plugin {tele} came up enabled, with no one asking")
 
-    # IPC enablement precedes the asynchronous shell.json write.
-    machine.wait_until_succeeds(
-        f"${pkgs.jq}/bin/jq -e --arg id '{tele}' "
-        "'any(.bar.layout.right[]?; .id == $id)' "
-        "/home/omarchy/.config/omarchy/shell.json", timeout=60)
-    layout = json.loads(user("cat ~/.config/omarchy/shell.json"))
-    right = [w.get("id") for w in layout.get("bar", {}).get("layout", {}).get("right", [])]
-    assert tele in right, f"{tele} is enabled but not in the bar's right section: {right}"
-    user(f"test -e ~/.local/state/nixarchy/enabled-once/{tele}")
-    print("in the right section, and its marker is written")
-
     # #770: a panel-kind default lands in plugins[], not on the bar. Waited
     # for on disk, because the shell writes shell.json after IPC answers (#783).
     machine.succeed(
@@ -633,6 +622,17 @@ pkgs.testers.runNixOSTest rec {
     machine.wait_until_succeeds("su omarchy -c 'python3 /tmp/panel.py'", timeout=120)
     user("test -e ~/.local/state/nixarchy/enabled-once/nixarchy.panelfixture")
     print("a panel default is in plugins[], with its marker")
+
+    # IPC enablement precedes the asynchronous shell.json write.
+    machine.wait_until_succeeds(
+        f"${pkgs.jq}/bin/jq -e --arg id '{tele}' "
+        "'any(.bar.layout.right[]?; .id == $id)' "
+        "/home/omarchy/.config/omarchy/shell.json", timeout=60)
+    layout = json.loads(user("cat ~/.config/omarchy/shell.json"))
+    right = [w.get("id") for w in layout.get("bar", {}).get("layout", {}).get("right", [])]
+    assert tele in right, f"{tele} is enabled but not in the bar's right section: {right}"
+    user(f"test -e ~/.local/state/nixarchy/enabled-once/{tele}")
+    print("in the right section, and its marker is written")
 
     # Off in Setup > Plugins must survive the next login. The hook is run
     # again by hand, which is exactly what the next login does.

@@ -431,6 +431,41 @@ its 71.0 MiB closure, `jq` and `iproute2` are already in the reference system.
    a **nixpkgs** bump too, since herdr can rename a subcommand from that side.
 5. Build `checks.options` and `checks.plugin`.
 
+### The MicroVMs panel, on by default (#766)
+
+```nix
+nixarchy-microvm = {
+```
+
+The fourth default plugin, and the Sandbox group now: its five child rows are
+gone (each called a verb with no name, #781). The panel lists both kinds of
+VM in one place: disposable ones from `nixarchy vm`, and permanent ones from
+`programs.nixarchy.services.microvm.machines`. It drives `nixarchy vm`
+through argv arrays in `Model.js`, and reads what the CLI can do from
+`nixarchy vm help` (the `--detach`, `console` and `set-template` lines, #762).
+So `checks.menu-verbs` checks every verb the pinned `Model.js` runs against
+the CLI's own dispatch. Its permanent-VM features call nixarchy.pkg's script by
+path (`Model.js:988`), and nixarchy.pkg is a default too.
+
+Upstream's Home Manager module is **not** imported: its `microvm-binds.lua`
+would duplicate the seeded Super+Alt+V. The package output ships its LICENSE.
+
+Measured at 481e6c5 (2026-09-19): the plugin output is **145 KiB**, and the
+source tree on the ISO is **921 KiB**. It needs no packages the reference
+system lacks.
+
+**Bumping the pin:**
+
+1. Pick the commit on `main` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-microvm/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches
+   `nixarchy-microvm` alone, and `follows` keeps it on our nixpkgs.
+3. The manifest id must still be `nixarchy.microvm`.
+4. Build `checks.menu-verbs`: every `nixarchy-vm <verb>` the new `Model.js`
+   runs must be one the CLI accepts. Re-check `nixarchy vm help` against the
+   three capability regexes in `Model.js` if either side reworded them.
+5. Build `checks.options` and `checks.plugin`.
+
 <a id="221-222"></a>
 ### #221/#222
 

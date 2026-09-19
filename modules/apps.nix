@@ -700,6 +700,8 @@ let
       )
       // lib.optionalAttrs cfg.enable {
         # Why: modules/AGENTS.md#the-sandboxes-group-226
+        # The panel is the Sandbox group now (#766): its five child rows are
+        # gone -- each called a verb with no name, so none could succeed (#781).
         "trigger.vm" = {
           icon = "󰦛";
           label = "Sandbox";
@@ -708,43 +710,17 @@ let
             "sandbox"
             "microvm"
           ];
-          when = "nixarchy-vm --check";
+          action = "nixarchy-plugin nixarchy.microvm";
+          when = "nixarchy-vm --check && nixarchy-plugin --enabled nixarchy.microvm";
+          description = "Disposable and permanent VMs in a panel · Super+Alt+V";
         };
-        "trigger.vm.new" = {
-          icon = "󰕍";
-          label = "New sandbox";
-          # `create`, not `new`. The menu KEY is trigger.vm.new and the action
-          # was written to match the key instead of the CLI, so every click
-          # printed "nixarchy-vm: unknown subcommand 'new'" and closed. The
-          # sibling rows only work because run/stop/rm happen to be spelled the
-          # same on both sides; checks.menu-verbs now asserts that rather than
-          # leaving it to coincidence.
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm create";
-          description = "Name one, pick a template, and open it";
-        };
-        "trigger.vm.open" = {
-          icon = "󰁯";
-          label = "Open a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm run";
-          description = "Attach to one you already created";
-        };
-        "trigger.vm.stop" = {
-          icon = "󰉉";
-          label = "Stop a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm stop";
-          description = "Ask a running sandbox to shut down";
-        };
-        "trigger.vm.destroy" = {
-          icon = "󱄅";
-          label = "Destroy a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm rm";
-          description = "Delete it and its state -- cannot be undone";
-        };
-        "trigger.vm.list" = {
+        # With the panel turned off, the terminal is still a way in.
+        "trigger.vm-list" = {
           icon = "󰆓";
-          label = "List sandboxes";
+          label = "Sandbox";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm list";
-          description = "What you have created, and which are running";
+          when = "nixarchy-vm --check && ! nixarchy-plugin --enabled nixarchy.microvm";
+          description = "The panel is off: what you have created, in a terminal";
         };
       }
       // lib.listToAttrs (

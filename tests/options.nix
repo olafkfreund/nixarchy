@@ -138,6 +138,7 @@ let
       pkg = false;
       gitlab = false;
       herdr = false;
+      microvm = false;
     };
   };
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
@@ -858,6 +859,37 @@ let
         noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || defaultHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.herdr";
+    };
+    # #766 PR E: the MicroVMs panel is a default wherever nixarchy is on, and
+    # nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    microvmIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.microvm"
+        && hookLists "nixarchy.microvm" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.microvm"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.microvm"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.microvm";
+    };
+    # The Sandbox group is the panel: no trigger.vm.* child is left (each one
+    # called a verb with no name, #781), the parent opens the plugin, and the
+    # terminal row stands in while the plugin is off.
+    sandboxRowsRetired =
+      let
+        spec = menuSpec boxesOff;
+      in
+      {
+        on =
+          spec."trigger.vm".action == "nixarchy-plugin nixarchy.microvm" && spec ? "trigger.vm-list";
+        off = builtins.any (pkgs.lib.hasPrefix "trigger.vm.") (builtins.attrNames spec);
+      };
+    # Its permanent-VM features run nixarchy.pkg's script by path
+    # (Model.js:988), so wherever the panel is, the package panel is too.
+    microvmNeedsPkg = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.microvm"
+        && defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg";
+      off = noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.microvm";
     };
     # #770: a default's runtime tools are installed only where the default
     # resolves -- never standalone, never with nixarchy off (Mode A).
@@ -1632,6 +1664,8 @@ let
     builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text
       ? "apps.podman";
 
+  menuSpec =
+    cfg: builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text;
   homeOfBoxes = cfg: cfg.home-manager.users.${boxesUser};
   hasDistrobox = list: builtins.any (p: (p.pname or "") == "distrobox") list;
 

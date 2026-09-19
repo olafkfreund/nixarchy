@@ -1550,6 +1550,12 @@ in
             pkgs.iproute2
           ];
         };
+        # The MicroVMs panel, on wherever nixarchy is: gated like the Sandbox
+        # rows it replaces, whose `nixarchy-vm --check` always succeeds (#766).
+        microvm = {
+          id = "nixarchy.microvm";
+          src = inputs.nixarchy-microvm.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
       };
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login

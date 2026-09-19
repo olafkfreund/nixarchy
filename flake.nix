@@ -208,6 +208,13 @@
       flake = false;
     };
 
+    # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-microvm = {
+      url = "github:olafkfreund/nixarchy-microvm/481e6c5c135c1edd9c624c3361b56fe7bee5d750";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The MCP configuration framework, for #623 -- the NixOS MCP server the
     # coding agents on this desktop get so they stop guessing option names.
     #
@@ -888,6 +895,7 @@
           # modules/home.nix names it as a default plugin (#766).
           nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
           nixarchy-podman = inputs.nixarchy-podman.packages.${system}.default;
+          nixarchy-microvm = inputs.nixarchy-microvm.packages.${system}.default;
 
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.

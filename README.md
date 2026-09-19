@@ -457,6 +457,7 @@ basename is what it stores.
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
 | **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
 | **Boxes** | `nixarchy box create dev --template archlinux` drops you into an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
+| **Trigger ▸ Sandbox** | disposable and permanent MicroVMs in one panel ([nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm)). **On by default**, Super+Alt+V on a new install; `programs.nixarchy.defaultPlugins.microvm = false` removes it |
 | **Apps ▸ Podman** | containers, images, volumes and networks in a panel ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)). **On wherever podman is** — the Podman services row or Boxes — Super+Alt+O on a new install; `docker` stays Docker |
 | **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](docs/manual/remote-desktop.md). Off by default |
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |

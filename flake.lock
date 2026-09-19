@@ -590,6 +590,27 @@
         "type": "github"
       }
     },
+    "nixarchy-microvm": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789770545,
+        "narHash": "sha256-/gd8ElLZsNoI03+IBe90+dqW7EZgaOECq6s+LtXpuV0=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-microvm",
+        "rev": "481e6c5c135c1edd9c624c3361b56fe7bee5d750",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-microvm",
+        "rev": "481e6c5c135c1edd9c624c3361b56fe7bee5d750",
+        "type": "github"
+      }
+    },
     "nixarchy-pkg": {
       "inputs": {
         "nixpkgs": [
@@ -773,6 +794,7 @@
         "nix-index-database": "nix-index-database",
         "nixarchy-gltui": "nixarchy-gltui",
         "nixarchy-herdr": "nixarchy-herdr",
+        "nixarchy-microvm": "nixarchy-microvm",
         "nixarchy-pkg": "nixarchy-pkg",
         "nixarchy-podman": "nixarchy-podman",
         "nixi": "nixi",

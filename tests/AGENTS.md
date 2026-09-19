@@ -231,6 +231,18 @@ when upstream changes, and force it to be long enough to be checkable by a
 person — `etc-overlay` throws on a reason under 80 characters for that reason
 alone. Reasons go stale silently; the keys cannot.
 
+## A verb check is not an arity check
+
+`checks.menu-verbs` proves that every verb a menu row runs is one its CLI
+accepts. It never proved that the call could succeed. The Sandbox group
+shipped five rows (`nixarchy-vm create`, `run`, `stop`, `rm`, `list`), and the
+first four needed a VM name that no row passed. They printed usage and exited 1
+for everyone, with the check green throughout (#781). They were only noticed
+while planning the panel that replaced them (#766 PR E). A row that needs an
+argument the menu cannot supply is not a menu row at all. Before adding one,
+run its exact action string once by hand. The MicroVMs contract scan has the
+same limit: it checks the verbs `Model.js` runs, not the arguments it passes.
+
 ## Default plugins are tested with stand-ins, never the real four
 
 nixarchy's default plugins (#766) are exercised through the internal

@@ -678,6 +678,15 @@ the five ship in one release, so all five are in the one #762 PR.
 
 `Refs #766` on both PRs. #762's PR says `Closes #762`, alone on its line (§8).
 
+**PR E deviations (made while implementing, 2026-09-19, on `feat/batch-766-800-772`):**
+- **Step 5 keeps the two vm row scans.** The owner's fallback row (`trigger.vm-list`,
+  shown while the plugin is off) still runs `nixarchy-vm list`, and both rows'
+  `when` runs `nixarchy-vm --check`, so the scans still have rows to read. The
+  contract scan over `Model.js` is added beside them, not in their place.
+- **Step 3 adds the fallback row** that the owner's answer to open question 1 asked
+  for: `trigger.vm-list`, with the inverse `when`.
+- **The plugin-row floor goes from 4 to 5** (Sandbox), deliberately.
+
 ### Open questions for the owner
 
 1. With the plugin turned off, the Sandbox row hides, and the CLI is the only

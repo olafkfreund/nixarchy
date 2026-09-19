@@ -28,7 +28,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Apps ▸ Podman · Super+Alt+O |
 | [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P |
 | [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H |
-| [MicroVMs](#microvms) | disposable and permanent VMs, one list | coming | today: Trigger ▸ Sandbox |
+| [MicroVMs](#microvms) | disposable and permanent VMs, one list | **on by default** | Trigger ▸ Sandbox · Super+Alt+V |
 | [Distrobox](#distrobox) | boxes, created from nixarchy's templates | coming | today: Trigger ▸ Boxes |
 | [GitHub Actions](#github-actions) | workflow runs, jobs and steps | coming | — |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | coming | — |
@@ -112,7 +112,6 @@ ahead of it on `PATH`.
 ## MicroVMs
 
 [nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm) · [its own site](https://olafkfreund.github.io/nixarchy-microvm/)
-· **coming**
 
 **What it solves.** nixarchy has two kinds of VM: disposable [sandboxes](sandboxes)
 from `nixarchy vm`, and permanent machines you declare in your configuration.
@@ -120,10 +119,8 @@ They lived in two places. This puts both in one list.
 
 **What it does.** Create a VM from a template, run it in the background and
 attach to its console later, stop it, or remove it. There's optional help from
-your AI agent to fill in the create form. The machine-readable `nixarchy vm`
-it builds on (`list --json`, `run --detach`, `console`) has already landed. The
-panel replaces the Sandbox menu when it ships. Until then, use
-**Trigger ▸ Sandbox** and `nixarchy vm`.
+your AI agent to fill in the create form. It is **Trigger ▸ Sandbox** now,
+and `nixarchy vm` is still there in a terminal.
 
 ![The MicroVMs panel: two disposable demo VMs, filtered to one](../img/plugins/microvm.gif)
 

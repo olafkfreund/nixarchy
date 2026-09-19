@@ -338,7 +338,28 @@ on a rootless machine there is no root socket for it to grant access to.
 
 Rootless [podman](https://podman.io) solves the same problem a different way --
 no daemon at all. nixarchy already uses it: [boxes](boxes) are rootless podman
-underneath, though podman is only switched on when you enable boxes.
+underneath. To have podman without boxes, it is a row in the services
+catalogue:
+
+```sh
+nixarchy-service-enable podman
+nixarchy apply
+```
+
+which writes the plain upstream line, the same one you would write yourself:
+
+```nix
+virtualisation.podman.enable = true;
+```
+
+`docker` keeps meaning Docker: that row leaves `dockerCompat` off.
+
+Wherever podman is on -- that row or boxes -- nixarchy also turns on the
+**Podman panel** ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)):
+containers, images, volumes and networks, with start, stop, logs, a shell and
+prune, from **Apps ▸ Podman** or, on a new install, **Super+Alt+O**. Its `d`
+key opens `podman-tui`, which nixarchy does not install, so that one key does
+nothing until you add `podman-tui` to your packages yourself.
 
 If you prefer it as your container runtime, note that nixpkgs refuses to build
 a machine where both `dockerCompat` and the rooted Docker daemon exist

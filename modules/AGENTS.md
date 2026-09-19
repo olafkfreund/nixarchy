@@ -931,6 +931,18 @@ How, and why this way:
   toggle`.** A toggle for an installed but disabled plugin exits 0 and does
   nothing. The helper checks shell.json first and names where to turn the
   plugin on.
+- **A gate follows the feature, not nixarchy (#766 PR C).** nixarchy.podman's
+  gate is `osConfig.virtualisation.podman.enable`, the upstream option, rather
+  than a nixarchy option: podman is a *plain* services row, so its only switch
+  is the line the user wrote -- or the one boxes sets at `mkDefault`. Reading
+  `services.boxes.enable` instead would put a podman panel on a machine where
+  boxes are on and podman was forced back off; tests/options.nix
+  (`podmanViaBoxes`) holds that line. The Apps ▸ Podman row uses the same gate
+  at the Nix level (`podmanEnabled`), so it does not exist without podman.
+- **A seeded bind can outlive its plugin.** Seed binds reach every new home,
+  gated defaults do not. So the helper checks the plugin's directory before
+  anything else and says "not installed on this machine" -- pointing such a
+  user at `omarchy plugin enable` would send them to a command that fails.
 
 Nixi's own turn-on is separate and stays nixi's: its module does it, with its
 own marker (#709).

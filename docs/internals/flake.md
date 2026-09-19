@@ -336,6 +336,34 @@ section 4) and would check nothing more.
 4. Build `checks.menu-verbs`, `checks.options` and `checks.plugin`. The
    row, the default and the enable-once hook all name the plugin.
 
+<a id="the-podman-panel-wherever-podman-is-on-766"></a>
+### The Podman panel, wherever podman is on (#766)
+
+```nix
+nixarchy-podman = {
+```
+
+nixarchy-podman is the second of nixarchy's own plugins in
+`programs.nixarchy.defaultPlugins`, and the first with a gate: it is installed
+where `virtualisation.podman.enable` is true -- the Podman services row or boxes
+-- and nowhere else, because a podman panel on a machine without podman is a
+panel that fails. It is an input, with `follows`, for the reasons
+nixarchy-pkg's entry above gives: pure QML, nothing to build, one nixpkgs.
+
+Measured at 03d9f02 (2026-09-19): the plugin output is **106 KiB**, and ships
+its MIT `LICENSE` (its flake lists it among the copied files). The input's
+source tree, which `lib.inputSources` carries onto the offline ISO and the
+installed host whether or not podman is on, is **5.2 MiB**, mostly docs images.
+
+Not in `checks`, like nixarchy-pkg: `validatedPlugins` validates it in every
+home that installs it, and `checks.menu-verbs` builds a machine with boxes, so
+podman is on there and the Apps ▸ Podman row's id is checked against its
+manifest.
+
+**Bumping the pin.** As nixarchy-pkg's, with two differences: the branch is
+**`master`**, not `main`, and the id to confirm in step 3 is
+`nixarchy.podman`.
+
 <a id="221-222"></a>
 ### #221/#222
 

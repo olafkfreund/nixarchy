@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 772
 intent: intent/2026-09-19-772-ghtui-default.md
 ---

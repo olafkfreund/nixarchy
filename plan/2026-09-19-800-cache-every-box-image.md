@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 800
 spec: spec/2026-09-19-788-cache-box-image.md (on branch fix/788-cache-box-image, approved d73ba89)
 ---

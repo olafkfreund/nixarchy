@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 802
 spec: spec/2026-09-19-802-nixarchy-devenv.md
 ---

@@ -115,7 +115,11 @@ writeShellApplication {
         }
 
         template_exists() {
-          grep -q "^$1	" "$templates/index.tsv"
+          local candidate rest
+          while IFS=$'\t' read -r candidate rest; do
+            [ "$candidate" != "$1" ] || return 0
+          done < "$templates/index.tsv"
+          return 1
         }
 
         # KVM present and writable -> the real thing. Absent or not (yet) writable
@@ -209,6 +213,15 @@ writeShellApplication {
           done
         }
 
+        validate_name() {
+          case "$1" in
+            *[!a-zA-Z0-9_-]*|"")
+              echo "nixarchy-vm: name must be letters, digits, '-' or '_'." >&2
+              exit 1
+              ;;
+          esac
+        }
+
         create_vm() {
           name="''${1:?usage: nixarchy vm create <name> [--template t]}"
           shift
@@ -226,12 +239,7 @@ writeShellApplication {
             esac
           done
 
-          case "$name" in
-            *[!a-zA-Z0-9_-]*|"")
-              echo "nixarchy-vm: name must be letters, digits, '-' or '_'." >&2
-              exit 1
-              ;;
-          esac
+          validate_name "$name"
 
           if ! template_exists "$template"; then
             echo "nixarchy-vm: no template '$template'." >&2
@@ -255,6 +263,7 @@ writeShellApplication {
 
         need_vm() {
           name="''${2:?$1}"
+          validate_name "$name"
           dir="$stateDir/$name"
           if [ ! -d "$dir" ]; then
             echo "nixarchy-vm: no VM named '$name'. 'nixarchy vm create $name' first." >&2
@@ -307,6 +316,18 @@ writeShellApplication {
           fi
         }
 
+        # A detached unit can become active before its runner takes the lock.
+        # Check after acquiring it so an earlier inactive observation cannot
+        # authorize a mutation during that handoff. The prebuilt runner uses
+        # take_lock directly: it is the active unit we refuse everywhere else.
+        lock_stopped_vm() {
+          take_lock -n
+          if unit_busy "$dir"; then
+            echo "nixarchy-vm: '$name' is already running -- 'nixarchy vm stop $name' first." >&2
+            exit 1
+          fi
+        }
+
         exec_vm() {
           echo "$name" > "$dir/hostname"
           cd "$dir"
@@ -315,11 +336,7 @@ writeShellApplication {
 
         run_vm() {
           need_vm "usage: nixarchy vm run [--detach] <name>" "$@"
-          if unit_busy "$dir"; then
-            echo "nixarchy-vm: '$name' is already running." >&2
-            exit 1
-          fi
-          take_lock -n
+          lock_stopped_vm
           build_vm
           exec_vm
         }
@@ -342,11 +359,7 @@ writeShellApplication {
         # holds the lock itself. Back only once it does.
         detach_vm() {
           need_vm "usage: nixarchy vm run --detach <name>" "$@"
-          if unit_busy "$dir"; then
-            echo "nixarchy-vm: '$name' is already running." >&2
-            exit 1
-          fi
-          take_lock -n
+          lock_stopped_vm
           build_vm
           rm -f "$dir/console.sock"
           systemd-run --user --unit="nixarchy-vm-$name" --collect --quiet \
@@ -396,11 +409,7 @@ writeShellApplication {
             list_templates >&2
             exit 1
           fi
-          exec 9>"$dir/.lock"
-          if unit_busy "$dir" || ! flock -n 9; then
-            echo "nixarchy-vm: '$name' is running -- 'nixarchy vm stop $name' first." >&2
-            exit 1
-          fi
+          lock_stopped_vm
           # A volume belongs to the template that made it: k3s's disk under a
           # node VM is at best dead weight and at worst mounted where the new
           # template puts something else.
@@ -421,6 +430,7 @@ writeShellApplication {
 
         stop_vm() {
           name="''${1:?usage: nixarchy vm stop <name>}"
+          validate_name "$name"
           dir="$stateDir/$name"
           if [ ! -d "$dir" ] || [ ! -e "$dir/current" ]; then
             echo "nixarchy-vm: no VM named '$name'." >&2
@@ -431,22 +441,13 @@ writeShellApplication {
 
         rm_vm() {
           name="''${1:?usage: nixarchy vm rm <name>}"
+          validate_name "$name"
           dir="$stateDir/$name"
           if [ ! -d "$dir" ]; then
             echo "nixarchy-vm: no VM named '$name'." >&2
             exit 1
           fi
-          if unit_busy "$dir"; then
-            echo "nixarchy-vm: '$name' is running -- 'nixarchy vm stop $name' first." >&2
-            exit 1
-          fi
-          if [ -e "$dir/.lock" ]; then
-            exec 9>"$dir/.lock"
-            if ! flock -n 9; then
-              echo "nixarchy-vm: '$name' is running -- 'nixarchy vm stop $name' first." >&2
-              exit 1
-            fi
-          fi
+          lock_stopped_vm
           # Removing the directory removes the out-link with it, which is how the
           # GC root goes away -- there is nothing else to clean up.
           rm -rf "$dir"

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 765
 spec: spec/2026-09-18-765-rebuild-window.md
 ---
@@ -209,7 +209,7 @@ spec: spec/2026-09-18-765-rebuild-window.md
 Never pipe a build whose exit status is the result (§1). Run the scripts
 under bash (§1).
 
-## PR 2 — draft, awaiting approval
+## PR 2 — approved 2026-09-19
 
 *Revision:* PR 1 (#776) is stepped above and approved. This section steps PR 2
 only, which is why the frontmatter is back to `draft`. The branch is

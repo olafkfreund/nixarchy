@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 765
 spec: spec/2026-09-18-765-rebuild-window.md
 ---
@@ -321,7 +321,7 @@ already wired (`flake.nix:1819`). No workflow names it; `build.yml`'s `omarchy`
 job builds it in its catch-all step, "Build every check no other job claims".
 So there is no new `checks.<name>` and no workflow edit (§4). Build it under bash, never piped (§1).
 
-## PR 3 — draft, awaiting approval
+## PR 3 — approved 2026-09-19
 
 *Revision:* PRs 1 (#776) and 2 (#778) are merged. This section steps PR 3 only,
 which is why the frontmatter is back to `draft`. Branch:

@@ -98,6 +98,36 @@ let
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
 
+  # #766's default plugins, exercised with fixtures rather than the real four:
+  # those arrive with their own inputs in later PRs, and a test that fetched
+  # them would move with every pin. A plugin is only a valid manifest here.
+  fixturePlugin =
+    id:
+    pkgs.runCommand "nixarchy-fixture-${id}" { } ''
+      mkdir -p $out
+      echo 'import QtQuick' > $out/Panel.qml
+      echo '{"schemaVersion":1,"id":"${id}","name":"fixture","version":"0.0.0","kinds":["panel"],"entryPoints":{"panel":"Panel.qml"}}' > $out/manifest.json
+    '';
+  fixtureDefaults = extra: {
+    imports = [ extra ];
+    programs.nixarchy.defaultPluginSet = {
+      fixture = {
+        id = "nixarchy.fixture";
+        src = fixturePlugin "nixarchy.fixture";
+      };
+      other = {
+        id = "nixarchy.other";
+        src = fixturePlugin "nixarchy.other";
+      };
+    };
+  };
+  defaultHook = "omarchy/hooks/post-boot.d/default-plugins";
+  installsFixture = h: h.programs.nixarchy.plugins ? "nixarchy.fixture";
+  hookLists =
+    id: h:
+    h.xdg.configFile ? ${defaultHook} && pkgs.lib.hasInfix id h.xdg.configFile.${defaultHook}.text;
+  fixtureHome = homeOn { } (fixtureDefaults { });
+
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
   # above deliberately is not.
   #
@@ -730,6 +760,53 @@ let
     # The card turned on for you, once (#709): an explicit exception to "installed,
     # not enabled", pinned here by name so a nixi bump that drops it fails this
     # case rather than a user's SUPER+H doing nothing.
+    # ---- #766: nixarchy's own plugins, installed and turned on once ----
+    #
+    # Mode A on the home side, which modeAInert cannot see (it compares NixOS
+    # closures): standalone Home Manager, and a home on a machine with nixarchy
+    # off, get neither the plugin nor the hook.
+    defaultPluginsNeedAnOsConfig = {
+      on = installsFixture fixtureHome && hookLists "nixarchy.fixture" fixtureHome;
+      off =
+        installsFixture (homeWith (fixtureDefaults { }))
+        || hookLists "nixarchy.fixture" (homeWith (fixtureDefaults { }));
+    };
+    defaultPluginsNeedNixarchyOn = {
+      on = installsFixture fixtureHome;
+      off =
+        let
+          h = homeOn { enable = false; } (fixtureDefaults { });
+        in
+        installsFixture h || h.xdg.configFile ? ${defaultHook};
+    };
+    # Opting one out removes it from both the install and the hook, and leaves
+    # the other where it was: a name set to false is not every name dropped.
+    defaultPluginsOptOut =
+      let
+        h = homeOn { } (fixtureDefaults {
+          programs.nixarchy.defaultPlugins.fixture = false;
+        });
+      in
+      {
+        on = hookLists "nixarchy.other" h && h.programs.nixarchy.plugins ? "nixarchy.other";
+        off = installsFixture h || hookLists "nixarchy.fixture" h;
+      };
+    # A plugin whose feature is off (podman, boxes) is not installed.
+    defaultPluginsGate = {
+      on = installsFixture fixtureHome;
+      off = installsFixture (
+        homeOn { } (fixtureDefaults {
+          programs.nixarchy.defaultPluginSet.fixture.gate = false;
+        })
+      );
+    };
+    # With nothing resolved there is no hook at all, which is PR A's state on
+    # every real machine.
+    defaultPluginsNoHookWhenEmpty = {
+      on = fixtureHome.xdg.configFile ? ${defaultHook};
+      off = defaultHomeOn.xdg.configFile ? ${defaultHook};
+    };
+
     nixiEnablesCard = {
       on = defaultHome.home.activation ? nixiEnableCard;
       off = nixiOff.home.activation ? nixiEnableCard;
@@ -2036,6 +2113,19 @@ pkgs.runCommand "nixarchy-options"
   {
     inherit report;
     inherit menuFile vm;
+    # #766: the helper rows and binds call, run for real below.
+    pluginHelper = pkgs.callPackage ../pkgs/nixarchy-plugin.nix {
+      inherit ((pkgs.extend inputs.self.overlays.default)) omarchy;
+    };
+    # A default whose pinned manifest renamed its id must fail its build.
+    renamedDefault =
+      pkgs.testers.testBuildFailure
+        (homeOn { } {
+          programs.nixarchy.defaultPluginSet.fixture = {
+            id = "nixarchy.fixture";
+            src = fixturePlugin "nixarchy.renamed";
+          };
+        }).programs.nixarchy.pluginChecks."nixarchy.fixture";
     omarchyPath = "${(pkgs.extend inputs.self.overlays.default).omarchy}/share/omarchy";
     # The menu the shell actually renders on this machine, which is NOT the
     # package's own: modules/apps.nix rewrites the rows that would run pacman
@@ -4711,6 +4801,23 @@ pkgs.runCommand "nixarchy-options"
         need "$locallua" 'name = "pi"' "pi is the agent pointed at the local model"
         need "$locallua" '<leader>o' "the local model is <leader>o, cloud is <leader>a"
         echo "every Neovim spec names what it is for, and nothing it cannot have"
+
+        # ---- #766: nixarchy-plugin --enabled reads shell.json like the shell --
+        mkdir -p cfg/omarchy
+        shelljson=cfg/omarchy/shell.json
+        enabled() { XDG_CONFIG_HOME=$PWD/cfg "$pluginHelper/bin/nixarchy-plugin" --enabled "$1"; }
+        echo '{"bar":{"layout":{"right":[{"id":"nixarchy.fixture"}]}}}' > $shelljson
+        enabled nixarchy.fixture || { echo "nixarchy-plugin: a widget on the bar reads as off" >&2; exit 1; }
+        echo '{"plugins":[{"id":"nixarchy.fixture"}],"disabledPlugins":["nixarchy.fixture"]}' > $shelljson
+        ! enabled nixarchy.fixture || { echo "nixarchy-plugin: a disabled plugin reads as on" >&2; exit 1; }
+        echo '{"plugins":[{"id":"nixarchy.other"}]}' > $shelljson
+        ! enabled nixarchy.fixture || { echo "nixarchy-plugin: an absent plugin reads as on" >&2; exit 1; }
+        grep -q "now says id 'nixarchy.renamed'" $renamedDefault/testBuildFailure.log || {
+          echo "a default plugin whose manifest renamed its id did not fail for that reason:" >&2
+          cat $renamedDefault/testBuildFailure.log >&2
+          exit 1
+        }
+        echo "default plugins: the helper reads shell.json as the shell does, and a renamed id fails the build"
 
           touch $out
       ''

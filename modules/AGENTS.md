@@ -879,6 +879,62 @@ would mean a plugin you turned off in Setup > Plugins came back at the
 next rebuild, which is the sort of thing that makes people stop using the
 menu. Declare the plugin, enable it once, and your choice persists.
 
+That still holds for every plugin you declare. nixarchy's own defaults are
+the one exception, next.
+
+<a id="the-default-plugins-are-on-from-the-first-login"></a>
+### The default plugins are on from the first login, once
+
+```nix
+defaultPlugins = lib.mkOption {
+```
+
+**The owner's decision (2026-09-18, #766).** nixarchy-pkg, -podman,
+-distrobox and -microvm are part of the desktop, not optional extras, so they
+are installed *and turned on* on every nixarchy machine, both fresh installs
+and existing ones at their next update, with no prompt. This reverses the
+rule above for exactly these plugins. The reasoning above still applies to
+it: a plugin turned off must stay off. So each default is turned on **once**,
+and after that the user decides.
+
+How, and why this way:
+
+- **Through the running shell, never by writing shell.json.** The shell
+  rewrites the whole of shell.json from memory and watches it
+  (`shell/shell.qml`, `setText` plus `watchChanges`). A second writer loses
+  updates in both directions. So a post-boot hook
+  (`~/.config/omarchy/hooks/post-boot.d/default-plugins`, run by upstream's
+  `omarchy-hook post-boot`) waits for `omarchy-shell shell ping` and then
+  calls `omarchy plugin enable <id> right`, the shell's own IPC writer. This
+  is also why there is no vendored-default shell.json: a user's shell.json
+  replaces the defaults rather than merging with them, so a defaults layer
+  would reach fresh installs only, and the hook reaches both.
+- **The marker is the "once".** `~/.local/state/nixarchy/enabled-once/<id>`
+  is written only after the enable succeeded, or when the plugin is already
+  on. A failure is logged (`journalctl -t nixarchy-default-plugins`) and
+  retried at the next login. With the marker present the hook never touches
+  that id again, so Setup > Plugins' "off" sticks.
+- **Opting out is `defaultPlugins.<name> = false`.** That stops nixarchy
+  installing and enabling the plugin. It does not reach into shell.json, for
+  the same reason as above. A name left out of the attrset counts as on, so
+  setting one name does not silently drop the other three.
+- **Mode A.** Everything resolves through
+  `osConfig.programs.nixarchy.enable`, so standalone Home Manager and a
+  machine with nixarchy off get nothing. tests/options.nix asserts both,
+  because `modeAInert` compares NixOS closures and cannot see a Home Manager
+  default.
+- **The id is asserted for defaults only.** Menu rows and binds name a
+  default by id, so the build fails if a pin's manifest id stops matching.
+  Plugins you declare keep free attribute names (the option installs under
+  the manifest's id).
+- **Rows and binds call `nixarchy-plugin <id>`, not `omarchy-shell shell
+  toggle`.** A toggle for an installed but disabled plugin exits 0 and does
+  nothing. The helper checks shell.json first and names where to turn the
+  plugin on.
+
+Nixi's own turn-on is separate and stays nixi's: its module does it, with its
+own marker (#709).
+
 <a id="omarchys-desktop-is-its-hyprland-config"></a>
 ### Omarchy's desktop is its Hyprland config
 

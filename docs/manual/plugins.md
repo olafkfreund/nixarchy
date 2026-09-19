@@ -49,6 +49,8 @@ package, and set NixOS options through a form. Everything is written to the
 same files nixarchy's own commands write, then applied with one key. The
 rebuild asks for your password through the Omarchy dialog.
 
+![The package manager: switching tabs, then filtering the Apps tab to one app and the line it writes](../img/plugins/pkg.gif)
+
 ![The package manager's Apps tab: curated apps and services, with what each one turns on](../img/plugins/pkg-apps.jpg)
 
 ![Searching nixpkgs for a package](../img/plugins/pkg-search.jpg)
@@ -72,6 +74,8 @@ attention.
 **podman** row in the Services catalogue, or with [Boxes](boxes), and is absent
 where podman is off. nixarchy's container engine is still rootless Docker, so
 `docker` keeps meaning Docker.
+
+![The Podman panel: moving through the demo containers, then filtering to the shop ones](../img/plugins/podman.gif)
 
 ![The Podman panel's Containers tab: three of four running, one needing attention](../img/plugins/podman-containers.jpg)
 
@@ -121,6 +125,8 @@ it builds on (`list --json`, `run --detach`, `console`) has already landed. The
 panel replaces the Sandbox menu when it ships. Until then, use
 **Trigger ▸ Sandbox** and `nixarchy vm`.
 
+![The MicroVMs panel: two disposable demo VMs, filtered to one](../img/plugins/microvm.gif)
+
 ![The MicroVMs panel: disposable and permanent VMs in one list](../img/plugins/microvm-panel.jpg)
 
 ## Distrobox
@@ -137,6 +143,8 @@ terminal; start, stop, restart, upgrade or delete it. Create a box from a form,
 and watch create and upgrade stream into the panel. It replaces the Boxes menu
 once it creates boxes from nixarchy's own templates. Until then, use
 **Trigger ▸ Boxes**.
+
+![The Distrobox panel: two demo boxes, filtered to one](../img/plugins/distrobox.gif)
 
 ![The Distrobox panel: one box running, one exited, one created](../img/plugins/distrobox-popup.jpg)
 

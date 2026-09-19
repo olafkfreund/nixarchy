@@ -104,7 +104,7 @@ on their way, and Voice will be opt-in.
 
 ![The package manager panel: curated apps and services, and what each one turns on](img/plugins/pkg-apps.jpg)
 
-![The Podman panel, open from the bar: three of four containers running, one needing attention](img/plugins/podman-containers.jpg)
+![The Podman panel: moving through demo containers, then filtering them](img/plugins/podman.gif)
 
 See **[nixarchy's plugins](manual/plugins)** for what each one does and
 solves.

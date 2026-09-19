@@ -6,6 +6,37 @@ intent: intent/2026-09-19-747-options-memory.md
 
 # Spec: measure and reduce option-check evaluator memory
 
+## Evidence-backed implementation amendment — 2026-09-19
+
+The owner's instruction to continue without further approval pauses authorizes
+this amendment. The local full-workload baseline measured 12,241,972 KiB RSS,
+148.64 s wall, and 231.98 s user CPU. With only `GC_FREE_SPACE_DIVISOR=8`
+changed, the identical output/derivation paths and evaluator operation counters
+measured 9,790,236 KiB, 156.64 s wall, and 390.81 s user CPU. These are single
+samples, not acceptance medians. The 20.0% lower peak is accompanied by 68.5%
+more user CPU; a desktop with parallel collection does not establish the same
+wall-time trade-off on the hosted runner. Do not ship that collector setting.
+
+Instead expose the actual evaluator's statistics in the existing options CI
+step, with no second evaluation and no default allocator change:
+
+- `.github/workflows/build.yml`: set `NIX_SHOW_STATS=1` on the existing
+  "Check every option both ways" step. Keep its RSS/time measurement, condition,
+  command, failure propagation, and timeout unchanged.
+- `.github/scripts/already-proven.sh`: preserve the existing pair evaluation's
+  stderr when statistics are explicitly requested; otherwise retain suppression.
+  Duplicate the destination file descriptor rather than reopening `/dev/stderr`,
+  so caller log-file offsets are shared correctly. Stdout remains proof rows.
+- `tests/proof-push.nix`: exercise the real script against a tiny nix stub.
+  Assert requested diagnostics survive, normal diagnostics remain suppressed,
+  proof rows are byte-identical, and evaluation failures retain the empty-path
+  fallback. Run the check against the original suppression and observe failure.
+
+This is a diagnostic PR using `Refs #747`, not a memory-reduction closure.
+The original 15%/10% acceptance target still applies to a future optimization.
+Hosted statistics establish how the allocation/collection shape compares with
+the workstation before choosing that optimization. No workflow gate is changed.
+
 ## Design
 
 ### 1. Profile the evaluation that CI actually requests

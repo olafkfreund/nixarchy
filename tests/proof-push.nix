@@ -28,6 +28,7 @@ pkgs.runCommand "nixarchy-proof-push"
     buildUnlessProven = ../.github/scripts/build-unless-proven.sh;
     cachixPush = ../.github/scripts/cachix-push.sh;
     generatedChecks = ../.github/scripts/generated-checks.sh;
+    alreadyProven = ../.github/scripts/already-proven.sh;
   }
   ''
         mkdir -p stubs sut calls
@@ -259,6 +260,41 @@ pkgs.runCommand "nixarchy-proof-push"
       exit 1
     }
     echo "a store path passed as a check name is refused, and nothing is built"
+
+    # #747: evaluator diagnostics must survive without corrupting proof rows
+    # or turning a failed evaluation into a cache proof.
+    cat > stubs/nix <<'EOF'
+    #!/usr/bin/env bash
+    case "$1" in
+      eval)
+        echo evaluator-diagnostic >&2
+        [ "$3" != '.#checks.x86_64-linux.broken' ] || exit 1
+        printf '/nix/store/options /nix/store/options.drv'
+        ;;
+      path-info) exit 1 ;;
+    esac
+    EOF
+    sed -i "1s|.*|#!$(command -v bash)|" stubs/nix
+    chmod +x stubs/nix
+    NIX_SHOW_STATS=0 bash "$alreadyProven" options > normal.rows 2> normal.err
+    NIX_SHOW_STATS=1 bash "$alreadyProven" options > stats.rows 2> stats.err
+    printf 'options\t/nix/store/options.drv\t/nix/store/options\n' > expected.rows
+    cmp normal.rows expected.rows
+    cmp stats.rows expected.rows
+    if grep -q evaluator-diagnostic normal.err; then
+      echo "evaluator diagnostics leaked without NIX_SHOW_STATS=1" >&2
+      exit 1
+    fi
+    grep -q evaluator-diagnostic stats.err || {
+      echo "NIX_SHOW_STATS=1 evaluator diagnostics were discarded" >&2
+      exit 1
+    }
+    NIX_SHOW_STATS=1 bash "$alreadyProven" broken > broken.rows 2> broken.err
+    printf 'broken\t\t\n' > expected.rows
+    cmp broken.rows expected.rows
+    grep -q evaluator-diagnostic broken.err
+    grep -q 'does not evaluate here' broken.err
+    echo "evaluator statistics survive without changing proof rows or failure fallback"
 
         touch $out
   ''

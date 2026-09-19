@@ -207,3 +207,64 @@ Do not promote that experiment to an optimization or claim the 15%/10% target
 without complete-workload comparisons and the subsequent design approval.
 
 No memory reduction, retained-state cause, or issue closure is claimed.
+
+## Resumed execution and implementation — 2026-09-19
+
+The earlier diagnostic-only limitation was superseded by the owner's explicit
+approval to continue implementation without further pauses. Work rebased onto
+`main` at `133651d`; full profiles used clean commit `a653d47`, Nix 2.34.8,
+GNU time 1.10, the same lock, and the approved pair expression with eval cache
+disabled. The shared heavy lock was held and paginated install queries were
+empty at each start. Desktop activity was recorded, not described as idle.
+
+| setting | peak RSS (KiB) | wall (s) | user CPU (s) | GC cycles | GC heap (bytes) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| default | 12,241,972 | 148.64 | 231.98 | 18 | 11,626,876,928 |
+| divisor 8 | 9,790,236 | 156.64 | 390.81 | 39 | 9,261,289,472 |
+
+Captures, including command, metadata, statistics, exact paths, and exit codes:
+
+- `/mnt/data/vmtest/747-baseline-20260919T143009Z/`
+- `/mnt/data/vmtest/747-divisor8-20260919T143440Z/`
+
+Both exit 0. Their output and derivation paths match byte for byte, as do
+evaluator function/primitive calls, environments, values, sets, and list
+counters. Baseline GC allocations total 27,969,363,792 bytes; the heap is not
+a retained-object attribution. The installed libgc is Boehm 8.2.12; its
+[environment reader](https://github.com/ivmai/bdwgc/blob/v8.2.12/misc.c#L1190)
+and [documented trade-off](https://github.com/ivmai/bdwgc/blob/v8.2.12/include/gc.h#L318)
+support this experiment. Collection frequency changes peak usage without
+changing the checked workload, but does not identify a retaining fixture.
+
+The single candidate sample cuts RSS 20.0% and adds 5.4% wall time, but consumes
+68.5% more user CPU. Do not promote it from a many-core desktop to hosted CI
+or run repeat samples for a setting we are not shipping. Default GC stays intact.
+
+### Implement the amended spec
+
+1. Set `NIX_SHOW_STATS=1` only on the existing options step. Keep the current
+   timing, proof lookup/build, and exit-code propagation; do not add an eval.
+2. In `already-proven.sh`, duplicate stderr onto descriptor 3 only when stats
+   are requested, otherwise point descriptor 3 at `/dev/null`. Send only the
+   existing pair eval there. Keep proof rows and cache/refusal logic unchanged.
+3. Extend `checks.proof-push` using the real lookup script with a nix stub.
+   Check stats visibility, normal suppression, exact rows, and failed-eval
+   fallback. The original script fails with
+   `NIX_SHOW_STATS=1 evaluator diagnostics were discarded`; the fix passes.
+4. Run shell syntax/ShellCheck, Nix formatting, workflow lint, and the existing
+   proof-push check under the shared lock when available. Do not rebuild the
+   expensive options workload just to test stderr plumbing.
+5. Prepare a PR with `Refs #747`, the measurements and red/green evidence.
+   Keep #747 open: hosted statistics and a demonstrated acceptable memory
+   reduction remain outstanding. Root coordinates publication and CI scheduling.
+
+Rollback is the reverse of these three code changes; no installed machine,
+allocator default, or CI gate has changed.
+
+Verification completed after rebasing onto `main` at `5ab1d25`: the full
+`checks.proof-push` build passed (derivation
+`0bhz3sxyag67spjmxx3cklzjn92v5kb1-nixarchy-proof-push.drv`), including the new
+statistics/failure-fallback assertion and all existing proof-push cases.
+Bash syntax, ShellCheck, nixfmt, statix, deadnix, and whitespace checks passed.
+Actionlint passed with external ShellCheck/Pyflakes disabled after its default
+external-tool invocation stalled; changed shell code was checked separately.

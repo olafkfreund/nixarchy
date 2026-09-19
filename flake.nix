@@ -926,11 +926,9 @@
           # Every pinned box image in one entry, so the main-only cache publisher
           # serves them all to cold box checks (#788, #800): its closure is each
           # tarball. `images` is the set, for checks.box-template's same-path check.
-          box-test-image =
-            pkgsFor.${system}.linkFarm "box-test-images" boxImages.${system}
-            // {
-              images = boxImages.${system};
-            };
+          box-test-image = pkgsFor.${system}.linkFarm "box-test-images" boxImages.${system} // {
+            images = boxImages.${system};
+          };
 
           # Same reason again: tests/menu-verbs.nix reads the verbs out of the
           # command the Secrets menu rows exec, and it can only do that if the

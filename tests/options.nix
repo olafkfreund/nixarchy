@@ -896,8 +896,7 @@ let
         spec = menuSpec boxesOff;
       in
       {
-        on =
-          spec."trigger.vm".action == "nixarchy-plugin nixarchy.microvm" && spec ? "trigger.vm-list";
+        on = spec."trigger.vm".action == "nixarchy-plugin nixarchy.microvm" && spec ? "trigger.vm-list";
         off = builtins.any (pkgs.lib.hasPrefix "trigger.vm.") (builtins.attrNames spec);
       };
     # Its permanent-VM features run nixarchy.pkg's script by path
@@ -2248,8 +2247,10 @@ pkgs.runCommand "nixarchy-options"
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
     # #766 PR D: the Distrobox panel nixarchy installs, and the templates file
     # boxes.nix writes for it, both from the Boxes-on machine.
-    distroboxSrc = ((homeOfBoxes boxesOn).programs.nixarchy.defaultPluginSet.distrobox).src;
-    boxTemplatesIni = pkgs.writeText "box-templates.ini" boxesOn.environment.etc."nixarchy/box-templates.ini".text;
+    distroboxSrc = (homeOfBoxes boxesOn).programs.nixarchy.defaultPluginSet.distrobox.src;
+    boxTemplatesIni =
+      pkgs.writeText "box-templates.ini"
+        boxesOn.environment.etc."nixarchy/box-templates.ini".text;
     boxTemplateCount = builtins.length (builtins.attrNames (import ../data/box-templates.nix));
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
     herdrSrc =

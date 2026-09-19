@@ -8,6 +8,13 @@ spec: spec/2026-09-19-747-options-memory.md
 
 ## Approved decisions
 
+**Resumption authorization:** the owner explicitly instructed the team to
+continue the open issues without further approval pauses on 2026-09-19.
+Evidence-backed spec/plan amendments and implementation are therefore
+authorized; record the design and evidence before making the change. This
+supersedes the later approval pauses below, not the measurement or coverage
+requirements. No host deployment is authorized.
+
 This plan authorizes diagnostic work only after its approval. No cause has
 been established, and no production optimization is authorized. Shared fixture
 retention is a hypothesis. Do not split the check, collapse fixture modes,

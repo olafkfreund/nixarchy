@@ -192,6 +192,25 @@ when upstream changes, and force it to be long enough to be checkable by a
 person — `etc-overlay` throws on a reason under 80 characters for that reason
 alone. Reasons go stale silently; the keys cannot.
 
+## Default plugins are tested with stand-ins, never the real four
+
+nixarchy's default plugins (#766) are exercised through the internal
+`programs.nixarchy.defaultPluginSet`:
+
+- `options` fills it with two fixture manifests built in the check itself;
+- `plugin` fills its `defaults` node with the omteleprompt pin it already
+  fetches.
+
+Neither uses nixarchy-pkg, -podman, -distrobox or -microvm. Those arrive as
+flake inputs that move with every pin bump, so a test built on them would
+change for reasons unrelated to what it tests, and the mechanism would be
+untestable until the first of them landed. What the stand-ins cannot show is
+that a real plugin's panel opens. That belongs to the PR that adds each
+plugin, and the build asserts each default's manifest id.
+
+The `defaults` node boots only after `machine` shuts down. Two VMs up at once
+is a load the runners were never measured for (AGENTS.md §6).
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

@@ -152,6 +152,17 @@ spec: spec/2026-09-18-766-default-plugins.md
 
     Verify by building `.#checks.x86_64-linux.plugin`, which is already in a
     workflow, so no gate edit is needed.
+    *Deviations, made during implementation:*
+    - It is a second node, `defaults`: `machine` plus one default, the
+      omteleprompt pin this file already fetches. It boots only after
+      `machine` shuts down, and the test's `rec` lets it import `machine`.
+      Every seeded home already has a user shell.json, so this one scenario is
+      also the pre-seeded case.
+    - The hook waits up to **120 s** for the shell, not 30 s, and sets
+      `OMARCHY_SHELL_IPC_TIMEOUT=30s` unless the user set one. This file
+      already found both limits too short in a VM: the shell waits 240 s, and
+      upstream's 2 s IPC budget was cut off while plugins reloaded. The hook
+      runs in the background at login, so waiting costs nothing visible.
 11. `tests/AGENTS.md`: a line on the fixture plugin and why the real four are
     not used here (network and pin churn).
 12. `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .` and

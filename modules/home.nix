@@ -1495,6 +1495,9 @@ in
           ]
         }:$PATH
         state="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/enabled-once"
+        # Enabling makes the shell reload its plugins, which can outlast
+        # upstream's 2 s IPC budget; this runs in the background, so wait.
+        export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
 
         todo=()
         for id in ${lib.escapeShellArgs defaultIds}; do
@@ -1503,7 +1506,7 @@ in
         [ ''${#todo[@]} -gt 0 ] || exit 0
 
         # The shell may still be starting. No answer means next login.
-        for _ in $(seq 30); do
+        for _ in $(seq 120); do
           omarchy-shell shell ping >/dev/null 2>&1 && break
           sleep 1
         done

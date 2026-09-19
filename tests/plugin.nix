@@ -70,8 +70,17 @@ let
   # so the two never race for the same id.
   declarative = (builtins.elemAt plugins 1).src;
 in
-pkgs.testers.runNixOSTest {
+pkgs.testers.runNixOSTest rec {
   name = "nixarchy-plugin";
+
+  # `defaults` is `machine` plus one default plugin (#766), booted only after
+  # `machine` is shut down, so the two never compete for the runner.
+  nodes.defaults = {
+    imports = [ nodes.machine ];
+    home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.teleprompt = {
+      inherit (builtins.elemAt plugins 0) id src;
+    };
+  };
 
   nodes.machine = {
     imports = [
@@ -165,13 +174,18 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("test -S /run/user/1000/bus")
 
     # Bring the session up the way the greeter would, exactly as coexist does.
-    session = "/run/current-system/sw/share/wayland-sessions/omarchy.desktop"
-    exec = machine.succeed(f"sed -n 's/^Exec=//p' {session}").strip()
-    machine.succeed(
-        "systemd-run --uid=1000 --setenv=XDG_RUNTIME_DIR=/run/user/1000 "
-        "--setenv=WLR_RENDERER_ALLOW_SOFTWARE=1 --setenv=XDG_SESSION_TYPE=wayland "
-        "--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
-        f"--unit=omarchy-session --collect {exec}")
+    # A function, and `machine` a global it reads, so the `defaults` node at
+    # the end is brought up by the same code.
+    def start_session():
+        session = "/run/current-system/sw/share/wayland-sessions/omarchy.desktop"
+        exec = machine.succeed(f"sed -n 's/^Exec=//p' {session}").strip()
+        machine.succeed(
+            "systemd-run --uid=1000 --setenv=XDG_RUNTIME_DIR=/run/user/1000 "
+            "--setenv=WLR_RENDERER_ALLOW_SOFTWARE=1 --setenv=XDG_SESSION_TYPE=wayland "
+            "--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            f"--unit=omarchy-session --collect {exec}")
+
+    start_session()
 
     # Probes go through a file rather than su -c '...'. Nested single quotes
     # inside su -c have broken three separate probes in this repo already, and
@@ -209,15 +223,18 @@ pkgs.testers.runNixOSTest {
     # one that is still starting: upstream's omarchy-shell turns the
     # "Not ready to accept queries yet" reply into a failure precisely because
     # a starting shell answers stdout and exits 0.
-    machine.succeed(
-        "cat > /tmp/ping.sh <<'EOF'\n"
-        "export XDG_RUNTIME_DIR=/run/user/1000\n"
-        "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus\n"
-        "export OMARCHY_SHELL_IPC_TIMEOUT=30s\n"
-        "omarchy-shell shell ping\n"
-        "EOF")
-    machine.succeed("chmod 0755 /tmp/ping.sh")
-    machine.wait_until_succeeds("su omarchy -c 'bash /tmp/ping.sh'", timeout=240)
+    def wait_for_shell():
+        machine.succeed(
+            "cat > /tmp/ping.sh <<'EOF'\n"
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus\n"
+            "export OMARCHY_SHELL_IPC_TIMEOUT=30s\n"
+            "omarchy-shell shell ping\n"
+            "EOF")
+        machine.succeed("chmod 0755 /tmp/ping.sh")
+        machine.wait_until_succeeds("su omarchy -c 'bash /tmp/ping.sh'", timeout=240)
+
+    wait_for_shell()
     print("the shell answers IPC; plugin commands have something to talk to")
 
     # ---- the scheme check, the one thing file:// cannot exercise -----------
@@ -537,5 +554,52 @@ pkgs.testers.runNixOSTest {
     assert status != 0, (
         "the Remove Plugin row still shows itself with no plugins installed")
     print("and hides itself again once they are gone")
+
+    # ---- #766: a default plugin is turned on once, and then left alone ----
+    # `defaults` is this machine plus one default plugin (the omteleprompt
+    # pin above). Its home has a seeded shell.json, like every real home, so
+    # the enable has to go through the running shell: nothing else may write
+    # that file while a session is up.
+    machine.shutdown()
+    machine = defaults
+    machine.wait_for_unit("multi-user.target")
+    machine.wait_until_succeeds("systemctl is-active user@1000.service")
+    machine.wait_until_succeeds("test -S /run/user/1000/bus")
+    machine.succeed("test -s /home/omarchy/.config/omarchy/shell.json")
+    start_session()
+    wait_for_shell()
+
+    tele = PLUGINS[0]["id"]
+    enabled_probe = (
+        "omarchy-plugin-list --json | python3 -c 'import json,sys; "
+        f"sys.exit(0 if any(p[\"id\"] == \"{tele}\" and p[\"enabled\"] "
+        "for p in json.load(sys.stdin)) else 1)'")
+    # The post-boot hook runs from Hyprland's autostart, after the shell
+    # answers. Waiting on the result, not on the hook.
+    # Its own file: user() rewrites /tmp/probe.sh on every call.
+    machine.succeed(
+        "cat > /tmp/enabled.sh <<'PROBE_EOF'\n"
+        "export XDG_RUNTIME_DIR=/run/user/1000\n"
+        "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus\n"
+        "export OMARCHY_SHELL_IPC_TIMEOUT=30s\n"
+        + enabled_probe + "\nPROBE_EOF")
+    machine.wait_until_succeeds("su omarchy -c 'bash /tmp/enabled.sh'", timeout=300)
+    print(f"the default plugin {tele} came up enabled, with no one asking")
+
+    layout = json.loads(user("cat ~/.config/omarchy/shell.json"))
+    right = [w.get("id") for w in layout.get("bar", {}).get("layout", {}).get("right", [])]
+    assert tele in right, f"{tele} is enabled but not in the bar's right section: {right}"
+    user(f"test -e ~/.local/state/nixarchy/enabled-once/{tele}")
+    print("in the right section, and its marker is written")
+
+    # Off in Setup > Plugins must survive the next login. The hook is run
+    # again by hand, which is exactly what the next login does.
+    user(f"omarchy plugin disable {tele}")
+    user("~/.config/omarchy/hooks/post-boot.d/default-plugins")
+    status, _ = machine.execute("su omarchy -c 'bash /tmp/enabled.sh'")
+    assert status != 0, (
+        f"{tele} was turned back on at the next login after the user turned "
+        "it off. A default is enabled once; after that the choice is theirs.")
+    print("turned off, it stays off at the next login")
   '';
 }

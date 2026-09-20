@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 821
 intent: intent/2026-09-20-821-graphical-microvm-template.md
 ---
@@ -18,7 +18,8 @@ intent: intent/2026-09-20-821-graphical-microvm-template.md
 - **The template wraps the browsers** so accessibility is genuinely on, rather
   than setting an environment variable and documenting the rest.
 - **virtio-gpu, not headless** — decided after the first revision of this spec
-  was disproved. The next section is the evidence.
+  was disproved, and now proven in a booted VM. The next section is the
+  evidence.
 
 ## Why this is the second revision
 
@@ -74,8 +75,64 @@ why that value exists:
 > The `headless` backend can be started through a systemd job as it does not
 > open a host window.
 
-That makes the virtio-gpu route two lines of template configuration rather than
-new qemu plumbing.
+That makes the virtio-gpu route a template configuration change rather than new
+qemu plumbing.
+
+## What the plan's step 1 proved, and what it corrected
+
+Six probe iterations in a booted VM. The design survived; three of this spec's
+supporting claims did not, and they are corrected below rather than quietly
+fixed in the implementation.
+
+**Proven.** With the configuration in the next section, in a guest with no
+host window:
+
+```
+/dev/dri:  card0   renderD128
+hyprctl version  -> Hyprland 0.56.2
+hyprctl -j monitors -> one "Virtual-1", 1920x1080@60, XRGB8888
+grim -t ppm      -> P6 1920 1080, 6220817 bytes
+```
+
+And the break, per §1: with `microvm.graphics.enable` removed the same probe
+gives `No such file or directory` for `/dev/dri` and
+`CRIT: Cannot open backend: no allocator available` — the original failure,
+reproduced deliberately.
+
+**Correction 1: it is not two lines.** Two more are load-bearing, and each was
+found only by running it:
+
+- **`services.seatd.enable = true`**, with `dev` in the `seat` group. Without
+  it nothing opens the DRM device at all, and aquamarine reports the result as
+  `drm: Skipping device …, not a KMS device` — which is misleading:
+  `CSessionDevice::supportsKMS()` returns early on `deviceID < 0` and never
+  calls `drmIsKMS`. The probe's log contains neither of the two strings that
+  function logs, which is how the early return was proved rather than guessed.
+- **`hardware.graphics.enable = true`**. With a seat, the device opens and KMS
+  is detected, and aquamarine then fails at `Cannot create a GBM Allocator: gbm
+  failed to create a device`. GBM needs a mesa driver, and a NixOS guest has
+  none under `/run/opengl-driver` until this option provides one. mesa 26.2.3
+  ships `virtio_gpu_dri.so`, which is the driver this device wants.
+
+**Correction 2: the reason given for the user service was wrong.** This spec
+said a systemd *user* service is right because its `XDG_RUNTIME_DIR` is what
+"logind creates for a real session". The guest's session is `Type=tty` with
+`Seat=` **empty** — logind's libseat backend declines it outright
+(`Backend 'logind' failed to open seat, skipping`). The decision still stands,
+but for a different reason: **seatd makes the seat question irrelevant**, which
+is also what lets a lingering user manager — which has no session at all — run
+the compositor. The conclusion survived; the stated reason did not, and a rule
+whose reason does not survive checking is one the next reader discards.
+
+**Correction 3: a caller outside the session cannot reach the compositor.**
+`HYPRLAND_INSTANCE_SIGNATURE` and `WAYLAND_DISPLAY` are exported by Hyprland to
+its **children**, not to whatever starts it. Every caller of this template
+drives it from outside that session, so `hyprctl` answers
+`is hyprland running?` and `grim` answers `failed to create display` against a
+perfectly healthy compositor. Three of the six probe iterations were lost to
+exactly this. Both variables are derivable from `$XDG_RUNTIME_DIR`, and the
+template's `note` must say so — otherwise every caller rediscovers it, and the
+symptom reads as "the template is broken".
 
 ## Design
 
@@ -99,13 +156,23 @@ greeter would be a second thing to keep working for no gain.
 ```nix
 microvm.graphics.enable = true;
 microvm.graphics.backend = "headless";
+services.seatd.enable = true;
+hardware.graphics.enable = true;
+users.users.dev.extraGroups = [ "video" "render" "seat" ];
 ```
 
-`enable` alone would open a GTK window on the host. `backend = "headless"` is
-what keeps the VM in the background while still giving the guest a
-`virtio-gpu-gl` device, and therefore a DRM node, and therefore a GBM
-allocator. Both lines carry a comment saying so, because dropping either one
-silently breaks the template in a way whose error message names neither.
+All four are load-bearing and were each proved necessary by a probe run:
+
+- `enable` alone would open a GTK window on the host; `backend = "headless"`
+  gives the guest a `virtio-gpu-gl` device with no host window.
+- `seatd` is what lets anything open that device. Without it the DRM node is
+  present and unopenable, reported as "not a KMS device".
+- `hardware.graphics` is what gives GBM a mesa driver. Without it the device
+  opens and `gbm_create_device` fails.
+
+Each carries a comment naming the failure it prevents, because all three
+failures surface as the same Hyprland message — `CBackend::create() failed!` —
+which names none of them.
 
 `microvm.graphics.vulkan` stays `null`. Venus would be a second thing to keep
 working, no caller needs it, and it pulls `hostmem` into the template's
@@ -115,8 +182,10 @@ surface.
 
 A systemd **user** service for `dev`, not a system service, because the
 compositor belongs to the user's session and its `XDG_RUNTIME_DIR` is
-`/run/user/1000` — which logind creates for a real session and which a system
-service would have to fake.
+`/run/user/1000`, which a system service would have to fake. Note the
+correction above: this is *not* because logind gives the guest a real seated
+session — it does not. `seatd` is what makes the seat question irrelevant, and
+it is what makes this decision work for a lingering user manager.
 
 The service is `wantedBy` the user's `default.target`, with lingering already
 enabled in the guest (`linger-users.service` is in the boot log).
@@ -151,7 +220,11 @@ as "accessibility is on" and is not.
 One entry in `data/microvm-templates.nix` — `label`, `module`, `note` — and the
 `note` says what it gives and what it costs, like the other nine. It should say
 plainly that there is no omarchy shell, because "nixarchy vm" will otherwise
-imply one, and that this is the first template that asks for a GPU device.
+imply one, that this is the first template that asks for a GPU device, and
+**how to reach the compositor from outside its session** — `HYPRLAND_INSTANCE_SIGNATURE`
+and `WAYLAND_DISPLAY`, both derivable from `$XDG_RUNTIME_DIR`. Per correction 3,
+a caller that does not set them sees a healthy compositor report
+`is hyprland running?`.
 
 ### 6. The check
 
@@ -197,13 +270,12 @@ rather than a template that quietly drops its GPU under tcg.
 ## Risks
 
 - **`egl-headless` may need something of the host's that a runner lacks.** It
-  is a qemu display backend that still wants EGL. The plan's first step proves
-  it on p620 before anything is written; whether it survives a CI runner is
-  the `-tcg` question above.
-- **virtio-gpu in the guest needs mesa to offer a GBM-capable render node.**
-  `virtio-gpu-gl` plus mesa's virgl should give `/dev/dri/renderD128`, but this
-  spec asserts it rather than having proved it, and it is the second thing the
-  plan's first step checks — `ls /dev/dri` before `hyprctl version`.
+  is a qemu display backend that still wants EGL. Proved working on p620;
+  whether it survives a CI runner is the `-tcg` question above, and it is now
+  the largest remaining unknown in this spec.
+- ~~**virtio-gpu in the guest needs mesa to offer a GBM-capable render node.**~~
+  Settled by the probe: `card0` and `renderD128` both appear, and
+  `hardware.graphics.enable` supplies the driver GBM needs.
 - **A user service that fails at boot is invisible.** Unlike the existing
   templates, this one has something that can be running or not. It needs a way
   to tell — even `systemctl --user status` in the note — or a VM with a dead

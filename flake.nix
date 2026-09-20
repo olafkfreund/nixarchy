@@ -1985,6 +1985,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The QML injected into upstream's Quickshell tree is copied, never
+          # compiled, so a syntax error ships as a bar element that silently is
+          # not there (#810). See tests/qml.nix -- it carries its own broken
+          # fixture so it proves on every run that it can go red.
+          qml = import ./tests/qml.nix { pkgs = pkgsFor.${system}; };
+
           # The release notes, against a fixture repository whose diff is known.
           # Same dangerous failure as the delta above, over more scans: a release
           # note that reads calm because a grep stopped matching. See

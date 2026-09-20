@@ -222,6 +222,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-dev-environments-panel-wherever-devenv-is-802
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-devenv = {
+      url = "github:olafkfreund/nixarchy-devenv/e003f004fc1b5ec63ee654bb53dcff2645e8110d";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
@@ -995,75 +1002,38 @@
           # complete.
           explain = pkgsFor.${system}.nixarchy-explain;
 
-          # Why: docs/internals/flake.md#nix-run-devenv-presets-scaffolds-every-preset-in
-          devenv-presets =
-            let
-              pkgs = pkgsFor.${system};
-            in
-            pkgs.writeShellApplication {
-              name = "nixarchy-devenv-presets";
-              runtimeInputs = [
-                pkgs.coreutils
-                # The same devenv the catalogue entry installs: pkgs.devenv is
-                # what modules/services/devenv.nix defaults its `package` to, so
-                # what evaluates here is what a user's machine would run.
-                pkgs.devenv
-                pkgs.gnused
-                (pkgs.callPackage ./pkgs/dev-init.nix { })
-              ];
-              text = ''
-                presets=( ${nixpkgs.lib.concatStringsSep " " (builtins.attrNames (import ./data/devenv-presets.nix))} )
-
-                # Everything under one temp root, HOME included: `devenv allow`
-                # writes a trust database into XDG state, and a check has no
-                # business touching the trust decisions of whoever ran it.
-                root=$(mktemp -d)
-                trap 'rm -rf "$root"' EXIT
-                HOME="$root/home"
-                export HOME
-                mkdir -p "$HOME"
-
-                fail=0
-                for preset in "''${presets[@]}"; do
-                  echo "== $preset"
-                  dir="$root/$preset"
-                  mkdir -p "$dir"
-                  cd "$dir"
-
-                  if ! nixarchy-dev-init "$preset" > init.log 2>&1; then
-                    echo "   scaffolding failed:"
-                    sed 's/^/   /' init.log
-                    fail=1
-                    continue
-                  fi
-
-                  # `devenv info` is the cheapest command that evaluates the whole
-                  # module set -- it prints the packages the environment would
-                  # have, which it cannot know without resolving every option the
-                  # preset set. A renamed option dies here.
-                  if devenv info > eval.log 2>&1; then
-                    echo "   ok"
-                  else
-                    echo "   does not evaluate:"
-                    sed 's/^/   /' eval.log
-                    echo "   the devenv.nix it wrote:"
-                    sed 's/^/   /' devenv.nix
-                    fail=1
-                  fi
-                done
-
-                if [ "$fail" -ne 0 ]; then
-                  echo
-                  echo "A preset in data/devenv-presets.nix no longer evaluates against"
-                  echo "devenv. Either an option was renamed upstream -- fix the preset,"
-                  echo "the new name is in devenv's src/modules -- or the scaffold this"
-                  echo "edits changed shape and pkgs/dev-init.nix has to follow."
-                  exit 1
-                fi
-                echo
-                echo "all ''${#presets[@]} presets evaluate"
-              '';
-            };
+          # `nix run .#devenv-presets` -- every template the Dev environments
+          # plugin ships, scaffolded with a real devenv and evaluated (#802).
+          #
+          # The NAME is fixed: `devenv-presets` is a required status check on
+          # main, and `build.yml`'s job of that name runs this attribute. The
+          # catalogue moved to the plugin (nixarchy-devenv), so what the name
+          # runs is now the plugin's own `templates-check`, over the eight ids
+          # this repo used to carry. Renaming either would need a workflow and
+          # a branch-protection change, which are a human's (AGENTS.md 4, 11).
+          #
+          # Not in `checks`: it needs the network, because devenv fetches the
+          # inputs each devenv.yaml names.
+          #
+          # What the old runner got wrong, and why the plugin's replaces it:
+          # it moved HOME but inherited XDG_DATA_HOME, and devenv keeps its
+          # trust database at $XDG_DATA_HOME/devenv/allowed -- so every run
+          # wrote its throwaway scaffolds into the trust list of whoever ran
+          # it (80 dead entries on p620). The plugin's check puts HOME, every
+          # XDG path and DEVENV_HOME inside one temporary root, and fails if
+          # the caller's allow list changes while it runs.
+          devenv-presets = pkgsFor.${system}.writeShellApplication {
+            name = "devenv-presets";
+            text = ''
+              # The ids this repo's data/devenv-presets.nix used to hold. The
+              # plugin has more (java, kotlin, dotnet, php, ruby, flutter and
+              # the cloud generator); those are its own CI's business, and
+              # `cloud` needs the network at create time, so this check keeps
+              # the scope the required check has always had.
+              exec ${inputs.nixarchy-devenv.apps.${system}.templates-check.program} \
+                go jupyter ml node python react rust typescript
+            '';
+          };
 
           # Why: docs/internals/flake.md#screencasts-of-a-real-session-scene-by-scene-see
           inherit

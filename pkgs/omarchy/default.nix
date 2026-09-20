@@ -1953,6 +1953,7 @@ stdenvNoCC.mkDerivation {
                       'o.bind("SUPER + ALT + H", "Herdr", "nixarchy-plugin nixarchy.herdr")' \
                       'o.bind("SUPER + ALT + V", "MicroVMs", "nixarchy-plugin nixarchy.microvm")' \
                       'o.bind("SUPER + ALT + D", "Distrobox", "nixarchy-plugin nixarchy.distrobox")' \
+                      'o.bind("SUPER + ALT + E", "Dev environments", "nixarchy-plugin nixarchy.devenv")' \
                       >>"$binds"
 
                     runHook postInstall

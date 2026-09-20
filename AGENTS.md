@@ -313,8 +313,27 @@ Two other ways a check stops checking, both found in one week:
   is worse than a check). **Teach it the new word in the same PR** — the case
   table and every alternation that carries the old range.
 
+- **A check that writes into the caller's own state is not hermetic, and
+  nothing tells you.** `nix run .#devenv-presets` scaffolded its throwaway
+  projects with a moved `HOME` — and inherited `XDG_DATA_HOME`. devenv keeps
+  its trust database at `$XDG_DATA_HOME/devenv/allowed`, so every run for a
+  year appended its temp directories to the *invoking user's* trust list: 80
+  dead entries on p620, every one `vmtest/tmp/tmp.*/<preset>`. The check
+  passed each time; it was corrupting state it was never meant to touch.
+  **Moving `HOME` is not isolation.** A tool that keeps per-user state reads
+  `XDG_*` and its own `*_HOME` first, so isolate those too — and have the
+  check *assert* the real file is untouched (a checksum before and after),
+  because that is the only part a passing run can prove (#802).
+
 ## 5. Git and flake mechanics that bite
 
+- **A heredoc inside an indented Nix string reindents the whole file.**
+  nixfmt strips a `''…''` block's common indentation, and a heredoc body has
+  to start at column zero — so one `cat <<'EOF'` added to a check's shell
+  lowered that common indent and `nix fmt` rewrote 2,600 lines of
+  `tests/options.nix` around it. The diff is noise no reviewer can read past.
+  Write the file with `printf '%s\n' 'line' 'line'` instead, and run
+  `nix fmt -- --ci` before pushing rather than after (#802).
 - **A flake in a worktree sees only tracked or staged files.** A new file you
   have not `git add`ed fails evaluation with `path '…' does not exist` — not
   "untracked", *does not exist*. This cost three separate debugging sessions

@@ -144,6 +144,25 @@ wherever [Boxes](boxes) are on, and its templates are nixarchy's own, from
 
 ![The Distrobox panel: one box running, one exited, one created](../img/plugins/distrobox-popup.jpg)
 
+## Dev environments
+
+[nixarchy-devenv](https://github.com/olafkfreund/nixarchy-devenv) · [its own site](https://olafkfreund.github.io/nixarchy-devenv/)
+
+**What it solves.** [Per-project environments](per-project-environments) were a
+command and nothing else: `nixarchy dev init` scaffolded a project, and after
+that every environment on the machine was invisible. Which folders have one,
+which activate on `cd`, which have a database running — all of it lived in
+your head or in `ls`.
+
+**What it does.** Every devenv project under your project roots, the ones you
+allowed first. Enter one in a terminal (`devenv shell`), edit its `devenv.nix`,
+start and stop its processes, update its lock, allow or revoke it, and remove
+it in steps from revoke to deleting the folder. Create a new project from
+sixteen templates — languages, Jupyter and machine learning, Flutter, and cloud
+projects for AWS, Azure, GCP and five more. It is **Apps ▸ Dev environments**
+or **Super+Alt+E** wherever the [devenv service](per-project-environments) is
+on, and `nixarchy dev …` is the same tool in a terminal.
+
 ## GitHub Actions
 
 [nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)

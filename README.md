@@ -49,7 +49,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[Get this machine back](https://olafkfreund.github.io/nixarchy/manual/reinstall-image)** | `nixarchy reinstall iso` — an install image built from your own configuration |
 | **[One flake, many machines](https://olafkfreund.github.io/nixarchy/manual/many-machines)** | roll a change out to a fleet from one repository |
 | **[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)** | `Update ▸ Channel`, per machine or per package |
-| **[A toolchain per project](https://olafkfreund.github.io/nixarchy/manual/per-project-environments)** | `nixarchy dev init react` |
+| **[A toolchain per project](https://olafkfreund.github.io/nixarchy/manual/per-project-environments)** | `nixarchy dev init react`, or the panel on `Super+Alt+E` |
 | **[Your phone on the desktop](https://olafkfreund.github.io/nixarchy/manual/android)** | `nixarchy android`, mirrored or emulated |
 | **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `hypr-rdp`, the running session over RDP |
 | **[Ask the machine](https://olafkfreund.github.io/nixarchy/manual/ai)** | agent skills written for NixOS, even against a [local model](https://olafkfreund.github.io/nixarchy/manual/ai#running-the-model-locally) |
@@ -412,7 +412,7 @@ nixarchy                     # what this port adds, and what it defers to
 nixarchy search tailscale    # nixarchy-search
 nixarchy pkg add ripgrep     # nixarchy-pkg-add
 nixarchy apply               # nixarchy-apply
-nixarchy dev init react      # nixarchy-dev-init — a devenv project, here
+nixarchy dev init react      # nixarchy-devenv — a devenv project, here
 nixarchy theme set catppuccin   # → omarchy theme set catppuccin, unchanged
 ```
 
@@ -456,7 +456,7 @@ basename is what it stores.
 | **Plugins** | `omarchy plugin add <url>` works as upstream ships it, and `programs.nixarchy.plugins` pins one in your flake |
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
-| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish — [the page](docs/manual/per-project-environments.md). Off by default |
+| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish, and the **Dev environments** panel (`Super+Alt+E`) lists, creates, enters and removes them — [the page](docs/manual/per-project-environments.md). Off by default |
 | **Boxes** | `nixarchy box create dev --template archlinux` drops you into an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
 | **Trigger ▸ Boxes** | your distrobox boxes in a panel ([nixarchy-distrobox](https://github.com/olafkfreund/nixarchy-distrobox)), created from nixarchy's own templates. **On wherever Boxes are**, Super+Alt+D on a new install; `programs.nixarchy.defaultPlugins.distrobox = false` removes it |
 | **Trigger ▸ Sandbox** | disposable and permanent MicroVMs in one panel ([nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm)). **On by default**, Super+Alt+V on a new install; `programs.nixarchy.defaultPlugins.microvm = false` removes it |

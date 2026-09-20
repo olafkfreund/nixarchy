@@ -617,13 +617,15 @@ in
         podman = true;
         distrobox = true;
         microvm = true;
+        devenv = true;
       };
       example = lib.literalExpression "{ podman = false; }";
       description = ''
         nixarchy's own shell plugins, installed and turned on for you: the
         package manager, GitLab pipelines, GitHub Actions and herdr panels
         always, podman when podman is on, distrobox when Boxes is on,
-        microvms always. A name left out counts as on.
+        microvms always, dev environments when the devenv service is on. A
+        name left out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -1593,6 +1595,17 @@ in
         microvm = {
           id = "nixarchy.microvm";
           src = inputs.nixarchy-microvm.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+        # The Dev environments panel wherever devenv is, the way Podman
+        # follows podman (#802): the panel lists, creates and enters devenv
+        # projects, and with no devenv behind it there is nothing to list and
+        # nothing it could create. `packages` carries the CLI it drives --
+        # `nixarchy-devenv`, which is also what `nixarchy dev` dispatches to.
+        devenv = {
+          id = "nixarchy.devenv";
+          src = inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+          gate = osConfig.programs.nixarchy.services.devenv.enable or false;
+          packages = [ inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.cli ];
         };
       };
 

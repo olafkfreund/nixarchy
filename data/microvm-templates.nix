@@ -6,7 +6,8 @@
 # issue, #224) to prove it boots without booting it.
 #
 # That is also why `module` is a path and not a `lines` string the way
-# data/devenv-presets.nix's `lines` is. devenv.nix is never evaluated here --
+# the devenv templates' `lines` are (they live in nixarchy-devenv now, #802).
+# devenv.nix is never evaluated here --
 # it is pasted into a file this repo will never see again, so a typo in it is
 # invisible until `nixarchy dev init` builds the shell. A microvm template
 # left as a string would carry the same blind spot into something we DO
@@ -15,7 +16,7 @@
 #
 # ## The bar: a template is exactly a NixOS module
 #
-# The same bar data/devenv-presets.nix sets for itself, translated to this
+# The same bar the devenv templates set for themselves, translated to this
 # catalogue's material. Plain NixOS plus whatever microvm.nix's own options
 # add -- no nixarchy vocabulary. The user who outgrows a template copies
 # `module` into a flake of their own and grows it from the NixOS manual and

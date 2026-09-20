@@ -19,17 +19,11 @@ flake, with its menus rewired to Nix instead of pacman.
 
 ![The desktop, and the menu everything is driven from](img/desktop/menu.webp)
 
-<div class="gallery" markdown="1">
+![Search every package and NixOS option from one picker, with its type and docs](img/plugins/pkg-panel.webp)
 
-![Search every package and NixOS option from one picker](img/desktop/search-results.jpg)
-
-![The package manager panel: curated apps and services, and what each turns on](img/plugins/pkg-panel.webp)
-
-![The Ask menu, routed to the skill that answers each question](img/desktop/menu-ask.webp)
+![The Ask menu: ten questions, each routed to the skill that answers it](img/desktop/menu-ask.webp)
 
 ![The MicroVMs panel, in the desktop's own look](img/plugins/microvm-panel.webp)
-
-</div>
 
 Omarchy 4.x is not a dotfiles repo, it is an application: 444 shell commands, a
 QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua API

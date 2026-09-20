@@ -12,7 +12,21 @@ lists must agree or CI fails (`build.yml`, "Every manual page is in the
 sidebar"): `_config.yml`'s `nav`, `llms.txt`'s Manual section, and the table in
 `manual/index.md`. A new page goes in all three.
 
-## The house style is a whole desktop at 16:10
+## The house style is a whole desktop at 16:10, shown big
+
+**Big is part of the rule, and was learned by breaking it.** #820 first put five
+whole-desktop stills into a two-up grid on the front page. Each cell came out
+near 320px, and a 1885px desktop scaled into that turns a panel's rows into grey
+mush -- two terminal shots were indistinguishable from each other. That is
+arithmetic, not taste: a screenshot of an interface has a minimum legible
+display width, and a whole desktop's is most of the column.
+
+So screenshots **stack at full container width** rather than sharing a row, and
+the container is wider than the prose measure (72rem against 46rem). If a
+picture has to be small, it should not be a whole desktop -- but the answer that
+actually worked was to stop making them small.
+
+## The frame is a whole desktop at 16:10
 
 Every image on this site is a capture of the desktop, not a cropped widget:
 feature GIFs at 900x563, desktop stills at 760x475 or 1280x800, the

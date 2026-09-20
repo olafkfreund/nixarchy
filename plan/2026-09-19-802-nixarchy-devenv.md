@@ -178,6 +178,12 @@ Copied from the spec so this file stands alone.
   heredoc body starts at column zero, which lowers the common indentation of
   the surrounding Nix string and made `nix fmt` reindent 2,600 lines of
   `tests/options.nix`.
+- **Step 12: this flake has no `p620` host.** Its `nixosConfigurations` are
+  the reference and installer machines; p620's own configuration lives in the
+  owner's `~/.config/nixos` and consumes nixarchy as an input. So the closure
+  built here is `reference` (`checks.reference-toplevel`, plus `vm-toplevel`).
+  Trying it on p620 means overriding the nixarchy input to this branch, which
+  is the owner's to do and is written into the PR.
 
 ## Tests
 

@@ -272,5 +272,12 @@
 
   networking.firewall.enable = lib.mkForce false;
 
+  # at-spi2-core is already in the guest store as a transitive dependency, but
+  # without this there is no D-Bus service file, so org.a11y.Bus is "not
+  # activatable" rather than merely disabled -- nothing can start it, and no
+  # application in the guest can expose an accessibility tree (#823). This is
+  # the option that installs the service file, which is the whole difference.
+  services.gnome.at-spi2-core.enable = true;
+
   environment.systemPackages = [ pkgs.kitty ];
 }

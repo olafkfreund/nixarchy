@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 816
 intent: intent/2026-09-20-816-walkthrough-scenes.md
 ---
@@ -27,7 +27,8 @@ Split by the node each group needs, since that is the real cost:
   Three scenes, one node, one review.
 - **B — the flows on the base node.** Adding a package, enabling a service, and
   MicroVM templates. These need no new services, only script.
-- **C — the agent.** Its own node, its own PR, and its own decision to make
+- **C — the agents.** Nixi on `SUPER + H` and a terminal agent, both against
+  the local model. Its own node, its own PR, and its own decision to make
   (below).
 
 ### 2. GitHub Actions and GitLab Pipelines stay stills — the gate says so
@@ -53,6 +54,20 @@ clock for one short exchange.
   scene is written and the measurement goes in the PR.
 - If it does not, the outcome is **a still of herdr with a real local-model
   session in it**, and the page says the agent is not shown moving.
+
+**Nixi is part of this scene, and is the better half of it.** `SUPER + H` is
+the desktop's own help agent: an overlay that reaches an agent through an ACP
+adapter, which is why it has the same requirement as anything else here — a
+working backend. It is also the one an ordinary reader would actually use,
+because it is a keybinding rather than a terminal. So pass C records **nixi
+answering a question about this machine**, with the terminal agent as the
+supporting shot rather than the headline.
+
+It sharpens the measurement in the same move: nixi's failure mode is already
+documented in `docs/manual/ai.md` — with no adapter pinned, `SUPER + H` reports
+*"Claude Code's ACP adapter (claude-agent-acp) is not on the system PATH"* and
+the rebuild says nothing. The scene must therefore assert that an adapter is
+pinned before recording, or it records that error message in good faith.
 
 Either way no credential enters the VM: the agent is driven by `localAi`
 (`qwen3:8b`), with `opencode` or `codex` from `data/apps.nix`. The node is

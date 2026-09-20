@@ -92,6 +92,8 @@ background daemon and no stored token. It uses `glab`, which nixarchy installs
 with it. Run `glab auth login` once; until you do, the panel says so and stops
 polling.
 
+*Not shown moving: until `glab` is authenticated the panel is one unchanging "authenticate first" message, which cannot honestly clear the recorder's frame-diversity gate.*
+
 ## Herdr sessions
 
 [nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)
@@ -124,7 +126,7 @@ attach to its console later, stop it, or remove it. There's optional help from
 your AI agent to fill in the create form. It is **Trigger ▸ Sandbox** now,
 and `nixarchy vm` is still there in a terminal.
 
-![The MicroVMs panel: two disposable demo VMs, filtered to one](../img/plugins/microvm.gif)
+![A MicroVM created and booted from the panel, to a prompt inside the guest](../img/features/microvm.gif)
 
 ![The MicroVMs panel: disposable and permanent VMs in one list](../img/plugins/microvm-panel.jpg)
 
@@ -142,7 +144,7 @@ and watch create and upgrade stream into the panel. It is **Trigger ▸ Boxes**
 wherever [Boxes](boxes) are on, and its templates are nixarchy's own, from
 `/etc/nixarchy/box-templates.ini`.
 
-![The Distrobox panel: two demo boxes, filtered to one](../img/plugins/distrobox.gif)
+![A box created from a template and entered, to a prompt inside it](../img/features/boxes.gif)
 
 ![The Distrobox panel: one box running, one exited, one created](../img/plugins/distrobox-popup.jpg)
 
@@ -165,6 +167,8 @@ projects for AWS, Azure, GCP and five more. It is **Apps ▸ Dev environments**
 or **Super+Alt+E** wherever the [devenv service](per-project-environments) is
 on, and `nixarchy dev …` is the same tool in a terminal.
 
+![A devenv project scaffolded from a template, with its languages in devenv.nix](../img/features/devenv.gif)
+
 ## GitHub Actions
 
 [nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)
@@ -180,6 +184,8 @@ keys are on **Super+Ctrl+Alt+A**.
 **If you installed it by hand before,** remove your copy before switching:
 `rm -rf ~/.config/omarchy/plugins/olafkfreund.github-actions`. nixarchy won't
 replace a real directory. It stays enabled, and the managed copy takes over.
+
+*Not shown moving, for the same reason as GitLab pipelines above: unauthenticated, the panel holds one message still.*
 
 ## ai-mirror
 
@@ -198,6 +204,8 @@ yes first.
 
 **[Watch the nixarchy desktop showcase](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)**, recorded by an agent through ai-mirror.
 
+*Not recorded yet. It needs an agent driving the desktop, which is [#816](https://github.com/olafkfreund/nixarchy/issues/816) pass C.*
+
 ## Voice
 
 [nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice) · [its own site](https://olafkfreund.github.io/nixarchy-voice/)
@@ -215,3 +223,5 @@ voice speaks the reply.
 with its speech models. So it is not in the default install. A **Set up voice**
 menu row installs it and asks which backend to use. Notification logging, the
 wake word and desktop control all start off.
+
+*Not recorded yet. Speech is the one thing a silent GIF cannot show; pass C decides what it can show instead.*

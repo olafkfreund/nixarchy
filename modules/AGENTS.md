@@ -937,6 +937,25 @@ How, and why this way:
   plugin's gate exactly and Mode A installs nothing. It is for the CLIs a
   plugin shells out to (`glab` for the GitLab panel). Services, credentials
   and MCP registration are not fields here; they get their own options.
+- **Those tools lose every collision with the user's own (#809).** They are
+  added at `lib.lowPrio`, once, where `resolvedDefaults` is concatenated into
+  `home.packages`. The reason is that nobody asked for them: the defaults are
+  on from the first login, and the tools are ordinary things a person may
+  already keep. Two panels each carrying a bare `pkgs.python3` beside a user's
+  own `python3.withPackages` is two interpreters in one profile, and `buildEnv`
+  refuses -- `home-manager-path` fails, the whole system closure fails with it,
+  and the error names `bin/idle3` and nothing of ours. The machine cannot leave
+  its old generation, so it is not a cosmetic collision.
+
+  The same paragraph is already in `modules/home.nix` above `packages`, written
+  for `omarchy-nvim-config` and again for an overridden `tesseract`. #809 is the
+  third time, which is why the priority now sits at the concatenation rather
+  than on the entry somebody last remembered. **Anything nixarchy puts in
+  somebody's profile loses to what they installed themselves**; a user who wants
+  ours to win can `lib.hiPrio` it in their own file. `checks.options` carries the
+  rule (`defaultRuntimeToolsLowPriority`) and `checks.home-profile` builds a
+  profile holding both interpreters, because the collision only exists once
+  something calls `buildEnv`.
 - **A panel needs no placement.** The hook always passes `right`, and
   upstream's `setEnabled` (`PluginRegistry.qml:486-489`) reads it only for
   `bar-widget` kinds, so a `panel` lands in `plugins[]`. checks.plugin's

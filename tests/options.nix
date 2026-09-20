@@ -869,6 +869,40 @@ let
       on = hasGh defaultHomeOn;
       off = hasGh noDefaultsHome || hasGh defaultHome;
     };
+    # #809: the defaults' runtime tools arrive without being asked for, so they
+    # lose to whatever the user installed themselves. Without the priority, a
+    # user's own `python3.withPackages` beside a panel's bare python3 is two
+    # interpreters in one profile and `home-manager-path` refuses to build --
+    # taking the whole closure with it, over `bin/idle3`, naming nothing of
+    # ours. `off` is the same predicate on the homes that get no defaults: no
+    # tool of ours is in their profile at any priority.
+    defaultRuntimeToolsLowPriority =
+      let
+        # Every runtime tool any defaultPluginSet entry contributes. Spelled
+        # out rather than read back from the module: a tool that stops being
+        # prioritised should break this, and a list derived from the same
+        # expression as the fix could not (AGENTS.md §1).
+        toolNames = [
+          "gh"
+          "glab"
+          "python3"
+          "xdg-utils"
+          "jq"
+          "iproute2"
+          "herdr"
+        ];
+        ours = h: builtins.filter (p: builtins.elem (p.pname or "") toolNames) h.home.packages;
+        allLowPrio =
+          h:
+          let
+            ps = ours h;
+          in
+          ps != [ ] && builtins.all (p: (p.meta.priority or 5) > 5) ps;
+      in
+      {
+        on = allLowPrio defaultHomeOn;
+        off = allLowPrio noDefaultsHome || allLowPrio defaultHome;
+      };
     # #771: the herdr sessions widget is a default wherever nixarchy is on,
     # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
     herdrIsADefault = {

@@ -20,6 +20,7 @@ baseurl: "/nixarchy"
 include:
   - manual
 exclude:
+  - AGENTS.md
   - internals
   - screenshots
   - capture-screenshots.sh

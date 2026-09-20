@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 821
 intent: intent/2026-09-20-821-graphical-microvm-template.md
 ---

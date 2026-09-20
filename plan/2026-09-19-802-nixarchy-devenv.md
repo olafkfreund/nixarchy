@@ -158,6 +158,14 @@ Copied from the spec so this file stands alone.
   comment naming `data/devenv-presets.nix` (`:223`). The plan promised no
   workflow edit, and a workflow file is a human's (AGENTS.md 4, 11). The PR
   points the comment out for the owner.
+- **Step 10: there is no `checks.readme-counts`.** The plan named one; the
+  docs-facing checks in this repo are `doc-options`, `skill-parity` and
+  `plugin`, and those were run instead.
+- **Step 4/8: the Apps row is gated**, `lib.optionalAttrs devenvEnabled`, the
+  way the Podman row is -- a row whose panel cannot exist is a dead row. So
+  `checks.menu-verbs`' fixture turns the devenv service on, for the same
+  reason it already turns Boxes on, and `checks.options` asserts the row
+  exists with devenv on and not without it (`devenvRow`).
 
 ## Tests
 

@@ -897,6 +897,11 @@ rule above for exactly these plugins. The reasoning above still applies to
 it: a plugin turned off must stay off. So each default is turned on **once**,
 and after that the user decides.
 
+A gated default follows its feature rather than the desktop: -podman where
+podman is, -distrobox where Boxes are, and -devenv where
+`services.devenv.enable` is (#802). A panel with nothing behind it is a panel
+that fails, so the gate is part of the decision rather than an exception to it.
+
 How, and why this way:
 
 - **Through the running shell, never by writing shell.json.** The shell

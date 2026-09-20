@@ -398,7 +398,8 @@ nixarchy did not write, config-repo drift surfaced rather than left to rot, an
 allowlisted `$HOME` backup, and a factory baseline taken at install time that a
 reset has something to return to. Also
 [per-project developer environments](https://github.com/olafkfreund/nixarchy/issues/148)
-— `nixarchy dev init react` scaffolds a devenv project that activates at the
+— `nixarchy dev init react`, or the Dev environments panel on Super+Alt+E,
+scaffolds a devenv project that activates at the
 next prompt, in bash, zsh and fish. Off unless you select it. Also
 [many machines, one repo](https://github.com/olafkfreund/nixarchy/issues/121)
 — a machine is a directory, a second one is installed from the same

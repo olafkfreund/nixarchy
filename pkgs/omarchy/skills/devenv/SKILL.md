@@ -33,7 +33,7 @@ repository actually needs.
 
 | The request | Route |
 |---|---|
-| A tool for **this project** | `devenv.nix` in the project directory — `nixarchy dev init <preset>` if there is none yet |
+| A tool for **this project** | `devenv.nix` in the project directory — `nixarchy dev init <template>` if there is none yet |
 | A toolchain for **the machine** | The app selection — `nixarchy-app-enable`, `nixarchy-pkg-add`. That is the `nixos` skill |
 | **Try it once** | `nix shell nixpkgs#<pkg>` — and say plainly that it leaves nothing behind |
 | `mise use --global <lang>@latest` | Not on this machine. See below |
@@ -89,17 +89,24 @@ toolchain instead of compiling one. Decline the cache with
 In an empty (or at least `devenv.nix`-less) project directory:
 
 ```bash
-nixarchy dev init            # lists the presets and what each one costs
+nixarchy dev init            # lists the templates and what each one costs
 nixarchy dev init go
 ```
 
-Presets: `go`, `node`, `python`, `react`, `rust`, `typescript`. Each one is a
-small block of devenv's own option lines, folded into devenv's own scaffold.
+Templates: `go`, `node`, `python`, `react`, `rust`, `typescript`, `java`,
+`java-maven`, `kotlin`, `dotnet`, `php`, `ruby`, `flutter`, `ml`, `jupyter`,
+and `cloud` (which takes providers: `nixarchy dev init cloud aws gcp`). Each
+one is a small block of devenv's own option lines, folded into devenv's own
+scaffold. `nixarchy dev` is the same program as the **Dev environments** panel
+on Super+Alt+E, so what it can do the panel can too: `list`, `status`,
+`templates`, `remove`.
 
-It writes four files and runs `devenv allow` for you:
+It writes four files, and **does not** run `devenv allow` unless you pass
+`--allow`: a devenv.nix is code that runs on `cd`, so that consent is the
+user's. It runs `git init` unless you pass `--no-git`.
 
 ```
-devenv.nix     the environment — the preset's lines are already in it
+devenv.nix     the environment — the template's lines are already in it
 devenv.yaml    which nixpkgs it draws from
 devenv.lock    written by the first activation, not by init
 .gitignore     devenv's scratch directories
@@ -113,7 +120,7 @@ while. Once. Do not run it on a machine with no network and conclude something
 is broken.
 
 If the directory already has a `devenv.nix`, `nixarchy dev init` refuses and
-prints the preset's lines for you to paste. That refusal is correct — do not
+prints the template's lines for you to paste. That refusal is correct — do not
 work around it by deleting the user's file.
 
 ## Editing devenv.nix

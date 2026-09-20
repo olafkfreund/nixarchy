@@ -364,6 +364,42 @@ manifest.
 **`master`**, not `main`, and the id to confirm in step 3 is
 `nixarchy.podman`.
 
+<a id="the-dev-environments-panel-wherever-devenv-is-802"></a>
+### The Dev environments panel, wherever devenv is (#802)
+
+```nix
+nixarchy-devenv = {
+```
+
+nixarchy-devenv is the panel for [per-project
+environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments),
+and the second default with a gate: it is installed where
+`programs.nixarchy.services.devenv.enable` is true and nowhere else, for the
+same reason the Podman panel follows podman -- with no devenv behind it there
+is nothing to list and nothing it could create. An input with `follows`, like
+the others: QML plus one shell script, nothing to build, one nixpkgs.
+
+It also carries the **catalogue**. The eight presets this repo used to hold in
+`data/devenv-presets.nix` moved there unchanged, with eight more beside them
+(java, java-maven, kotlin, dotnet, php, ruby, flutter, and a `cloud` generator
+that runs cloud-projects-templates). Keeping a second catalogue here would be
+drift waiting to happen, so `pkgs/dev-init.nix` went with it and
+`nixarchy dev ...` dispatches to the plugin's `nixarchy-devenv` command.
+
+Measured at e003f00 (2026-09-19): the plugin output is **148 KiB** (a 121.7 KiB
+closure) and ships its MIT `LICENSE`, which `checks.options` asserts. The CLI
+is **28 KiB** of script, but its closure is **57.2 MiB**: it is a
+`writeShellApplication` over coreutils, findutils, gnugrep, gnused and jq. It
+goes only to machines that turned devenv on -- which are already carrying
+devenv itself, and devenv bundles its own Nix. `devenv`, `git` and `nix` are
+deliberately not runtime inputs of it: it calls them by name from PATH, so a
+machine that never enabled devenv gets none of that closure through this.
+
+**Bumping the pin.** As nixarchy-pkg's; the branch is `main` and the id to
+confirm is `nixarchy.devenv`. Run `nix run .#devenv-presets` after the bump:
+that check runs the pinned plugin's own templates check, so a bump that breaks
+a template fails there rather than in somebody's project.
+
 ### The GitLab pipelines panel, on by default (#770)
 
 ```nix
@@ -792,21 +828,29 @@ the question "what did this Omarchy release add and drop" already has
 an answer here, and two of them would disagree eventually.
 
 <a id="nix-run-devenv-presets-scaffolds-every-preset-in"></a>
-### `nix run .#devenv-presets` -- scaffolds every preset in
+### `nix run .#devenv-presets` -- every template the plugin ships
 
 ```nix
-devenv-presets =
+devenv-presets = pkgsFor.${system}.writeShellApplication {
 ```
 
-`nix run .#devenv-presets` -- scaffolds every preset in
-data/devenv-presets.nix with the real `nixarchy dev init`, then asks a
-real devenv to evaluate what it wrote.
+`nix run .#devenv-presets` scaffolds the eight templates this repo used to
+carry -- go, jupyter, ml, node, python, react, rust, typescript -- with a real
+devenv, and asks devenv to evaluate what it wrote. Since #802 the catalogue and
+the scaffolder live in nixarchy-devenv, so this runs **the plugin's own
+`templates-check` app** over those ids rather than a copy of the proof.
 
-This is the whole safety net under that catalogue. `lines` is a
-string, so a preset that names an option devenv renamed is a valid Nix
-file and a broken project, and nothing in `nix flake check` would ever
-say so. It runs the command rather than reproducing what it does,
-because a check that scaffolds its own devenv.nix tests a copy.
+**The name is fixed.** `devenv-presets` is a required status check on `main`,
+and `build.yml`'s job of that name runs this attribute. Renaming either would
+be a workflow change and a branch-protection change, which are a human's
+(AGENTS.md 4 and 11) -- so the attribute keeps the name and changes what it
+runs. That is also why the check's scope stayed at the eight: the plugin's
+other templates are its own CI's business, and its `cloud` generator needs the
+network at create time.
+
+This is still the whole safety net under a catalogue of strings. `lines` is a
+string, so a template naming an option devenv renamed is a valid Nix file and a
+broken project, and nothing in `nix flake check` would ever say so.
 
 NOT in `checks`, and that is not an oversight. #150 proposed it as one
 on the reasoning that a full `devenv shell` needs the network but
@@ -818,6 +862,14 @@ github:cachix/devenv` fails with `allow-import-from-derivation is
 disabled` before it prints anything. A sandboxed derivation has
 neither, so `checks.devenv-presets` could not run at all. A workflow
 job that has a network does, and build.yml has one.
+
+**What the old runner got wrong.** It moved `HOME` into a temporary directory
+but inherited `XDG_DATA_HOME`, and devenv keeps its trust database at
+`$XDG_DATA_HOME/devenv/allowed`. Every run therefore wrote its throwaway
+scaffolds into the trust list of whoever ran it: 80 dead entries on p620, all
+`vmtest/tmp/tmp.*/<preset>`. The plugin's check puts `HOME`, every `XDG_*` path
+and `DEVENV_HOME` inside one temporary root, and compares the caller's allow
+list checksum before and after, failing if it moved.
 
 <a id="screencasts-of-a-real-session-scene-by-scene-see"></a>
 ### Screencasts of a real session, scene by scene -- see

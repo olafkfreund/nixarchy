@@ -465,9 +465,12 @@ sets in Setup → Plugins still wins, and nothing writes `shell.json`.
 `checks.options` reads the pinned plugin's own accepted-key lists
 (`ASSEMBLE_BOOLS`, `ASSEMBLE_SINGLE`, `ASSEMBLE_CUMULATIVE` in `Model.js`) and
 fails if a template sets a key the panel refuses. The package ships its
-LICENSE. `nixarchy box` stays until the panel can promote and list (#801).
+LICENSE. The panel can promote since dd9e89c: `p` on a row copies the same
+`programs.nixarchy.services.boxes.machines.<name>` snippet `nixarchy box
+promote` prints, byte for byte. That was the last thing #801 wanted from this
+side, so `nixarchy box` now goes on its own schedule.
 
-Measured at f68ac27 (2026-09-19): the plugin output is **128 KiB**. The source
+Measured at dd9e89c (2026-09-20): the plugin output is **131 KiB**. The source
 tree on the ISO is **2.9 MiB**, mostly its docs site's screenshots.
 
 **Bumping the pin:**

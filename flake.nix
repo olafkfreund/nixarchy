@@ -218,7 +218,7 @@
     # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-distrobox = {
-      url = "github:olafkfreund/nixarchy-distrobox/f68ac276dc05cd06f053900d419e1fd6ff30eaff";
+      url = "github:olafkfreund/nixarchy-distrobox/dd9e89cd4b5b47f24f1cb542c521ea3a98d2d7b7";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

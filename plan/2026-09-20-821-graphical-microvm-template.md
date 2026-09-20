@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 821
 spec: spec/2026-09-20-821-graphical-microvm-template.md
 ---
@@ -43,7 +43,26 @@ nixarchy-voice's #28 plan records being approved after its implementation
 merged. If the instruction was not meant to carry this, step 1 is the place to
 stop: it is a throwaway probe and nothing after it has been written.
 
-## Steps
+## Step 1 ran and stopped the plan
+
+As instructed: headless does not work in the guest, so the rest of these steps
+are not to be executed against the current spec. See the spec's first section.
+
+**Three things the probe taught that are worth keeping**, because each cost an
+iteration:
+
+1. **A systemd *user* service writes nothing to the console.** The first probe
+   ran as one, reported `Finished`, and produced no output anywhere — which I
+   misread as "Hyprland failed silently" when it was "I cannot see anything a
+   user unit does". Run a guest probe from the autologin shell on `ttyS0`.
+2. **Redirecting to `/mnt/host` is not a reliable channel for a probe.** Two
+   attempts wrote no file at all while the share was mounted. The console is
+   the one channel that has never lied here.
+3. **`microvm.graphics.enable = true` opens a GTK window on the host.** Not
+   what a background VM wants, and the thing to solve before virtio-gpu can be
+   called a fallback.
+
+## Steps (not executed beyond 1)
 
 **1. Prove headless, before writing the template.** This is the whole issue and
 the spec deliberately left it open: a scoping probe reported `Finished` and

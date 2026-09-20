@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 821
 intent: intent/2026-09-20-821-graphical-microvm-template.md
 ---
@@ -58,7 +58,53 @@ is reachable through `XDG_RUNTIME_DIR`, and `XDG_RUNTIME_DIR` must stay under
 None of that applies inside a guest, which owns its own seat; it is here so the
 next person does not spend the same hour.
 
-## Design
+## Step 1 ran, and it disproved the design. This spec needs re-approving.
+
+The plan's first step was to prove headless before writing anything. It is
+proved false.
+
+In a guest with no DRM device, Hyprland dies with:
+
+```
+HYPR: DEBUG ]: Creating the AsyncResourceGatherer!
+HYPR: terminate called after throwing an instance of 'std::runtime_error'
+HYPR:   what():  CBackend::create() failed!
+```
+
+It gets far enough to create its instance directory — the probe found
+`.socket2.sock` — and then cannot build a backend.
+
+**My reading in the section below is wrong and I cannot yet say why.** The
+guest builds hyprland 0.56.2, the same version whose `Compositor.cpp:311-313`
+asks for `AQ_BACKEND_HEADLESS` with `AQ_BACKEND_REQUEST_MANDATORY`, and whose
+aquamarine `CBackend::create` appeared to return null only on an empty list.
+Both readings cannot be true at once. The likeliest explanation is that the
+aquamarine I read (`nixpkgs#aquamarine.src`) is not the one this Hyprland links
+against, but that is a guess and it is labelled as one.
+
+**And virtio-gpu is not a drop-in fallback.** `microvm.graphics.enable = true`
+produces a qemu **GTK display** — a window on the host's desktop — which
+defeats the whole premise of a VM that runs in the background unattended. It
+would need `-display egl-headless` or equivalent, which is a different design
+decision and not an implementation detail.
+
+So this spec's central technical claim is dead and the next step is not
+implementation. Whoever picks it up chooses between:
+
+1. **virtio-gpu with a headless host display.** Guest gets a real DRM device,
+   host gets no window. Needs proving that `egl-headless` reaches microvm.nix's
+   qemu invocation, and that `grim` can capture from it.
+2. **Find out why headless fails**, starting with which aquamarine the guest
+   actually links and what `CBackend::create` does in *that* revision. If it is
+   a packaging mismatch it may be a nixpkgs bug worth reporting rather than
+   designing around.
+3. **Abandon the VM** and use the nested compositor, which is recorded below as
+   rejected but which *was verified working* in about two seconds.
+
+The probe that produced this is not in the tree — it was a throwaway and it is
+reverted. What is worth keeping from it is in the plan.
+
+## Design (superseded by the section above)
 
 ### 1. `modules/microvm/templates/hyprland.nix`
 

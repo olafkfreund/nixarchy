@@ -179,6 +179,28 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Speech into desktop actions (#774). An input on every machine while the
+    # app is on none, which is not a contradiction: data/apps.nix is data, and
+    # this module only does anything once somebody sets
+    # services.omarchy-voice.enable in their own flake. It is not in
+    # defaultPluginSet and must not be -- about a gigabyte with whisper and the
+    # Piper models, and the models are IN the package, so an off switch would
+    # not shrink the machine or the ISO.
+    #
+    # nixarchy overrides none of its defaults, deliberately. Desktop control,
+    # the notification log and the wake word all start off upstream as of
+    # nixarchy-voice#19 and #21, and the "Jenny (Dioco)" attribution is in the
+    # built wrapper. Restating any of that here would be a second place to
+    # change and would hide an upstream regression rather than catch it --
+    # checks.options asserts the off state instead.
+    #
+    # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
+    # a branch is not a version.
+    nixarchy-voice = {
+      url = "github:olafkfreund/nixarchy-voice/a953559d2da99c2f8075869dab73e344b78988ae";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-pkg = {

@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "ai-mirror": {
+      "inputs": {
+        "nixpkgs": [
+          "nixarchy-voice",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789919871,
+        "narHash": "sha256-sODwVlwAqRTdsrSmhRAus3hW9pHFFmSXgTfT1R2J1dU=",
+        "owner": "olafkfreund",
+        "repo": "ai-mirror",
+        "rev": "66dc075223cbafae45f66980eda60c958960e70a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "ai-mirror",
+        "type": "github"
+      }
+    },
     "aquamarine": {
       "inputs": {
         "hyprutils": [
@@ -112,6 +133,27 @@
       }
     },
     "home-manager_2": {
+      "inputs": {
+        "nixpkgs": [
+          "nixarchy-voice",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789765459,
+        "narHash": "sha256-voJJ5IZR4w2149u2Jm/j2zifeWROlpZQ+JzmCQwjgn8=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "17903129f47656fa4d07e78ad87f6592ff4f2527",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "home-manager_3": {
       "inputs": {
         "nixpkgs": [
           "zen-browser",
@@ -716,6 +758,30 @@
         "type": "github"
       }
     },
+    "nixarchy-voice": {
+      "inputs": {
+        "ai-mirror": "ai-mirror",
+        "home-manager": "home-manager_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "systems": "systems_2"
+      },
+      "locked": {
+        "lastModified": 1789922046,
+        "narHash": "sha256-ag8/bDqOJRmjxTrg/C7J5eMsN46jjTetJu2HiXTV4go=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-voice",
+        "rev": "a953559d2da99c2f8075869dab73e344b78988ae",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-voice",
+        "rev": "a953559d2da99c2f8075869dab73e344b78988ae",
+        "type": "github"
+      }
+    },
     "nixi": {
       "inputs": {
         "nixpkgs": [
@@ -863,13 +929,14 @@
         "nixarchy-microvm": "nixarchy-microvm",
         "nixarchy-pkg": "nixarchy-pkg",
         "nixarchy-podman": "nixarchy-podman",
+        "nixarchy-voice": "nixarchy-voice",
         "nixi": "nixi",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-stable": "nixpkgs-stable",
         "omarchy": "omarchy",
         "sops-nix": "sops-nix",
-        "systems": "systems_2",
+        "systems": "systems_3",
         "zen-browser": "zen-browser"
       }
     },
@@ -940,6 +1007,21 @@
         "type": "github"
       }
     },
+    "systems_3": {
+      "locked": {
+        "lastModified": 1689347949,
+        "narHash": "sha256-12tWmuL2zgBgZkdoB6qXZsgJEH9LR3oUgpaQq2RbI80=",
+        "owner": "nix-systems",
+        "repo": "default-linux",
+        "rev": "31732fcf5e8fea42e59c2488ad31a0e651500f68",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default-linux",
+        "type": "github"
+      }
+    },
     "xdph": {
       "inputs": {
         "hyprland-protocols": [
@@ -983,7 +1065,7 @@
     },
     "zen-browser": {
       "inputs": {
-        "home-manager": "home-manager_2",
+        "home-manager": "home-manager_3",
         "nixpkgs": [
           "nixpkgs"
         ]

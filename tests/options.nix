@@ -903,6 +903,26 @@ let
         on = allLowPrio defaultHomeOn;
         off = allLowPrio noDefaultsHome || allLowPrio defaultHome;
       };
+    # #774: voice is a row in the catalogue, never a default. The closure is
+    # 6.7 GiB measured -- whisper and the Piper models -- so a machine that did
+    # not ask for it must not carry it, and an off switch would not help
+    # because the models are IN the package.
+    #
+    # `off` is the same predicate on the homes that get no defaults, so this
+    # case cannot pass by the module simply being absent: `on` proves the
+    # module is imported and inert, and adding voice to defaultPluginSet breaks
+    # it.
+    voiceIsNotADefault =
+      let
+        hasVoice =
+          h:
+          builtins.any (p: (p.pname or "") == "omarchy-voice") h.home.packages
+          || (h.systemd.user.services or { }) ? omarchy-voice;
+      in
+      {
+        on = !(hasVoice defaultHomeOn) && defaultHomeOn.programs ? omarchy-voice;
+        off = hasVoice noDefaultsHome || hasVoice defaultHome || hasVoice fixtureNixarchyOff;
+      };
     # #771: the herdr sessions widget is a default wherever nixarchy is on,
     # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
     herdrIsADefault = {

@@ -175,7 +175,7 @@ into your flake and runs `nh os switch`.
 
 ![Searching all of nixpkgs from the menu](../img/desktop/search-results.jpg)
 
-The app selection carries 66 applications. **Search** offers the rest of NixOS: one
+The app selection carries 67 applications. **Search** offers the rest of NixOS: one
 fuzzy picker over every nixpkgs package, every NixOS option and the app
 selection — 137,526 rows in that screenshot, 3,554 of them matching
 `tailscale` — with each entry's type, default and documentation in the preview.

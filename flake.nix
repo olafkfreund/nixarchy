@@ -734,6 +734,19 @@
 
       packages = eachSystem (
         system:
+        let
+          # Imported once, and every scene it defines is exposed below without
+          # anybody typing the name here. The list that used to live in this
+          # file failed OPEN: three scenes added to tests/demo/default.nix were
+          # not flake attributes, nothing went red, and the only detector was
+          # demo-record failing an hour later with "does not provide attribute"
+          # (#816, AGENTS.md section 4).
+          demoOutputs = import ./tests/demo {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            microvmRunner = self.packages.${system}."microvm-shell-tcg";
+          };
+        in
         {
           default = self.packages.${system}.omarchy;
           inherit (pkgsFor.${system}) omarchy nixarchy-plymouth;
@@ -1036,27 +1049,10 @@
           };
 
           # Why: docs/internals/flake.md#screencasts-of-a-real-session-scene-by-scene-see
-          inherit
-            (import ./tests/demo {
-              inherit inputs;
-              pkgs = pkgsFor.${system};
-              microvmRunner = self.packages.${system}."microvm-shell-tcg";
-            })
+          inherit (demoOutputs)
             demo
             demo-record
             demo-verify
-            demo-scene-menus
-            demo-scene-themes
-            demo-scene-install
-            demo-scene-devenv
-            demo-scene-plugin
-            demo-scene-microvm
-            # Not a GIF but the scene's test DRIVER: boxes needs the real
-            # network in the VM (podman pulls the image, and the first
-            # `distrobox enter` provisions online), which no sandboxed build
-            # has. demo-record runs it outside the sandbox and applies the
-            # same encode and the same verify gate to the frames.
-            demo-scene-boxes
             ;
 
           inherit (pkgsFor.${system}.nixarchy-apps)
@@ -1182,6 +1178,9 @@
             ignoreCollisions = true;
           };
         }
+        # Every scene, by construction. Adding one to tests/demo/default.nix is
+        # now enough; there is no second place to forget.
+        // lib.filterAttrs (name: _: lib.hasPrefix "demo-scene-" name) demoOutputs
         # Why: docs/internals/flake.md#two-runners-per-data-microvm-templates-nix-entry-b
         // lib.concatMapAttrs (
           name: template:

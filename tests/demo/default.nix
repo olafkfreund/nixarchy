@@ -613,6 +613,187 @@ let
       assert "fastfetch" in out, "nothing was installed inside the box"
     '';
 
+    podman = ''
+      # ---- podman ----------------------------------------------------------
+      # The panel is gated on virtualisation.podman, which the base node does
+      # not have -- panelExtras supplies it. Without that the panel is absent
+      # rather than empty, which is why this was never recorded.
+      #
+      # Containers exist BEFORE the panel opens. A panel that fills in while
+      # it is being filmed reads as a loading screen rather than as a tool.
+      user("podman pull docker.io/library/busybox:latest", timeout=600)
+      user("podman run -d --name demo-api busybox sleep 3600", timeout=60)
+      user("podman run -d --name demo-cache busybox sleep 3600", timeout=60)
+      user("podman run -d --name demo-worker busybox sleep 3600", timeout=60)
+      user("podman volume create demo-data", timeout=30)
+
+      names = user("podman ps --format '{{.Names}}'", timeout=30)
+      print(f"  containers: {names.split()}")
+      assert "demo-api" in names, (
+          "podman has no demo container, so the panel would film an empty "
+          "list -- a GIF of nothing, which its own gate must refuse"
+      )
+
+      user("omarchy-shell shell toggle nixarchy.podman", timeout=30)
+      machine.sleep(3)
+      shot("podman-containers", hold=4)
+
+      # Holds are SHORT and every step moves something. The first gated
+      # recording of this scene failed at 3 of 9 transitions with hold=8: the
+      # content was right -- OCR found demo-api and volumes -- and six of the
+      # nine sampled pairs were duplicate frames from inside a hold. The fix
+      # is more of the panel doing its job, never a lower floor (see plugin).
+      for row in ("row2", "row3"):
+          machine.send_key("down")
+          machine.sleep(1)
+          shot(f"podman-{row}", hold=3)
+
+      # Right moves a tab: PanelKeyCatcher's onMoveRequested passes dx to
+      # Model.shiftTab (PodmanView.qml). Read from the plugin, not guessed.
+      for label in ("images", "volumes"):
+          machine.send_key("right")
+          machine.sleep(2)
+          shot(f"podman-{label}", hold=4)
+
+      machine.send_key("left")
+      machine.send_key("left")
+      machine.sleep(2)
+      shot("podman-back", hold=3)
+
+      # A row changing state, which is the thing a container panel is FOR.
+      user("podman stop demo-cache", timeout=60)
+      machine.sleep(3)
+      shot("podman-stopped", hold=5)
+
+      machine.send_key("esc")
+      machine.sleep(1)
+
+      user("podman rm -f demo-api demo-cache demo-worker", timeout=90)
+      user("podman volume rm demo-data", timeout=30)
+    '';
+
+    herdr = ''
+      # ---- herdr -----------------------------------------------------------
+      # herdr-sessions has a demo mode, written by its own author for exactly
+      # this, and finding it ended four rounds of trying to manufacture a real
+      # session. Its header says why it exists: "so a screenshot never carries
+      # real project names or agent titles, and so it looks the same in a
+      # year. Every write is a no-op while it is on, so a click during a shoot
+      # cannot kill a real server."
+      #
+      # That also answers docs/AGENTS.md's standing warning that herdr lists
+      # real sessions and what each agent is doing. It does not have to.
+      #
+      # What the real thing needs is an AGENT, and there is none until pass C.
+      # `herdr --session <name>` was tried three times: it runs, pgrep sees
+      # it, and `herdr api snapshot` answers "no herdr server is running" --
+      # a running process is not a registered session. With plain `herdr`
+      # started first the server answers, and reports agents: [].
+      shot("herdr-empty", hold=4)
+
+      # By path, not by name: the script ships inside the plugin directory
+      # and is never on PATH -- the previous run said "herdr-sessions:
+      # command not found", which is a better failure than a silent one.
+      hs = "$HOME/.config/omarchy/plugins/nixarchy.herdr/bin/herdr-sessions"
+      user(f"{hs} demo on", timeout=30)
+      machine.sleep(2)
+
+      listed = user(f"{hs} 2>&1 || true", timeout=30)
+      print(f"  herdr-sessions says: {listed.strip()[:400]}")
+      assert "billing-api" in listed, (
+          "herdr's demo mode is not listing its invented sessions, so the "
+          "widget would show an idle bar and this scene would be a picture "
+          "of nothing"
+      )
+
+      user("omarchy-shell -q nixarchy.herdr refresh", timeout=30)
+      machine.sleep(2)
+      shot("herdr-widget", hold=4)
+
+      # Open, close, open. The list is static once it is up -- the first
+      # recording scored 1 of 10 because two `down` presses changed nothing
+      # a 2% RMSE floor can see, the menu being mouse-driven. A whole menu
+      # appearing and vanishing is the largest repaint available here, and
+      # it is also what using it looks like.
+      user("omarchy-shell shell toggle nixarchy.herdr", timeout=30)
+      machine.sleep(3)
+      shot("herdr-menu", hold=5)
+
+      user("omarchy-shell shell toggle nixarchy.herdr", timeout=30)
+      machine.sleep(2)
+      shot("herdr-closed", hold=4)
+
+      user("omarchy-shell shell toggle nixarchy.herdr", timeout=30)
+      machine.sleep(3)
+      shot("herdr-menu-again", hold=5)
+
+      user("omarchy-shell shell toggle nixarchy.herdr", timeout=30)
+      machine.sleep(1)
+      user(f"{hs} demo off", timeout=30)
+    '';
+
+    pkg = ''
+      # ---- the package manager panel ---------------------------------------
+      # The keys are the panel's own, from Menu.qml: j/k move the cursor, h/l
+      # change tab, `/` focuses the search and Escape hands the keyboard back
+      # to the list. That last pair matters -- the panel CLEARS the search
+      # field's focus when it opens, with a comment warning that a stray `l`
+      # would be typed into the query instead of changing tab.
+      #
+      # The steps are chosen for how much of the screen they REPAINT, not for
+      # how many there are. An earlier version moved the cursor three times
+      # and scored 2 of 8: a selected row is a few hundred pixels and does not
+      # clear a 2% RMSE floor. A tab switch and a filter redraw the whole
+      # list, and those are what this scene is made of now.
+      user("omarchy-shell shell toggle nixarchy.pkg", timeout=30)
+      machine.sleep(3)
+      shot("pkg-apps", hold=4)
+
+      for label in ("services", "selection", "options"):
+          machine.send_key("l")
+          machine.sleep(2)
+          shot(f"pkg-{label}", hold=4)
+
+      # Back to Apps, three tabs left.
+      for _ in range(3):
+          machine.send_key("h")
+          machine.sleep(1)
+      machine.sleep(1)
+      shot("pkg-back", hold=3)
+
+      # No filter. Four rounds went into typing one into this panel and the
+      # last frame explained why that was the wrong idea twice over: the
+      # query survived but the Apps tab said `nothing matches "alacritty"`,
+      # because this node's app list is not the one a real install has, and
+      # the space still reached the FIELD rather than the list.
+      #
+      # The claim being filmed does not need a filter. It is that a pick
+      # becomes a line in a file you own, and that is the footer changing
+      # from "nothing queued" to a count. So: land on a row, tick it.
+      # TWO rows down, to bitwarden. One was not enough and the frame said
+      # why: the cursor landed on `_1password.settings`, a settings row drawn
+      # with a different glyph, and the footer underneath it read "configures
+      # _1password -- edit it in ~/.config/nixarchy/apps.nix". Space toggles
+      # where a row has two states, and that row has none.
+      machine.send_key("j")
+      machine.send_key("j")
+      machine.sleep(1)
+      machine.send_key("spc")
+      machine.sleep(2)
+      shot("pkg-queued", hold=5)
+
+      # The key sheet: a full repaint, and the thing a reader wants next
+      # anyway. Diversity is earned with panels that change, not with steps.
+      machine.send_key("question")
+      machine.sleep(2)
+      shot("pkg-keys", hold=4)
+      machine.send_key("esc")
+      machine.sleep(1)
+
+      machine.send_key("esc")
+      machine.sleep(1)
+    '';
+
     plugin = ''
       # ---- plugins --------------------------------------------------------
       # The one deliberately imperative corner of Omarchy: a plugin is cloned
@@ -689,6 +870,29 @@ let
     '';
   };
 
+  # The extra node the panel scenes share (#816 pass A). Podman and Boxes are
+  # the two services whose panels are gated on them, and the base node has
+  # neither -- so nixarchy.podman and nixarchy.distrobox are invisible there,
+  # which is why none of them had ever been recorded.
+  #
+  # The networking is NOT reinvented: it is the boxes scene's, which was paid
+  # for once already. SLIRP advertises IPv6 it cannot route, and a registry
+  # that resolves AAAA first then hangs is how one recording attempt spent
+  # 900s in silence. The disk size is from the same lesson -- 1GB died inside
+  # podman staging image blobs in /var/tmp, with the pull itself having worked.
+  panelExtras = {
+    virtualisation = {
+      podman.enable = true;
+      diskSize = 16 * 1024;
+    };
+    programs.nixarchy.services.boxes.enable = true;
+    networking = {
+      interfaces.eth0.useDHCP = lib.mkForce true;
+      nameservers = [ "10.0.2.3" ];
+      enableIPv6 = false;
+    };
+  };
+
   # ---- scenes ---------------------------------------------------------------
   # What each scene records, what its GIF must show to be allowed to exist,
   # and anything its machine needs beyond the base node.
@@ -747,6 +951,58 @@ let
       ];
       minDistinct = 2;
     };
+    # #816 pass A. All three share panelExtras, and all three are online:
+    # podman pulls an image, and a scene that pre-placed one would be filming
+    # a fixture rather than the tool.
+    podman = {
+      script = segments.podman;
+      expects = [
+        "demo-api"
+        "volumes"
+      ];
+      minDistinct = 4;
+      online = true;
+      extraNode = panelExtras;
+    };
+
+    herdr = {
+      script = segments.herdr;
+      # The session name, because the widget's own text is small and tesseract
+      # reads a bar glyph poorly -- the same reason microvm allows de[mn]o.
+      # What the menu actually draws, read off a captured frame rather than
+      # grepped out of the script: workspace labels and agent states, not the
+      # session names further down in herdr-sessions.
+      expects = [
+        "needs you"
+        "Herdr"
+      ];
+      minDistinct = 3;
+      online = true;
+      extraNode = panelExtras;
+    };
+
+    pkg = {
+      script = segments.pkg;
+      # The toast, not the footer. The footer does say "1 change queued" and
+      # tesseract reads it in the 1280px capture -- but verify-frames reads
+      # the ENCODED GIF, 900px wide with a reduced palette, and there the
+      # same words come out "1 change queved". The toast is large type and
+      # survives. Same family as microvm's dev@de[mn]o allowance.
+      # "enabled bitwarden", not the toast and not the footer's count. The
+      # toast is transient -- it fades, and the verifier samples every third
+      # frame, so a true thing can simply not be in the sample. The footer's
+      # own count is permanent but small, and at the GIF's 900px it OCRs as
+      # "1 change queved". This line is permanent AND large enough: measured
+      # on a downscaled frame, it reads back exactly.
+      expects = [
+        "Services"
+        "enabled bitwarden"
+      ];
+      minDistinct = 4;
+      online = true;
+      extraNode = panelExtras;
+    };
+
     boxes = {
       script = segments.boxes;
       # All three can only appear if the guest userland actually ran --

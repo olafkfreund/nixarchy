@@ -19,6 +19,7 @@ failure history for its own area, and they are where the long reasoning lives:
 | `modules/AGENTS.md` | the option surface, Mode A, and what each module owns |
 | `pkgs/AGENTS.md` | the vendored tree, the patch rules, and `runtimeInputs` |
 | `tests/AGENTS.md` | what each check covers, and what only a cheap one can reach |
+| `docs/AGENTS.md` | the site, the manual's three lists, and the house style for pictures |
 | `docs/internals/flake.md` | the flake's own reasoning — inputs, the overlay, the checks |
 
 `CLAUDE.md` is a symlink to this file, because Claude Code reads `CLAUDE.md`
@@ -880,3 +881,38 @@ repository that **no check in this repo can see**, so nothing load-bearing
 lives there. It carries orientation and reasoning — the parts that do not
 drift on their own. If you find yourself wanting to put a rule in the wiki,
 that is the signal it belongs in a check instead.
+
+## 13. Reading what a tool is actually telling you
+
+Four of the hours lost on 2026-09-19 went to answers that looked like one
+thing and meant another. None of them was a bug in this repo.
+
+- **A 522 from the cache means "ask somewhere else", not "the entry is
+  broken".** `nixarchy.cachix.org/<hash>.narinfo` hung for 39 s and returned
+  HTTP 522 for a path that was simply **not there**: the authenticated API
+  (`app.cachix.org/api/v1/cache/nixarchy/<hash>.narinfo`) answered 404 in
+  0.2 s. nix treats the 522 as fatal after five retries, so `system` and
+  `omarchy` failed on every PR whose closure contained that path, and it read
+  as a broken cache entry. The public URL cannot tell missing from broken; the
+  API can. A push does not necessarily clear it either — the entry was served
+  by the API immediately and still 522'd publicly for a while. (#767, #788)
+- **`cancelled` on an install job has a third cause.** §6 names timeout and
+  eviction. The eviction case is the common one when several PRs are open at
+  once: the annotation says *"Canceling since a higher priority waiting request
+  for nixarchy-install-vm-N exists"*. Two operational rules follow. A draft PR,
+  or one blocked on another repo, should not hold an install slot — cancel its
+  run. And after a merge, cancel the runs on superseded commits, so the only
+  install in flight is the newest `main`, which contains everything anyway.
+- **A glob over artifact filenames matches the date, not just the issue.**
+  `spec/*-18-*.md` matches `2026-09-18-13-refusals-in-log.md` as happily as
+  `2026-09-19-18-nixarchy-packaging.md`, and `head -1` picks the older one. An
+  approval script built that way flipped `status:` in the wrong file, reported
+  success, and left the real spec a draft. Name artifact files in full when
+  approving them, and check afterwards that the commit touched the file you
+  meant: `git log -1 --name-only`.
+- **An eval error kills the whole batch, so a green sibling proves nothing.**
+  `nix build .#checks.x86_64-linux.{a,b,c}` aborts on the first evaluation
+  failure, and the others report *"has no built result here; no proof
+  pushed"*. Those checks did not pass; they never ran. When a PR is merged on
+  the strength of "only one check failed", say which checks were never
+  reached, and let `main`'s own run be their first.

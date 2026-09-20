@@ -17,17 +17,17 @@ flake, with its menus rewired to Nix instead of pacman.
 
 ## See it in action
 
-![The desktop, and the menu everything is driven from](img/desktop/menu.jpg)
+![The desktop, and the menu everything is driven from](img/desktop/menu.webp)
 
 <div class="gallery" markdown="1">
 
 ![Search every package and NixOS option from one picker](img/desktop/search-results.jpg)
 
-![The package manager panel: curated apps and services, and what each turns on](img/plugins/pkg-apps.jpg)
+![The package manager panel: curated apps and services, and what each turns on](img/plugins/pkg-panel.webp)
 
-![The Ask menu, routed to the skill that answers each question](img/desktop/menu-ask.jpg)
+![The Ask menu, routed to the skill that answers each question](img/desktop/menu-ask.webp)
 
-![Panels for Podman, MicroVMs and Distrobox, in the desktop's own look](img/plugins/microvm-panel.jpg)
+![The MicroVMs panel, in the desktop's own look](img/plugins/microvm-panel.webp)
 
 </div>
 

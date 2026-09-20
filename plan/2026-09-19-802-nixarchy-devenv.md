@@ -166,6 +166,18 @@ Copied from the spec so this file stands alone.
   `checks.menu-verbs`' fixture turns the devenv service on, for the same
   reason it already turns Boxes on, and `checks.options` asserts the row
   exists with devenv on and not without it (`devenvRow`).
+- **Step 11: `nix flake check` is not how this repo verifies** (AGENTS.md 6):
+  checks are built one at a time by name, and a bare `nix flake check` stops
+  on an unfree package in the apps catalogue, which is unrelated to this
+  change. Run instead: `nix fmt -- --ci`, statix, deadnix, and by name
+  `options`, `menu-verbs`, `plugin`, `doc-options`, `skill-parity`,
+  `reference-toplevel`, `vm-toplevel`, the `omarchy` package, and
+  `nix run .#devenv-presets`. aarch64 is covered by evaluating the runner and
+  the plugin for that system.
+- **Step 8: the dispatch stub is written with `printf`, not a heredoc.** A
+  heredoc body starts at column zero, which lowers the common indentation of
+  the surrounding Nix string and made `nix fmt` reindent 2,600 lines of
+  `tests/options.nix`.
 
 ## Tests
 

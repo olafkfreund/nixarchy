@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 817
 spec: spec/2026-09-20-817-vm-big-is-the-dev-vm.md
 ---

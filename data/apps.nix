@@ -358,6 +358,32 @@
     # user who has not set allowUnfree.
     unfree = true;
   };
+  # #774. Not a default and not in defaultPluginSet: the closure is 6.7 GiB,
+  # measured (`nix path-info -Sh` on omarchy-voice 0.3.0), which is where
+  # whisper and the Piper models land. The issue estimated "about 1 GiB" and
+  # that was out by a factor of six, which is the whole argument for this being
+  # a row somebody picks rather than something every machine carries.
+  #
+  # `option` is the PREFIX, as everywhere in this file -- the writer appends
+  # .enable. programs, not services: upstream's is a Home Manager module
+  # (nix/hm-module.nix:30), checked rather than assumed, because a row naming
+  # an option that does not exist writes configuration that will not build.
+  omarchy-voice = {
+    menuId = "install.ai.voice";
+    label = "Voice";
+    category = "AI";
+    option = [
+      "programs"
+      "omarchy-voice"
+    ];
+    note = ''
+      Speech into desktop actions. 6.7 GiB installed, most of it whisper and
+      the Piper voice models. Desktop control, the wake word and notification
+      logging each start off; turn on what you want in
+      `programs.omarchy-voice`.
+    '';
+  };
+
   codex = {
     label = "Codex";
     category = "AI";

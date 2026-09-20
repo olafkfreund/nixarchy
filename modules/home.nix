@@ -476,7 +476,16 @@ in
   # It is also why no row was added to data/services.nix. That catalogue
   # generates ~/.config/nixarchy/services.nix, which is a NixOS file; nixi is
   # a home-manager module and there is no NixOS option for a row to write.
-  imports = [ inputs.nixi.homeModules.default ];
+  imports = [
+    inputs.nixi.homeModules.default
+    # Voice (#774). Imported on every machine, enabled on none: its options
+    # default off upstream, so this costs an evaluation and nothing else until
+    # somebody picks Voice out of Install > Search and their own flake sets
+    # programs.omarchy-voice.enable. It is deliberately NOT in
+    # defaultPluginSet -- about a gigabyte with whisper and the Piper models,
+    # which are in the package, so an off switch would not shrink anything.
+    inputs.nixarchy-voice.homeModules.default
+  ];
 
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "the Omarchy user session";

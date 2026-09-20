@@ -91,12 +91,25 @@
   #
   # VM-only settings: password auth with a known password, on a port forwarded
   # to localhost. Never copy this into a real host.
-  services.openssh = {
-    enable = true;
-    settings = {
-      PasswordAuthentication = true;
-      PermitRootLogin = "yes";
+  services = {
+    openssh = {
+      enable = true;
+      settings = {
+        PasswordAuthentication = true;
+        PermitRootLogin = "yes";
+      };
     };
+
+    # at-spi2-core is already in the guest store as a transitive dependency,
+    # but without this there is no D-Bus service file, so org.a11y.Bus is "not
+    # activatable" rather than merely disabled -- nothing can start it, and no
+    # application in the guest can expose an accessibility tree (#823). This is
+    # the option that installs the service file, which is the whole difference.
+    #
+    # Inside this block rather than as its own `services.` assignment: statix's
+    # "repeated keys in attribute sets" counts them, and a third one turns the
+    # lint job red.
+    gnome.at-spi2-core.enable = true;
   };
 
   virtualisation = {
@@ -271,13 +284,6 @@
   };
 
   networking.firewall.enable = lib.mkForce false;
-
-  # at-spi2-core is already in the guest store as a transitive dependency, but
-  # without this there is no D-Bus service file, so org.a11y.Bus is "not
-  # activatable" rather than merely disabled -- nothing can start it, and no
-  # application in the guest can expose an accessibility tree (#823). This is
-  # the option that installs the service file, which is the whole difference.
-  services.gnome.at-spi2-core.enable = true;
 
   environment.systemPackages = [ pkgs.kitty ];
 }

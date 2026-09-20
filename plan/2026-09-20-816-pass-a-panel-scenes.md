@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 816
 spec: spec/2026-09-20-816-walkthrough-scenes.md
 ---

@@ -1047,6 +1047,35 @@ It writes nixarchy-vm-big.qcow2 into the working directory and REUSES
 it, which is the point here and is exactly what .#vm avoids. Delete
 that file to start clean.
 
+**This is the VM you keep** (#817). Not only the model VM: it is the
+one to develop and test features in, because it is the only one whose
+state survives. So it also turns on podman and boxes, which the smoke
+test does not -- nixarchy.podman and nixarchy.distrobox are gated on
+those services, and with them off the two panels most worth trying by
+hand are invisible. It now resolves seven default plugins where .#vm
+resolves five.
+
+Keep the qcow2 under /mnt/data/vmtest/, never /tmp: that is a 32GB
+tmpfs and a VM disk there competes with the machine's RAM and loses
+quietly.
+
+**Rebuild it monthly:**
+
+  rm nixarchy-vm-big.qcow2 && nix run .#vm-big
+
+Monthly rather than "when it misbehaves", because the failure a stale
+disk causes is one you do not notice. That is not hypothetical, and it
+is why the other VM has no disk at all: Omarchy persists every
+notification under ~/.local/state/omarchy/notifications/history/ and
+its shell replays that directory on start, so failures already fixed
+in the package kept reappearing on screen from an old disk. .#vm's
+diskImage = null is load-bearing (vm/configuration.nix), and the
+obligation it hands over is stated there too -- set a path and you own
+clearing it. This is that obligation, written down and given a date.
+
+Boxes pulls images, so a vm-big run offline has a Distrobox panel that
+lists templates and cannot fetch one. Honest behaviour, not a fault.
+
 <a id="one-module-that-imports-the-machines-own-two-rathe"></a>
 ### One module that imports the machine's own two, rather than two
 

@@ -162,6 +162,12 @@ image is unaffected and is what people install from.
 - `data/menu-exceptions.nix` — the rows this port deliberately does not map
 - `AGENTS.md` — the rules the checks are written against
 
+And if you want to try something by hand rather than read about it:
+`nix run .#vm` is a throwaway desktop whose state deliberately does not
+survive, while **`nix run .#vm-big` is the one to keep** — it has a real disk,
+every default panel turned on, and a local model. Both are described in
+[the flake's own notes](../internals/flake.md#the-same-vm-with-room-to-run-a-model).
+
 The commit messages are part of the documentation. When something here was wrong,
 the commit that fixed it says what was wrong, how it was found, and what would
 have caught it sooner.

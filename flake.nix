@@ -2012,6 +2012,14 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The profile a user with their own interpreter actually gets, built
+          # rather than inspected: #809's collision only exists once something
+          # calls buildEnv. See tests/home-profile.nix.
+          home-profile = import ./tests/home-profile.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # A previewed config's desktop actually renders: the vmVariant
           # gains the software-GL fallbacks and sizing, only when nixarchy
           # is on, all of it overridable. See tests/preview-variant.nix

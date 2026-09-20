@@ -823,7 +823,14 @@ in
         cfg.package
       ]
       ++ lib.optionals (!(osConfig.programs.nixarchy.enable or false)) cfg.package.passthru.runtimeDeps
-      ++ lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults);
+      # lowPrio, because these arrive without being asked for: the default
+      # plugins are on from the first login, and their runtime tools are
+      # ordinary things a user may already keep -- gh, glab, jq, python3. A
+      # user's own `python3.withPackages` beside a panel's bare python3 is two
+      # interpreters in one profile, which buildEnv refuses over bin/idle3;
+      # home-manager-path fails and the whole closure with it, naming idle3 and
+      # nothing of ours (#809). Whatever the user installed themselves wins.
+      ++ map lib.lowPrio (lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults));
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 

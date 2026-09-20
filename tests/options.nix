@@ -1757,8 +1757,7 @@ let
   homeOfDevenv = cfg: cfg.home-manager.users.${devenvPanelUser};
   # The CLI `nixarchy dev` dispatches to, on the session PATH exactly where
   # the panel is.
-  hasDevenvCli =
-    h: builtins.any (p: (p.pname or p.name or "") == "nixarchy-devenv") h.home.packages;
+  hasDevenvCli = h: builtins.any (p: (p.pname or p.name or "") == "nixarchy-devenv") h.home.packages;
   # #766 PR C: the two machines podman adds, bound once each (#747 -- every
   # machine here is a full NixOS eval inside the 11.5 GB check). Podman on by
   # itself, and Boxes on with podman forced back off.
@@ -4513,10 +4512,10 @@ pkgs.runCommand "nixarchy-options"
         }
 
         mkdir -p devstub
-        cat >devstub/nixarchy-devenv <<'STUB'
-#!/bin/sh
-echo "stub got: $*"
-STUB
+        # printf rather than a heredoc: a heredoc body has to start at column
+        # zero, which lowers this whole string's common indentation and makes
+        # the formatter reindent the file around it.
+        printf '%s\n' '#!/bin/sh' 'echo "stub got: $*"' >devstub/nixarchy-devenv
         chmod +x devstub/nixarchy-devenv
         if ! r=$(PATH="$PWD/devstub:$vm/sw/bin:$PATH" HOME=$rmhome "$vm/sw/bin/nixarchy" dev init ml 2>&1); then
           echo "nixarchy dev init failed with the CLI on PATH:" >&2

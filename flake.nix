@@ -1339,6 +1339,15 @@
                       ];
                     };
 
+                    # This is the VM a person KEEPS (#817), so it matches a real
+                    # machine rather than the smoke test. Both panels that follow
+                    # a service are gated on that service, and with neither
+                    # enabled nixarchy.podman and nixarchy.distrobox are invisible
+                    # here -- the two panels most worth trying by hand. The cost
+                    # is the image pulls, paid by whoever runs this VM.
+                    virtualisation.podman.enable = true;
+                    programs.nixarchy.services.boxes.enable = true;
+
                     # Sized for the machine rather than inherited from the smoke
                     # test: with 32GB the 8b tier is comfortable, and 8b is the
                     # smallest size shown to follow the skills rather than answer

@@ -66,14 +66,14 @@ the VMs. Nothing changes for an installed machine, and **`.#vm` is not touched**
 - Enlarging `vm-big` must not make it unrunnable on a smaller machine than p620,
   or it stops being a development tool for anyone else.
 
-## Open questions
+## Decided (owner, 2026-09-20)
 
-1. **Does `vm-big` keep its name?** It is now two things — the model VM and the
-   development VM — and the name only describes the first. A rename touches the
-   flake's public attribute names and anything that calls it.
-2. **What is the reset policy?** "Delete when it misbehaves" is honest but is
-   what the `.#vm` comment warns about; a documented "rebuild monthly, or when a
-   panel behaves oddly" is a rule somebody might follow.
-3. **Should podman and boxes be on by default in it, or behind a flag?** On by
-   default makes it match a real machine, and costs every user of `vm-big` the
-   image pulls.
+1. **`vm-big` keeps its name.** It is a public flake attribute and a rename
+   costs every caller and every doc reference for a word. The docs carry the
+   second meaning instead.
+2. **Podman and boxes are on by default in it**, not behind a flag: the point of
+   this VM is to match a real machine, where both are on. The cost is the image
+   pulls, paid by anyone using `vm-big`.
+3. **Rebuild monthly.** A stated cadence rather than "delete when it misbehaves"
+   — which is exactly the stale-disk failure `.#vm`'s comment warns about, just
+   with a longer fuse.

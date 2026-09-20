@@ -215,3 +215,56 @@ pre code { background: none; padding: 0; font-size: 0.88rem; }
   .sidebar { position: static; }
   .toc { max-height: none; }
 }
+
+/* ---------- home: hero, gallery, wide media (#814) ---------- */
+
+/* The front page's own width. Prose stays at the reading measure set above;
+   only the media container widens, which is how omarchy.org reads -- a narrow
+   column of text with screenshots given room to be legible. A 16:10 desktop
+   still at 46rem is too small to make out a panel's rows. */
+.home .content--centred { max-width: 64rem; }
+.home .content p,
+.home .content li,
+.home .content blockquote { max-width: 46rem; }
+
+/* The first screen: wordmark, one sentence, two things to do. The masthead
+   above already carries the wordmark, so this only has to not waste the space
+   underneath it -- the old page spent 370 words here before showing anything. */
+.home .masthead { padding: 2rem 1.5rem 1.25rem; }
+
+.cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.8rem 0 2.6rem; }
+
+.cta-button {
+  display: inline-block;
+  padding: 0.55rem 1.2rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--fg);
+  background: var(--code-bg);
+  font-size: 0.95rem;
+}
+.cta-button:hover { border-color: var(--accent); text-decoration: none; }
+.cta-button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--code-bg);
+  font-weight: 700;
+}
+.cta-button--primary:hover { filter: brightness(1.08); }
+
+/* Two up on a desktop, stacked on a phone. Screenshots here are 16:10 whole
+   desktops (docs/AGENTS.md), so a pair at half width still reads. */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.2rem;
+}
+.gallery p { margin: 0; }
+
+.content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+}

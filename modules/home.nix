@@ -681,16 +681,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # The other half of #774's bridge: the machine's switch, read the way every
-    # gated default reads one. Voice's own settings are left entirely alone --
-    # desktop control, the wake word and the notification log all start off
-    # upstream, and restating them here would be a second place to change and
-    # would hide a regression rather than catch it.
-    #
-    # Inside `config`, not beside `imports`: this module declares options, so a
-    # top-level `programs` is "an unsupported attribute" and the error names
-    # the module by an anonymous id rather than by path.
-    programs.omarchy-voice.enable = lib.mkDefault (osConfig.programs.nixarchy.voice.enable or false);
 
     # THE ONE LINE. The guide ships on, and this is where that is decided:
     # `false` here takes it off every nixarchy desktop, and mkDefault means a
@@ -1733,29 +1723,41 @@ in
     # itself, installed by modules/services/boxes.nix). `machines` came over
     # from the NixOS side above; everything else here is what turns it into
     # containers Home Manager's own module actually writes.
-    programs.distrobox = lib.mkIf boxes.enable {
-      # Scalars, so mkDefault throughout -- see the header of
-      # modules/services/default.nix. This is Home Manager's option, not
-      # ours, but the same Mode A reasoning holds: someone who already set
-      # programs.distrobox by hand in their own home-manager config keeps
-      # their definition, and this yields to it. `containers` is the one
-      # attrset here and stays plain assignment for the same reason -- see
-      # that file's header for why mkDefault on a merging type is a bug
-      # rather than a courtesy.
-      enable = lib.mkDefault true;
-      containers = boxes.machines;
+    # One `programs` block, not three keys. statix refuses a third top-level
+    # programs.* assignment as a repeated key -- main has two and is clean --
+    # so voice's switch nests here beside distrobox's.
+    #
+    # The bridge itself (#774): the machine's switch, read the way every gated
+    # default reads one. Voice's own settings are left alone; desktop control,
+    # the wake word and the notification log all start off upstream, and
+    # restating them would be a second place to change.
+    programs = {
+      omarchy-voice.enable = lib.mkDefault (osConfig.programs.nixarchy.voice.enable or false);
 
-      # Never `pkgs.distrobox` -- that would go through the overlay/plain
-      # nixpkgs pkgs this file already has and add a SECOND profile entry for
-      # the same package modules/services/boxes.nix already put in
-      # environment.systemPackages. `null` here means Home Manager's module
-      # installs nothing: one copy of distrobox, reached the way its own
-      # comment requires -- by bare name, through
-      # /run/current-system/sw/bin, never a store path.
-      package = lib.mkDefault null;
+      distrobox = lib.mkIf boxes.enable {
+        # Scalars, so mkDefault throughout -- see the header of
+        # modules/services/default.nix. This is Home Manager's option, not
+        # ours, but the same Mode A reasoning holds: someone who already set
+        # programs.distrobox by hand in their own home-manager config keeps
+        # their definition, and this yields to it. `containers` is the one
+        # attrset here and stays plain assignment for the same reason -- see
+        # that file's header for why mkDefault on a merging type is a bug
+        # rather than a courtesy.
+        enable = lib.mkDefault true;
+        containers = boxes.machines;
 
-      # Why: modules/AGENTS.md#left-at-home-managers-own-default-everywhere-else-
-      enableSystemdUnit = lib.mkDefault false;
+        # Never `pkgs.distrobox` -- that would go through the overlay/plain
+        # nixpkgs pkgs this file already has and add a SECOND profile entry for
+        # the same package modules/services/boxes.nix already put in
+        # environment.systemPackages. `null` here means Home Manager's module
+        # installs nothing: one copy of distrobox, reached the way its own
+        # comment requires -- by bare name, through
+        # /run/current-system/sw/bin, never a store path.
+        package = lib.mkDefault null;
+
+        # Why: modules/AGENTS.md#left-at-home-managers-own-default-everywhere-else-
+        enableSystemdUnit = lib.mkDefault false;
+      };
     };
   };
 }

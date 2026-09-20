@@ -277,7 +277,8 @@ pkgs.testers.runNixOSTest {
   nodes = { };
 
   testScript = builtins.readFile ./vm-cleanup.py + ''
-    import os
+    # os, sys and traceback come from vm-cleanup.py, which is prepended to
+    # this script -- importing them again is F811 and the driver lints (#812).
     import shutil
     import subprocess
     import re

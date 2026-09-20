@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 821
 spec: spec/2026-09-20-821-graphical-microvm-template.md
 ---
@@ -34,6 +34,14 @@ Copied from the spec so this file stands alone.
   `-nographic`, and Hyprland asks for a headless backend first and
   `MANDATORY` (`Compositor.cpp:311-313`) while `CBackend::create` returns null
   only on an empty list — so "no GPU" is not on its own a reason to fail.
+
+## How this was approved
+
+On "continue and close them", rather than on an explicit approval of this
+file. Recorded rather than left to look like a clean gate, the same way
+nixarchy-voice's #28 plan records being approved after its implementation
+merged. If the instruction was not meant to carry this, step 1 is the place to
+stop: it is a throwaway probe and nothing after it has been written.
 
 ## Steps
 

@@ -254,6 +254,22 @@ in
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "Nixarchy, the Omarchy desktop vendored for NixOS";
 
+    # #774. A NixOS switch in front of a Home Manager module, which is the
+    # bridge services.boxes already uses: data/apps.nix and Install > Search
+    # write NixOS options, and upstream's voice module defines
+    # programs.omarchy-voice under Home Manager. Without something at this
+    # level the catalogue row writes an option that does not exist, which is
+    # exactly what the first attempt did.
+    #
+    # Off by default and deliberately not a default plugin: the closure is
+    # 6.7 GiB measured, most of it whisper and the Piper models, and the models
+    # are IN the package so an off switch would not shrink the machine.
+    voice.enable = lib.mkEnableOption ''
+      nixarchy-voice: speech into desktop actions. 6.7 GiB installed. Desktop
+      control, the wake word and notification logging each stay off until you
+      turn them on in `programs.omarchy-voice`
+    '';
+
     # Why: modules/AGENTS.md#nixarchy-wrote-this-machine-as-a-property-of-the-c
     installerManaged = lib.mkOption {
       type = lib.types.bool;

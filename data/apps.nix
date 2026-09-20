@@ -369,12 +369,17 @@
   # (nix/hm-module.nix:30), checked rather than assumed, because a row naming
   # an option that does not exist writes configuration that will not build.
   omarchy-voice = {
-    menuId = "install.ai.voice";
+    # No menuId, like codex and opencode above: a menuId must name a row that
+    # exists in upstream's menu, and there is no install.ai submenu -- the
+    # build says so ("upstream menu has no rows: install.ai.voice") rather than
+    # producing a menu with a dead entry. Voice is found through
+    # Install > Search, which is where the front page points anyway.
     label = "Voice";
     category = "AI";
     option = [
       "programs"
-      "omarchy-voice"
+      "nixarchy"
+      "voice"
     ];
     note = ''
       Speech into desktop actions. 6.7 GiB installed, most of it whisper and

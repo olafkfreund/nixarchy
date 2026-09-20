@@ -681,6 +681,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # The other half of #774's bridge: the machine's switch, read the way every
+    # gated default reads one. Voice's own settings are left entirely alone --
+    # desktop control, the wake word and the notification log all start off
+    # upstream, and restating them here would be a second place to change and
+    # would hide a regression rather than catch it.
+    #
+    # Inside `config`, not beside `imports`: this module declares options, so a
+    # top-level `programs` is "an unsupported attribute" and the error names
+    # the module by an anonymous id rather than by path.
+    programs.omarchy-voice.enable = lib.mkDefault (osConfig.programs.nixarchy.voice.enable or false);
+
     # THE ONE LINE. The guide ships on, and this is where that is decided:
     # `false` here takes it off every nixarchy desktop, and mkDefault means a
     # user's own `services.nixi.enable = false` outranks us without needing

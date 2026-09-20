@@ -74,7 +74,7 @@ a key, keyboard-first, in the desktop's own look:
 
 Seven are on by default. ai-mirror is on its way, and Voice will be opt-in.
 
-[![The Podman panel: moving through demo containers, then filtering them](img/plugins/podman.gif)](img/plugins/podman.gif)
+[![The Podman panel: containers, images and volumes, then a container stopping](img/features/podman.gif)](img/features/podman.gif)
 
 See **[nixarchy's plugins](manual/plugins)** for what each one does and solves.
 

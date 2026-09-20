@@ -49,7 +49,7 @@ package, and set NixOS options through a form. Everything is written to the
 same files nixarchy's own commands write, then applied with one key. The
 rebuild asks for your password through the Omarchy dialog.
 
-![The package manager: switching tabs, then filtering the Apps tab to one app and the line it writes](../img/plugins/pkg.gif)
+![The package manager: across its tabs, then one app ticked and the line that writes](../img/features/pkg.gif)
 
 ![The package manager's Apps tab: curated apps and services, with what each one turns on](../img/plugins/pkg-apps.jpg)
 
@@ -75,7 +75,7 @@ attention.
 where podman is off. nixarchy's container engine is still rootless Docker, so
 `docker` keeps meaning Docker.
 
-![The Podman panel: moving through the demo containers, then filtering to the shop ones](../img/plugins/podman.gif)
+![The Podman panel: containers, images and volumes, then a container stopping](../img/features/podman.gif)
 
 ![The Podman panel's Containers tab: three of four running, one needing attention](../img/plugins/podman-containers.jpg)
 
@@ -107,7 +107,9 @@ the popup. `herdr` itself comes with it from nixpkgs, so update it through
 nixpkgs (`herdr update` cannot write to the Nix store), or put your own build
 ahead of it on `PATH`.
 
-![The herdr popup: three sessions, one agent needing you, two done](../img/plugins/herdr-sessions.jpg)
+![The herdr popup: workspaces with one agent needing you and two done](../img/features/herdr.gif)
+
+![The herdr popup, still: three sessions, one agent needing you, two done](../img/plugins/herdr-sessions.jpg)
 
 ## MicroVMs
 

@@ -269,3 +269,17 @@ pre code { background: none; padding: 0; font-size: 0.88rem; }
   border-radius: 6px;
   border: 1px solid var(--rule);
 }
+
+/* The three places a reader goes next, under the wordmark on every page:
+   the manual, the source, and what is open. Centred like the tagline above
+   it, and wrapping rather than scrolling on a phone. */
+.mast-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1.6rem;
+  margin-top: 0.9rem;
+  font-size: 0.92rem;
+}
+.mast-nav a { color: var(--dim); }
+.mast-nav a:hover { color: var(--link); text-decoration: none; }

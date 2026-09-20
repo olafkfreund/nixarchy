@@ -10,6 +10,12 @@ Branch `feat/821-graphical-microvm-template`, already carrying the intent and
 the spec. One commit per step, each subject a full sentence (AGENTS.md §8). A
 deviation updates this file in the same commit as the code.
 
+This is the second version of this plan. The first was written against a spec
+whose central claim — that Hyprland needs no GPU — its own step 1 disproved.
+The spec has been rewritten on evidence and re-approved; this file is rewritten
+to match. What the disproved run *taught* is kept below, because each item cost
+an iteration and none of it depends on which backend won.
+
 ## Approved decisions
 
 Copied from the spec so this file stands alone.
@@ -18,6 +24,22 @@ Copied from the spec so this file stands alone.
   `wtype`, `wl-clipboard`, `foot`. No omarchy shell — no caller needs it today
   and it would be the first template importing nixarchy's own modules, against
   the bar in `data/microvm-templates.nix`.
+- **virtio-gpu, not headless.** Settled by reading the sources the guest
+  builds, not by preference: GBM is aquamarine's only allocator
+  (`Backend.cpp:163-198`, with an upstream `TODO` on it), it is built only from
+  an implementation exposing a DRM fd, and `CHeadlessBackend::drmFD()` returns
+  `-1` unconditionally (`Headless.cpp:133-135`). No DRM device means no
+  allocator, `start()` returns false, and Hyprland dies. The guest needs a real
+  DRM node.
+- **Two lines give it.** `microvm.graphics.enable = true` and
+  `microvm.graphics.backend = "headless"`. The second is not optional: the enum
+  defaults to `gtk` on Linux, which opens a window on the host and defeats a
+  background VM. `headless` emits `-display egl-headless -device
+  virtio-gpu-gl` (`lib/runners/qemu.nix:245-256`), which upstream documents as
+  the value that exists so a VM can run under a systemd job.
+- **`microvm.graphics.vulkan` stays `null`.** No caller needs GPU compute in
+  the guest and venus pulls `hostmem` and a `blob=true` device into a template
+  whose first job is to come up at all.
 - **No windows on boot.** A compositor and the tools; the caller opens its own
   window set through `/mnt/host`. A fixed *monitor size* is not a window set —
   a compositor needs monitor configuration, and resolution is the variable that
@@ -30,75 +52,76 @@ Copied from the spec so this file stands alone.
 - **A systemd user service** starts the compositor, not a system service. Its
   `XDG_RUNTIME_DIR` is `/run/user/1000`, which logind creates for a real
   session and a system service would have to fake.
-- **Headless, not virtio-gpu**, unless step 1 disproves it. The runner passes
-  `-nographic`, and Hyprland asks for a headless backend first and
-  `MANDATORY` (`Compositor.cpp:311-313`) while `CBackend::create` returns null
-  only on an empty list — so "no GPU" is not on its own a reason to fail.
 
-## How this was approved
+Two decisions the approver left to this file, stated here to be rejected here:
 
-On "continue and close them", rather than on an explicit approval of this
-file. Recorded rather than left to look like a clean gate, the same way
-nixarchy-voice's #28 plan records being approved after its implementation
-merged. If the instruction was not meant to carry this, step 1 is the place to
-stop: it is a throwaway probe and nothing after it has been written.
+- **`microvm.mem = 4096`.** The spec said "raised" without a number.
+  `python.nix` takes 3072 for a venv; a compositor plus a browser under test
+  wants more, and 4096 is the next round figure. Cheap to change, and the
+  `note` carries it.
+- **If `-tcg` cannot do virtio-gpu, the hole gets documented, not papered.**
+  Per §3: a row in `tests/install-matrix.py` and a sentence in
+  `tests/AGENTS.md` naming what no runner can reach. Step 7 decides it on
+  evidence.
 
-## Step 1 ran and stopped the plan
+## What the disproved run taught
 
-As instructed: headless does not work in the guest, so the rest of these steps
-are not to be executed against the current spec. See the spec's first section.
-
-**Three things the probe taught that are worth keeping**, because each cost an
-iteration:
+Kept verbatim in substance, because none of it was about headless:
 
 1. **A systemd *user* service writes nothing to the console.** The first probe
-   ran as one, reported `Finished`, and produced no output anywhere — which I
-   misread as "Hyprland failed silently" when it was "I cannot see anything a
-   user unit does". Run a guest probe from the autologin shell on `ttyS0`.
+   ran as one, reported `Finished`, and produced no output anywhere — which
+   read as "Hyprland failed silently" when it was "I cannot see anything a user
+   unit does". Run a guest probe from the autologin shell on `ttyS0`.
 2. **Redirecting to `/mnt/host` is not a reliable channel for a probe.** Two
    attempts wrote no file at all while the share was mounted. The console is
    the one channel that has never lied here.
-3. **`microvm.graphics.enable = true` opens a GTK window on the host.** Not
-   what a background VM wants, and the thing to solve before virtio-gpu can be
-   called a fallback.
+3. **`microvm.graphics.enable = true` alone opens a GTK window on the host.**
+   Now understood — it is the enum's default — and it is why step 2 sets
+   `backend` in the same commit as `enable`, never in a later one.
+4. **`git add` the new template before building.** Nix cannot see an untracked
+   file in a git-tree flake; the error says the path *does not exist* and
+   arrives inside a truncated stack trace (AGENTS.md §5). Another agent posted
+   the same trap to the bus for plugin QML.
+5. **Hyprland's fatal error string is ambiguous.** `CBackend::create()
+   failed!` is thrown from `Compositor.cpp:328` *and* `:340`, for two different
+   failures. The `CRIT` line four lines above the throw is what tells them
+   apart. Any probe here must capture Hyprland's own log, not just the
+   terminate message — that ambiguity is what cost the first attempt its
+   diagnosis.
 
-## Steps (not executed beyond 1)
+## Steps
 
-**1. Prove headless, before writing the template.** This is the whole issue and
-the spec deliberately left it open: a scoping probe reported `Finished` and
-wrote nothing, which is evidence about the probe, not about Hyprland.
+**1. Prove the guest gets a DRM node, before writing the template.** The spec
+is built on this and asserts it rather than having proved it. Throwaway
+template carrying only `microvm.graphics.enable`, `backend = "headless"` and a
+shell, booted from the autologin console on `ttyS0`.
 
-Throwaway template + entry, built and booted, with the compositor as a **user**
-service so it gets a real `XDG_RUNTIME_DIR`. The probe must report where it
-failed rather than leaving silence to be interpreted: redirect Hyprland's own
-stdout and copy `$XDG_RUNTIME_DIR/hypr/*/hyprland.log` out, and write the probe
-file with `install -D` so a missing directory is an error rather than a
-swallowed redirect.
+→ verify by `ls /dev/dri` showing a `renderD*` **and** `hyprctl version`
+answering after starting Hyprland by hand from that console. Capture
+`$XDG_RUNTIME_DIR/hypr/*/hyprland.log` to the console either way, per lesson 5.
+→ **and prove the break**, per §1: with `graphics.enable` removed, the same
+probe must produce `Cannot open backend: no allocator available` in that log.
+A probe that passes both ways is measuring nothing. Both outputs go in the PR.
 
-→ verify by `hyprctl -j monitors` naming one monitor at the configured size,
-read from the host afterwards. If it fails, **stop and revise the spec** —
-virtio-gpu is the recorded fallback, and the template does not quietly grow a
-GPU.
-
-**Two things that will otherwise cost an hour each**, from the scoping spike:
-
-- **`git add` the new template before building.** Nix cannot see an untracked
-  file in a git-tree flake; the error names the file but arrives inside a
-  truncated stack trace. Another agent posted this same trap to the bus for
-  plugin QML, and it applies identically here.
-- `XDG_RUNTIME_DIR` must stay under 108 bytes or the Wayland socket exceeds
-  `sun_path` and the compositor aborts one line above a C++ `terminate called`,
-  which is where the eye goes. Relevant to any host-side harness, not to the
-  guest.
+If the DRM node does not appear, **stop and revise the spec again** — there is
+no third option behind this one, and the honest outcome would be the nested
+compositor the spec records as rejected.
 
 **2. `modules/microvm/templates/hyprland.nix`.** The real template: packages,
-`microvm.mem` raised with a comment saying why (`python.nix` is the precedent),
+the two graphics lines *together* with the comment saying why `backend` is not
+optional, `microvm.mem = 4096` with a comment (`python.nix` is the precedent),
 the Hyprland config pinning one monitor, and the user service.
 
 No display manager — `guest.nix` already autologins `dev` on `ttyS0`.
 → verify by step 1's probe, now against the real file.
 
-**3. Accessibility.** `QT_ACCESSIBILITY = "1"` and
+**3. Prove no host window appears.** The property `backend = "headless"` exists
+for, and the one a green build cannot show. Boot the template, confirm nothing
+opens on the host's desktop, then flip `backend` to `gtk` and confirm one does.
+→ verify by both observations, recorded in the PR. This is §1 applied to a
+property whose failure is invisible to every automated layer we have.
+
+**4. Accessibility.** `QT_ACCESSIBILITY = "1"` and
 `GTK_MODULES = "gail:atk-bridge"` in `environment.sessionVariables`;
 `services.gnome.at-spi2-core.enable` so `org.a11y.Bus` is actually running;
 wrappers for Chromium and Electron adding `--force-renderer-accessibility`.
@@ -107,13 +130,6 @@ The wrappers are the one opinionated thing here and the `note` must say so —
 someone expecting stock Chromium should not have to discover it.
 → verify by test 5.
 
-**4. `data/microvm-templates.nix`: the entry.** `label`, `module`, `note`, in
-the style of the other nine. The `note` says: what it gives, that there is **no
-omarchy shell** (because "nixarchy vm" implies one), that the browsers are
-wrapped, and that the closure is large — with the measured figure from step 6,
-not an adjective.
-→ verify by `nixarchy vm templates` listing it with that note.
-
 **5. Make a dead compositor visible.** The spec's named risk: this is the first
 template with something that can be running or not, and a VM whose compositor
 died looks exactly like a working one until a capture returns nothing.
@@ -121,12 +137,28 @@ died looks exactly like a working one until a capture returns nothing.
 Cheapest honest answer: the `note` tells the reader to check
 `systemctl --user status`, and the service is `Restart=no` so a failure stays
 failed and visible rather than flapping. If step 1 shows something better and
-cheap — a motd line, a file in `/mnt/host` — take it, but do not build a health
-system for one template.
+cheap — a motd line — take it, but do not build a health system for one
+template.
 → verify by killing the compositor in a booted VM and confirming the failure is
 discoverable without already suspecting it.
 
-**6. Measure the closure and finish the note.** `nix path-info -Sh` on the
+**6. `data/microvm-templates.nix`: the entry.** `label`, `module`, `note`, in
+the style of the other nine. The `note` says: what it gives, that there is **no
+omarchy shell** (because "nixarchy vm" implies one), that the browsers are
+wrapped, that it is the first template asking for a GPU device, and that the
+closure is large — with the measured figure from step 8, not an adjective.
+→ verify by `nixarchy vm templates` listing it with that note.
+
+**7. Settle `-tcg`.** `checks.microvm-hyprland-tcg` overrides
+`machineOpts.accel = "tcg"`. Whether `virtio-gpu-gl` and `egl-headless` work
+without KVM, on a runner with no GPU of its own, is unknown and this plan does
+not guess.
+→ verify by building both variants. If `-tcg` cannot, document the hole in
+`tests/AGENTS.md` and `tests/install-matrix.py` and say so in the PR. Do not
+special-case the template to keep a check green — that is a check measuring the
+arrangement rather than the property (§1).
+
+**8. Measure the closure and finish the note.** `nix path-info -Sh` on the
 runner. A template that takes ten minutes to realise on first run should say
 so, in numbers.
 → verify by the figure appearing in the `note`.
@@ -136,23 +168,26 @@ so, in numbers.
 The existing `checks.microvm-hyprland` and `-tcg` come free from the `genAttrs`
 over `data/microvm-templates.nix` (`flake.nix:1189-1214`). They prove it
 builds, which is what that check is for, and prove nothing about whether the
-compositor runs — hence steps 1 and 5.
+compositor runs — hence steps 1, 3 and 5.
 
 Run by hand in a booted VM, in this order, because each depends on the last:
 
-1. **Headless comes up.** `hyprctl version` answers; `hyprctl -j monitors`
-   reports one monitor at the configured size.
-2. **`grim` captures.** `grim -t ppm` produces a file of the expected
+1. **The DRM node exists.** `ls /dev/dri` shows a `renderD*`. Everything below
+   depends on it and it is the spec's load-bearing claim.
+2. **The compositor comes up.** `hyprctl version` answers; `hyprctl -j
+   monitors` reports one monitor at the configured size.
+3. **No host window appeared** while the VM was running.
+4. **`grim` captures.** `grim -t ppm` produces a file of the expected
    dimensions. PPM rather than PNG deliberately — nixarchy-voice #26 measured
    the encode at 0.9s on a 2560x1440 framebuffer against 0.03s, and a probe
    should not spend it.
-3. **A window is addressable.** `foot` inside the guest appears in
+5. **A window is addressable.** `foot` inside the guest appears in
    `hyprctl -j clients` with a class and a title.
-4. **The event socket works.** `$XDG_RUNTIME_DIR/hypr/*/.socket2.sock` exists
+6. **The event socket works.** `$XDG_RUNTIME_DIR/hypr/*/.socket2.sock` exists
    and an `openwindow` line arrives on it when a window opens. nixarchy-voice
    #28's listener depends on this, and it is the one thing a build check can
    never reach.
-5. **Accessibility is genuinely on.** A page in the wrapped browser exposes a
+7. **Accessibility is genuinely on.** A page in the wrapped browser exposes a
    link through AT-SPI with bounds and an action — the same probe that returned
    zero nodes on p620 without the flag.
 
@@ -164,6 +199,11 @@ nix flake check                        # green, including the template checks
 nixarchy vm create probe --template hyprland && nixarchy vm run probe
 ```
 
+**Timing, per §6.** Every step that boots a VM is a local VM build on p620,
+where all four runners live. Check `gh run list` before starting one, and do
+not start one while an install job is in flight — a guest-side timeout is a
+hidden concurrency limit, and the cost lands on somebody else's check.
+
 ## Rollback
 
 One branch, and the template is additive: a new module, a new catalogue entry,
@@ -173,6 +213,6 @@ untouched.
 Nothing persists outside the repo. A VM created from the template lives in
 `~/.local/state/nixarchy/microvm/<name>/` and goes with `nixarchy vm rm`.
 
-If step 1 disproves headless, the rollback is not a revert — it is a spec
-revision, because "virtio-gpu instead" is a different design and the spec
-records it as the fallback rather than as an implementation detail to improvise.
+If step 1 disproves the DRM node, the rollback is not a revert — it is a third
+spec revision, and the only option the spec has left recorded is abandoning the
+VM for the nested compositor.

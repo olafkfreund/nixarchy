@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 821
 spec: spec/2026-09-20-821-graphical-microvm-template.md
 ---
@@ -31,12 +31,15 @@ Copied from the spec so this file stands alone.
   `-1` unconditionally (`Headless.cpp:133-135`). No DRM device means no
   allocator, `start()` returns false, and Hyprland dies. The guest needs a real
   DRM node.
-- **Two lines give it.** `microvm.graphics.enable = true` and
-  `microvm.graphics.backend = "headless"`. The second is not optional: the enum
-  defaults to `gtk` on Linux, which opens a window on the host and defeats a
-  background VM. `headless` emits `-display egl-headless -device
-  virtio-gpu-gl` (`lib/runners/qemu.nix:245-256`), which upstream documents as
-  the value that exists so a VM can run under a systemd job.
+- **Four settings give it**, not two — step 1 proved the other two the hard
+  way. `microvm.graphics.enable = true` and
+  `microvm.graphics.backend = "headless"` (the enum defaults to `gtk`, which
+  opens a host window; `headless` emits `-display egl-headless -device
+  virtio-gpu-gl`, `lib/runners/qemu.nix:245-256`), plus
+  `services.seatd.enable = true` and `hardware.graphics.enable = true`, with
+  `dev` in `video`, `render` and `seat`. Drop seatd and nothing can open the
+  DRM device; drop hardware.graphics and `gbm_create_device` fails. All three
+  failures print the same Hyprland message, which names none of them.
 - **`microvm.graphics.vulkan` stays `null`.** No caller needs GPU compute in
   the guest and venus pulls `hostmem` and a `blob=true` device into a template
   whose first job is to come up at all.
@@ -89,9 +92,43 @@ Kept verbatim in substance, because none of it was about headless:
    terminate message — that ambiguity is what cost the first attempt its
    diagnosis.
 
+## Step 1 is done
+
+Six probe iterations on p620, 2026-09-20. Evidence, all from one boot:
+
+```
+/dev/dri:            card0   renderD128
+hyprctl version      Hyprland 0.56.2
+hyprctl -j monitors  one "Virtual-1", 1920x1080@60, XRGB8888
+grim -t ppm          P6 1920 1080, 6220817 bytes
+```
+
+And the break, as this plan named it in advance: with
+`microvm.graphics.enable` removed, `/dev/dri` does not exist and aquamarine
+prints `CRIT: Cannot open backend: no allocator available`. The edit was
+verified with `git diff` before the run, per §1 — a `sed` that matched nothing
+and a blind check are indistinguishable from an exit status.
+
+**Four probe bugs are worth keeping**, because three of them will hit any
+caller of the finished template, not just a probe:
+
+1. `cat … | tail -40 || echo "no log"` — the `||` guards **`tail`**, which
+   succeeds on empty input. A failed `cat` printed nothing and reported
+   success. §1's pipeline trap, written into a diagnostic rather than a build.
+2. Hyprland **disables stdout logs by default**; the `CRIT` that explains any
+   failure goes to a file in a tmpfs that dies with the VM. Set
+   `debug:enable_stdout_logs`.
+3. `hyprctl` needs `HYPRLAND_INSTANCE_SIGNATURE` and `grim` needs
+   `WAYLAND_DISPLAY`. Hyprland exports both to its **children**, not to
+   whatever starts it, so a healthy compositor answers `is hyprland running?`
+   and `failed to create display`. Both derive from `$XDG_RUNTIME_DIR`.
+4. `CBackend::create() failed!` meant three different things across the runs —
+   no seat, no mesa driver, and no GPU. It is thrown from two call sites and
+   names none of the causes; only the `CRIT` line above it does.
+
 ## Steps
 
-**1. Prove the guest gets a DRM node, before writing the template.** The spec
+**1. ~~Prove the guest gets a DRM node~~ — done, see above.** The spec
 is built on this and asserts it rather than having proved it. Throwaway
 template carrying only `microvm.graphics.enable`, `backend = "headless"` and a
 shell, booted from the autologin console on `ttyS0`.
@@ -108,9 +145,11 @@ no third option behind this one, and the honest outcome would be the nested
 compositor the spec records as rejected.
 
 **2. `modules/microvm/templates/hyprland.nix`.** The real template: packages,
-the two graphics lines *together* with the comment saying why `backend` is not
-optional, `microvm.mem = 4096` with a comment (`python.nix` is the precedent),
-the Hyprland config pinning one monitor, and the user service.
+the **four** graphics-related settings and the three groups, each with a
+comment naming the failure it prevents, `microvm.mem = 4096` with a comment
+(`python.nix` is the precedent), the Hyprland config pinning one monitor —
+name the connector `Virtual-1`, since step 1 showed a catch-all `monitor = ,`
+does not match it — and the user service.
 
 No display manager — `guest.nix` already autologins `dev` on `ttyS0`.
 → verify by step 1's probe, now against the real file.
@@ -145,8 +184,10 @@ discoverable without already suspecting it.
 **6. `data/microvm-templates.nix`: the entry.** `label`, `module`, `note`, in
 the style of the other nine. The `note` says: what it gives, that there is **no
 omarchy shell** (because "nixarchy vm" implies one), that the browsers are
-wrapped, that it is the first template asking for a GPU device, and that the
-closure is large — with the measured figure from step 8, not an adjective.
+wrapped, that it is the first template asking for a GPU device, that the
+closure is large — with the measured figure from step 8, not an adjective —
+and **how to reach the compositor from outside its session**, since probe
+lesson 3 costs every caller the same hour otherwise.
 → verify by `nixarchy vm templates` listing it with that note.
 
 **7. Settle `-tcg`.** `checks.microvm-hyprland-tcg` overrides

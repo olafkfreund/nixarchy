@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 809
 intent: intent/2026-09-20-809-panel-python-collision.md
 ---

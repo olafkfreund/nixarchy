@@ -4158,6 +4158,46 @@ pkgs.runCommand "nixarchy-options"
         rm -f "$svcfile"
         echo "a service can be enabled and disabled, byte for byte"
 
+        # ---- services: a row an older services.nix lacks is added on enable (#843) ----
+        # services.nix is written once, so a file that predates a row could
+        # not enable it: service-enable found no marker and gave up.
+        tpldir="$vm/etc/nixarchy"
+        cp "$tpldir/services-template.nix" "$svcfile"
+        chmod u+w "$svcfile"
+        sed -i -E "/#@ $svcid([[:space:]]|\$)/d" "$svcfile"
+        svcout=$(NIXARCHY_TEMPLATES="$tpldir" run nixarchy-service-enable "$svcid") || {
+          echo "nixarchy-service-enable $svcid failed on a file without its row (#843)" >&2; exit 1; }
+        printf '%s\n' "$svcout" | grep -q "added the $svcid row" || {
+          echo "nixarchy-service-enable did not say it added the row: $svcout" >&2; exit 1; }
+        grep -qE "^[[:space:]]*[^#[:space:]].*#@ $svcid([[:space:]]|\$)" "$svcfile" || {
+          echo "the added $svcid row was not enabled" >&2; exit 1; }
+        rowline=$(grep -nE "#@ $svcid([[:space:]]|\$)" "$svcfile" | cut -d: -f1)
+        closeline=$(grep -n "^}" "$svcfile" | tail -1 | cut -d: -f1)
+        [ "$rowline" -lt "$closeline" ] || {
+          echo "the added row landed after the closing brace, outside the attrset" >&2; exit 1; }
+        # Nothing else moved: without that row, its heading and blank lines,
+        # the file is the template without that row.
+        diff <(grep -vE "#@ $svcid([[:space:]]|\$)|Added by nixarchy-catalogue-diff|^[[:space:]]*\$" "$svcfile") \
+             <(grep -vE "#@ $svcid([[:space:]]|\$)|^[[:space:]]*\$" "$tpldir/services-template.nix") >/dev/null || {
+          echo "adding the $svcid row changed other lines of services.nix" >&2; exit 1; }
+        helpout=$(run nixarchy-service-enable --help) || {
+          echo "nixarchy-service-enable --help did not exit 0" >&2; exit 1; }
+        { printf '%s\n' "$helpout" | grep -q '^usage: nixarchy-service-enable' &&
+          printf '%s\n' "$helpout" | grep -qi 'missing'; } || {
+          echo "--help does not say usage and that a missing row is added: $helpout" >&2; exit 1; }
+        svcsum=$(cksum < "$svcfile")
+        rc=0; NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one services definitely-not-a-row >/dev/null 2>&1 || rc=$?
+        [ "$rc" = 1 ] && [ "$svcsum" = "$(cksum < "$svcfile")" ] || {
+          echo "--add-one of a row the template lacks: exit $rc, or the file changed" >&2; exit 1; }
+        rc=0; NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one bogus x >/dev/null 2>&1 || rc=$?
+        [ "$rc" = 2 ] || { echo "--add-one with a bad part exited $rc, not 2" >&2; exit 1; }
+        NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one services "$svcid" >/dev/null || {
+          echo "--add-one of a row already present failed" >&2; exit 1; }
+        [ "$svcsum" = "$(cksum < "$svcfile")" ] || {
+          echo "--add-one of a row already present changed the file" >&2; exit 1; }
+        rm -f "$svcfile"
+        echo "an older services.nix gets a missing row on enable, and nothing else"
+
         # ---- catalogue-diff finds a missing row and --add restores it ----
         # nixarchy-catalogue-diff had no test of any kind either.
         cp "$appfile" "$rmhome/apps.before-diff"

@@ -1158,21 +1158,39 @@ in
               ];
               text = ''
                 add=false
+                # --add-one <part> <id>: just that row (#843). What
+                # nixarchy-service-enable calls when a file predates a row.
+                only_part=""
+                only_id=""
+                usage() {
+                  echo "usage: nixarchy-catalogue-diff [--add | --add-one apps|services|advanced <id>]" >&2
+                  exit 2
+                }
                 case "''${1:-}" in
                   --add) add=true ;;
-                  "") ;;
-                  *)
-                    echo "usage: nixarchy-catalogue-diff [--add]" >&2
-                    exit 2
+                  --add-one)
+                    add=true
+                    only_part="''${2:-}"
+                    only_id="''${3:-}"
+                    case "$only_part" in apps | services | advanced) ;; *) usage ;; esac
+                    case "$only_id" in *[!a-z0-9_.-]* | "") usage ;; esac
                     ;;
+                  "") ;;
+                  *) usage ;;
                 esac
+                refused=false
 
                 dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
                 total=0
 
                 for part in apps services advanced; do
+                  [ -z "$only_part" ] || [ "$part" = "$only_part" ] || continue
                   user="$dir/$part.nix"
                   tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/$part-template.nix"
+                  if [ -n "$only_id" ]; then
+                    [ -f "$user" ] || { echo "no $user" >&2; exit 1; }
+                    [ -f "$tpl" ] || { echo "no $tpl" >&2; exit 1; }
+                  fi
                   [ -f "$user" ] && [ -f "$tpl" ] || continue
 
                   # Compared by marker, never by line: the file's own header
@@ -1186,6 +1204,21 @@ in
                       <(grep -oE "#@ [a-z0-9_.-]+" "$tpl" | sort -u) \
                       <(grep -oE "#@ [a-z0-9_.-]+" "$user" | sort -u)
                   )
+                  if [ -n "$only_id" ]; then
+                    # Here-strings, not pipes: under pipefail a grep -q that
+                    # stops reading early can fail the pipeline it ends.
+                    have=$(grep -oE "#@ [a-z0-9_.-]+" "$user" || true)
+                    offer=$(grep -oE "#@ [a-z0-9_.-]+" "$tpl" || true)
+                    if grep -qxF "#@ $only_id" <<<"$have"; then
+                      echo "$part.nix already has $only_id"
+                      exit 0
+                    fi
+                    grep -qxF "#@ $only_id" <<<"$offer" || {
+                      echo "no $only_id in $tpl" >&2
+                      exit 1
+                    }
+                    missing="#@ $only_id"
+                  fi
                   [ -n "$missing" ] || continue
 
                   count=$(printf '%s\n' "$missing" | grep -c . || true)
@@ -1227,6 +1260,7 @@ in
                       echo "  $user has no closing brace on its own line;" >&2
                       echo "  add these by hand rather than let this guess:" >&2
                       printf '%s' "$rows" >&2
+                      refused=true
                       continue
                     fi
                     tmp=$(mktemp)
@@ -1242,6 +1276,11 @@ in
                     echo "  appended to $user"
                   fi
                 done
+
+                if [ -n "$only_id" ]; then
+                  [ "$refused" = false ] || exit 1
+                  exit 0
+                fi
 
                 if [ "$total" -eq 0 ]; then
                   echo "your files have everything the catalogue offers"
@@ -1267,6 +1306,17 @@ in
               ];
               text = ''
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+
+                # Callers (nixarchy-microvm) read this to learn that a missing
+                # row heals itself, so keep "usage:" and "missing" in it (#843).
+                case "''${1:-}" in
+                  -h | --help)
+                    echo "usage: nixarchy-service-enable <service-id>"
+                    echo "  A row missing from services.nix is added from /etc/nixarchy/services-template.nix."
+                    exit 0
+                    ;;
+                esac
+
                 id="''${1:?usage: nixarchy-service-enable <service-id>}"
 
                 # Validated before it reaches sed and grep, which the app scripts
@@ -1283,10 +1333,17 @@ in
 
                 [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
+                # A services.nix written before this row existed does not have
+                # it; nothing regenerates the file, so add just that row from
+                # the template, where catalogue-diff puts rows (#843).
                 if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  echo "nixarchy: no service '$id' in $file" >&2
-                  echo "  The full list is /etc/nixarchy/services-template.nix." >&2
-                  exit 1
+                  if nixarchy-catalogue-diff --add-one services "$id" >/dev/null; then
+                    echo "added the $id row from the template"
+                  else
+                    echo "nixarchy: no service '$id' in $file" >&2
+                    echo "  The full list is /etc/nixarchy/services-template.nix." >&2
+                    exit 1
+                  fi
                 fi
 
                 # Already on if the marked line is not commented out.

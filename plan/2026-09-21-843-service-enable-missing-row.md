@@ -72,6 +72,14 @@ spec: spec/2026-09-21-843-service-enable-missing-row.md
    lacks the row (the plugin detects #843). → Verify with a still of the
    form flipped to permanent.
 
+*Refined during implementation (steps 2–3):* `--add-one` filters inside
+the existing per-part loop (`only_part`/`only_id`) instead of factoring the
+body into a function, which means fewer lines moved with the same
+behaviour. The marker checks use here-strings rather than
+`grep | grep -q`, because under `writeShellApplication`'s `pipefail` a
+`grep -q` that stops reading early can fail the pipeline. Result: `checks.options`
+green, including the unchanged catalogue-diff and enable/disable tests.
+
 ## Tests
 
 `nix build .#checks.x86_64-linux.options -L` · the existing catalogue-diff

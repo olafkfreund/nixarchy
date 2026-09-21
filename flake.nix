@@ -967,10 +967,6 @@
 
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
 
-          # Exposed at top level for the same reason as nixarchy-vm just
-          # above: checks.box-template builds and reads the exact command
-          # `nixarchy box` execs.
-
           # Every pinned box image in one entry, so the main-only cache publisher
           # serves them all to cold box checks (#788, #800): its closure is each
           # tarball. `images` is the set, for checks.box-template's same-path check.
@@ -2237,7 +2233,7 @@
             pkgs = pkgsFor.${system};
           };
 
-          # Reads the box catalogue and `nixarchy box` structurally -- see
+          # Reads the box catalogue structurally -- see
           # tests/box-template.nix for what that can and cannot prove. The
           # pins and images are shared with checks.box-boot and the cache output.
           box-template = import ./tests/box-template.nix {

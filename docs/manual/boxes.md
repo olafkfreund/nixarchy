@@ -82,8 +82,10 @@ also the whole feature: the panel lists every box, enters one in a terminal,
 starts, stops, upgrades, promotes and deletes them, and creates new ones from
 a form.
 
-From a terminal, the same thing without the panel -- the templates are
-sections of a generated INI, and `--name` picks one:
+From a terminal, distrobox's own tools. The templates are sections of a
+generated INI, and `--name` selects one section -- so the box takes the
+*template's* name, and without `--name` assemble creates every template in the
+file:
 
 ```sh
 grep '^\[' /etc/nixarchy/box-templates.ini   # what's available
@@ -91,7 +93,11 @@ distrobox-assemble create --file /etc/nixarchy/box-templates.ini --name archlinu
 distrobox enter archlinux
 ```
 
-Without `--name`, `distrobox-assemble` creates every template in the file.
+This is not what the panel runs, and it cannot give a box a name of your
+choosing. The panel parses the templates itself and then calls
+`distrobox create --name <the name you typed> --image <the template's image>`,
+which is also what you would write by hand for a box called something other
+than `archlinux`.
 
 ![The generated templates file listing archlinux and debian, distrobox-assemble pulling the Arch image with podman, distrobox enter, /etc/os-release answering Arch Linux, pacman installing fastfetch inside the box, and fastfetch printing "OS: Arch Linux x86_64" with "WM: Hyprland (Wayland)"](../img/features/boxes.gif)
 
@@ -102,10 +108,15 @@ default. Two things to know:
   read unless you point the panel's **Your templates** setting at it (Setup →
   Plugins). The panel reads one file.
 - The panel refuses `exported_apps` and `exported_bins`, which run commands
-  inside the box. A template that needs them goes through
-  `distrobox-assemble` directly, as above -- `distrobox` is on your `PATH`
-  wherever boxes are on, and these templates are its own file format, so
-  nothing here is a workaround.
+  inside the box, and it never hands your file to `distrobox-assemble` --
+  assemble writes each `key=value` into a file it then *sources as shell*, so
+  an unquoted `$(...)` in a template runs on the host merely from being read.
+  The panel parses the INI itself to avoid that.
+
+  A template that needs those fields therefore has to go through
+  `distrobox-assemble --file <your file>` yourself. That is upstream's own
+  tool and it works, but you are taking on the thing the panel declines to do
+  for you: run it only on a file you wrote or have read.
 
 `programs.nixarchy.defaultPlugins.distrobox = false` stops nixarchy
 installing the panel.

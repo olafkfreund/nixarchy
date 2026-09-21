@@ -1001,9 +1001,9 @@ done
 
 # ---- boxes ----------------------------------------------------------------
 # What only real hardware and a live network can answer for distrobox (#230).
-# CI's checks.box-template (#258) proves the catalogue and nixarchy box's own
-# script are well-formed with no network at all; checks.box-boot, once it
-# lands, proves creation and entry inside an isolated VM with a preloaded
+# CI's checks.box-template (#258) proves the catalogue is well-formed with no
+# network at all; checks.box-boot proves creation and entry inside an
+# isolated VM with a preloaded
 # image and no real network path out. Neither can answer "does this actually
 # work for THIS user, on THIS machine, on the real internet" -- AGENTS.md #2's
 # point, the same reason Bluetooth pairing above is answerable nowhere else.
@@ -1034,11 +1034,11 @@ else
   fi
 
   # Every box podman actually knows about -- declared or ad hoc, this script
-  # cannot and does not try to tell them apart, the same way `nixarchy box
-  # list` does not either.
+  # cannot and does not try to tell them apart, and neither does the panel's
+  # own list.
   boxes=$(podman ps -a --format '{{.Names}}' 2>/dev/null || true)
   if [ -z "$boxes" ]; then
-    hmm "no boxes exist yet" "nixarchy box create <name> --template <t>"
+    hmm "no boxes exist yet" "open the Distrobox panel with Super+Alt+D"
   else
     while IFS= read -r box; do
       [ -n "$box" ] || continue

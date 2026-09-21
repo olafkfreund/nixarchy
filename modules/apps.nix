@@ -2968,7 +2968,7 @@ in
             })
 
             # `nixarchy vm <subcommand>`. Its own file for the same reason as
-            # box.nix below: `checks.microvm-template` (#224) has to run
+            # secret.nix below: `checks.microvm-template` (#224) has to run
             # the real command. See pkgs/microvm.nix for what it does and why.
             (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
 
@@ -3067,7 +3067,10 @@ in
                   # checks.options now asserts the route.
                   try) shift; exec nixarchy-try "$@" ;;
                   vm) shift; exec nixarchy-vm "$@" ;;
-                  # Retired (#801): the Distrobox panel does all of it.
+                  # Retired (#801): the Distrobox panel does all of it. Not
+                  # listed in the usage above any more -- a help text naming a
+                  # verb that prints "is retired" is the #538 defect wearing
+                  # the opposite coat.
                   # A pointer for one release rather than falling through to
                   # `exec omarchy "$@"`, which would answer a command this
                   # project shipped with "Unknown Omarchy command: omarchy
@@ -3143,7 +3146,6 @@ in
                                               The panel is Super+Alt+E, or Apps > Dev environments
                   nixarchy try <app|attr>     Run something once without installing it
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
-                  nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                   nixarchy doctor             What this machine needs to run nixarchy
                   nixarchy verify             Check the hardware nixarchy cannot test in a VM
                   nixarchy version            The Omarchy version and the nixarchy revision

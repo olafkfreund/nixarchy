@@ -541,7 +541,10 @@ let
           # `nixarchy box`): the templates are sections of the generated
           # INI, and --name picks one. Without --name, assemble would create
           # every template in the catalogue.
-          "echo '$ grep ^[ /etc/nixarchy/box-templates.ini'"
+          # The banner is what a viewer reads off the GIF and may type, so
+          # it carries the same quoting as the command that runs -- an
+          # unquoted `^[` is an unterminated bracket expression.
+          "echo \"\\$ grep '^\\[' /etc/nixarchy/box-templates.ini\""
           " ; grep '^\\[' /etc/nixarchy/box-templates.ini ; sleep 8",
           "echo ; echo '$ distrobox-assemble create --file"
           " /etc/nixarchy/box-templates.ini --name archlinux'"

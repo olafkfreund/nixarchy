@@ -211,9 +211,28 @@ Nothing is ticked there because nothing is installed on that machine. Upstream's
 tick asks whether an agent was *picked*, which on Arch is the same question;
 here a rebuild sits in between, so it asks whether the command exists.
 
+## Nixi, on SUPER + H
+
+`SUPER + H` (or the ✨ in the bar) opens **Nixi**, the nixarchy guide: a card
+you ask "how do I…" in plain words. Before every question it searches a local,
+hash-verified copy of this manual and Omarchy's, so the answer to "how do I
+install an app" is `apps.nix` and `nixarchy apply`, not `pacman -S`. It can
+also look at your machine, so "how full is my disk?" gets your real numbers.
+
+![Nixi answering how to install an app, then, in Mechanic, adding a key binding after asking permission, verifying it, and undoing it](../img/features/nixi.gif)
+
+It has two trust levels. **Guide**, the default, explains and changes
+nothing: every permission request is cancelled before it reaches you.
+**Mechanic** (`/mechanic`) makes the change for you, and every step needs your
+**Allow**. `/tour` and `/learn` work with no agent at all.
+
+[Nixi's own site](https://olafkfreund.github.io/nixi-nixarchy/) walks through a
+first session, and its [README](https://github.com/olafkfreund/nixi-nixarchy#readme)
+covers the options.
+
 ### If you installed Claude some other way
 
-Nixi's panel — the one `SUPER + H` opens — talks to agents over **ACP**. Claude
+[Nixi's panel](#nixi-on-super--h) — the one `SUPER + H` opens — talks to agents over **ACP**. Claude
 and Codex each need a separate adapter package for that; OpenCode speaks it
 itself. nixarchy pins what the first two agents need on every machine, and
 Claude's conditionally:

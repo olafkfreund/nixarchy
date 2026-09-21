@@ -146,7 +146,26 @@
     # no better than none here, so this stays the same situation sops-nix above
     # is in. Bump it deliberately; never track a branch.
     #
-    # 6b5878a is nixi-nixarchy#17: the missing-adapter message names the route a
+    # 1c3fc7c is nixi-nixarchy master after #30. Five changes a user sees:
+    #   - Choosing a FAQ row shows its written answer (#28). It had thrown a
+    #     QML TypeError since the rows were added, so the offline FAQ, one of
+    #     the three things that need no agent, answered nothing.
+    #   - Y and N answer a permission prompt (#29), but only while the message
+    #     box is empty, so typing cannot turn into consent; Return no longer
+    #     sends a steering message from behind the dialog.
+    #   - A permission prompt shows what is being approved (#30): the whole
+    #     command, or each file's -/+ lines, from the ACP tool call's rawInput
+    #     and diff content, as plain text that scrolls. Before, only the tool's
+    #     title reached the card, cut at five lines.
+    #   - Nixi leads with nixarchy's own panels (#25): the package manager, Dev
+    #     environments, MicroVMs, Podman and Distrobox, checked first with
+    #     nixarchy-plugin --enabled, so it never names a panel that is off or a
+    #     key that is not bound.
+    #   - The README and a new Pages site show a first session (#24); docs/
+    #     is excluded from the package, so this one changes no closure.
+    # Each was tried on a real nixarchy desktop before merge (razer, 2026-09-21).
+    #
+    # The previous pin, 6b5878a, was nixi-nixarchy#17: the missing-adapter message names the route a
     # nixarchy user actually has. It used to say only "add pkgs.claude-agent-acp
     # to your configuration", which works and is not what this distribution
     # provides; it now names `services.nixi.agents`, says that is a Home Manager
@@ -175,7 +194,7 @@
     # literal name "claude". That still matters from #731 on and is carried
     # forward here; see that issue for the reasoning.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/6b5878a427e0bb007fa7c673b4786ad80bf270fd";
+      url = "github:olafkfreund/nixi-nixarchy/1c3fc7c946499e544534fc260472fda61fb1730d";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

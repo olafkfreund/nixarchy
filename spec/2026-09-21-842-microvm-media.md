@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 842
 intent: intent/2026-09-21-842-microvm-media.md
 ---

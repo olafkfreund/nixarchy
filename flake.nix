@@ -970,7 +970,6 @@
           # Exposed at top level for the same reason as nixarchy-vm just
           # above: checks.box-template builds and reads the exact command
           # `nixarchy box` execs.
-          nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
 
           # Every pinned box image in one entry, so the main-only cache publisher
           # serves them all to cold box checks (#788, #800): its closure is each

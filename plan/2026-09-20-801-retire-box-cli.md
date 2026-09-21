@@ -74,8 +74,17 @@ box) echo "nixarchy box is retired -- boxes live in the Distrobox panel" \
           "(Super+Alt+D, or the Boxes row in the menu)." >&2; exit 1 ;;
 ```
 
-→ verify by `nix build .#nixarchy`, `nix flake show` no longer listing
-`nixarchy-box`, and running `nixarchy box` to read the message.
+→ verify by `nix flake show` no longer listing `nixarchy-box`, and by running
+`nixarchy box` to read the message.
+
+**Deviation.** This step originally said `nix build .#nixarchy`. There is no
+such attribute and never was: the dispatcher is a `writeShellApplication`
+inside `modules/apps.nix`'s `systemPackages`, not a flake package, so the
+command fails with *"flake … does not provide attribute"* whatever the state
+of the tree. Replaced by two things that do answer the question —
+`checks.menu-verbs`, which evaluates the module and builds the menu, and
+building the `systemPackages` entry out of `nixosConfigurations.reference` to
+run it. Both done; `nixarchy box` prints the pointer and exits 1.
 
 **3. `tests/menu-verbs.nix`.** `:135` knows the box rows go through
 `nixarchy box <verb>`. It is updated with them, in the same commit as step 2 —

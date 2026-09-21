@@ -42,7 +42,6 @@ let
   menu = eval.config.environment.etc."nixarchy/omarchy-menu.jsonc".source;
 
   vmcli = inputs.self.packages.${system}.nixarchy-vm;
-  boxcli = inputs.self.packages.${system}.nixarchy-box;
   secretcli = inputs.self.packages.${system}.nixarchy-secret;
 
   # nixarchy-channel ships in the omarchy tree rather than as its own package,
@@ -86,8 +85,8 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # the dispatch is caught too.
     # Two `case` shapes, because both are in use: most of these scripts
     # dispatch on "$1" directly, and nixarchy-channel assigns it to $target
-    # first. Verified that adding the second address leaves nixarchy-vm and
-    # nixarchy-box's verb lists byte-identical (10 each) -- a helper that
+    # first. Verified that adding the second address left nixarchy-vm and
+    # the retired nixarchy-box's verb lists byte-identical (10 each) -- a helper that
     # claims to read "the shipped script's own case block" should not be
     # silently blind to a script that writes it the other way.
     #
@@ -104,7 +103,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
     }
 
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
-    verbs_of ${boxcli}/bin/nixarchy-box > box-verbs
     verbs_of ${secretcli}/bin/nixarchy-secret > secret-verbs
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
     for m in ${pkgs.lib.escapeShellArgs pluginSources}; do
@@ -112,7 +110,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
     done | sort -u > plugin-ids
 
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
-    echo "nixarchy-box accepts: $(tr '\n' ' ' < box-verbs)"
     echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
     echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
@@ -121,7 +118,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # dispatch stopped parsing" into a green check -- the exact shape of failure
     # this file exists to reject.
     test "$(wc -l < vm-verbs)"  -ge 5
-    test "$(wc -l < box-verbs)" -ge 5
     # new, edit, list, where, copy, remove -- plus the three help spellings.
     test "$(wc -l < secret-verbs)" -ge 6
     # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
@@ -132,7 +128,14 @@ pkgs.runCommand "nixarchy-menu-verbs"
     checked=0
 
     # Both spellings, because both are in use: the vm rows call `nixarchy-vm
-    # <verb>` and the box rows go through the top-level `nixarchy box <verb>`.
+    # <verb>` and the secret rows go through the top-level `nixarchy secret
+    # <verb>`.
+    #
+    # The box rows had both spellings too, until #801 retired the CLI. The
+    # Boxes row is `nixarchy-plugin nixarchy.distrobox` now, checked by the
+    # plugin-id scan below and by the floor that names Boxes -- so the row is
+    # still covered; what went is a verb list for a command that no longer
+    # exists.
     scan() {
       local pattern="$1" field="$2" cli="$3" list="$4"
       while read -r verb; do
@@ -148,8 +151,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
 
     scan '\bnixarchy-vm +[-a-z]+'      2 nixarchy-vm  vm-verbs
     scan '\bnixarchy +vm +[-a-z]+'     3 nixarchy-vm  vm-verbs
-    scan '\bnixarchy-box +[-a-z]+'     2 nixarchy-box box-verbs
-    scan '\bnixarchy +box +[-a-z]+'    3 nixarchy-box box-verbs
 
     # The Secrets group (#611/#612). Four rows, added with the rows rather
     # than after one of them breaks -- `nixarchy-vm new`, the row this file

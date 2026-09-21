@@ -174,7 +174,8 @@ renderer=$(
 # vendor:device ids and the (rev ..) noise; keep the model.
 #
 # hyprctl by BARE NAME, deliberately not in runtimeInputs -- the same
-# wrapper-only rule as distrobox in pkgs/box.nix, for a different reason.
+# wrapper-only rule as distrobox in modules/services/boxes.nix, for a
+# different reason.
 # hyprctl speaks to the compositor over its instance socket, and the client
 # that matches the running Hyprland is the one the session put on PATH
 # (0.56, from flake.nix's pinned input); pinning nixpkgs' hyprctl here would
@@ -1009,7 +1010,7 @@ done
 #
 # distrobox is deliberately never in this script's runtimeInputs and never
 # called any way but by bare name below -- the same wrapper-only rule
-# pkgs/box.nix's header explains: distrobox resolves its own support scripts
+# modules/services/boxes.nix's header explains: distrobox resolves its own support scripts
 # relative to the directory it was invoked from, so a /nix/store path here
 # would be exactly the mistake this section exists to catch elsewhere.
 head_ "Boxes"

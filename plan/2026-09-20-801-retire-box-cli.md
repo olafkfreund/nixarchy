@@ -40,9 +40,16 @@ Copied from the spec so this file stands alone.
 never lapse, and doing this first means step 2 is a deletion against a suite
 that already tests the replacement.
 
-- `tests/box-boot.nix` — `:95` runs `nixarchy box create`; it runs
-  `distrobox assemble` against the generated
-  `/etc/nixarchy/box-templates.ini` instead.
+- `tests/box-boot.nix` — `:95` runs `nixarchy box create`; it mirrors the
+  panel's own argv instead: `env DBX_CONTAINER_MANAGER=podman distrobox
+  create --yes --name demo-arch --image <image>`, with the image read out of
+  the generated `/etc/nixarchy/box-templates.ini`.
+
+  **This step originally said `distrobox assemble` against that file, "the
+  path the panel takes".** It is not: the panel parses the INI in JavaScript
+  and never hands it to assemble (`Model.js`), because assemble sources an
+  INI as shell. Corrected at the maintainer's direction after a review of the
+  branch; the spec carries the full reasoning.
 - `tests/box-template.nix` — the catalogue assertions stay; the
   `${nixarchyBox}/bin/nixarchy-box` grep at `:92` goes, with a comment saying
   why it has no panel equivalent (the plugin is QML and resolves `distrobox`

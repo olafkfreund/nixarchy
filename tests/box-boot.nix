@@ -16,11 +16,20 @@
 #
 # ## What is asserted
 #
-#   * the Distrobox panel's create path -- `distrobox-assemble` called by
-#     BARE NAME against the generated /etc/nixarchy/box-templates.ini --
+#   * the argv the Distrobox panel builds -- `distrobox create --yes --name
+#     <name> --image <image>` under `env DBX_CONTAINER_MANAGER=podman`, with
+#     the image read out of the generated INI the way the panel reads it --
 #     creates a container from the preloaded image, with no network.
 #     Breaking this looks like skipping the preload: create tries to pull
 #     and fails (proved red exactly that way for the PR).
+#
+#     This MIRRORS the panel; it is not the panel. `Model.js`'s `createArgv`
+#     and `dbx()` are the source, and a pin bump that changes them will not
+#     move this check -- tests/AGENTS.md says so. An earlier version of this
+#     file ran `distrobox-assemble` against the same INI and claimed to be
+#     the panel's path; it is not one. The panel parses the INI in JavaScript
+#     and never hands it to assemble, because assemble sources an INI as
+#     shell (`Model.js`, "never handed to distrobox").
 #   * the created container's recorded distrobox-init mount does NOT point
 #     into /nix/store -- modules/services/boxes.nix's rule (nixpkgs#478154),
 #     observed on a real container rather than grepped off a script the way
@@ -83,22 +92,30 @@ pkgs.testers.runNixOSTest {
     machine.succeed(alice("podman tag ${imagePin.imageName}:${imagePin.tag or "latest"} ${fullImage} || true"))
     machine.succeed(alice("podman inspect --type image ${fullImage} >/dev/null"))
 
-    # The real path, end to end: the Distrobox panel -> distrobox-assemble
-    # (bare name) -> distrobox create. The panel reads the generated
-    # /etc/nixarchy/box-templates.ini, whose sections are keyed by TEMPLATE
-    # name, so the container is named for the template -- where the retired
-    # `nixarchy box create` stitched on a header naming the box instead.
-    # --name is what keeps this to one section; without it assemble would
-    # create every template in the catalogue.
+    # The image comes out of the generated INI rather than being repeated
+    # here, so this varies with what modules/services/boxes.nix writes: the
+    # panel reads that file for its "Start from" list, and a drift between
+    # the catalogue and what gets created is exactly what this should catch.
+    image = machine.succeed(alice(
+        "sed -n '/^\\[archlinux\\]/,/^\\[/p' /etc/nixarchy/box-templates.ini"
+        " | sed -n 's/^image=//p'"
+    )).strip()
+    assert image == "${fullImage}", f"the archlinux template names {image!r}, not the pinned ${fullImage}"
+
+    # The panel's own argv, from Model.js's createArgv() and dbx(): the
+    # engine in the environment, `distrobox` by BARE NAME (the entrypoint
+    # mount must track the current generation -- modules/services/boxes.nix,
+    # nixpkgs#478154), --yes, a name of our choosing, and --image. No --pull,
+    # because the template sets pull=false and the panel only passes it when
+    # the form asks; that plus the preload is what makes this work offline.
     #
-    # Bare name, not a store path: the entrypoint mount must track the
-    # current generation (modules/services/boxes.nix, nixpkgs#478154), and
-    # the assertion below is what holds that.
-    #
-    # pull=false plus the preload above is what makes this work with no
-    # network at all.
+    # The box is named demo-arch, not archlinux: a name the panel's form
+    # would accept, and one that cannot collide with the image's own name.
     machine.succeed(
-        alice("distrobox-assemble create --file /etc/nixarchy/box-templates.ini --name archlinux"),
+        alice(
+            "env DBX_CONTAINER_MANAGER=podman distrobox create --yes"
+            f" --name demo-arch --image {image}"
+        ),
         timeout=600,
     )
 
@@ -108,14 +125,14 @@ pkgs.testers.runNixOSTest {
     # be a /nix/store path (nixpkgs#478154). Both halves asserted -- that an
     # init mount exists at all, and that it is not a store path -- so this
     # cannot go green by the mount disappearing.
-    # `podman container inspect`, not `podman inspect`: the container is now
-    # named for its template, so it shares a name with the preloaded image,
-    # and plain `inspect` falls back to the image when no container exists.
-    # Proved live -- a no-container break passed that line and failed two
-    # lines later on the mount assertion, red only because the image happens
-    # not to contain the string "distrobox-init". With `container inspect`
-    # the same break fails here, with `no such container "archlinux"`.
-    inspect = machine.succeed(alice("podman container inspect archlinux"))
+    # `podman container inspect`, not `podman inspect`: plain `inspect`
+    # resolves images as well as containers, so a break that creates no
+    # container passes that line and fails two lines later on the mount
+    # assertion -- red for an adjacent reason. Proved live when the box was
+    # briefly named `archlinux`, colliding with the preloaded image; the name
+    # no longer collides, and this stays because the ambiguity is in the
+    # command, not in the name.
+    inspect = machine.succeed(alice("podman container inspect demo-arch"))
     assert "distrobox-init" in inspect, "no distrobox-init mount recorded at all:\n" + inspect[:2000]
     import re
     stores = re.findall(r"/nix/store/\S*distrobox\S*", inspect)
@@ -161,7 +178,7 @@ pkgs.testers.runNixOSTest {
     # stays an ALLOWLIST rather than a truthiness check, so a genuinely new
     # failure mode -- or a silent one -- still goes red and gets read by a
     # person, which is what the original assertion was for.
-    out = machine.fail(alice("distrobox enter archlinux -- true 2>&1"), timeout=600)
+    out = machine.fail(alice("distrobox enter demo-arch -- true 2>&1"), timeout=600)
     # The third arrived on 2026-09-07, on main, with nothing in this repo
     # touching distrobox. distrobox-enter:729 prints it from the poll loop it
     # runs after "Starting container...": if the container is not `running`

@@ -290,12 +290,20 @@ is a load the runners were never measured for (AGENTS.md §6).
 deleted, but what they now exercise is not what they exercised before, and the
 difference is worth stating rather than discovering.
 
-**They test a pinned rev, not a script this repo owns.** `box-boot` runs
-`distrobox-assemble create --file /etc/nixarchy/box-templates.ini --name
-archlinux` -- the path the Distrobox panel takes. The panel is a flake input
-pinned by rev. If a pin bump changes how the panel creates a box, nothing here
-goes red: the check still exercises the INI path, which is the contract, but
-not the panel's own code. The panel opening at all is the plugin PR's
+**They MIRROR a pinned rev; they do not run it.** `box-boot` builds the argv
+`Model.js`'s `createArgv()` builds -- `env DBX_CONTAINER_MANAGER=podman
+distrobox create --yes --name <name> --image <image>`, with the image read out
+of the generated INI the way the panel reads it. The panel is a flake input
+pinned by rev, and a bump that changes `createArgv` will not move this check.
+The mirror can rot silently; that is the trade.
+
+The first attempt at this retarget ran `distrobox-assemble` against the same
+INI and called it "the panel's create path". It is not one, and the error is
+worth keeping because it survived a spec, a plan, five commits and a review of
+my own: the panel parses that INI **in JavaScript and never hands it to
+assemble**, because assemble writes each `key=value` into a file it sources as
+shell. Reading the dependency's source is what caught it; nothing in this
+repository could have. The panel opening at all is the plugin PR's
 business (see the stand-ins section above), and `menu-verbs` asserts only that
 the Boxes row names an installed plugin id.
 

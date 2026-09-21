@@ -537,10 +537,13 @@ let
       print("registry reachable")
 
       terminal(" ; ".join([
-          # The terminal path the Distrobox panel also takes (#801 retired
-          # `nixarchy box`): the templates are sections of the generated
-          # INI, and --name picks one. Without --name, assemble would create
-          # every template in the catalogue.
+          # A terminal path, NOT the panel's (#801 retired `nixarchy box`):
+          # the panel parses this INI itself and runs `distrobox create`,
+          # because assemble sources an INI as shell. What this scene shows
+          # is the generated catalogue being used by distrobox's own tool,
+          # which is what a viewer can type. checks.box-boot mirrors the
+          # panel's argv instead. --name picks one section; without it
+          # assemble would create every template in the catalogue.
           # The banner is what a viewer reads off the GIF and may type, so
           # it carries the same quoting as the command that runs -- an
           # unquoted `^[` is an unterminated bracket expression.

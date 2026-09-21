@@ -154,6 +154,14 @@ toolchains, "Seven are on by default" against README's eight panel rows, the
 → verify by the issue existing with a milestone and an area label (§12), and by
 this plan linking it.
 
+Filed as **#856**, with two findings the plan did not know about. The search
+index count already disagrees — `137,599` in README and `docs/index.md` against
+`137,526` in `getting-started.md`. And "Seven are on by default" cannot simply
+be checked: README names ten `Install ▸`/`Apps ▸`/`Trigger ▸` rows and
+`tests/menu-verbs.nix` floors plugin rows at eight, so three places count
+different sets and the prose has to say which one it means before any number
+can be derived.
+
 ## Tests
 
 ```

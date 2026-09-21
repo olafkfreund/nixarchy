@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 831
 intent: intent/2026-09-21-831-readme-site-parity.md
 ---
@@ -36,22 +36,57 @@ what is compared, not about correcting today's numbers.
 
 ## Design
 
-### The source of truth is the filesystem
+### The check exists. README is the consumer it does not cover
 
-`docs/manual/*.md` — **33 files today** — is what Jekyll publishes. Everything
-else is a list *about* that set: `docs/_config.yml` `nav`, the Manual section of
-`docs/llms.txt`, the table in `docs/manual/index.md`, and now README.
+**Revised after the first draft of this spec.** That draft proposed a new
+`.github/scripts/docs-parity.sh` built around "the filesystem is the source of
+truth, and every list about it is compared". That design was right and it is
+already implemented — `build.yml:714`, the step **"Every manual page is in the
+sidebar"**:
 
-So one comparison, four consumers: each list is checked against the files on
-disk, and each failure **names the page**, never a count. CLAUDE.md §4 records
-both halves of this failing before — four pages published and reachable from no
-sidebar, and a third index nothing compared that was already missing Boxes and
-Sandboxes. Those are the same bug as this one and this check subsumes them.
+```sh
+pages=$(basename -a docs/manual/*.md | sed 's/\.md$//' | grep -v '^index$' | sort)
+nav=$(grep  -oE 'path: /manual/[a-z-]+'      docs/_config.yml     | … | sort -u)
+llms=$(grep -oE 'manual/[a-z-]+'             docs/llms.txt        | … | sort -u)
+index=$(grep -oE '\]\([a-z-]+(#[a-z-]*)?\)'  docs/manual/index.md | … | sort -u)
+```
 
-A new script, `.github/scripts/docs-parity.sh`, since `readme-counts.sh` is about
-*quantities extracted from a built tree* and this is about *set membership*.
-Folding it in would mean its 27-quantity floor growing a second, unrelated
-meaning.
+then one `comm -23` loop per list, each emitting
+`::error::docs/manual/$n.md is published but not in …`.
+
+It already takes the files on disk as truth, already names the page rather than
+a count, and already checks membership rather than order with the reasoning
+written out. Its comments record the incidents this spec's first draft cited as
+justification: four pages drifted out of the nav (`channels`, `preview`,
+`reinstall-image`, `how-this-is-tested`), and `manual/index.md` sat at 24 of 26
+(#574) with `boxes` and `sandboxes` unreachable.
+
+Writing a second script would have been the `nix.gc.automatic` mistake in
+CLAUDE.md §12 — grepping for the spelling, not the behaviour, and shipping a
+duplicate of something that already worked.
+
+**So the change is a fourth list in that existing step**, built the same way:
+
+```sh
+readme=$(grep -oE 'docs/manual/[a-z-]+' README.md | sed 's|docs/manual/||' | sort -u)
+```
+
+and a fourth `comm -23` loop, erroring with *"published but not linked from
+README.md"*.
+
+README is genuinely uncovered today: `build.yml` checks it for open epics
+(`The README's roadmap still matches the open epics`) and for derived numbers
+(`Every derived number in the README`), and for nothing else.
+
+Two consequences, both good:
+
+- **no new script, and no new workflow entry.** CLAUDE.md §4's coverage guard —
+  a `checks.<name>` named by no workflow — does not apply, because nothing new
+  is added to `checks`. The step already runs on pull requests in the `omarchy`
+  job.
+- **it is still a `build.yml` edit.** Not a gate change (no new required check,
+  no trigger change), but a workflow file is touched and the pull request says
+  so plainly rather than burying it.
 
 ### README gains an index, not 33 table rows
 
@@ -102,14 +137,21 @@ intended proof that the check works on a page added after it.
 
 ## Alternatives rejected
 
+- **A new `.github/scripts/docs-parity.sh`.** This spec's own first draft. It
+  would have duplicated `build.yml:714` almost line for line, and the duplicate
+  would have disagreed with the original the first time either changed. Rejected
+  on discovering the original — recorded here rather than deleted, because the
+  way it was missed is the more useful warning: the behaviour was searched for
+  by the name a script would have had, and it lives in a workflow step instead.
 - **`docs/_config.yml` `nav` as the source of truth.** It is the list most likely
   to be edited when a page is added, which is exactly why it cannot be the
   reference: a page added to disk and forgotten in `nav` is the failure already
   seen here, and a check reading `nav` would report it as absent rather than as
-  unreachable.
+  unreachable. The existing step already made this choice.
 - **Folding the check into `readme-counts.sh`.** Its floor asserts 27 quantities
   are accounted for. Set membership is not a quantity, and overloading the floor
-  weakens the guarantee it exists to give.
+  weakens the guarantee it exists to give. Still the right call, and now moot:
+  the membership check has its own home.
 - **A count-based check** — "README links 33 manual pages". CLAUDE.md §4: a count
   only says a number moved. It would go red without saying which page, and a
   rename that swaps one page for another would keep it green.
@@ -121,10 +163,17 @@ intended proof that the check works on a page added after it.
 
 ## Risks
 
-- **The check must be run by a workflow or it checks nothing** (CLAUDE.md §4:
-  `checks.installer-ui` was wired into `checks` and named by no workflow, and its
-  PR went green without it ever executing). Naming it in a workflow is a CI-gate
-  change and needs a human (§11) — the plan raises it rather than wiring it.
+- **The README grep is looser than the three beside it.** `nav`, `llms.txt` and
+  `manual/index.md` each have one link syntax; README has several — relative
+  `docs/manual/x`, a full `https://olafkfreund.github.io/nixarchy/manual/x`, and
+  bare prose. A grep for `docs/manual/[a-z-]+` sees only the first, so a page
+  linked by its published URL would read as missing. Settle which spellings
+  count, and have README use one — the check should push README toward one
+  spelling, not grow a pattern per spelling.
+- **Matching a substring of a longer name.** `python` is a prefix of nothing
+  today, but `preview` and a future `preview-x` would both match a careless
+  pattern. `sort -u` plus `comm` on whole names, as the existing loops do,
+  handles this; a `grep -c` would not.
 - **`readme-counts.sh` can fail closed.** §4 records `word_for` refusing on a
   number it has no word for. This change touches `pacman-scripts` only and adds
   no worded quantity, but the plan re-reads the alternations before touching the
@@ -147,13 +196,14 @@ Per CLAUDE.md §1, each assertion is broken first and the failing output capture
 for the pull request. Three breaks, because the check makes three distinct
 claims:
 
-1. **A published page README does not name.** `touch docs/manual/zzz-probe.md`,
-   `git add` it (a flake in a worktree sees only tracked files, §5). Expect red
-   naming `zzz-probe.md`. Delete, expect green.
-2. **A README link to a page that does not exist.** Point one README link at
-   `docs/manual/nonexistent.md`. Expect red naming that path — this is the
-   direction a page rename breaks, and the direction a count-based check cannot
-   see at all.
+1. **A published page README does not name.** Delete one README link — say the
+   one to `docs/manual/boxes.md`. Expect red naming `boxes.md`, and **only**
+   that page: the three sibling loops must stay quiet, which is what proves the
+   new loop is the one that fired.
+2. **A page added after the check.** `docs/manual/try-it-in-a-vm.md` is created
+   by this very change. Adding it and not linking it from README must go red —
+   and since the three existing loops go red too, this doubles as evidence the
+   fourth loop was wired into the same rc, not bolted on beside it.
 3. **The second number in `pacman-scripts`.** Set README L393 back to
    `**32 of 444 scripts**` and run `readme-counts.sh --check`. Expect red on the
    `444`. This one is the regression test for the defect that opened the issue,

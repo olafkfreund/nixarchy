@@ -211,7 +211,7 @@
     # Why: docs/internals/flake.md#the-podman-panel-wherever-podman-is-on-766
     # A commit on master (that repo's default branch, no tags).
     nixarchy-podman = {
-      url = "github:olafkfreund/nixarchy-podman/03d9f02d2be454f8592901d93890f4854912a814";
+      url = "github:olafkfreund/nixarchy-podman/ce1d990480dd19c21e712a11336dcc3e6544e430";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

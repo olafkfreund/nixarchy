@@ -44,7 +44,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[Try an app before installing it](https://olafkfreund.github.io/nixarchy/manual/try-it-first)** | `nixarchy try <name>` |
 | **[Look before you switch](https://olafkfreund.github.io/nixarchy/manual/preview)** | `nixarchy preview` boots the pending configuration in a VM window |
 | **[Disposable VMs](https://olafkfreund.github.io/nixarchy/manual/sandboxes)** | `nixarchy vm run` |
-| **[Arch or Debian, when NixOS will not do](https://olafkfreund.github.io/nixarchy/manual/boxes)** | `nixarchy box create` |
+| **[Arch or Debian, when NixOS will not do](https://olafkfreund.github.io/nixarchy/manual/boxes)** | the Distrobox panel — `Super+Alt+D` |
 | **[Run the binary you just downloaded](https://olafkfreund.github.io/nixarchy/manual/python)** | `nix-ld`, `envfs` and AppImages, on by default — `nixarchy-doctor <binary>` names what is still missing |
 | **[Get this machine back](https://olafkfreund.github.io/nixarchy/manual/reinstall-image)** | `nixarchy reinstall iso` — an install image built from your own configuration |
 | **[One flake, many machines](https://olafkfreund.github.io/nixarchy/manual/many-machines)** | roll a change out to a fleet from one repository |
@@ -457,7 +457,7 @@ basename is what it stores.
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
 | **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish, and the **Dev environments** panel (`Super+Alt+E`) lists, creates, enters and removes them — [the page](docs/manual/per-project-environments.md). Off by default |
-| **Boxes** | `nixarchy box create dev --template archlinux` drops you into an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
+| **Boxes** | the Distrobox panel (`Super+Alt+D`) creates, enters and promotes an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
 | **Trigger ▸ Boxes** | your distrobox boxes in a panel ([nixarchy-distrobox](https://github.com/olafkfreund/nixarchy-distrobox)), created from nixarchy's own templates. **On wherever Boxes are**, Super+Alt+D on a new install; `programs.nixarchy.defaultPlugins.distrobox = false` removes it |
 | **Trigger ▸ Sandbox** | disposable and permanent MicroVMs in one panel ([nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm)). **On by default**, Super+Alt+V on a new install; `programs.nixarchy.defaultPlugins.microvm = false` removes it |
 | **Apps ▸ Podman** | containers, images, volumes and networks in a panel ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)). **On wherever podman is** — the Podman services row or Boxes — Super+Alt+O on a new install; `docker` stays Docker |

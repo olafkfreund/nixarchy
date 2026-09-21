@@ -101,6 +101,35 @@ panel, Super+Alt+D — rather than simply dropping the sentence.
 historical references, and by `readme-counts.sh` staying green (removing rows
 moves counts, and that guard refuses on a number it cannot spell).
 
+**Deviation: two things this step did not know about.**
+
+`docs/llms.txt:91` names the command too, so the doc list is four files, not
+three.
+
+More seriously, **`tests/demo/default.nix`'s `boxes` scene drives the retired
+command** -- `nixarchy box templates`, `create`, and a wait on
+`grep -q 'nixarchy box enter'` -- and produces the GIF `docs/manual/boxes.md`
+embeds. No artifact mentioned `tests/demo`. Nothing would have gone red: demo
+scenes are `packages`, not `checks`, and no workflow builds them, so the scene
+would have broken silently while the published GIF kept showing a command that
+errors (AGENTS.md §4, failing open). Retargeted to the same
+`distrobox-assemble --file /etc/nixarchy/box-templates.ini --name archlinux`
+path step 1 gave `box-boot`; the scene's node already sets
+`services.boxes.enable`, so the generated INI is there. The wait is now
+`distrobox enter archlinux`, which `distrobox-create` prints on success
+(read from its source, not guessed). **The GIF must be re-recorded before this
+merges** -- the committed one shows the retired CLI.
+
+**Decision, taken during implementation and outside the approved spec.** The
+panel still refuses `exported_apps`/`exported_bins`
+(`Model.js`: *"exported_apps runs commands inside the box; not supported
+yet"*), and the page's escape hatch for such a template was
+`nixarchy box create`. No shipped template uses those fields, and `distrobox`
+is on every user's PATH via `services.boxes`, so the page now points at
+`distrobox-assemble` directly -- which is what these templates already are.
+A documented path is still narrower than before, and the PR says so rather
+than letting the sentence quietly disappear.
+
 **5. `tests/AGENTS.md`: the coverage this trades away.** The old checks
 exercised a script this repo owns; the new ones exercise a plugin pinned by
 rev, so a plugin bump could change the create path with nothing here going red.

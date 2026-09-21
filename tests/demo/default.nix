@@ -516,7 +516,7 @@ let
       # userland, on a NixOS host, which is the entire point of the feature.
       #
       # This scene runs with a NETWORK, and that is honest rather than a
-      # concession: `nixarchy box create` pulls the image with podman over
+      # concession: creating a box pulls the image with podman over
       # the real network -- the one step checks.box-template deliberately
       # does not attempt -- and tests/box-boot.nix pins that the offline
       # first `distrobox enter` fails loudly at the entrypoint. A real user
@@ -537,18 +537,25 @@ let
       print("registry reachable")
 
       terminal(" ; ".join([
-          "echo '$ nixarchy box templates' ; nixarchy box templates ; sleep 8",
-          "echo ; echo '$ nixarchy box create demo --template archlinux'"
+          # The terminal path the Distrobox panel also takes (#801 retired
+          # `nixarchy box`): the templates are sections of the generated
+          # INI, and --name picks one. Without --name, assemble would create
+          # every template in the catalogue.
+          "echo '$ grep ^[ /etc/nixarchy/box-templates.ini'"
+          " ; grep '^\\[' /etc/nixarchy/box-templates.ini ; sleep 8",
+          "echo ; echo '$ distrobox-assemble create --file"
+          " /etc/nixarchy/box-templates.ini --name archlinux'"
           # tee, because foot's own log only carries foot's stderr: the wait
           # below needs the create's last line, and the screen alone cannot
           # be grepped.
-          " ; nixarchy box create demo --template archlinux 2>&1"
+          " ; distrobox-assemble create --file"
+          " /etc/nixarchy/box-templates.ini --name archlinux 2>&1"
           " | tee /tmp/box-create.log",
           # `script` keeps the enter interactive -- a plain pipe through tee
           # would take the TTY away from the container shell -- while still
           # logging everything typed and printed for the waits below.
-          "echo ; echo '$ nixarchy box enter demo'"
-          " ; script -qfc 'distrobox enter demo' /tmp/box-tty.log",
+          "echo ; echo '$ distrobox enter archlinux'"
+          " ; script -qfc 'distrobox enter archlinux' /tmp/box-tty.log",
       ]), [
           ("box-templates", 8, 0),
       ], tail=0)
@@ -558,7 +565,8 @@ let
       # the create log instead of a bare stack trace.
       try:
           machine.wait_until_succeeds(
-              "grep -q 'nixarchy box enter' /tmp/box-create.log", timeout=1500)
+              "grep -q 'distrobox enter archlinux' /tmp/box-create.log",
+              timeout=1500)
       except Exception:
           print("=== box-create.log at timeout ===")
           print(machine.execute("cat /tmp/box-create.log")[1])

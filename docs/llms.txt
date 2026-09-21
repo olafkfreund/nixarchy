@@ -88,8 +88,8 @@ Key facts an assistant should know before answering questions about nixarchy:
   disposable NixOS MicroVM (microvm.nix) that 9p-mounts the host's /nix/store
   read-only — no root, no rebuild, megabytes not gigabytes. Root filesystem is
   tmpfs; it is not a hardened security boundary.
-- Boxes are a compatibility layer, not a sandbox: `nixarchy box create dev
-  --template archlinux` gives a privileged distrobox container with your $HOME
+- Boxes are a compatibility layer, not a sandbox: the Distrobox panel
+  (Super+Alt+D) gives a privileged distrobox container with your $HOME
   mounted, for AUR packages, .deb installers and other software NixOS will not
   run. nixpkgs first, always.
 - Unfree packages are allowed by default (`programs.nixarchy.allowUnfree =

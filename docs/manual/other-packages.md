@@ -145,6 +145,14 @@ stale and cannot be removed once people depend on it, so nixarchy declares only
 what it genuinely integrates and leaves the rest of `services.tailscale` where
 you already know how to look it up.
 
+A service can be newer than your file. `services.nix` is written once, at your
+first login, and nothing rewrites it after that, because it is yours. So a
+service nixarchy adds later has no line in it. `nixarchy-service-enable <name>`
+copies that one line from `/etc/nixarchy/services-template.nix`, just before
+the file's closing brace, turns it on, and changes nothing else.
+`nixarchy-catalogue-diff` lists every row your files are missing; `--add`
+writes them all, commented out, and `--add-one services <name>` writes one.
+
 ## Unfree software
 
 Chrome, VSCode, Cursor, Spotify, Steam and a few others are unfree in nixpkgs.

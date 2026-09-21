@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 834
 spec: spec/2026-09-21-834-luks-prompt-race.md
 ---

@@ -1015,15 +1015,19 @@ let
       script = segments.boxes;
       # All three can only appear if the guest userland actually ran --
       # "Arch Linux" is printed by the container's os-release and fastfetch,
-      # and "omarchy@demo" is the prompt INSIDE the container, hostname
-      # assigned by create. Not "pacman": the install visibly happens, but
+      # and "omarchy@archlinux" is the prompt INSIDE the container, hostname
+      # assigned by create -- which is the TEMPLATE name since #801, because
+      # the panel's INI is keyed by template where the retired CLI stitched
+      # on a header naming the box. This gate caught that rename by refusing
+      # the first recording of the retargeted scene, which is the whole
+      # reason it exists. Not "pacman": the install visibly happens, but
       # its command line scrolls off screen under its own output, and the
       # first gated recording failed on exactly that -- a token that
       # depends on scroll position is a flaky witness, while the prompt
       # recurs on every frame that shows the shell.
       expects = [
         "Arch Linux"
-        "omarchy@demo"
+        "omarchy@archlinux"
         "fastfetch"
       ];
       minDistinct = 3;

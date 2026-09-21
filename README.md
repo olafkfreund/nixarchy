@@ -390,7 +390,7 @@ package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
 ```
 
 Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
-the Lua defaults all follow. Only **32 of 444 scripts** actually run
+the Lua defaults all follow. Only **32 of 445 scripts** actually run
 `pacman`/`yay` — that's the entire distro-coupling surface.
 
 Six of those are replaced outright, in `pkgs/omarchy/nix-bin/`: the ones the
@@ -436,6 +436,20 @@ basename is what it stores.
 
 ## What works
 
+The panels below are described in prose further down and are easier to believe
+in motion. Each is a real session, recorded in a VM and gated on what the
+frames actually show (`tests/demo/`).
+
+| | |
+|---|---|
+| ![The Packages panel: searching nixpkgs, adding a package, and applying without a terminal](docs/img/features/pkg.gif) | ![The Distrobox panel: creating an Arch box from a template and entering it](docs/img/features/boxes.gif) |
+| **Install ▸ Packages** — `Super+Alt+N` | **Trigger ▸ Boxes** — `Super+Alt+D` |
+| ![The Herdr panel: agent sessions and what each one is doing](docs/img/features/herdr.gif) | ![The Dev environments panel: scaffolding a devenv project and entering it](docs/img/features/devenv.gif) |
+| **Apps ▸ Herdr** — `Super+Alt+H` | **Apps ▸ Dev environments** — `Super+Alt+E` |
+
+More under [`docs/img/features/`](docs/img/features), and the rest of the tour
+is on [the site](https://olafkfreund.github.io/nixarchy/).
+
 | | |
 |---|---|
 | Hyprland session, QuickShell bar, 22 themes | as upstream ships them |
@@ -446,6 +460,8 @@ basename is what it stores.
 | **Apps ▸ GitLab Pipelines** | project pipelines, stages and jobs in a panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui)), with `glab`. **On by default**, Super+Alt+P on a new install; `programs.nixarchy.defaultPlugins.gitlab = false` removes it |
 | **Apps ▸ GitHub Actions** | repository workflow runs, jobs and steps in a panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)), with `gh`. **On by default**, Super+Alt+A on a new install; `programs.nixarchy.defaultPlugins.github = false` removes it |
 | **Apps ▸ Herdr** | your herdr sessions and their agents in the bar ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)), with `herdr`. **On by default**, Super+Alt+H on a new install; `programs.nixarchy.defaultPlugins.herdr = false` removes it |
+| **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **Coming**, and it asks a human before it takes control — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
+| **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in, and coming** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
@@ -456,21 +472,21 @@ basename is what it stores.
 | **Plugins** | `omarchy plugin add <url>` works as upstream ships it, and `programs.nixarchy.plugins` pins one in your flake |
 | **Themes** | `omarchy theme install <url>` clones and applies a published theme at runtime |
 | 13 language toolchains | Go, Rust, Node, Bun, Deno, Java, Elixir, Zig, Clojure, Scala, .NET, OCaml, Python — from nixpkgs, not from `mise` |
-| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish, and the **Dev environments** panel (`Super+Alt+E`) lists, creates, enters and removes them — [the page](docs/manual/per-project-environments.md). Off by default |
-| **Boxes** | the Distrobox panel (`Super+Alt+D`) creates, enters and promotes an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](docs/manual/boxes.md). Off by default |
+| **Per-project environments** | `nixarchy dev init react` scaffolds a [devenv](https://devenv.sh) project that activates on `cd` in bash, zsh and fish, and the **Dev environments** panel (`Super+Alt+E`) lists, creates, enters and removes them — [the page](https://olafkfreund.github.io/nixarchy/manual/per-project-environments). Off by default |
+| **Boxes** | the Distrobox panel (`Super+Alt+D`) creates, enters and promotes an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](https://olafkfreund.github.io/nixarchy/manual/boxes). Off by default |
 | **Trigger ▸ Boxes** | your distrobox boxes in a panel ([nixarchy-distrobox](https://github.com/olafkfreund/nixarchy-distrobox)), created from nixarchy's own templates. **On wherever Boxes are**, Super+Alt+D on a new install; `programs.nixarchy.defaultPlugins.distrobox = false` removes it |
 | **Trigger ▸ Sandbox** | disposable and permanent MicroVMs in one panel ([nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm)). **On by default**, Super+Alt+V on a new install; `programs.nixarchy.defaultPlugins.microvm = false` removes it |
 | **Apps ▸ Podman** | containers, images, volumes and networks in a panel ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)). **On wherever podman is** — the Podman services row or Boxes — Super+Alt+O on a new install; `docker` stays Docker |
-| **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](docs/manual/remote-desktop.md). Off by default |
-| **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](docs/manual/sandboxes.md). Off by default |
-| **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](docs/manual/python.md). **On by default** |
+| **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](https://olafkfreund.github.io/nixarchy/manual/remote-desktop). Off by default |
+| **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](https://olafkfreund.github.io/nixarchy/manual/sandboxes). Off by default |
+| **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries). **On by default** |
 | Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |
-| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a card over the desktop with a hands-on tour and a tutor grounded in your machine (Claude Code by default), from the snowflake in the bar or `nixi` — [the page](docs/manual/getting-started.md#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
+| **The guide** | [nixi](https://github.com/olafkfreund/nixi-nixarchy) — a card over the desktop with a hands-on tour and a tutor grounded in your machine (Claude Code by default), from the snowflake in the bar or `nixi` — [the page](https://olafkfreund.github.io/nixarchy/manual/getting-started#the-guide). **On by default**; `services.nixi.enable = false` removes it entirely |
 | **Agent skills** | from `nixarchy` and `nixos` to `nixos-gpu` and `nixos-android` — rewritten for NixOS, not Omarchy's Arch originals |
 | **LocalSend** | the firewall opens 53317 as upstream's `firewall.sh` does — Share ▸ Receive is reachable, not merely listening |
 | Disk Usage, screensaver | `dua` and `ttfx` are runtime dependencies, so the launcher row and `SUPER + Esc` do something |
 | **Fresh-machine install** | a bootable ISO, seven questions, and the machine is a flake you own — with no network |
-| **Android** | `scrcpy` mirrors the phone you own, `nixarchy android` gets it paired over Wi-Fi, and Waydroid runs Android without one — [the page](docs/manual/android.md). Off by default |
+| **Android** | `scrcpy` mirrors the phone you own, `nixarchy android` gets it paired over Wi-Fi, and Waydroid runs Android without one — [the page](https://olafkfreund.github.io/nixarchy/manual/android). Off by default |
 | Lock screen on sleep/wake | quickshell pinned to 0.3.1; 0.3.0 aborts on DPMS and leaves the compositor locked with no way in |
 
 ## AI agent skills
@@ -698,6 +714,39 @@ scrolling past it:
 | [Design notes, status, and what running it found](docs/internals/design.md) | each bug that shipped and is now guarded by CI; what proves every claim in *What works*; the AI measurements; the screencast and the development checks |
 | [How this is tested](https://olafkfreund.github.io/nixarchy/manual/how-this-is-tested) | what CI runs, when, and what each check does not prove |
 
+## The manual
+
+Every page the site publishes. CI keeps this list honest against
+`docs/manual/` — a page added there and not named here fails a pull request,
+by name (`build.yml`, "Every manual page is in the sidebar").
+
+**Start here** — what nixarchy is, how to install it, and what a declarative machine changes about your habits
+
+  [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started) · [Try it in a VM](https://olafkfreund.github.io/nixarchy/manual/try-it-in-a-vm) · [The NixOS philosophy, and what it changes](https://olafkfreund.github.io/nixarchy/manual/philosophy) · [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) · [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos)
+
+**Installing software** — from the menu, from all of nixpkgs, without installing at all, and when the thing is not packaged
+
+  [Other packages](https://olafkfreund.github.io/nixarchy/manual/other-packages) · [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first) · [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview) · [Prebuilt Binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries) · [Python](https://olafkfreund.github.io/nixarchy/manual/python)
+
+**Development** — toolchains per project, an Arch or Debian userland, a disposable VM, a phone
+
+  [Development tools](https://olafkfreund.github.io/nixarchy/manual/development-tools) · [Per-project environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments) · [Boxes](https://olafkfreund.github.io/nixarchy/manual/boxes) · [Sandboxes](https://olafkfreund.github.io/nixarchy/manual/sandboxes) · [Android](https://olafkfreund.github.io/nixarchy/manual/android)
+
+**The desktop** — options, panels, your own files, your own theme, agents, and games
+
+  [Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration) · [nixarchy's Plugins](https://olafkfreund.github.io/nixarchy/manual/plugins) · [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles) · [Making your own theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme) · [AI](https://olafkfreund.github.io/nixarchy/manual/ai) · [Gaming](https://olafkfreund.github.io/nixarchy/manual/gaming)
+
+**Keeping it running** — updating, stable or unstable, going back, and what to do when something breaks
+
+  [Updates](https://olafkfreund.github.io/nixarchy/manual/updates) · [Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels) · [System snapshots](https://olafkfreund.github.io/nixarchy/manual/system-snapshots) · [Troubleshooting](https://olafkfreund.github.io/nixarchy/manual/troubleshooting) · [How this is tested](https://olafkfreund.github.io/nixarchy/manual/how-this-is-tested)
+
+**Security and access** — the firewall and disk encryption, credentials that are not world-readable, and the session from elsewhere
+
+  [Security](https://olafkfreund.github.io/nixarchy/manual/security) · [Secrets](https://olafkfreund.github.io/nixarchy/manual/secrets) · [Remote desktop](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)
+
+**More than one machine** — one flake for several hosts, an image of this machine, sharing a disk, and installing hands-free
+
+  [Many machines, one repo](https://olafkfreund.github.io/nixarchy/manual/many-machines) · [A reinstall image of this machine](https://olafkfreund.github.io/nixarchy/manual/reinstall-image) · [Dual boot install](https://olafkfreund.github.io/nixarchy/manual/dual-boot-install) · [Unattended installs](https://olafkfreund.github.io/nixarchy/manual/unattended-installs)
 ## Contributing
 
 Contributions are welcome, and the process is written down rather than

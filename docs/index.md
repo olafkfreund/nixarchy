@@ -25,7 +25,7 @@ flake, with its menus rewired to Nix instead of pacman.
 
 ![The MicroVMs panel, in the desktop's own look](img/plugins/microvm-panel.webp)
 
-Omarchy 4.x is not a dotfiles repo, it is an application: 444 shell commands, a
+Omarchy 4.x is not a dotfiles repo, it is an application: 445 shell commands, a
 QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua API
 introduced in 0.55. nixarchy packages that tree as a derivation and replaces the
 parts that assume Arch, rather than reimplementing it in Nix. Tracking an
@@ -201,4 +201,9 @@ New to NixOS? Start with **[the philosophy](manual/philosophy)** and
   [roadmap](https://github.com/olafkfreund/nixarchy#roadmap), which CI keeps
   honest against the open epics
 - **[What is being worked on](https://github.com/olafkfreund/nixarchy/issues)**
+- Repository-facing subjects that live in the README rather than here, because
+  a second copy is a second thing to keep true:
+  [how releases are numbered](https://github.com/olafkfreund/nixarchy#releases),
+  [who updates which application](https://github.com/olafkfreund/nixarchy#keeping-applications-updated),
+  and [what "vendored, not reimplemented" means](https://github.com/olafkfreund/nixarchy#vendored-not-reimplemented)
 - **[Omarchy itself](https://omarchy.org)**, upstream

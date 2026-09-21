@@ -70,10 +70,8 @@ on the nixarchy site as well as the plugin's.
 - **"Status claims age badly"**: if the panel description changes, it changes
   in the same places that carry it (`plugins.md`, the front page, and
   `llms.txt`), or not at all.
-- It lands after olafkfreund/nixarchy-devenv#4 merges, so the site never
-  describes a behaviour the pinned plugin lacks. The pin bump that brings #4
-  to nixarchy is part of this task or a prerequisite of it: to be decided in
-  the spec.
+- It lands after #849 bumps the pin to include olafkfreund/nixarchy-devenv#4
+  (merged), so the site never describes a behaviour the pinned plugin lacks.
 
 ## Decisions
 

@@ -284,6 +284,46 @@ widget's rendering, so a pin bump that changes the widget does not move it.
 The `defaults` node boots only after `machine` shuts down. Two VMs up at once
 is a load the runners were never measured for (AGENTS.md §6).
 
+## The box checks moved onto a plugin, and three things went with them
+
+#801 retired `nixarchy box`. The two box checks were retargeted rather than
+deleted, but what they now exercise is not what they exercised before, and the
+difference is worth stating rather than discovering.
+
+**They test a pinned rev, not a script this repo owns.** `box-boot` runs
+`distrobox-assemble create --file /etc/nixarchy/box-templates.ini --name
+archlinux` -- the path the Distrobox panel takes. The panel is a flake input
+pinned by rev. If a pin bump changes how the panel creates a box, nothing here
+goes red: the check still exercises the INI path, which is the contract, but
+not the panel's own code. The panel opening at all is the plugin PR's
+business (see the stand-ins section above), and `menu-verbs` asserts only that
+the Boxes row names an installed plugin id.
+
+**The cheap static half is gone.** `box-template` used to grep the built
+`nixarchy-box` for a literal store path to distrobox, which is the rule
+`modules/services/boxes.nix`'s header states (nixpkgs#478154): reached any way
+other than by bare name, distrobox bakes a generation-specific entrypoint into
+every container it creates, and garbage collection can delete that path from
+under a running box. A QML panel has no generated script to grep, so that
+assertion has no equivalent -- it was not moved, it was lost. What remains is
+`box-boot` observing the recorded mount on a real container, which is the
+stronger measurement and the one that needs `/dev/kvm`. A regression a grep
+would have caught on every pull request now waits for a VM.
+
+**Nothing asserts the retired verb still answers.** `modules/apps.nix` keeps a
+`box)` case that prints a pointer at the panel. Delete that row and `nixarchy
+box` falls through to `exec omarchy "$@"`, which answers a command this
+project shipped with *"Unknown Omarchy command: omarchy box"* -- the #538
+failure, in reverse. No check covers it. It is one `case` row, so the cheapest
+honest guard would be a grep over the built dispatcher, and this paragraph is
+here rather than that check because nobody has written it.
+
+One more, adjacent and worse, found while retargeting: **`tests/demo/`'s
+scenes are `packages`, not `checks`, and no workflow builds any of them.** The
+`boxes` scene drove `nixarchy box` and would have gone on producing a
+published GIF of a command that errors, silently, with `main` green. Anything
+in there that names a command is unguarded by construction.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

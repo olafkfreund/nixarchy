@@ -75,12 +75,20 @@ on the nixarchy site as well as the plugin's.
   to nixarchy is part of this task or a prerequisite of it: to be decided in
   the spec.
 
+## Decisions
+
+Answered by the owner on 2026-09-21:
+
+1. **The new GIF replaces `img/features/devenv.gif` in the plugins section.**
+   `per-project-environments.md` keeps its `nixarchy dev init` GIF, which
+   shows the command that page is about.
+2. **The pin bump is a separate task:** #849 bumps `nixarchy-devenv` from
+   `e003f00` to `72c0a47` or later (the merge of nixarchy-devenv#4). It is a
+   prerequisite: this change lands after it.
+3. **Bound directories are mentioned in all three places:**
+   `docs/manual/plugins.md`, `docs/manual/per-project-environments.md` and
+   `docs/llms.txt`.
+
 ## Open questions
 
-1. Should the new GIF **replace** `img/features/devenv.gif` in the plugins
-   section, or sit beside it? That GIF shows `nixarchy dev init`, which
-   `per-project-environments.md` still needs.
-2. Does the flake-input bump that brings nixarchy-devenv#4 into nixarchy
-   belong to this task, or to a separate one first?
-3. Should `per-project-environments.md` and `llms.txt` mention bound
-   directories, or only `plugins.md`?
+None.

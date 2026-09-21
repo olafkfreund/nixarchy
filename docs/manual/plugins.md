@@ -159,7 +159,9 @@ which activate on `cd`, which have a database running — all of it lived in
 your head or in `ls`.
 
 **What it does.** Every devenv project under your project roots, the ones you
-allowed first. Enter one in a terminal (`devenv shell`), edit its `devenv.nix`,
+allowed first. Directories bound to a configuration elsewhere with `devenv
+--from` are listed too, reading **from &lt;source&gt;**; they have nothing of
+their own to edit or delete, so removal offers only revoke. Enter one in a terminal (`devenv shell`), edit its `devenv.nix`,
 start and stop its processes, update its lock, allow or revoke it, and remove
 it in steps from revoke to deleting the folder. Create a new project from
 sixteen templates — languages, Jupyter and machine learning, Flutter, and cloud
@@ -167,7 +169,9 @@ projects for AWS, Azure, GCP and five more. It is **Apps ▸ Dev environments**
 or **Super+Alt+E** wherever the [devenv service](per-project-environments) is
 on, and `nixarchy dev …` is the same tool in a terminal.
 
-![A devenv project scaffolded from a template, with its languages in devenv.nix](../img/features/devenv.gif)
+![The Dev environments menu listing a directory bound with devenv --from, offering only revoke, entering its shell, then revoking it](../img/plugins/devenv-bound.gif)
+
+![The Dev environments menu: demo projects, demo-bound first, reading from its source with no edit button](../img/plugins/devenv-bound.jpg)
 
 ## GitHub Actions
 

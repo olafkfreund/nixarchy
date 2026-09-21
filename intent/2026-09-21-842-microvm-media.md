@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 842
 author: olafkfreund
 ---
@@ -51,8 +51,5 @@ waiting for apply.
 
 ## Open questions
 
-1. The sources were recorded on razer's theme, Gruvbox, not Tokyo Night. A panel in
-   another theme on the Tokyo Night backdrop could read as a different
-   product, which is #789's failure again. Is that acceptable, or should the
-   two captures be retaken on a Tokyo Night session first? That means one
-   popup recording and one menu still.
+None. Settled by the owner on 2026-09-21: the sources are composed as they
+are, in Gruvbox, and the theme does not matter here.

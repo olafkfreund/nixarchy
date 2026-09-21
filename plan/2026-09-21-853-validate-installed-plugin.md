@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 853
 spec: spec/2026-09-21-853-validate-installed-plugin.md
 ---

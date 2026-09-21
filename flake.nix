@@ -254,7 +254,7 @@
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
-      url = "github:olafkfreund/nixarchy-microvm/481e6c5c135c1edd9c624c3361b56fe7bee5d750";
+      url = "github:olafkfreund/nixarchy-microvm/c498b3b16a7c5cccf928ae9b8c0bb6326e17d755";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

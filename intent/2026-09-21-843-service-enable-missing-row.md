@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 843
 author: olafkfreund
 ---
@@ -54,11 +54,4 @@ the script can do.
 
 ## Open questions
 
-1. **A row the user deliberately deleted.** Today that makes the id
-   impossible to enable. After this change, running the script re-adds it.
-   My lean: that's fine, since running `nixarchy-service-enable <id>` is an
-   explicit request to enable that service.
-2. **Where the row goes.** Either appended at the end of the attrset, just
-   before the closing `}`, or inserted under its section heading as the
-   template has it. My lean is before the closing `}`: simple, and robust to
-   a user's reordered file.
+None. The owner approved this intent on 2026-09-21 with the stated leans: (1) running the script for an id whose row the user deleted re-adds it, because it's an explicit request; (2) the row goes just before the closing `}` of the attrset.

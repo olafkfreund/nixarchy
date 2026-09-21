@@ -446,6 +446,8 @@ basename is what it stores.
 | **Apps ▸ GitLab Pipelines** | project pipelines, stages and jobs in a panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui)), with `glab`. **On by default**, Super+Alt+P on a new install; `programs.nixarchy.defaultPlugins.gitlab = false` removes it |
 | **Apps ▸ GitHub Actions** | repository workflow runs, jobs and steps in a panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)), with `gh`. **On by default**, Super+Alt+A on a new install; `programs.nixarchy.defaultPlugins.github = false` removes it |
 | **Apps ▸ Herdr** | your herdr sessions and their agents in the bar ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)), with `herdr`. **On by default**, Super+Alt+H on a new install; `programs.nixarchy.defaultPlugins.herdr = false` removes it |
+| **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **Coming**, and it asks a human before it takes control — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
+| **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in, and coming** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 839
 intent: intent/2026-09-21-839-devenv-bound-showcase.md
 ---

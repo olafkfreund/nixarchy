@@ -126,9 +126,9 @@ attach to its console later, stop it, or remove it. There's optional help from
 your AI agent to fill in the create form. It is **Trigger ▸ Sandbox** now,
 and `nixarchy vm` is still there in a terminal.
 
-![A MicroVM created and booted from the panel, to a prompt inside the guest](../img/features/microvm.gif)
+![A MicroVM started from the bar popup, its build streaming into the panel until it runs in the background](../img/features/microvm.gif)
 
-![The MicroVMs panel: disposable and permanent VMs in one list](../img/plugins/microvm-panel.jpg)
+![The MicroVMs menu: two disposable VMs running and a permanent one pending apply, in one list](../img/plugins/microvm-panel.jpg)
 
 ## Distrobox
 

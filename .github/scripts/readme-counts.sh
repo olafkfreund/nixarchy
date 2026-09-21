@@ -225,6 +225,14 @@ quantity "commands-upstream" "$commands" \
 quantity "pacman-scripts" "$pac" \
   '.*\*\*([0-9]+) of [0-9]+ scripts\*\*.*' \
   's/\*\*[0-9]+ of [0-9]+ scripts\*\*/**'"$pac"' of '"$commands"' scripts**/'
+# The SECOND number on that line, which had no entry of its own and so was
+# rewritten by --fix and never compared by --check (#831). README said 445 in
+# four places and 444 here, through every pull request, and nothing could go
+# red: the pattern above captures only the first number. One quantity per
+# number is the rule the rest of this file already follows.
+quantity "pacman-scripts-of" "$commands" \
+  '.*\*\*[0-9]+ of ([0-9]+) scripts\*\*.*' \
+  's/\*\*([0-9]+) of [0-9]+ scripts\*\*/**\1 of '"$commands"' scripts**/'
 quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'
@@ -346,12 +354,12 @@ for f in "$readme" "$root/docs/manual/ai.md"; do
   done
 done
 
-# A floor. Twenty-seven quantities are declared above; a run that checked fewer
+# A floor. Twenty-eight quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 27 ]; then
-  echo "::error::only $checked of 27 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 28 ]; then
+  echo "::error::only $checked of 28 quantities were accounted for" >&2
   fail=1
 fi
 

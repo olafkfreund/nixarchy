@@ -25,7 +25,7 @@ flake, with its menus rewired to Nix instead of pacman.
 
 ![The MicroVMs panel, in the desktop's own look](img/plugins/microvm-panel.webp)
 
-Omarchy 4.x is not a dotfiles repo, it is an application: 444 shell commands, a
+Omarchy 4.x is not a dotfiles repo, it is an application: 445 shell commands, a
 QuickShell desktop shell, 22 themes, and Hyprland configured through the Lua API
 introduced in 0.55. nixarchy packages that tree as a derivation and replaces the
 parts that assume Arch, rather than reimplementing it in Nix. Tracking an

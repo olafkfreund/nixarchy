@@ -108,7 +108,14 @@ pkgs.testers.runNixOSTest {
     # be a /nix/store path (nixpkgs#478154). Both halves asserted -- that an
     # init mount exists at all, and that it is not a store path -- so this
     # cannot go green by the mount disappearing.
-    inspect = machine.succeed(alice("podman inspect archlinux"))
+    # `podman container inspect`, not `podman inspect`: the container is now
+    # named for its template, so it shares a name with the preloaded image,
+    # and plain `inspect` falls back to the image when no container exists.
+    # Proved live -- a no-container break passed that line and failed two
+    # lines later on the mount assertion, red only because the image happens
+    # not to contain the string "distrobox-init". With `container inspect`
+    # the same break fails here, with `no such container "archlinux"`.
+    inspect = machine.succeed(alice("podman container inspect archlinux"))
     assert "distrobox-init" in inspect, "no distrobox-init mount recorded at all:\n" + inspect[:2000]
     import re
     stores = re.findall(r"/nix/store/\S*distrobox\S*", inspect)

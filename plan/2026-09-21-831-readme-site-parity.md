@@ -77,9 +77,28 @@ worktree, seconds, no VM and no evaluation:
      shows the new loop was wired into the same `rc` rather than bolted beside
      it.
 
-Confirm each break landed with `git diff` before believing a red result (§1: a
-silent no-op break and a blind check are indistinguishable from an exit
-status). Run the step's shell under `bash`, not the interactive zsh.
+Confirm each break landed before believing a red result (§1: a silent no-op
+break and a blind check are indistinguishable from an exit status). Run the
+step's shell under `bash`, not the interactive zsh.
+
+**Deviations, recorded with the code that caused them.**
+
+1. **Steps 1 and 2 land in one commit.** A commit that adds a check README
+   cannot yet satisfy leaves the branch red between the two, and a red commit
+   in a branch's history is a trap for whoever bisects it later.
+2. **There are 32 pages, not 33.** `docs/manual/` holds 33 files; the check
+   excludes `index.md`, as this plan's own quoted `grep -v '^index$'` does. The
+   generator asserts its group map equals what is on disk, which is what caught
+   it.
+3. **The *Prebuilt binaries* row linked `python.md`.** `prebuilt-binaries.md`
+   was one of the 13 pages nothing named, and the row describing it pointed at
+   the wrong page — so the fix belongs to the same edit, and the missing list
+   became 12.
+4. **`git diff` is the wrong way to confirm a break in an uncommitted block.**
+   Removing a line from a section that is not yet in `HEAD` produces no `-`
+   line to match, so the check for the break reported nothing and the `&&`
+   chain stopped before the check ran. Confirm against the *file*
+   (`grep -c` on the working tree), not against a diff with `HEAD`.
 
 **2. README gains the index.** A grouped section linking all 33 pages, in the
 settled spelling. The 13 above stop being invisible; `plugins.md` in

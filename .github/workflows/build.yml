@@ -728,6 +728,17 @@ jobs:
           # matching a `/manual/` prefix like the two above.
           index=$(grep -oE '\]\([a-z-]+(#[a-z-]*)?\)' docs/manual/index.md |
             sed 's/](//;s/)//;s/#.*//' | sort -u)
+          # The FOURTH hand-maintained index of the same pages (#831), and the
+          # one nothing checked: README linked 19 of 33, and the 13 it named
+          # nowhere included plugins.md -- the site's own hub for the eight
+          # panels README lists row by row.
+          #
+          # One spelling, on purpose. README used both a relative path and the
+          # published URL; #831 normalised it on the URL, because that is what
+          # a reader on github.com can click through to the rendered page, and
+          # because a pattern per spelling is how this grep would rot.
+          readme=$(grep -oE 'nixarchy/manual/[a-z-]+' README.md |
+            sed 's|.*manual/||' | sort -u)
           rc=0
           for n in $(comm -23 <(echo "$pages") <(echo "$nav") || true); do
             echo "::error::docs/manual/$n.md is published but not in the docs/_config.yml sidebar"
@@ -743,8 +754,12 @@ jobs:
             echo "::error::docs/manual/$n.md is published but not linked from docs/manual/index.md"
             rc=1
           done
+          for n in $(comm -23 <(echo "$pages") <(echo "$readme") || true); do
+            echo "::error::docs/manual/$n.md is published but not linked from README.md"
+            rc=1
+          done
           [ $rc -eq 0 ] || exit 1
-          echo "every manual page is in the sidebar, in llms.txt and in the manual index"
+          echo "every manual page is in the sidebar, in llms.txt, in the manual index and in README"
 
       - name: Verify shebangs were patched
         run: |

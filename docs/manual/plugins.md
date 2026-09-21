@@ -164,7 +164,7 @@ allowed first. Directories bound to a configuration elsewhere with `devenv
 their own to edit or delete, so removal offers only revoke. Enter one in a terminal (`devenv shell`), edit its `devenv.nix`,
 start and stop its processes, update its lock, allow or revoke it, and remove
 it in steps from revoke to deleting the folder. Create a new project from
-sixteen templates — languages, Jupyter and machine learning, Flutter, and cloud
+seventeen templates — languages, Jupyter and machine learning, Flutter, Android, and cloud
 projects for AWS, Azure, GCP and five more. It is **Apps ▸ Dev environments**
 or **Super+Alt+E** wherever the [devenv service](per-project-environments) is
 on, and `nixarchy dev …` is the same tool in a terminal.

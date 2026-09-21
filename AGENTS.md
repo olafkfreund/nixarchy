@@ -22,8 +22,20 @@ failure history for its own area, and they are where the long reasoning lives:
 | `docs/AGENTS.md` | the site, the manual's three lists, and the house style for pictures |
 | `docs/internals/flake.md` | the flake's own reasoning — inputs, the overlay, the checks |
 
-`CLAUDE.md` is a symlink to this file, because Claude Code reads `CLAUDE.md`
-and not `AGENTS.md`. Without it none of this loads.
+`CLAUDE.md` is a symlink to this file, and so is a `CLAUDE.md` beside each
+of the registers above. Claude Code has read `AGENTS.md` natively since
+v2.1.277 — but only where there is no `CLAUDE.md` at or above the working
+directory, and this repository's root has one. A root `CLAUDE.md` puts the
+whole tree in CLAUDE.md mode, so the five directory registers were reaching
+no Claude Code session at all: measured on 2.1.278, a fresh agent that read
+`tests/box-boot.nix` and `modules/services/boxes.nix` got this file and
+neither of theirs (#836).
+
+The symlinks are what make the nearest-file rule below true. Removing the
+root one would also work, by putting the tree in AGENTS.md mode — and would
+silently leave every session before v2.1.277, and every session that cannot
+fetch feature flags, with no project instructions whatsoever. Five symlinks
+need no version floor and no per-user setting.
 
 ## Write back what cost you an hour
 
@@ -625,8 +637,9 @@ files carry the full reasoning and the failure history.
   directory that has one — `installer/`, `modules/`, `pkgs/`, `tests/` — states
   its intent, what it owns, and which checks cover it, followed by the design
   reasoning and failure history. Claude Code loads the nearest one when it
-  reads a file in that directory; other agents follow the same nearest-file
-  rule.
+  reads a file in that directory — through the `CLAUDE.md` symlink beside it,
+  which is what makes that true (see the top of this file, and #836); other
+  agents follow the same nearest-file rule against `AGENTS.md` itself.
 - **What still belongs in the code is a short note that stops the next edit
   being wrong.** One to three lines, at the line it protects: an invariant, a
   gotcha, the reason a call is shaped the way it is. The test is whether

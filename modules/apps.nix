@@ -699,8 +699,8 @@ let
       // lib.optionalAttrs boxesEnabled {
         # The Boxes group is the Distrobox panel now (#766 PR D): it enters,
         # removes and creates -- from nixarchy's own templates, which boxes.nix
-        # writes where the panel reads them. `nixarchy box` stays for the
-        # terminal until the panel can also promote and list (#801).
+        # writes where the panel reads them. The `box` alias stays: it is how
+        # somebody who knew the retired `nixarchy box` finds the panel (#801).
         "trigger.box" = {
           icon = "󰆧";
           label = "Boxes";
@@ -2968,19 +2968,12 @@ in
             })
 
             # `nixarchy vm <subcommand>`. Its own file for the same reason as
-            # box.nix below: `checks.microvm-template` (#224) has to run
+            # secret.nix below: `checks.microvm-template` (#224) has to run
             # the real command. See pkgs/microvm.nix for what it does and why.
             (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
 
-            # `nixarchy box <subcommand>`. Its own file for the same reason as
-            # microvm.nix above: `checks.box-template` (#258)
-            # has to run the real command. See pkgs/box.nix for what it does
-            # and why -- in particular why it never resolves distrobox through
-            # a /nix/store path.
-            (pkgs.callPackage ../pkgs/box.nix { })
-
             # `nixarchy secret <subcommand>`. Its own file for the same reason
-            # as the three above: tests/menu-verbs.nix reads the verbs out of
+            # as the two above: tests/menu-verbs.nix reads the verbs out of
             # the command the Secrets rows exec. See pkgs/secret.nix for why
             # the host's age identity never leaves root, and why the
             # declaration line is printed rather than written.
@@ -3074,7 +3067,16 @@ in
                   # checks.options now asserts the route.
                   try) shift; exec nixarchy-try "$@" ;;
                   vm) shift; exec nixarchy-vm "$@" ;;
-                  box) shift; exec nixarchy-box "$@" ;;
+                  # Retired (#801): the Distrobox panel does all of it. Not
+                  # listed in the usage above any more -- a help text naming a
+                  # verb that prints "is retired" is the #538 defect wearing
+                  # the opposite coat.
+                  # A pointer for one release rather than falling through to
+                  # `exec omarchy "$@"`, which would answer a command this
+                  # project shipped with "Unknown Omarchy command: omarchy
+                  # box" -- the #538 failure, in reverse.
+                  box) echo "nixarchy box is retired -- boxes live in the Distrobox panel" \
+                            "(Super+Alt+D, or the Boxes row in the menu)." >&2; exit 1 ;;
                   secret) shift; exec nixarchy-secret "$@" ;;
 
                   # The rest of them (#538). Every one of these was shipped,
@@ -3144,7 +3146,6 @@ in
                                               The panel is Super+Alt+E, or Apps > Dev environments
                   nixarchy try <app|attr>     Run something once without installing it
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
-                  nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                   nixarchy doctor             What this machine needs to run nixarchy
                   nixarchy verify             Check the hardware nixarchy cannot test in a VM
                   nixarchy version            The Omarchy version and the nixarchy revision

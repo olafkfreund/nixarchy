@@ -40,9 +40,16 @@ Copied from the spec so this file stands alone.
 never lapse, and doing this first means step 2 is a deletion against a suite
 that already tests the replacement.
 
-- `tests/box-boot.nix` — `:95` runs `nixarchy box create`; it runs
-  `distrobox assemble` against the generated
-  `/etc/nixarchy/box-templates.ini` instead.
+- `tests/box-boot.nix` — `:95` runs `nixarchy box create`; it mirrors the
+  panel's own argv instead: `env DBX_CONTAINER_MANAGER=podman distrobox
+  create --yes --name demo-arch --image <image>`, with the image read out of
+  the generated `/etc/nixarchy/box-templates.ini`.
+
+  **This step originally said `distrobox assemble` against that file, "the
+  path the panel takes".** It is not: the panel parses the INI in JavaScript
+  and never hands it to assemble (`Model.js`), because assemble sources an
+  INI as shell. Corrected at the maintainer's direction after a review of the
+  branch; the spec carries the full reasoning.
 - `tests/box-template.nix` — the catalogue assertions stay; the
   `${nixarchyBox}/bin/nixarchy-box` grep at `:92` goes, with a comment saying
   why it has no panel equivalent (the plugin is QML and resolves `distrobox`
@@ -53,6 +60,18 @@ retargeted path at a template name that does not exist and capture the output.
 Both failing outputs go in the PR. Prove the break landed with `git diff`
 before believing a red result.
 
+**Deviation, recorded with the code that caused it.** `flake.nix:2248`
+(`nixarchyBox = …`) moved from step 2 into step 1. Dropping the `nixarchyBox`
+parameter from `tests/box-template.nix` makes the call site pass an argument
+the function no longer accepts, so the tree does not evaluate between the two
+steps. Step 2 keeps the rest of its flake work; only this line moved.
+
+Two container-name notes the retarget forced, since they are behaviour and not
+style. `/etc/nixarchy/box-templates.ini` is keyed by TEMPLATE name, where
+`nixarchy box create` stitched on a header naming the BOX — so the container
+`box-boot` creates is now `archlinux`, not `scratch`. And `--name` is required:
+without it `distrobox-assemble` would create every template in the catalogue.
+
 **2. Remove the CLI.** `pkgs/box.nix` deleted; `nixarchy-box` and the
 `nixarchyBox` argument out of `flake.nix`; `modules/apps.nix:3077` becomes a
 pointer rather than an exec:
@@ -62,8 +81,17 @@ box) echo "nixarchy box is retired -- boxes live in the Distrobox panel" \
           "(Super+Alt+D, or the Boxes row in the menu)." >&2; exit 1 ;;
 ```
 
-→ verify by `nix build .#nixarchy`, `nix flake show` no longer listing
-`nixarchy-box`, and running `nixarchy box` to read the message.
+→ verify by `nix flake show` no longer listing `nixarchy-box`, and by running
+`nixarchy box` to read the message.
+
+**Deviation.** This step originally said `nix build .#nixarchy`. There is no
+such attribute and never was: the dispatcher is a `writeShellApplication`
+inside `modules/apps.nix`'s `systemPackages`, not a flake package, so the
+command fails with *"flake … does not provide attribute"* whatever the state
+of the tree. Replaced by two things that do answer the question —
+`checks.menu-verbs`, which evaluates the module and builds the menu, and
+building the `systemPackages` entry out of `nixosConfigurations.reference` to
+run it. Both done; `nixarchy box` prints the pointer and exits 1.
 
 **3. `tests/menu-verbs.nix`.** `:135` knows the box rows go through
 `nixarchy box <verb>`. It is updated with them, in the same commit as step 2 —
@@ -79,6 +107,35 @@ panel, Super+Alt+D — rather than simply dropping the sentence.
 → verify by `grep -rn "nixarchy box" README.md docs/` returning only
 historical references, and by `readme-counts.sh` staying green (removing rows
 moves counts, and that guard refuses on a number it cannot spell).
+
+**Deviation: two things this step did not know about.**
+
+`docs/llms.txt:91` names the command too, so the doc list is four files, not
+three.
+
+More seriously, **`tests/demo/default.nix`'s `boxes` scene drives the retired
+command** -- `nixarchy box templates`, `create`, and a wait on
+`grep -q 'nixarchy box enter'` -- and produces the GIF `docs/manual/boxes.md`
+embeds. No artifact mentioned `tests/demo`. Nothing would have gone red: demo
+scenes are `packages`, not `checks`, and no workflow builds them, so the scene
+would have broken silently while the published GIF kept showing a command that
+errors (AGENTS.md §4, failing open). Retargeted to the same
+`distrobox-assemble --file /etc/nixarchy/box-templates.ini --name archlinux`
+path step 1 gave `box-boot`; the scene's node already sets
+`services.boxes.enable`, so the generated INI is there. The wait is now
+`distrobox enter archlinux`, which `distrobox-create` prints on success
+(read from its source, not guessed). **The GIF must be re-recorded before this
+merges** -- the committed one shows the retired CLI.
+
+**Decision, taken during implementation and outside the approved spec.** The
+panel still refuses `exported_apps`/`exported_bins`
+(`Model.js`: *"exported_apps runs commands inside the box; not supported
+yet"*), and the page's escape hatch for such a template was
+`nixarchy box create`. No shipped template uses those fields, and `distrobox`
+is on every user's PATH via `services.boxes`, so the page now points at
+`distrobox-assemble` directly -- which is what these templates already are.
+A documented path is still narrower than before, and the PR says so rather
+than letting the sentence quietly disappear.
 
 **5. `tests/AGENTS.md`: the coverage this trades away.** The old checks
 exercised a script this repo owns; the new ones exercise a plugin pinned by

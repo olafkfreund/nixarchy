@@ -58,9 +58,31 @@ capability.
 `tests/box-template.nix:92` greps `${nixarchyBox}/bin/nixarchy-box` for a baked
 `/nix/store` distrobox path.
 
-They are retargeted at the path the panel takes — `distrobox assemble` against
-the generated `/etc/nixarchy/box-templates.ini` — so box creation stays tested
-end to end rather than losing coverage as a side effect of a deletion.
+They are retargeted so box creation stays tested end to end rather than losing
+coverage as a side effect of a deletion.
+
+**Corrected during implementation, at the maintainer's direction.** This spec
+said the retarget should run `distrobox assemble` against the generated
+`/etc/nixarchy/box-templates.ini`, "the path the panel takes". That is wrong,
+and the error reached a spec, a plan, five commits and a public note before a
+review of the branch caught it by reading the pinned plugin's source. The
+panel parses that INI **in JavaScript and never hands it to assemble** —
+`Model.js`: *"Read here, in JavaScript, and never handed to distrobox:
+distrobox-assemble (1.8.2.5) writes each key=value into a file it then sources
+as shell, so an unquoted `$(...)` value runs on the host just from being
+read."* It then runs `createArgv()`: `env DBX_CONTAINER_MANAGER=podman
+distrobox create --yes --name <name> --image <image>`.
+
+So `box-boot` mirrors **that argv**, with the image read out of the generated
+INI the way the panel reads it, and a box name of its own choosing — which is
+also what the panel's form allows and what `assemble --name` could never do,
+since that selects an INI *section*.
+
+It is a mirror, not the panel: a pin bump that changes `createArgv` will not
+move the check. `tests/AGENTS.md` records that as the trade, alongside the
+mistake itself, because the way it survived so long is the more useful
+lesson — every layer that repeated it was repeating me, and only the
+dependency's own source settled it.
 
 `tests/box-template.nix`'s no-baked-store-path assertion is about a **script**
 and has no panel equivalent: the plugin is QML and resolves `distrobox` through

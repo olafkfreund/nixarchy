@@ -516,7 +516,7 @@ let
       # userland, on a NixOS host, which is the entire point of the feature.
       #
       # This scene runs with a NETWORK, and that is honest rather than a
-      # concession: `nixarchy box create` pulls the image with podman over
+      # concession: creating a box pulls the image with podman over
       # the real network -- the one step checks.box-template deliberately
       # does not attempt -- and tests/box-boot.nix pins that the offline
       # first `distrobox enter` fails loudly at the entrypoint. A real user
@@ -537,18 +537,31 @@ let
       print("registry reachable")
 
       terminal(" ; ".join([
-          "echo '$ nixarchy box templates' ; nixarchy box templates ; sleep 8",
-          "echo ; echo '$ nixarchy box create demo --template archlinux'"
+          # A terminal path, NOT the panel's (#801 retired `nixarchy box`):
+          # the panel parses this INI itself and runs `distrobox create`,
+          # because assemble sources an INI as shell. What this scene shows
+          # is the generated catalogue being used by distrobox's own tool,
+          # which is what a viewer can type. checks.box-boot mirrors the
+          # panel's argv instead. --name picks one section; without it
+          # assemble would create every template in the catalogue.
+          # The banner is what a viewer reads off the GIF and may type, so
+          # it carries the same quoting as the command that runs -- an
+          # unquoted `^[` is an unterminated bracket expression.
+          "echo \"\\$ grep '^\\[' /etc/nixarchy/box-templates.ini\""
+          " ; grep '^\\[' /etc/nixarchy/box-templates.ini ; sleep 8",
+          "echo ; echo '$ distrobox-assemble create --file"
+          " /etc/nixarchy/box-templates.ini --name archlinux'"
           # tee, because foot's own log only carries foot's stderr: the wait
           # below needs the create's last line, and the screen alone cannot
           # be grepped.
-          " ; nixarchy box create demo --template archlinux 2>&1"
+          " ; distrobox-assemble create --file"
+          " /etc/nixarchy/box-templates.ini --name archlinux 2>&1"
           " | tee /tmp/box-create.log",
           # `script` keeps the enter interactive -- a plain pipe through tee
           # would take the TTY away from the container shell -- while still
           # logging everything typed and printed for the waits below.
-          "echo ; echo '$ nixarchy box enter demo'"
-          " ; script -qfc 'distrobox enter demo' /tmp/box-tty.log",
+          "echo ; echo '$ distrobox enter archlinux'"
+          " ; script -qfc 'distrobox enter archlinux' /tmp/box-tty.log",
       ]), [
           ("box-templates", 8, 0),
       ], tail=0)
@@ -558,7 +571,8 @@ let
       # the create log instead of a bare stack trace.
       try:
           machine.wait_until_succeeds(
-              "grep -q 'nixarchy box enter' /tmp/box-create.log", timeout=1500)
+              "grep -q 'distrobox enter archlinux' /tmp/box-create.log",
+              timeout=1500)
       except Exception:
           print("=== box-create.log at timeout ===")
           print(machine.execute("cat /tmp/box-create.log")[1])
@@ -1007,15 +1021,19 @@ let
       script = segments.boxes;
       # All three can only appear if the guest userland actually ran --
       # "Arch Linux" is printed by the container's os-release and fastfetch,
-      # and "omarchy@demo" is the prompt INSIDE the container, hostname
-      # assigned by create. Not "pacman": the install visibly happens, but
+      # and "omarchy@archlinux" is the prompt INSIDE the container, hostname
+      # assigned by create -- which is the TEMPLATE name since #801, because
+      # the panel's INI is keyed by template where the retired CLI stitched
+      # on a header naming the box. This gate caught that rename by refusing
+      # the first recording of the retargeted scene, which is the whole
+      # reason it exists. Not "pacman": the install visibly happens, but
       # its command line scrolls off screen under its own output, and the
       # first gated recording failed on exactly that -- a token that
       # depends on scroll position is a flaky witness, while the prompt
       # recurs on every frame that shows the shell.
       expects = [
         "Arch Linux"
-        "omarchy@demo"
+        "omarchy@archlinux"
         "fastfetch"
       ];
       minDistinct = 3;

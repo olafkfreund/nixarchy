@@ -104,15 +104,19 @@ in
     # entrypoint mount tracks the current generation; called via its own
     # /nix/store/... path directly, the mount is that exact versioned path.
     # environment.systemPackages puts /run/current-system/sw/bin on every
-    # interactive shell's PATH, which is sufficient -- so `nixarchy box`
-    # (a later issue) must call `distrobox` by bare name too, and must not
-    # list it in a writeShellApplication's runtimeInputs, which would put its
-    # own store bin/ on PATH ahead of the profile and reintroduce this.
+    # interactive shell's PATH, which is sufficient. This is the canonical
+    # statement of the rule, and the checks and pkgs/verify.sh point here for
+    # it: anything nixarchy ships that reaches distrobox must call it by bare
+    # name, and must not list it in a writeShellApplication's runtimeInputs,
+    # which would put that derivation's own store bin/ on PATH ahead of the
+    # profile and reintroduce this. `nixarchy box` was the script this was
+    # written for; #801 retired it, and the rule outlived it.
     environment.systemPackages = [ pkgs.distrobox ];
 
     # The Distrobox panel's templates, in the `distrobox assemble` shape its
-    # templatesFile reads (#766): one section per template, from the same
-    # catalogue `nixarchy box` uses, so the two cannot drift apart.
+    # templatesFile reads (#766): one section per template, from
+    # data/box-templates.nix. The panel parses this itself rather than handing
+    # it to distrobox-assemble, which sources an INI as shell.
     environment.etc."nixarchy/box-templates.ini".text = lib.concatStrings (
       lib.mapAttrsToList (name: t: "[${name}]\n${t.ini}\n") (import ../../data/box-templates.nix)
     );

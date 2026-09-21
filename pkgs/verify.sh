@@ -174,7 +174,8 @@ renderer=$(
 # vendor:device ids and the (rev ..) noise; keep the model.
 #
 # hyprctl by BARE NAME, deliberately not in runtimeInputs -- the same
-# wrapper-only rule as distrobox in pkgs/box.nix, for a different reason.
+# wrapper-only rule as distrobox in modules/services/boxes.nix, for a
+# different reason.
 # hyprctl speaks to the compositor over its instance socket, and the client
 # that matches the running Hyprland is the one the session put on PATH
 # (0.56, from flake.nix's pinned input); pinning nixpkgs' hyprctl here would
@@ -1000,16 +1001,16 @@ done
 
 # ---- boxes ----------------------------------------------------------------
 # What only real hardware and a live network can answer for distrobox (#230).
-# CI's checks.box-template (#258) proves the catalogue and nixarchy box's own
-# script are well-formed with no network at all; checks.box-boot, once it
-# lands, proves creation and entry inside an isolated VM with a preloaded
+# CI's checks.box-template (#258) proves the catalogue is well-formed with no
+# network at all; checks.box-boot proves creation and entry inside an
+# isolated VM with a preloaded
 # image and no real network path out. Neither can answer "does this actually
 # work for THIS user, on THIS machine, on the real internet" -- AGENTS.md #2's
 # point, the same reason Bluetooth pairing above is answerable nowhere else.
 #
 # distrobox is deliberately never in this script's runtimeInputs and never
 # called any way but by bare name below -- the same wrapper-only rule
-# pkgs/box.nix's header explains: distrobox resolves its own support scripts
+# modules/services/boxes.nix's header explains: distrobox resolves its own support scripts
 # relative to the directory it was invoked from, so a /nix/store path here
 # would be exactly the mistake this section exists to catch elsewhere.
 head_ "Boxes"
@@ -1033,11 +1034,11 @@ else
   fi
 
   # Every box podman actually knows about -- declared or ad hoc, this script
-  # cannot and does not try to tell them apart, the same way `nixarchy box
-  # list` does not either.
+  # cannot and does not try to tell them apart, and neither does the panel's
+  # own list.
   boxes=$(podman ps -a --format '{{.Names}}' 2>/dev/null || true)
   if [ -z "$boxes" ]; then
-    hmm "no boxes exist yet" "nixarchy box create <name> --template <t>"
+    hmm "no boxes exist yet" "open the Distrobox panel with Super+Alt+D"
   else
     while IFS= read -r box; do
       [ -n "$box" ] || continue

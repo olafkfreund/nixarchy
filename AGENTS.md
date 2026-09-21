@@ -314,6 +314,17 @@ Two other ways a check stops checking, both found in one week:
   is worse than a check). **Teach it the new word in the same PR** — the case
   table and every alternation that carries the old range.
 
+- **`tests/demo/`'s scenes are `packages`, not `checks`, and no workflow
+  builds any of them.** The `boxes` scene drove `nixarchy box`; #801 deleted
+  that command, and nothing went red. The scene would have gone on publishing
+  a GIF of a command that errors, with `main` green, because the only thing
+  that reads those scenes is a human running `nix run .#demo-record`. Anything
+  in there naming a command is unguarded by construction, so
+  `grep -rn '<command>' tests/demo/` belongs in every rename or deletion of a
+  user-facing command. The frame gate itself is sound -- it refused the first
+  retargeted recording because the in-box prompt had changed from
+  `omarchy@demo` to `omarchy@archlinux`, which is precisely the job it exists
+  for -- but a gate nothing runs protects nothing.
 - **A check that writes into the caller's own state is not hermetic, and
   nothing tells you.** `nix run .#devenv-presets` scaffolded its throwaway
   projects with a moved `HOME` — and inherited `XDG_DATA_HOME`. devenv keeps
@@ -399,6 +410,19 @@ Two other ways a check stops checking, both found in one week:
   unfree" passes for the wrong reason. Found on #709, where every local
   no-unfree build had been run that way. Prefix unfree-sensitive local builds
   with `env -u NIXPKGS_ALLOW_UNFREE`, and prove the check fails first (§1).
+- **A background build's EVALUATION is not pinned to when you launched it,
+  and a later run can rebuild the stale derivation.** A VM check was started
+  in the background; the tree was then edited to set up a deliberate break
+  (§1), and the build picked up the *dirty* tree -- so it failed describing a
+  state the tree no longer had. The re-run afterwards, on a clean tree,
+  rebuilt the **same stale `.drv`** rather than re-evaluating, and failed
+  identically. Two invalid VM runs read as two real regressions. This is §5's
+  two-processes-one-worktree rule in its quiet form: no git operation is
+  involved and nothing errors. Evaluate once, visibly, before anything long
+  starts -- `nix eval --raw .#checks.x86_64-linux.<name>.drvPath`, check it is
+  the derivation you mean (`nix derivation show` and grep for the break), then
+  `nix build '<drv>^*'`. Building by attribute path is what lets a stale
+  evaluation back in.
 
 ## 6. How to run the checks, and what each one costs
 

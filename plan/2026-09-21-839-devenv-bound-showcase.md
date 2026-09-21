@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 839
 spec: spec/2026-09-21-839-devenv-bound-showcase.md
 ---

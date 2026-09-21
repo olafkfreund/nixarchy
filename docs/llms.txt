@@ -115,7 +115,7 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
 - [Making Your Own Theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme): overlaying or forking a stock theme out of the read-only store
 - [Development Tools](https://olafkfreund.github.io/nixarchy/manual/development-tools): editors, and the 13 language toolchains from nixpkgs instead of mise
-- [Per-Project Environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments): nixarchy dev init, the Dev environments panel (Super+Alt+E) and devenv — a pinned toolchain that activates on cd (opt-in)
+- [Per-Project Environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments): nixarchy dev init, the Dev environments panel (Super+Alt+E), which also lists directories bound with `devenv --from`, and devenv — a pinned toolchain that activates on cd (opt-in)
 - [Python](https://olafkfreund.github.io/nixarchy/manual/python): pip in a venv works today; why an import dies on libGL.so.1 (the loader, not pip), the nix-ld fix, then the project preset and uv
 - [Prebuilt binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries): the three on-by-default answers to a downloaded Linux binary -- nix-ld and its curated library set, envfs for shebangs, binfmt-registered AppImages -- and where each stops
 - [Boxes](https://olafkfreund.github.io/nixarchy/manual/boxes): Arch or Debian userlands via rootless podman and distrobox, ad hoc or declared (opt-in)

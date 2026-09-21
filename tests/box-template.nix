@@ -65,13 +65,29 @@ pkgs.runCommand "nixarchy-box-template"
         fail=1
       fi
 
-      # The pin taken for this template is a real image name -- a
-      # structural cross-check that the pin was not taken against the wrong
-      # template.
-      if ! <<<"$ini" grep -q ${lib.escapeShellArg imagePins.${name}.imageName}; then
-        echo "${name}: ini does not mention pinned image '${imagePins.${name}.imageName}'" >&2
-        fail=1
-      fi
+      # The INI names the image the pin was taken against -- NAME AND TAG,
+      # anchored to the image= line.
+      #
+      # This used to be `grep -q <imageName>`: unanchored, and the bare name
+      # only. Changing just the tag left it green (#835), so a catalogue that
+      # asked for an image the fixed-output pin had never fetched looked
+      # correct here and failed later in checks.box-boot, which needs
+      # /dev/kvm. That inverts what the two checks are for -- this one is the
+      # cheap structural half that runs on every pull request.
+      #
+      # The registry prefix is deliberately not pinned: what matters is that
+      # the INI ends in the name:tag this template was pinned against, so a
+      # template that moves to another registry is a decision somebody makes,
+      # not a check that breaks.
+      want=${lib.escapeShellArg "${imagePins.${name}.imageName}:${imagePins.${name}.tag or "latest"}"}
+      have=$(<<<"$ini" sed -n 's/^image=//p' | head -1)
+      case "$have" in
+        */"$want" | "$want") ;;
+        *)
+          echo "${name}: ini names '$have', but the pin is for '$want'" >&2
+          fail=1
+          ;;
+      esac
 
       # The pinned image is a fixed-output derivation that actually landed
       # in the store -- non-empty tarball, no container ever started.

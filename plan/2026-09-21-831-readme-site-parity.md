@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 831
 spec: spec/2026-09-21-831-readme-site-parity.md
 ---

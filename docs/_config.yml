@@ -20,7 +20,10 @@ baseurl: "/nixarchy"
 include:
   - manual
 exclude:
+  # Both names, because CLAUDE.md is a symlink to AGENTS.md: without this the
+  # agent guide publishes at /nixarchy/CLAUDE (#836).
   - AGENTS.md
+  - CLAUDE.md
   - internals
   - screenshots
   - capture-screenshots.sh

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 843
 spec: spec/2026-09-21-843-service-enable-missing-row.md
 ---

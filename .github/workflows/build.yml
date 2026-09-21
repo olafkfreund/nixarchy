@@ -1294,8 +1294,13 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         # checks.box-template: the catalogue INI names a real, pinned image
         # (pulled as a fixed-output derivation, network allowed because the
-        # hash -- not the sandbox -- makes it reproducible), and nixarchy
-        # box never resolves distrobox through a /nix/store path.
+        # hash -- not the sandbox -- makes it reproducible).
+        #
+        # It no longer greps a built script for a baked /nix/store distrobox
+        # path: #801 retired `nixarchy box`, and the panel that replaced it is
+        # QML with no generated script to grep. That assertion was lost rather
+        # than moved -- tests/AGENTS.md names the gap, and checks.box-boot
+        # observes the same property on a real container instead.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.box-template
 
       - name: Drive a session and the app-selection loop
@@ -1509,8 +1514,11 @@ jobs:
       - name: Create a box offline, and pin what enter does without a network
         if: needs.gate.outputs.relevant == 'true'
         # checks.box-boot: the pinned image is preloaded from the store
-        # (dockerTools.pullImage is fixed-output), `nixarchy box create` runs
-        # end to end as a rootless user, the recorded distrobox-init mount is
+        # (dockerTools.pullImage is fixed-output), the argv the Distrobox
+        # panel builds -- `distrobox create --yes --name <name> --image
+        # <image>` under `env DBX_CONTAINER_MANAGER=podman`, with the image
+        # read out of the generated INI -- runs end to end as a rootless
+        # user, the recorded distrobox-init mount is
         # not a /nix/store path (nixpkgs#478154), and the first offline
         # `distrobox enter` fails loudly at the entrypoint -- the measured
         # answer to the epic's open first-start question, asserted as

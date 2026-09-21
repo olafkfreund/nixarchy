@@ -71,6 +71,7 @@ the documentation as much as the code.
 | **nixarchy's plugins** | **nixarchy only** — [read here](plugins) |
 | **Preview changes** | **nixarchy only** — [read here](preview) |
 | **Try it first** | **nixarchy only** — [read here](try-it-first) |
+| **Try it in a VM** | **nixarchy only** — [read here](try-it-in-a-vm) |
 | **Updates** | **differs on NixOS** — [read here](updates) |
 | **Stable or unstable** | **nixarchy only** — [read here](channels) |
 | **Dotfiles** | **differs on NixOS** — [read here](dotfiles) |

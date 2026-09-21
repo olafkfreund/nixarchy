@@ -722,7 +722,7 @@ by name (`build.yml`, "Every manual page is in the sidebar").
 
 **Start here** — what nixarchy is, how to install it, and what a declarative machine changes about your habits
 
-  [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started) · [The NixOS philosophy, and what it changes](https://olafkfreund.github.io/nixarchy/manual/philosophy) · [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) · [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos)
+  [Getting Started](https://olafkfreund.github.io/nixarchy/manual/getting-started) · [Try it in a VM](https://olafkfreund.github.io/nixarchy/manual/try-it-in-a-vm) · [The NixOS philosophy, and what it changes](https://olafkfreund.github.io/nixarchy/manual/philosophy) · [The ISO in depth](https://olafkfreund.github.io/nixarchy/manual/the-iso) · [Updating NixOS](https://olafkfreund.github.io/nixarchy/manual/updating-nixos)
 
 **Installing software** — from the menu, from all of nixpkgs, without installing at all, and when the thing is not packaged
 

@@ -51,6 +51,7 @@ nav:
   - { path: /manual/configuration,            title: Configuring nixarchy }
   - { path: /manual/plugins,                  title: nixarchy's Plugins }
   - { path: /manual/try-it-first,             title: Try It First }
+  - { path: /manual/try-it-in-a-vm,           title: Try It in a VM }
   - { path: /manual/dotfiles,                 title: Dotfiles }
   - { path: /manual/making-your-own-theme,    title: Making Your Own Theme }
   - { path: /manual/development-tools,        title: Development Tools }

@@ -201,4 +201,9 @@ New to NixOS? Start with **[the philosophy](manual/philosophy)** and
   [roadmap](https://github.com/olafkfreund/nixarchy#roadmap), which CI keeps
   honest against the open epics
 - **[What is being worked on](https://github.com/olafkfreund/nixarchy/issues)**
+- Repository-facing subjects that live in the README rather than here, because
+  a second copy is a second thing to keep true:
+  [how releases are numbered](https://github.com/olafkfreund/nixarchy#releases),
+  [who updates which application](https://github.com/olafkfreund/nixarchy#keeping-applications-updated),
+  and [what "vendored, not reimplemented" means](https://github.com/olafkfreund/nixarchy#vendored-not-reimplemented)
 - **[Omarchy itself](https://omarchy.org)**, upstream

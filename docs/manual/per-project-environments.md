@@ -65,7 +65,9 @@ Turning devenv on installs the [Dev environments
 panel](https://olafkfreund.github.io/nixarchy-devenv/) and turns it on once,
 like nixarchy's other panels. It lists every `devenv.nix` under your project
 roots (`~/Source` and `~/Projects` by default), and the ones you have allowed
-come first.
+come first. A directory bound with `devenv --from <source> allow` is listed
+too, with its source; see [the plugin's
+manual](https://olafkfreund.github.io/nixarchy-devenv/usage#bound-environments).
 
 | Key | What it does |
 | --- | --- |

@@ -821,6 +821,14 @@ in Nix would drift from it at the first upstream bump. A plugin that would
 not load now fails the rebuild, with the reason, instead of being installed
 and doing nothing.
 
+The check runs on `plugin.src`, the store path. What gets installed is a
+link to it, and upstream's validator refuses any symlink in a plugin
+folder, the folder itself included. So validating the INSTALLED folder by
+hand fails, and that is the expected consequence of the two, not a gap in
+this check: the plugin itself passed here. Copying plugins instead of
+linking them, or patching upstream's symlink rule, would change the
+message and not fix anything (#853).
+
 The id comes out of manifest.json rather than the attribute name. It is
 what the shell, the menu and every omarchy-plugin-* command key on, and a
 directory named anything else would be a plugin the user cannot enable,

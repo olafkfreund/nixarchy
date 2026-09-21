@@ -150,6 +150,12 @@ Three consequences worth knowing, all of them deliberate:
   `omarchy-plugin-validate` rather than a copy of its rules — so it cannot
   drift at the next Omarchy bump. You find out at `nixos-rebuild` instead of
   after logging in to a plugin that installed and does nothing.
+- **Validating the installed folder by hand refuses it, and that is
+  expected.** A declared plugin is installed as a link into the store, and
+  `omarchy-plugin-validate` refuses any symlink in a plugin folder, the folder
+  itself included. The rebuild has already validated the plugin itself, the
+  store path the link points to. To check it again, validate that:
+  `omarchy plugin validate "$(readlink -f ~/.config/omarchy/plugins/<id>)"`.
 
 `omarchy plugin add` still works alongside this, and the two do not collide: a
 plugin you add by hand is a real directory this never touches, and adding one

@@ -53,6 +53,18 @@ retargeted path at a template name that does not exist and capture the output.
 Both failing outputs go in the PR. Prove the break landed with `git diff`
 before believing a red result.
 
+**Deviation, recorded with the code that caused it.** `flake.nix:2248`
+(`nixarchyBox = …`) moved from step 2 into step 1. Dropping the `nixarchyBox`
+parameter from `tests/box-template.nix` makes the call site pass an argument
+the function no longer accepts, so the tree does not evaluate between the two
+steps. Step 2 keeps the rest of its flake work; only this line moved.
+
+Two container-name notes the retarget forced, since they are behaviour and not
+style. `/etc/nixarchy/box-templates.ini` is keyed by TEMPLATE name, where
+`nixarchy box create` stitched on a header naming the BOX — so the container
+`box-boot` creates is now `archlinux`, not `scratch`. And `--name` is required:
+without it `distrobox-assemble` would create every template in the catalogue.
+
 **2. Remove the CLI.** `pkgs/box.nix` deleted; `nixarchy-box` and the
 `nixarchyBox` argument out of `flake.nix`; `modules/apps.nix:3077` becomes a
 pointer rather than an exec:

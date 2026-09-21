@@ -1,5 +1,5 @@
-# Creates and enters a real box. checks.box-template reads the catalogue and
-# `nixarchy box` structurally, and deliberately stops short of the one step
+# Creates and enters a real box. checks.box-template reads the catalogue
+# structurally, and deliberately stops short of the one step
 # that can fail offline: the first-start package-manager update inside a
 # freshly created box. This is the other half of #262 -- the same split
 # #224/#228 used for microvm.
@@ -16,13 +16,13 @@
 #
 # ## What is asserted
 #
-#   * `nixarchy box create` -- the real command, which calls
-#     `distrobox-assemble` by BARE NAME -- creates a container from the
-#     preloaded image, with no network. Breaking this looks like skipping the
-#     preload: create tries to pull and fails (proved red exactly that way
-#     for the PR).
+#   * the Distrobox panel's create path -- `distrobox-assemble` called by
+#     BARE NAME against the generated /etc/nixarchy/box-templates.ini --
+#     creates a container from the preloaded image, with no network.
+#     Breaking this looks like skipping the preload: create tries to pull
+#     and fails (proved red exactly that way for the PR).
 #   * the created container's recorded distrobox-init mount does NOT point
-#     into /nix/store -- pkgs/box.nix's header rule (nixpkgs#478154),
+#     into /nix/store -- modules/services/boxes.nix's rule (nixpkgs#478154),
 #     observed on a real container rather than grepped off a script the way
 #     checks.box-template does. Breaking this looks like calling
 #     distrobox-assemble through its literal store path.
@@ -83,18 +83,32 @@ pkgs.testers.runNixOSTest {
     machine.succeed(alice("podman tag ${imagePin.imageName}:${imagePin.tag or "latest"} ${fullImage} || true"))
     machine.succeed(alice("podman inspect --type image ${fullImage} >/dev/null"))
 
-    # The real command, end to end: nixarchy box -> distrobox-assemble (bare
-    # name) -> distrobox create. pull=false plus the preload above is what
-    # makes this work with no network at all.
-    machine.succeed(alice("nixarchy box create scratch --template archlinux"), timeout=600)
+    # The real path, end to end: the Distrobox panel -> distrobox-assemble
+    # (bare name) -> distrobox create. The panel reads the generated
+    # /etc/nixarchy/box-templates.ini, whose sections are keyed by TEMPLATE
+    # name, so the container is named for the template -- where the retired
+    # `nixarchy box create` stitched on a header naming the box instead.
+    # --name is what keeps this to one section; without it assemble would
+    # create every template in the catalogue.
+    #
+    # Bare name, not a store path: the entrypoint mount must track the
+    # current generation (modules/services/boxes.nix, nixpkgs#478154), and
+    # the assertion below is what holds that.
+    #
+    # pull=false plus the preload above is what makes this work with no
+    # network at all.
+    machine.succeed(
+        alice("distrobox-assemble create --file /etc/nixarchy/box-templates.ini --name archlinux"),
+        timeout=600,
+    )
 
-    # The rule pkgs/box.nix exists to enforce, observed on the container
-    # podman actually recorded: the distrobox-init entrypoint mount must
+    # The rule modules/services/boxes.nix exists to enforce, observed on the
+    # container podman actually recorded: the distrobox-init entrypoint must
     # survive a generation change plus nix-collect-garbage, so it must not
     # be a /nix/store path (nixpkgs#478154). Both halves asserted -- that an
     # init mount exists at all, and that it is not a store path -- so this
     # cannot go green by the mount disappearing.
-    inspect = machine.succeed(alice("podman inspect scratch"))
+    inspect = machine.succeed(alice("podman inspect archlinux"))
     assert "distrobox-init" in inspect, "no distrobox-init mount recorded at all:\n" + inspect[:2000]
     import re
     stores = re.findall(r"/nix/store/\S*distrobox\S*", inspect)
@@ -140,7 +154,7 @@ pkgs.testers.runNixOSTest {
     # stays an ALLOWLIST rather than a truthiness check, so a genuinely new
     # failure mode -- or a silent one -- still goes red and gets read by a
     # person, which is what the original assertion was for.
-    out = machine.fail(alice("distrobox enter scratch -- true 2>&1"), timeout=600)
+    out = machine.fail(alice("distrobox enter archlinux -- true 2>&1"), timeout=600)
     # The third arrived on 2026-09-07, on main, with nothing in this repo
     # touching distrobox. distrobox-enter:729 prints it from the poll loop it
     # runs after "Starting container...": if the container is not `running`

@@ -1,4 +1,4 @@
-# Reads the catalogue and `nixarchy box` structurally, without the one step
+# Reads the catalogue structurally, without the one step
 # that can fail offline: the first-start package-manager update inside a
 # freshly created box (`pacman -Syy` / `apt-get update`). That is
 # `checks.box-boot`'s job, deliberately left to a later, CI-gate issue
@@ -17,15 +17,15 @@
 #     registry-1.docker.io, the same way a `sha256` for `fetchurl` is.
 #   * each template's raw `ini` names the same image the pin was taken
 #     against -- a structural cross-check, not a build of the container.
-#   * `nixarchy box`'s built script never resolves `distrobox` through a
-#     literal /nix/store path, and never lists it in a derivation that would
-#     put one on PATH -- grepping the built script is the cheapest form of
-#     the assertion pkgs/box.nix's header makes in prose.
+#
+# What it no longer proves: `nixarchy box` is retired (#801), and the
+# /nix/store-path assertion over its built script went with it. The panel
+# that replaced it has no generated script to grep. See the body for why
+# that has no equivalent here, and tests/AGENTS.md for the gap it leaves.
 {
   pkgs,
   lib,
   templates,
-  nixarchyBox,
   # name -> { imageName, imageDigest, sha256 } -- see the header. A template
   # with no entry here fails loudly (missingPins below) rather than being
   # silently skipped, so #259 adding `debian` cannot forget this half.
@@ -82,22 +82,24 @@ pkgs.runCommand "nixarchy-box-template"
       fi
     '') names}
 
-    echo "== nixarchy box: no /nix/store distrobox path =="
-
-    # Breaking this looks like adding `runtimeInputs = [ pkgs.distrobox ]`
-    # back to pkgs/box.nix, or calling it via `''${pkgs.distrobox}/bin/...`.
-    # Either would put a literal /nix/store/*-distrobox-*/bin path into the
-    # built script, either on the PATH= line writeShellApplication generates
-    # or directly in the text -- one grep catches both.
-    if grep -oE '/nix/store/[^ "]*-distrobox-[^ "/]*' ${nixarchyBox}/bin/nixarchy-box; then
-      echo "nixarchy-box resolves distrobox through a /nix/store path -- see pkgs/box.nix's header" >&2
-      fail=1
-    else
-      echo "nixarchy-box calls distrobox only by bare name"
-    fi
+    # What this check no longer makes, and why there is no replacement.
+    #
+    # `nixarchy box` was a writeShellApplication, so a stray
+    # `runtimeInputs = [ pkgs.distrobox ]` would have baked a literal
+    # /nix/store/*-distrobox-*/bin path into the generated script, and one
+    # grep over that script caught it. The Distrobox panel that replaces it
+    # is QML, pinned by rev, and resolves `distrobox` through PATH by
+    # construction -- there is no generated script here to grep, so this
+    # assertion has no panel equivalent rather than a moved one.
+    #
+    # The property itself still matters and is still covered, one layer up:
+    # modules/services/boxes.nix's header states it (nixpkgs#478154) and
+    # checks.box-boot observes it on a real container's recorded
+    # distrobox-init mount, which is the stronger of the two measurements.
+    # What is lost is the cheap static half that ran on every pull request.
+    # tests/AGENTS.md names that gap.
 
     [ "$fail" -eq 0 ] || exit 1
-    echo "every catalogue template names a real, pinned image, and" \
-         "nixarchy box never bakes a /nix/store path to distrobox."
+    echo "every catalogue template names a real, pinned image."
     touch $out
   ''

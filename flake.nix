@@ -2245,7 +2245,6 @@
             pkgs = pkgsFor.${system};
             inherit lib;
             templates = import ./data/box-templates.nix;
-            nixarchyBox = self.packages.${system}.nixarchy-box;
             imagePins = boxImagePins;
             inherit images;
             cached = self.packages.${system}.box-test-image;

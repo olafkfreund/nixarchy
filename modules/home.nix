@@ -1691,6 +1691,10 @@ in
         ai-mirror = {
           id = "olafkfreund.ai-mirror";
           src = inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+          # A user running ai-mirror's own module already declares this plugin,
+          # by the same manifest id; two entries would fight over one link, and
+          # ours would override the pin they chose. Theirs wins.
+          gate = !(config.programs.ai-mirror.enable or false);
         };
       };
 

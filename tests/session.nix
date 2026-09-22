@@ -1650,10 +1650,15 @@ pkgs.testers.runNixOSTest {
     lapsed = json.loads(replies[3]["result"]["content"][0]["text"])["owner"]
     assert lapsed == "off", f"an unanswered request did not lapse after 30 s: owner {lapsed}"
 
-    binds = aim("hyprctl binds -j")
-    assert "ai-mirror control off" in binds, (
-        "Hyprland holds no bind running `ai-mirror control off`; the seed "
-        "bindings.lua lost the kill switch")
+    # Lua-era Hyprland reports an o.bind's dispatcher as `HL.Dispatcher(exec_cmd)`
+    # with an index for `arg`, never the command text -- so the bind is found by
+    # what it does expose: its description, key and modifiers (Super 64 + Shift 1).
+    kill = [b for b in json.loads(aim("hyprctl binds -j"))
+            if b.get("description") == "ai-mirror: stop agent control"
+            and b.get("key", "").upper() == "ESCAPE" and b.get("modmask") == 65]
+    assert kill, (
+        "Hyprland holds no Super+Shift+Escape bind described 'ai-mirror: stop "
+        "agent control'; the seed bindings.lua lost the kill switch")
     aim("ai-mirror control agent && ai-mirror control confirm")
     assert aim_owner() == "agent", "setup: the CLI grant (Decision A) did not take"
     aim("ai-mirror control off")

@@ -263,6 +263,36 @@ in the file (AGENTS.md §1).
   their first run. `pkgs/verify.sh` gained the Voice row, and passes `bash -n`
   and shellcheck.
 
+**Two fixes after CI ran the session check for the first time.**
+
+- **The kill-switch probe could not have passed.** It looked for the string
+  `ai-mirror control off` in `hyprctl binds -j`. Lua-era Hyprland reports an
+  `o.bind` as `dispatcher: HL.Dispatcher(exec_cmd)` with an index for `arg`, and
+  never the command text (checked against a real session's binds). The four
+  other ai-mirror assertions passed in that same run; this one failed on a bind
+  that is almost certainly there. It now matches what Hyprland does expose:
+  `description == "ai-mirror: stop agent control"`, key `ESCAPE`, modmask 65
+  (Super 64 + Shift 1). Proven against a real `hyprctl binds -j`: the entry is
+  found; with it removed, red; a Super-only bind with the same description, red;
+  Super+Shift+Escape with another description, red. A near miss is in that data
+  already -- the System menu is Super+Escape.
+- **A user running ai-mirror's own module would have had their plugin
+  overridden.** Their module declares the same plugin under the key
+  `ai-mirror`, ours under `olafkfreund.ai-mirror`, and plugins are linked by
+  **manifest id** (`home.nix:1030-1039`). Two entries, one link: the later key
+  wins (ours), against the pin they chose, and the watched plugins directory is
+  rewritten on every activation (#710's reload trigger). So the default now
+  carries `gate = !(config.programs.ai-mirror.enable or false)` -- theirs wins.
+  `tests/options.nix` gains `aiMirrorWidgetStepsAside`, on the evaluation the
+  other #773 cases already share, which now also stands in for that user (#747:
+  no new NixOS evaluation).
+  - **§1, on a quiet host:** `checks.options` passes with all six ai-mirror
+    cases `on=1 off=`; with the gate removed it fails naming
+    `aiMirrorWidgetStepsAside` (`on=1 off=1`); restored, the derivation hashes
+    identical to the green one.
+  - The restore needed re-applying by hand: `git checkout HEAD --` returns the
+    file *without* the gate, because the gate was never committed (§5).
+
 ## Tests
 
 ```bash

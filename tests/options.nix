@@ -146,7 +146,12 @@ let
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
-  aiMirrorMcpHome = homeOn { aiMirror.mcp = true; } { };
+  # It also stands in for a user running ai-mirror's own module: a stub option
+  # is enough, since the default reads only `programs.ai-mirror.enable`.
+  aiMirrorMcpHome = homeOn { aiMirror.mcp = true; } {
+    imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
+    programs.ai-mirror.enable = true;
+  };
   hasGh = h: builtins.any (p: (p.pname or "") == "gh") h.home.packages;
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
 
@@ -631,6 +636,13 @@ let
     aiMirrorWidget = {
       on = defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
       off = noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
+    };
+
+    # A user running ai-mirror's own module keeps their plugin: ours steps
+    # aside rather than fighting it over the same manifest id.
+    aiMirrorWidgetStepsAside = {
+      on = defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
+      off = aiMirrorMcpHome.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
     };
 
     # Session-wide accessibility stays off: ai-mirror switches it on only

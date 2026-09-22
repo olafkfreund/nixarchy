@@ -143,6 +143,7 @@ let
       distrobox = false;
       devenv = false;
       ai-mirror = false;
+      rebuild = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.

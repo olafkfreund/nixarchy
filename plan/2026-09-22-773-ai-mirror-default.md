@@ -58,9 +58,15 @@ has `foreground`, `background`, `accent`, `urgent` and `muted`, and nothing else
   default, has `#7aa2f7` against `#a9b1d6`.
 - In **kanagawa** they are the same, so colour alone would change nothing there.
 
-So watching is **`accent` plus a slow opacity pulse** (0.55 ↔ 1.0, about 1.2 s).
-The pulse keeps it distinct in every theme. The colour makes it plain in 21 of
-them. This needs the owner's approval with this plan.
+So watching is **`accent`, steady, at full opacity**.
+
+This was planned first as accent **plus a pulse**, and approved that way. It
+was changed before any code, by the owner, on 2026-09-22, after reading the
+widget's own rule: *"Live control is the one state worth interrupting someone
+for, so it is the only one that moves"* (`Widget.qml:70-71`). A second moving
+state would weaken the one signal that means *an agent is driving*. In
+kanagawa, the one theme where accent equals the text colour, watching is a
+brightness change only (1.0 against off's 0.45). That is accepted.
 
 **Deviation 2: turning the MCP opt-in off must remove what it added.**
 
@@ -91,8 +97,8 @@ Other facts:
 - In `plugin/Widget.qml`, while `root.watching`, the `AgentMark` colour is
   `root.bar ? root.bar.accent : Color.accent`. If `bar` exposes no `accent`,
   read it from `Color.accent`, and say which one in the PR.
-- Opacity runs a `SequentialAnimation` loop between 0.55 and 1.0 for as long as
-  `watching` holds, and stops the moment it does not.
+- Opacity is 1.0 while watching, steady. Nothing moves except *on*, as the
+  widget's rule requires (deviation 1).
 - *On* (urgent, 1.0) and *off* (foreground, 0.45) are unchanged.
 
 → verify:
@@ -101,7 +107,7 @@ Other facts:
 - a screenshot of the bar in a nested session, taken with ai-mirror itself
   (`screenshot` right after an `index` call), showing the accent colour, and a
   second one taken 11 s later showing it gone;
-- in kanagawa, two screenshots 0.6 s apart differ in the icon's opacity.
+- in kanagawa, the watching icon is at full opacity against off's 0.45.
 
 Merge it. The resulting commit is the pin for step 1.
 

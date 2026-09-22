@@ -198,9 +198,28 @@ otherwise be a green light:
   `journalctl`.** `RebuildState` follows the unit's journal itself, so a
   `journalctl.*nixarchy-rebuild` match is satisfied by the panel's own
   follower with `openInTerminal()` emptied.
-- **`Copy log` asserts the journal is non-empty before comparing it** to the
-  clipboard. With an empty journal, an emptied `copyLog()` leaves an empty
-  clipboard and empty equals empty.
+**`Copy log` is the one action with no assertion, and that is a decision, not
+an oversight.** Two CI runs put the unit's journal on the clipboard and then
+compared `wl-paste` against it; both timed out while the assertions on either
+side passed. The row was dropped rather than retried (§10, and the spec said so
+in advance). What is *not* established is which of these is true:
+
+- the assertion is wrong -- a trailing newline, a stale selection, or the
+  journal growing between the snapshot and the copy; or
+- **the button is broken.** `wl-copy` forks a daemon to serve the selection,
+  and `RebuildState.copyLog()` runs it as `sh -c "journalctl … | wl-copy"`
+  inside a Quickshell `Process`. If Quickshell reaps that process group when
+  the `Process` finishes, the forked `wl-copy` dies with it and the clipboard
+  is never served.
+
+The second is worth ruling out **by hand on real hardware** before writing any
+more of the first: press Copy log after a failed rebuild and paste somewhere.
+If it does not paste, the check was right and the panel needs fixing.
+
+Note also what the first attempt got wrong, because the shape recurs: the
+assertion asserted the journal was non-empty *before* comparing, precisely so
+that an emptied `copyLog()` could not pass by leaving an empty clipboard to
+match an empty journal.
 - **An unknown verb is asserted to fail.** `omarchy-shell` wraps `qs ipc call`,
   which exits 0 on IPC-level errors and writes them to stdout; the wrapper
   repairs that by matching `Function not found.` **per function name**. That is

@@ -840,7 +840,13 @@ in
       # interpreters in one profile, which buildEnv refuses over bin/idle3;
       # home-manager-path fails and the whole closure with it, naming idle3 and
       # nothing of ours (#809). Whatever the user installed themselves wins.
-      ++ map lib.lowPrio (lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults));
+      ++ map lib.lowPrio (lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults))
+      # ai-mirror on every nixarchy machine, whether or not its widget is on
+      # (#773): the seeded kill switch runs it. lowPrio for #809's reason -- a
+      # user who installs it through its own module keeps theirs.
+      ++ lib.optional (osConfig.programs.nixarchy.enable or false) (
+        lib.lowPrio inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.ai-mirror
+      );
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 
@@ -1623,6 +1629,14 @@ in
           src = inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
           gate = osConfig.programs.nixarchy.services.devenv.enable or false;
           packages = [ inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.cli ];
+        };
+        # The ai-mirror widget, on every machine (#773): it shows when an agent
+        # is watching or driving, draws the confirm dialog, and a click stops a
+        # live grant. No agent is connected to ai-mirror by this; see
+        # programs.nixarchy.aiMirror.mcp. Why: spec/2026-09-22-773-ai-mirror-default.md
+        ai-mirror = {
+          id = "olafkfreund.ai-mirror";
+          src = inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
         };
       };
 

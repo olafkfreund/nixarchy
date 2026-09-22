@@ -17,9 +17,9 @@ intent: intent/2026-09-22-889-github-actions-showcase.md
   colours. Stills are 760×475 or 1280×800. #797 corrected pictures that broke
   this.
 - The nixarchy-ghtui#21 files are **card crops in Gruvbox** (razer's theme).
-  Shipping them as they are breaks the house style, and composing them onto
-  the Tokyo Night backdrop would show a Gruvbox panel on a Tokyo Night desktop,
-  which *"reads as a different product"*.
+  Shipping them as they are breaks the frame rule. Composing them keeps the
+  frame and sizes, but leaves a Gruvbox panel on the Tokyo Night backdrop.
+  You accepted that theme difference ("Gruvbox is fine").
 - The site has a gate for GIFs: `tests/demo/verify-frames.sh`, which checks
   frame diversity and requires every `--expect` regex to match in OCR of the
   sampled frames.
@@ -33,26 +33,19 @@ intent: intent/2026-09-22-889-github-actions-showcase.md
 
 ## Design
 
-### 1. Re-record on razer in the default theme
+### 1. Reuse the razer recordings, in Gruvbox
 
-This keeps the approved provenance (razer, authenticated) and follows the
-house style. The procedure is the one proven in nixarchy-ghtui#20:
+**Decided at review:** Gruvbox is fine, so there's no re-recording and no
+theme switch on razer. The sources are the files from nixarchy-ghtui#20,
+which already passed its privacy gate:
 
-- Record the starting state (`omarchy-theme-current`,
-  `omarchy-theme-bg-current`, and do-not-disturb), switch to **Tokyo Night**,
-  and silence notifications.
-- Use the same storyboard: open on an existing `nixarchy` search, narrow it
-  to `nixarchy-p` and back, drill `olafkfreund/nixarchy` → a running run → a
-  job → its steps, back out, and close with Super+Alt+A (not Esc, which would
-  clear the filter and list every repository).
-- Record the card region with `wf-recorder`, trim to the frames where the
-  card border is on screen, and cut at the card border.
-- Put razer back afterwards: theme, wallpaper, do-not-disturb, and the test
-  terminal.
+- the original 920×700 MP4, trimmed to the span where the card border is on
+  screen (3.6–52.4 s) and cut at the card border (900×680);
+- the full-resolution PNG screenshots behind the #21 stills (`s1-list`,
+  `s2-steps`).
 
-If no `olafkfreund/nixarchy` run is in progress at recording time, the
-steps view shows the most recent completed run instead. The GIF is still
-valid, but its alt text says so.
+The recording shows `olafkfreund/nixarchy` with two runs in progress.
+razer isn't touched again.
 
 ### 2. Compose onto the default desktop
 
@@ -97,8 +90,8 @@ statement, so it's left alone.
 
 - **Ship the #21 card crops as they are:** this breaks the written house
   style; #797 is the precedent for correcting exactly that.
-- **Compose the Gruvbox crops onto the Tokyo Night backdrop:** a panel in
-  one theme on a desktop in another reads as a different product.
+- **Re-record in Tokyo Night:** declined at review. It would mean a theme
+  switch and shell restart on razer for a colour match only.
 - **A demo-VM scene with GitHub auth:** it needs a token inside the VM and a
   secrets path, which is out of scope. You accepted razer provenance.
 - **Bump the pin in a separate PR:** you decided on this change, and the pin
@@ -106,13 +99,13 @@ statement, so it's left alone.
 
 ## Risks
 
-- **razer:** switching the theme restarts the shell (seen in #20). The
-  panel's cache resets and the recording waits for its scan. The desktop is
-  restored afterwards, as the house style requires.
+- **Theme:** a Gruvbox panel on the Tokyo Night desktop is the one
+  departure from `docs/AGENTS.md`, and it was approved. The provenance line
+  says where the recording comes from.
 - **Privacy:** only public repositories appear. The same OCR allow-list gate
-  as #20 applies (the 14 public repositories matching `nixarchy`), plus a
-  check by eye. The composite shows only the card on the stock backdrop, so
-  no desktop widgets can appear.
+  as #20 is re-run on the composites (the 14 public repositories matching
+  `nixarchy`), plus a check by eye. The composite shows only the card on the
+  stock backdrop, so no desktop widgets can appear.
 - **Legibility:** a card that is about 47% of a 900 px GIF is small. That is
   the same trade-off as the site's other panel GIFs. The 1280×800 stills
   carry the detail.

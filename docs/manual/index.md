@@ -68,8 +68,10 @@ the documentation as much as the code.
 | Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |
 | **Other packages** | **differs on NixOS** — [read here](other-packages) |
 | **Configuring nixarchy** | **nixarchy only** — [read here](configuration) |
+| **nixarchy's plugins** | **nixarchy only** — [read here](plugins) |
 | **Preview changes** | **nixarchy only** — [read here](preview) |
 | **Try it first** | **nixarchy only** — [read here](try-it-first) |
+| **Try it in a VM** | **nixarchy only** — [read here](try-it-in-a-vm) |
 | **Updates** | **differs on NixOS** — [read here](updates) |
 | **Stable or unstable** | **nixarchy only** — [read here](channels) |
 | **Dotfiles** | **differs on NixOS** — [read here](dotfiles) |

@@ -254,6 +254,22 @@ in
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "Nixarchy, the Omarchy desktop vendored for NixOS";
 
+    # #774. A NixOS switch in front of a Home Manager module, which is the
+    # bridge services.boxes already uses: data/apps.nix and Install > Search
+    # write NixOS options, and upstream's voice module defines
+    # programs.omarchy-voice under Home Manager. Without something at this
+    # level the catalogue row writes an option that does not exist, which is
+    # exactly what the first attempt did.
+    #
+    # Off by default and deliberately not a default plugin: the closure is
+    # 6.7 GiB measured, most of it whisper and the Piper models, and the models
+    # are IN the package so an off switch would not shrink the machine.
+    voice.enable = lib.mkEnableOption ''
+      nixarchy-voice: speech into desktop actions. 6.7 GiB installed. Desktop
+      control, the wake word and notification logging each stay off until you
+      turn them on in `programs.omarchy-voice`
+    '';
+
     # Why: modules/AGENTS.md#nixarchy-wrote-this-machine-as-a-property-of-the-c
     installerManaged = lib.mkOption {
       type = lib.types.bool;
@@ -862,9 +878,10 @@ in
       #
       #   kms server died or never started, exit code: 127
       #
-      # -- and there is no fallback, because gpu-screen-recorder then tries
-      # pkexec, which wants a setuid helper that NixOS' polkit does not ship.
-      # A tester hit exactly this.
+      # -- and pkexec, which gpu-screen-recorder then tries, was no fallback:
+      # NixOS' polkit shipped no setuid helper for it. A tester hit exactly this.
+      # #765 ships that helper, so without this wrapper recording would now ask
+      # for a password in the polkit dialog; this wrapper is the no-prompt path.
       #
       # Enabling the module is enough, and it is worth writing down why the
       # package in our wrapper picks the privileged binary up rather than the
@@ -1454,9 +1471,30 @@ in
       omarchy-lock-fingerprint.unixAuth = false;
     };
 
-    # etc/sudoers.d/omarchy-passwd-tries.
-    # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
-    security.sudo.extraConfig = "Defaults passwd_tries=10";
+    security = {
+      # etc/sudoers.d/omarchy-passwd-tries.
+      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+      sudo.extraConfig = "Defaults passwd_tries=10";
+
+      # The rebuild elevates through pkexec so the Omarchy polkit dialog asks (#765).
+      # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+      # Unstable made the setuid wrapper opt-in; stable ships it and has no option.
+      polkit = {
+        extraConfig = ''
+          // nh elevates each step of a switch as `pkexec env ...`: one password, kept.
+          polkit.addRule(function (action, subject) {
+            if (action.id == "org.freedesktop.policykit.exec" &&
+                subject.local && subject.active && subject.isInGroup("wheel") &&
+                (action.lookup("program") || "").split("/").pop() == "env") {
+              return polkit.Result.AUTH_ADMIN_KEEP;
+            }
+          });
+        '';
+      }
+      // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
+        enablePkexecWrapper = lib.mkDefault true;
+      };
+    };
 
     # upstream's user.conf.d/20-omarchy-nofile.conf. Outside the block below,
     # which already has two `user.` keys.

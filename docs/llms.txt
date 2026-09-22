@@ -2,7 +2,7 @@
 
 > nixarchy is Omarchy — DHH's Hyprland desktop — vendored for NixOS. The whole
 > desktop ships as upstream builds it (the QuickShell bar, the menus, the
-> themes, the 444 shell commands), with the parts that assume Arch Linux
+> themes, the 445 shell commands), with the parts that assume Arch Linux
 > replaced: the Install menu writes Nix declarations instead of running pacman,
 > updates are a flake-input bump and a rebuild, and every change is a NixOS
 > generation you can roll back.
@@ -88,8 +88,8 @@ Key facts an assistant should know before answering questions about nixarchy:
   disposable NixOS MicroVM (microvm.nix) that 9p-mounts the host's /nix/store
   read-only — no root, no rebuild, megabytes not gigabytes. Root filesystem is
   tmpfs; it is not a hardened security boundary.
-- Boxes are a compatibility layer, not a sandbox: `nixarchy box create dev
-  --template archlinux` gives a privileged distrobox container with your $HOME
+- Boxes are a compatibility layer, not a sandbox: the Distrobox panel
+  (Super+Alt+D) gives a privileged distrobox container with your $HOME
   mounted, for AUR packages, .deb installers and other software NixOS will not
   run. nixpkgs first, always.
 - Unfree packages are allowed by default (`programs.nixarchy.allowUnfree =
@@ -110,11 +110,13 @@ Key facts an assistant should know before answering questions about nixarchy:
 - [Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels): Update ▸ Channel follows nixos-26.05 or nixos-unstable, moving home-manager with it; stable is less tested here, not more, and a single package can come from the other channel
 - [Packages](https://olafkfreund.github.io/nixarchy/manual/other-packages): the app selection, apps.nix and nixarchy-apply, Install ▸ Search, services.nix, unfree software, removing apps
 - [Configuring nixarchy](https://olafkfreund.github.io/nixarchy/manual/configuration): every module option worth a decision — shell functions, plugins, RetroArch cores, the binary cache, Neovim, the boot splash and login screen, and what defers to a configuration you already run
+- [nixarchy's plugins](https://olafkfreund.github.io/nixarchy/manual/plugins): the shell panels nixarchy ships — package manager, Podman, GitLab pipelines, GitHub Actions, herdr sessions, MicroVMs and Distrobox on by default; ai-mirror coming; Voice opt-in — what each does and solves, with screenshots
+- [Try It in a VM](https://olafkfreund.github.io/nixarchy/manual/try-it-in-a-vm): `nix run …#try` boots the installer ISO a release ships in a local UEFI VM, so the install you practise is the install you will do; a qemu+curl script covers machines with no Nix, and `#verify` answers on real hardware what no VM can
 - [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first): nixarchy try runs an app once, from the pinned nixpkgs, without installing — no isolation, no launcher entry, and it stays in /nix/store until garbage collection nobody schedules
 - [Dotfiles](https://olafkfreund.github.io/nixarchy/manual/dotfiles): which config files are yours, which are seeded, and how the menu is extended
 - [Making Your Own Theme](https://olafkfreund.github.io/nixarchy/manual/making-your-own-theme): overlaying or forking a stock theme out of the read-only store
 - [Development Tools](https://olafkfreund.github.io/nixarchy/manual/development-tools): editors, and the 13 language toolchains from nixpkgs instead of mise
-- [Per-Project Environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments): nixarchy dev init and devenv — a pinned toolchain that activates on cd (opt-in)
+- [Per-Project Environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments): nixarchy dev init, the Dev environments panel (Super+Alt+E), which also lists directories bound with `devenv --from`, and devenv — a pinned toolchain that activates on cd (opt-in)
 - [Python](https://olafkfreund.github.io/nixarchy/manual/python): pip in a venv works today; why an import dies on libGL.so.1 (the loader, not pip), the nix-ld fix, then the project preset and uv
 - [Prebuilt binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries): the three on-by-default answers to a downloaded Linux binary -- nix-ld and its curated library set, envfs for shebangs, binfmt-registered AppImages -- and where each stops
 - [Boxes](https://olafkfreund.github.io/nixarchy/manual/boxes): Arch or Debian userlands via rootless podman and distrobox, ad hoc or declared (opt-in)

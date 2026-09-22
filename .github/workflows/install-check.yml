@@ -336,6 +336,21 @@ jobs:
       - name: This host can finish what it is about to start
         if: needs.gate.outputs.relevant == 'true'
         run: |
+          # What else is on this host as the install starts (#863). Three
+          # installs hit the 90-minute cap on 2026-09-21 and none recorded what
+          # was competing -- and one competitor was an agent's own wedged local
+          # VM, which the Actions queue cannot show. Recorded, never enforced:
+          # this informs the next timeout's diagnosis and must not fail a run.
+          #
+          # /proc, not ps/pgrep/gh: a self-hosted step's shell has only what the
+          # environment provides (AGENTS.md §4). And /proc/*/comm, not cmdline:
+          # cmdline matches any process whose ARGUMENTS name qemu, which counted
+          # a shell wrapper as three phantom VMs when this was measured.
+          load=$(cut -d' ' -f1-3 /proc/loadavg)
+          vms=$(grep -lx 'qemu-system-x86' /proc/[0-9]*/comm 2>/dev/null | wc -l || true)
+          echo "host load at start: $load; qemu already running: $vms"
+          echo "- host load at start \`$load\`, qemu already running: **$vms**" >> "$GITHUB_STEP_SUMMARY"
+
           need_gb=40
           store=$(nix --extra-experimental-features nix-command eval --raw --impure \
             --expr 'builtins.storeDir' 2>/dev/null || echo /nix/store)

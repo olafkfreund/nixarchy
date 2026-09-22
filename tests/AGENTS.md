@@ -121,6 +121,60 @@ Non-gating, per-night, filed as its own issue by the report job — a job
 rather than a check for the same reason devenv-presets is (see build.yml's
 comment on that job).
 
+## The one-dialog one: no VM here runs a whole switch through polkit
+
+`checks.session` proves the rebuild's elevation reaches the Omarchy polkit
+dialog: it starts `pkexec env touch` inside the greeter-logged-in Hyprland
+session, reads the dialog by OCR, types the password and finds a root-owned
+file (#765). It runs pkexec **once**. The promise the design rests on -- one
+password per switch, because the `AUTH_ADMIN_KEEP` rule lets polkit keep the
+authorisation across the three elevations nh makes -- is a claim about
+retention across separate pkexec processes, and nothing here drives a real
+switch from inside a session. It is checked by hand on real hardware: one
+Install > Apply, count the dialogs. More than one means retention did not
+hold; the answer is not a wider rule.
+
+Two things the probe cost, both general. **polkit needs a logind session**:
+it resolves the subject (`local`, `active`) and the agent's registration
+through it, so a VM that starts the desktop with `systemd-run --uid=1000`
+(`tests/plugin.nix`) cannot exercise anything polkit decides -- a probe there
+is red on a correct build. Log in through the greeter, as `session.nix` does.
+And **OCR cannot read the Omarchy theme's dialogs** any better than its
+greeter: wait on a system fact the dialog causes (here, a
+`polkit-agent-helper@*` unit) rather than on its text.
+
+## The stub-only detach: `run --detach` never runs a real unit on a PR
+
+`checks.microvm-template` proves `nixarchy vm run --detach` against **stub**
+`systemd-run` and `dtach` (exported bash functions, because
+`writeShellApplication` puts its runtimeInputs first on PATH, and a stub file
+is never reached). The stubs run the launch for real, so the lock hand-off
+and the timeout are real. But a real `systemd --user` unit, a real dtach
+socket and a real guest behind them are not: a sandboxed derivation has no
+user manager.
+
+**Nothing exercises a real detach yet, nightly included.** `microvm-boot`
+boots a *declared* machine as root, with no session user (`user = null`) and
+no network for `run`'s `nix build github:...`, so it cannot host this without
+a redesign. A detached VM that stops starting is found by hand, on real
+hardware: `nixarchy vm run --detach <n>`, then `nixarchy vm list --json`
+shows `running: true`, and `nixarchy vm console <n>` attaches.
+
+## A detached rebuild is proven failing, never succeeding
+
+`checks.session` runs `nixarchy-apply --detach --yes` against **real**
+systemd, but aims it at a missing flake. The session VM is offline and can't
+evaluate its own flake, so a rebuild that *succeeds* inside a detached unit
+can't be staged there. What the check does prove:
+- the unit exists;
+- it keeps `Result=exit-code`;
+- its output reaches the journal;
+- a second detach is refused while one runs.
+
+What only a person can prove: `nixarchy apply --detach --yes` on real
+hardware, then `journalctl --user -fu nixarchy-rebuild` shows the build, the
+dialog asks once, and the unit ends `Result=success`.
+
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
 The network reinstall image (#483) is only honest for a closure the caches
@@ -192,6 +246,18 @@ when upstream changes, and force it to be long enough to be checkable by a
 person — `etc-overlay` throws on a reason under 80 characters for that reason
 alone. Reasons go stale silently; the keys cannot.
 
+## A verb check is not an arity check
+
+`checks.menu-verbs` proves that every verb a menu row runs is one its CLI
+accepts. It never proved that the call could succeed. The Sandbox group
+shipped five rows (`nixarchy-vm create`, `run`, `stop`, `rm`, `list`), and the
+first four needed a VM name that no row passed. They printed usage and exited 1
+for everyone, with the check green throughout (#781). They were only noticed
+while planning the panel that replaced them (#766 PR E). A row that needs an
+argument the menu cannot supply is not a menu row at all. Before adding one,
+run its exact action string once by hand. The MicroVMs contract scan has the
+same limit: it checks the verbs `Model.js` runs, not the arguments it passes.
+
 ## Default plugins are tested with stand-ins, never the real four
 
 nixarchy's default plugins (#766) are exercised through the internal
@@ -208,8 +274,63 @@ untestable until the first of them landed. What the stand-ins cannot show is
 that a real plugin's panel opens. That belongs to the PR that adds each
 plugin, and the build asserts each default's manifest id.
 
+One exception, about a plugin's *tools* rather than the plugin: the
+`defaults` node turns the real herdr default back on (#771). What it proves is
+that the `herdr` binary the entry brings is on the session's PATH and the
+widget's backend reaches it, and a stand-in herdr would prove only that a
+stand-in is there. It asserts the backend's answer (`"ok":true`), never the
+widget's rendering, so a pin bump that changes the widget does not move it.
+
 The `defaults` node boots only after `machine` shuts down. Two VMs up at once
 is a load the runners were never measured for (AGENTS.md §6).
+
+## The box checks moved onto a plugin, and three things went with them
+
+#801 retired `nixarchy box`. The two box checks were retargeted rather than
+deleted, but what they now exercise is not what they exercised before, and the
+difference is worth stating rather than discovering.
+
+**They MIRROR a pinned rev; they do not run it.** `box-boot` builds the argv
+`Model.js`'s `createArgv()` builds -- `env DBX_CONTAINER_MANAGER=podman
+distrobox create --yes --name <name> --image <image>`, with the image read out
+of the generated INI the way the panel reads it. The panel is a flake input
+pinned by rev, and a bump that changes `createArgv` will not move this check.
+The mirror can rot silently; that is the trade.
+
+The first attempt at this retarget ran `distrobox-assemble` against the same
+INI and called it "the panel's create path". It is not one, and the error is
+worth keeping because it survived a spec, a plan, five commits and a review of
+my own: the panel parses that INI **in JavaScript and never hands it to
+assemble**, because assemble writes each `key=value` into a file it sources as
+shell. Reading the dependency's source is what caught it; nothing in this
+repository could have. The panel opening at all is the plugin PR's
+business (see the stand-ins section above), and `menu-verbs` asserts only that
+the Boxes row names an installed plugin id.
+
+**The cheap static half is gone.** `box-template` used to grep the built
+`nixarchy-box` for a literal store path to distrobox, which is the rule
+`modules/services/boxes.nix`'s header states (nixpkgs#478154): reached any way
+other than by bare name, distrobox bakes a generation-specific entrypoint into
+every container it creates, and garbage collection can delete that path from
+under a running box. A QML panel has no generated script to grep, so that
+assertion has no equivalent -- it was not moved, it was lost. What remains is
+`box-boot` observing the recorded mount on a real container, which is the
+stronger measurement and the one that needs `/dev/kvm`. A regression a grep
+would have caught on every pull request now waits for a VM.
+
+**Nothing asserts the retired verb still answers.** `modules/apps.nix` keeps a
+`box)` case that prints a pointer at the panel. Delete that row and `nixarchy
+box` falls through to `exec omarchy "$@"`, which answers a command this
+project shipped with *"Unknown Omarchy command: omarchy box"* -- the #538
+failure, in reverse. No check covers it. It is one `case` row, so the cheapest
+honest guard would be a grep over the built dispatcher, and this paragraph is
+here rather than that check because nobody has written it.
+
+One more, adjacent and worse, found while retargeting: **`tests/demo/`'s
+scenes are `packages`, not `checks`, and no workflow builds any of them.** The
+`boxes` scene drove `nixarchy box` and would have gone on producing a
+published GIF of a command that errors, silently, with `main` green. Anything
+in there that names a command is unguarded by construction.
 
 ## The cheap ones, which is where new checks usually belong
 
@@ -230,6 +351,18 @@ Two branches only these can reach, as illustration:
   is stable, so no install check can produce a negative duration.
 
 ## Working here
+
+- **Dynamic VMs need bounded cleanup on failure (#714).** The pinned driver's
+  `create_machine` does not register its result. `shutdown()` waits on the
+  process without a timeout, `release()` joins the non-daemon serial reader
+  without a timeout, and a monitor `quit` can block too. The install tests use
+  `vm-cleanup.py` from `finally`: kill every owned process, then bounded waits
+  for children and serial readers. On an unreapable reader, print the original
+  assertion and force a failing exit rather than hang in Python's exit joins.
+  Register before `start()` so partial starts are covered. The driver uses
+  `Popen(shell=True)`: prefix our direct qemu commands with `exec` so the
+  process handle owns qemu, not a shell. `install-teardown` drives real
+  SIGTERM-ignoring subprocesses and a stuck reader; it does not boot qemu.
 
 - **A check in `flake.nix` and in no workflow is not a check.** `build.yml` has
   a step asserting every check is run by some workflow, because

@@ -821,6 +821,14 @@ in Nix would drift from it at the first upstream bump. A plugin that would
 not load now fails the rebuild, with the reason, instead of being installed
 and doing nothing.
 
+The check runs on `plugin.src`, the store path. What gets installed is a
+link to it, and upstream's validator refuses any symlink in a plugin
+folder, the folder itself included. So validating the INSTALLED folder by
+hand fails, and that is the expected consequence of the two, not a gap in
+this check: the plugin itself passed here. Copying plugins instead of
+linking them, or patching upstream's symlink rule, would change the
+message and not fix anything (#853).
+
 The id comes out of manifest.json rather than the attribute name. It is
 what the shell, the menu and every omarchy-plugin-* command key on, and a
 directory named anything else would be a plugin the user cannot enable,
@@ -897,6 +905,11 @@ rule above for exactly these plugins. The reasoning above still applies to
 it: a plugin turned off must stay off. So each default is turned on **once**,
 and after that the user decides.
 
+A gated default follows its feature rather than the desktop: -podman where
+podman is, -distrobox where Boxes are, and -devenv where
+`services.devenv.enable` is (#802). A panel with nothing behind it is a panel
+that fails, so the gate is part of the decision rather than an exception to it.
+
 How, and why this way:
 
 - **Through the running shell, never by writing shell.json.** The shell
@@ -927,10 +940,56 @@ How, and why this way:
   default by id, so the build fails if a pin's manifest id stops matching.
   Plugins you declare keep free attribute names (the option installs under
   the manifest's id).
+- **A default brings its own tools (#770).** `defaultPluginSet.<name>.packages`
+  goes into `home.packages` from `resolvedDefaults`, so it follows the
+  plugin's gate exactly and Mode A installs nothing. It is for the CLIs a
+  plugin shells out to (`glab` for the GitLab panel). Services, credentials
+  and MCP registration are not fields here; they get their own options.
+- **Those tools lose every collision with the user's own (#809).** They are
+  added at `lib.lowPrio`, once, where `resolvedDefaults` is concatenated into
+  `home.packages`. The reason is that nobody asked for them: the defaults are
+  on from the first login, and the tools are ordinary things a person may
+  already keep. Two panels each carrying a bare `pkgs.python3` beside a user's
+  own `python3.withPackages` is two interpreters in one profile, and `buildEnv`
+  refuses -- `home-manager-path` fails, the whole system closure fails with it,
+  and the error names `bin/idle3` and nothing of ours. The machine cannot leave
+  its old generation, so it is not a cosmetic collision.
+
+  The same paragraph is already in `modules/home.nix` above `packages`, written
+  for `omarchy-nvim-config` and again for an overridden `tesseract`. #809 is the
+  third time, which is why the priority now sits at the concatenation rather
+  than on the entry somebody last remembered. **Anything nixarchy puts in
+  somebody's profile loses to what they installed themselves**; a user who wants
+  ours to win can `lib.hiPrio` it in their own file. `checks.options` carries the
+  rule (`defaultRuntimeToolsLowPriority`) and `checks.home-profile` builds a
+  profile holding both interpreters, because the collision only exists once
+  something calls `buildEnv`.
+- **A panel needs no placement.** The hook always passes `right`, and
+  upstream's `setEnabled` (`PluginRegistry.qml:486-489`) reads it only for
+  `bar-widget` kinds, so a `panel` lands in `plugins[]`. checks.plugin's
+  panel fixture holds that.
 - **Rows and binds call `nixarchy-plugin <id>`, not `omarchy-shell shell
   toggle`.** A toggle for an installed but disabled plugin exits 0 and does
   nothing. The helper checks shell.json first and names where to turn the
   plugin on.
+- **A gate follows the feature, not nixarchy (#766 PR C).** nixarchy.podman's
+  gate is `osConfig.virtualisation.podman.enable`, the upstream option, rather
+  than a nixarchy option: podman is a *plain* services row, so its only switch
+  is the line the user wrote -- or the one boxes sets at `mkDefault`. Reading
+  `services.boxes.enable` instead would put a podman panel on a machine where
+  boxes are on and podman was forced back off; tests/options.nix
+  (`podmanViaBoxes`) holds that line. The Apps ▸ Podman row uses the same gate
+  at the Nix level (`podmanEnabled`), so it does not exist without podman.
+- **A seeded bind can outlive its plugin.** Seed binds reach every new home,
+  gated defaults do not. So the helper checks the plugin's directory before
+  anything else and says "not installed on this machine" -- pointing such a
+  user at `omarchy plugin enable` would send them to a command that fails.
+- **A user's menu extension overrides these rows, key by key.** Upstream
+  merges `~/.config/omarchy/extensions/omarchy-menu.jsonc` over the defaults
+  (`Menu.qml:243-247`), so a row a plugin once wrote there under the same key
+  (gltui's own `register` did) keeps its `action` over nixarchy's. Nix cannot
+  see that file, so no check can either; the manual tells users to delete the
+  stale keys.
 
 Nixi's own turn-on is separate and stays nixi's: its module does it, with its
 own marker (#709).
@@ -1659,6 +1718,14 @@ below -- same as `nixarchy dev init`), so there is no
 #221 designed the disposable half to need no root and no rebuild,
 so nothing about it is opt-in.
 
+**Since #766 PR E the group is the MicroVMs panel.** `trigger.vm` opens
+`nixarchy.microvm`, and its five child rows are gone. Each one called a verb
+with no name (`nixarchy-vm create`, `run`...), so none could ever succeed
+(#781). `checks.menu-verbs` never saw that: it checks that a verb exists, not
+that the call can work. While the plugin is off, `trigger.vm-list` stands in
+and opens `nixarchy vm list` in a terminal. The CLI stays, for the terminal
+and for the panel itself.
+
 <a id="dim-when-the-app-is-in-the-selection-or-already-on"></a>
 ### Dim when the app is in the selection *or* already on PATH
 
@@ -1982,3 +2049,51 @@ installed anything to notice.
 
 Excludes the copy itself, which of course contains its own name
 nowhere but is matched by the filename glob.
+
+## The rebuild asks through polkit
+
+`nixarchy-apply` and `omarchy-update` export
+`NH_ELEVATION_STRATEGY=/run/wrappers/bin/pkexec` (unless the caller already
+set one) before running the switch, so the password is asked by the Omarchy
+shell's polkit agent (`shell/plugins/polkit`), not by sudo in the terminal
+(#765). nh's own `auto` finds sudo before pkexec, which is why nothing
+changed until it was told.
+
+- **pkexec, not an askpass helper.** The polkit agent is already running on
+  every nixarchy desktop; an askpass helper would be a second dialog and a
+  second password path to secure.
+- **The script, not the session.** Only the rebuild changes. Every other sudo,
+  SSH and the console included, keeps its own prompt. A user's own
+  `NH_ELEVATION_STRATEGY` wins, and `auto` gives sudo back for one run.
+- **The setuid wrapper** is opt-in on unstable
+  (`security.polkit.enablePkexecWrapper`) and unconditional on stable, which
+  has no such option -- hence the `options ? ...` guard. A path makes nh
+  *prefer* pkexec: if the wrapper is missing it warns and falls back to sudo.
+  It also gives gpu-screen-recorder the pkexec fallback it never had; its own
+  setcap wrapper stays the no-prompt path. And five upstream scripts that call
+  pkexec -- `omarchy-dns`, `omarchy-update-stay-awake`,
+  `omarchy-theme-set-browser-policy`, `omarchy-windows-vm`,
+  `omarchy-launch-docker-tui` -- had no setuid pkexec on unstable and failed;
+  they now ask through the same dialog. `omarchy-launch-docker-tui` elevates
+  as `pkexec /usr/bin/env ...`, so the keep-rule below covers it too.
+- **`AUTH_ADMIN_KEEP`, never `YES`.** One switch elevates three times
+  (activate, profile, bootloader), each as `pkexec env ...`. Without keeping,
+  that is three dialogs. The rule matches `org.freedesktop.policykit.exec` for
+  a local, active wheel subject whose program's basename is `env` -- the
+  basename because `env`'s path depends on the caller's PATH. It is still one
+  password; a passwordless switch would be passwordless root, since activation
+  runs code from a configuration the user controls. The price: for polkit's
+  retention window, any `pkexec env ...` from that session passes without a
+  second prompt -- the same shape as sudo's timestamp.
+- **Without a graphical session** (SSH, a text console) pkexec's own text
+  agent prompts, as sudo did. With no agent and no tty it fails, as sudo does.
+- **`--detach` runs it as the user unit `nixarchy-rebuild`** (#765 PR 3), so
+  a closed window or a restarted shell can't kill a rebuild halfway. The PR's
+  first check proved pkexec from a user unit still reaches this agent.
+  - **No `--collect`:** it unloads a *failed* unit at once, which then reads
+    `Result=success`.
+  - **Rate limiting off:** a build log is bursty, and dropped lines are the
+    ones a failure needs.
+  - **No cancel verb:** SIGTERM to nh can land mid-activation. Don't stop the
+    unit by hand once its log says "Activating"; PR 5 decides whether a panel
+    offers cancel, and only during the build.

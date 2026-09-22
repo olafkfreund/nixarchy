@@ -413,6 +413,73 @@ pkgs.testers.runNixOSTest {
     print("=========== is the shell alive? ===========")
     print(machine.succeed("pgrep -a quickshell || echo 'NO QUICKSHELL PROCESS'"))
 
+    # ---- the rebuild's password goes through the Omarchy dialog (#765) ----
+    # Here and not in tests/plugin.nix: polkit resolves the subject and the
+    # agent through the logind session, and only this file logs in through the
+    # greeter. pkexec is started by Hyprland so it sits in that session, as a
+    # menu-launched rebuild does.
+    machine.wait_until_succeeds(
+        "journalctl -b -t omarchy-shell --no-pager"
+        " | grep -q 'omarchy polkit agent registered'", timeout=120)
+    machine.succeed(
+        "cat > /tmp/pkexec-probe.sh <<'PROBE_EOF'\n"
+        "export XDG_RUNTIME_DIR=/run/user/1000\n"
+        "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+        # Lua-era Hyprland: dispatch takes a Lua expression, as upstream's own
+        # omarchy-restart-shell does.
+        "hyprctl dispatch 'hl.dsp.exec_cmd(\"/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok\")'\n"
+        "PROBE_EOF")
+    machine.succeed("su omarchy -c 'bash /tmp/pkexec-probe.sh'")
+    # Only a polkit agent starts polkit-agent-helper, and only once it is asking
+    # for the password -- so this is the dialog being up, deterministically.
+    # OCR was tried first and cannot read this theme's dialog (see the greeter).
+    machine.wait_until_succeeds(
+        "systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)
+    machine.send_chars("omarchy\n")
+    machine.wait_until_succeeds("test \"$(stat -c %U /tmp/pkexec-ok)\" = root", timeout=60)
+    print("the rebuild's elevation reaches the Omarchy polkit dialog")
+
+    # The same, from a `systemd-run --user` unit, which is where a detached
+    # rebuild runs (#765 PR 3): it lives under user@.service, outside the
+    # login session, so this proves polkit still reaches the agent from there.
+    # `pkexec touch`, not `env`: #776's rule keeps an `env` authorisation, and
+    # a kept one would pass without a dialog.
+    machine.wait_until_succeeds(
+        "! systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=60)
+    machine.succeed(
+        "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+        " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+        " systemd-run --user --collect --unit=unit-pkexec-probe --"
+        " /run/wrappers/bin/pkexec touch /tmp/unit-pkexec-ok'")
+    machine.wait_until_succeeds(
+        "systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)
+    machine.send_chars("omarchy\n")
+    machine.wait_until_succeeds("test \"$(stat -c %U /tmp/unit-pkexec-ok)\" = root", timeout=60)
+    print("pkexec from a user unit reaches the Omarchy polkit dialog")
+
+    # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
+    # Not a real switch: this VM is offline and cannot evaluate its flake. A
+    # detach at a missing flake still proves the unit, its kept result and its
+    # journal; a real unit of the same name proves the refusal.
+    def as_user(cmd):
+        return ("su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus " + cmd + "'")
+    machine.succeed(as_user("NIXARCHY_FLAKE=/nonexistent nixarchy-apply --detach --yes"))
+    machine.wait_until_succeeds(
+        as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),
+        timeout=60)
+    machine.succeed(
+        "journalctl -b _SYSTEMD_USER_UNIT=nixarchy-rebuild.service --no-pager"
+        " | grep -q 'does not exist'")
+    print("a detached apply runs as nixarchy-rebuild, keeps its result, and logs to the journal")
+    machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
+    machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+    machine.succeed(as_user("systemd-run --user --unit=nixarchy-rebuild --collect sleep 300"))
+    busy = machine.execute(as_user("NIXARCHY_FLAKE=/nonexistent nixarchy-apply --detach --yes"))[0]
+    assert busy == 3, f"a detach while nixarchy-rebuild runs exited {busy}, want 3"
+    machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+    print("a second detached apply is refused while one runs")
+
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it
     # reads it as `2>/dev/null` with a fallback: with no UPower the call fails

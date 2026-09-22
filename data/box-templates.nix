@@ -3,9 +3,9 @@
 # `programs.nixarchy.services.boxes.machines.<name>` snippet.
 #
 # The fifth catalogue: data/apps.nix installs, data/services.nix turns on,
-# data/flatpaks.nix reaches what nixpkgs cannot, data/devenv-presets.nix seeds a
+# data/flatpaks.nix reaches what nixpkgs cannot, the devenv templates seed a
 # project file, and this one assembles a container. Same bar
-# data/devenv-presets.nix already sets for itself, for the same reason: `ini` is
+# the devenv templates already set for themselves, for the same reason: `ini` is
 # pasted into a `distrobox-assemble` block verbatim, in the exact shape
 # distrobox's own manual and INI examples show, with no nixarchy vocabulary in
 # it. A user who outgrows a template grows it from distrobox's own

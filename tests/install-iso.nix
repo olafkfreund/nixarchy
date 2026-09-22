@@ -329,8 +329,9 @@ pkgs.testers.runNixOSTest {
 
   nodes = { };
 
-  testScript = ''
-    import os
+  testScript = builtins.readFile ./vm-cleanup.py + ''
+    # os, sys and traceback come from vm-cleanup.py, which is prepended to
+    # this script -- importing them again is F811 and the driver lints (#812).
     import shutil
     import subprocess
     import re
@@ -366,41 +367,8 @@ pkgs.testers.runNixOSTest {
     os.chmod(efi_vars, 0o644)
     efi = f" -drive if=pflash,format=raw,unit=1,readonly=off,file={efi_vars}"
 
-    # Every machine this script makes, and the single place they are killed.
-    #
-    # A machine made by create_machine is not reaped for us the way a declared
-    # node is -- and the happy path is not the one that matters. When an
-    # assertion fails the driver stops running this script where it stands,
-    # the qemu processes stay up, and the derivation hangs until the JOB's
-    # wall clock kills it. GitHub records that as `cancelled`, not `failed`,
-    # and nightly.yml's reporter is `if: failure()` -- so the nights of
-    # 2026-09-02 and 2026-09-03 both broke here, hung for three hours, and
-    # told nobody. A hang is not just slow; it is SILENT, and that is the part
-    # worth remembering. checks.install did the same thing for nine hours
-    # before anyone noticed.
-    #
-    # Hence a finally, rather than a `quit` after the last assertion, which is
-    # what this file did before and which only ever ran when nothing was
-    # wrong.
-    #
-    # `quit`, not shutdown(): these machines have no backdoor, which is why
-    # every wait below is on console text rather than a question put to the
-    # guest. If qemu is already gone -- the usual outcome, poweroff having got
-    # there first -- the monitor socket went with it and this raises
-    # BrokenPipeError, which would otherwise fail the test on the cleanest
-    # possible outcome.
-    # `vms`, not `machines`: the driver already has a global of that name, and
-    # shadowing it fails the test's own type check ("Object of type
-    # `BaseMachine` has no attribute `send_monitor_command`") rather than
-    # anything you would recognise as a name clash.
+    # Dynamic machines need bounded cleanup; see tests/AGENTS.md (#714).
     vms = []
-
-    def reap():
-        for m in vms:
-            try:
-                m.send_monitor_command("quit")
-            except Exception:
-                pass
 
     try:
         # A blank disk for the install to land on, made here rather than by
@@ -414,7 +382,7 @@ pkgs.testers.runNixOSTest {
             f" -drive file={disk},if=virtio,format=qcow2,werror=report"
             " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
 
-        installer = create_machine("${installerCommand}" + efi + drives, name="installer")
+        installer = create_machine("exec ${installerCommand}" + efi + drives, name="installer")
         vms.append(installer)
         installer.start()
 
@@ -507,7 +475,7 @@ pkgs.testers.runNixOSTest {
 
         # ---- boot what was installed ---------------------------------------
         target = create_machine(
-            "${targetCommand}"
+            "exec ${targetCommand}"
             + efi
             + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
             name="target")
@@ -542,6 +510,6 @@ pkgs.testers.runNixOSTest {
         target.wait_for_console_text(r"<<< Welcome to NixOS .* - ttyS0 >>>", timeout=900)
         print("and the system it installed reached multi-user, offering a login")
     finally:
-        reap()
+        reap_owned_vms(vms)
   '';
 }

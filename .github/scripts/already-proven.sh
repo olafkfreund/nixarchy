@@ -44,6 +44,9 @@ SYSTEM="${NIXARCHY_SYSTEM:-x86_64-linux}"
 proven=0
 needed=0
 
+# Keep requested evaluator statistics on stderr, separate from the proof rows.
+if [ "${NIX_SHOW_STATS:-0}" = 1 ]; then exec 3>&2; else exec 3>/dev/null; fi
+
 for spec in "$@"; do
   # Both spellings, and the fully-qualified one is why: build.yml's coverage
   # gate greps the workflows for `checks.x86_64-linux.<name>` to prove every
@@ -62,7 +65,7 @@ for spec in "$@"; do
   # well -- which sent every check down the failure branch with an empty
   # drvPath, silently, while still printing the right names.
   if ! pair=$(nix eval --raw ".#checks.$SYSTEM.$c" \
-    --apply 'd: d.outPath + " " + d.drvPath' 2>/dev/null); then
+    --apply 'd: d.outPath + " " + d.drvPath' 2>&3); then
     echo "  $c: does not evaluate here; leaving it to the build" >&2
     # No drvPath to offer, so the build falls back to the attribute.
     printf '%s\t\t\n' "$c"

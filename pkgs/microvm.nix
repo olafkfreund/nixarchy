@@ -6,7 +6,7 @@
 # `programs.nixarchy.services.microvm` (modules/services/microvm.nix, #223).
 #
 # Its own file rather than another entry in modules/apps.nix's package list,
-# same reason as pkgs/dev-init.nix: `checks.microvm-template` has to exercise
+# same reason as pkgs/secret.nix: `checks.microvm-template` has to exercise
 # the real command, not a copy of it.
 #
 # Two behaviours here are load-bearing, both from #221 and both asserted by
@@ -36,6 +36,9 @@
   coreutils,
   gnugrep,
   util-linux,
+  jq,
+  dtach,
+  systemd,
   self,
 }:
 let
@@ -64,7 +67,7 @@ let
   fallbackUrl = "github:olafkfreund/nixarchy/main";
 
   # One file per template plus a tab-separated index -- same shape as
-  # pkgs/dev-init.nix's presetDir, and for the same reason: the script then
+  # the retired pkgs/box.nix's templateDir, and for the same reason: the script then
   # knows nothing about the catalogue beyond "read this directory", so a new
   # template is a change to data/microvm-templates.nix and nothing else.
   templateDir = runCommandLocal "nixarchy-vm-templates" { } ''
@@ -84,6 +87,9 @@ writeShellApplication {
     coreutils
     gnugrep
     util-linux # flock
+    jq # --json output, never assembled by string concatenation (#762)
+    dtach # the detached console behind `run --detach` and `console`
+    systemd # systemd-run --user, which owns a detached VM's runner
   ];
   # `nix` itself is deliberately not in runtimeInputs: it is the system's
   # own nix, already first on PATH, and pinning a second copy here would be
@@ -96,6 +102,11 @@ writeShellApplication {
         fallbackUrl=${lib.escapeShellArg fallbackUrl}
 
         list_templates() {
+          if [ "''${1:-}" = --json ]; then
+            jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {name: .[0], label: .[1], note: .[2]})' \
+              < "$templates/index.tsv"
+            return
+          fi
           echo "Templates:"
           while IFS=$'\t' read -r name label note; do
             printf '  %-10s %s\n' "$name" "$label"
@@ -104,7 +115,11 @@ writeShellApplication {
         }
 
         template_exists() {
-          grep -q "^$1	" "$templates/index.tsv"
+          local candidate rest
+          while IFS=$'\t' read -r candidate rest; do
+            [ "$candidate" != "$1" ] || return 0
+          done < "$templates/index.tsv"
+          return 1
         }
 
         # KVM present and writable -> the real thing. Absent or not (yet) writable
@@ -139,7 +154,51 @@ writeShellApplication {
           echo "kvm"
         }
 
+        # Whether anything holds the VM's lock: a runner, or a detach mid-build.
+        lock_held() {
+          [ -e "$1/.lock" ] || return 1
+          exec 8>"$1/.lock"
+          if flock -n 8; then
+            exec 8>&-
+            return 1
+          fi
+          exec 8>&-
+          return 0
+        }
+
+        # A detached VM's unit, from its start until its runner takes the
+        # lock. The lock cannot be handed to it (systemd-run inherits no fd),
+        # so the unit itself covers that gap for everything that refuses.
+        unit_busy() {
+          case "$(systemctl --user is-active "nixarchy-vm-$(basename "$1")" 2>/dev/null)" in
+            active|activating|reloading) return 0 ;;
+          esac
+          return 1
+        }
+
+        # "running" or "stopped": the lock, or a unit about to take it.
+        vm_status() {
+          if lock_held "$1" || unit_busy "$1"; then
+            echo running
+          else
+            echo stopped
+          fi
+        }
+
         list_vms() {
+          # Fields are only ever added: nixarchy.microvm reads this (#762).
+          if [ "''${1:-}" = --json ]; then
+            for dir in "$stateDir"/*/; do
+              [ -d "$dir" ] || continue
+              dir=''${dir%/}
+              jq -n --arg name "$(basename "$dir")" \
+                --arg template "$(cat "$dir/template" 2>/dev/null || echo "?")" \
+                --argjson running "$([ "$(vm_status "$dir")" = running ] && echo true || echo false)" \
+                --arg dir "$dir" \
+                '{name: $name, template: $template, running: $running, dir: $dir}'
+            done | jq -s .
+            return
+          fi
           if [ ! -d "$stateDir" ] || [ -z "$(ls -A "$stateDir" 2>/dev/null)" ]; then
             echo "No VMs yet. 'nixarchy vm create <name>' to make one."
             return
@@ -149,14 +208,18 @@ writeShellApplication {
             [ -d "$dir" ] || continue
             name=$(basename "$dir")
             tmpl=$(cat "$dir/template" 2>/dev/null || echo "?")
-            status=stopped
-            if [ -e "$dir/.lock" ]; then
-              exec 8>"$dir/.lock"
-              flock -n 8 || status=running
-              exec 8>&-
-            fi
+            status=$(vm_status "$dir")
             printf '  %-16s template=%-10s %s\n' "$name" "$tmpl" "$status"
           done
+        }
+
+        validate_name() {
+          case "$1" in
+            *[!a-zA-Z0-9_-]*|"")
+              echo "nixarchy-vm: name must be letters, digits, '-' or '_'." >&2
+              exit 1
+              ;;
+          esac
         }
 
         create_vm() {
@@ -176,12 +239,7 @@ writeShellApplication {
             esac
           done
 
-          case "$name" in
-            *[!a-zA-Z0-9_-]*|"")
-              echo "nixarchy-vm: name must be letters, digits, '-' or '_'." >&2
-              exit 1
-              ;;
-          esac
+          validate_name "$name"
 
           if ! template_exists "$template"; then
             echo "nixarchy-vm: no template '$template'." >&2
@@ -203,26 +261,18 @@ writeShellApplication {
           echo "  nixarchy vm run $name"
         }
 
-        run_vm() {
-          name="''${1:?usage: nixarchy vm run <name>}"
+        need_vm() {
+          name="''${2:?$1}"
+          validate_name "$name"
           dir="$stateDir/$name"
           if [ ! -d "$dir" ]; then
             echo "nixarchy-vm: no VM named '$name'. 'nixarchy vm create $name' first." >&2
             exit 1
           fi
+        }
+
+        build_vm() {
           template=$(cat "$dir/template")
-
-          # Held for the life of this process -- including across the exec below,
-          # since a plain `exec N>file` redirection is not close-on-exec. A second
-          # `run` of the same name hits this while the first is still attached to
-          # the terminal, and refuses instead of two qemus racing over one 9p
-          # share and one volume image.
-          exec 9>"$dir/.lock"
-          if ! flock -n 9; then
-            echo "nixarchy-vm: '$name' is already running." >&2
-            exit 1
-          fi
-
           attr="microvm-$template"
           [ "$(variant)" = "tcg" ] && attr="$attr-tcg"
 
@@ -251,14 +301,136 @@ writeShellApplication {
             echo "this system was built from." >&2
             nix build ''${NIXPKGS_ALLOW_UNFREE:+--impure} "$fallbackUrl#$attr" --out-link "$dir/current"
           fi
+        }
 
+        # Held for the life of this process -- including across the exec in
+        # exec_vm, since a plain `exec N>file` redirection is not
+        # close-on-exec. A second `run` of the same name hits this while the
+        # first is still up, and refuses instead of two qemus racing over one
+        # 9p share and one volume image.
+        take_lock() {
+          exec 9>"$dir/.lock"
+          if ! flock "$@" 9; then
+            echo "nixarchy-vm: '$name' is already running." >&2
+            exit 1
+          fi
+        }
+
+        # A detached unit can become active before its runner takes the lock.
+        # Check after acquiring it so an earlier inactive observation cannot
+        # authorize a mutation during that handoff. The prebuilt runner uses
+        # take_lock directly: it is the active unit we refuse everywhere else.
+        lock_stopped_vm() {
+          take_lock -n
+          if unit_busy "$dir"; then
+            echo "nixarchy-vm: '$name' is already running -- 'nixarchy vm stop $name' first." >&2
+            exit 1
+          fi
+        }
+
+        exec_vm() {
           echo "$name" > "$dir/hostname"
           cd "$dir"
           exec ./current/bin/microvm-run
         }
 
+        run_vm() {
+          need_vm "usage: nixarchy vm run [--detach] <name>" "$@"
+          lock_stopped_vm
+          build_vm
+          exec_vm
+        }
+
+        # The half a detached unit runs: already built, so lock and launch.
+        # Waits rather than refusing: detach_vm still holds the lock when the
+        # unit starts, and its start-up poll takes it for an instant after.
+        launch_vm() {
+          need_vm "usage: nixarchy vm run --prebuilt <name>" "$@"
+          take_lock -w 30
+          exec_vm
+        }
+
+        # Build here, so the build log and a build failure are the caller's;
+        # then a user unit owns the runner, inside dtach so `console` can
+        # attach later. The lock is held from before the build until the unit
+        # exists (#784's review: `rm` or a second detach used to win the
+        # build window), and the unit's own launch waits for it. From then
+        # on the unit is busy to everything that refuses, until its runner
+        # holds the lock itself. Back only once it does.
+        detach_vm() {
+          need_vm "usage: nixarchy vm run --detach <name>" "$@"
+          lock_stopped_vm
+          build_vm
+          rm -f "$dir/console.sock"
+          systemd-run --user --unit="nixarchy-vm-$name" --collect --quiet \
+            --setenv=XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
+            -- "$(command -v dtach)" -N "$dir/console.sock" -z \
+            "$(readlink -f "$0")" run --prebuilt "$name"
+          exec 9>&-
+          timeout=''${NIXARCHY_VM_DETACH_TIMEOUT:-30}
+          for _ in $(seq 1 $((timeout * 5))); do
+            if lock_held "$dir"; then
+              echo "'$name' is running in the background. 'nixarchy vm console $name' to attach."
+              return 0
+            fi
+            sleep 0.2
+          done
+          echo "nixarchy-vm: '$name' did not start within ''${timeout}s." >&2
+          echo "  See: journalctl --user -u nixarchy-vm-$name" >&2
+          exit 1
+        }
+
+        run_cmd() {
+          case "''${1:-}" in
+            --detach) shift; detach_vm "$@" ;;
+            --prebuilt) shift; launch_vm "$@" ;;
+            *) run_vm "$@" ;;
+          esac
+        }
+
+        console_vm() {
+          need_vm "usage: nixarchy vm console <name>" "$@"
+          if [ ! -S "$dir/console.sock" ]; then
+            echo "nixarchy-vm: '$name' is not detached -- 'nixarchy vm run $name' attaches directly." >&2
+            exit 1
+          fi
+          # Not `exec`: that would skip a shell function, and the check's
+          # dtach stub is one.
+          dtach -a "$dir/console.sock" -e '^]' -r winch
+        }
+
+        set_template() {
+          need_vm "usage: nixarchy vm set-template <name> <template> [--keep-volumes]" "$@"
+          template="''${2:?usage: nixarchy vm set-template <name> <template> [--keep-volumes]}"
+          keep=false
+          [ "''${3:-}" = --keep-volumes ] && keep=true
+          if ! template_exists "$template"; then
+            echo "nixarchy-vm: no template '$template'." >&2
+            list_templates >&2
+            exit 1
+          fi
+          lock_stopped_vm
+          # A volume belongs to the template that made it: k3s's disk under a
+          # node VM is at best dead weight and at worst mounted where the new
+          # template puts something else.
+          # A loop, not `compgen -G`: writeShellApplication's bash has no
+          # completion builtins, and a missing command in an `if` fails open.
+          vols=""
+          for f in "$dir"/*.img; do
+            [ -e "$f" ] && vols="$vols ''${f##*/}"
+          done
+          if ! $keep && [ -n "$vols" ]; then
+            echo "nixarchy-vm: '$name' has volumes made by its '$(cat "$dir/template")' template:$vols" >&2
+            echo "  Pass --keep-volumes to switch anyway, or 'nixarchy vm rm $name' and create it again." >&2
+            exit 1
+          fi
+          echo "$template" > "$dir/template"
+          echo "'$name' now uses the '$template' template; the next 'nixarchy vm run $name' rebuilds it."
+        }
+
         stop_vm() {
           name="''${1:?usage: nixarchy vm stop <name>}"
+          validate_name "$name"
           dir="$stateDir/$name"
           if [ ! -d "$dir" ] || [ ! -e "$dir/current" ]; then
             echo "nixarchy-vm: no VM named '$name'." >&2
@@ -269,18 +441,13 @@ writeShellApplication {
 
         rm_vm() {
           name="''${1:?usage: nixarchy vm rm <name>}"
+          validate_name "$name"
           dir="$stateDir/$name"
           if [ ! -d "$dir" ]; then
             echo "nixarchy-vm: no VM named '$name'." >&2
             exit 1
           fi
-          if [ -e "$dir/.lock" ]; then
-            exec 9>"$dir/.lock"
-            if ! flock -n 9; then
-              echo "nixarchy-vm: '$name' is running -- 'nixarchy vm stop $name' first." >&2
-              exit 1
-            fi
-          fi
+          lock_stopped_vm
           # Removing the directory removes the out-link with it, which is how the
           # GC root goes away -- there is nothing else to clean up.
           rm -rf "$dir"
@@ -292,22 +459,31 @@ writeShellApplication {
           # every nixarchy machine, KVM or not, so #226's menu group has
           # nothing to gate on beyond "this command exists".
           --check) exit 0 ;;
-          templates|"") list_templates ;;
-          list) list_vms ;;
+          templates) shift; list_templates "$@" ;;
+          "") list_templates ;;
+          list) shift; list_vms "$@" ;;
           create) shift; create_vm "$@" ;;
-          run) shift; run_vm "$@" ;;
+          run) shift; run_cmd "$@" ;;
+          console) shift; console_vm "$@" ;;
+          set-template) shift; set_template "$@" ;;
           stop) shift; stop_vm "$@" ;;
           rm) shift; rm_vm "$@" ;;
           -h|--help|help)
             cat <<'USAGE'
     nixarchy vm -- disposable NixOS MicroVMs. No root, no rebuild.
 
-      nixarchy vm templates          List what's available
-      nixarchy vm list                List VMs you have created
+      nixarchy vm templates [--json] List what's available
+      nixarchy vm list [--json]       List VMs you have created
       nixarchy vm create <name> [--template t]
                                       Make one (default template: shell)
-      nixarchy vm run <name>          Build (if needed) and attach -- Ctrl-A X to
-                                       leave the console without stopping the VM
+      nixarchy vm run [--detach] <name>
+                                      Build (if needed) and attach -- Ctrl-A X to
+                                       leave the console without stopping the VM.
+                                       --detach runs it in the background instead
+      nixarchy vm console <name>      Attach to a detached VM -- Ctrl-] leaves it running
+      nixarchy vm set-template <name> <template> [--keep-volumes]
+                                      Switch a stopped VM's template; the next run rebuilds.
+                                       Refuses over existing volumes unless told
       nixarchy vm stop <name>         Ask a running VM to shut down
       nixarchy vm rm <name>           Delete a VM and its state
 

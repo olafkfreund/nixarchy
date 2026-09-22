@@ -146,7 +146,34 @@
     # no better than none here, so this stays the same situation sops-nix above
     # is in. Bump it deliberately; never track a branch.
     #
-    # 6b5878a is nixi-nixarchy#17: the missing-adapter message names the route a
+    # 1e25cb8 is nixi-nixarchy#32: in the card, install, environment, VM,
+    # container and other-distro questions now lead with the nixarchy panel
+    # for the job. The manual excerpt added before each question used to win
+    # instead (a dual-boot page for "install btop"), framed as "answer
+    # directly from this", so #25 held on the command line but not in the
+    # card. Tried through the real card on razer: 6/6 lead with the right
+    # panel, and no unbound key is offered as working.
+    #
+    # The previous pin, 1c3fc7c, was nixi-nixarchy master after #30. Five changes a user sees:
+    #   - Choosing a FAQ row shows its written answer (#28). It had thrown a
+    #     QML TypeError since the rows were added, so the offline FAQ, one of
+    #     the three things that need no agent, answered nothing.
+    #   - Y and N answer a permission prompt (#29), but only while the message
+    #     box is empty, so typing cannot turn into consent; Return no longer
+    #     sends a steering message from behind the dialog.
+    #   - A permission prompt shows what is being approved (#30): the whole
+    #     command, or each file's -/+ lines, from the ACP tool call's rawInput
+    #     and diff content, as plain text that scrolls. Before, only the tool's
+    #     title reached the card, cut at five lines.
+    #   - Nixi leads with nixarchy's own panels (#25): the package manager, Dev
+    #     environments, MicroVMs, Podman and Distrobox, checked first with
+    #     nixarchy-plugin --enabled, so it never names a panel that is off or a
+    #     key that is not bound.
+    #   - The README and a new Pages site show a first session (#24); docs/
+    #     is excluded from the package, so this one changes no closure.
+    # Each was tried on a real nixarchy desktop before merge (razer, 2026-09-21).
+    #
+    # The previous pin, 6b5878a, was nixi-nixarchy#17: the missing-adapter message names the route a
     # nixarchy user actually has. It used to say only "add pkgs.claude-agent-acp
     # to your configuration", which works and is not what this distribution
     # provides; it now names `services.nixi.agents`, says that is a Home Manager
@@ -175,7 +202,86 @@
     # literal name "claude". That still matters from #731 on and is carried
     # forward here; see that issue for the reasoning.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/6b5878a427e0bb007fa7c673b4786ad80bf270fd";
+      url = "github:olafkfreund/nixi-nixarchy/1e25cb8784a51e4d7a3f978ca3050ecd94173b1f";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Speech into desktop actions (#774). An input on every machine while the
+    # app is on none, which is not a contradiction: data/apps.nix is data, and
+    # this module only does anything once somebody sets
+    # services.omarchy-voice.enable in their own flake. It is not in
+    # defaultPluginSet and must not be -- about a gigabyte with whisper and the
+    # Piper models, and the models are IN the package, so an off switch would
+    # not shrink the machine or the ISO.
+    #
+    # nixarchy overrides none of its defaults, deliberately. Desktop control,
+    # the notification log and the wake word all start off upstream as of
+    # nixarchy-voice#19 and #21, and the "Jenny (Dioco)" attribution is in the
+    # built wrapper. Restating any of that here would be a second place to
+    # change and would hide an upstream regression rather than catch it --
+    # checks.options asserts the off state instead.
+    #
+    # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
+    # a branch is not a version.
+    nixarchy-voice = {
+      url = "github:olafkfreund/nixarchy-voice/a953559d2da99c2f8075869dab73e344b78988ae";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-pkg = {
+      url = "github:olafkfreund/nixarchy-pkg/dd937f2cb289e81c51a7358152835879ef47bf96";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-podman-panel-wherever-podman-is-on-766
+    # A commit on master (that repo's default branch, no tags).
+    nixarchy-podman = {
+      url = "github:olafkfreund/nixarchy-podman/bc0b77adb86375269e2a35aee757ef5fa01d9efd";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-gltui = {
+      url = "github:olafkfreund/nixarchy-gltui/0b827c62cfb2839e0b930becfe94008b689623cc";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-github-actions-panel-on-by-default-772
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-ghtui = {
+      url = "github:olafkfreund/nixarchy-ghtui/dfba799b51536982343f596993acfbaace4f308f";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-herdr-sessions-widget-on-by-default-771
+    # No flake upstream, so nothing to follow; a commit on master, bumped the
+    # way that page says.
+    nixarchy-herdr = {
+      url = "github:olafkfreund/nixarchy-herdr/6bb0a4c52bc65ea6c104acaebfcd47a9df4d9cc1";
+      flake = false;
+    };
+
+    # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-distrobox = {
+      url = "github:olafkfreund/nixarchy-distrobox/dd9e89cd4b5b47f24f1cb542c521ea3a98d2d7b7";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-dev-environments-panel-wherever-devenv-is-802
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-devenv = {
+      url = "github:olafkfreund/nixarchy-devenv/83ff7e6eb9d96d48f7ca7343ef7e26a24a5297b4";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
+    # A commit on main (no tags); bump it the way that page says.
+    nixarchy-microvm = {
+      url = "github:olafkfreund/nixarchy-microvm/c498b3b16a7c5cccf928ae9b8c0bb6326e17d755";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -259,6 +365,40 @@
           localSystem = system;
           overlays = [ self.overlays.default ];
         }
+      );
+
+      # `imagePins` for the box checks, taken by hand against
+      # registry-1.docker.io, once per template, the same way a `fetchurl`
+      # sha256 is -- a new template (data/box-templates.nix) adds an entry
+      # here too, or checks.box-template fails loudly with "no imagePins
+      # entry for". One table, shared: checks.box-template reads every
+      # entry structurally, checks.box-boot creates a real container from
+      # the default template's -- two checks disagreeing about which image
+      # is pinned would be the #288/#289 failure shape again.
+      boxImagePins = {
+        archlinux = {
+          imageName = "archlinux";
+          imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
+          tag = "latest";
+          sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
+        };
+        debian = {
+          imageName = "debian";
+          imageDigest = "sha256:f324c7ff54321e8d9c588493a20244965938ce0aa50bbd1022d38010e9ffc4b1";
+          tag = "trixie";
+          sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
+        };
+      };
+
+      boxImages = eachSystem (
+        system:
+        lib.mapAttrs (
+          _: pin:
+          pkgsFor.${system}.dockerTools.pullImage {
+            inherit (pin) imageName imageDigest sha256;
+            finalImageTag = pin.tag or "latest";
+          }
+        ) boxImagePins
       );
 
       omarchyVersion = "4.0.4";
@@ -643,6 +783,19 @@
 
       packages = eachSystem (
         system:
+        let
+          # Imported once, and every scene it defines is exposed below without
+          # anybody typing the name here. The list that used to live in this
+          # file failed OPEN: three scenes added to tests/demo/default.nix were
+          # not flake attributes, nothing went red, and the only detector was
+          # demo-record failing an hour later with "does not provide attribute"
+          # (#816, AGENTS.md section 4).
+          demoOutputs = import ./tests/demo {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            microvmRunner = self.packages.${system}."microvm-shell-tcg";
+          };
+        in
         {
           default = self.packages.${system}.omarchy;
           inherit (pkgsFor.${system}) omarchy nixarchy-plymouth;
@@ -820,6 +973,14 @@
           # modules/home.nix instead.
           nixi = inputs.nixi.packages.${system}.nixi;
 
+          # Re-exported for the same reasons as nixi: `nix build .#nixarchy-pkg`
+          # works, and it is built against our nixpkgs through the `follows`.
+          # modules/home.nix names it as a default plugin (#766).
+          nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
+          nixarchy-podman = inputs.nixarchy-podman.packages.${system}.default;
+          nixarchy-microvm = inputs.nixarchy-microvm.packages.${system}.default;
+          nixarchy-distrobox = inputs.nixarchy-distrobox.packages.${system}.default;
+
           # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
           # installables, and an overlay attribute is not one.
           #
@@ -833,10 +994,12 @@
 
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
 
-          # Exposed at top level for the same reason as nixarchy-vm just
-          # above: checks.box-template builds and reads the exact command
-          # `nixarchy box` execs.
-          nixarchy-box = pkgsFor.${system}.callPackage ./pkgs/box.nix { };
+          # Every pinned box image in one entry, so the main-only cache publisher
+          # serves them all to cold box checks (#788, #800): its closure is each
+          # tarball. `images` is the set, for checks.box-template's same-path check.
+          box-test-image = pkgsFor.${system}.linkFarm "box-test-images" boxImages.${system} // {
+            images = boxImages.${system};
+          };
 
           # Same reason again: tests/menu-verbs.nix reads the verbs out of the
           # command the Secrets menu rows exec, and it can only do that if the
@@ -896,98 +1059,44 @@
           # complete.
           explain = pkgsFor.${system}.nixarchy-explain;
 
-          # Why: docs/internals/flake.md#nix-run-devenv-presets-scaffolds-every-preset-in
-          devenv-presets =
-            let
-              pkgs = pkgsFor.${system};
-            in
-            pkgs.writeShellApplication {
-              name = "nixarchy-devenv-presets";
-              runtimeInputs = [
-                pkgs.coreutils
-                # The same devenv the catalogue entry installs: pkgs.devenv is
-                # what modules/services/devenv.nix defaults its `package` to, so
-                # what evaluates here is what a user's machine would run.
-                pkgs.devenv
-                pkgs.gnused
-                (pkgs.callPackage ./pkgs/dev-init.nix { })
-              ];
-              text = ''
-                presets=( ${nixpkgs.lib.concatStringsSep " " (builtins.attrNames (import ./data/devenv-presets.nix))} )
-
-                # Everything under one temp root, HOME included: `devenv allow`
-                # writes a trust database into XDG state, and a check has no
-                # business touching the trust decisions of whoever ran it.
-                root=$(mktemp -d)
-                trap 'rm -rf "$root"' EXIT
-                HOME="$root/home"
-                export HOME
-                mkdir -p "$HOME"
-
-                fail=0
-                for preset in "''${presets[@]}"; do
-                  echo "== $preset"
-                  dir="$root/$preset"
-                  mkdir -p "$dir"
-                  cd "$dir"
-
-                  if ! nixarchy-dev-init "$preset" > init.log 2>&1; then
-                    echo "   scaffolding failed:"
-                    sed 's/^/   /' init.log
-                    fail=1
-                    continue
-                  fi
-
-                  # `devenv info` is the cheapest command that evaluates the whole
-                  # module set -- it prints the packages the environment would
-                  # have, which it cannot know without resolving every option the
-                  # preset set. A renamed option dies here.
-                  if devenv info > eval.log 2>&1; then
-                    echo "   ok"
-                  else
-                    echo "   does not evaluate:"
-                    sed 's/^/   /' eval.log
-                    echo "   the devenv.nix it wrote:"
-                    sed 's/^/   /' devenv.nix
-                    fail=1
-                  fi
-                done
-
-                if [ "$fail" -ne 0 ]; then
-                  echo
-                  echo "A preset in data/devenv-presets.nix no longer evaluates against"
-                  echo "devenv. Either an option was renamed upstream -- fix the preset,"
-                  echo "the new name is in devenv's src/modules -- or the scaffold this"
-                  echo "edits changed shape and pkgs/dev-init.nix has to follow."
-                  exit 1
-                fi
-                echo
-                echo "all ''${#presets[@]} presets evaluate"
-              '';
-            };
+          # `nix run .#devenv-presets` -- every template the Dev environments
+          # plugin ships, scaffolded with a real devenv and evaluated (#802).
+          #
+          # The NAME is fixed: `devenv-presets` is a required status check on
+          # main, and `build.yml`'s job of that name runs this attribute. The
+          # catalogue moved to the plugin (nixarchy-devenv), so what the name
+          # runs is now the plugin's own `templates-check`, over the eight ids
+          # this repo used to carry. Renaming either would need a workflow and
+          # a branch-protection change, which are a human's (AGENTS.md 4, 11).
+          #
+          # Not in `checks`: it needs the network, because devenv fetches the
+          # inputs each devenv.yaml names.
+          #
+          # What the old runner got wrong, and why the plugin's replaces it:
+          # it moved HOME but inherited XDG_DATA_HOME, and devenv keeps its
+          # trust database at $XDG_DATA_HOME/devenv/allowed -- so every run
+          # wrote its throwaway scaffolds into the trust list of whoever ran
+          # it (80 dead entries on p620). The plugin's check puts HOME, every
+          # XDG path and DEVENV_HOME inside one temporary root, and fails if
+          # the caller's allow list changes while it runs.
+          devenv-presets = pkgsFor.${system}.writeShellApplication {
+            name = "devenv-presets";
+            text = ''
+              # The ids this repo's data/devenv-presets.nix used to hold. The
+              # plugin has more (java, kotlin, dotnet, php, ruby, flutter and
+              # the cloud generator); those are its own CI's business, and
+              # `cloud` needs the network at create time, so this check keeps
+              # the scope the required check has always had.
+              exec ${inputs.nixarchy-devenv.apps.${system}.templates-check.program} \
+                go jupyter ml node python react rust typescript
+            '';
+          };
 
           # Why: docs/internals/flake.md#screencasts-of-a-real-session-scene-by-scene-see
-          inherit
-            (import ./tests/demo {
-              inherit inputs;
-              pkgs = pkgsFor.${system};
-              microvmRunner = self.packages.${system}."microvm-shell-tcg";
-            })
+          inherit (demoOutputs)
             demo
             demo-record
             demo-verify
-            demo-scene-menus
-            demo-scene-themes
-            demo-scene-install
-            demo-scene-devenv
-            demo-scene-plugin
-            demo-scene-microvm
-            # Not a GIF but the scene's test DRIVER: boxes needs the real
-            # network in the VM (podman pulls the image, and the first
-            # `distrobox enter` provisions online), which no sandboxed build
-            # has. demo-record runs it outside the sandbox and applies the
-            # same encode and the same verify gate to the frames.
-            demo-scene-boxes
             ;
 
           inherit (pkgsFor.${system}.nixarchy-apps)
@@ -1113,6 +1222,9 @@
             ignoreCollisions = true;
           };
         }
+        # Every scene, by construction. Adding one to tests/demo/default.nix is
+        # now enough; there is no second place to forget.
+        // lib.filterAttrs (name: _: lib.hasPrefix "demo-scene-" name) demoOutputs
         # Why: docs/internals/flake.md#two-runners-per-data-microvm-templates-nix-entry-b
         // lib.concatMapAttrs (
           name: template:
@@ -1269,6 +1381,15 @@
                         }
                       ];
                     };
+
+                    # This is the VM a person KEEPS (#817), so it matches a real
+                    # machine rather than the smoke test. Both panels that follow
+                    # a service are gated on that service, and with neither
+                    # enabled nixarchy.podman and nixarchy.distrobox are invisible
+                    # here -- the two panels most worth trying by hand. The cost
+                    # is the image pulls, paid by whoever runs this VM.
+                    virtualisation.podman.enable = true;
+                    programs.nixarchy.services.boxes.enable = true;
 
                     # Sized for the machine rather than inherited from the smoke
                     # test: with 32GB the 8b tier is comfortable, and 8b is the
@@ -1524,28 +1645,7 @@
       checks = eachSystem (
         system:
         let
-          # `imagePins` for the box checks, taken by hand against
-          # registry-1.docker.io, once per template, the same way a `fetchurl`
-          # sha256 is -- a new template (data/box-templates.nix) adds an entry
-          # here too, or checks.box-template fails loudly with "no imagePins
-          # entry for". One table, shared: checks.box-template reads every
-          # entry structurally, checks.box-boot creates a real container from
-          # the default template's -- two checks disagreeing about which image
-          # is pinned would be the #288/#289 failure shape again.
-          boxImagePins = {
-            archlinux = {
-              imageName = "archlinux";
-              imageDigest = "sha256:818793c894d94534c22f2149154a39ebaee57e4e67321023b0866a1d5722036c";
-              tag = "latest";
-              sha256 = "sha256-XqDfBl6Ehkzgw/3LPVd+nrQnV3CxDCqyynqBOfTFZDs=";
-            };
-            debian = {
-              imageName = "debian";
-              imageDigest = "sha256:f324c7ff54321e8d9c588493a20244965938ce0aa50bbd1022d38010e9ffc4b1";
-              tag = "trixie";
-              sha256 = "sha256-iL1J4Iro9wW+yL7dHgGlaMpoTxCU5XzuEgKkWAar4yA=";
-            };
-          };
+          images = boxImages.${system};
         in
         {
           omarchy = self.packages.${system}.omarchy;
@@ -1907,6 +2007,22 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The QML injected into upstream's Quickshell tree is copied, never
+          # compiled, so a syntax error ships as a bar element that silently is
+          # not there (#810). See tests/qml.nix -- it carries its own broken
+          # fixture so it proves on every run that it can go red.
+          qml = import ./tests/qml.nix { pkgs = pkgsFor.${system}; };
+
+          # A keep-loaded plugin lost its shell API at the first shell.json
+          # change, because manifestHasKind tested kinds with Array.isArray and a
+          # Qt sequence is not one (#877). Runs the built function in a real QML
+          # engine, with upstream's as its negative control.
+          manifest-has-kind = import ./tests/manifest-has-kind.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
+
           # The release notes, against a fixture repository whose diff is known.
           # Same dangerous failure as the delta above, over more scans: a release
           # note that reads calm because a grep stopped matching. See
@@ -1960,6 +2076,14 @@
           # Every option that adds something, checked with it turned off too --
           # see tests/options.nix for why that half is the one at risk.
           options = import ./tests/options.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # The profile a user with their own interpreter actually gets, built
+          # rather than inspected: #809's collision only exists once something
+          # calls buildEnv. See tests/home-profile.nix.
+          home-profile = import ./tests/home-profile.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
           };
@@ -2045,6 +2169,10 @@
           # bootloader the installer wrote, and asserts a rebuild builds
           # nothing. See tests/install.nix for why the second machine is not a
           # normal test node.
+          install-teardown = import ./tests/install-teardown.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           install = import ./tests/install.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
@@ -2142,15 +2270,16 @@
             pkgs = pkgsFor.${system};
           };
 
-          # Reads the box catalogue and `nixarchy box` structurally -- see
+          # Reads the box catalogue structurally -- see
           # tests/box-template.nix for what that can and cannot prove. The
-          # pins live in `boxImagePins` above, shared with checks.box-boot.
+          # pins and images are shared with checks.box-boot and the cache output.
           box-template = import ./tests/box-template.nix {
             pkgs = pkgsFor.${system};
             inherit lib;
             templates = import ./data/box-templates.nix;
-            nixarchyBox = self.packages.${system}.nixarchy-box;
             imagePins = boxImagePins;
+            inherit images;
+            cached = self.packages.${system}.box-test-image;
           };
 
           # The half checks.box-template deliberately leaves alone: create a
@@ -2160,6 +2289,7 @@
             inherit inputs;
             pkgs = pkgsFor.${system};
             imagePin = boxImagePins.archlinux;
+            image = images.archlinux;
           };
 
           # The other disk mode, built so the cache has it: installer/cd.nix

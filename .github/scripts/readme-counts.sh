@@ -170,6 +170,7 @@ repl_n=$(comm -12 "$tmp/pac" "$tmp/nixbin" | wc -l)
 # The numbers the README spells as words.
 word_for() {
   case "$1" in
+    1) echo One ;; 2) echo Two ;; 3) echo Three ;; 4) echo Four ;;
     5) echo Five ;; 6) echo Six ;; 7) echo Seven ;; 8) echo Eight ;;
     9) echo Nine ;; 10) echo Ten ;; 11) echo Eleven ;; 12) echo Twelve ;;
     13) echo Thirteen ;; 14) echo Fourteen ;; 15) echo Fifteen ;;
@@ -210,6 +211,21 @@ questions=$(grep -oE '\[ -n "\$[a-z_]+" \] \|\| problems' "$root/installer/insta
   sort -u | wc -l)
 questions_word=$(word_for "$questions" | tr '[:upper:]' '[:lower:]')
 
+# The default plugins, read as text from the one attrset that declares them:
+# evaluating it would cost a Home Manager evaluation (#856). Fewer than five
+# means the block moved, not that nixarchy stopped shipping plugins.
+plugins_block=$(awk '/^      defaultPluginSet = \{/{f=1} f; f && /^      \};/{exit}' "$root/modules/home.nix")
+p_total=$(grep -c 'id = "' <<<"$plugins_block" || true)
+p_gated=$(grep -c 'gate = ' <<<"$plugins_block" || true)
+if [ "$p_total" -lt 5 ]; then
+  echo "::error::default-plugins: found $p_total ids under 'defaultPluginSet = {' in modules/home.nix -- the block moved; refusing" >&2
+  fail=1
+  p_total=0
+fi
+p_word=$(word_for "$p_total")
+p_on_word=$(word_for "$((p_total - p_gated))" | tr '[:upper:]' '[:lower:]')
+p_gated_word=$(word_for "$p_gated" | tr '[:upper:]' '[:lower:]')
+
 quantity "commands" "$commands" \
   '.*\*\*([0-9]+) shell commands\*\*.*' \
   's/\*\*[0-9]+ shell commands\*\*/**'"$commands"' shell commands**/'
@@ -225,6 +241,14 @@ quantity "commands-upstream" "$commands" \
 quantity "pacman-scripts" "$pac" \
   '.*\*\*([0-9]+) of [0-9]+ scripts\*\*.*' \
   's/\*\*[0-9]+ of [0-9]+ scripts\*\*/**'"$pac"' of '"$commands"' scripts**/'
+# The SECOND number on that line, which had no entry of its own and so was
+# rewritten by --fix and never compared by --check (#831). README said 445 in
+# four places and 444 here, through every pull request, and nothing could go
+# red: the pattern above captures only the first number. One quantity per
+# number is the rule the rest of this file already follows.
+quantity "pacman-scripts-of" "$commands" \
+  '.*\*\*[0-9]+ of ([0-9]+) scripts\*\*.*' \
+  's/\*\*([0-9]+) of [0-9]+ scripts\*\*/**\1 of '"$commands"' scripts**/'
 quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'
@@ -325,6 +349,24 @@ quantity "apps-other-ours" "$a_ours" \
 quantity "apps-other-unavailable" "$a_un" \
   '^and ([0-9]+) have no equivalent and say so in the menu\.$' \
   "s/^and [0-9]+ have no equivalent and say so in the menu\.$/and $a_un have no equivalent and say so in the menu./"
+# Eight plugins ship; some turn on only with their feature. Each word is
+# captured separately because quantity reads \1. Which plugins they are is
+# the lint step "Every default plugin has a row in the manual".
+readme="$root/docs/index.md"
+dp='ship by default: '
+quantity "default-plugins" "$p_word" \
+  "^([A-Z][a-z]+) ${dp}[a-z]+ are always on, and [a-z]+ turn on.*" \
+  "s/^[A-Z][a-z]+ ${dp}/$p_word ${dp}/"
+quantity "default-plugins-on" "$p_on_word" \
+  "^[A-Z][a-z]+ ${dp}([a-z]+) are always on, and [a-z]+ turn on.*" \
+  "s/^([A-Z][a-z]+ ${dp})[a-z]+ are always on/\1$p_on_word are always on/"
+quantity "default-plugins-gated" "$p_gated_word" \
+  "^[A-Z][a-z]+ ${dp}[a-z]+ are always on, and ([a-z]+) turn on.*" \
+  "s/(are always on, and )[a-z]+ turn on/\1$p_gated_word turn on/"
+# Deliberately NOT a quantity: the search index's row count (README, "about
+# 137,000 rows"). modules/apps.nix builds the index on each machine from its own
+# options.json and nixpkgs, so no exact figure is true of every machine, and
+# deriving one here would mean evaluating one. The prose rounds instead (#856).
 readme=$readme_saved
 
 # The count says a number moved; this says which skill a table forgot. Every
@@ -346,12 +388,12 @@ for f in "$readme" "$root/docs/manual/ai.md"; do
   done
 done
 
-# A floor. Twenty-seven quantities are declared above; a run that checked fewer
+# A floor. Thirty-one quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 27 ]; then
-  echo "::error::only $checked of 27 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 31 ]; then
+  echo "::error::only $checked of 31 quantities were accounted for" >&2
   fail=1
 fi
 

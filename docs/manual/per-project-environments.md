@@ -23,6 +23,10 @@ This is nixarchy's, not Omarchy's — upstream reaches for `mise use`, which
 [Development tools](development-tools) explains does not fit here. It is also
 not on by default.
 
+Once it is on, you also get the **Dev environments** panel: every project on
+the machine in one list, on **Super+Alt+E** and under **Apps ▸ Dev
+environments**. See [The panel](#the-panel) below.
+
 ## Turning it on
 
 devenv is a row in the services catalogue, off until you pick it:
@@ -54,6 +58,51 @@ into a project downloads what Cachix already built rather than compiling a
 toolchain. Decline it with
 `programs.nixarchy.services.devenv.binaryCache = false;` if you would rather
 not trust that cache; the environments still work, they are just built locally.
+
+## The panel
+
+Turning devenv on installs the [Dev environments
+panel](https://olafkfreund.github.io/nixarchy-devenv/) and turns it on once,
+like nixarchy's other panels. It lists every `devenv.nix` under your project
+roots (`~/Source` and `~/Projects` by default), and the ones you have allowed
+come first. A directory bound with `devenv --from <source> allow` is listed
+too, with its source; see [the plugin's
+manual](https://olafkfreund.github.io/nixarchy-devenv/usage#bound-environments).
+
+| Key | What it does |
+| --- | --- |
+| <kbd>enter</kbd> | `devenv shell` in a new terminal, in the project |
+| <kbd>e</kbd> | your editor on its `devenv.nix` |
+| <kbd>s</kbd> | start its processes (`devenv up -d`), or stop them |
+| <kbd>g</kbd> | `devenv update`, with the log in the panel |
+| <kbd>a</kbd> | allow or revoke activation on `cd` |
+| <kbd>x</kbd> | remove it: revoke, devenv's files, files and state, or the folder |
+| <kbd>c</kbd> | a new project from a template |
+
+Removing is in steps, least destructive first, and `.devenv/state` — where a
+service such as PostgreSQL keeps its data — survives unless you ask for it to
+go. Deleting the folder needs its name typed.
+
+`nixarchy dev …` is the same tool in a terminal: `nixarchy dev init <template>`
+here, `nixarchy dev list --json` for what the panel sees. The panel and the
+command are one program, so there is no second catalogue to drift.
+
+Turn the panel off and keep devenv with
+`programs.nixarchy.defaultPlugins.devenv = false;`.
+
+## Two things that changed with the panel
+
+The scaffolder moved into the plugin (#802), and two of its habits changed
+with it:
+
+- **`devenv allow` is no longer run for you.** A `devenv.nix` is code that runs
+  when you enter the directory, so consent is yours: `nixarchy dev init
+  --allow`, the panel's "Allow automatic activation" switch, or `devenv allow`
+  when you are ready. Until then use `devenv shell`, or the panel's
+  <kbd>enter</kbd>.
+- **A new project gets `git init`** unless you pass `--no-git`. The lockfile is
+  only reproducibility if it is committed, and devenv's own git hooks need a
+  repository.
 
 ## What `nixarchy dev init` writes
 
@@ -201,9 +250,9 @@ The global rows in _Install ▸ Development_ are still the right place for
 language servers and one-off scripts — anything a *project* depends on belongs
 in that project.
 
-## Growing past the presets
+## Growing past the templates
 
-A preset is exactly a set of devenv option lines, deliberately: what lands in
+A template is exactly a set of devenv option lines, deliberately: what lands in
 your `devenv.nix` is the same text devenv's own documentation and every forum
 answer show, with no nixarchy vocabulary in it. So the reference for editing
 that file is devenv's, not ours:

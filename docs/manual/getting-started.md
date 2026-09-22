@@ -175,7 +175,7 @@ into your flake and runs `nh os switch`.
 
 ![Searching all of nixpkgs from the menu](../img/desktop/search-results.jpg)
 
-The app selection carries 66 applications. **Search** offers the rest of NixOS: one
+The app selection carries 67 applications. **Search** offers the rest of NixOS: one
 fuzzy picker over every nixpkgs package, every NixOS option and the app
 selection — 137,526 rows in that screenshot, 3,554 of them matching
 `tailscale` — with each entry's type, default and documentation in the preview.
@@ -184,6 +184,15 @@ The preview is the part worth noticing. It does not just name the package; it
 shows what selecting it *writes*. `tailscale.enable = true;` is a line you could
 have typed yourself, and the menu is only saving you the trip to
 search.nixos.org.
+
+### Install ▸ Packages
+
+The same catalogue in a panel instead of a terminal: search, add, draft and
+apply packages, services and options from the shell. It is on from your first
+login, and **Super+Alt+N** opens it on a new install. It is
+[nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg), one of nixarchy's
+own plugins; [Configuring nixarchy](configuration.md#nixarchys-own-plugins)
+says how to turn it off.
 
 ## The guide
 

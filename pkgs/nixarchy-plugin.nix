@@ -44,6 +44,14 @@ writeShellApplication {
         echo "usage: nixarchy-plugin <id> | nixarchy-plugin --enabled <id>"
         ;;
       *)
+        # Seeded binds reach every new home, but a gated default (podman) is
+        # only installed where its gate holds -- `omarchy plugin enable` would
+        # fail there, so do not send anyone to it.
+        if [ ! -d "''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$1" ]; then
+          omarchy-notification-send -u normal "$1 is not installed on this machine" \
+            "It ships with the feature it belongs to; turn that on first."
+          exit 1
+        fi
         if enabled "$1"; then
           exec omarchy-shell shell toggle "$1" '{}'
         fi

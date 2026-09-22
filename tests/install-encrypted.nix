@@ -354,7 +354,7 @@ pkgs.testers.runNixOSTest {
       };
     };
 
-  testScript = ''
+  testScript = import ./with-vm-cleanup.nix pkgs.lib ''
     installer.wait_for_unit("multi-user.target")
 
     # ---- install -------------------------------------------------------
@@ -630,7 +630,7 @@ pkgs.testers.runNixOSTest {
     assert os.path.exists(disk), f"the installer's target disk is not at {disk}"
     print(subprocess.run(["ls", "vm-state-installer"],
                          capture_output=True, text=True).stdout)
-    target = create_machine(
+    target = create_owned_machine(
         "${targetCommand}" + f" -drive file={disk},if=virtio,werror=report",
         name="target")
     target.start()
@@ -639,7 +639,36 @@ pkgs.testers.runNixOSTest {
     # instrumentation, plymouth off. The pattern covers both stage-1
     # implementations: scripted prints "Passphrase for <device>", systemd
     # prints "Please enter passphrase for disk ...".
-    target.wait_for_console_text(r"[Pp]assphrase for", timeout=600)
+    #
+    # It also tolerates a kernel message landing INSIDE the prompt, which is
+    # what #834 was: `loglevel=7` and the prompt share ttyS0, and a printk
+    # split the word "passphrase" in half. No pattern over a fixed string can
+    # survive that -- an interleave can land between any two characters.
+    #
+    # The separator is SHAPED, not a character budget: it admits a run of
+    # kernel timestamped lines and nothing else. wait_for_console_text
+    # re.searches a buffer holding the whole boot, so `.{0,N}` between letters
+    # matches them scattered across unrelated output -- and a match with no
+    # prompt on screen sends the passphrase to whatever is listening. The
+    # DECOY assertion below is what holds that line.
+    kmsg = r"(?:\[ *\d+\.\d+\][^\n]*\n?)*"
+    luks_prompt = "(?i:" + kmsg.join(re.escape(c) for c in "assphrase for") + ")"
+
+    # The fixture is the transcript the failure produced, so this regression
+    # test needs no VM and no race. The second assertion keeps the first
+    # honest: it fails if anyone "simplifies" SPLIT into an ordinary prompt,
+    # which would leave the first passing for the wrong reason (AGENTS.md §1).
+    SPLIT = ("Please enter pas[    2.948528] scsi 1:0:0:0: CD-ROM            QEMU"
+             "     QEMU DVD-ROM     2.5+ PQ: 0 ANSI: 5\n"
+             "sphrase for disk disk-main-root (cryptroot): (press TAB for no echo) ")
+    DECOY = "\n".join(f"[    {i}.000000] probe {c}" for i, c in enumerate("assphrase for"))
+    assert re.search(luks_prompt, SPLIT), "the matcher no longer tolerates a split prompt"
+    assert not re.search(r"[Pp]assphrase for", SPLIT), "SPLIT is no longer a split prompt"
+    assert not re.search(luks_prompt, DECOY), "the matcher matches output with no prompt in it"
+    assert re.search(luks_prompt, "Please enter passphrase for disk d (cryptroot): ")
+    assert re.search(luks_prompt, "Passphrase for /dev/disk/by-uuid/deadbeef: ")
+
+    target.wait_for_console_text(luks_prompt, timeout=600)
     target.send_console("${luksPassphrase}\n")
     print("stage 1 asked for the passphrase on the serial console")
 
@@ -692,9 +721,5 @@ pkgs.testers.runNixOSTest {
         f"installed {before}: the encrypted layout does not describe the "
         "machine it produced (Invariant 1).")
     print("a rebuild straight after an encrypted install builds nothing")
-
-    # Or this check never finishes; see tests/install.nix, which paid for
-    # this once.
-    target.shutdown()
   '';
 }

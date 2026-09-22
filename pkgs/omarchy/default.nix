@@ -1927,11 +1927,68 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     }
 
+                    # A keep-loaded plugin (the Podman menu) lost its shell API the
+                    # first time shell.json changed, and read barConfig as null
+                    # until the shell restarted (#877). manifestHasKind tested
+                    # kinds with Array.isArray. A manifest read through a QML
+                    # property carries kinds as a Qt sequence -- length 2,
+                    # "menu,bar-widget", Array.isArray false -- so the plugin's
+                    # scoped API was recorded `no-menu`, re-checked as `menu` by
+                    # prunePluginApis against the plain-JS manifest, revoked for
+                    # the mismatch, and the plugin kept the destroyed object.
+                    # Confirmed on razer with log lines in a copy of shell.qml.
+                    #
+                    # CARRIED, and meant to be dropped, like the #749 block above:
+                    # AGENTS.md section 11 puts Omarchy fixes upstream, and this is
+                    # carried only at the owner's request until it lands there.
+                    # Delete it the moment upstream reads kinds without
+                    # Array.isArray. The whole function is the needle, so a
+                    # reworded one fails this build. checks.manifest-has-kind runs
+                    # the result against a real Qt sequence.
+                    # printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    hasKindOld=$(printf '%s\n' \
+                      '  function manifestHasKind(manifest, kind) {' \
+                      '    return !!manifest && Array.isArray(manifest.kinds)' \
+                      '      && manifest.kinds.indexOf(kind) !== -1' \
+                      '  }')
+                    hasKindNew=$(printf '%s\n' \
+                      '  function manifestHasKind(manifest, kind) {' \
+                      '    // nixarchy CARRIED patch (#877): kinds read through a QML property is a Qt' \
+                      '    // sequence, for which Array.isArray is false; accept anything list-shaped.' \
+                      '    var kinds = manifest ? manifest.kinds : null' \
+                      '    return !!kinds && typeof kinds.length === "number"' \
+                      '      && Array.prototype.indexOf.call(kinds, kind) !== -1' \
+                      '  }')
+                    substituteInPlace "$shellQml" --replace-fail "$hasKindOld" "$hasKindNew"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \
                       --subst-var-by snowflake \
                       "${nixos-icons}/share/icons/hicolor/256x256/apps/nix-snowflake.png"
+
+                    # The default plugins' binds (#766), in the SEED, so new homes get
+                    # them and nobody's edited bindings.lua is touched. Appended after
+                    # upstream's last line, asserted first so a reworded seed fails here.
+                    binds=$out/share/omarchy/config/hypr/bindings.lua
+                    [ "$(tail -n1 "$binds")" = '-- o.bind("SUPER + PERIOD", nil, "omarchy-shell shell toggle omarchy.emojis")' ] || {
+                      echo "default-plugin binds: upstream's seed bindings.lua no longer ends where it did" >&2
+                      exit 1
+                    }
+                    # printf, not a heredoc: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    printf '%s\n' "" \
+                      "-- nixarchy's own plugins (#766). The helper says so if one is turned off." \
+                      'o.bind("SUPER + ALT + N", "Packages", "nixarchy-plugin nixarchy.pkg")' \
+                      'o.bind("SUPER + ALT + O", "Podman", "nixarchy-plugin nixarchy.podman")' \
+                      'o.bind("SUPER + ALT + P", "GitLab Pipelines", "nixarchy-plugin olafkfreund.gitlab-pipelines")' \
+                      'o.bind("SUPER + CTRL + ALT + P", "GitLab Pipelines keybindings", "python3 $HOME/.config/omarchy/plugins/olafkfreund.gitlab-pipelines/menu.py keys")' \
+                      'o.bind("SUPER + ALT + A", "GitHub Actions", "nixarchy-plugin olafkfreund.github-actions")' \
+                      'o.bind("SUPER + CTRL + ALT + A", "GitHub Actions keybindings", "python3 $HOME/.config/omarchy/plugins/olafkfreund.github-actions/menu.py keys")' \
+                      'o.bind("SUPER + ALT + H", "Herdr", "nixarchy-plugin nixarchy.herdr")' \
+                      'o.bind("SUPER + ALT + V", "MicroVMs", "nixarchy-plugin nixarchy.microvm")' \
+                      'o.bind("SUPER + ALT + D", "Distrobox", "nixarchy-plugin nixarchy.distrobox")' \
+                      'o.bind("SUPER + ALT + E", "Dev environments", "nixarchy-plugin nixarchy.devenv")' \
+                      >>"$binds"
 
                     runHook postInstall
   '';

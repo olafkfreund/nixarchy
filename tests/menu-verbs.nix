@@ -28,24 +28,53 @@ let
   # reference, plus boxes -- the box group is gated on services.boxes.enable
   # and would otherwise contribute no rows, quietly halving what is checked.
   eval = inputs.self.nixosConfigurations.reference.extendModules {
-    modules = [ { programs.nixarchy.services.boxes.enable = true; } ];
+    modules = [
+      {
+        programs.nixarchy.services.boxes.enable = true;
+        # Same reason as boxes: the Dev environments row and its panel exist
+        # only where devenv is, so without this the row contributes nothing
+        # and the plugin-row floor below would be checking one row less (#802).
+        programs.nixarchy.services.devenv.enable = true;
+      }
+    ];
   };
 
   menu = eval.config.environment.etc."nixarchy/omarchy-menu.jsonc".source;
 
   vmcli = inputs.self.packages.${system}.nixarchy-vm;
-  boxcli = inputs.self.packages.${system}.nixarchy-box;
   secretcli = inputs.self.packages.${system}.nixarchy-secret;
 
   # nixarchy-channel ships in the omarchy tree rather than as its own package,
   # so it is reached through the built tree the same way the menu reaches it.
   omarchyPkg = (pkgs.extend inputs.self.overlays.default).omarchy;
+
+  # Every plugin Home Manager installs on this machine, by source. A row that
+  # names a plugin id is checked against these manifests (#766): attribute
+  # names are free, so the id has to come from the manifest itself.
+  pluginSources = pkgs.lib.concatMap (
+    u: pkgs.lib.mapAttrsToList (_: p: "${p.src}") u.programs.nixarchy.plugins
+  ) (builtins.attrValues eval.config.home-manager.users);
+
+  # The herdr widget as installed, and the herdr it drives (#771). Its script
+  # is upstream's and herdr is nixpkgs', so a bump on either side can rename a
+  # subcommand out from under the other -- and the widget would only say
+  # "error" in the bar.
+  herdrSrc =
+    (builtins.head (builtins.attrValues eval.config.home-manager.users))
+    .programs.nixarchy.defaultPluginSet.herdr.src;
+
+  # The MicroVMs panel as installed (#766). It drives nixarchy-vm through
+  # argv arrays in Model.js, so those are the calls this CLI has to accept.
+  microvmSrc =
+    (builtins.head (builtins.attrValues eval.config.home-manager.users))
+    .programs.nixarchy.defaultPluginSet.microvm.src;
 in
 pkgs.runCommand "nixarchy-menu-verbs"
   {
     nativeBuildInputs = [
       pkgs.gnugrep
       pkgs.gnused
+      pkgs.jq
     ];
   }
   ''
@@ -56,8 +85,8 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # the dispatch is caught too.
     # Two `case` shapes, because both are in use: most of these scripts
     # dispatch on "$1" directly, and nixarchy-channel assigns it to $target
-    # first. Verified that adding the second address leaves nixarchy-vm and
-    # nixarchy-box's verb lists byte-identical (10 each) -- a helper that
+    # first. Verified that adding the second address left nixarchy-vm and
+    # the retired nixarchy-box's verb lists byte-identical (10 each) -- a helper that
     # claims to read "the shipped script's own case block" should not be
     # silently blind to a script that writes it the other way.
     #
@@ -74,20 +103,21 @@ pkgs.runCommand "nixarchy-menu-verbs"
     }
 
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
-    verbs_of ${boxcli}/bin/nixarchy-box > box-verbs
     verbs_of ${secretcli}/bin/nixarchy-secret > secret-verbs
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
+    for m in ${pkgs.lib.escapeShellArgs pluginSources}; do
+      jq -r .id "$m/manifest.json"
+    done | sort -u > plugin-ids
 
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
-    echo "nixarchy-box accepts: $(tr '\n' ' ' < box-verbs)"
     echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
+    echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
 
     # A floor. An empty verb list makes every row below pass, turning "the
     # dispatch stopped parsing" into a green check -- the exact shape of failure
     # this file exists to reject.
     test "$(wc -l < vm-verbs)"  -ge 5
-    test "$(wc -l < box-verbs)" -ge 5
     # new, edit, list, where, copy, remove -- plus the three help spellings.
     test "$(wc -l < secret-verbs)" -ge 6
     # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
@@ -98,7 +128,14 @@ pkgs.runCommand "nixarchy-menu-verbs"
     checked=0
 
     # Both spellings, because both are in use: the vm rows call `nixarchy-vm
-    # <verb>` and the box rows go through the top-level `nixarchy box <verb>`.
+    # <verb>` and the secret rows go through the top-level `nixarchy secret
+    # <verb>`.
+    #
+    # The box rows had both spellings too, until #801 retired the CLI. The
+    # Boxes row is `nixarchy-plugin nixarchy.distrobox` now, checked by the
+    # plugin-id scan below and by the floor that names Boxes -- so the row is
+    # still covered; what went is a verb list for a command that no longer
+    # exists.
     scan() {
       local pattern="$1" field="$2" cli="$3" list="$4"
       while read -r verb; do
@@ -114,8 +151,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
 
     scan '\bnixarchy-vm +[-a-z]+'      2 nixarchy-vm  vm-verbs
     scan '\bnixarchy +vm +[-a-z]+'     3 nixarchy-vm  vm-verbs
-    scan '\bnixarchy-box +[-a-z]+'     2 nixarchy-box box-verbs
-    scan '\bnixarchy +box +[-a-z]+'    3 nixarchy-box box-verbs
 
     # The Secrets group (#611/#612). Four rows, added with the rows rather
     # than after one of them breaks -- `nixarchy-vm new`, the row this file
@@ -129,6 +164,69 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # found by a tester.
     scan '\bnixarchy-channel +[-a-z]+'  2 nixarchy-channel channel-verbs
     scan '\bnixarchy +channel +[-a-z]+' 3 nixarchy-channel channel-verbs
+
+    # The plugin rows (#766): a row opening a plugin that is not installed
+    # does nothing at all, so each id has to be one this machine installs.
+    scan '\bnixarchy-plugin +[a-z][-a-z.]*'               2 nixarchy-plugin plugin-ids
+    scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
+    pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
+    # Packages, Podman and Boxes (Boxes is on), GitLab Pipelines, GitHub
+    # Actions, Herdr, Sandbox, and Dev environments (#802).
+    test "$pluginrows" -ge 8 || {
+      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, Boxes, GitLab Pipelines, GitHub Actions, Herdr, Sandbox and Dev environments" >&2
+      exit 1
+    }
+
+    # MicroVMs (#766): the Sandbox rows are the panel now, so the verbs that
+    # matter are the ones its Model.js runs, as `"nixarchy-vm", "<verb>"`.
+    vmcalls=0
+    while read -r verb; do
+      vmcalls=$((vmcalls + 1))
+      grep -qx -- "$verb" vm-verbs || {
+        echo "ERROR: the MicroVMs plugin calls nixarchy-vm '$verb', which it does not accept" >&2
+        echo "       it accepts: $(tr '\n' ' ' < vm-verbs)" >&2
+        fail=1
+      }
+    done < <(grep -hoE '"nixarchy-vm", *"[-a-z]+"' ${microvmSrc}/Model.js \
+               | grep -oE '"[-a-z]+"$' | tr -d '"' | sort -u)
+    # list, templates, help, console, run, stop, rm, create, set-template.
+    test "$vmcalls" -ge 7 || {
+      echo "ERROR: found $vmcalls nixarchy-vm calls in the MicroVMs plugin, expected 7" >&2
+      exit 1
+    }
+    echo "nixarchy-vm verbs the MicroVMs panel runs: $vmcalls, all accepted"
+
+    # herdr (#771): every `<level> <sub>` herdr-sessions sends, spelled either
+    # `herdr ...` or through its `"''${base[@]}"` array, must be a subcommand
+    # the pinned herdr lists under that level, and its two flags must be in
+    # the top-level usage. A floor, because a pattern that stopped matching
+    # would check nothing and pass.
+    export HOME=$TMPDIR
+    herdrcalls=0
+    while read -r level sub; do
+      herdrcalls=$((herdrcalls + 1))
+      ${pkgs.herdr}/bin/herdr "$level" --help 2>&1 \
+        | sed -n '/^Commands:/,/^$/p' | awk '{print $1}' | grep -qx -- "$sub" || {
+        echo "ERROR: herdr-sessions runs 'herdr $level $sub', which herdr ${pkgs.herdr.version} does not list" >&2
+        fail=1
+      }
+    done < <(grep -hoE '(\bherdr|"\$\{base\[@\]\}") +(session|api|agent) +[a-z-]+' \
+               ${herdrSrc}/bin/herdr-sessions \
+             | awk '{print $(NF-1), $NF}' | sort -u)
+    test "$herdrcalls" -ge 8 || {
+      echo "ERROR: found $herdrcalls herdr subcommands in herdr-sessions, expected 8" >&2
+      exit 1
+    }
+    # Captured first: under pipefail, `herdr --help | grep -q` fails whenever
+    # grep matches early and herdr takes the SIGPIPE (tests/AGENTS.md).
+    herdrusage=$(${pkgs.herdr}/bin/herdr --help 2>&1)
+    for flag in --session --remote; do
+      grep -q -- "herdr $flag " <<<"$herdrusage" || {
+        echo "ERROR: herdr ${pkgs.herdr.version} no longer takes $flag, which herdr-sessions uses" >&2
+        fail=1
+      }
+    done
+    echo "herdr subcommands the widget sends: $herdrcalls, all in herdr ${pkgs.herdr.version}"
 
     # The second floor: if the menu stopped carrying these rows, every scan
     # above would run zero times and the check would pass having read nothing.

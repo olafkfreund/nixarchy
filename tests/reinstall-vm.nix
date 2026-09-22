@@ -276,8 +276,9 @@ pkgs.testers.runNixOSTest {
 
   nodes = { };
 
-  testScript = ''
-    import os
+  testScript = builtins.readFile ./vm-cleanup.py + ''
+    # os, sys and traceback come from vm-cleanup.py, which is prepended to
+    # this script -- importing them again is F811 and the driver lints (#812).
     import shutil
     import subprocess
     import re
@@ -296,13 +297,6 @@ pkgs.testers.runNixOSTest {
     # derivation -- silently. Hence the finally.
     vms = []
 
-    def reap():
-        for m in vms:
-            try:
-                m.send_monitor_command("quit")
-            except Exception:
-                pass
-
     try:
         disk = os.path.abspath("target.qcow2")
         subprocess.check_call(
@@ -313,7 +307,7 @@ pkgs.testers.runNixOSTest {
             f" -drive file={disk},if=virtio,format=qcow2,werror=report"
             " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
 
-        installer = create_machine("${installerCommand}" + efi + drives, name="installer")
+        installer = create_machine("exec ${installerCommand}" + efi + drives, name="installer")
         vms.append(installer)
         installer.start()
 
@@ -385,7 +379,7 @@ pkgs.testers.runNixOSTest {
 
         # ---- boot what was reinstalled ------------------------------------
         target = create_machine(
-            "${targetCommand}"
+            "exec ${targetCommand}"
             + efi
             + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
             name="target")
@@ -403,6 +397,6 @@ pkgs.testers.runNixOSTest {
         target.wait_for_console_text(r"<<< Welcome to NixOS .* - ttyS0 >>>", timeout=900)
         print("the closure the image carried booted to multi-user, offering a login")
     finally:
-        reap()
+        reap_owned_vms(vms)
   '';
 }

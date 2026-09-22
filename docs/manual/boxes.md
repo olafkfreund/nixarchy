@@ -70,19 +70,56 @@ if you already use it, is untouched -- boxes only need podman) and installs
 same property nixarchy's own rootless Docker default has, for the same
 reason.
 
+Because boxes turn podman on, they also bring the **Podman panel** (Apps ▸
+Podman, Super+Alt+O on a new install); see
+[Development tools](development-tools#podman).
+
 ## Making one
 
+**`Trigger ▸ Boxes` opens the Distrobox panel** (Super+Alt+D on a new
+install; search "box" or "distrobox"), and that is how you make one. It is
+also the whole feature: the panel lists every box, enters one in a terminal,
+starts, stops, upgrades, promotes and deletes them, and creates new ones from
+a form.
+
+From a terminal, distrobox's own tools. The templates are sections of a
+generated INI, and `--name` selects one section -- so the box takes the
+*template's* name, and without `--name` assemble creates every template in the
+file:
+
 ```sh
-nixarchy box templates       # what's available
-nixarchy box create dev --template archlinux
-nixarchy box enter dev
+grep '^\[' /etc/nixarchy/box-templates.ini   # what's available
+distrobox-assemble create --file /etc/nixarchy/box-templates.ini --name archlinux
+distrobox enter archlinux
 ```
 
-![nixarchy box templates listing archlinux and debian, box create pulling the Arch image with podman, distrobox enter, /etc/os-release answering Arch Linux, pacman installing fastfetch inside the box, and fastfetch printing "OS: Arch Linux x86_64" with "WM: Hyprland (Wayland)"](../img/features/boxes.gif)
+This is not what the panel runs, and it cannot give a box a name of your
+choosing. The panel parses the templates itself and then calls
+`distrobox create --name <the name you typed> --image <the template's image>`,
+which is also what you would write by hand for a box called something other
+than `archlinux`.
 
-`nixarchy box` is also reachable from the menu -- `Trigger ▸ Boxes`, or
-search for "box" or "distrobox" -- as one row per template, plus "Enter a
-box" and "Remove a box", which prompt for which one.
+![The generated templates file listing archlinux and debian, distrobox-assemble pulling the Arch image with podman, distrobox enter, /etc/os-release answering Arch Linux, pacman installing fastfetch inside the box, and fastfetch printing "OS: Arch Linux x86_64" with "WM: Hyprland (Wayland)"](../img/features/boxes.gif)
+
+The panel's **Start from** list is these same templates: nixarchy writes them
+to `/etc/nixarchy/box-templates.ini`, and the panel reads that file by
+default. Two things to know:
+- A templates file of your own, `~/.config/distrobox/boxes.ini`, is no longer
+  read unless you point the panel's **Your templates** setting at it (Setup →
+  Plugins). The panel reads one file.
+- The panel refuses `exported_apps` and `exported_bins`, which run commands
+  inside the box, and it never hands your file to `distrobox-assemble` --
+  assemble writes each `key=value` into a file it then *sources as shell*, so
+  an unquoted `$(...)` in a template runs on the host merely from being read.
+  The panel parses the INI itself to avoid that.
+
+  A template that needs those fields therefore has to go through
+  `distrobox-assemble --file <your file>` yourself. That is upstream's own
+  tool and it works, but you are taking on the thing the panel declines to do
+  for you: run it only on a file you wrote or have read.
+
+`programs.nixarchy.defaultPlugins.distrobox = false` stops nixarchy
+installing the panel.
 
 Templates are distrobox's own `distrobox-assemble` INI, verbatim: `image`,
 and whatever else the template needs -- `additional_packages`, `init_hooks`,
@@ -101,7 +138,7 @@ a new base image, stays upstream's problem instead of this repo's.
 
 Both halves exist on purpose, and the distinction is the whole feature:
 
-- **Ad hoc.** `nixarchy box create` makes a box right now, imperatively --
+- **Ad hoc.** The panel makes a box right now, imperatively --
   the one deliberate corner of a nixarchy machine where that is the right
   answer. It lives entirely in podman's own state; nothing here manages it.
 - **Declared.** `programs.nixarchy.services.boxes.machines.<name>` in your
@@ -111,15 +148,11 @@ Both halves exist on purpose, and the distinction is the whole feature:
 What is declared is *which boxes exist* -- never what you did inside one. A
 box you decide to keep gets promoted:
 
-```sh
-nixarchy box promote dev
-```
-
-which prints a starting snippet -- the image podman recorded, and a reminder
+The panel's **Promote** prints a starting snippet -- the image podman recorded, and a reminder
 of what else `distrobox-assemble` accepts -- for you to paste into your own
 configuration and fill in. From there it rolls back with a generation like
-everything else declared; a box made with `nixarchy box create` does not,
-because it was never part of one.
+everything else declared; a box made ad hoc does not, because it was never
+part of one.
 
 ## GUI apps in your launcher
 
@@ -138,7 +171,7 @@ its bare name on `PATH` -- that resolution bakes a generation-specific path
 into every container it creates, and `nix-collect-garbage` can delete that
 path out from under a box that is still running
 ([nixpkgs#478154](https://github.com/NixOS/nixpkgs/issues/478154), open, no
-fix upstream). `nixarchy box` only ever calls `distrobox` by its bare name,
+fix upstream). Everything nixarchy ships calls `distrobox` by its bare name,
 which resolves through `/run/current-system/sw/bin` and tracks whichever
 generation is current -- so a box you made stays working across upgrades and
 garbage collection. This is why the answer to "my box stopped starting after
@@ -147,11 +180,13 @@ wrong way, which nothing in this repo's own commands do.
 
 ## Getting out
 
+The panel's **Delete**, or from a terminal:
+
 ```sh
-nixarchy box rm dev
+distrobox rm archlinux
 ```
 
 Removes the container and its exported apps and binaries. The base image
 distrobox pulled stays in podman's own store until you remove it yourself
 (`podman rmi <image>`) or run garbage collection on podman's storage --
-`nixarchy box rm` only ever touches the one container you named.
+removing a box only ever touches the one container you named.

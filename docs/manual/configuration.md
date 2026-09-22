@@ -150,6 +150,12 @@ Three consequences worth knowing, all of them deliberate:
   `omarchy-plugin-validate` rather than a copy of its rules — so it cannot
   drift at the next Omarchy bump. You find out at `nixos-rebuild` instead of
   after logging in to a plugin that installed and does nothing.
+- **Validating the installed folder by hand refuses it, and that is
+  expected.** A declared plugin is installed as a link into the store, and
+  `omarchy-plugin-validate` refuses any symlink in a plugin folder, the folder
+  itself included. The rebuild has already validated the plugin itself, the
+  store path the link points to. To check it again, validate that:
+  `omarchy plugin validate "$(readlink -f ~/.config/omarchy/plugins/<id>)"`.
 
 `omarchy plugin add` still works alongside this, and the two do not collide: a
 plugin you add by hand is a real directory this never touches, and adding one
@@ -158,6 +164,54 @@ whose id you already declare is refused rather than installed twice.
 Plugins run unsandboxed inside your long-lived shell process. Upstream warns
 about this at the prompt and refuses `ext::`-style URLs that would run a command
 at clone time; both behaviours are intact here.
+
+### nixarchy's own plugins
+
+What each one does, what it solves, and screenshots: [nixarchy's plugins](plugins).
+
+A few plugins are part of nixarchy itself, and those are the exception to "it
+installs, it does not enable". **nixarchy.pkg**, the package manager panel, is
+installed wherever nixarchy is, turned on at your first login, and opened from
+**Install ▸ Packages** or, on a new install, **Super+Alt+N**. **nixarchy.podman**,
+the Podman panel, follows podman rather than nixarchy: it comes with the Podman
+service row or with boxes, opens from **Apps ▸ Podman** or **Super+Alt+O**, and
+is absent where podman is off (the key then says the panel is not installed).
+
+The GitLab pipelines panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui))
+is the same: installed with `glab`, on at your first login, opened from
+**Apps ▸ GitLab Pipelines** or **Super+Alt+P** (its keys: **Super+Ctrl+Alt+P**).
+It needs `glab auth login` once; until then it says so and stops polling.
+If you ran the panel before nixarchy shipped it, its own `register` may have
+written `apps.gitlab-pipelines` and `learn.gitlab-pipelines-keybindings` into
+`~/.config/omarchy/extensions/omarchy-menu.jsonc`. Your file wins over
+nixarchy's rows, so delete those two keys to get nixarchy's.
+The GitHub Actions panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui))
+is its GitHub twin: installed with `gh`, opened from **Apps ▸ GitHub Actions**
+or **Super+Alt+A** (its keys: **Super+Ctrl+Alt+A**), and it needs
+`gh auth login` once. The same two keys apply, as `apps.github-actions` and
+`learn.github-actions-keybindings`.
+The herdr sessions widget ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr))
+sits in the bar's right section with `herdr` itself, on at your first login,
+and opens from **Apps ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
+write to the Nix store: update herdr with nixpkgs, or put your own build ahead
+of it on `PATH`.
+
+"Once" is the point. A marker in `~/.local/state/nixarchy/enabled-once/` records
+that it was turned on, so if you turn it off in Setup → Plugins it stays off. To
+stop nixarchy installing one at all:
+
+```nix
+programs.nixarchy.defaultPlugins.pkg = false;
+programs.nixarchy.defaultPlugins.podman = false;
+programs.nixarchy.defaultPlugins.gitlab = false;
+programs.nixarchy.defaultPlugins.github = false;
+programs.nixarchy.defaultPlugins.herdr = false;
+programs.nixarchy.defaultPlugins.devenv = false;
+```
+
+That never edits your `shell.json`, so a plugin you already have on stays on
+until you turn it off there. If you already declare it yourself through
+`programs.nixarchy.plugins`, your `src` wins.
 
 ## RetroArch cores
 

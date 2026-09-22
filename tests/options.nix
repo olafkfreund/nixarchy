@@ -114,6 +114,8 @@ let
       fixture = {
         id = "nixarchy.fixture";
         src = fixturePlugin "nixarchy.fixture";
+        # #770: a default's runtime tools ride with it, behind the same gate.
+        packages = [ pkgs.hello ];
       };
       other = {
         id = "nixarchy.other";
@@ -127,6 +129,23 @@ let
     id: h:
     h.xdg.configFile ? ${defaultHook} && pkgs.lib.hasInfix id h.xdg.configFile.${defaultHook}.text;
   fixtureHome = homeOn { } (fixtureDefaults { });
+  # Bound once each: every homeOn is a NixOS evaluation (#747).
+  fixtureStandalone = homeWith (fixtureDefaults { });
+  fixtureNixarchyOff = homeOn { enable = false; } (fixtureDefaults { });
+  # Every real default opted out: the home with nothing resolved.
+  noDefaultsHome = homeOn { } {
+    programs.nixarchy.defaultPlugins = {
+      pkg = false;
+      gitlab = false;
+      github = false;
+      herdr = false;
+      microvm = false;
+      distrobox = false;
+      devenv = false;
+    };
+  };
+  hasGh = h: builtins.any (p: (p.pname or "") == "gh") h.home.packages;
+  hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
 
   # A home evaluated as if it were on a nixarchy MACHINE, which `homeWith`
   # above deliberately is not.
@@ -767,17 +786,11 @@ let
     # off, get neither the plugin nor the hook.
     defaultPluginsNeedAnOsConfig = {
       on = installsFixture fixtureHome && hookLists "nixarchy.fixture" fixtureHome;
-      off =
-        installsFixture (homeWith (fixtureDefaults { }))
-        || hookLists "nixarchy.fixture" (homeWith (fixtureDefaults { }));
+      off = installsFixture fixtureStandalone || hookLists "nixarchy.fixture" fixtureStandalone;
     };
     defaultPluginsNeedNixarchyOn = {
       on = installsFixture fixtureHome;
-      off =
-        let
-          h = homeOn { enable = false; } (fixtureDefaults { });
-        in
-        installsFixture h || h.xdg.configFile ? ${defaultHook};
+      off = installsFixture fixtureNixarchyOff || fixtureNixarchyOff.xdg.configFile ? ${defaultHook};
     };
     # Opting one out removes it from both the install and the hook, and leaves
     # the other where it was: a name set to false is not every name dropped.
@@ -800,11 +813,207 @@ let
         })
       );
     };
-    # With nothing resolved there is no hook at all, which is PR A's state on
-    # every real machine.
+    # With nothing resolved there is no hook at all. Retargeted in #766 PR B:
+    # it read the default home, which was empty only until nixarchy.pkg
+    # joined the set -- the property is "nothing resolved, no hook".
     defaultPluginsNoHookWhenEmpty = {
       on = fixtureHome.xdg.configFile ? ${defaultHook};
-      off = defaultHomeOn.xdg.configFile ? ${defaultHook};
+      off = noDefaultsHome.xdg.configFile ? ${defaultHook};
+    };
+    # The real package manager panel is a default wherever nixarchy is on, and
+    # nowhere else: standalone Home Manager gets nothing (Mode A).
+    pkgIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg" && hookLists "nixarchy.pkg" defaultHomeOn;
+      off = defaultHome.programs.nixarchy.plugins ? "nixarchy.pkg";
+    };
+    # #766 PR C: the Podman panel follows podman itself, not nixarchy. "off" is
+    # the default machine, where podman is off, plus standalone Home Manager.
+    podmanPluginGate = {
+      on = installsPodman podmanOnly && hookLists "nixarchy.podman" (homeOfBoxes podmanOnly);
+      off =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.podman"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.podman";
+    };
+    # Boxes turns podman on, so it brings the panel -- but the gate is podman,
+    # not Boxes: Boxes with podman forced back off gets no panel.
+    podmanViaBoxes = {
+      on = installsPodman boxesOn;
+      off = installsPodman boxesNoPodman;
+    };
+    # The row exists exactly where podman does (Nix-level, like the box rows).
+    podmanRow = {
+      on = hasPodmanRow boxesOn && hasPodmanRow podmanOnly;
+      off = hasPodmanRow boxesOff || hasPodmanRow boxesNoPodman;
+    };
+    # #770: the GitLab pipelines panel is a default, and opting out removes it.
+    gitlabIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines"
+        && hookLists "olafkfreund.gitlab-pipelines" defaultHomeOn;
+      off = noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.gitlab-pipelines";
+    };
+    # #772: the GitHub Actions panel is a default wherever nixarchy is on, and
+    # nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    githubIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.github-actions"
+        && hookLists "olafkfreund.github-actions" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.github-actions"
+        || defaultHome.programs.nixarchy.plugins ? "olafkfreund.github-actions"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "olafkfreund.github-actions";
+    };
+    # Its CLI comes with it, and only where it resolves.
+    githubPackages = {
+      on = hasGh defaultHomeOn;
+      off = hasGh noDefaultsHome || hasGh defaultHome;
+    };
+    # #809: the defaults' runtime tools arrive without being asked for, so they
+    # lose to whatever the user installed themselves. Without the priority, a
+    # user's own `python3.withPackages` beside a panel's bare python3 is two
+    # interpreters in one profile and `home-manager-path` refuses to build --
+    # taking the whole closure with it, over `bin/idle3`, naming nothing of
+    # ours. `off` is the same predicate on the homes that get no defaults: no
+    # tool of ours is in their profile at any priority.
+    defaultRuntimeToolsLowPriority =
+      let
+        # Every runtime tool any defaultPluginSet entry contributes. Spelled
+        # out rather than read back from the module: a tool that stops being
+        # prioritised should break this, and a list derived from the same
+        # expression as the fix could not (AGENTS.md §1).
+        toolNames = [
+          "gh"
+          "glab"
+          "python3"
+          "xdg-utils"
+          "jq"
+          "iproute2"
+          "herdr"
+        ];
+        ours = h: builtins.filter (p: builtins.elem (p.pname or "") toolNames) h.home.packages;
+        allLowPrio =
+          h:
+          let
+            ps = ours h;
+          in
+          ps != [ ] && builtins.all (p: (p.meta.priority or 5) > 5) ps;
+      in
+      {
+        on = allLowPrio defaultHomeOn;
+        off = allLowPrio noDefaultsHome || allLowPrio defaultHome;
+      };
+    # #774: voice is a row in the catalogue, never a default. The closure is
+    # 6.7 GiB measured -- whisper and the Piper models -- so a machine that did
+    # not ask for it must not carry it, and an off switch would not help
+    # because the models are IN the package.
+    #
+    # `off` is the same predicate on the homes that get no defaults, so this
+    # case cannot pass by the module simply being absent: `on` proves the
+    # module is imported and inert, and adding voice to defaultPluginSet breaks
+    # it.
+    voiceIsNotADefault =
+      let
+        hasVoice =
+          h:
+          builtins.any (p: (p.pname or "") == "omarchy-voice") h.home.packages
+          || (h.systemd.user.services or { }) ? omarchy-voice;
+      in
+      {
+        on = !(hasVoice defaultHomeOn) && defaultHomeOn.programs ? omarchy-voice;
+        off = hasVoice noDefaultsHome || hasVoice defaultHome || hasVoice fixtureNixarchyOff;
+      };
+    # #771: the herdr sessions widget is a default wherever nixarchy is on,
+    # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    herdrIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.herdr"
+        && hookLists "nixarchy.herdr" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.herdr"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.herdr"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.herdr";
+    };
+    # #766 PR D: the Distrobox panel follows Boxes, like distrobox itself:
+    # on with Boxes, off without them, off standalone and when opted out.
+    distroboxIsADefault = {
+      on =
+        (homeOfBoxes boxesOn).programs.nixarchy.plugins ? "nixarchy.distrobox"
+        && hookLists "nixarchy.distrobox" (homeOfBoxes boxesOn);
+      off =
+        (homeOfBoxes boxesOff).programs.nixarchy.plugins ? "nixarchy.distrobox"
+        || fixtureStandalone.programs.nixarchy.plugins ? "nixarchy.distrobox"
+        || noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.distrobox";
+    };
+    # The templates file exists exactly where Boxes are (the panel reads it).
+    boxTemplatesIniPresent = {
+      on = boxesOn.environment.etc ? "nixarchy/box-templates.ini";
+      off = boxesOff.environment.etc ? "nixarchy/box-templates.ini";
+    };
+    # #766 PR E: the MicroVMs panel is a default wherever nixarchy is on, and
+    # nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    microvmIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.microvm"
+        && hookLists "nixarchy.microvm" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.microvm"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.microvm"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.microvm";
+    };
+    # #802: the Dev environments panel follows the devenv service, the way
+    # Podman follows podman -- with devenv off there is nothing to list and
+    # nothing it could create. Off standalone, off when nixarchy is off, and
+    # off when opted out.
+    devenvIsADefault = {
+      on =
+        (homeOfDevenv devenvPanelOn).programs.nixarchy.plugins ? "nixarchy.devenv"
+        && hookLists "nixarchy.devenv" (homeOfDevenv devenvPanelOn)
+        && hasDevenvCli (homeOfDevenv devenvPanelOn);
+      off =
+        (homeOfDevenv devenvPanelOff).programs.nixarchy.plugins ? "nixarchy.devenv"
+        || hasDevenvCli (homeOfDevenv devenvPanelOff)
+        || fixtureStandalone.programs.nixarchy.plugins ? "nixarchy.devenv"
+        || noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.devenv"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.devenv";
+    };
+    # nixarchy ships the plugin to other people's machines, so the package it
+    # ships has to carry the licence that allows it.
+    devenvLicence = {
+      on = builtins.pathExists "${inputs.nixarchy-devenv.packages.${system}.plugin}/LICENSE";
+      # The negative half is the plugin folder itself: a file that is not the
+      # licence must not satisfy it.
+      off = builtins.pathExists "${inputs.nixarchy-devenv.packages.${system}.plugin}/COPYING";
+    };
+    # The Apps row exists exactly where the panel does.
+    devenvRow = {
+      on = menuSpec devenvPanelOn ? "apps.devenv";
+      off = menuSpec devenvPanelOff ? "apps.devenv";
+    };
+    # The Sandbox group is the panel: no trigger.vm.* child is left (each one
+    # called a verb with no name, #781), the parent opens the plugin, and the
+    # terminal row stands in while the plugin is off.
+    sandboxRowsRetired =
+      let
+        spec = menuSpec boxesOff;
+      in
+      {
+        on = spec."trigger.vm".action == "nixarchy-plugin nixarchy.microvm" && spec ? "trigger.vm-list";
+        off = builtins.any (pkgs.lib.hasPrefix "trigger.vm.") (builtins.attrNames spec);
+      };
+    # Its permanent-VM features run nixarchy.pkg's script by path
+    # (Model.js:988), so wherever the panel is, the package panel is too.
+    microvmNeedsPkg = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.microvm"
+        && defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg";
+      off = noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.microvm";
+    };
+    # #770: a default's runtime tools are installed only where the default
+    # resolves -- never standalone, never with nixarchy off (Mode A).
+    defaultPluginPackages = {
+      on = hasHello fixtureHome;
+      off = hasHello fixtureStandalone || hasHello fixtureNixarchyOff;
     };
 
     nixiEnablesCard = {
@@ -1520,8 +1729,12 @@ let
   # the unit is STILL absent, not just that "off" is quiet.
   boxesUser = "tester";
 
-  boxesConfig =
-    enable:
+  # `extra` is one more NixOS module, for #766 PR C's podman machines: they need
+  # `virtualisation.podman`, which configNamed cannot set, and this builder
+  # already nests Home Manager the way a real machine does.
+  boxesConfig = boxesConfigWith { };
+  boxesConfigWith =
+    extra: enable:
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
@@ -1552,12 +1765,66 @@ let
           };
           system.stateVersion = "25.05";
         }
+        extra
       ];
     }).config;
 
   boxesOff = boxesConfig false;
   boxesOn = boxesConfig true;
 
+  # #802: the Dev environments panel follows the devenv service, so the pair
+  # that proves it needs a home-manager user on both sides. Bound once each
+  # (#747): every machine here is a full NixOS evaluation.
+  devenvPanelUser = "devtester";
+  devenvPanelConfig =
+    enable:
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
+        {
+          programs.nixarchy = {
+            enable = true;
+            services.devenv.enable = enable;
+          };
+          users.users.${devenvPanelUser}.isNormalUser = true;
+          home-manager.users.${devenvPanelUser} = {
+            imports = [ inputs.self.homeManagerModules.nixarchy ];
+            home.stateVersion = "25.05";
+            programs.nixarchy.enable = true;
+          };
+        }
+        {
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config;
+
+  devenvPanelOff = devenvPanelConfig false;
+  devenvPanelOn = devenvPanelConfig true;
+  homeOfDevenv = cfg: cfg.home-manager.users.${devenvPanelUser};
+  # The CLI `nixarchy dev` dispatches to, on the session PATH exactly where
+  # the panel is.
+  hasDevenvCli = h: builtins.any (p: (p.pname or p.name or "") == "nixarchy-devenv") h.home.packages;
+  # #766 PR C: the two machines podman adds, bound once each (#747 -- every
+  # machine here is a full NixOS eval inside the 11.5 GB check). Podman on by
+  # itself, and Boxes on with podman forced back off.
+  podmanOnly = boxesConfigWith { virtualisation.podman.enable = true; } false;
+  boxesNoPodman = boxesConfigWith { virtualisation.podman.enable = pkgs.lib.mkForce false; } true;
+  installsPodman = cfg: (homeOfBoxes cfg).programs.nixarchy.plugins ? "nixarchy.podman";
+  hasPodmanRow =
+    cfg:
+    builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text
+      ? "apps.podman";
+
+  menuSpec =
+    cfg: builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text;
   homeOfBoxes = cfg: cfg.home-manager.users.${boxesUser};
   hasDistrobox = list: builtins.any (p: (p.pname or "") == "distrobox") list;
 
@@ -2117,6 +2384,23 @@ pkgs.runCommand "nixarchy-options"
     pluginHelper = pkgs.callPackage ../pkgs/nixarchy-plugin.nix {
       inherit ((pkgs.extend inputs.self.overlays.default)) omarchy;
     };
+    # #770: the source nixarchy installs for the panel carries the sentinel
+    # that tells its menu.py nixarchy owns the rows, and the MIT notice.
+    gitlabSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.gitlab or { src = "/nonexistent"; }).src;
+    # #772: the same, for the GitHub Actions panel.
+    githubSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.github or { src = "/nonexistent"; }).src;
+    # #766 PR D: the Distrobox panel nixarchy installs, and the templates file
+    # boxes.nix writes for it, both from the Boxes-on machine.
+    distroboxSrc = (homeOfBoxes boxesOn).programs.nixarchy.defaultPluginSet.distrobox.src;
+    boxTemplatesIni =
+      pkgs.writeText "box-templates.ini"
+        boxesOn.environment.etc."nixarchy/box-templates.ini".text;
+    boxTemplateCount = builtins.length (builtins.attrNames (import ../data/box-templates.nix));
+    # #771: the herdr widget nixarchy installs, whose scripts run by path.
+    herdrSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
     # A default whose pinned manifest renamed its id must fail its build.
     renamedDefault =
       pkgs.testers.testBuildFailure
@@ -2248,6 +2532,13 @@ pkgs.runCommand "nixarchy-options"
     sopsOnActive = pkgs.lib.boolToString (hasSops sopsOn);
     modeAInert = pkgs.lib.boolToString (
       loaderOff.system.build.toplevel.drvPath == notImported.system.build.toplevel.drvPath
+    );
+    # #765: the rebuild elevates through pkexec, so the wrapper has to exist, the
+    # keep-rule has to be there, and neither may reach a Mode A machine.
+    pkexecWrapperOn = pkgs.lib.boolToString defaultMachine.security.polkit.enablePkexecWrapper;
+    pkexecWrapperModeA = pkgs.lib.boolToString loaderOff.security.polkit.enablePkexecWrapper;
+    pkexecKeepRule = pkgs.lib.boolToString (
+      pkgs.lib.hasInfix "org.freedesktop.policykit.exec" defaultMachine.security.polkit.extraConfig
     );
     # The home seed's copy function, run below against a directory it cannot write.
     seedActivation = defaultHome.home.activation.nixarchySeed.data;
@@ -3824,6 +4115,32 @@ pkgs.runCommand "nixarchy-options"
         }
         echo "importing the module and enabling nothing builds the same system"
 
+        # ---- #765: the rebuild asks through the Omarchy polkit dialog ----
+        [ "$pkexecWrapperOn" = true ] || {
+          echo "security.polkit.enablePkexecWrapper is off on an enabled machine:" >&2
+          echo "  the rebuild's NH_ELEVATION_STRATEGY points at /run/wrappers/bin/pkexec," >&2
+          echo "  so nh falls back to sudo in a terminal and the dialog never appears (#765)" >&2
+          exit 1
+        }
+        [ "$pkexecKeepRule" = true ] || {
+          echo "no polkit rule for org.freedesktop.policykit.exec: every switch asks" >&2
+          echo "  for the password three times, once per elevated step nh runs (#765)" >&2
+          exit 1
+        }
+        [ "$pkexecWrapperModeA" = false ] || {
+          echo "the pkexec wrapper reaches a Mode A machine -- a setuid binary added to" >&2
+          echo "  a configuration that only imported the module (#765, AGENTS.md section 7)" >&2
+          exit 1
+        }
+        for script in nixarchy-apply omarchy-update; do
+          grep -q 'NH_ELEVATION_STRATEGY' "$vm/sw/bin/$script" || {
+            echo "$script runs the switch without NH_ELEVATION_STRATEGY:" >&2
+            echo "  nh auto-selects sudo, which asks in the terminal, not the dialog (#765)" >&2
+            exit 1
+          }
+        done
+        echo "the rebuild elevates through pkexec, once per switch, and not in Mode A"
+
         # ---- services: enable then disable is byte-identical ----
         # nixarchy-service-disable had no test of any kind.
         svcfile=$rmhome/.config/nixarchy/services.nix
@@ -3840,6 +4157,46 @@ pkgs.runCommand "nixarchy-options"
           echo "service enable then disable changed services.nix" >&2; exit 1; }
         rm -f "$svcfile"
         echo "a service can be enabled and disabled, byte for byte"
+
+        # ---- services: a row an older services.nix lacks is added on enable (#843) ----
+        # services.nix is written once, so a file that predates a row could
+        # not enable it: service-enable found no marker and gave up.
+        tpldir="$vm/etc/nixarchy"
+        cp "$tpldir/services-template.nix" "$svcfile"
+        chmod u+w "$svcfile"
+        sed -i -E "/#@ $svcid([[:space:]]|\$)/d" "$svcfile"
+        svcout=$(NIXARCHY_TEMPLATES="$tpldir" run nixarchy-service-enable "$svcid") || {
+          echo "nixarchy-service-enable $svcid failed on a file without its row (#843)" >&2; exit 1; }
+        printf '%s\n' "$svcout" | grep -q "added the $svcid row" || {
+          echo "nixarchy-service-enable did not say it added the row: $svcout" >&2; exit 1; }
+        grep -qE "^[[:space:]]*[^#[:space:]].*#@ $svcid([[:space:]]|\$)" "$svcfile" || {
+          echo "the added $svcid row was not enabled" >&2; exit 1; }
+        rowline=$(grep -nE "#@ $svcid([[:space:]]|\$)" "$svcfile" | cut -d: -f1)
+        closeline=$(grep -n "^}" "$svcfile" | tail -1 | cut -d: -f1)
+        [ "$rowline" -lt "$closeline" ] || {
+          echo "the added row landed after the closing brace, outside the attrset" >&2; exit 1; }
+        # Nothing else moved: without that row, its heading and blank lines,
+        # the file is the template without that row.
+        diff <(grep -vE "#@ $svcid([[:space:]]|\$)|Added by nixarchy-catalogue-diff|^[[:space:]]*\$" "$svcfile") \
+             <(grep -vE "#@ $svcid([[:space:]]|\$)|^[[:space:]]*\$" "$tpldir/services-template.nix") >/dev/null || {
+          echo "adding the $svcid row changed other lines of services.nix" >&2; exit 1; }
+        helpout=$(run nixarchy-service-enable --help) || {
+          echo "nixarchy-service-enable --help did not exit 0" >&2; exit 1; }
+        { printf '%s\n' "$helpout" | grep -q '^usage: nixarchy-service-enable' &&
+          printf '%s\n' "$helpout" | grep -qi 'missing'; } || {
+          echo "--help does not say usage and that a missing row is added: $helpout" >&2; exit 1; }
+        svcsum=$(cksum < "$svcfile")
+        rc=0; NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one services definitely-not-a-row >/dev/null 2>&1 || rc=$?
+        [ "$rc" = 1 ] && [ "$svcsum" = "$(cksum < "$svcfile")" ] || {
+          echo "--add-one of a row the template lacks: exit $rc, or the file changed" >&2; exit 1; }
+        rc=0; NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one bogus x >/dev/null 2>&1 || rc=$?
+        [ "$rc" = 2 ] || { echo "--add-one with a bad part exited $rc, not 2" >&2; exit 1; }
+        NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one services "$svcid" >/dev/null || {
+          echo "--add-one of a row already present failed" >&2; exit 1; }
+        [ "$svcsum" = "$(cksum < "$svcfile")" ] || {
+          echo "--add-one of a row already present changed the file" >&2; exit 1; }
+        rm -f "$svcfile"
+        echo "an older services.nix gets a missing row on enable, and nothing else"
 
         # ---- catalogue-diff finds a missing row and --add restores it ----
         # nixarchy-catalogue-diff had no test of any kind either.
@@ -4233,6 +4590,57 @@ pkgs.runCommand "nixarchy-options"
             ;;
         esac
         echo "nixarchy pkg remove routes to nixarchy-pkg-remove"
+
+        # ---- #802: `nixarchy dev` routes to the plugin's CLI, and says what
+        # to enable when it is absent.
+        #
+        # The route is what #498 taught: a verb advertised and unreachable
+        # ships green. This one has a second half the others do not -- the
+        # command it routes to is installed only where the devenv service is,
+        # so the branch a machine without devenv takes has to be an answer
+        # rather than "command not found", which is what nixarchy-dev-init
+        # printed before the plugin replaced it.
+        grep -q 'nixarchy dev init' "$vm/sw/bin/nixarchy" || {
+          echo "the dispatcher's usage does not advertise 'nixarchy dev init'" >&2
+          exit 1
+        }
+
+        mkdir -p devstub
+        # printf rather than a heredoc: a heredoc body has to start at column
+        # zero, which lowers this whole string's common indentation and makes
+        # the formatter reindent the file around it.
+        printf '%s\n' '#!/bin/sh' 'echo "stub got: $*"' >devstub/nixarchy-devenv
+        chmod +x devstub/nixarchy-devenv
+        if ! r=$(PATH="$PWD/devstub:$vm/sw/bin:$PATH" HOME=$rmhome "$vm/sw/bin/nixarchy" dev init ml 2>&1); then
+          echo "nixarchy dev init failed with the CLI on PATH:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"stub got: init ml"*) ;;
+          *)
+            echo "nixarchy dev did not forward its arguments to nixarchy-devenv; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy dev routes to nixarchy-devenv, arguments and all"
+
+        # Without it: a paragraph naming the switch, and a non-zero status.
+        if r=$(env PATH="$vm/sw/bin" HOME=$rmhome "$vm/sw/bin/nixarchy" dev init ml 2>&1); then
+          echo "nixarchy dev init succeeded on a machine with no nixarchy-devenv:" >&2
+          printf '%s\n' "$r" >&2
+          exit 1
+        fi
+        case "$r" in
+          *"services.devenv.enable"*) ;;
+          *)
+            echo "nixarchy dev does not name the switch that installs devenv; it said:" >&2
+            printf '%s\n' "$r" >&2
+            exit 1
+            ;;
+        esac
+        echo "nixarchy dev without the CLI names services.devenv.enable"
 
         # Same shape for `pkg new` (#581): advertised in the usage, routed by
         # the dispatcher, and the route proven by reaching the command's own
@@ -4812,12 +5220,87 @@ pkgs.runCommand "nixarchy-options"
         ! enabled nixarchy.fixture || { echo "nixarchy-plugin: a disabled plugin reads as on" >&2; exit 1; }
         echo '{"plugins":[{"id":"nixarchy.other"}]}' > $shelljson
         ! enabled nixarchy.fixture || { echo "nixarchy-plugin: an absent plugin reads as on" >&2; exit 1; }
+        # A gated default that is not installed here says so, rather than sending
+        # the user to `omarchy plugin enable`, which would fail (#766 PR C). The
+        # notifier is an exported function: writeShellApplication puts its own
+        # runtimeInputs first on PATH, so a stub file there would never be reached.
+        omarchy-notification-send() { printf '%s\n' "$*" >> notes; }
+        export -f omarchy-notification-send
+        ! XDG_CONFIG_HOME=$PWD/cfg "$pluginHelper/bin/nixarchy-plugin" nixarchy.fixture 2>/dev/null
+        grep -q "is not installed on this machine" notes || {
+          echo "nixarchy-plugin: a plugin that is not installed is not reported as such:" >&2
+          cat notes >&2 || true
+          exit 1
+        }
         grep -q "now says id 'nixarchy.renamed'" $renamedDefault/testBuildFailure.log || {
           echo "a default plugin whose manifest renamed its id did not fail for that reason:" >&2
           cat $renamedDefault/testBuildFailure.log >&2
           exit 1
         }
         echo "default plugins: the helper reads shell.json as the shell does, and a renamed id fails the build"
+
+        # ---- #770: gitlabMenuManaged ----
+        for f in menu.managed LICENSE; do
+          [ -f "$gitlabSrc/$f" ] || {
+            echo "gitlabMenuManaged: the GitLab panel nixarchy installs has no $f ($gitlabSrc)" >&2
+            exit 1
+          }
+        done
+        echo "the GitLab panel carries menu.managed and its licence"
+
+        # ---- #772: githubMenuManaged ----
+        for f in menu.managed LICENSE; do
+          [ -f "$githubSrc/$f" ] || {
+            echo "githubMenuManaged: the GitHub panel nixarchy installs has no $f ($githubSrc)" >&2
+            exit 1
+          }
+        done
+        echo "the GitHub panel carries menu.managed and its licence"
+
+        # ---- #766 PR D: distroboxTemplatesFile, boxTemplatesIni ----
+        # The panel's default templates file is the one boxes.nix writes, and a
+        # user's own path in Setup > Plugins still overrides it (a default only).
+        grep -q '"templatesFile": *"/etc/nixarchy/box-templates.ini"' "$distroboxSrc/manifest.json" || {
+          echo "distroboxTemplatesFile: the Distrobox panel does not default to /etc/nixarchy/box-templates.ini ($distroboxSrc)" >&2
+          exit 1
+        }
+        # One section per template, and every key one the pinned plugin's parser
+        # accepts -- read from its own Model.js, so a key it drops fails here.
+        sections=$(grep -c '^\[' "$boxTemplatesIni")
+        [ "$sections" = "$boxTemplateCount" ] || {
+          echo "boxTemplatesIni: $sections sections for $boxTemplateCount templates" >&2
+          exit 1
+        }
+        sed -n '/^var ASSEMBLE_\(BOOLS\|SINGLE\|CUMULATIVE\) *=/,/\]/p' "$distroboxSrc/Model.js" \
+          | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u > accepted-keys
+        [ "$(wc -l < accepted-keys)" -ge 10 ] || {
+          echo "boxTemplatesIni: read only $(wc -l < accepted-keys) accepted keys from the plugin's Model.js" >&2
+          exit 1
+        }
+        while read -r key; do
+          grep -qx -- "$key" accepted-keys || {
+            echo "boxTemplatesIni: a template sets '$key', which the Distrobox panel refuses" >&2
+            exit 1
+          }
+        done < <(grep -oE '^[a-z_]+=' "$boxTemplatesIni" | tr -d = | sort -u)
+        echo "the Distrobox panel reads nixarchy's templates: $sections sections, every key accepted"
+
+        # ---- #771: herdrPackaged ----
+        # Its scripts are run by path, and upstream's `#!/bin/bash` only works
+        # through envfs; the notice names two holders, and both must travel.
+        for f in bin/herdr-sessions bin/herdr-menu-keys; do
+          head -1 "$herdrSrc/$f" | grep -q '^#!/nix/store/' || {
+            echo "herdrPackaged: $f in the herdr widget nixarchy installs has no store shebang ($herdrSrc)" >&2
+            exit 1
+          }
+        done
+        for holder in "Jankees van Woezik" "olafkfreund"; do
+          grep -q "$holder" "$herdrSrc/LICENSE" 2>/dev/null || {
+            echo "herdrPackaged: the herdr widget's LICENSE does not name $holder ($herdrSrc)" >&2
+            exit 1
+          }
+        done
+        echo "the herdr widget has store shebangs and both copyright holders"
 
           touch $out
       ''

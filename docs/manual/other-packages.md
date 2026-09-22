@@ -13,9 +13,9 @@ pacman. None of that applies here, and the reasons are on the
 
 The Install menu still exists and still has every row Omarchy ships. Each row
 has been mapped to how NixOS installs the thing, beside a few apps upstream does
-not list. There are 66 apps in total:
+not list. There are 67 apps in total:
 50 are plain nixpkgs packages,
-5 are NixOS modules,
+6 are NixOS modules,
 9 are built by nixarchy itself because nixpkgs does not carry them,
 and 2 have no equivalent and say so in the menu.
 
@@ -26,7 +26,27 @@ have five uncommented lines. Then _Install > Apply changes_ runs
 `nixarchy-apply`, which copies that file to `nixarchy-apps.nix` in your flake
 directory and offers to run `nh os switch <flake>`.
 
+The switch asks for your password in the same Omarchy dialog as any other
+administrator prompt, once per switch, rather than in the terminal. Over SSH
+or on a text console it asks as text instead. To get the old sudo prompt for
+one run, use `NH_ELEVATION_STRATEGY=auto nixarchy apply`.
+
+For scripts and panels with no terminal, `nixarchy apply --yes --no-preview`
+answers both questions: switch, and skip the VM preview. With no flags and no
+terminal it declines to switch.
+
+`nixarchy apply --detach --yes` runs the rebuild in the background, as the user
+service `nixarchy-rebuild`, so closing the window doesn't stop it. Follow it
+with `journalctl --user -fu nixarchy-rebuild`. The password still comes up in
+the same dialog. A second detached rebuild is refused while one is running.
+Once its log says "Activating", let it finish: stopping it then can leave the
+system partly changed.
+
 ## Finding it in the first place
+
+_Install > Packages_ (Super+Alt+N on a new install) is the same work in a
+panel: search, add, draft and apply without a terminal. It drives the commands
+this page describes, so everything below holds for both.
 
 `nixarchy-search`, or _Install > Search_, is one fzf picker over every nixpkgs
 package, every NixOS option and the curated app list, with each entry's type,
@@ -124,6 +144,14 @@ That is the design rather than an omission. An option copied from upstream goes
 stale and cannot be removed once people depend on it, so nixarchy declares only
 what it genuinely integrates and leaves the rest of `services.tailscale` where
 you already know how to look it up.
+
+A service can be newer than your file. `services.nix` is written once, at your
+first login, and nothing rewrites it after that, because it is yours. So a
+service nixarchy adds later has no line in it. `nixarchy-service-enable <name>`
+copies that one line from `/etc/nixarchy/services-template.nix`, just before
+the file's closing brace, turns it on, and changes nothing else.
+`nixarchy-catalogue-diff` lists every row your files are missing; `--add`
+writes them all, commented out, and `--add-one services <name>` writes one.
 
 ## Unfree software
 

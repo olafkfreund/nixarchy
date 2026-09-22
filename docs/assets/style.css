@@ -215,3 +215,71 @@ pre code { background: none; padding: 0; font-size: 0.88rem; }
   .sidebar { position: static; }
   .toc { max-height: none; }
 }
+
+/* ---------- home: hero and wide media (#814) ---------- */
+
+/* The front page's own width. Prose stays at the reading measure set above;
+   only the media container widens, which is how omarchy.org reads -- a narrow
+   column of text with screenshots given room to be legible. A 16:10 desktop
+   still at 46rem is too small to make out a panel's rows. */
+.home .content--centred { max-width: 72rem; }
+.home .content p,
+.home .content li,
+.home .content blockquote { max-width: 46rem; }
+/* ...except a paragraph that is only an image. kramdown wraps every image in
+   a <p>, so the rule above clamped the screenshots to the READING measure and
+   the wide container above did nothing -- the hero rendered at 736px inside a
+   1024px column. Measured on the deployed page, not guessed. */
+.home .content p:has(img) { max-width: none; }
+
+/* The first screen: wordmark, one sentence, two things to do. The masthead
+   above already carries the wordmark, so this only has to not waste the space
+   underneath it -- the old page spent 370 words here before showing anything. */
+.home .masthead { padding: 2rem 1.5rem 1.25rem; }
+
+.cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.8rem 0 2.6rem; }
+
+.cta-button {
+  display: inline-block;
+  padding: 0.55rem 1.2rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--fg);
+  background: var(--code-bg);
+  font-size: 0.95rem;
+}
+.cta-button:hover { border-color: var(--accent); text-decoration: none; }
+.cta-button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--code-bg);
+  font-weight: 700;
+}
+.cta-button--primary:hover { filter: brightness(1.08); }
+
+/* Screenshots stack at full width rather than sharing a row. A two-up grid
+   was tried and removed: each cell came out near 320px, and a 1885px desktop
+   scaled into that turns a panel's rows into grey mush -- the arithmetic
+   decides this, not taste. Deployed and looked at before it was replaced. */
+.home .content img { margin: 1.4rem 0; }
+
+.content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+}
+
+/* The three places a reader goes next, under the wordmark on every page:
+   the manual, the source, and what is open. Centred like the tagline above
+   it, and wrapping rather than scrolling on a phone. */
+.mast-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1.6rem;
+  margin-top: 0.9rem;
+  font-size: 0.92rem;
+}
+.mast-nav a { color: var(--dim); }
+.mast-nav a:hover { color: var(--link); text-decoration: none; }

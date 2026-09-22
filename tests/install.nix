@@ -470,7 +470,7 @@ pkgs.testers.runNixOSTest {
 
   enableOCR = true;
 
-  testScript = ''
+  testScript = import ./with-vm-cleanup.nix pkgs.lib ''
     installer.wait_for_unit("multi-user.target")
 
     # Is what was seeded actually here? extraDependencies is supposed to put
@@ -721,7 +721,7 @@ pkgs.testers.runNixOSTest {
     # (start_command: str, *, name, keep_machine_state) in current nixpkgs.
     disk = os.path.abspath("vm-state-installer/empty0.qcow2")
     assert os.path.exists(disk), f"the installer's target disk is not at {disk}"
-    target = create_machine(
+    target = create_owned_machine(
         "${targetCommand}" + f" -drive file={disk},if=virtio,werror=report",
         name="target")
     target.start()
@@ -1075,19 +1075,5 @@ pkgs.testers.runNixOSTest {
     target.succeed("test -s /etc/nixos/flake.nix")
     target.succeed("git -C /etc/nixos rev-parse --is-inside-work-tree")
     print("a factory reset returned /home and /var/lib, and left /etc/nixos alone")
-
-    # Shut the target down, or this check never finishes.
-    #
-    # `installer` is shut down above; `target` was not, and a machine made by
-    # create_machine is not reaped for us the way a declared node is. The test
-    # script would reach its end, every assertion passing, and the derivation
-    # would then sit forever with a qemu still running -- measured at nine
-    # hours against a script that finished in 510 seconds.
-    #
-    # That is why this check had never once produced a verdict: CI records the
-    # 45-minute timeout as `cancelled`, which reads like someone cancelled it
-    # rather than like a hang, so the passing test looked like an interrupted
-    # one every single time.
-    target.shutdown()
   '';
 }

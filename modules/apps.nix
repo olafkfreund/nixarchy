@@ -14,7 +14,12 @@ let
   # same "Nix-level: lib.optionalAttrs cfg.enable" #226 already established
   # for sandboxes.
   boxesEnabled = cfg.enable && cfg.services.boxes.enable;
-  boxTemplates = import ../data/box-templates.nix;
+  # The Podman panel's row, by the same rule: podman is on through the
+  # Services row or through Boxes, and without it the row must not exist.
+  podmanEnabled = cfg.enable && config.virtualisation.podman.enable;
+  # #802: the Dev environments row exists where its panel does, which is
+  # where the devenv service is -- the same shape as podmanEnabled.
+  devenvEnabled = cfg.enable && cfg.services.devenv.enable;
 
   # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
   appBinary =
@@ -332,6 +337,82 @@ let
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-search";
           description = "Every package, NixOS option and Omarchy app, in one picker";
         };
+        # The panel that ships on by default (#766). The helper, never a bare
+        # `omarchy-shell shell toggle`: toggling a plugin that is off exits 0
+        # and does nothing, and `when` hides the row once it is turned off.
+        "install.packages" = {
+          icon = "󰏖";
+          label = "Packages";
+          action = "nixarchy-plugin nixarchy.pkg";
+          when = "nixarchy-plugin --enabled nixarchy.pkg";
+          description = "Browse, add and apply packages in a panel";
+        };
+
+        # The GitLab pipelines panel (#770). nixarchy declares these rows and
+        # its copy carries `menu.managed`, so the panel does not also write
+        # them into the user's menu extension file.
+        "apps.gitlab-pipelines" = {
+          icon = "";
+          label = "GitLab Pipelines";
+          action = "nixarchy-plugin olafkfreund.gitlab-pipelines";
+          when = "nixarchy-plugin --enabled olafkfreund.gitlab-pipelines";
+          aliases = [
+            "gitlab"
+            "pipelines"
+            "ci"
+          ];
+          description = "Project pipelines, stages and jobs · Super+Alt+P";
+        };
+        "learn.gitlab-pipelines-keybindings" = {
+          icon = "";
+          label = "GitLab Pipelines keybindings";
+          action = "python3 $HOME/.config/omarchy/plugins/olafkfreund.gitlab-pipelines/menu.py keys";
+          when = "nixarchy-plugin --enabled olafkfreund.gitlab-pipelines";
+          description = "All pipeline panel controls · Super+Ctrl+Alt+P";
+        };
+
+        # The GitHub Actions panel (#772), the same way.
+        "apps.github-actions" = {
+          icon = "";
+          label = "GitHub Actions";
+          action = "nixarchy-plugin olafkfreund.github-actions";
+          when = "nixarchy-plugin --enabled olafkfreund.github-actions";
+          aliases = [
+            "github"
+            "actions"
+            "workflows"
+          ];
+          description = "Repository workflow runs, jobs and steps · Super+Alt+A";
+        };
+        "learn.github-actions-keybindings" = {
+          icon = "";
+          label = "GitHub Actions keybindings";
+          action = "python3 $HOME/.config/omarchy/plugins/olafkfreund.github-actions/menu.py keys";
+          when = "nixarchy-plugin --enabled olafkfreund.github-actions";
+          description = "All workflow panel controls · Super+Ctrl+Alt+A";
+        };
+
+        # The herdr sessions widget (#771): its sessions in the bar, and the
+        # sheet of keys that only exist while its menu has the keyboard.
+        "apps.herdr" = {
+          icon = "";
+          label = "Herdr";
+          action = "nixarchy-plugin nixarchy.herdr";
+          when = "nixarchy-plugin --enabled nixarchy.herdr";
+          aliases = [
+            "herdr"
+            "sessions"
+            "agents"
+          ];
+          description = "Your herdr sessions and their agents · Super+Alt+H";
+        };
+        "learn.herdr-keybindings" = {
+          icon = "";
+          label = "Herdr keybindings";
+          action = "$HOME/.config/omarchy/plugins/nixarchy.herdr/bin/herdr-menu-keys";
+          when = "nixarchy-plugin --enabled nixarchy.herdr";
+          description = "The keys of the herdr sessions menu";
+        };
 
         # The Secrets group (#611). A new parent with no action of its own,
         # which is legitimate for a submenu -- Menu.qml renders the children.
@@ -578,51 +659,64 @@ let
           description = "Copy the selection into your flake and nixos-rebuild switch";
         };
       }
-      // lib.optionalAttrs boxesEnabled (
-        {
-          # A new parent under Trigger, appended after upstream's own rows --
-          # the same precedent system.recovery above already set for this
-          # file (#542), and the one #226 set for sandboxes.
-          # `when` is the runtime half of the gate: whether podman is
-          # actually usable THIS login is only knowable now, not at rebuild
-          # time -- the Nix-level half is `boxesEnabled` just above, which
-          # keeps the row from existing at all when the feature is off.
-          "trigger.box" = {
-            icon = "󰆧";
-            label = "Boxes";
-            aliases = [
-              "box"
-              "distrobox"
-            ];
-            when = "nixarchy box --check";
-          };
-
-          "trigger.box.enter" = {
-            icon = "󰆍";
-            label = "Enter a box";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box enter";
-            description = "Pick a box you already have and get a shell in it";
-          };
-
-          "trigger.box.rm" = {
-            icon = "󰩹";
-            label = "Remove a box";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box rm";
-            description = "Pick a box and delete it";
-          };
-        }
-        // lib.mapAttrs' (
-          name: template:
-          lib.nameValuePair "trigger.box.create.${name}" {
-            icon = "󰐕";
-            label = "New: ${template.label}";
-            action = "omarchy-launch-floating-terminal-with-presentation nixarchy box create --template ${name}";
-            description = template.note;
-          }
-        ) boxTemplates
-      )
+      // lib.optionalAttrs devenvEnabled {
+        # The Dev environments panel (#802). The helper rather than a bare
+        # toggle, as install.packages: an off plugin is named, not toggled,
+        # and `when` hides the row once it is turned off.
+        "apps.devenv" = {
+          icon = "󱄅";
+          label = "Dev environments";
+          action = "nixarchy-plugin nixarchy.devenv";
+          when = "nixarchy-plugin --enabled nixarchy.devenv";
+          aliases = [
+            "devenv"
+            "environments"
+            "projects"
+            "dev shell"
+          ];
+          description = "List, create, enter and manage devenv projects · Super+Alt+E";
+        };
+      }
+      // lib.optionalAttrs podmanEnabled {
+        # The helper, as install.packages: an off plugin is named, not toggled.
+        # No `docker` alias, unlike the plugin's own snippet: where the engine is
+        # Docker, searching "docker" must not open a podman panel.
+        "apps.podman" = {
+          icon = "";
+          label = "Podman";
+          action = "nixarchy-plugin nixarchy.podman";
+          when = "nixarchy-plugin --enabled nixarchy.podman";
+          description = "Containers, images, volumes and networks in a panel";
+          aliases = [
+            "podman"
+            "containers"
+            "images"
+            "volumes"
+            "networks"
+          ];
+        };
+      }
+      // lib.optionalAttrs boxesEnabled {
+        # The Boxes group is the Distrobox panel now (#766 PR D): it enters,
+        # removes and creates -- from nixarchy's own templates, which boxes.nix
+        # writes where the panel reads them. The `box` alias stays: it is how
+        # somebody who knew the retired `nixarchy box` finds the panel (#801).
+        "trigger.box" = {
+          icon = "󰆧";
+          label = "Boxes";
+          aliases = [
+            "box"
+            "distrobox"
+          ];
+          action = "nixarchy-plugin nixarchy.distrobox";
+          when = "nixarchy-plugin --enabled nixarchy.distrobox";
+          description = "Your boxes, and new ones from a template · Super+Alt+D";
+        };
+      }
       // lib.optionalAttrs cfg.enable {
         # Why: modules/AGENTS.md#the-sandboxes-group-226
+        # The panel is the Sandbox group now (#766): its five child rows are
+        # gone -- each called a verb with no name, so none could succeed (#781).
         "trigger.vm" = {
           icon = "󰦛";
           label = "Sandbox";
@@ -631,43 +725,17 @@ let
             "sandbox"
             "microvm"
           ];
-          when = "nixarchy-vm --check";
+          action = "nixarchy-plugin nixarchy.microvm";
+          when = "nixarchy-vm --check && nixarchy-plugin --enabled nixarchy.microvm";
+          description = "Disposable and permanent VMs in a panel · Super+Alt+V";
         };
-        "trigger.vm.new" = {
-          icon = "󰕍";
-          label = "New sandbox";
-          # `create`, not `new`. The menu KEY is trigger.vm.new and the action
-          # was written to match the key instead of the CLI, so every click
-          # printed "nixarchy-vm: unknown subcommand 'new'" and closed. The
-          # sibling rows only work because run/stop/rm happen to be spelled the
-          # same on both sides; checks.menu-verbs now asserts that rather than
-          # leaving it to coincidence.
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm create";
-          description = "Name one, pick a template, and open it";
-        };
-        "trigger.vm.open" = {
-          icon = "󰁯";
-          label = "Open a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm run";
-          description = "Attach to one you already created";
-        };
-        "trigger.vm.stop" = {
-          icon = "󰉉";
-          label = "Stop a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm stop";
-          description = "Ask a running sandbox to shut down";
-        };
-        "trigger.vm.destroy" = {
-          icon = "󱄅";
-          label = "Destroy a sandbox";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm rm";
-          description = "Delete it and its state -- cannot be undone";
-        };
-        "trigger.vm.list" = {
+        # With the panel turned off, the terminal is still a way in.
+        "trigger.vm-list" = {
           icon = "󰆓";
-          label = "List sandboxes";
+          label = "Sandbox";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm list";
-          description = "What you have created, and which are running";
+          when = "nixarchy-vm --check && ! nixarchy-plugin --enabled nixarchy.microvm";
+          description = "The panel is off: what you have created, in a terminal";
         };
       }
       // lib.listToAttrs (
@@ -1090,21 +1158,39 @@ in
               ];
               text = ''
                 add=false
+                # --add-one <part> <id>: just that row (#843). What
+                # nixarchy-service-enable calls when a file predates a row.
+                only_part=""
+                only_id=""
+                usage() {
+                  echo "usage: nixarchy-catalogue-diff [--add | --add-one apps|services|advanced <id>]" >&2
+                  exit 2
+                }
                 case "''${1:-}" in
                   --add) add=true ;;
-                  "") ;;
-                  *)
-                    echo "usage: nixarchy-catalogue-diff [--add]" >&2
-                    exit 2
+                  --add-one)
+                    add=true
+                    only_part="''${2:-}"
+                    only_id="''${3:-}"
+                    case "$only_part" in apps | services | advanced) ;; *) usage ;; esac
+                    case "$only_id" in *[!a-z0-9_.-]* | "") usage ;; esac
                     ;;
+                  "") ;;
+                  *) usage ;;
                 esac
+                refused=false
 
                 dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
                 total=0
 
                 for part in apps services advanced; do
+                  [ -z "$only_part" ] || [ "$part" = "$only_part" ] || continue
                   user="$dir/$part.nix"
                   tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/$part-template.nix"
+                  if [ -n "$only_id" ]; then
+                    [ -f "$user" ] || { echo "no $user" >&2; exit 1; }
+                    [ -f "$tpl" ] || { echo "no $tpl" >&2; exit 1; }
+                  fi
                   [ -f "$user" ] && [ -f "$tpl" ] || continue
 
                   # Compared by marker, never by line: the file's own header
@@ -1118,6 +1204,21 @@ in
                       <(grep -oE "#@ [a-z0-9_.-]+" "$tpl" | sort -u) \
                       <(grep -oE "#@ [a-z0-9_.-]+" "$user" | sort -u)
                   )
+                  if [ -n "$only_id" ]; then
+                    # Here-strings, not pipes: under pipefail a grep -q that
+                    # stops reading early can fail the pipeline it ends.
+                    have=$(grep -oE "#@ [a-z0-9_.-]+" "$user" || true)
+                    offer=$(grep -oE "#@ [a-z0-9_.-]+" "$tpl" || true)
+                    if grep -qxF "#@ $only_id" <<<"$have"; then
+                      echo "$part.nix already has $only_id"
+                      exit 0
+                    fi
+                    grep -qxF "#@ $only_id" <<<"$offer" || {
+                      echo "no $only_id in $tpl" >&2
+                      exit 1
+                    }
+                    missing="#@ $only_id"
+                  fi
                   [ -n "$missing" ] || continue
 
                   count=$(printf '%s\n' "$missing" | grep -c . || true)
@@ -1159,6 +1260,7 @@ in
                       echo "  $user has no closing brace on its own line;" >&2
                       echo "  add these by hand rather than let this guess:" >&2
                       printf '%s' "$rows" >&2
+                      refused=true
                       continue
                     fi
                     tmp=$(mktemp)
@@ -1174,6 +1276,11 @@ in
                     echo "  appended to $user"
                   fi
                 done
+
+                if [ -n "$only_id" ]; then
+                  [ "$refused" = false ] || exit 1
+                  exit 0
+                fi
 
                 if [ "$total" -eq 0 ]; then
                   echo "your files have everything the catalogue offers"
@@ -1199,6 +1306,17 @@ in
               ];
               text = ''
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+
+                # Callers (nixarchy-microvm) read this to learn that a missing
+                # row heals itself, so keep "usage:" and "missing" in it (#843).
+                case "''${1:-}" in
+                  -h | --help)
+                    echo "usage: nixarchy-service-enable <service-id>"
+                    echo "  A row missing from services.nix is added from /etc/nixarchy/services-template.nix."
+                    exit 0
+                    ;;
+                esac
+
                 id="''${1:?usage: nixarchy-service-enable <service-id>}"
 
                 # Validated before it reaches sed and grep, which the app scripts
@@ -1215,10 +1333,17 @@ in
 
                 [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
+                # A services.nix written before this row existed does not have
+                # it; nothing regenerates the file, so add just that row from
+                # the template, where catalogue-diff puts rows (#843).
                 if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  echo "nixarchy: no service '$id' in $file" >&2
-                  echo "  The full list is /etc/nixarchy/services-template.nix." >&2
-                  exit 1
+                  if nixarchy-catalogue-diff --add-one services "$id" >/dev/null; then
+                    echo "added the $id row from the template"
+                  else
+                    echo "nixarchy: no service '$id' in $file" >&2
+                    echo "  The full list is /etc/nixarchy/services-template.nix." >&2
+                    exit 1
+                  fi
                 fi
 
                 # Already on if the marked line is not commented out.
@@ -2899,30 +3024,13 @@ in
               '';
             })
 
-            # `nixarchy dev init <preset>`. Its own file because flake.nix's
-            # devenv-presets check runs THIS command rather than a copy of it --
-            # see pkgs/dev-init.nix.
-            #
-            # Installed unconditionally, unlike devenv itself, which is an opt-in
-            # catalogue entry. The command's first act is to check for devenv and
-            # name the entry that installs it, and that answer is only useful on a
-            # machine that has not enabled it yet.
-            (pkgs.callPackage ../pkgs/dev-init.nix { })
-
             # `nixarchy vm <subcommand>`. Its own file for the same reason as
-            # dev-init.nix above: `checks.microvm-template` (#224) has to run
+            # secret.nix below: `checks.microvm-template` (#224) has to run
             # the real command. See pkgs/microvm.nix for what it does and why.
             (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
 
-            # `nixarchy box <subcommand>`. Its own file for the same reason as
-            # dev-init.nix and microvm.nix above: `checks.box-template` (#258)
-            # has to run the real command. See pkgs/box.nix for what it does
-            # and why -- in particular why it never resolves distrobox through
-            # a /nix/store path.
-            (pkgs.callPackage ../pkgs/box.nix { })
-
             # `nixarchy secret <subcommand>`. Its own file for the same reason
-            # as the three above: tests/menu-verbs.nix reads the verbs out of
+            # as the two above: tests/menu-verbs.nix reads the verbs out of
             # the command the Secrets rows exec. See pkgs/secret.nix for why
             # the host's age identity never leaves root, and why the
             # declaration line is printed rather than written.
@@ -2979,10 +3087,30 @@ in
                       remove)  shift 2; exec nixarchy-app-remove "$@" ;;
                     esac
                     ;;
+                  # `nixarchy dev ...` is the terminal half of the Dev
+                  # environments panel (#802): the plugin's own CLI, which
+                  # comes with the panel and so is here wherever the devenv
+                  # service is on. Every subcommand is forwarded, not just
+                  # init, because the CLI grew list, templates, status and
+                  # remove and a second list here would drift from it.
+                  #
+                  # Where devenv is off the CLI is absent, and this says what
+                  # to turn on -- the same answer `nixarchy dev init` gave on
+                  # such a machine before the plugin replaced it.
                   dev)
-                    case "''${2:-}" in
-                      init) shift 2; exec nixarchy-dev-init "$@" ;;
-                    esac
+                    shift
+                    if command -v nixarchy-devenv >/dev/null 2>&1; then
+                      exec nixarchy-devenv "$@"
+                    fi
+                    echo "nixarchy: devenv is not enabled on this machine, so there is" >&2
+                    echo "nothing for 'nixarchy dev' to drive." >&2
+                    echo >&2
+                    echo "  nixarchy-service-enable devenv && nixarchy apply" >&2
+                    echo >&2
+                    echo "or, in your own configuration:" >&2
+                    echo >&2
+                    echo "  programs.nixarchy.services.devenv.enable = true;" >&2
+                    exit 1
                     ;;
                   # Without this row `nixarchy try foo` falls through to
                   # `exec omarchy try ...` and dies as "Unknown Omarchy command"
@@ -2996,7 +3124,16 @@ in
                   # checks.options now asserts the route.
                   try) shift; exec nixarchy-try "$@" ;;
                   vm) shift; exec nixarchy-vm "$@" ;;
-                  box) shift; exec nixarchy-box "$@" ;;
+                  # Retired (#801): the Distrobox panel does all of it. Not
+                  # listed in the usage above any more -- a help text naming a
+                  # verb that prints "is retired" is the #538 defect wearing
+                  # the opposite coat.
+                  # A pointer for one release rather than falling through to
+                  # `exec omarchy "$@"`, which would answer a command this
+                  # project shipped with "Unknown Omarchy command: omarchy
+                  # box" -- the #538 failure, in reverse.
+                  box) echo "nixarchy box is retired -- boxes live in the Distrobox panel" \
+                            "(Super+Alt+D, or the Boxes row in the menu)." >&2; exit 1 ;;
                   secret) shift; exec nixarchy-secret "$@" ;;
 
                   # The rest of them (#538). Every one of these was shipped,
@@ -3062,9 +3199,10 @@ in
                   nixarchy app remove         Pick apps, packages and options to remove
                   nixarchy apply              Copy the selection into your flake and rebuild
                   nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
+                  nixarchy dev list --json    Every devenv project under your roots
+                                              The panel is Super+Alt+E, or Apps > Dev environments
                   nixarchy try <app|attr>     Run something once without installing it
                   nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
-                  nixarchy box <subcommand>   distrobox, for software NixOS will not run -- 'nixarchy box help'
                   nixarchy doctor             What this machine needs to run nixarchy
                   nixarchy verify             Check the hardware nixarchy cannot test in a VM
                   nixarchy version            The Omarchy version and the nixarchy revision
@@ -3121,10 +3259,65 @@ in
                 # that anything is happening. It is also the smaller closure of
                 # the two, by about 200 MiB.
                 pkgs.nh
+                # systemd-run and systemctl, for --detach (#765).
+                pkgs.systemd
               ];
               text = ''
+                # The two answers as flags, for a caller with no terminal (#765).
+                # Anything else exits 2: an unknown flag must never mean "switch".
+                yes="" nopreview="" detach=""
+                while [ $# -gt 0 ]; do
+                  case "$1" in
+                    --yes) yes=1 ;;
+                    --no-preview) nopreview=1 ;;
+                    --detach) detach=1 ;;
+                    *)
+                      echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
+                      exit 2
+                      ;;
+                  esac
+                  shift
+                done
+
                 file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                 flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
+
+                # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+                # A supervised user unit, so a closed window or a shell restart
+                # cannot kill a switch halfway; its state and log are the unit's.
+                if [ -n "$detach" ]; then
+                  [ -n "$yes" ] || {
+                    echo "nixarchy-apply: --detach needs --yes: a unit has no terminal to answer" >&2
+                    exit 2
+                  }
+                  # SubState, not ActiveState: RemainAfterExit keeps a finished
+                  # rebuild "active" (SubState exited) so its result stays readable.
+                  case "$(systemctl --user show -p SubState --value nixarchy-rebuild 2>/dev/null || true)" in
+                    running | start*)
+                      echo "nixarchy-apply: a rebuild is already running." >&2
+                      echo "  Follow it with: journalctl --user -fu nixarchy-rebuild" >&2
+                      exit 3
+                      ;;
+                    "" | dead) ;;
+                    *)
+                      systemctl --user stop nixarchy-rebuild 2>/dev/null || true
+                      systemctl --user reset-failed nixarchy-rebuild 2>/dev/null || true
+                      ;;
+                  esac
+                  # No NoNewPrivileges: elevation goes through the setuid pkexec.
+                  # Rate limit off: a build log is bursty, and it is the log a
+                  # failure needs. No --collect: it unloads a FAILED unit at once,
+                  # which then reads Result=success -- the one result that matters.
+                  systemd-run --user --unit=nixarchy-rebuild \
+                    -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
+                    --setenv=NIXARCHY_FLAKE="$flake" \
+                    --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
+                    --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
+                    -- "$(readlink -f "$0")" --yes --no-preview
+                  echo "Rebuilding in the background. Follow it with:"
+                  echo "  journalctl --user -fu nixarchy-rebuild"
+                  exit 0
+                fi
 
                 # Why: modules/AGENTS.md#where-the-selection-lands
                 base="$flake"
@@ -3308,14 +3501,20 @@ in
                 # Treating EOF as an empty answer is also the right behaviour
                 # rather than a test accommodation: a piped or non-interactive
                 # apply should decline to switch, not die halfway through.
-                if command -v nixarchy-preview >/dev/null 2>&1; then
+                # --no-preview and --yes answer the two questions instead; EOF
+                # still declines when they are not given.
+                if [ -z "$nopreview" ] && command -v nixarchy-preview >/dev/null 2>&1; then
                   read -r -p "Preview in a VM first? [y/N] " reply || reply=""
                   case "$reply" in
                     [yY]*) nixarchy-preview || true ;;
                   esac
                 fi
 
-                read -r -p "Build and switch now? [y/N] " reply || reply=""
+                if [ -n "$yes" ]; then
+                  reply=y
+                else
+                  read -r -p "Build and switch now? [y/N] " reply || reply=""
+                fi
                 case "$reply" in
                   # No sudo: nh elevates itself, and wrapping it means the
                   # elevation happens before nh can decide how to do it.
@@ -3327,12 +3526,22 @@ in
                   # another is a failure that looks like nothing happening.
                   [yY]*)
                     rc=0
-                    nh os switch "$flake" || rc=$?
+                    # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+                    export NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}"
+                    # nom draws with escape codes, unreadable in a journal or a pipe.
+                    nomflag=""
+                    [ -t 1 ] || nomflag=--no-nom
+                    nh os switch ''${nomflag:+"$nomflag"} "$flake" || rc=$?
                     if [ "$rc" -ne 0 ]; then
                       # The selection stays copied, so every later apply or update
-                      # fails the same way until the cause is taken out.
+                      # fails the same way until the cause is taken out. No claim
+                      # about what changed: nh activates before it sets the profile
+                      # and the bootloader, so a late failure leaves it switched.
                       echo
-                      echo "The rebuild failed (exit $rc). Nothing changed on this machine."
+                      echo "The rebuild failed (exit $rc). The log above says where."
+                      echo "  If it stopped while building, the running system is unchanged."
+                      echo "  If it stopped while activating, it may be partly switched --"
+                      echo "  'nixarchy rollback' lists the earlier generations to go back to."
                       echo "  What you picked is still in the selection, so the next"
                       echo "  rebuild will fail the same way until it is removed:"
                       echo "    nixarchy app remove                    take out what you just picked"

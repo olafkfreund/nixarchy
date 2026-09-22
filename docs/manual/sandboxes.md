@@ -48,7 +48,16 @@ enable for the disposable half above. What you are turning on by using it is
 whatever templates you pick, one machine at a time, and nothing runs until
 you do.
 
-The **menu group** is the one thing that needs a moment: `Trigger ▸ Sandbox`
+**`Trigger ▸ Sandbox` opens the MicroVMs panel**, on by default
+(Super+Alt+V on a new install): disposable VMs from `nixarchy vm` and the
+permanent machines you declare, in one list. Create, run in the background,
+attach to the console, stop and remove from there. See
+[nixarchy's plugins](plugins#microvms). If you turn the panel off in
+Setup → Plugins, the same row opens `nixarchy vm list` in a terminal instead,
+and `programs.nixarchy.defaultPlugins.microvm = false` stops nixarchy
+installing it.
+
+The menu row is the one thing that needs a moment: `Trigger ▸ Sandbox`
 is generated into the merged menu defaults at rebuild time, and Omarchy's
 shell reads that file once, at login. Rebuilding with this feature already
 on your system does not make the row appear in an already-open session —
@@ -195,6 +204,31 @@ nixarchy vm rm shell-1            # delete it and its state
 A second `run` of a name that is already attached refuses rather than racing
 a second qemu over the same shared directory — you get "already running",
 not a wedged guest.
+
+### In the background, and back in later
+
+```sh
+nixarchy vm run --detach shell-1  # build here, then run it with no terminal
+nixarchy vm console shell-1       # attach — Ctrl-] leaves it running
+nixarchy vm set-template shell-1 python   # a stopped VM, rebuilt next run
+```
+
+`--detach` builds in front of you, so a build error is yours to read. Then a
+user unit, `nixarchy-vm-<name>`, owns the guest, and the command returns once
+the guest holds its lock. If it never does, the command says so and names
+`journalctl --user -u nixarchy-vm-<name>`. Ctrl-A X still stops the guest
+from its console.
+
+`set-template` refuses while the VM runs, and refuses if the VM has volume
+images (`*.img`) the old template made — a k3s disk under a node VM helps
+nobody. Pass `--keep-volumes` to switch anyway.
+
+### For scripts: `--json`
+
+`nixarchy vm list --json` prints `[{"name", "template", "running", "dir"}]`,
+and `nixarchy vm templates --json` prints `[{"name", "label", "note"}]`. The
+text output is unchanged. Fields are only ever added, never renamed or
+removed: the nixarchy.microvm panel reads these.
 
 ## On-disk layout, and the GC root
 

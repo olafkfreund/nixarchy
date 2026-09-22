@@ -20,6 +20,10 @@ baseurl: "/nixarchy"
 include:
   - manual
 exclude:
+  # Both names, because CLAUDE.md is a symlink to AGENTS.md: without this the
+  # agent guide publishes at /nixarchy/CLAUDE (#836).
+  - AGENTS.md
+  - CLAUDE.md
   - internals
   - screenshots
   - capture-screenshots.sh
@@ -45,7 +49,9 @@ nav:
   - { path: /manual/channels,                 title: Stable or Unstable }
   - { path: /manual/other-packages,           title: Packages }
   - { path: /manual/configuration,            title: Configuring nixarchy }
+  - { path: /manual/plugins,                  title: nixarchy's Plugins }
   - { path: /manual/try-it-first,             title: Try It First }
+  - { path: /manual/try-it-in-a-vm,           title: Try It in a VM }
   - { path: /manual/dotfiles,                 title: Dotfiles }
   - { path: /manual/making-your-own-theme,    title: Making Your Own Theme }
   - { path: /manual/development-tools,        title: Development Tools }

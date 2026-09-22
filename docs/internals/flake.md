@@ -299,6 +299,262 @@ the ed25519 keys from services.openssh.hostKeys upstream -- so the
 mkDefault rule in modules/services/default.nix never even arises here.
 tests/options.nix asserts the inertness rather than trusting this note.
 
+<a id="the-package-manager-panel-on-by-default-766"></a>
+### The package manager panel, on by default (#766)
+
+```nix
+nixarchy-pkg = {
+```
+
+nixarchy-pkg is the first of nixarchy's own shell plugins in
+`programs.nixarchy.defaultPlugins`. It is installed and turned on, once,
+wherever nixarchy is enabled (modules/AGENTS.md has the reversal of
+"plugins present, never on" and its reasoning). It is an input for nixi's
+reasons: same maintainer, its own release cadence and checks, and a copy
+here would be a second place to maintain it. It uses `follows` because it
+is QML plus a bash adapter, so there is nothing to build and no binary
+cache to forfeit, and one nixpkgs in the lock beats two.
+
+Measured at dd937f2 (2026-09-19): the plugin output is **120 KiB**. The
+input's source tree, which `lib.inputSources` carries onto the offline ISO
+and the installed host, is **6.0 MiB**, mostly its docs images.
+
+It is not in `checks`. modules/home.nix's `validatedPlugins` runs
+`omarchy-plugin-validate` on it in every home that installs it, the
+reference machine included, so a pin that moves to a broken manifest fails
+there. A separate `checks.nixarchy-pkg` would need a workflow edit (AGENTS.md
+section 4) and would check nothing more.
+
+**Bumping the pin.** The repo has no tags, so there is nothing to track:
+
+1. Pick the commit on `main`, and read what changed since the current pin
+   (`gh api repos/olafkfreund/nixarchy-pkg/compare/<old>...<new>`).
+2. Edit the rev in the URL, then `nix flake lock`. The lock diff must
+   touch `nixarchy-pkg` alone; a second nixpkgs means `follows` broke.
+3. Check that the manifest id is still `nixarchy.pkg`. The build fails if
+   it is not, because the default set is keyed by it.
+4. Build `checks.menu-verbs`, `checks.options` and `checks.plugin`. The
+   row, the default and the enable-once hook all name the plugin.
+
+<a id="the-podman-panel-wherever-podman-is-on-766"></a>
+### The Podman panel, wherever podman is on (#766)
+
+```nix
+nixarchy-podman = {
+```
+
+nixarchy-podman is the second of nixarchy's own plugins in
+`programs.nixarchy.defaultPlugins`, and the first with a gate: it is installed
+where `virtualisation.podman.enable` is true -- the Podman services row or boxes
+-- and nowhere else, because a podman panel on a machine without podman is a
+panel that fails. It is an input, with `follows`, for the reasons
+nixarchy-pkg's entry above gives: pure QML, nothing to build, one nixpkgs.
+
+Measured at 03d9f02 (2026-09-19): the plugin output is **106 KiB**, and ships
+its MIT `LICENSE` (its flake lists it among the copied files). The input's
+source tree, which `lib.inputSources` carries onto the offline ISO and the
+installed host whether or not podman is on, is **5.2 MiB**, mostly docs images.
+
+Not in `checks`, like nixarchy-pkg: `validatedPlugins` validates it in every
+home that installs it, and `checks.menu-verbs` builds a machine with boxes, so
+podman is on there and the Apps ▸ Podman row's id is checked against its
+manifest.
+
+**Bumping the pin.** As nixarchy-pkg's, with two differences: the branch is
+**`master`**, not `main`, and the id to confirm in step 3 is
+`nixarchy.podman`.
+
+<a id="the-dev-environments-panel-wherever-devenv-is-802"></a>
+### The Dev environments panel, wherever devenv is (#802)
+
+```nix
+nixarchy-devenv = {
+```
+
+nixarchy-devenv is the panel for [per-project
+environments](https://olafkfreund.github.io/nixarchy/manual/per-project-environments),
+and the second default with a gate: it is installed where
+`programs.nixarchy.services.devenv.enable` is true and nowhere else, for the
+same reason the Podman panel follows podman -- with no devenv behind it there
+is nothing to list and nothing it could create. An input with `follows`, like
+the others: QML plus one shell script, nothing to build, one nixpkgs.
+
+It also carries the **catalogue**. The eight presets this repo used to hold in
+`data/devenv-presets.nix` moved there unchanged, with eight more beside them
+(java, java-maven, kotlin, dotnet, php, ruby, flutter, and a `cloud` generator
+that runs cloud-projects-templates). Keeping a second catalogue here would be
+drift waiting to happen, so `pkgs/dev-init.nix` went with it and
+`nixarchy dev ...` dispatches to the plugin's `nixarchy-devenv` command.
+
+Measured at e003f00 (2026-09-19): the plugin output is **148 KiB** (a 121.7 KiB
+closure) and ships its MIT `LICENSE`, which `checks.options` asserts. The CLI
+is **28 KiB** of script, but its closure is **57.2 MiB**: it is a
+`writeShellApplication` over coreutils, findutils, gnugrep, gnused and jq. It
+goes only to machines that turned devenv on -- which are already carrying
+devenv itself, and devenv bundles its own Nix. `devenv`, `git` and `nix` are
+deliberately not runtime inputs of it: it calls them by name from PATH, so a
+machine that never enabled devenv gets none of that closure through this.
+
+**Bumping the pin.** As nixarchy-pkg's; the branch is `main` and the id to
+confirm is `nixarchy.devenv`. Run `nix run .#devenv-presets` after the bump:
+that check runs the pinned plugin's own templates check, so a bump that breaks
+a template fails there rather than in somebody's project.
+
+### The GitLab pipelines panel, on by default (#770)
+
+```nix
+nixarchy-gltui = {
+```
+
+Another of nixarchy's own default plugins, for the same reasons as
+nixarchy-pkg above: same maintainer, its own cadence and checks, and
+`follows` because it is QML plus python with nothing to build. modules/home.nix
+installs nixarchy's copy rather than upstream's output as-is: a `runCommand`
+that adds `menu.managed` (nixarchy declares the menu rows) and takes the MIT
+`LICENSE` from the source tree, because upstream's package leaves it out.
+
+Measured at 0b827c6 (2026-09-19): the plugin output is **58 KiB**, and the
+source tree `lib.inputSources` carries onto the ISO is **208 KiB**. Its
+runtime tools cost more: `glab` is **49.9 MiB** (its 88.6 MiB closure is
+otherwise glibc and friends every system already has), and `python3` and
+`xdg-utils` are already in the reference closure.
+
+**Bumping the pin**, as for nixarchy-pkg:
+
+1. Pick the commit on `main` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-gltui/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches `nixarchy-gltui`
+   alone.
+3. The manifest id must still be `olafkfreund.gitlab-pipelines`; the build
+   fails if not.
+4. If upstream's `menu.py` changed how it decides to `register`, re-read it:
+   `menu.managed` only works if it still checks for that file.
+5. Build `checks.options`, `checks.menu-verbs` and `checks.plugin`.
+
+### The GitHub Actions panel, on by default (#772)
+
+```nix
+nixarchy-ghtui = {
+```
+
+gltui's origin, installed the same way and for the same reasons (#770 above):
+a `runCommand` in modules/home.nix adds `menu.managed` and takes the MIT
+`LICENSE` from the source tree when upstream's package omits it.
+
+Measured at dfba799 (2026-09-19): the plugin output is **84 KiB**, and the
+source tree on the ISO is **304 KiB**. `gh` is **40.1 MiB** (its 80.6 MiB
+closure is otherwise glibc and friends every system already has); `python3`
+and `xdg-utils` are already in the reference closure.
+
+**Bumping the pin:** as for nixarchy-gltui above, with
+`olafkfreund/nixarchy-ghtui`, the id `olafkfreund.github-actions`, and the same
+`menu.py` `register` check.
+
+### The herdr sessions widget, on by default (#771)
+
+```nix
+nixarchy-herdr = {
+```
+
+The third default plugin, with one difference: upstream has **no flake**, so
+the input is `flake = false` and there is nothing to `follows`. nixarchy is
+the packager. modules/home.nix's `herdrSessions` is a `runCommand` that
+copies the tree without its design documents (`intent/`, `spec/`, `plan/`,
+`tests/`, `preview.png`) and runs `patchShebangs` on `bin/`. Upstream's two
+scripts say `#!/bin/bash` and are run by path, which works today only through
+envfs. The build fails unless `LICENSE` still names both holders, Jankees van
+Woezik and olafkfreund.
+
+`herdr` itself comes from nixpkgs (0.9.0 at the pin). `herdr update`
+downloads a new binary into the path it runs from, so it cannot update a
+store copy. Update herdr by bumping nixpkgs, or install your own build ahead
+of it on `PATH`, as the maintainer's machine does.
+
+Measured at 6bb0a4c (2026-09-19): the plugin output is **681 KiB**, and the
+source tree on the ISO is **983 KiB**. `herdr` adds **25.0 MiB**; the rest of
+its 71.0 MiB closure, `jq` and `iproute2` are already in the reference system.
+
+**Bumping the pin:**
+
+1. Pick the commit on `master` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-herdr/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches `nixarchy-herdr`
+   alone.
+3. The manifest id must still be `nixarchy.herdr`; the build fails if not.
+4. Build `checks.menu-verbs`: every `herdr <level> <sub>` the new
+   `herdr-sessions` sends must be one the pinned herdr lists. Re-run it on
+   a **nixpkgs** bump too, since herdr can rename a subcommand from that side.
+5. Build `checks.options` and `checks.plugin`.
+
+### The Distrobox panel, wherever Boxes are (#766)
+
+```nix
+nixarchy-distrobox = {
+```
+
+The fifth default plugin, gated like distrobox itself on
+`programs.nixarchy.services.boxes.enable`. Its templates come from nixarchy:
+`boxes.nix` writes `data/box-templates.nix` to `/etc/nixarchy/box-templates.ini`
+as a `distrobox assemble` file, and modules/home.nix's `distroboxPanel` points
+the manifest's **default** `templatesFile` at it with `jq`. A path the user
+sets in Setup → Plugins still wins, and nothing writes `shell.json`.
+`checks.options` reads the pinned plugin's own accepted-key lists
+(`ASSEMBLE_BOOLS`, `ASSEMBLE_SINGLE`, `ASSEMBLE_CUMULATIVE` in `Model.js`) and
+fails if a template sets a key the panel refuses. The package ships its
+LICENSE. The panel can promote since dd9e89c: `p` on a row copies a
+`programs.nixarchy.services.boxes.machines.<name>` snippet, which is what the
+retired `nixarchy box promote` printed. That was the last thing #801 wanted
+from this side, and #801 has since retired the command.
+
+Measured at dd9e89c (2026-09-20): the plugin output is **131 KiB**. The source
+tree on the ISO is **2.9 MiB**, mostly its docs site's screenshots.
+
+**Bumping the pin:**
+
+1. Pick the commit on `main` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-distrobox/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches
+   `nixarchy-distrobox` alone.
+3. The manifest id must still be `nixarchy.distrobox`, and
+   `.barWidget.defaults.templatesFile` must still be the setting's key.
+   `checks.options` fails if either moved.
+4. Build `checks.options` (the accepted-key read) and `checks.menu-verbs`.
+
+### The MicroVMs panel, on by default (#766)
+
+```nix
+nixarchy-microvm = {
+```
+
+The fourth default plugin, and the Sandbox group now: its five child rows are
+gone (each called a verb with no name, #781). The panel lists both kinds of
+VM in one place: disposable ones from `nixarchy vm`, and permanent ones from
+`programs.nixarchy.services.microvm.machines`. It drives `nixarchy vm`
+through argv arrays in `Model.js`, and reads what the CLI can do from
+`nixarchy vm help` (the `--detach`, `console` and `set-template` lines, #762).
+So `checks.menu-verbs` checks every verb the pinned `Model.js` runs against
+the CLI's own dispatch. Its permanent-VM features call nixarchy.pkg's script by
+path (`Model.js:988`), and nixarchy.pkg is a default too.
+
+Upstream's Home Manager module is **not** imported: its `microvm-binds.lua`
+would duplicate the seeded Super+Alt+V. The package output ships its LICENSE.
+
+Measured at 481e6c5 (2026-09-19): the plugin output is **145 KiB**, and the
+source tree on the ISO is **921 KiB**. It needs no packages the reference
+system lacks.
+
+**Bumping the pin:**
+
+1. Pick the commit on `main` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-microvm/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches
+   `nixarchy-microvm` alone, and `follows` keeps it on our nixpkgs.
+3. The manifest id must still be `nixarchy.microvm`.
+4. Build `checks.menu-verbs`: every `nixarchy-vm <verb>` the new `Model.js`
+   runs must be one the CLI accepts. Re-check `nixarchy vm help` against the
+   three capability regexes in `Model.js` if either side reworded them.
+5. Build `checks.options` and `checks.plugin`.
+
 <a id="221-222"></a>
 ### #221/#222
 
@@ -575,21 +831,29 @@ the question "what did this Omarchy release add and drop" already has
 an answer here, and two of them would disagree eventually.
 
 <a id="nix-run-devenv-presets-scaffolds-every-preset-in"></a>
-### `nix run .#devenv-presets` -- scaffolds every preset in
+### `nix run .#devenv-presets` -- every template the plugin ships
 
 ```nix
-devenv-presets =
+devenv-presets = pkgsFor.${system}.writeShellApplication {
 ```
 
-`nix run .#devenv-presets` -- scaffolds every preset in
-data/devenv-presets.nix with the real `nixarchy dev init`, then asks a
-real devenv to evaluate what it wrote.
+`nix run .#devenv-presets` scaffolds the eight templates this repo used to
+carry -- go, jupyter, ml, node, python, react, rust, typescript -- with a real
+devenv, and asks devenv to evaluate what it wrote. Since #802 the catalogue and
+the scaffolder live in nixarchy-devenv, so this runs **the plugin's own
+`templates-check` app** over those ids rather than a copy of the proof.
 
-This is the whole safety net under that catalogue. `lines` is a
-string, so a preset that names an option devenv renamed is a valid Nix
-file and a broken project, and nothing in `nix flake check` would ever
-say so. It runs the command rather than reproducing what it does,
-because a check that scaffolds its own devenv.nix tests a copy.
+**The name is fixed.** `devenv-presets` is a required status check on `main`,
+and `build.yml`'s job of that name runs this attribute. Renaming either would
+be a workflow change and a branch-protection change, which are a human's
+(AGENTS.md 4 and 11) -- so the attribute keeps the name and changes what it
+runs. That is also why the check's scope stayed at the eight: the plugin's
+other templates are its own CI's business, and its `cloud` generator needs the
+network at create time.
+
+This is still the whole safety net under a catalogue of strings. `lines` is a
+string, so a template naming an option devenv renamed is a valid Nix file and a
+broken project, and nothing in `nix flake check` would ever say so.
 
 NOT in `checks`, and that is not an oversight. #150 proposed it as one
 on the reasoning that a full `devenv shell` needs the network but
@@ -601,6 +865,14 @@ github:cachix/devenv` fails with `allow-import-from-derivation is
 disabled` before it prints anything. A sandboxed derivation has
 neither, so `checks.devenv-presets` could not run at all. A workflow
 job that has a network does, and build.yml has one.
+
+**What the old runner got wrong.** It moved `HOME` into a temporary directory
+but inherited `XDG_DATA_HOME`, and devenv keeps its trust database at
+`$XDG_DATA_HOME/devenv/allowed`. Every run therefore wrote its throwaway
+scaffolds into the trust list of whoever ran it: 80 dead entries on p620, all
+`vmtest/tmp/tmp.*/<preset>`. The plugin's check puts `HOME`, every `XDG_*` path
+and `DEVENV_HOME` inside one temporary root, and compares the caller's allow
+list checksum before and after, failing if it moved.
 
 <a id="screencasts-of-a-real-session-scene-by-scene-see"></a>
 ### Screencasts of a real session, scene by scene -- see
@@ -774,6 +1046,35 @@ a restart rather than being re-downloaded every time.
 It writes nixarchy-vm-big.qcow2 into the working directory and REUSES
 it, which is the point here and is exactly what .#vm avoids. Delete
 that file to start clean.
+
+**This is the VM you keep** (#817). Not only the model VM: it is the
+one to develop and test features in, because it is the only one whose
+state survives. So it also turns on podman and boxes, which the smoke
+test does not -- nixarchy.podman and nixarchy.distrobox are gated on
+those services, and with them off the two panels most worth trying by
+hand are invisible. It now resolves seven default plugins where .#vm
+resolves five.
+
+Keep the qcow2 under /mnt/data/vmtest/, never /tmp: that is a 32GB
+tmpfs and a VM disk there competes with the machine's RAM and loses
+quietly.
+
+**Rebuild it monthly:**
+
+  rm nixarchy-vm-big.qcow2 && nix run .#vm-big
+
+Monthly rather than "when it misbehaves", because the failure a stale
+disk causes is one you do not notice. That is not hypothetical, and it
+is why the other VM has no disk at all: Omarchy persists every
+notification under ~/.local/state/omarchy/notifications/history/ and
+its shell replays that directory on start, so failures already fixed
+in the package kept reappearing on screen from an old disk. .#vm's
+diskImage = null is load-bearing (vm/configuration.nix), and the
+obligation it hands over is stated there too -- set a path and you own
+clearing it. This is that obligation, written down and given a date.
+
+Boxes pulls images, so a vm-big run offline has a Distrobox panel that
+lists templates and cannot fetch one. Honest behaviour, not a fault.
 
 <a id="one-module-that-imports-the-machines-own-two-rathe"></a>
 ### One module that imports the machine's own two, rather than two

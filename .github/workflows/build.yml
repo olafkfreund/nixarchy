@@ -306,7 +306,10 @@ jobs:
       #
       # So name what to push rather than inferring it.
       - name: Push the Omarchy closure to cachix
+        # A slow cache is not an error, so continue-on-error alone would let it
+        # spend the job's timeout and cancel every check after it (#883).
         continue-on-error: true
+        timeout-minutes: 5
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
@@ -728,6 +731,17 @@ jobs:
           # matching a `/manual/` prefix like the two above.
           index=$(grep -oE '\]\([a-z-]+(#[a-z-]*)?\)' docs/manual/index.md |
             sed 's/](//;s/)//;s/#.*//' | sort -u)
+          # The FOURTH hand-maintained index of the same pages (#831), and the
+          # one nothing checked: README linked 19 of 33, and the 13 it named
+          # nowhere included plugins.md -- the site's own hub for the eight
+          # panels README lists row by row.
+          #
+          # One spelling, on purpose. README used both a relative path and the
+          # published URL; #831 normalised it on the URL, because that is what
+          # a reader on github.com can click through to the rendered page, and
+          # because a pattern per spelling is how this grep would rot.
+          readme=$(grep -oE 'nixarchy/manual/[a-z-]+' README.md |
+            sed 's|.*manual/||' | sort -u)
           rc=0
           for n in $(comm -23 <(echo "$pages") <(echo "$nav") || true); do
             echo "::error::docs/manual/$n.md is published but not in the docs/_config.yml sidebar"
@@ -743,8 +757,39 @@ jobs:
             echo "::error::docs/manual/$n.md is published but not linked from docs/manual/index.md"
             rc=1
           done
+          for n in $(comm -23 <(echo "$pages") <(echo "$readme") || true); do
+            echo "::error::docs/manual/$n.md is published but not linked from README.md"
+            rc=1
+          done
           [ $rc -eq 0 ] || exit 1
-          echo "every manual page is in the sidebar, in llms.txt and in the manual index"
+          echo "every manual page is in the sidebar, in llms.txt, in the manual index and in README"
+
+      # A count in readme-counts.sh says how many plugins ship by default; this
+      # says WHICH one the manual forgot. The table lacked Dev environments for
+      # as long as it had been a default (#856). The module id is the only name
+      # both sides share, so each row carries it as a comment inside its last
+      # cell -- after the final pipe, kramdown renders an extra column.
+      - name: Every default plugin has a row in the manual
+        run: |
+          ids=$(awk '/^      defaultPluginSet = \{/{f=1} f; f && /^      \};/{exit}' modules/home.nix |
+            grep -oE 'id = "[^"]+"' | sed 's/id = "//;s/"$//' | sort -u || true)
+          if [ "$(printf '%s' "$ids" | grep -c . || true)" -lt 5 ]; then
+            echo "::error::fewer than five ids under 'defaultPluginSet = {' in modules/home.nix -- the block moved; refusing"
+            exit 1
+          fi
+          rows=$(grep -oE '<!-- [a-z][a-z.-]+ -->' docs/manual/plugins.md |
+            sed 's/<!-- //;s/ -->//' | sort -u)
+          rc=0
+          for n in $(comm -23 <(echo "$ids") <(echo "$rows") || true); do
+            echo "::error::$n is a default plugin but has no row in docs/manual/plugins.md"
+            rc=1
+          done
+          for n in $(comm -13 <(echo "$ids") <(echo "$rows") || true); do
+            echo "::error::docs/manual/plugins.md has a row for $n, which is not a default plugin"
+            rc=1
+          done
+          [ $rc -eq 0 ] || exit 1
+          echo "every default plugin has a row in the manual, and every row is a default"
 
       - name: Verify shebangs were patched
         run: |
@@ -1147,6 +1192,7 @@ jobs:
         # Nowhere else serves them. Unfree ones are not on the allowlist: this
         # cache is public, and pushing them would be redistributing them.
         continue-on-error: true
+        timeout-minutes: 5
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
@@ -1251,9 +1297,11 @@ jobs:
       # Without this the allowlist entry #739 added is never pushed, the cache
       # stays empty, and every run compiles 447 crates again (#738). Free in
       # this job, which builds it either way; the run after substitutes it.
-      - name: Build hypr-rdp, which nothing above this line needs
+      # The box image also needs realizing before this push on a cold store;
+      # its tests run later, and cachix-push deliberately does not build (#788).
+      - name: Build the allowlisted tools and box image before publishing
         if: needs.gate.outputs.relevant == 'true'
-        run: nix build --no-link .#hypr-rdp
+        run: nix build --no-link .#hypr-rdp .#box-test-image
 
       # The two closures that decide whether somebody's rebuild downloads or
       # compiles. Same reason as the omarchy push above (#439); this is the
@@ -1261,6 +1309,7 @@ jobs:
       - name: Push the system closures to cachix
         if: needs.gate.outputs.relevant == 'true'
         continue-on-error: true
+        timeout-minutes: 5
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
@@ -1282,6 +1331,7 @@ jobs:
         # `nixarchy vm run` downloads the KVM runner; checks.microvm-boot the
         # -tcg one. main only -- cachix-push.sh says so and exits 0 elsewhere.
         continue-on-error: true
+        timeout-minutes: 5
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
@@ -1292,8 +1342,13 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         # checks.box-template: the catalogue INI names a real, pinned image
         # (pulled as a fixed-output derivation, network allowed because the
-        # hash -- not the sandbox -- makes it reproducible), and nixarchy
-        # box never resolves distrobox through a /nix/store path.
+        # hash -- not the sandbox -- makes it reproducible).
+        #
+        # It no longer greps a built script for a baked /nix/store distrobox
+        # path: #801 retired `nixarchy box`, and the panel that replaced it is
+        # QML with no generated script to grep. That assertion was lost rather
+        # than moved -- tests/AGENTS.md names the gap, and checks.box-boot
+        # observes the same property on a real container instead.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.box-template
 
       - name: Drive a session and the app-selection loop
@@ -1309,6 +1364,8 @@ jobs:
       # gap they exist to close stayed open a second time.
       - name: Check every option both ways
         if: needs.gate.outputs.relevant == 'true'
+        env:
+          NIX_SHOW_STATS: "1"
         # Evaluated, not booted -- each option here does its work by putting a
         # package in a list, so evaluation is where the answer is. Not cheap
         # though, and the expensive axis is MEMORY: a developer machine
@@ -1355,6 +1412,17 @@ jobs:
               echo "| peak RSS | $(( ${peak:-0} / 1024 )) MiB of 16384 MiB |"
               echo "| wall clock | ${wall:-unknown} |"
             } >> "$GITHUB_STEP_SUMMARY"
+            # Loud before it is fatal (#747). Past 16 GB the runner is killed,
+            # and the job reports `cancelled` with no failed step -- which reads
+            # like an eviction or a timeout (AGENTS.md section 6). Six readings
+            # on main sat at 11.5-12.2 GB, so 14 GB is a trend, not noise. A
+            # warning, never a failure: the check itself has already passed.
+            peak_mib=$(( ${peak:-0} / 1024 ))
+            if [ "$peak_mib" -ge 14336 ]; then
+              echo "::warning::checks.options peaked at $peak_mib MiB of 16384," \
+                "within 2 GB of this runner's limit -- past it the job reports" \
+                "cancelled with no failed step rather than an error (#747)."
+            fi
           else
             echo "::error::/usr/bin/time is gone from this image, so the" \
               "options memory measurement (#747) did not happen. The check" \
@@ -1377,6 +1445,10 @@ jobs:
         # .desktop, and the desktop asserted to render -- the arrangement the
         # README tells people with an existing Hyprland to use.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.coexist
+
+      - name: Failed install assertions reap unresponsive dynamic VMs
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.install-teardown
 
       - name: The installer's screens draw at every width
         if: needs.gate.outputs.relevant == 'true'
@@ -1501,8 +1573,11 @@ jobs:
       - name: Create a box offline, and pin what enter does without a network
         if: needs.gate.outputs.relevant == 'true'
         # checks.box-boot: the pinned image is preloaded from the store
-        # (dockerTools.pullImage is fixed-output), `nixarchy box create` runs
-        # end to end as a rootless user, the recorded distrobox-init mount is
+        # (dockerTools.pullImage is fixed-output), the argv the Distrobox
+        # panel builds -- `distrobox create --yes --name <name> --image
+        # <image>` under `env DBX_CONTAINER_MANAGER=podman`, with the image
+        # read out of the generated INI -- runs end to end as a rootless
+        # user, the recorded distrobox-init mount is
         # not a /nix/store path (nixpkgs#478154), and the first offline
         # `distrobox enter` fails loudly at the entrypoint -- the measured
         # answer to the epic's open first-start question, asserted as

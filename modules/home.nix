@@ -263,6 +263,52 @@ let
   # the next person copying this line will be packaging something that does.
   omarchyNvimConfig = (pkgs.extend inputs.self.overlays.default).omarchy-nvim-config;
 
+  # The GitLab pipelines panel as nixarchy installs it (#770): upstream's copy
+  # plus `menu.managed`, which tells its menu.py that nixarchy owns the rows,
+  # and the MIT notice from the source tree when upstream's package omits it.
+  gitlabPipelines = pkgs.runCommand "nixarchy-gltui" { } ''
+    cp -r ${inputs.nixarchy-gltui.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    touch $out/menu.managed
+    [ -f $out/LICENSE ] || cp ${inputs.nixarchy-gltui}/LICENSE $out/LICENSE
+  '';
+
+  # The GitHub Actions panel, the same way (#772): gltui is its fork.
+  githubActions = pkgs.runCommand "nixarchy-ghtui" { } ''
+    cp -r ${inputs.nixarchy-ghtui.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    touch $out/menu.managed
+    [ -f $out/LICENSE ] || cp ${inputs.nixarchy-ghtui}/LICENSE $out/LICENSE
+  '';
+
+  # The Distrobox panel as nixarchy installs it (#766 PR D): upstream's copy with
+  # its manifest's default templatesFile pointed at the file boxes.nix writes
+  # from data/box-templates.nix. A default, not a setting: a path the user sets
+  # in Setup > Plugins still wins, and nothing here writes shell.json.
+  distroboxPanel = pkgs.runCommand "nixarchy-distrobox" { nativeBuildInputs = [ pkgs.jq ]; } ''
+    cp -r ${inputs.nixarchy-distrobox.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    jq '.barWidget.defaults.templatesFile = "/etc/nixarchy/box-templates.ini"' \
+      $out/manifest.json > manifest.json
+    mv manifest.json $out/manifest.json
+  '';
+
+  # The herdr sessions widget as nixarchy installs it (#771). Upstream has no
+  # flake, so this is the package: the plugin without its design documents, and
+  # its scripts' `#!/bin/bash` pointed into the store -- they run by path, and
+  # today that only works through envfs.
+  herdrSessions = pkgs.runCommand "nixarchy-herdr" { } ''
+    cp -r ${inputs.nixarchy-herdr} $out
+    chmod -R u+w $out
+    rm -rf $out/intent $out/spec $out/plan $out/tests $out/preview.png
+    chmod +x $out/bin/*
+    patchShebangs $out/bin
+    grep -q "Jankees van Woezik" $out/LICENSE && grep -q olafkfreund $out/LICENSE || {
+      echo "nixarchy-herdr: LICENSE must keep both copyright holders" >&2
+      exit 1
+    }
+  '';
+
   # Omarchy's Neovim configuration, appended to the seed activation rather than
   # wrapped around it: this is a string the activation interpolates, so adding
   # it costs the diff it is worth instead of re-indenting three hundred lines
@@ -430,7 +476,16 @@ in
   # It is also why no row was added to data/services.nix. That catalogue
   # generates ~/.config/nixarchy/services.nix, which is a NixOS file; nixi is
   # a home-manager module and there is no NixOS option for a row to write.
-  imports = [ inputs.nixi.homeModules.default ];
+  imports = [
+    inputs.nixi.homeModules.default
+    # Voice (#774). Imported on every machine, enabled on none: its options
+    # default off upstream, so this costs an evaluation and nothing else until
+    # somebody picks Voice out of Install > Search and their own flake sets
+    # programs.omarchy-voice.enable. It is deliberately NOT in
+    # defaultPluginSet -- about a gigabyte with whisper and the Piper models,
+    # which are in the package, so an off switch would not shrink anything.
+    inputs.nixarchy-voice.homeModules.default
+  ];
 
   options.programs.nixarchy = {
     enable = lib.mkEnableOption "the Omarchy user session";
@@ -565,15 +620,21 @@ in
       type = lib.types.attrsOf lib.types.bool;
       default = {
         pkg = true;
+        gitlab = true;
+        github = true;
+        herdr = true;
         podman = true;
         distrobox = true;
         microvm = true;
+        devenv = true;
       };
       example = lib.literalExpression "{ podman = false; }";
       description = ''
         nixarchy's own shell plugins, installed and turned on for you: the
-        package manager panel always, podman when podman is on, distrobox when
-        Boxes is on, microvms always. A name left out counts as on.
+        package manager, GitLab pipelines, GitHub Actions and herdr panels
+        always, podman when podman is on, distrobox when Boxes is on,
+        microvms always, dev environments when the devenv service is on. A
+        name left out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -596,6 +657,12 @@ in
               type = lib.types.bool;
               default = true;
             };
+            # Runtime tools the plugin shells out to (glab, gh, ...), on the
+            # session PATH wherever the plugin itself is installed (#770).
+            packages = lib.mkOption {
+              type = lib.types.listOf lib.types.package;
+              default = [ ];
+            };
           };
         }
       );
@@ -614,6 +681,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+
     # THE ONE LINE. The guide ships on, and this is where that is decided:
     # `false` here takes it off every nixarchy desktop, and mkDefault means a
     # user's own `services.nixi.enable = false` outranks us without needing
@@ -764,7 +832,15 @@ in
       packages = [
         cfg.package
       ]
-      ++ lib.optionals (!(osConfig.programs.nixarchy.enable or false)) cfg.package.passthru.runtimeDeps;
+      ++ lib.optionals (!(osConfig.programs.nixarchy.enable or false)) cfg.package.passthru.runtimeDeps
+      # lowPrio, because these arrive without being asked for: the default
+      # plugins are on from the first login, and their runtime tools are
+      # ordinary things a user may already keep -- gh, glab, jq, python3. A
+      # user's own `python3.withPackages` beside a panel's bare python3 is two
+      # interpreters in one profile, which buildEnv refuses over bin/idle3;
+      # home-manager-path fails and the whole closure with it, naming idle3 and
+      # nothing of ours (#809). Whatever the user installed themselves wins.
+      ++ map lib.lowPrio (lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults));
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 
@@ -1475,10 +1551,86 @@ in
           ''
         );
 
-    # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
-    programs.nixarchy.plugins = lib.mapAttrs' (
-      _: p: lib.nameValuePair p.id { src = lib.mkDefault p.src; }
-    ) resolvedDefaults;
+    programs.nixarchy = {
+      defaultPluginSet = {
+        # The package manager panel, on wherever nixarchy is (#766).
+        pkg = {
+          id = "nixarchy.pkg";
+          src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+        # Wherever podman is on -- the Services row or Boxes -- and nowhere
+        # else: a podman panel with no podman behind it is a broken panel.
+        # `or false` also covers standalone Home Manager, whose osConfig is null.
+        podman = {
+          id = "nixarchy.podman";
+          src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          gate = osConfig.virtualisation.podman.enable or false;
+        };
+        # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
+        # drives and the python its actions.py runs on (#770).
+        gitlab = {
+          id = "olafkfreund.gitlab-pipelines";
+          src = gitlabPipelines;
+          packages = [
+            pkgs.glab
+            pkgs.python3
+            pkgs.xdg-utils
+          ];
+        };
+        # The GitHub Actions panel, the same way, with gh (#772).
+        github = {
+          id = "olafkfreund.github-actions";
+          src = githubActions;
+          packages = [
+            pkgs.gh
+            pkgs.python3
+            pkgs.xdg-utils
+          ];
+        };
+        # The herdr sessions widget, with herdr itself and the tools its
+        # herdr-sessions script calls (#771).
+        herdr = {
+          id = "nixarchy.herdr";
+          src = herdrSessions;
+          packages = [
+            # Stable lacks herdr. Prefer the consumer's CLI when it exists;
+            # only the missing standalone tool comes from our pinned nixpkgs.
+            (pkgs.herdr or inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.herdr)
+            pkgs.jq
+            pkgs.iproute2
+          ];
+        };
+        # The Distrobox panel wherever Boxes are on, which is also where
+        # distrobox itself and the templates file are (#766 PR D).
+        distrobox = {
+          id = "nixarchy.distrobox";
+          src = distroboxPanel;
+          gate = osConfig.programs.nixarchy.services.boxes.enable or false;
+        };
+        # The MicroVMs panel, on wherever nixarchy is: gated like the Sandbox
+        # rows it replaces, whose `nixarchy-vm --check` always succeeds (#766).
+        microvm = {
+          id = "nixarchy.microvm";
+          src = inputs.nixarchy-microvm.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+        # The Dev environments panel wherever devenv is, the way Podman
+        # follows podman (#802): the panel lists, creates and enters devenv
+        # projects, and with no devenv behind it there is nothing to list and
+        # nothing it could create. `packages` carries the CLI it drives --
+        # `nixarchy-devenv`, which is also what `nixarchy dev` dispatches to.
+        devenv = {
+          id = "nixarchy.devenv";
+          src = inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+          gate = osConfig.programs.nixarchy.services.devenv.enable or false;
+          packages = [ inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.cli ];
+        };
+      };
+
+      # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
+      plugins = lib.mapAttrs' (
+        _: p: lib.nameValuePair p.id { src = lib.mkDefault p.src; }
+      ) resolvedDefaults;
+    };
 
     # Turned on through the running shell's own writer, never by editing
     # shell.json: the shell rewrites that whole file from memory, so a second
@@ -1571,29 +1723,41 @@ in
     # itself, installed by modules/services/boxes.nix). `machines` came over
     # from the NixOS side above; everything else here is what turns it into
     # containers Home Manager's own module actually writes.
-    programs.distrobox = lib.mkIf boxes.enable {
-      # Scalars, so mkDefault throughout -- see the header of
-      # modules/services/default.nix. This is Home Manager's option, not
-      # ours, but the same Mode A reasoning holds: someone who already set
-      # programs.distrobox by hand in their own home-manager config keeps
-      # their definition, and this yields to it. `containers` is the one
-      # attrset here and stays plain assignment for the same reason -- see
-      # that file's header for why mkDefault on a merging type is a bug
-      # rather than a courtesy.
-      enable = lib.mkDefault true;
-      containers = boxes.machines;
+    # One `programs` block, not three keys. statix refuses a third top-level
+    # programs.* assignment as a repeated key -- main has two and is clean --
+    # so voice's switch nests here beside distrobox's.
+    #
+    # The bridge itself (#774): the machine's switch, read the way every gated
+    # default reads one. Voice's own settings are left alone; desktop control,
+    # the wake word and the notification log all start off upstream, and
+    # restating them would be a second place to change.
+    programs = {
+      omarchy-voice.enable = lib.mkDefault (osConfig.programs.nixarchy.voice.enable or false);
 
-      # Never `pkgs.distrobox` -- that would go through the overlay/plain
-      # nixpkgs pkgs this file already has and add a SECOND profile entry for
-      # the same package modules/services/boxes.nix already put in
-      # environment.systemPackages. `null` here means Home Manager's module
-      # installs nothing: one copy of distrobox, reached the way its own
-      # comment requires -- by bare name, through
-      # /run/current-system/sw/bin, never a store path.
-      package = lib.mkDefault null;
+      distrobox = lib.mkIf boxes.enable {
+        # Scalars, so mkDefault throughout -- see the header of
+        # modules/services/default.nix. This is Home Manager's option, not
+        # ours, but the same Mode A reasoning holds: someone who already set
+        # programs.distrobox by hand in their own home-manager config keeps
+        # their definition, and this yields to it. `containers` is the one
+        # attrset here and stays plain assignment for the same reason -- see
+        # that file's header for why mkDefault on a merging type is a bug
+        # rather than a courtesy.
+        enable = lib.mkDefault true;
+        containers = boxes.machines;
 
-      # Why: modules/AGENTS.md#left-at-home-managers-own-default-everywhere-else-
-      enableSystemdUnit = lib.mkDefault false;
+        # Never `pkgs.distrobox` -- that would go through the overlay/plain
+        # nixpkgs pkgs this file already has and add a SECOND profile entry for
+        # the same package modules/services/boxes.nix already put in
+        # environment.systemPackages. `null` here means Home Manager's module
+        # installs nothing: one copy of distrobox, reached the way its own
+        # comment requires -- by bare name, through
+        # /run/current-system/sw/bin, never a store path.
+        package = lib.mkDefault null;
+
+        # Why: modules/AGENTS.md#left-at-home-managers-own-default-everywhere-else-
+        enableSystemdUnit = lib.mkDefault false;
+      };
     };
   };
 }

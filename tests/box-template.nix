@@ -1,4 +1,4 @@
-# Reads the catalogue and `nixarchy box` structurally, without the one step
+# Reads the catalogue structurally, without the one step
 # that can fail offline: the first-start package-manager update inside a
 # freshly created box (`pacman -Syy` / `apt-get update`). That is
 # `checks.box-boot`'s job, deliberately left to a later, CI-gate issue
@@ -17,35 +17,36 @@
 #     registry-1.docker.io, the same way a `sha256` for `fetchurl` is.
 #   * each template's raw `ini` names the same image the pin was taken
 #     against -- a structural cross-check, not a build of the container.
-#   * `nixarchy box`'s built script never resolves `distrobox` through a
-#     literal /nix/store path, and never lists it in a derivation that would
-#     put one on PATH -- grepping the built script is the cheapest form of
-#     the assertion pkgs/box.nix's header makes in prose.
+#
+# What it no longer proves: `nixarchy box` is retired (#801), and the
+# /nix/store-path assertion over its built script went with it. The panel
+# that replaced it has no generated script to grep. See the body for why
+# that has no equivalent here, and tests/AGENTS.md for the gap it leaves.
 {
   pkgs,
   lib,
   templates,
-  nixarchyBox,
   # name -> { imageName, imageDigest, sha256 } -- see the header. A template
   # with no entry here fails loudly (missingPins below) rather than being
   # silently skipped, so #259 adding `debian` cannot forget this half.
   imagePins,
+  images,
+  # packages.box-test-image: the one cache-allowlist entry that has to carry
+  # every pinned image, byte for byte the ones checked here (#800).
+  cached,
 }:
 let
   names = builtins.attrNames templates;
   missingPins = lib.subtractLists (builtins.attrNames imagePins) names;
-
-  pulledImages = lib.mapAttrs (
-    _: pin:
-    pkgs.dockerTools.pullImage {
-      inherit (pin) imageName imageDigest;
-      finalImageTag = pin.tag or "latest";
-      inherit (pin) sha256;
-    }
-  ) imagePins;
+  uncached = builtins.filter (
+    n: !(cached.images ? ${n}) || cached.images.${n}.outPath != images.${n}.outPath
+  ) (builtins.attrNames images);
 in
 assert
   missingPins == [ ] || throw "checks.box-template: no imagePins entry for: ${toString missingPins}";
+assert
+  uncached == [ ]
+  || throw "checks.box-template: box-test-image does not carry the pinned image for: ${toString uncached}";
 pkgs.runCommand "nixarchy-box-template"
   {
     nativeBuildInputs = [ pkgs.gnugrep ];
@@ -64,39 +65,57 @@ pkgs.runCommand "nixarchy-box-template"
         fail=1
       fi
 
-      # The pin taken for this template is a real image name -- a
-      # structural cross-check that the pin was not taken against the wrong
-      # template.
-      if ! <<<"$ini" grep -q ${lib.escapeShellArg imagePins.${name}.imageName}; then
-        echo "${name}: ini does not mention pinned image '${imagePins.${name}.imageName}'" >&2
-        fail=1
-      fi
+      # The INI names the image the pin was taken against -- NAME AND TAG,
+      # anchored to the image= line.
+      #
+      # This used to be `grep -q <imageName>`: unanchored, and the bare name
+      # only. Changing just the tag left it green (#835), so a catalogue that
+      # asked for an image the fixed-output pin had never fetched looked
+      # correct here and failed later in checks.box-boot, which needs
+      # /dev/kvm. That inverts what the two checks are for -- this one is the
+      # cheap structural half that runs on every pull request.
+      #
+      # The registry prefix is deliberately not pinned: what matters is that
+      # the INI ends in the name:tag this template was pinned against, so a
+      # template that moves to another registry is a decision somebody makes,
+      # not a check that breaks.
+      want=${lib.escapeShellArg "${imagePins.${name}.imageName}:${imagePins.${name}.tag or "latest"}"}
+      have=$(<<<"$ini" sed -n 's/^image=//p' | head -1)
+      case "$have" in
+        */"$want" | "$want") ;;
+        *)
+          echo "${name}: ini names '$have', but the pin is for '$want'" >&2
+          fail=1
+          ;;
+      esac
 
       # The pinned image is a fixed-output derivation that actually landed
       # in the store -- non-empty tarball, no container ever started.
-      size=$(stat -c%s ${pulledImages.${name}} 2>/dev/null || echo 0)
+      size=$(stat -c%s ${images.${name}} 2>/dev/null || echo 0)
       if [ "$size" -le 0 ]; then
-        echo "${name}: pulled image ${pulledImages.${name}} is empty or missing" >&2
+        echo "${name}: pulled image ${images.${name}} is empty or missing" >&2
         fail=1
       fi
     '') names}
 
-    echo "== nixarchy box: no /nix/store distrobox path =="
-
-    # Breaking this looks like adding `runtimeInputs = [ pkgs.distrobox ]`
-    # back to pkgs/box.nix, or calling it via `''${pkgs.distrobox}/bin/...`.
-    # Either would put a literal /nix/store/*-distrobox-*/bin path into the
-    # built script, either on the PATH= line writeShellApplication generates
-    # or directly in the text -- one grep catches both.
-    if grep -oE '/nix/store/[^ "]*-distrobox-[^ "/]*' ${nixarchyBox}/bin/nixarchy-box; then
-      echo "nixarchy-box resolves distrobox through a /nix/store path -- see pkgs/box.nix's header" >&2
-      fail=1
-    else
-      echo "nixarchy-box calls distrobox only by bare name"
-    fi
+    # What this check no longer makes, and why there is no replacement.
+    #
+    # `nixarchy box` was a writeShellApplication, so a stray
+    # `runtimeInputs = [ pkgs.distrobox ]` would have baked a literal
+    # /nix/store/*-distrobox-*/bin path into the generated script, and one
+    # grep over that script caught it. The Distrobox panel that replaces it
+    # is QML, pinned by rev, and resolves `distrobox` through PATH by
+    # construction -- there is no generated script here to grep, so this
+    # assertion has no panel equivalent rather than a moved one.
+    #
+    # The property itself still matters and is still covered, one layer up:
+    # modules/services/boxes.nix's header states it (nixpkgs#478154) and
+    # checks.box-boot observes it on a real container's recorded
+    # distrobox-init mount, which is the stronger of the two measurements.
+    # What is lost is the cheap static half that ran on every pull request.
+    # tests/AGENTS.md names that gap.
 
     [ "$fail" -eq 0 ] || exit 1
-    echo "every catalogue template names a real, pinned image, and" \
-         "nixarchy box never bakes a /nix/store path to distrobox."
+    echo "every catalogue template names a real, pinned image."
     touch $out
   ''

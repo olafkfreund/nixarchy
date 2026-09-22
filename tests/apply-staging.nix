@@ -52,11 +52,14 @@ pkgs.runCommand "nixarchy-apply-staging"
     EOF
 
     # A fake nh: apply ends by rebuilding, which this check has no business
-    # doing. Everything asserted here happens before that.
-    mkdir -p "$PWD/stub"
-    printf '#!${pkgs.runtimeShell}\nexit 0\n' > "$PWD/stub/nh"
-    chmod +x "$PWD/stub/nh"
-    export PATH=$PWD/stub:$PATH
+    # doing. An exported FUNCTION, not a file on PATH: writeShellApplication
+    # prepends its runtimeInputs, so the real nh would shadow any stub file.
+    # Bash resolves functions before PATH. It records each call and returns
+    # $NH_STUB_RC, so the cases below can tell "switched" from "declined".
+    nhcalls=$PWD/nh.calls
+    nh() { echo "$*" >> "$nhcalls"; return "''${NH_STUB_RC:-0}"; }
+    export nhcalls
+    export -f nh
 
     # A flake with one tracked file of the user's own, so "did apply stage
     # anything it should not have" is answerable.
@@ -112,6 +115,105 @@ pkgs.runCommand "nixarchy-apply-staging"
       ok "a second apply leaves it staged"
     else
       bad "a second apply unstaged the copy"
+    fi
+
+    # ---- answers as flags (#765 PR 2) -----------------------------------
+    # A panel or script has no terminal; it must be able to say "switch" and
+    # "no preview" without feeding answers on stdin, and EOF must still decline.
+    calls() { [ -s "$PWD/nh.calls" ]; }
+
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root $apply --yes --no-preview </dev/null >/dev/null 2>&1 || rc=$?
+    if calls && [ "$rc" -eq 0 ]; then
+      ok "--yes --no-preview switches with no stdin"
+    else
+      bad "--yes --no-preview did not switch (exit $rc, nh calls: $(cat "$PWD/nh.calls" 2>/dev/null))"
+    fi
+
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root $apply </dev/null >/dev/null 2>&1 || rc=$?
+    if calls; then
+      bad "EOF on stdin switched; it must decline"
+    else
+      ok "EOF on stdin still declines"
+    fi
+
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root $apply --frobnicate </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] && ! calls; then
+      ok "an unknown flag exits 2 and never switches"
+    else
+      bad "an unknown flag exited $rc (want 2), nh calls: $(cat "$PWD/nh.calls" 2>/dev/null)"
+    fi
+
+    # A failed rebuild keeps nh's exit code and makes no claim about what
+    # changed: nh activates before it sets the profile and the bootloader, so
+    # it can fail with the live system already switched. It points at rollback.
+    rm -f "$PWD/nh.calls"; rc=0
+    NIXARCHY_FLAKE=$PWD/root NH_STUB_RC=3 $apply --yes --no-preview </dev/null >"$PWD/fail.out" 2>&1 || rc=$?
+    if [ "$rc" -eq 3 ] && grep -q "nixarchy rollback" "$PWD/fail.out" && ! grep -q "Nothing changed" "$PWD/fail.out"; then
+      ok "a failed rebuild exits with nh's code and points at rollback"
+    else
+      bad "a failed rebuild exited $rc (want 3), or claimed nothing changed, or named no rollback: $(tail -6 "$PWD/fail.out")"
+    fi
+
+    # ---- detached, as a supervised user unit (#765 PR 3) -------------------
+    # Stubbed like nh, and for the same reason. `systemctl show` answers with
+    # $UNIT_STATE as the unit's SubState; everything else is recorded.
+    sdcalls=$PWD/sdrun.calls sccalls=$PWD/sctl.calls
+    systemd-run() { echo "$*" >> "$sdcalls"; }
+    systemctl() {
+      case " $* " in
+        *" show "*) echo "''${UNIT_STATE:-}" ;;
+        *) echo "$*" >> "$sccalls" ;;
+      esac
+    }
+    export sdcalls sccalls
+    export -f systemd-run systemctl
+    fresh() { rm -f "$PWD/nh.calls" "$sdcalls" "$sccalls"; rc=0; }
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root $apply --detach --yes </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && ! calls \
+      && grep -q -- "--unit=nixarchy-rebuild" "$sdcalls" 2>/dev/null \
+      && grep -q -- "RemainAfterExit=yes" "$sdcalls" \
+      && ! grep -q -- "--collect" "$sdcalls" \
+      && grep -q -- "--yes --no-preview" "$sdcalls"; then
+      ok "--detach --yes starts the nixarchy-rebuild unit and does not rebuild in-process"
+    else
+      bad "--detach --yes exited $rc; systemd-run: $(cat "$sdcalls" 2>/dev/null); nh: $(cat "$PWD/nh.calls" 2>/dev/null)"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root UNIT_STATE=running $apply --detach --yes </dev/null >"$PWD/busy.out" 2>&1 || rc=$?
+    if [ "$rc" -eq 3 ] && grep -q "already running" "$PWD/busy.out" && [ ! -s "$sdcalls" ]; then
+      ok "a detached start refuses while a rebuild is running"
+    else
+      bad "a detached start during a rebuild exited $rc (want 3): $(cat "$PWD/busy.out")"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root UNIT_STATE=exited $apply --detach --yes </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && [ -s "$sccalls" ] && [ -s "$sdcalls" ]; then
+      ok "a finished unit is cleared before the next detached start"
+    else
+      bad "a finished unit was not cleared, or no start followed (exit $rc; systemctl: $(cat "$sccalls" 2>/dev/null))"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root $apply --detach </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 2 ] && [ ! -s "$sdcalls" ]; then
+      ok "--detach without --yes exits 2: a unit has no terminal to answer"
+    else
+      bad "--detach without --yes exited $rc (want 2)"
+    fi
+
+    fresh
+    NIXARCHY_FLAKE=$PWD/root $apply --yes --no-preview </dev/null >/dev/null 2>&1 || rc=$?
+    if grep -q -- "--no-nom" "$PWD/nh.calls" 2>/dev/null; then
+      ok "off a terminal, nh runs with --no-nom"
+    else
+      bad "off a terminal nh ran without --no-nom: $(cat "$PWD/nh.calls" 2>/dev/null)"
     fi
 
     [ "$fails" -eq 0 ] || exit 1

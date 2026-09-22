@@ -19,10 +19,23 @@ failure history for its own area, and they are where the long reasoning lives:
 | `modules/AGENTS.md` | the option surface, Mode A, and what each module owns |
 | `pkgs/AGENTS.md` | the vendored tree, the patch rules, and `runtimeInputs` |
 | `tests/AGENTS.md` | what each check covers, and what only a cheap one can reach |
+| `docs/AGENTS.md` | the site, the manual's three lists, and the house style for pictures |
 | `docs/internals/flake.md` | the flake's own reasoning — inputs, the overlay, the checks |
 
-`CLAUDE.md` is a symlink to this file, because Claude Code reads `CLAUDE.md`
-and not `AGENTS.md`. Without it none of this loads.
+`CLAUDE.md` is a symlink to this file, and so is a `CLAUDE.md` beside each
+of the registers above. Claude Code has read `AGENTS.md` natively since
+v2.1.277 — but only where there is no `CLAUDE.md` at or above the working
+directory, and this repository's root has one. A root `CLAUDE.md` puts the
+whole tree in CLAUDE.md mode, so the five directory registers were reaching
+no Claude Code session at all: measured on 2.1.278, a fresh agent that read
+`tests/box-boot.nix` and `modules/services/boxes.nix` got this file and
+neither of theirs (#836).
+
+The symlinks are what make the nearest-file rule below true. Removing the
+root one would also work, by putting the tree in AGENTS.md mode — and would
+silently leave every session before v2.1.277, and every session that cannot
+fetch feature flags, with no project instructions whatsoever. Five symlinks
+need no version floor and no per-user setting.
 
 ## Write back what cost you an hour
 
@@ -313,8 +326,38 @@ Two other ways a check stops checking, both found in one week:
   is worse than a check). **Teach it the new word in the same PR** — the case
   table and every alternation that carries the old range.
 
+- **`tests/demo/`'s scenes are `packages`, not `checks`, and no workflow
+  builds any of them.** The `boxes` scene drove `nixarchy box`; #801 deleted
+  that command, and nothing went red. The scene would have gone on publishing
+  a GIF of a command that errors, with `main` green, because the only thing
+  that reads those scenes is a human running `nix run .#demo-record`. Anything
+  in there naming a command is unguarded by construction, so
+  `grep -rn '<command>' tests/demo/` belongs in every rename or deletion of a
+  user-facing command. The frame gate itself is sound -- it refused the first
+  retargeted recording because the in-box prompt had changed from
+  `omarchy@demo` to `omarchy@archlinux`, which is precisely the job it exists
+  for -- but a gate nothing runs protects nothing.
+- **A check that writes into the caller's own state is not hermetic, and
+  nothing tells you.** `nix run .#devenv-presets` scaffolded its throwaway
+  projects with a moved `HOME` — and inherited `XDG_DATA_HOME`. devenv keeps
+  its trust database at `$XDG_DATA_HOME/devenv/allowed`, so every run for a
+  year appended its temp directories to the *invoking user's* trust list: 80
+  dead entries on p620, every one `vmtest/tmp/tmp.*/<preset>`. The check
+  passed each time; it was corrupting state it was never meant to touch.
+  **Moving `HOME` is not isolation.** A tool that keeps per-user state reads
+  `XDG_*` and its own `*_HOME` first, so isolate those too — and have the
+  check *assert* the real file is untouched (a checksum before and after),
+  because that is the only part a passing run can prove (#802).
+
 ## 5. Git and flake mechanics that bite
 
+- **A heredoc inside an indented Nix string reindents the whole file.**
+  nixfmt strips a `''…''` block's common indentation, and a heredoc body has
+  to start at column zero — so one `cat <<'EOF'` added to a check's shell
+  lowered that common indent and `nix fmt` rewrote 2,600 lines of
+  `tests/options.nix` around it. The diff is noise no reviewer can read past.
+  Write the file with `printf '%s\n' 'line' 'line'` instead, and run
+  `nix fmt -- --ci` before pushing rather than after (#802).
 - **A flake in a worktree sees only tracked or staged files.** A new file you
   have not `git add`ed fails evaluation with `path '…' does not exist` — not
   "untracked", *does not exist*. This cost three separate debugging sessions
@@ -379,6 +422,19 @@ Two other ways a check stops checking, both found in one week:
   unfree" passes for the wrong reason. Found on #709, where every local
   no-unfree build had been run that way. Prefix unfree-sensitive local builds
   with `env -u NIXPKGS_ALLOW_UNFREE`, and prove the check fails first (§1).
+- **A background build's EVALUATION is not pinned to when you launched it,
+  and a later run can rebuild the stale derivation.** A VM check was started
+  in the background; the tree was then edited to set up a deliberate break
+  (§1), and the build picked up the *dirty* tree -- so it failed describing a
+  state the tree no longer had. The re-run afterwards, on a clean tree,
+  rebuilt the **same stale `.drv`** rather than re-evaluating, and failed
+  identically. Two invalid VM runs read as two real regressions. This is §5's
+  two-processes-one-worktree rule in its quiet form: no git operation is
+  involved and nothing errors. Evaluate once, visibly, before anything long
+  starts -- `nix eval --raw .#checks.x86_64-linux.<name>.drvPath`, check it is
+  the derivation you mean (`nix derivation show` and grep for the break), then
+  `nix build '<drv>^*'`. Building by attribute path is what lets a stale
+  evaluation back in.
 
 ## 6. How to run the checks, and what each one costs
 
@@ -419,7 +475,8 @@ requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
 - every `cachix-action` has `skipPush: true`, and a guard fails otherwise;
 - closures are pushed only from `main`, and only what
   `.github/scripts/cache-allowlist.sh` names, each entry with the reason someone
-  downloads it;
+  downloads it. One entry is there for availability rather than build cost:
+  the box checks' pinned base images, because Docker Hub is not ours (#788, #800);
 - check results are pushed from any ref by `cachix-push.sh --proof`, as a
   single path, which is how `build-unless-proven.sh` skips what already passed;
 - `cache-budget.sh` fails the `system` job when the allowlist would cost more
@@ -557,6 +614,22 @@ of your own footprint.
 
 Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
 
+**Two ways a local VM outlives your attention, both from 2026-09-22.**
+
+- **A wedged `nix build` looks exactly like a working one.** An
+  `install-encrypted` build was reported "still running" for hours: it had
+  printed `timeout reached; test terminating...`, then sat at 0% CPU for
+  **11h17m** against an 85-minute `globalTimeout`, holding a qemu VM while a
+  pull request's install check failed on a timing race beside it. The process
+  table said alive. `ps -o etime=,%cpu= -p <pid>` against the check's own
+  timeout, and the mtime of its log, say wedged. Killing the `nix build` does not
+  reap its VM either: a sandbox child runs as a `nixbld` user outside your
+  process group, so find it and kill it **by pid**.
+- **Never `pkill` by process name on this host.** `pkill -x qemu-system-x86`,
+  meant for one throwaway VM, also names every CI install VM on p620. It did no
+  harm only because those run as `nixbld` users and the command ran without
+  root. Kill the pid you started, and nothing else.
+
 ## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the
@@ -580,8 +653,9 @@ files carry the full reasoning and the failure history.
   directory that has one — `installer/`, `modules/`, `pkgs/`, `tests/` — states
   its intent, what it owns, and which checks cover it, followed by the design
   reasoning and failure history. Claude Code loads the nearest one when it
-  reads a file in that directory; other agents follow the same nearest-file
-  rule.
+  reads a file in that directory — through the `CLAUDE.md` symlink beside it,
+  which is what makes that true (see the top of this file, and #836); other
+  agents follow the same nearest-file rule against `AGENTS.md` itself.
 - **What still belongs in the code is a short note that stops the next edit
   being wrong.** One to three lines, at the line it protects: an invariant, a
   gotcha, the reason a call is shaped the way it is. The test is whether
@@ -626,6 +700,24 @@ Both of these were written here in one day, and both lost tracking silently:
 
 Neither produces an error. Check the issues actually closed rather than
 assuming the body did it.
+
+### A skip marker anywhere in the message skips CI, even quoted
+
+GitHub skips push and pull-request workflows when the head commit's message
+contains `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]` or
+`[actions skip]` -- **anywhere**, including inside a sentence explaining the
+marker. #880 fixed the cache probe's diagnosis of exactly that, and its squash
+commit took the PR body as its message. The body quoted the marker four times,
+so `build` and `install-check` never ran for the commit that shipped the fix.
+Nothing went red; it showed only because the run list for `fa3d5bd` held
+`pages` and nothing else.
+
+A squash merge of a multi-commit branch uses the PR description as the commit
+body, so **the PR description is part of the commit message.** When writing
+about the marker, name it without its literal form -- "a skip-CI marker" -- in
+commit messages and PR descriptions alike. If it has already happened, both
+`build.yml` and `install-check.yml` accept `workflow_dispatch`:
+`gh workflow run build.yml --ref main`, and the same for `install-check.yml`.
 
 ### `auto=on` is not "will merge"
 
@@ -860,3 +952,38 @@ repository that **no check in this repo can see**, so nothing load-bearing
 lives there. It carries orientation and reasoning — the parts that do not
 drift on their own. If you find yourself wanting to put a rule in the wiki,
 that is the signal it belongs in a check instead.
+
+## 13. Reading what a tool is actually telling you
+
+Four of the hours lost on 2026-09-19 went to answers that looked like one
+thing and meant another. None of them was a bug in this repo.
+
+- **A 522 from the cache means "ask somewhere else", not "the entry is
+  broken".** `nixarchy.cachix.org/<hash>.narinfo` hung for 39 s and returned
+  HTTP 522 for a path that was simply **not there**: the authenticated API
+  (`app.cachix.org/api/v1/cache/nixarchy/<hash>.narinfo`) answered 404 in
+  0.2 s. nix treats the 522 as fatal after five retries, so `system` and
+  `omarchy` failed on every PR whose closure contained that path, and it read
+  as a broken cache entry. The public URL cannot tell missing from broken; the
+  API can. A push does not necessarily clear it either — the entry was served
+  by the API immediately and still 522'd publicly for a while. (#767, #788)
+- **`cancelled` on an install job has a third cause.** §6 names timeout and
+  eviction. The eviction case is the common one when several PRs are open at
+  once: the annotation says *"Canceling since a higher priority waiting request
+  for nixarchy-install-vm-N exists"*. Two operational rules follow. A draft PR,
+  or one blocked on another repo, should not hold an install slot — cancel its
+  run. And after a merge, cancel the runs on superseded commits, so the only
+  install in flight is the newest `main`, which contains everything anyway.
+- **A glob over artifact filenames matches the date, not just the issue.**
+  `spec/*-18-*.md` matches `2026-09-18-13-refusals-in-log.md` as happily as
+  `2026-09-19-18-nixarchy-packaging.md`, and `head -1` picks the older one. An
+  approval script built that way flipped `status:` in the wrong file, reported
+  success, and left the real spec a draft. Name artifact files in full when
+  approving them, and check afterwards that the commit touched the file you
+  meant: `git log -1 --name-only`.
+- **An eval error kills the whole batch, so a green sibling proves nothing.**
+  `nix build .#checks.x86_64-linux.{a,b,c}` aborts on the first evaluation
+  failure, and the others report *"has no built result here; no proof
+  pushed"*. Those checks did not pass; they never ran. When a PR is merged on
+  the strength of "only one check failed", say which checks were never
+  reached, and let `main`'s own run be their first.

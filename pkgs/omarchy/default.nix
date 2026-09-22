@@ -1927,6 +1927,40 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     }
 
+                    # A keep-loaded plugin (the Podman menu) lost its shell API the
+                    # first time shell.json changed, and read barConfig as null
+                    # until the shell restarted (#877). manifestHasKind tested
+                    # kinds with Array.isArray. A manifest read through a QML
+                    # property carries kinds as a Qt sequence -- length 2,
+                    # "menu,bar-widget", Array.isArray false -- so the plugin's
+                    # scoped API was recorded `no-menu`, re-checked as `menu` by
+                    # prunePluginApis against the plain-JS manifest, revoked for
+                    # the mismatch, and the plugin kept the destroyed object.
+                    # Confirmed on razer with log lines in a copy of shell.qml.
+                    #
+                    # CARRIED, and meant to be dropped, like the #749 block above:
+                    # AGENTS.md section 11 puts Omarchy fixes upstream, and this is
+                    # carried only at the owner's request until it lands there.
+                    # Delete it the moment upstream reads kinds without
+                    # Array.isArray. The whole function is the needle, so a
+                    # reworded one fails this build. checks.manifest-has-kind runs
+                    # the result against a real Qt sequence.
+                    # printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    hasKindOld=$(printf '%s\n' \
+                      '  function manifestHasKind(manifest, kind) {' \
+                      '    return !!manifest && Array.isArray(manifest.kinds)' \
+                      '      && manifest.kinds.indexOf(kind) !== -1' \
+                      '  }')
+                    hasKindNew=$(printf '%s\n' \
+                      '  function manifestHasKind(manifest, kind) {' \
+                      '    // nixarchy CARRIED patch (#877): kinds read through a QML property is a Qt' \
+                      '    // sequence, for which Array.isArray is false; accept anything list-shaped.' \
+                      '    var kinds = manifest ? manifest.kinds : null' \
+                      '    return !!kinds && typeof kinds.length === "number"' \
+                      '      && Array.prototype.indexOf.call(kinds, kind) !== -1' \
+                      '  }')
+                    substituteInPlace "$shellQml" --replace-fail "$hasKindOld" "$hasKindNew"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

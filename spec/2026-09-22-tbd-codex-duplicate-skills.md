@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: TBD
 intent: intent/2026-09-22-tbd-codex-duplicate-skills.md
 ---

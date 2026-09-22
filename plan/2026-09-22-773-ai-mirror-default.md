@@ -293,6 +293,24 @@ in the file (AGENTS.md §1).
   - The restore needed re-applying by hand: `git checkout HEAD --` returns the
     file *without* the gate, because the gate was never committed (§5).
 
+**And a third fix: the deference is the plugin's default, not a `gate`.**
+
+The first attempt expressed "step aside for a user's own ai-mirror module" as
+`gate = !(config.programs.ai-mirror.enable or false)`. `omarchy` went red:
+`readme-counts.sh` counts `gate = ` lines in the `defaultPluginSet` block to
+derive how many defaults "turn on with their feature", so the count read four
+against the prose's three.
+
+The numbers were the symptom. ai-mirror is **not** on-with-a-feature: it is on
+everywhere except where the user runs it themselves. So the deference moved to
+`defaultPlugins.ai-mirror = lib.mkDefault (!(...))` -- the plugin's own off
+switch, which is what it is -- and `gate` keeps its one meaning. The counts are
+back to nine/six/three, and the bounded parse reads 9 ids and 3 gates.
+`defaultPlugins.ai-mirror = true` still forces ours on.
+
+The general form went into AGENTS.md §4, with the stale-head trap that made a
+fixed failure look unfixed.
+
 ## Tests
 
 ```bash

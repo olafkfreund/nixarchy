@@ -1691,12 +1691,17 @@ in
         ai-mirror = {
           id = "olafkfreund.ai-mirror";
           src = inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
-          # A user running ai-mirror's own module already declares this plugin,
-          # by the same manifest id; two entries would fight over one link, and
-          # ours would override the pin they chose. Theirs wins.
-          gate = !(config.programs.ai-mirror.enable or false);
         };
       };
+
+      # A user running ai-mirror's own module already declares that plugin, by
+      # the same manifest id; two entries fight over one link and ours would
+      # override the pin they chose, rewriting the watched plugins directory on
+      # every activation (#710). So ours defaults off there -- theirs wins, and
+      # `defaultPlugins.ai-mirror = true` still forces ours. NOT a `gate`: a
+      # gate means "on wherever its feature is", which ai-mirror is not; it is
+      # on everywhere, except where you run it yourself.
+      defaultPlugins.ai-mirror = lib.mkDefault (!(config.programs.ai-mirror.enable or false));
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
       plugins = lib.mapAttrs' (

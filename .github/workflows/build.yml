@@ -1379,6 +1379,17 @@ jobs:
               echo "| peak RSS | $(( ${peak:-0} / 1024 )) MiB of 16384 MiB |"
               echo "| wall clock | ${wall:-unknown} |"
             } >> "$GITHUB_STEP_SUMMARY"
+            # Loud before it is fatal (#747). Past 16 GB the runner is killed,
+            # and the job reports `cancelled` with no failed step -- which reads
+            # like an eviction or a timeout (AGENTS.md section 6). Six readings
+            # on main sat at 11.5-12.2 GB, so 14 GB is a trend, not noise. A
+            # warning, never a failure: the check itself has already passed.
+            peak_mib=$(( ${peak:-0} / 1024 ))
+            if [ "$peak_mib" -ge 14336 ]; then
+              echo "::warning::checks.options peaked at $peak_mib MiB of 16384," \
+                "within 2 GB of this runner's limit -- past it the job reports" \
+                "cancelled with no failed step rather than an error (#747)."
+            fi
           else
             echo "::error::/usr/bin/time is gone from this image, so the" \
               "options memory measurement (#747) did not happen. The check" \

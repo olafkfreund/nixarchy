@@ -78,6 +78,10 @@ spec: spec/2026-09-22-889-github-actions-showcase.md
    (images and page), and `chore(flake): bump nixarchy-ghtui to 4f51f7f
    (#889)`. Push, and open a PR linking intent, spec and plan → verify the
    image URLs on the branch return 200.
+   **Added at implementation:** the repository's PR template asks for a
+   general lesson to be recorded in `AGENTS.md` in the same PR, so
+   `docs/AGENTS.md` gains "ffmpeg compositing traps" (the looped still at
+   25 fps, noise defeating held frames, and small panels failing OCR).
 9. The PR waits for your review; merging it is your call, as for #21. After
    merge, check that the Pages site shows the images at
    `/manual/plugins#github-actions`.

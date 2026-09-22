@@ -764,6 +764,33 @@ jobs:
           [ $rc -eq 0 ] || exit 1
           echo "every manual page is in the sidebar, in llms.txt, in the manual index and in README"
 
+      # A count in readme-counts.sh says how many plugins ship by default; this
+      # says WHICH one the manual forgot. The table lacked Dev environments for
+      # as long as it had been a default (#856). The module id is the only name
+      # both sides share, so each row carries it as a comment inside its last
+      # cell -- after the final pipe, kramdown renders an extra column.
+      - name: Every default plugin has a row in the manual
+        run: |
+          ids=$(awk '/^      defaultPluginSet = \{/{f=1} f; f && /^      \};/{exit}' modules/home.nix |
+            grep -oE 'id = "[^"]+"' | sed 's/id = "//;s/"$//' | sort -u || true)
+          if [ "$(printf '%s' "$ids" | grep -c . || true)" -lt 5 ]; then
+            echo "::error::fewer than five ids under 'defaultPluginSet = {' in modules/home.nix -- the block moved; refusing"
+            exit 1
+          fi
+          rows=$(grep -oE '<!-- [a-z][a-z.-]+ -->' docs/manual/plugins.md |
+            sed 's/<!-- //;s/ -->//' | sort -u)
+          rc=0
+          for n in $(comm -23 <(echo "$ids") <(echo "$rows") || true); do
+            echo "::error::$n is a default plugin but has no row in docs/manual/plugins.md"
+            rc=1
+          done
+          for n in $(comm -13 <(echo "$ids") <(echo "$rows") || true); do
+            echo "::error::docs/manual/plugins.md has a row for $n, which is not a default plugin"
+            rc=1
+          done
+          [ $rc -eq 0 ] || exit 1
+          echo "every default plugin has a row in the manual, and every row is a default"
+
       - name: Verify shebangs were patched
         run: |
           # Line 1 only. Several scripts legitimately contain `#!/bin/bash`

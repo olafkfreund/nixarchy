@@ -34,7 +34,7 @@ upstream release is a source bump, not a re-port.
 ## Search everything, install declaratively
 
 The app selection carries 67 applications. **Install ▸ Search** offers the
-rest of NixOS — one fuzzy picker over **137,599 rows**: every nixpkgs package,
+rest of NixOS — one fuzzy picker over **about 137,000 rows**: every nixpkgs package,
 every NixOS option, and the app selection, with each entry's type, default and
 documentation in a preview pane.
 
@@ -72,7 +72,7 @@ a key, keyboard-first, in the desktop's own look:
 - see which coding agent in your herdr sessions needs you;
 - manage MicroVMs and Distrobox boxes.
 
-Seven are on by default. ai-mirror is on its way, and Voice will be opt-in.
+Eight ship by default: five are always on, and three turn on with their feature. ai-mirror is on its way, and Voice will be opt-in.
 
 [![The Podman panel: containers, images and volumes, then a container stopping](img/features/podman.gif)](img/features/podman.gif)
 

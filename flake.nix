@@ -2028,6 +2028,11 @@
           # change, because manifestHasKind tested kinds with Array.isArray and a
           # Qt sequence is not one (#877). Runs the built function in a real QML
           # engine, with upstream's as its negative control.
+          # Turning programs.nixarchy.aiMirror.mcp off takes nixarchy's entry
+          # back out of the three agent configs, and leaves one the user wrote
+          # (#773). The real package against fixtures, both cases.
+          ai-mirror-mcp-remove = import ./tests/ai-mirror-mcp-remove.nix { pkgs = pkgsFor.${system}; };
+
           manifest-has-kind = import ./tests/manifest-has-kind.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

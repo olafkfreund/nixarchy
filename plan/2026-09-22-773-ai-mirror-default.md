@@ -230,6 +230,39 @@ in the file (AGENTS.md §1).
   command) is a `pkgs/verify.sh` row, because no VM here has a microphone
   (AGENTS.md §3: a documented hole).
 
+**Step 6, as done, and where it departs from the text above.**
+
+- **An agent's MCP confirm is refused by the schema, not by `not_owner`.** The
+  `control` tool's `mode` accepts only `agent` or `off` (`mcp.py:54`), so a
+  confirm never reaches the `not_owner` check the spec cites. The session
+  asserts the property (an error, and the request still pending, then ended
+  with the server), not the message.
+  - **§1, proven without a VM:** the same request file against ai-mirror run
+    from source passes. Against a copy patched so `control` accepts `confirm`
+    and dispatches it as human, it fails with the session's own message.
+- **The session reads `state.json`, and gets the lapse from MCP `status`.** A
+  request's lapse is applied only when `read_state()` runs, so the raw file can
+  still say `pending`. The lapse case therefore asks the live server for
+  `status` after 36 s.
+- **The kill switch is checked as a bind Hyprland holds** (`hyprctl binds`),
+  then its command is run. No key-press primitive for this Hyprland was found in
+  the suite. Setting up the grant uses the CLI self-grant Decision A accepted.
+- **A new default plugin had to be opted out by name in two tests.** Both
+  `tests/plugin.nix` (`machine`) and `tests/options.nix` (`noDefaultsHome`)
+  switch off every default to get an empty plugin set. A default they do not
+  name reappears and breaks them. These lines are not in the steps above.
+- **Evaluations are bound once (#747).** Every `homeOn` is a NixOS evaluation,
+  so the five cases share one `aiMirrorMcpHome`, reuse `noDefaultsHome`, and
+  probe accessibility on a standalone `homeWith`. That is one new NixOS
+  evaluation, not five.
+- **The removal check** was proven both ways: a widened match removes the
+  user's entry, and a match that never succeeds leaves ours in place. The
+  restored derivation is identical to the green one.
+- **Not run locally:** `checks.options`, `checks.plugin` and `checks.session`.
+  An install was in flight on the shared host each time (AGENTS.md §6), so CI is
+  their first run. `pkgs/verify.sh` gained the Voice row, and passes `bash -n`
+  and shellcheck.
+
 ## Tests
 
 ```bash

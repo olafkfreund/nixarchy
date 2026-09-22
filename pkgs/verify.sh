@@ -422,6 +422,25 @@ else
   fi
 fi
 
+# ---- ai-mirror beside Voice (#773) ---------------------------------------
+# No VM here has a microphone, so "a voice command never hands an agent the
+# desktop" can only be answered on a real machine. Voice uses ai-mirror's
+# input helper and nothing else; control belongs to whoever said yes on screen.
+head_ "ai-mirror beside Voice"
+aim_state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ai-mirror/state.json"
+if ! command -v ai-mirror >/dev/null 2>&1; then
+  hmm "ai-mirror is not installed" "nothing to test"
+elif ! systemctl --user is-active omarchy-voice.service >/dev/null 2>&1; then
+  hmm "Voice is not running" "turn it on, say a command, and run this again"
+else
+  aim_owner=$(grep -oE '"owner": ?"[a-z]+"' "$aim_state" 2>/dev/null | grep -oE '[a-z]+"$' | tr -d '"')
+  if [ "${aim_owner:-off}" = agent ]; then
+    bad "an agent holds control with Voice running" "did you say yes to it? Voice must not have"
+  else
+    ok "ai-mirror control is ${aim_owner:-off} with Voice running" "say a command, then run this again"
+  fi
+fi
+
 # ---- bluetooth -----------------------------------------------------------
 # The checks assert the service is enabled and that the VM has no radio. This
 # is the other half.

@@ -176,6 +176,7 @@ pkgs.testers.runNixOSTest rec {
             herdr = false;
             microvm = false;
             distrobox = false;
+            ai-mirror = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

@@ -537,7 +537,73 @@ pkgs.testers.runNixOSTest {
         timeout=30)
     print("Install > Apply's row opens the rebuild panel over the running unit")
 
+    # ---- the panel's buttons, over IPC (#896) ------------------------------
+    # The unit above is still running, so reattach, Open full log and Copy log
+    # all have something real to act on. "Opening starts nothing" needs the
+    # opposite, and comes after it is cleared.
+    #
+    # The mechanism first, because everything below rests on it: omarchy-shell
+    # wraps `qs ipc call`, which exits 0 on IPC-level errors and writes them to
+    # stdout. The wrapper repairs that by matching "Function not found." -- per
+    # function name, which is why the panel has a verb per button rather than
+    # one invoke(action) whose bad argument would return quietly.
+    machine.fail(as_user("omarchy-shell nixarchy.rebuild.bar noSuchVerb"))
+    print("an unknown panel verb fails rather than exiting 0")
+
+    # Closing detaches, reopening reattaches. The panel keeps no state of its
+    # own -- the unit is the source of truth -- so a regression that cached
+    # state would break this and nothing else.
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar close"))
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar open"))
+    machine.wait_until_succeeds(
+        as_user("omarchy-shell nixarchy.rebuild.bar status") + " | grep -q running",
+        timeout=30)
+    print("a reopened panel reattaches to the running rebuild")
+
+    # Open full log in terminal, matched on the TERMINAL LAUNCH and never on a
+    # bare journalctl: RebuildState follows the unit's journal itself, so a
+    # `journalctl.*nixarchy-rebuild` match is satisfied by the panel's own
+    # follower with openInTerminal() emptied. That is a green light.
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar openLog"))
+    machine.wait_until_succeeds(
+        "pgrep -af omarchy-launch-floating-terminal-with-presentation", timeout=30)
+    print("Open full log in terminal launches a terminal, not the panel's own follower")
+
+    # Copy log. The journal is asserted non-empty FIRST: with an empty journal,
+    # an emptied copyLog() would also leave an empty clipboard and the
+    # comparison would pass with the button doing nothing.
+    machine.succeed(
+        as_user("journalctl --user -u nixarchy-rebuild -o cat") + " | grep -q .")
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar copyLog"))
+    machine.wait_until_succeeds(
+        as_user(
+            "test \"$(wl-paste)\" = \"$(journalctl --user -u nixarchy-rebuild -o cat)\""),
+        timeout=30)
+    print("Copy log puts the rebuild's journal on the clipboard")
+
     machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+    machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
+    machine.wait_until_succeeds(
+        as_user("nixarchy-rebuild-state") + " | grep -q idle", timeout=30)
+
+    # Opening the panel must start NOTHING. Install > Apply used to offer a
+    # preview and then ask; a panel that rebuilt on the click would have turned
+    # that into a one-click irreversible switch. Every other assertion here
+    # still passes if that regressed, which is why this one exists.
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar close"))
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar open"))
+    machine.sleep(5)  # a regression would need a moment to start the unit
+    machine.succeed(as_user("nixarchy-rebuild-state") + " | grep -q idle")
+    print("opening the rebuild panel starts no rebuild")
+
+    # Rebuild now. The VM is offline and cannot evaluate its own flake, so the
+    # unit fails quickly -- as #805's own probe relies on. What is proven is
+    # that the button STARTED it, never that a rebuild succeeded.
+    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar rebuild"))
+    machine.wait_until_succeeds(
+        as_user("systemctl --user show -p LoadState --value nixarchy-rebuild")
+        + " | grep -qx loaded", timeout=60)
+    print("Rebuild now starts the nixarchy-rebuild unit")
 
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it

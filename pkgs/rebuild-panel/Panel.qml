@@ -36,6 +36,13 @@ Panel {
     function status(): string {
       return JSON.stringify({ state: RebuildState.state, exit: RebuildState.exitCode })
     }
+
+    // The three buttons, so a check can press what a person presses (#896).
+    // They call the same RebuildState methods RebuildView's buttons call and
+    // nothing else, so there is no second path to start a rebuild down.
+    function rebuild(): void { RebuildState.start() }
+    function copyLog(): void { RebuildState.copyLog() }
+    function openLog(): void { RebuildState.openInTerminal() }
   }
 
   // ------------------------------------------------------------------- bar

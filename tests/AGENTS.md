@@ -175,24 +175,45 @@ What only a person can prove: `nixarchy apply --detach --yes` on real
 hardware, then `journalctl --user -fu nixarchy-rebuild` shows the build, the
 dialog asks once, and the unit ends `Result=success`.
 
-## The panel one: nothing in the suite presses a button
+## The panel one: its buttons are pressed over IPC, and its pixels are not
 
 The rebuild panel (#765 PR 5, `pkgs/rebuild-panel/`) is covered in three
-places, and none of them is the panel itself:
+places. #896 closed most of the gap that used to be here.
 
 - `checks.qml` proves its three QML files parse -- and only that;
 - `checks.apply-staging` proves the state mapping, because it is a command
   (`nixarchy-rebuild-state`) and not logic inside QML. That split exists for
   this reason;
-- `checks.session` proves `nixarchy-plugin nixarchy.rebuild` opens it over a
-  running unit.
+- `checks.session` opens it with `nixarchy-plugin nixarchy.rebuild`, then
+  drives its three actions over the shell's IPC and asserts what each one did:
+  the unit started, the journal reached the clipboard, a terminal launched. It
+  also asserts reattach after close/open, and -- the one that matters most --
+  that **opening the panel starts nothing**, because every other assertion
+  still passes if a regression made it rebuild on open.
 
-What no check reaches: pressing _Rebuild now_, _Copy log_ or _Open full log in
-terminal_, the confirm text, the elapsed time, and the log tail rendering.
-Nothing here drives a click in the shell's QML, and OCR is not an option --
-#765 PR 1 already found this theme unreadable to it, which is why the session
-probe waits on a `polkit-agent-helper@*` unit rather than on text. So the
-panel's behaviour is a by-hand check on real hardware, listed in the PR.
+Three things about how those assertions are written, each of which would
+otherwise be a green light:
+
+- **`Open full log in terminal` matches the terminal launch, never a bare
+  `journalctl`.** `RebuildState` follows the unit's journal itself, so a
+  `journalctl.*nixarchy-rebuild` match is satisfied by the panel's own
+  follower with `openInTerminal()` emptied.
+- **`Copy log` asserts the journal is non-empty before comparing it** to the
+  clipboard. With an empty journal, an emptied `copyLog()` leaves an empty
+  clipboard and empty equals empty.
+- **An unknown verb is asserted to fail.** `omarchy-shell` wraps `qs ipc call`,
+  which exits 0 on IPC-level errors and writes them to stdout; the wrapper
+  repairs that by matching `Function not found.` **per function name**. That is
+  why the panel has a verb per button rather than one `invoke(action)` whose
+  bad argument would return quietly -- and why the check proves the mechanism
+  once rather than assuming it.
+
+What still reaches nothing: the **rendering** -- the confirm text, the elapsed
+time, the log tail. OCR is not an option (#765 PR 1 found this theme unreadable
+to it, which is why the session probe waits on a `polkit-agent-helper@*` unit
+rather than on text), and nothing here drives a click in the shell's QML. And
+"one polkit dialog per Apply" stays where it was: a real networked switch, by
+hand, on real hardware.
 
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 

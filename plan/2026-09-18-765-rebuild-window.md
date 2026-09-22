@@ -476,10 +476,90 @@ it is stopped by hand. It holds no state beyond its log.
   unknown flag and exited 2 anyway. It was proven instead by removing the new
   "needs `--yes`" guard, which it then catches ("exited 0 (want 2)").
 
+## PR 4 — draft, awaiting approval
+
+*Revision:* PRs 1-3 (#776, #778, #805) are merged. This section steps PR 4 only,
+which is why the frontmatter is back to `draft`. Branch
+`feat/765-spinner-opens-rebuild-log`, cut from `main`.
+
+**Scope** (the spec's outline, item 4): clicking the bar spinner opens the log
+of the thing that is actually rebuilding.
+
+### The spec's wording is wrong, and this is the correction
+
+Spec item 4 says `switch-indicator.qml:96` changes to
+`journalctl --user -fu nixarchy-rebuild`. Applied literally, that is a
+regression for two of the three cases the spinner covers.
+
+The spinner's visibility comes from a process match, and the file states why
+that was chosen over a state file:
+
+> Deliberately not a state file written by `nixarchy-apply`: a rebuild the user
+> typed themselves is exactly as worth showing as one the menu started, and a
+> file only knows about the second.
+
+So it lights for three things, and only one of them has a user unit:
+
+| what is running | has a `nixarchy-rebuild` unit? |
+| --- | --- |
+| `nixarchy-apply --detach` (#805) | yes |
+| Install > Apply in a floating terminal | **no** |
+| a rebuild typed by hand | **no** |
+
+Pointing the click unconditionally at the user unit swaps a *wrong* log for an
+*empty* one in exactly the cases the process match exists to cover. The spec
+wrote item 4 before PR 3 existed, when the unit was the only imagined path.
+
+### What this PR does instead
+
+Choose the log from what is running: if the unit is active, follow its journal;
+otherwise keep today's target. The right log when the unit is there, today's
+behaviour otherwise, and no case gets a blank window -- which is the failure
+this item exists to remove.
+
+`systemctl --user -q is-active` rather than parsing `ActiveState`: it is the
+documented predicate, and it exits non-zero for both "inactive" and "no such
+unit", which want the same branch.
+
+### Steps
+
+**1. Replace the click handler** in `pkgs/omarchy/switch-indicator.qml`, with
+the reason at the line -- two or three lines on why the branch exists, not the
+table above (AGENTS.md §7).
+
+→ verify by §1, both directions:
+
+  a. **The unit case.** With the unit active, the command must resolve to the
+     user journal. Provable with no desktop: start a transient unit of that
+     name, run the branch, and assert which side it takes. Break it by
+     inverting the predicate and watch it choose the wrong log.
+  b. **The no-unit case.** With no such unit, it must fall back to today's
+     target. Break it by dropping the fallback and watch the command exit
+     non-zero having opened nothing -- the blank window this PR exists to
+     prevent, reproduced on purpose.
+
+**2. Keep the QML parseable.** `tests/qml.nix:68` already parses this file with
+`qmllint`; the change must not break it.
+
+→ verify by `nix build .#checks.x86_64-linux.qml`.
+
+### Tests
+
+```
+nix build .#checks.x86_64-linux.qml --print-build-logs
+# the branch line, by hand, in both states, per §1 above
+nix fmt -- --ci, statix, deadnix, over `.`
+```
+
+`checks.session` boots a real desktop and already asserts the
+`nixarchy-rebuild` unit's journal, so that is where an end-to-end assertion
+would live. This PR does **not** add one: the handler runs in the shell's QML
+and nothing in the suite drives a bar click today. The gap is named here rather
+than papered over, and belongs in `tests/AGENTS.md` if it outlives this PR
+(§3).
+
 ## Later PRs (outline; each is stepped when reached)
 
-3. *(Stepped above: "PR 3 — draft, awaiting approval".)*
-4. The spinner opens `journalctl --user -fu nixarchy-rebuild`.
 5. The Quickshell panel replaces the floating terminal for Install > Apply and
    the per-app rows.
 

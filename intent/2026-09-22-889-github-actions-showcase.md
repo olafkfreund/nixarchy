@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 889
 author: olafkfreund
 ---
@@ -61,3 +61,9 @@ on https://olafkfreund.github.io/nixarchy/manual/plugins.
 2. **Pin.** `flake.nix` pins `nixarchy-ghtui` at `dfba799`. #19 (the
    `menu.managed` marker) and #21 (a clearer offline error message) are newer.
    Should the pin be bumped in this change, after #21 merges, or separately?
+
+## Decisions (at approval)
+
+1. Provenance: accepted. The razer recordings are used, card-cropped, with a
+   line saying where they come from.
+2. Pin: bumped in this change to `4f51f7f` (nixarchy-ghtui `main` after #21).

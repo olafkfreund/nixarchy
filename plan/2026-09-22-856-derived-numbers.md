@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 856
 spec: spec/2026-09-22-856-derived-numbers.md
 ---

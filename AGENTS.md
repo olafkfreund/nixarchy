@@ -614,6 +614,22 @@ of your own footprint.
 
 Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
 
+**Two ways a local VM outlives your attention, both from 2026-09-22.**
+
+- **A wedged `nix build` looks exactly like a working one.** An
+  `install-encrypted` build was reported "still running" for hours: it had
+  printed `timeout reached; test terminating...`, then sat at 0% CPU for
+  **11h17m** against an 85-minute `globalTimeout`, holding a qemu VM while a
+  pull request's install check failed on a timing race beside it. The process
+  table said alive. `ps -o etime=,%cpu= -p <pid>` against the check's own
+  timeout, and the mtime of its log, say wedged. Killing the `nix build` does not
+  reap its VM either: a sandbox child runs as a `nixbld` user outside your
+  process group, so find it and kill it **by pid**.
+- **Never `pkill` by process name on this host.** `pkill -x qemu-system-x86`,
+  meant for one throwaway VM, also names every CI install VM on p620. It did no
+  harm only because those run as `nixbld` users and the command ran without
+  root. Kill the pid you started, and nothing else.
+
 ## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the

@@ -192,7 +192,13 @@ keys are on **Super+Ctrl+Alt+A**.
 `rm -rf ~/.config/omarchy/plugins/olafkfreund.github-actions`. nixarchy won't
 replace a real directory. It stays enabled, and the managed copy takes over.
 
-*Not shown moving, for the same reason as GitLab pipelines above: unauthenticated, the panel holds one message still.*
+![The GitHub Actions panel opening on a search for nixarchy, narrowing it, then following a running workflow down to the steps of its install job and back out](../img/features/github-actions.gif)
+
+![Repositories matching nixarchy, the one with two running workflows first](../img/plugins/github-actions-list.webp)
+
+![A running install check expanded to its jobs, and the install job to its eight steps with their status and timers](../img/plugins/github-actions-steps.webp)
+
+*Recorded on an authenticated desktop, in Gruvbox, showing public repositories only.*
 
 ## ai-mirror
 

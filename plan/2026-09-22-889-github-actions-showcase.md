@@ -41,6 +41,17 @@ spec: spec/2026-09-22-889-github-actions-showcase.md
    verify with `magick identify` (900×563) and `stat` (under 1 MB). If it's
    over 1 MB, speed the take up (`setpts`), and never drop below 4 fps or
    900 px.
+   **Deviation, recorded at implementation:** at 900/1920 (656 px) the
+   card's caption text was too small for `verify-frames.sh` to OCR
+   `install` or `running`, although both were on screen. The site's own
+   panel GIFs give their panels about 70–80% of the frame (Podman about
+   79%, packages about 72%), so the card is placed at its native 900×680
+   (64%), centred at (250,97), and nothing is rescaled. The looping
+   backdrop has to be read at `-framerate 4`; at ffmpeg's default of 25 the
+   output ran at 25 fps. Frames the H.264 source's noise made
+   near-identical are merged with `mpdecimate` (`-fps_mode vfr`), which
+   turns holds into longer frames. Result: 187 frames, 46.75 s, 1,020,375
+   bytes, and no speed-up was needed.
 2. The same script composes `s1-list` and `s2-steps` at 1280×800 as WebP →
    verify 1280×800 with `magick identify`, and check both by eye.
 3. Gates:

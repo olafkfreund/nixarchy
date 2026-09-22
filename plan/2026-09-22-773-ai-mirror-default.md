@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 773
 spec: spec/2026-09-22-773-ai-mirror-default.md
 ---

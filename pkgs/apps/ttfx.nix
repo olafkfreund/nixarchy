@@ -8,16 +8,16 @@
 }:
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "ttfx";
-  version = "0.3.2";
+  version = "0.3.3";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "ttfx";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-bwFjC6ZkZibkgXjoYVH2VuqqeXklGR9kmRl2fTitWBU=";
+    hash = "sha256-N28CYWQ71hfMm2dEcfLFf1qsLXWRbCiGd+ygVzCVbU0=";
   };
 
-  cargoHash = "sha256-DNrg12MNqBcQi6yvoJObM1gtE90iGBCxeQ3RwueYCE4=";
+  cargoHash = "sha256-JKfEgISmX8iIw5Bcr0u7pb5J5TsKCvNSQn3E9tH7Wes=";
 
   nativeBuildInputs = [ installShellFiles ];
 

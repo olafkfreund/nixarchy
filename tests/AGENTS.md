@@ -293,6 +293,20 @@ untestable until the first of them landed. What the stand-ins cannot show is
 that a real plugin's panel opens. That belongs to the PR that adds each
 plugin, and the build asserts each default's manifest id.
 
+**Adding a default means teaching `noDefaultsHome` too** (`tests/options.nix:136`).
+It lists every default by attribute name so `defaultPluginsNoHookWhenEmpty` can
+assert "nothing resolved, no hook". Leave a new one out and that assertion fails
+on its *off* half, naming neither your plugin nor your own new assertion — which
+reads as an unrelated regression. #765 PR 5 hit this. It is §4's hand-maintained
+list failing closed rather than open, which is the right direction, but only for
+somebody who knows where to look.
+
+And when proving such an assertion can fail, **delete the entry rather than
+renaming it.** A plugin is installed under its manifest's `id`, not its
+attribute name, so a rename leaves it installed and turns a *different* check
+red. Read the assertion's own value in the log (`rebuildIsADefault: on= off=`),
+never the exit status alone.
+
 One exception, about a plugin's *tools* rather than the plugin: the
 `defaults` node turns the real herdr default back on (#771). What it proves is
 that the `herdr` binary the entry brings is on the session's PATH and the

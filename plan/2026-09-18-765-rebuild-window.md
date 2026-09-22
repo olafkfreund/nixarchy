@@ -664,6 +664,24 @@ entry; the menu work, the tests and the docs are unchanged.
   nothing unless `osConfig.programs.nixarchy.enable` (`modules/home.nix:377`).
   No new gating is needed and none is added.
 
+- **A ninth default breaks an all-defaults-off fixture, and the failure names
+  neither the plugin nor the new assertion.** `tests/options.nix`'s
+  `noDefaultsHome` (`:136`) lists every default by attribute name so that
+  `defaultPluginsNoHookWhenEmpty` can assert "nothing resolved, no hook". Add a
+  default and forget that list, and one plugin still resolves, the hook is
+  still written, and `checks.options` fails on *that* assertion's off half.
+  It is §4's hand-maintained list, failing closed rather than open, which is the
+  good direction -- but only if the next person knows to look there. Adding a
+  default means adding it to `noDefaultsHome` in the same change.
+- **Renaming the `defaultPluginSet` attribute does not remove the plugin.**
+  The first attempt at step 4's red proof renamed `rebuild = {` and watched
+  `checks.options` go red -- on the wrong assertion. Installation keys on the
+  manifest's **id**, not the attribute name, so the plugin was still installed
+  and `rebuildIsADefault` still read `on=1`. Deleting the entry is what proves
+  it. §1's "prove the break landed" is not enough on its own: prove the break
+  removed *the thing the assertion is about*, by reading the assertion's own
+  value in the log, not the exit status.
+
 ### Territory (§9)
 
 `modules/apps.nix`'s menu rows were named on the bus as a collision-prone file.

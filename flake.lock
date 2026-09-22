@@ -744,17 +744,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1790028891,
-        "narHash": "sha256-lV8b5855yjFh+ed0OCoXJWM3Ru1A/3MRju4gyGN5huk=",
+        "lastModified": 1790063848,
+        "narHash": "sha256-HTPq7c7GWcomHxUxokCU0kcx7VLbGVcXFaztIMEmYYk=",
         "owner": "olafkfreund",
         "repo": "nixarchy-podman",
-        "rev": "ce1d990480dd19c21e712a11336dcc3e6544e430",
+        "rev": "bc0b77adb86375269e2a35aee757ef5fa01d9efd",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-podman",
-        "rev": "ce1d990480dd19c21e712a11336dcc3e6544e430",
+        "rev": "bc0b77adb86375269e2a35aee757ef5fa01d9efd",
         "type": "github"
       }
     },

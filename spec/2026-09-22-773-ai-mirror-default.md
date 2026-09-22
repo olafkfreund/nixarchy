@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 773
 intent: intent/2026-09-19-773-ai-mirror-default.md
 ---

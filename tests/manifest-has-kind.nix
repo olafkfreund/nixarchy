@@ -1,4 +1,8 @@
-{ pkgs, omarchy, omarchySrc }:
+{
+  pkgs,
+  omarchy,
+  omarchySrc,
+}:
 # Omarchy's manifestHasKind tested `Array.isArray(manifest.kinds)`. A manifest
 # read through a QML property carries `kinds` as a Qt sequence -- it has a
 # length and entries, but Array.isArray says false. So a keep-loaded plugin's
@@ -33,12 +37,12 @@
 #    probe can no longer tell the bug from the fix, and the check goes red for
 #    that instead.
 pkgs.runCommand "nixarchy-manifest-has-kind"
-{
-  nativeBuildInputs = [
-    pkgs.qt6.qtdeclarative
-    pkgs.gawk
-  ];
-}
+  {
+    nativeBuildInputs = [
+      pkgs.qt6.qtdeclarative
+      pkgs.gawk
+    ];
+  }
   ''
     export HOME=$TMPDIR XDG_RUNTIME_DIR=$TMPDIR QT_QPA_PLATFORM=offscreen
     # The sandbox has no QML import path of its own, so `import QtQuick` would

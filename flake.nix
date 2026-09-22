@@ -226,6 +226,17 @@
     nixarchy-voice = {
       url = "github:olafkfreund/nixarchy-voice/a953559d2da99c2f8075869dab73e344b78988ae";
       inputs.nixpkgs.follows = "nixpkgs";
+      # Voice types through ai-mirror's input helper; one ai-mirror, not two.
+      inputs.ai-mirror.follows = "ai-mirror";
+    };
+
+    # ai-mirror (#773): the binary and its bar widget on every machine, no agent
+    # connected to it unless programs.nixarchy.aiMirror.mcp says so. Pinned to a
+    # commit like voice above; this one carries the steady accent watching sign.
+    # Why: spec/2026-09-22-773-ai-mirror-default.md
+    ai-mirror = {
+      url = "github:olafkfreund/ai-mirror/929c9d15bbd0140d4a17e3876a18db982fe4c74e";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766

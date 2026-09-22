@@ -111,6 +111,18 @@ Other facts:
 
 Merge it. The resulting commit is the pin for step 1.
 
+**Done: ai-mirror#28, merged as `929c9d15`.** It is a deviation in how it was
+verified.
+
+- `nix flake check` passed: 116 tests, the licence check and the plugin check.
+- None of those parse QML, so `qmlformat plugin/Widget.qml` stood in. It exits
+  0, and 1 on a copy with an unbalanced parenthesis. (A first "break" that only
+  moved a `:` still parsed, and was caught as a break that never broke, §1.)
+- **The screenshots did not happen.** Swapping the plugin into a running shell
+  is #847's bar-blanking trigger. So the visual check is the first deploy:
+  `ai-mirror index`, then the mark turns accent for 10 s. Step 6's session
+  check asserts that the widget loads.
+
 **1. The input.** In `flake.nix`, add `ai-mirror` pinned to step 0's commit, with
 `inputs.nixpkgs.follows = "nixpkgs"`, and add
 `inputs.ai-mirror.follows = "ai-mirror"` to `nixarchy-voice`. Then run

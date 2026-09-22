@@ -76,6 +76,23 @@ A capture of a real desktop shows whatever is on it.
 - **`find` does not follow `result`.** The same trap as AGENTS.md §5, and the
   reason `readme-counts.sh` once counted zero skills.
 
+## ffmpeg compositing traps
+
+- **A looped still runs at 25 fps, and `overlay` takes its timing from it.**
+  Composing a recording onto `-loop 1 -i backdrop.png` makes a 25 fps GIF,
+  even with `fps=4` on the recording's input. For #889, 195 frames became
+  about 1160, and the file size read like a palette problem. Put
+  `-framerate 4` before `-loop 1`, then count the frames with
+  `ffprobe -count_frames`.
+- **A lossy source makes held frames differ.** H.264 noise re-encodes the
+  whole panel in every frame, so speeding the take up made #889's GIF
+  *bigger*. `mpdecimate` with `-fps_mode vfr` merges near-duplicate frames
+  into longer ones, the way `shot()` holds a state.
+- **Small panels fail the OCR gate honestly.** At 47% of a 900 px frame,
+  caption text was on screen, but `verify-frames.sh` couldn't read it.
+  Panels on this site take about 64–80% of the frame. Fix the size, not
+  the `--expect`.
+
 ## Status claims age badly
 
 `manual/plugins.md` says which panels are on by default and which are coming.

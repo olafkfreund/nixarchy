@@ -37,9 +37,9 @@ directories of Claude Code, Codex, Pi and the generic `~/.agents/skills`
 location, so most harnesses load it automatically. nixarchy keeps the
 mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
-`~/.pi/agent/skills` — but ships sixteen skills instead of one. It leaves out
-upstream's `~/.codex/skills`: Codex reads `~/.agents/skills` too, and linking
-both made it list every skill twice.
+`~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
+reads `~/.agents/skills` too and would list every skill twice — but ships
+sixteen skills instead of one:
 
 | skill | owns |
 |---|---|

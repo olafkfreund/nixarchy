@@ -148,6 +148,8 @@ wherever [Boxes](boxes) are on, and its templates are nixarchy's own, from
 
 ![The Distrobox panel: one box running, one exited, one created](../img/plugins/distrobox-popup.jpg)
 
+[![The nixarchy-distrobox tour: a 90-second walk through the panel](https://olafkfreund.github.io/nixarchy-distrobox/img/tour.png)](https://olafkfreund.github.io/nixarchy-distrobox/)
+
 ## Dev environments
 
 [nixarchy-devenv](https://github.com/olafkfreund/nixarchy-devenv) · [its own site](https://olafkfreund.github.io/nixarchy-devenv/)

@@ -171,9 +171,9 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
     pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
     # Packages, Podman and Boxes (Boxes is on), GitLab Pipelines, GitHub
-    # Actions, Herdr, Sandbox, and Dev environments (#802).
-    test "$pluginrows" -ge 8 || {
-      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, Boxes, GitLab Pipelines, GitHub Actions, Herdr, Sandbox and Dev environments" >&2
+    # Actions, Herdr, Sandbox, Dev environments (#802), and Rebuild (#765).
+    test "$pluginrows" -ge 9 || {
+      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, Boxes, GitLab Pipelines, GitHub Actions, Herdr, Sandbox, Dev environments and Rebuild" >&2
       exit 1
     }
 

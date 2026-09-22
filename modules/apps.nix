@@ -655,7 +655,7 @@ let
         "install.apply" = {
           icon = "";
           label = "Apply changes";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-apply";
+          action = "nixarchy-plugin nixarchy.rebuild";
           description = "Copy the selection into your flake and nixos-rebuild switch";
         };
       }
@@ -1364,8 +1364,8 @@ in
                 if command -v omarchy-notification-send >/dev/null 2>&1; then
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "$id queued -- not enabled yet" \
-                    "$queued selected. Click here, or Install > Apply changes, to run nixos-rebuild." \
-                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                    "$queued selected. Click here, or Install > Apply changes, to review and rebuild." \
+                    --exec nixarchy-plugin nixarchy.rebuild || true
                 fi
                 echo "enabled $id in $file ($queued queued)"
                 echo "run 'nixarchy-apply' when you have picked everything you want"
@@ -1471,8 +1471,8 @@ in
                   # also the way to start it.
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "$id queued -- not installed yet" \
-                    "$queued app(s) selected. Click here, or Install > Apply changes, to run nixos-rebuild." \
-                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                    "$queued app(s) selected. Click here, or Install > Apply changes, to review and rebuild." \
+                    --exec nixarchy-plugin nixarchy.rebuild || true
                 fi
                 echo "enabled $id in $file ($queued queued)"
                 echo "run 'nixarchy-apply' when you have picked everything you want"
@@ -1514,8 +1514,8 @@ in
                 if command -v omarchy-notification-send >/dev/null 2>&1; then
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "$id removed from your selection" \
-                    "$queued app(s) still selected. Click here to run nixos-rebuild and apply it." \
-                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                    "$queued app(s) still selected. Click here to review and rebuild." \
+                    --exec nixarchy-plugin nixarchy.rebuild || true
                 fi
                 echo "disabled $id in $file ($queued still enabled)"
                 echo "it stays installed until 'nixarchy-apply' rebuilds"
@@ -1684,8 +1684,8 @@ in
                 if command -v omarchy-notification-send >/dev/null 2>&1; then
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "''${removed[*]} removed from your selection" \
-                    "$count extra package(s) still selected. Click here to run nixos-rebuild and apply it." \
-                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                    "$count extra package(s) still selected. Click here to review and rebuild." \
+                    --exec nixarchy-plugin nixarchy.rebuild || true
                 fi
                 for attr in "''${removed[@]}"; do
                   echo "removed $attr from $file"
@@ -1781,8 +1781,8 @@ in
                 if command -v omarchy-notification-send >/dev/null 2>&1; then
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "''${removed[*]} removed from your selection" \
-                    "The draft file itself is kept. Click here to run nixos-rebuild and apply it." \
-                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                    "The draft file itself is kept. Click here to review and rebuild." \
+                    --exec nixarchy-plugin nixarchy.rebuild || true
                 fi
                 pkgdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/packages"
                 for name in "''${removed[@]}"; do
@@ -2433,8 +2433,8 @@ in
                 if command -v omarchy-notification-send >/dev/null 2>&1; then
                   omarchy-notification-send -r 8471 -t 8000 -u normal \
                     "''${added[*]} queued -- not installed yet" \
-                    "$count extra package(s) selected. Click here, or Install > Apply changes, to run nixos-rebuild." \
-                    --exec omarchy-launch-floating-terminal-with-presentation nixarchy-apply || true
+                    "$count extra package(s) selected. Click here, or Install > Apply changes, to review and rebuild." \
+                    --exec nixarchy-plugin nixarchy.rebuild || true
                 fi
 
                 # The flake half, which this tool cannot do for you (#531).
@@ -3553,6 +3553,53 @@ in
                 esac
               '';
             })
+
+            # What the rebuild panel reads, and the only place the unit's
+            # properties are turned into a state (#765 PR 5). A command rather
+            # than logic in QML so tests/apply-staging.nix can run it against a
+            # stubbed systemctl: a panel's state machine is the part worth
+            # testing, and nothing in the suite drives QML.
+            (pkgs.writeShellApplication {
+              name = "nixarchy-rebuild-state";
+              runtimeInputs = [ pkgs.systemd ];
+              text = ''
+                # One show call, not three: a unit that finishes between two
+                # calls would otherwise report a state that never existed.
+                # Property order is systemd's, so read by key rather than line.
+                props=$(systemctl --user show \
+                  -p SubState -p Result -p ExecMainStatus nixarchy-rebuild \
+                  2>/dev/null || true)
+                get() { printf '%s\n' "$props" | sed -n "s/^$1=//p" | tail -1; }
+
+                sub=$(get SubState)
+                result=$(get Result)
+                code=$(get ExecMainStatus)
+                [ -n "$code" ] || code=0
+
+                # SubState, not ActiveState, for the reason nixarchy-apply gives
+                # at its own read: RemainAfterExit keeps a finished rebuild
+                # "active", and `exited` plus Result is the only pair that
+                # separates a success from a failure that already activated.
+                case "$sub" in
+                  running | start | start-pre | start-post) state=running ;;
+                  failed) state=failed ;;
+                  exited)
+                    if [ "$result" = "success" ] && [ "$code" = "0" ]; then
+                      state=succeeded
+                    else
+                      state=failed
+                    fi
+                    ;;
+                  *) state=idle ;;
+                esac
+
+                # exit is meaningless unless it failed; say 0 rather than leave
+                # the key out, so the panel never has to test for absence.
+                [ "$state" = failed ] || code=0
+                printf '{"state":"%s","exit":%s}\n' "$state" "$code"
+              '';
+            })
+
           ]
           ++ appPackages;
         }

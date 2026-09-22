@@ -19,6 +19,23 @@ re-port, and that property is worth more than any individual fix.
 | `doctor.sh`, `verify.sh`, `review.sh` | scripts spliced into derivations at build time |
 | `explain.sh` | reads a Nix failure and says what it is, in the user's vocabulary |
 | `box.nix`, `microvm.nix` | the container and guest runners |
+| `rebuild-panel/` | the one Quickshell panel whose source is here, not an input |
+
+**Why `rebuild-panel/` is here and every other panel is a flake input.** The
+eight panels nixarchy installs (`nixarchy.pkg`, `.podman`, `.distrobox`,
+`.herdr`, `.microvm`, `.devenv`, `olafkfreund.gitlab-pipelines`,
+`.github-actions`) each come from their own repository, copied into place by a
+`runCommand` in `modules/home.nix`. That is the right shape for a panel that
+drives a tool: the tool has its own release cycle and the panel follows it.
+
+`nixarchy.rebuild` (#765 PR 5) drives *this repository's* `nixarchy-apply
+--detach`, and the two are one contract: the unit's name, `RemainAfterExit`,
+and the properties `nixarchy-rebuild-state` reads. Split across two repos,
+nothing asserts both ends and a skew is a panel that shows the wrong state
+with both sides green. Here, `checks.qml` parses it and
+`checks.apply-staging` tests its state mapping against the very script that
+starts the unit. Follow this only for a panel that is inseparable from
+something here; take a flake input otherwise.
 
 ## The trap that has cost the most here
 

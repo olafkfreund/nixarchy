@@ -175,6 +175,25 @@ What only a person can prove: `nixarchy apply --detach --yes` on real
 hardware, then `journalctl --user -fu nixarchy-rebuild` shows the build, the
 dialog asks once, and the unit ends `Result=success`.
 
+## The panel one: nothing in the suite presses a button
+
+The rebuild panel (#765 PR 5, `pkgs/rebuild-panel/`) is covered in three
+places, and none of them is the panel itself:
+
+- `checks.qml` proves its three QML files parse -- and only that;
+- `checks.apply-staging` proves the state mapping, because it is a command
+  (`nixarchy-rebuild-state`) and not logic inside QML. That split exists for
+  this reason;
+- `checks.session` proves `nixarchy-plugin nixarchy.rebuild` opens it over a
+  running unit.
+
+What no check reaches: pressing _Rebuild now_, _Copy log_ or _Open full log in
+terminal_, the confirm text, the elapsed time, and the log tail rendering.
+Nothing here drives a click in the shell's QML, and OCR is not an option --
+#765 PR 1 already found this theme unreadable to it, which is why the session
+probe waits on a `polkit-agent-helper@*` unit rather than on text. So the
+panel's behaviour is a by-hand check on real hardware, listed in the PR.
+
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
 The network reinstall image (#483) is only honest for a closure the caches
@@ -273,6 +292,33 @@ change for reasons unrelated to what it tests, and the mechanism would be
 untestable until the first of them landed. What the stand-ins cannot show is
 that a real plugin's panel opens. That belongs to the PR that adds each
 plugin, and the build asserts each default's manifest id.
+
+**Adding an UNGATED default means teaching two all-defaults-off fixtures**, and
+they are in different files:
+
+- `noDefaultsHome` (`tests/options.nix`), so `defaultPluginsNoHookWhenEmpty` can
+  assert "nothing resolved, no hook";
+- the `machine` node's `defaultPlugins` block (`tests/plugin.nix`), so the
+  machine really has an **empty plugin directory** — several assertions there
+  depend on it, including that the Remove Plugin row hides itself.
+
+Miss the first and `checks.options` fails on that assertion's *off* half. Miss
+the second and `checks.plugin` fails with `the Remove Plugin row still shows
+itself with no plugins installed`. Neither message names your plugin or your own
+new assertion, so both read as unrelated regressions — #765 PR 5 hit them in
+that order, the second only in CI because `checks.plugin` is a booted VM. They
+are §4's hand-maintained list failing closed rather than open, which is the
+right direction, but only for somebody who knows where to look.
+
+A **gated** default (podman, distrobox, devenv) does not hit either, because it
+resolves to nothing on those nodes anyway. That is why the lists are shorter
+than the default set, and why the trap only springs on an ungated one.
+
+And when proving such an assertion can fail, **delete the entry rather than
+renaming it.** A plugin is installed under its manifest's `id`, not its
+attribute name, so a rename leaves it installed and turns a *different* check
+red. Read the assertion's own value in the log (`rebuildIsADefault: on= off=`),
+never the exit status alone.
 
 One exception, about a plugin's *tools* rather than the plugin: the
 `defaults` node turns the real herdr default back on (#771). What it proves is

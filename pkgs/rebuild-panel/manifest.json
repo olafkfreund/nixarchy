@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "nixarchy.rebuild",
+  "name": "nixarchy rebuild",
+  "version": "0.1.0",
+  "author": "olafkfreund",
+  "license": "MIT",
+  "description": "Watch the rebuild: what it is doing, how long it has taken, and its log -- without a terminal.",
+  "homepage": "https://github.com/olafkfreund/nixarchy",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Rebuild",
+    "description": "Shows only while the machine is rebuilding; opens the rebuild's log and controls.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  },
+  "keepLoaded": true
+}

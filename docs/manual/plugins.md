@@ -32,6 +32,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D <!-- nixarchy.distrobox --> |
 | [Dev environments](#dev-environments) | the per-project environments on this machine | **on wherever devenv is** | Apps ▸ Dev environments · Super+Alt+E <!-- nixarchy.devenv --> |
 | [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A <!-- olafkfreund.github-actions --> |
+| [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
 
@@ -199,6 +200,32 @@ replace a real directory. It stays enabled, and the managed copy takes over.
 ![A running install check expanded to its jobs, and the install job to its eight steps with their status and timers](../img/plugins/github-actions-steps.webp)
 
 *Recorded on an authenticated desktop, in Gruvbox, showing public repositories only.*
+
+## Rebuild
+
+Shipped with nixarchy itself, in `pkgs/rebuild-panel/` -- the only panel here
+whose source is in the nixarchy repository, because it and `nixarchy apply
+--detach` are two halves of one thing.
+
+**What it solves.** Applying a change used to open a floating terminal: a
+tty prompt, a progress view drawn in escape codes, and a window you could not
+close without wondering whether you had just killed the rebuild. Closing it
+did kill it, before the supervised unit existed.
+
+**What it does.** _Install -> Apply changes_ opens it instead. It says what it
+is about to do and starts nothing until you press **Rebuild now**; then it
+shows the elapsed time and the tail of the log while the rebuild runs as the
+`nixarchy-rebuild` user unit. Close it and the rebuild carries on; open it
+again and you are back on the same one -- including a rebuild you started
+yourself in a terminal. If it fails, it keeps the exit code and offers
+**Copy log** and **Open full log in terminal**.
+
+**No cancel button, deliberately.** Stopping a switch part-way can leave the
+system half-changed, so it is not one keypress away. Once the log reaches
+"Activating", let it finish and roll back afterwards if you need to.
+
+**Its bar icon appears only while a rebuild is running or has failed**, so it
+costs nothing in the bar the rest of the time.
 
 ## ai-mirror
 

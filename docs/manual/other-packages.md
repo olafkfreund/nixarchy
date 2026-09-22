@@ -22,9 +22,21 @@ and 2 have no equivalent and say so in the menu.
 Picking a row does not install anything. It uncomments one line in
 `~/.config/nixarchy/apps.nix`, which is a file nixarchy writes for you, fully
 populated with every app and every line commented out. Pick five rows and you
-have five uncommented lines. Then _Install > Apply changes_ runs
-`nixarchy-apply`, which copies that file to `nixarchy-apps.nix` in your flake
-directory and offers to run `nh os switch <flake>`.
+have five uncommented lines. Then _Install > Apply changes_ opens the rebuild
+panel, which says what it is about to do and starts only when you press
+_Rebuild now_: it copies that file to `nixarchy-apps.nix` in your flake
+directory and runs `nh os switch <flake>`.
+
+The panel is only a view of the rebuild. It shows how long it has taken and the
+tail of the log while it runs; closing it does not stop anything, and opening it
+again reattaches to the same rebuild -- including one you started yourself in a
+terminal. There is no cancel button on purpose: stopping a switch part-way can
+leave the system half-changed, and that should not be one keypress away. If it
+fails, the panel keeps the exit code and offers _Copy log_ and _Open full log in
+terminal_.
+
+Its bar icon appears only while a rebuild is running or has failed, so it is not
+a permanent fixture. `nixarchy apply` in a terminal is unchanged.
 
 The switch asks for your password in the same Omarchy dialog as any other
 administrator prompt, once per switch, rather than in the terminal. Over SSH

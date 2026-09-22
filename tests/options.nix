@@ -143,6 +143,7 @@ let
       distrobox = false;
       devenv = false;
       ai-mirror = false;
+      rebuild = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
@@ -891,6 +892,15 @@ let
       on =
         defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg" && hookLists "nixarchy.pkg" defaultHomeOn;
       off = defaultHome.programs.nixarchy.plugins ? "nixarchy.pkg";
+    };
+    # #765 PR 5: the rebuild panel, the same way. Ungated -- every nixarchy
+    # machine rebuilds -- so "off" is Mode A alone, which is the state a
+    # refactor breaks quietly.
+    rebuildIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.rebuild"
+        && hookLists "nixarchy.rebuild" defaultHomeOn;
+      off = defaultHome.programs.nixarchy.plugins ? "nixarchy.rebuild";
     };
     # #766 PR C: the Podman panel follows podman itself, not nixarchy. "off" is
     # the default machine, where podman is off, plus standalone Home Manager.

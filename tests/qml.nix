@@ -47,6 +47,9 @@ pkgs.runCommand "nixarchy-qml"
     # readable diff here, the same argument pkgs/omarchy/default.nix makes for
     # its runtime list.
     src = ../pkgs/omarchy;
+    # The rebuild panel is ours too (#765 PR 5), and lives in its own
+    # directory rather than in the omarchy tree.
+    panel = ../pkgs/rebuild-panel;
   }
   ''
     set -o pipefail
@@ -76,10 +79,12 @@ pkgs.runCommand "nixarchy-qml"
     # start, which is this file's own §2 argument one file over.
     cp ${omarchy}/share/omarchy/shell/shell.qml patched-shell.qml
 
-    for f in menu-bar-widget.qml switch-indicator.qml wrapped/shell-state-ipc.qml patched-shell.qml; do
+    for f in menu-bar-widget.qml switch-indicator.qml wrapped/shell-state-ipc.qml patched-shell.qml \
+      panel/Panel.qml panel/RebuildView.qml panel/RebuildState.qml; do
       echo "== $f"
       case "$f" in
         wrapped/*|patched-shell.qml) report=$(lint "$f") ;;
+        panel/*)   report=$(lint "$panel/''${f#panel/}") ;;
         *)         report=$(lint "$src/$f") ;;
       esac
       # NOT `out=` -- that is the builder's output path, and clobbering it

@@ -513,8 +513,31 @@ pkgs.testers.runNixOSTest {
     machine.succeed(as_user("systemd-run --user --unit=nixarchy-rebuild --collect sleep 300"))
     busy = machine.execute(as_user("NIXARCHY_FLAKE=/nonexistent nixarchy-apply --detach --yes"))[0]
     assert busy == 3, f"a detach while nixarchy-rebuild runs exited {busy}, want 3"
-    machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
     print("a second detached apply is refused while one runs")
+
+    # ---- the rebuild panel, over that running unit (#765 PR 5) -------------
+    # The `sleep 300` unit above is still nixarchy-rebuild, so this runs
+    # against a rebuild that is, as far as anything here can tell, going on.
+    #
+    # Asked over IPC, never by OCR: PR 1 found this theme unreadable to the
+    # test's OCR and had to stop matching on the dialog's text. A panel drawn
+    # in the same palette is no more readable.
+    machine.wait_until_succeeds(
+        as_user("nixarchy-rebuild-state") + " | grep -q running", timeout=60)
+    print("nixarchy-rebuild-state reads a live unit as running")
+
+    # A row that opens a plugin the machine has not installed, or has not
+    # enabled, does nothing at all -- the failure nixarchy-plugin exists to
+    # make loud. The precondition is asserted before the action, so "the
+    # panel did not open" cannot be read as "the plugin was never there".
+    machine.succeed(as_user("nixarchy-plugin --enabled nixarchy.rebuild"))
+    machine.succeed(as_user("nixarchy-plugin nixarchy.rebuild"))
+    machine.wait_until_succeeds(
+        as_user("omarchy-shell nixarchy.rebuild.bar status") + " | grep -q running",
+        timeout=30)
+    print("Install > Apply's row opens the rebuild panel over the running unit")
+
+    machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
 
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it

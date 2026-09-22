@@ -81,8 +81,9 @@ switch cannot clean it up.
 
 ### Hyprland comes from upstream, not nixpkgs
 
-Omarchy 4.x needs ≥ 0.55 for `hl.bind` / `hl.window_rule` / `hl.on`; nixpkgs is
-on 0.54.3.
+Omarchy 4.x needs ≥ 0.55 for `hl.bind` / `hl.window_rule` / `hl.on`. nixpkgs
+has since caught up -- it ships the `v0.56.2` release -- but the point stands
+for the next lag, and for the tag itself, which does not build (below).
 
 The flake pins a **commit**, not the `v0.56.2` tag, because that tag does not
 build against its own `flake.lock`: its `CMakeLists.txt` asks for

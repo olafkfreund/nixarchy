@@ -626,11 +626,13 @@ entry; the menu work, the tests and the docs are unchanged.
   `omarchy-shell shell toggle`. That helper already handles the two cases a raw
   toggle gets wrong: not installed, and installed but disabled, both of which
   exit 0 having done nothing.
-- **The row starts the unit, then opens the panel.** `install.apply` becomes a
-  small wrapper, not two chained commands in the menu string: if
-  `nixarchy-apply --detach --yes` exits non-zero (exit 3 = already running),
-  the panel still opens, because a rebuild already running is exactly what the
-  user wants to look at.
+- **The row only opens the panel.** An earlier draft of this decision had the
+  row start the unit *and* open the panel through a wrapper, which contradicts
+  the next decision: if the panel asks first, there is nothing to start yet.
+  So `install.apply` is exactly `nixarchy-plugin nixarchy.rebuild`, no wrapper,
+  and the panel's button is the only thing that runs
+  `nixarchy-apply --detach --yes`. A rebuild already running is what the panel
+  shows when it opens, which is what the user wanted to see anyway.
 - **Apply keeps asking.** Today Install > Apply opens a terminal that offers a
   VM preview and then asks "Build and switch now?". `--detach --yes` answers
   both. Making the menu row a one-click irreversible switch is a behaviour
@@ -668,6 +670,42 @@ entry; the menu work, the tests and the docs are unchanged.
 Check `gh pr list` and the bus for open work on the `install.*` rows before
 step 5, and rebase rather than merge.
 
+### Deviations found while implementing PR 5
+
+- **The manifest is `bar-widget`, not `panel`.** Step 1 below said "a panel
+  kind, and no bar widget". `omarchy-shell shell toggle` reaches
+  `shell.toggle()` -> `shell.summon()` -> `shell.bar.summonBarWidget(id)`
+  (`shell.qml:1169`), and `summonBarWidget` resolves the id with
+  `findPanelWidget` against the *instantiated* bar widgets (`Bar.qml:745`).
+  What `nixarchy-plugin <id>` opens is a bar widget's panel. The validator does
+  carry a `panel` kind, but that is for the shell's own built-ins
+  (`shell/plugins/panels/clock`, `weather`). Built as the step first said, the
+  plugin would validate, install, enable, and log `summon: no live bar widget
+  for:` -- the "installs and does nothing" failure the validator's own comment
+  is about. The manifest follows the eight shipping panels:
+  `kinds: ["bar-widget"]`, `entryPoints.barWidget = "Panel.qml"`.
+- **A default plugin gets a permanent bar icon, and that was not anticipated.**
+  `modules/home.nix:1675` enables each default id with
+  `omarchy-plugin-enable "$id" right`, so the panel takes a ninth slot in the
+  bar -- beside `SystemSwitch.qml`, the rebuild spinner #873 just taught to open
+  the rebuild's log. Two bar items about rebuilding. It is forced by the
+  mechanism above: a widget that is not in the bar cannot be summoned.
+  **Decision taken, after finding the precedent:** the widget is in the bar so
+  it can be summoned, and *draws nothing* unless a rebuild is running --
+  `visible: RebuildState.active || root.opened` on its `BarIconButton`. This is
+  not invented here: `nixarchy.distrobox` ships `hideWhenEmpty`, which hides its
+  own icon the same way, and a hidden-but-instantiated widget still answers
+  `findPanelWidget`, so `nixarchy-plugin` opens it either way. So there is no
+  ninth permanent icon, `SystemSwitch.qml` is untouched, and #873 is not
+  reverted. The two do overlap while a rebuild runs -- the indicator's spinner
+  beside the panel's icon -- and merging them is a follow-up, in its own PR with
+  its own red/green pair, not a change made on the day #873 merged.
+- **The log tail is capped at 500 lines, not the 2000 the decisions said.**
+  `LogView.qml` in the distrobox panel caps at 400, and matching the house
+  number is worth more than the round one I picked before reading it. A failing
+  nix build's useful context is its last screenful; the full log is one button
+  away and is what Copy log copies.
+
 ### Steps
 
 0. **Before anything local:** read the bus, and check nothing is in flight with
@@ -675,7 +713,8 @@ step 5, and rebase rather than merge.
    (§6). Repeat before every build. Work in `/mnt/data/vmtest/nixarchy-765-pr5`.
 
 1. **The manifest, and the assertion that it loads.** `pkgs/rebuild-panel/manifest.json`
-   with id `nixarchy.rebuild`, a panel kind, and no bar widget.
+   with id `nixarchy.rebuild`, `kinds: ["bar-widget"]` and
+   `entryPoints.barWidget = "Panel.qml"` (see the deviation above).
    → **Red first (§1):** add the `defaultPluginSet` entry pointing at the
    directory *before* the manifest is valid — a `manifest.json` missing its
    `id` — and build `nixosConfigurations.reference.config.home-manager...`

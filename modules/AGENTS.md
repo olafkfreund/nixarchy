@@ -2095,5 +2095,25 @@ changed until it was told.
   - **Rate limiting off:** a build log is bursty, and dropped lines are the
     ones a failure needs.
   - **No cancel verb:** SIGTERM to nh can land mid-activation. Don't stop the
-    unit by hand once its log says "Activating"; PR 5 decides whether a panel
-    offers cancel, and only during the build.
+    unit by hand once its log says "Activating". PR 5 decided the panel does
+    not offer one either, for the same reason: a button is one keypress.
+- **The panel reads the unit and keeps nothing** (#765 PR 5,
+  `pkgs/rebuild-panel/`). `nixarchy.rebuild` is the only default plugin whose
+  source is in this repository rather than a flake input, because it and
+  `nixarchy-apply --detach` are two halves of one contract and must not drift.
+  - **The state mapping is a command, not QML.** `nixarchy-rebuild-state`
+    turns `SubState`/`Result`/`ExecMainStatus` into
+    idle/running/succeeded/failed, so `checks.apply-staging` can test it
+    against a stubbed systemctl. Nothing in the suite drives QML, so logic
+    left in the panel would ship untested.
+  - **It asks before it switches.** Install > Apply used to open a terminal
+    that offered a preview and asked. A panel that rebuilt on the click would
+    have quietly turned that into a one-click irreversible switch, so the row
+    only opens the panel and the button is the only thing that starts a
+    rebuild.
+  - **The widget hides itself.** It has to be *in* the bar -- `summonBarWidget`
+    resolves an id against the instantiated widgets (`Bar.qml`), so a plugin
+    that is not there cannot be summoned -- but it draws nothing unless a
+    rebuild is running or has failed. `nixarchy.distrobox`'s `hideWhenEmpty`
+    is the same trick. `SystemSwitch.qml`, the indicator #873 taught to open
+    the rebuild's log, is untouched; merging the two is a follow-up.

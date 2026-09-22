@@ -26,6 +26,14 @@ let
       p: (p.pname or p.name or "") == "nixarchy-apply"
     ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
   );
+  # The rebuild panel's state mapping (#765 PR 5), taken the same way. It is a
+  # command precisely so it can be run here: nothing in the suite drives QML,
+  # so a state machine left in the panel would ship untested.
+  rebuildState = builtins.head (
+    builtins.filter (
+      p: (p.pname or p.name or "") == "nixarchy-rebuild-state"
+    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
+  );
 in
 pkgs.runCommand "nixarchy-apply-staging"
   {
@@ -215,6 +223,41 @@ pkgs.runCommand "nixarchy-apply-staging"
     else
       bad "off a terminal nh ran without --no-nom: $(cat "$PWD/nh.calls" 2>/dev/null)"
     fi
+
+    # ---- what the rebuild panel reads (#765 PR 5) -------------------------
+    # The stub above answers every `show` with $UNIT_STATE, which was enough
+    # while nixarchy-apply asked for one property with --value. This command
+    # asks for three at once, so the stub has to answer by key.
+    state=${rebuildState}/bin/nixarchy-rebuild-state
+    [ -x "$state" ] || { echo "nixarchy-rebuild-state is not where the module builds it" >&2; exit 1; }
+
+    systemctl() {
+      case " $* " in
+        *" -p SubState "*)
+          printf 'SubState=%s\n' "''${UNIT_STATE:-}"
+          printf 'Result=%s\n' "''${UNIT_RESULT:-}"
+          printf 'ExecMainStatus=%s\n' "''${UNIT_CODE:-0}"
+          ;;
+        *" show "*) echo "''${UNIT_STATE:-}" ;;
+        *) echo "$*" >> "$sccalls" ;;
+      esac
+    }
+    export -f systemctl
+
+    says() {
+      got=$(UNIT_STATE="$2" UNIT_RESULT="$3" UNIT_CODE="$4" $state)
+      if [ "$got" = "$1" ]; then
+        ok "$5"
+      else
+        bad "$5 -- said $got, wanted $1"
+      fi
+    }
+
+    says '{"state":"running","exit":0}'   running ""        0 "a running unit reads as running"
+    says '{"state":"succeeded","exit":0}' exited  success   0 "a finished unit that succeeded reads as succeeded"
+    says '{"state":"failed","exit":3}'    exited  exit-code 3 "a unit that failed AFTER activating keeps nh's exit code"
+    says '{"state":"failed","exit":1}'    failed  exit-code 1 "a failed unit reads as failed"
+    says '{"state":"idle","exit":0}'      ""      ""        0 "no unit at all reads as idle"
 
     [ "$fails" -eq 0 ] || exit 1
     touch $out

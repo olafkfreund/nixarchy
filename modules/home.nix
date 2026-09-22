@@ -1613,6 +1613,21 @@ in
 
     programs.nixarchy = {
       defaultPluginSet = {
+        # The rebuild panel (#765 PR 5), and the only one whose source is in
+        # this repository rather than a flake input: it reads the
+        # nixarchy-rebuild unit that nixarchy-apply --detach starts, and the two
+        # cannot be allowed to drift apart. Its widget draws nothing unless a
+        # rebuild is running, so the ninth default plugin is not a ninth icon.
+        rebuild = {
+          id = "nixarchy.rebuild";
+          src = ../pkgs/rebuild-panel;
+          # journalctl for the log, wl-copy for Copy log. nixarchy-apply and
+          # nixarchy-rebuild-state are already on the session PATH from apps.nix.
+          packages = [
+            pkgs.systemd
+            pkgs.wl-clipboard
+          ];
+        };
         # The package manager panel, on wherever nixarchy is (#766).
         pkg = {
           id = "nixarchy.pkg";

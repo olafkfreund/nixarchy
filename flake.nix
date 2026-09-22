@@ -2013,6 +2013,16 @@
           # fixture so it proves on every run that it can go red.
           qml = import ./tests/qml.nix { pkgs = pkgsFor.${system}; };
 
+          # A keep-loaded plugin lost its shell API at the first shell.json
+          # change, because manifestHasKind tested kinds with Array.isArray and a
+          # Qt sequence is not one (#877). Runs the built function in a real QML
+          # engine, with upstream's as its negative control.
+          manifest-has-kind = import ./tests/manifest-has-kind.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
+
           # The release notes, against a fixture repository whose diff is known.
           # Same dangerous failure as the delta above, over more scans: a release
           # note that reads calm because a grep stopped matching. See

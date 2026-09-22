@@ -60,6 +60,16 @@ spec: spec/2026-09-22-877-manifest-has-kind.md
   - Negative control: the same probe runs against the unpatched function (taken from
     the omarchy source before patching) and must fail. If it passes, the check fails.
   - It is wired into `flake.nix` `checks` next to `qml`.
+  - Deviations in step 1 (the harness, not the design):
+    - the function is declared **inside** `Component.onCompleted`, as plain JS.
+      As a member of the probe `Item`, calls are marshalled through QVariant,
+      which turned the Qt sequence into a real array, and the control failed for
+      that wrong reason;
+    - the probe exits `10 + bits`, so the `qml` tool's own small error codes
+      (exit 2, "Did not load any objects") are reported as harness failures, never
+      read as results;
+    - `QML_IMPORT_PATH` and `FONTCONFIG_FILE` are set, because the sandbox has no
+      QML import path and `import QtQuick` did not resolve.
 - **Rejected** (don't reintroduce): patching all 18 sites; a re-inject patch; a
   grep-only check; normalising manifests at call sites; a workaround in the plugin.
 

@@ -1127,6 +1127,19 @@ are removed. That is what distinguishes a link this module or
 provision-user planted from a skill the user wrote by hand, which is a
 real directory and is never touched.
 
+Three directories, not upstream's four: `~/.codex/skills` is left out,
+deliberately. Codex's documented user location is `~/.agents/skills`, and
+the binary reads both (checked on 0.151.0 and 0.155.1, which nixarchy
+ships). Its docs say that when two skills share a name "Codex doesn't merge
+them; both can appear in skill selectors", so linking both directories
+listed every nixarchy skill twice. `.codex` is still in the clean-up loop,
+because dropping it only from the link loop would leave the links earlier
+generations planted there for good. provision-user is patched to match
+(`pkgs/omarchy`), so a fresh machine does not get the duplicates at first
+login. The accepted cost: a Codex old enough to read only `~/.codex/skills`
+would not see these skills. Upstream's `~/.hermes/skills` is not linked
+either, as before this change.
+
 <a id="declared-plugins-linked-in-by-the-id-their-manifes"></a>
 ### Declared plugins, linked in by the id their manifest claims
 

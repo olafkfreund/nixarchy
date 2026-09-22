@@ -55,9 +55,12 @@ All paths are relative to the nixarchy repo root.
    The second one keeps a no-op line rather than deleting it, so the loop
    body's shape and line count stay stable. Both strings were checked
    against upstream 4.0.4 source lines 87 and 93.
-   → verify: `nix build .#nixosConfigurations.reference.pkgs.omarchy`
-   succeeds, and `grep -c codex/skills` on the built
-   `share/omarchy/bin/omarchy-provision-user` returns 0.
+   → verify: `nix build .#packages.x86_64-linux.omarchy` succeeds, and in
+   the built `share/omarchy/bin/omarchy-provision-user` the only remaining
+   `codex/skills` match is the no-op comment line (no `mkdir` and no
+   `ln`). `bash -n` passes. (Corrected during implementation: the approved
+   plan said `grep -c` returns 0, which missed that the no-op line itself
+   names the path, and it named a build attribute that does not exist.)
 3. **Update the comment at `pkgs/omarchy/default.nix:1075-1077`:** three
    directories, and why not `.codex`.
 4. **`tests/session.nix:621`.**

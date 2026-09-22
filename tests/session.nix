@@ -641,18 +641,25 @@ pkgs.testers.runNixOSTest {
     # The names matter as much as the links: an agent keys on the directory
     # name, so `omarchy` still being here would mean the rename never reached
     # the only place it is read.
-    for home in [".agents/skills", ".claude/skills", ".codex/skills",
-                 ".pi/agent/skills"]:
-        for skill in ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
-                      "nixos-services", "nixos-secrets", "nixos-performance",
-                      "nixos-security", "nixos-doctor", "nixos-config-repo",
-                      "devenv", "diagnose-crash"]:
+    skills = ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
+              "nixos-services", "nixos-secrets", "nixos-performance",
+              "nixos-security", "nixos-doctor", "nixos-config-repo",
+              "devenv", "diagnose-crash"]
+    for home in [".agents/skills", ".claude/skills", ".pi/agent/skills"]:
+        for skill in skills:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
             # -e follows the link: a link into a store path that is not in this
             # closure would pass -L and fail here, which is the stale case.
             machine.succeed(f"test -e /home/omarchy/{home}/{skill}/SKILL.md")
         machine.fail(f"test -e /home/omarchy/{home}/omarchy")
-    print("agent skills linked into all four agent homes, under the new names")
+    print("agent skills linked into all three agent homes, under the new names")
+
+    # And not into ~/.codex/skills: Codex reads ~/.agents/skills too and does not
+    # merge same-named skills, so a link here listed each one twice. This covers
+    # both writers, the activation loop and the patched provision-user.
+    for skill in skills:
+        machine.fail(f"test -e /home/omarchy/.codex/skills/{skill}")
+    print("no agent skills in ~/.codex/skills")
 
     # The config-repo nudge, and the three ways it is supposed to stay silent.
     #

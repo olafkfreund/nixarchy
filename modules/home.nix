@@ -989,9 +989,11 @@ in
                     skillsDir = "${omarchyPath}/default/agents/skills";
                   in
                   ''
+                    # Clean up everywhere a link was ever planted, .codex included:
+                    # dropping it from the link list alone would strand the old links.
                     for agentdir in .agents/skills .claude/skills .codex/skills .pi/agent/skills; do
                       dest="${config.home.homeDirectory}/$agentdir"
-                      run mkdir -p "$dest"
+                      [ -d "$dest" ] || continue
 
                       for link in "$dest"/*; do
                         [ -L "$link" ] || continue
@@ -999,6 +1001,13 @@ in
                           /nix/store/*/agents/skills/*) run rm -f "$link" ;;
                         esac
                       done
+                    done
+
+                    # Link where each agent reads. Not .codex: Codex reads
+                    # ~/.agents/skills too and does not merge same-named skills.
+                    for agentdir in .agents/skills .claude/skills .pi/agent/skills; do
+                      dest="${config.home.homeDirectory}/$agentdir"
+                      run mkdir -p "$dest"
 
                       ${pkgs.findutils}/bin/find ${skillsDir} -mindepth 1 -maxdepth 1 -type d |
                         while read -r skill; do

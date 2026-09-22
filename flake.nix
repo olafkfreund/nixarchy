@@ -146,7 +146,15 @@
     # no better than none here, so this stays the same situation sops-nix above
     # is in. Bump it deliberately; never track a branch.
     #
-    # 1c3fc7c is nixi-nixarchy master after #30. Five changes a user sees:
+    # 1e25cb8 is nixi-nixarchy#32: in the card, install, environment, VM,
+    # container and other-distro questions now lead with the nixarchy panel
+    # for the job. The manual excerpt added before each question used to win
+    # instead (a dual-boot page for "install btop"), framed as "answer
+    # directly from this", so #25 held on the command line but not in the
+    # card. Tried through the real card on razer: 6/6 lead with the right
+    # panel, and no unbound key is offered as working.
+    #
+    # The previous pin, 1c3fc7c, was nixi-nixarchy master after #30. Five changes a user sees:
     #   - Choosing a FAQ row shows its written answer (#28). It had thrown a
     #     QML TypeError since the rows were added, so the offline FAQ, one of
     #     the three things that need no agent, answered nothing.
@@ -194,7 +202,7 @@
     # literal name "claude". That still matters from #731 on and is carried
     # forward here; see that issue for the reasoning.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/1c3fc7c946499e544534fc260472fda61fb1730d";
+      url = "github:olafkfreund/nixi-nixarchy/1e25cb8784a51e4d7a3f978ca3050ecd94173b1f";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -177,6 +177,9 @@ pkgs.testers.runNixOSTest rec {
             microvm = false;
             distrobox = false;
             ai-mirror = false;
+            # Ungated (#765 PR 5): on every nixarchy machine, so an empty
+            # plugin directory needs it off here like nixarchy.pkg.
+            rebuild = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

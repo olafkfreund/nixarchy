@@ -72,7 +72,7 @@ a key, keyboard-first, in the desktop's own look:
 - see which coding agent in your herdr sessions needs you;
 - manage MicroVMs and Distrobox boxes.
 
-Nine ship by default: six are always on, and three turn on with their feature. Voice will be opt-in.
+Ten ship by default: seven are always on, and three turn on with their feature. Voice will be opt-in.
 
 [![The Podman panel: containers, images and volumes, then a container stopping](img/features/podman.gif)](img/features/podman.gif)
 

@@ -293,13 +293,26 @@ untestable until the first of them landed. What the stand-ins cannot show is
 that a real plugin's panel opens. That belongs to the PR that adds each
 plugin, and the build asserts each default's manifest id.
 
-**Adding a default means teaching `noDefaultsHome` too** (`tests/options.nix:136`).
-It lists every default by attribute name so `defaultPluginsNoHookWhenEmpty` can
-assert "nothing resolved, no hook". Leave a new one out and that assertion fails
-on its *off* half, naming neither your plugin nor your own new assertion — which
-reads as an unrelated regression. #765 PR 5 hit this. It is §4's hand-maintained
-list failing closed rather than open, which is the right direction, but only for
-somebody who knows where to look.
+**Adding an UNGATED default means teaching two all-defaults-off fixtures**, and
+they are in different files:
+
+- `noDefaultsHome` (`tests/options.nix`), so `defaultPluginsNoHookWhenEmpty` can
+  assert "nothing resolved, no hook";
+- the `machine` node's `defaultPlugins` block (`tests/plugin.nix`), so the
+  machine really has an **empty plugin directory** — several assertions there
+  depend on it, including that the Remove Plugin row hides itself.
+
+Miss the first and `checks.options` fails on that assertion's *off* half. Miss
+the second and `checks.plugin` fails with `the Remove Plugin row still shows
+itself with no plugins installed`. Neither message names your plugin or your own
+new assertion, so both read as unrelated regressions — #765 PR 5 hit them in
+that order, the second only in CI because `checks.plugin` is a booted VM. They
+are §4's hand-maintained list failing closed rather than open, which is the
+right direction, but only for somebody who knows where to look.
+
+A **gated** default (podman, distrobox, devenv) does not hit either, because it
+resolves to nothing on those nodes anyway. That is why the lists are shorter
+than the default set, and why the trap only springs on an ungated one.
 
 And when proving such an assertion can fail, **delete the entry rather than
 renaming it.** A plugin is installed under its manifest's `id`, not its

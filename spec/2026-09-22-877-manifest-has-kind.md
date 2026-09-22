@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 877
 intent: intent/2026-09-22-877-manifest-has-kind.md
 ---

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 889
 spec: spec/2026-09-22-889-github-actions-showcase.md
 ---

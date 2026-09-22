@@ -83,6 +83,11 @@ All paths are relative to the nixarchy repo root.
    provision-user is patched to match. It names the accepted risk, a Codex
    old enough to read only `.codex`, and notes that Hermes is not linked
    (unchanged).
+6a. **`AGENTS.md` §5 (added during implementation, required by the PR
+   template's write-back rule):** one bullet recording that an editor or
+   agent hook can silently reformat `.nix` in `nixpkgs-fmt` style, and that
+   `nix fmt -- --ci` failing once, then passing, is the tell. It cost real
+   time here and bites any agent editing this repo.
 7. **Commit** steps 1–6 as one commit:
    `fix(skills): stop linking nixarchy skills into ~/.codex/skills (#897)`.
 8. **Deploy to p620 only for real-machine verification**, from a nixos_config

@@ -1,7 +1,7 @@
 ---
 status: approved
-issue: TBD
-spec: spec/2026-09-22-tbd-codex-duplicate-skills.md
+issue: 897
+spec: spec/2026-09-22-897-codex-duplicate-skills.md
 ---
 
 # Plan: Codex lists every nixarchy skill twice
@@ -84,7 +84,7 @@ All paths are relative to the nixarchy repo root.
    old enough to read only `.codex`, and notes that Hermes is not linked
    (unchanged).
 7. **Commit** steps 1–6 as one commit:
-   `fix(skills): stop linking nixarchy skills into ~/.codex/skills (#TBD)`.
+   `fix(skills): stop linking nixarchy skills into ~/.codex/skills (#897)`.
 8. **Deploy to p620 only for real-machine verification**, from a nixos_config
    worktree with the nixarchy input overridden to this branch. Announce on
    the agent bus first, and diff units and closure against the running

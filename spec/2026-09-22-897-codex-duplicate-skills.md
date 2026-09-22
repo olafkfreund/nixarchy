@@ -1,7 +1,7 @@
 ---
 status: approved
-issue: TBD
-intent: intent/2026-09-22-tbd-codex-duplicate-skills.md
+issue: 897
+intent: intent/2026-09-22-897-codex-duplicate-skills.md
 ---
 
 # Spec: Codex lists every nixarchy skill twice

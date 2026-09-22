@@ -55,36 +55,29 @@ it.
 
 ## Design
 
-### Decision A (needs the owner): the command-line confirm
+### Decision A (owner, 2026-09-22): accept the command-line confirm, and document it
 
-**Proposed: a one-time code that never touches disk (upstream).**
+**Decided: accept and document.** The confirm binds MCP and the API, where an
+agent cannot answer its own request (`api.py:44-47`). The command line stays the
+user's own tool, as upstream has it: an agent with a shell **can** grant itself
+control with `ai-mirror control agent` and `ai-mirror control confirm`.
 
-- When a request is made, the dialog shows a short code, generated **inside the
-  shell process**, and passes it to `ai-mirror control confirm` on **stdin**, not
-  argv (argv is readable in `/proc/<pid>/cmdline`).
-- `confirm_request` accepts a request only with its code. The state file
-  carries a hash of the code, never the code.
-- A person at a terminal types the code the dialog shows. That keeps
-  upstream's "way out", but only for someone who can see the screen.
-- The CLI's default `by='human'` stays. The code is what makes it human.
+This relaxes the intent's constraint that the confirm holds "on every way in",
+knowingly and at the owner's direction. It is not left implied:
 
-This moves the bar from "run two commands" to "read another process's memory".
-It is stated as that, not as a guarantee: the spec, the manual and ai-mirror's
-docs all say that a same-user agent with a shell is not contained by any
-in-session prompt.
+- nixarchy's manual (the ai-mirror section of `docs/manual/plugins.md`) says in
+  plain words that an agent with a shell can grant itself control, and that an
+  agent you do not trust belongs in a Sandbox or a MicroVM, linking both;
+- `programs.nixarchy.aiMirror.mcp`'s description says the same, since turning
+  it on is the moment a person decides which agents reach the desktop;
+- every grant is still audited, with `request_by` and `enabled_by`
+  (`control.py:107-113, 209-217`), so a self-grant is visible after the fact.
 
-Alternatives for the owner:
+No ai-mirror code changes for A.
 
-- **Accept and document.** The confirm binds MCP and the API, the CLI is the
-  user's own tool, and the manual says so plainly. It costs nothing, and it
-  leaves the intent's "every way in" untrue.
-- **Remove the CLI confirm.** Not possible alone: the dialog *is* a CLI caller.
-  It would need the dialog to confirm some other way, which is the code design
-  above by a longer route.
+### Decision B (owner, 2026-09-22): watching gets a real sign
 
-### Decision B (needs the owner): watching gets a real sign
-
-**Proposed (upstream):** while `watching` is set, the icon takes the bar's
+**Decided (upstream):** while `watching` is set, the icon takes the bar's
 **warning** colour, not the foreground colour, and stays that way until 10 s
 after the last read. That is distinct from *on* (urgent colour) and from *off*
 (dimmed). No new grant: observation stays ungated, as the intent's default
@@ -132,10 +125,17 @@ file is touched.
 **An existing home without the bind still has a working stop.** Clicking the
 widget while an agent holds control runs `control off` (`Widget.qml:110`). The
 confirm dialog is part of the same plugin (`AgentConfirmDialog.qml`), so **a
-grant needs the plugin loaded, and a loaded plugin carries the stop.** That
-answers the intent's constraint without a runtime check for the bind. A home
-that has turned the widget off has no dialog either, and can grant nothing
-(with Decision A in place, not even from a terminal).
+grant made through the dialog needs the plugin loaded, and a loaded plugin
+carries the stop.**
+
+Decision A leaves one path outside that: a terminal self-grant in a home that
+has turned the widget off and predates the seeded bind. That grant has no stop
+on screen. What bounds it is upstream's expiry: a grant ends when the asking MCP
+server exits, and by itself after ten minutes with no input
+(`docs/usage.md:14-15`). `ai-mirror control off` in any terminal also ends it.
+The manual says this in the same paragraph as Decision A, and no runtime check
+for the bind is added: it would guard only the dialog path, which already has
+its stop.
 
 **4. MCP: a separate opt-in, off.** A new `programs.nixarchy.aiMirror.mcp`,
 default **false**, independent of `programs.nixarchy.mcp` (which defaults to
@@ -155,13 +155,18 @@ without enabling nixarchy installs nothing and sets no variable.
 
 ## Order
 
-ai-mirror's Decisions A and B land **first**, as PRs in ai-mirror (the owner's
-repository). nixarchy then pins the commit that contains them. That is the
-intent's constraint: "the human confirm lands upstream before this ships as a
-default". Nothing in nixarchy merges against a pin without them.
+Decision B lands **first**, as a PR in ai-mirror (the owner's repository), and
+nixarchy then pins the commit that contains it. The intent's constraint, "the
+human confirm lands upstream before this ships as a default", is already met by
+ai-mirror #10 for every path the owner kept gated (MCP and the API).
 
 ## Alternatives rejected
 
+- **A one-time code for the CLI confirm.** Designed here first: a code shown in
+  the dialog, passed over stdin, and required by `confirm_request`. It would
+  have raised a same-user agent's bar from two commands to reading another
+  process's memory, but not removed it. The owner chose to document the limit
+  instead of carrying that mechanism.
 - **Enable upstream's Home Manager module and override it.** Three overrides,
   one of them a duplicate-plugin key clash, against two lines of our own.
 - **Put ai-mirror behind `programs.nixarchy.mcp`.** The intent forbids it: that
@@ -175,12 +180,9 @@ default". Nothing in nixarchy merges against a pin without them.
 
 ## Risks
 
-- **Decision A is a bar, not a wall.** It is said in the manual, not implied.
-  The containment answer for an untrusted agent is a Sandbox or a MicroVM, and
-  the manual's ai-mirror section links them.
-- **The shell must pass the code over stdin.** Quickshell's `Process` supports
-  `stdinEnabled` and `write()`. That has to be proved in the upstream PR, not
-  assumed here.
+- **A shell agent can grant itself control (Decision A).** Accepted, not
+  mitigated. The manual and the MCP option say so, and the audit log records
+  who asked. If this is revisited, the one-time code above is the design.
 - **One more default plugin** moves #856's counts to nine and adds a
   `plugins.md` row. Those checks are why it cannot be forgotten.
 - **Voice and ai-mirror share one pin.** A bump to either moves the helper
@@ -191,10 +193,6 @@ default". Nothing in nixarchy merges against a pin without them.
 Each check is broken first and seen red (AGENTS.md §1).
 
 - **Upstream (ai-mirror's own tests):**
-  - `control confirm` without the code is refused;
-  - with a wrong code it is refused;
-  - with the dialog's code it is granted;
-  - the state file contains no code;
   - the watching colour is the warning colour for 10 s after an `OBSERVING`
     call and not after.
 - **nixarchy, evaluation (`checks.options`, both states):**
@@ -207,12 +205,14 @@ Each check is broken first and seen red (AGENTS.md §1).
   `bindings.lua`, beside the other default binds.
 - **nixarchy, the running session (`checks.session`):**
   - the widget is loaded;
-  - `ai-mirror control agent` from a shell leaves `owner: pending`;
-  - `ai-mirror control confirm` without the code leaves it pending;
-  - the request lapses to `off` after 30 s.
+  - an MCP `control confirm` is refused with `not_owner`, and the state stays
+    `pending`;
+  - an unanswered request lapses to `off` after 30 s;
+  - the kill switch and a widget click each return control to `off`.
 
-  This is the intent's "tested at runtime" requirement, and the break is to
-  revert Decision A's pin and watch the self-grant succeed.
+  This is the intent's "tested at runtime" requirement. The break for the
+  first is an MCP caller treated as human (`by='human'` in `mcp.py:189`),
+  which must turn the check red.
 - **Voice (runtime, a session with voice enabled):** voice's process holds no
   MCP connection to ai-mirror, and ai-mirror's state stays `off` throughout a
   voice command.

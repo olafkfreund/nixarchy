@@ -703,6 +703,28 @@ in
       '';
     };
 
+    # #773. Its own switch, off, and deliberately NOT behind `mcp` above,
+    # which is on for everyone. Why: spec/2026-09-22-773-ai-mirror-default.md
+    aiMirror.mcp = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Connect Claude Code, Codex and opencode to ai-mirror, which lets an
+        agent see this desktop and, once you say yes on screen, drive its
+        keyboard and mouse. The ai-mirror widget in the bar shows when an agent
+        is watching or driving, and Super+Shift+Escape takes control back.
+
+        What the yes does and does not cover: an agent reaching ai-mirror
+        through this connection cannot answer its own request. An agent with a
+        shell on your account can -- it can run `ai-mirror control confirm`
+        itself -- and no prompt inside your session can stop that. Run an agent
+        you do not trust in a sandbox or a MicroVM instead.
+
+        Turning this off takes the connection back out of all three agents'
+        configuration files, unless you wrote the entry yourself.
+      '';
+    };
+
     languageServer = lib.mkOption {
       type = lib.types.bool;
       default = true;

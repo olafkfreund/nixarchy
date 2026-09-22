@@ -50,6 +50,19 @@ let
   # NixOS module to have set any of them and every block below must then be
   # inert.
   mcpEnabled = osConfig.programs.nixarchy.mcp or false;
+  # #773: off unless asked for, and taken back out when turned off again.
+  aiMirrorMcp = osConfig.programs.nixarchy.aiMirror.mcp or false;
+  aiMirrorConfig =
+    args:
+    inputs.mcp-servers-nix.lib.mkConfig pkgs (
+      {
+        settings.servers.ai-mirror = {
+          command = "${inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.ai-mirror}/bin/ai-mirror";
+          args = [ "mcp" ];
+        };
+      }
+      // args
+    );
   languageServer = osConfig.programs.nixarchy.languageServer or false;
   nixdSettings = osConfig.programs.nixarchy.nixdSettings or { };
 
@@ -1200,6 +1213,47 @@ in
         fileName = "nixarchy-mcp-codex.toml";
       };
     });
+
+    # ---- #773: ai-mirror's MCP server, only when asked for -------------------
+    #
+    # The same three agents and the same helpers as the NixOS server above,
+    # under its own switch. Both helpers only ever add, so the off state is
+    # not "write nothing": it is the removal below, which takes back an entry
+    # whose command is our store path and leaves one the user wrote.
+    home.activation.nixarchyAiMirrorMcpClaude = lib.mkIf aiMirrorMcp (mergeJson {
+      what = "ai-mirror's MCP server";
+      file = "${config.home.homeDirectory}/.claude.json";
+      json = aiMirrorConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-ai-mirror-mcp-claude.json";
+      };
+    });
+    home.activation.nixarchyAiMirrorMcpOpencode = lib.mkIf aiMirrorMcp (mergeJson {
+      what = "ai-mirror's MCP server";
+      file = "${config.xdg.configHome}/opencode/opencode.json";
+      json = aiMirrorConfig {
+        flavor = "opencode";
+        fileName = "nixarchy-ai-mirror-mcp-opencode.json";
+      };
+    });
+    home.activation.nixarchyAiMirrorMcpCodex = lib.mkIf aiMirrorMcp (appendToml {
+      what = "ai-mirror's MCP server";
+      file = "${config.home.homeDirectory}/.codex/config.toml";
+      table = "mcp_servers.ai-mirror";
+      toml = aiMirrorConfig {
+        flavor = "codex";
+        format = "toml";
+        fileName = "nixarchy-ai-mirror-mcp-codex.toml";
+      };
+    });
+    home.activation.nixarchyAiMirrorMcpRemove = lib.mkIf (!aiMirrorMcp) (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
+          "${config.home.homeDirectory}/.claude.json" \
+          "${config.xdg.configHome}/opencode/opencode.json" \
+          "${config.home.homeDirectory}/.codex/config.toml"
+      ''
+    );
 
     # ---- #630: nixd, in the editors the Install menu offers --------------
     #

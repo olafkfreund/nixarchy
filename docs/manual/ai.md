@@ -219,7 +219,7 @@ hash-verified copy of this manual and Omarchy's, so the answer to "how do I
 install an app" is `apps.nix` and `nixarchy apply`, not `pacman -S`. It can
 also look at your machine, so "how full is my disk?" gets your real numbers.
 
-![Nixi answering how to install an app, then, in Mechanic, adding a key binding after asking permission, verifying it, and undoing it](../img/features/nixi.gif)
+![Nixi on the default desktop: an install question answered with the Packages panel, a written FAQ answer, then in Mechanic the whole command shown for approval, and the change undone](../img/features/nixi.gif)
 
 It has two trust levels. **Guide**, the default, explains and changes
 nothing: every permission request is cancelled before it reaches you.

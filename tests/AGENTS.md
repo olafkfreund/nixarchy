@@ -465,6 +465,17 @@ Two branches only these can reach, as illustration:
   the full transcript plus the host state the fixture does not control, because
   a check that disagrees with itself across two runners and cannot say what
   differed is one people learn to re-run until green.
+- **A `VAR=value cmd` prefix does not reach a `$(substitution)` in the same
+  line**, and in `session.nix` that silently strips the session environment.
+  `as_user` builds exactly that prefix (`XDG_RUNTIME_DIR=… DBUS_…=… <cmd>`),
+  so `as_user('test "$(wl-paste)" = "$(journalctl …)"')` runs **wl-paste
+  without XDG_RUNTIME_DIR** -- the shell expands the substitutions before
+  `test` is executed, and the assignment applies only to `test`. It fails with
+  `XDG_RUNTIME_DIR is invalid or not set in the environment`, which reads as a
+  broken VM session rather than a broken assertion, and the assertion could
+  never have passed whatever the thing under test did. Make the command that
+  needs the environment *be* the command: `as_user("wl-paste > /tmp/clip")`,
+  then compare the files in a separate step. #896 lost a CI round trip to this.
 - **Never name a shell variable `out` in a `runCommand` script.** `$out` is the
   derivation's output path, and assigning to it means every assertion passes
   and the build then fails with *"builder failed to produce output path"* —

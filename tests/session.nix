@@ -572,12 +572,18 @@ pkgs.testers.runNixOSTest {
     # Copy log. The journal is asserted non-empty FIRST: with an empty journal,
     # an emptied copyLog() would also leave an empty clipboard and the
     # comparison would pass with the button doing nothing.
+    #
+    # wl-paste is the COMMAND, never a $(substitution): as_user builds a
+    # `VAR=value cmd` prefix, which applies to cmd alone -- the shell expands
+    # any substitution first, so `VAR=... test "$(wl-paste)"` runs wl-paste
+    # with no XDG_RUNTIME_DIR and it cannot find the Wayland socket. That
+    # assertion could never have passed, whatever the button did.
     machine.succeed(
-        as_user("journalctl --user -u nixarchy-rebuild -o cat") + " | grep -q .")
+        as_user("journalctl --user -u nixarchy-rebuild -o cat > /tmp/journal"))
+    machine.succeed("test -s /tmp/journal")
     machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar copyLog"))
     machine.wait_until_succeeds(
-        as_user(
-            "test \"$(wl-paste)\" = \"$(journalctl --user -u nixarchy-rebuild -o cat)\""),
+        as_user("wl-paste > /tmp/clip") + " && diff -q /tmp/clip /tmp/journal",
         timeout=30)
     print("Copy log puts the rebuild's journal on the clipboard")
 

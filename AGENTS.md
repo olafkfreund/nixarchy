@@ -701,6 +701,24 @@ Both of these were written here in one day, and both lost tracking silently:
 Neither produces an error. Check the issues actually closed rather than
 assuming the body did it.
 
+### A skip marker anywhere in the message skips CI, even quoted
+
+GitHub skips push and pull-request workflows when the head commit's message
+contains `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]` or
+`[actions skip]` -- **anywhere**, including inside a sentence explaining the
+marker. #880 fixed the cache probe's diagnosis of exactly that, and its squash
+commit took the PR body as its message. The body quoted the marker four times,
+so `build` and `install-check` never ran for the commit that shipped the fix.
+Nothing went red; it showed only because the run list for `fa3d5bd` held
+`pages` and nothing else.
+
+A squash merge of a multi-commit branch uses the PR description as the commit
+body, so **the PR description is part of the commit message.** When writing
+about the marker, name it without its literal form -- "a skip-CI marker" -- in
+commit messages and PR descriptions alike. If it has already happened, both
+`build.yml` and `install-check.yml` accept `workflow_dispatch`:
+`gh workflow run build.yml --ref main`, and the same for `install-check.yml`.
+
 ### `auto=on` is not "will merge"
 
 Auto-merge waits for required checks — and it waits **just as quietly** on a

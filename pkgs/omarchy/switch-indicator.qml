@@ -91,8 +91,20 @@ BarIndicator {
   // Clicking it shows what is happening, rather than offering to stop it: a
   // half-applied switch is a worse place to be than a slow one, and nothing
   // here can safely interrupt an activation.
+  // Which log, chosen from what is actually running (#765). A detached apply
+  // (#805) is a user unit and has its own journal; Install > Apply in a
+  // terminal, and a rebuild typed by hand, have none -- and the spinner lights
+  // for all three, because it watches processes rather than a state file. So
+  // an unconditional `--user -fu nixarchy-rebuild` would trade a wrong log for
+  // an empty one in the two cases the process match exists to cover.
+  //
+  // `is-active` is the documented predicate and exits non-zero for both
+  // "inactive" and "no such unit", which want the same branch.
   onPressed: function () {
     if (root.bar)
-      root.bar.run("omarchy-launch-floating-terminal-with-presentation journalctl -f -u nix-daemon.service");
+      root.bar.run("args='-f -u nix-daemon.service';"
+        + " systemctl --user -q is-active nixarchy-rebuild"
+        + " && args='--user -fu nixarchy-rebuild';"
+        + " omarchy-launch-floating-terminal-with-presentation journalctl $args");
   }
 }

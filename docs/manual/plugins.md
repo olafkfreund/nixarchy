@@ -24,13 +24,14 @@ machine use the menu row, or copy the line from a fresh install.
 
 | Plugin | What it's for | Status | Open it |
 |---|---|---|---|
-| [Package manager](#package-manager) | apps, services, packages and options | **on by default** | Install ▸ Packages · Super+Alt+N |
-| [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Apps ▸ Podman · Super+Alt+O |
-| [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P |
-| [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H |
-| [MicroVMs](#microvms) | disposable and permanent VMs, one list | **on by default** | Trigger ▸ Sandbox · Super+Alt+V |
-| [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D |
-| [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A |
+| [Package manager](#package-manager) | apps, services, packages and options | **on by default** | Install ▸ Packages · Super+Alt+N <!-- nixarchy.pkg --> |
+| [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Apps ▸ Podman · Super+Alt+O <!-- nixarchy.podman --> |
+| [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P <!-- olafkfreund.gitlab-pipelines --> |
+| [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H <!-- nixarchy.herdr --> |
+| [MicroVMs](#microvms) | disposable and permanent VMs, one list | **on by default** | Trigger ▸ Sandbox · Super+Alt+V <!-- nixarchy.microvm --> |
+| [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D <!-- nixarchy.distrobox --> |
+| [Dev environments](#dev-environments) | the per-project environments on this machine | **on wherever devenv is** | Apps ▸ Dev environments · Super+Alt+E <!-- nixarchy.devenv --> |
+| [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A <!-- olafkfreund.github-actions --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | coming | — |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
 

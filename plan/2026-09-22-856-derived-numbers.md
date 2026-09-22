@@ -95,6 +95,22 @@ than five, reads `<!-- ([a-z.-]+) -->` from `plugins.md`, and runs one
 → verify by spec Verification 1 and 2. The step's shell is extracted and run
 under `bash`, as #747's step was, because `lint` cannot be run locally.
 
+**Deviation, recorded with the code that caused it.** The markers go **inside**
+the last cell (`… Super+Alt+N <!-- nixarchy.pkg --> |`), not after the final
+`|` as step 3 says. Rendered with kramdown's GFM parser, as the site's Pages
+build does, a marker after the pipe became a **fifth, empty column for the whole
+table**, header included. GitHub's own renderer drops excess cells, which is why
+the placement looked safe. Inside the cell it stays a comment: 4 columns, 40
+cells, 8 comments.
+
+**And a second one: the step is in the `omarchy` job, not `lint`.** *Every
+manual page is in the sidebar* lives there, and #831's spec said so. This plan
+and its spec named the wrong job, and the new step sits beside it as intended.
+`omarchy` runs on every pull request. This was caught because the first
+extraction asked yq for `jobs.lint`, got an empty script, and **passed**. A
+check run against nothing is §1's green light, so the extraction is now
+confirmed by its line count before its result is read.
+
 Steps 1–4 land in **one commit**. A commit adding a check that the prose cannot
 yet satisfy would leave the branch red in between (#831's plan, deviation 1).
 

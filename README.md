@@ -137,8 +137,10 @@ from a terminal:
   enter to select · tab for several · esc to cancel
 ```
 
-**137,599 rows: 25,102 NixOS options, 112,443 packages, and 65 of the 67 apps
-(the two with no nixpkgs equivalent cannot be indexed).** Three kinds,
+**About 137,000 rows on a default install: some 25,000 NixOS options, 112,000
+packages, and 65 of the 67 apps** (the two with no nixpkgs equivalent cannot be
+indexed). The exact count is each machine's own, because the index is built from
+that system's options and package set. Three kinds,
 one picker, because you should not have to know which kind you want before you
 can look. They are not interchangeable and the rows say so — picking Tailscale
 from the app rows gets you `services.tailscale` with its daemon; picking

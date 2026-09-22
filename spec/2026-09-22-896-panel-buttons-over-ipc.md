@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 896
 intent: intent/2026-09-22-896-panel-buttons-over-ipc.md
 ---

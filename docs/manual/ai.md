@@ -105,6 +105,12 @@ whole thing off with:
 programs.nixarchy.mcp = false;
 ```
 
+That switch is only the NixOS server. **ai-mirror**, which lets an agent see and
+drive your desktop, has its own, and it is off:
+`programs.nixarchy.aiMirror.mcp = true;` connects the same three agents to it.
+The two are independent. Read [what the yes does not cover](plugins#ai-mirror)
+before you turn it on.
+
 ### Why `omarchy` could not ship as-is
 
 Upstream's skill is written for Arch. It points the agent at

@@ -1988,6 +1988,9 @@ stdenvNoCC.mkDerivation {
                       'o.bind("SUPER + ALT + V", "MicroVMs", "nixarchy-plugin nixarchy.microvm")' \
                       'o.bind("SUPER + ALT + D", "Distrobox", "nixarchy-plugin nixarchy.distrobox")' \
                       'o.bind("SUPER + ALT + E", "Dev environments", "nixarchy-plugin nixarchy.devenv")' \
+                      "" \
+                      "-- ai-mirror's kill switch (#773): revoke agent control and release held keys." \
+                      'o.bind("SUPER + SHIFT + ESCAPE", "ai-mirror: stop agent control", "ai-mirror control off")' \
                       >>"$binds"
 
                     runHook postInstall

@@ -316,6 +316,16 @@ Two other ways a check stops checking, both found in one week:
   **Any list naming things that exist elsewhere wants a comparison, not
   discipline** — and the comparison should name the missing item, because a
   count only says a number moved.
+- **A derived number often measures a PROXY, and a second meaning breaks it.**
+  #773 added a `gate` to a default plugin so nixarchy would step aside for a
+  user's own module. `readme-counts.sh` derives "how many plugins turn on with
+  their feature" by counting `gate = ` lines, which had been a fair proxy while
+  a gate meant only that. The count went to four, the docs said three, and
+  `omarchy` went red on a change that had nothing to do with features. The fix
+  was not to satisfy the count: it was to stop overloading `gate`, and express
+  "defer to their module" as the plugin's own default instead (§1 read
+  backwards -- ask whether the check still describes the property). **Before
+  adding a second reason for a field, grep for what derives a number from it.**
 - **A guard can also fail CLOSED, and then it looks like your change.**
   `readme-counts.sh` spells its counts as words from a hand-written `word_for`
   table and matches them with a fixed alternation (`twelve|thirteen|…`). The
@@ -556,6 +566,15 @@ confirmed the wrong diagnosis. The annotation is the only thing that tells
 them apart — `gh api repos/<o>/<r>/check-runs/<job-id>/annotations` says
 *"exceeded the maximum execution time"* for one and nothing of the kind for
 the other. The duration is a hint (a timeout ends at the limit), not proof.
+
+**A check summary can describe the commit BEFORE your push.** `gh pr checks`
+and `gh pr view` read the pull request's recorded head, and GitHub takes a
+minute or two to move it after a push. In that window a fresh watcher exits
+immediately on the PREVIOUS head's failures -- including ones you have just
+fixed, and runs you cancelled yourself. That reads as "my fix did not work".
+Check `gh pr view <n> --json headRefOid` against the commit you pushed before
+reading any check result, and if the push output was filtered, confirm the
+branch moved: `git ls-remote origin <branch>`.
 
 **Do not build a VM check locally while CI has an install job in flight.**
 The concurrency group in `install-check.yml` serialises GitHub *jobs*; it

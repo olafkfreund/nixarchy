@@ -50,6 +50,19 @@ let
   # NixOS module to have set any of them and every block below must then be
   # inert.
   mcpEnabled = osConfig.programs.nixarchy.mcp or false;
+  # #773: off unless asked for, and taken back out when turned off again.
+  aiMirrorMcp = osConfig.programs.nixarchy.aiMirror.mcp or false;
+  aiMirrorConfig =
+    args:
+    inputs.mcp-servers-nix.lib.mkConfig pkgs (
+      {
+        settings.servers.ai-mirror = {
+          command = "${inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.ai-mirror}/bin/ai-mirror";
+          args = [ "mcp" ];
+        };
+      }
+      // args
+    );
   languageServer = osConfig.programs.nixarchy.languageServer or false;
   nixdSettings = osConfig.programs.nixarchy.nixdSettings or { };
 
@@ -840,7 +853,13 @@ in
       # interpreters in one profile, which buildEnv refuses over bin/idle3;
       # home-manager-path fails and the whole closure with it, naming idle3 and
       # nothing of ours (#809). Whatever the user installed themselves wins.
-      ++ map lib.lowPrio (lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults));
+      ++ map lib.lowPrio (lib.concatMap (p: p.packages) (lib.attrValues resolvedDefaults))
+      # ai-mirror on every nixarchy machine, whether or not its widget is on
+      # (#773): the seeded kill switch runs it. lowPrio for #809's reason -- a
+      # user who installs it through its own module keeps theirs.
+      ++ lib.optional (osConfig.programs.nixarchy.enable or false) (
+        lib.lowPrio inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.ai-mirror
+      );
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 
@@ -1194,6 +1213,47 @@ in
         fileName = "nixarchy-mcp-codex.toml";
       };
     });
+
+    # ---- #773: ai-mirror's MCP server, only when asked for -------------------
+    #
+    # The same three agents and the same helpers as the NixOS server above,
+    # under its own switch. Both helpers only ever add, so the off state is
+    # not "write nothing": it is the removal below, which takes back an entry
+    # whose command is our store path and leaves one the user wrote.
+    home.activation.nixarchyAiMirrorMcpClaude = lib.mkIf aiMirrorMcp (mergeJson {
+      what = "ai-mirror's MCP server";
+      file = "${config.home.homeDirectory}/.claude.json";
+      json = aiMirrorConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-ai-mirror-mcp-claude.json";
+      };
+    });
+    home.activation.nixarchyAiMirrorMcpOpencode = lib.mkIf aiMirrorMcp (mergeJson {
+      what = "ai-mirror's MCP server";
+      file = "${config.xdg.configHome}/opencode/opencode.json";
+      json = aiMirrorConfig {
+        flavor = "opencode";
+        fileName = "nixarchy-ai-mirror-mcp-opencode.json";
+      };
+    });
+    home.activation.nixarchyAiMirrorMcpCodex = lib.mkIf aiMirrorMcp (appendToml {
+      what = "ai-mirror's MCP server";
+      file = "${config.home.homeDirectory}/.codex/config.toml";
+      table = "mcp_servers.ai-mirror";
+      toml = aiMirrorConfig {
+        flavor = "codex";
+        format = "toml";
+        fileName = "nixarchy-ai-mirror-mcp-codex.toml";
+      };
+    });
+    home.activation.nixarchyAiMirrorMcpRemove = lib.mkIf (!aiMirrorMcp) (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
+          "${config.home.homeDirectory}/.claude.json" \
+          "${config.xdg.configHome}/opencode/opencode.json" \
+          "${config.home.homeDirectory}/.codex/config.toml"
+      ''
+    );
 
     # ---- #630: nixd, in the editors the Install menu offers --------------
     #
@@ -1624,7 +1684,24 @@ in
           gate = osConfig.programs.nixarchy.services.devenv.enable or false;
           packages = [ inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.cli ];
         };
+        # The ai-mirror widget, on every machine (#773): it shows when an agent
+        # is watching or driving, draws the confirm dialog, and a click stops a
+        # live grant. No agent is connected to ai-mirror by this; see
+        # programs.nixarchy.aiMirror.mcp. Why: spec/2026-09-22-773-ai-mirror-default.md
+        ai-mirror = {
+          id = "olafkfreund.ai-mirror";
+          src = inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+        };
       };
+
+      # A user running ai-mirror's own module already declares that plugin, by
+      # the same manifest id; two entries fight over one link and ours would
+      # override the pin they chose, rewriting the watched plugins directory on
+      # every activation (#710). So ours defaults off there -- theirs wins, and
+      # `defaultPlugins.ai-mirror = true` still forces ours. NOT a `gate`: a
+      # gate means "on wherever its feature is", which ai-mirror is not; it is
+      # on everywhere, except where you run it yourself.
+      defaultPlugins.ai-mirror = lib.mkDefault (!(config.programs.ai-mirror.enable or false));
 
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
       plugins = lib.mapAttrs' (

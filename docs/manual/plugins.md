@@ -32,7 +32,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D <!-- nixarchy.distrobox --> |
 | [Dev environments](#dev-environments) | the per-project environments on this machine | **on wherever devenv is** | Apps ▸ Dev environments · Super+Alt+E <!-- nixarchy.devenv --> |
 | [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A <!-- olafkfreund.github-actions --> |
-| [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | coming | — |
+| [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
 
 ## Package manager
@@ -196,18 +196,44 @@ replace a real directory. It stays enabled, and the managed copy takes over.
 
 ## ai-mirror
 
-[ai-mirror](https://github.com/olafkfreund/ai-mirror) · **coming**
+[ai-mirror](https://github.com/olafkfreund/ai-mirror) · **on by default**
 
 **What it solves.** A coding agent can drive a browser or a terminal, but not
 the dialog, the drag or the unlabelled button on your real desktop. ai-mirror
 gives an agent eyes and hands on your actual session, and takes them back
 with one keypress.
 
-**What it does.** A small MCP server plus a bar mark. The mark turns red while
-an agent is in control, and **Super+Shift+Escape** revokes control at any
-moment. When it ships in nixarchy it is installed, but **no agent is connected
-to it automatically**, and an agent will not take control without you saying
-yes first.
+**What it does.** A small MCP server and a mark in the bar (right). It is
+installed on every nixarchy machine, and **no agent is connected to it** until
+you set `programs.nixarchy.aiMirror.mcp = true;`. Turning that off again takes
+the connection back out of Claude Code, Codex and opencode.
+
+**The mark says what an agent is doing.**
+
+| the mark | means |
+|---|---|
+| dim | nothing: agent control is off |
+| the theme's accent colour, steady | an agent is **watching**: reading the screen, the clipboard or the accessibility tree. It cannot type or click. |
+| red, pulsing | an agent **controls** the keyboard and mouse |
+
+**An agent asks, and you answer.** When an agent wants control, a dialog asks
+you on screen. Nothing is granted until you press yes, and an unanswered
+request lapses after 30 seconds. **Super+Shift+Escape**, or a click on the
+mark, takes control back at any moment. A grant also ends by itself after ten
+minutes with no input, and when the agent that asked goes away.
+
+**What the yes does not cover.** An agent that reaches ai-mirror through the
+connection above cannot answer its own request. **An agent with a shell on your
+account can.** It can run `ai-mirror control confirm` itself, and no prompt
+inside your session can stop that. This is a deliberate choice, not an
+oversight: the agent already runs as you. Run an agent you do not trust in a
+[sandbox or a MicroVM](sandboxes) instead, where your desktop is not in reach.
+Every grant is logged with who asked, so a self-grant shows up afterwards.
+
+If you have turned the mark off and your `bindings.lua` predates the kill
+switch, a grant made that way has nothing on screen to stop it. It still ends
+after ten idle minutes, and `ai-mirror control off` in any terminal ends it at
+once.
 
 **[Watch the nixarchy desktop showcase](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)**, recorded by an agent through ai-mirror.
 

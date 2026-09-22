@@ -6,6 +6,42 @@
   doctor,
 }:
 let
+  # ai-mirror's MCP requests for the #773 block at the end of the script, one
+  # JSON-RPC message per line, as the server reads them.
+  aimMsg =
+    id: method: params:
+    builtins.toJSON {
+      jsonrpc = "2.0";
+      inherit id method params;
+    };
+  aimInit = aimMsg 1 "initialize" { protocolVersion = "2025-06-18"; };
+  aimControl =
+    id: mode:
+    aimMsg id "tools/call" {
+      name = "control";
+      arguments = { inherit mode; };
+    };
+  askAndConfirm = pkgs.writeText "aim-ask-confirm.jsonl" (
+    pkgs.lib.concatLines [
+      aimInit
+      (aimControl 2 "agent")
+      (aimControl 3 "confirm")
+    ]
+  );
+  askOnly = pkgs.writeText "aim-ask.jsonl" (
+    pkgs.lib.concatLines [
+      aimInit
+      (aimControl 2 "agent")
+    ]
+  );
+  statusOnly = pkgs.writeText "aim-status.jsonl" (
+    pkgs.lib.concatLines [
+      (aimMsg 3 "tools/call" {
+        name = "status";
+        arguments = { };
+      })
+    ]
+  );
   # A real published Omarchy theme, pinned. `omarchy theme install` is the
   # sibling of `omarchy plugin add`: it clones a git URL at runtime, past the
   # same omarchy-git-url-check, into ~/.config/omarchy -- so it depends on the
@@ -1568,6 +1604,67 @@ pkgs.testers.runNixOSTest {
         "at all, with Qt still reporting the image Ready -- see the "
         "sourceSize cap in pkgs/omarchy/default.nix.")
     print(f"wallpaper renders (delta {delta})")
+
+    # ---- ai-mirror: asked for, and never self-answered over MCP (#773) ----
+    # The widget is a default plugin, and its dialog is what a person answers.
+    # Over MCP an agent can ask and cannot answer (`control` takes only agent
+    # or off, so a confirm is refused by the schema); an unanswered request
+    # lapses after 30 s; a request ends with the server that made it; and the
+    # kill switch Hyprland holds runs `ai-mirror control off`. An agent with a
+    # shell CAN answer through the CLI -- accepted and documented (Decision A,
+    # spec/2026-09-22-773-ai-mirror-default.md) -- and the kill switch block
+    # below uses exactly that as its setup.
+    import json
+    def aim(cmd):
+        return machine.succeed(
+            "su omarchy -c 'export XDG_RUNTIME_DIR=/run/user/1000"
+            " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1); "
+            + cmd + "'")
+    def aim_owner():
+        return json.loads(aim("cat /run/user/1000/ai-mirror/state.json"))["owner"]
+    def aim_replies(out):
+        return {r["id"]: r for r in (json.loads(l) for l in out.splitlines() if l.strip())}
+
+    enabled = False
+    for _ in range(24):
+        rows = json.loads(aim("omarchy-plugin-list --json"))
+        enabled = any(r["id"] == "olafkfreund.ai-mirror" and r["enabled"] for r in rows)
+        if enabled:
+            break
+        machine.sleep(5)
+    assert enabled, "the ai-mirror widget is not an enabled plugin after first login"
+
+    replies = aim_replies(aim("ai-mirror mcp < ${askAndConfirm}"))
+    assert replies[2]["result"]["isError"] is False, f"an agent could not ask: {replies[2]}"
+    confirm = replies[3]["result"]
+    assert confirm["isError"], (
+        f"an agent answered its own request over MCP: {confirm}. The yes is the "
+        "person at the keyboard's, and MCP must not be able to give it.")
+    owner = aim_owner()
+    assert owner == "off", (
+        f"owner is {owner} after the asking MCP server exited; an agent's "
+        "request must end with the server that made it")
+
+    replies = aim_replies(aim("sh -c \"cat ${askOnly}; sleep 36; cat ${statusOnly}\" | ai-mirror mcp"))
+    lapsed = json.loads(replies[3]["result"]["content"][0]["text"])["owner"]
+    assert lapsed == "off", f"an unanswered request did not lapse after 30 s: owner {lapsed}"
+
+    # Lua-era Hyprland reports an o.bind's dispatcher as `HL.Dispatcher(exec_cmd)`
+    # with an index for `arg`, never the command text -- so the bind is found by
+    # what it does expose: its description, key and modifiers (Super 64 + Shift 1).
+    kill = [b for b in json.loads(aim("hyprctl binds -j"))
+            if b.get("description") == "ai-mirror: stop agent control"
+            and b.get("key", "").upper() == "ESCAPE" and b.get("modmask") == 65]
+    assert kill, (
+        "Hyprland holds no Super+Shift+Escape bind described 'ai-mirror: stop "
+        "agent control'; the seed bindings.lua lost the kill switch")
+    aim("ai-mirror control agent && ai-mirror control confirm")
+    assert aim_owner() == "agent", "setup: the CLI grant (Decision A) did not take"
+    aim("ai-mirror control off")
+    assert aim_owner() == "off", "the kill switch's command did not take control back"
+    print("ai-mirror: widget on, MCP cannot self-answer, requests lapse and end "
+          "with their server, and the kill switch is bound and works")
 
   '';
 }

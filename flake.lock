@@ -3,21 +3,21 @@
     "ai-mirror": {
       "inputs": {
         "nixpkgs": [
-          "nixarchy-voice",
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1789919871,
-        "narHash": "sha256-sODwVlwAqRTdsrSmhRAus3hW9pHFFmSXgTfT1R2J1dU=",
+        "lastModified": 1790096879,
+        "narHash": "sha256-GWJvDSeyoC+hEaz2rw1Tb7rqM8lnbZRfHVKZQHibkXI=",
         "owner": "olafkfreund",
         "repo": "ai-mirror",
-        "rev": "66dc075223cbafae45f66980eda60c958960e70a",
+        "rev": "929c9d15bbd0140d4a17e3876a18db982fe4c74e",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "ai-mirror",
+        "rev": "929c9d15bbd0140d4a17e3876a18db982fe4c74e",
         "type": "github"
       }
     },
@@ -760,7 +760,9 @@
     },
     "nixarchy-voice": {
       "inputs": {
-        "ai-mirror": "ai-mirror",
+        "ai-mirror": [
+          "ai-mirror"
+        ],
         "home-manager": "home-manager_2",
         "nixpkgs": [
           "nixpkgs"
@@ -912,6 +914,7 @@
     },
     "root": {
       "inputs": {
+        "ai-mirror": "ai-mirror",
         "disko": "disko",
         "home-manager": "home-manager",
         "home-manager-stable": "home-manager-stable",

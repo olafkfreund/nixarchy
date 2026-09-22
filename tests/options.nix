@@ -142,7 +142,15 @@ let
       microvm = false;
       distrobox = false;
       devenv = false;
+      ai-mirror = false;
     };
+  };
+  # Bound once for the same reason (#747): the #773 cases share it.
+  # It also stands in for a user running ai-mirror's own module: a stub option
+  # is enough, since the default reads only `programs.ai-mirror.enable`.
+  aiMirrorMcpHome = homeOn { aiMirror.mcp = true; } {
+    imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
+    programs.ai-mirror.enable = true;
   };
   hasGh = h: builtins.any (p: (p.pname or "") == "gh") h.home.packages;
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
@@ -226,6 +234,16 @@ let
     "nixarchyNixdHelix"
   ];
 
+  aiMirrorActivationNames = [
+    "nixarchyAiMirrorMcpClaude"
+    "nixarchyAiMirrorMcpCodex"
+    "nixarchyAiMirrorMcpOpencode"
+  ];
+  hasAiMirrorPackage = home: builtins.any (p: (p.pname or "") == "ai-mirror") home.home.packages;
+  forcesA11y =
+    home:
+    home.home.sessionVariables ? GTK_MODULES
+    || home.home.sessionVariables ? QT_LINUX_ACCESSIBILITY_ALWAYS_ON;
   mcpActivationNames = [
     "nixarchyMcpClaude"
     "nixarchyMcpCodex"
@@ -589,6 +607,53 @@ let
     mcpInertWithoutOsConfig = {
       on = hasAny defaultHomeOn mcpActivationNames;
       off = hasAny defaultHome mcpActivationNames;
+    };
+
+    # ---- #773: ai-mirror, on every machine, connected to no agent -------
+    #
+    # Off unless asked for, and independent of `mcp` above, which is on for
+    # everyone: the default home has the NixOS server and not this one.
+    aiMirrorMcp = {
+      on = hasAll aiMirrorMcpHome aiMirrorActivationNames;
+      off = hasAny defaultHomeOn aiMirrorActivationNames;
+    };
+
+    # The helpers only add, so off is a removal, not an absence. Present
+    # exactly when the option is off -- running it while on would undo it.
+    aiMirrorMcpRemovedWhenOff = {
+      on = defaultHomeOn.home.activation ? nixarchyAiMirrorMcpRemove;
+      off = aiMirrorMcpHome.home.activation ? nixarchyAiMirrorMcpRemove;
+    };
+
+    # The binary is on every nixarchy machine (the kill switch runs it), and
+    # on none without nixarchy: a standalone home is Mode A's inert state.
+    aiMirrorPackage = {
+      on = hasAiMirrorPackage defaultHomeOn;
+      off = hasAiMirrorPackage defaultHome;
+    };
+
+    # The widget is a default plugin like the others, and turns off the same way.
+    aiMirrorWidget = {
+      on = defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
+      off = noDefaultsHome.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
+    };
+
+    # A user running ai-mirror's own module keeps their plugin: ours steps
+    # aside rather than fighting it over the same manifest id.
+    aiMirrorWidgetStepsAside = {
+      on = defaultHomeOn.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
+      off = aiMirrorMcpHome.programs.nixarchy.plugins ? "olafkfreund.ai-mirror";
+    };
+
+    # Session-wide accessibility stays off: ai-mirror switches it on only
+    # while control is granted. `off` is a home where the USER set it, which
+    # proves the probe can see the variable -- and that theirs is kept.
+    aiMirrorLeavesA11yAlone = {
+      on = !(forcesA11y defaultHomeOn) && !(forcesA11y aiMirrorMcpHome);
+      off =
+        !(forcesA11y (homeWith {
+          home.sessionVariables.GTK_MODULES = "gail:atk-bridge";
+        }));
     };
 
     # ---- #630: nixd, in the editors the Install menu offers --------------

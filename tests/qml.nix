@@ -1,4 +1,9 @@
-{ pkgs, ... }:
+{
+  pkgs,
+  # The BUILT tree, for the upstream file our carried patches edit.
+  omarchy,
+  ...
+}:
 # The QML this repo injects into upstream's Quickshell tree is copied, never
 # compiled -- so a syntax error builds perfectly and ships. What the user sees
 # is a bar element that silently is not there, and the highest layer that can
@@ -65,10 +70,16 @@ pkgs.runCommand "nixarchy-qml"
     { echo "import QtQuick"; echo "Item {"; cat "$src/shell-state-ipc.qml"; echo "}"; } \
       > wrapped/shell-state-ipc.qml
 
-    for f in menu-bar-widget.qml switch-indicator.qml wrapped/shell-state-ipc.qml; do
+    # The patched upstream shell. Three carried patches edit it by
+    # substituteInPlace (#749, #877, #893) and nothing linted the result: a
+    # broken substitution builds perfectly and ships a shell that does not
+    # start, which is this file's own §2 argument one file over.
+    cp ${omarchy}/share/omarchy/shell/shell.qml patched-shell.qml
+
+    for f in menu-bar-widget.qml switch-indicator.qml wrapped/shell-state-ipc.qml patched-shell.qml; do
       echo "== $f"
       case "$f" in
-        wrapped/*) report=$(lint "$f") ;;
+        wrapped/*|patched-shell.qml) report=$(lint "$f") ;;
         *)         report=$(lint "$src/$f") ;;
       esac
       # NOT `out=` -- that is the builder's output path, and clobbering it

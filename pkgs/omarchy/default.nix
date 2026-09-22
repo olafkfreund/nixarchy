@@ -1961,6 +1961,37 @@ stdenvNoCC.mkDerivation {
                       '  }')
                     substituteInPlace "$shellQml" --replace-fail "$hasKindOld" "$hasKindNew"
 
+                    # `omarchy plugin remove` rebuilt every installed plugin TWICE,
+                    # leaving the bar gone for ~53 s on a machine with 40 of them
+                    # (#893). One removal starts two reloads: the watcher fires
+                    # once per deleted file and is debounced through
+                    # localPluginReloadTimer (150 ms), while the rescanPlugins IPC
+                    # the remove script sends afterwards calls reloadPlugins()
+                    # straight away. The second call lands mid-scan, sets
+                    # pluginReloadPending, and onScanFinished throws the half-built
+                    # first pass away ("Object or context destroyed during
+                    # incubation" x18) and repeats it. Sending the IPC through the
+                    # same timer merges the two into one reload.
+                    #
+                    # CARRIED, and meant to be dropped, like the #877 and #749
+                    # blocks above: AGENTS.md section 11 puts Omarchy fixes
+                    # upstream, and this is carried at the owner's request until it
+                    # lands there. Delete it the moment upstream debounces the IPC.
+                    # The whole function is the needle, so a reworded one fails
+                    # this build.
+                    # printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    rescanOld=$(printf '%s\n' \
+                      '    function rescanPlugins(): void {' \
+                      '      shell.reloadPlugins()' \
+                      '    }')
+                    rescanNew=$(printf '%s\n' \
+                      '    function rescanPlugins(): void {' \
+                      '      // nixarchy CARRIED patch (#893): through the same debounce as the' \
+                      '      // watcher, so one removal costs one reload rather than two.' \
+                      '      localPluginReloadTimer.restart()' \
+                      '    }')
+                    substituteInPlace "$shellQml" --replace-fail "$rescanOld" "$rescanNew"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

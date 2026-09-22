@@ -2022,7 +2022,10 @@
           # compiled, so a syntax error ships as a bar element that silently is
           # not there (#810). See tests/qml.nix -- it carries its own broken
           # fixture so it proves on every run that it can go red.
-          qml = import ./tests/qml.nix { pkgs = pkgsFor.${system}; };
+          qml = import ./tests/qml.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
 
           # A keep-loaded plugin lost its shell API at the first shell.json
           # change, because manifestHasKind tested kinds with Array.isArray and a

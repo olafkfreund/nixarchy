@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 877
 author: olafkfreund
 ---
@@ -105,3 +105,12 @@ read through a QObject `var` property are Qt sequence wrappers, not JS arrays.
 3. **The safety net:** re-injecting `shell` into keep-loaded instances after
    `syncPluginApis` would make any future revoke harmless too. I recommend leaving
    it to upstream, and not carrying a second, larger patch.
+
+## Decisions at approval
+
+Approved without separate answers; the recommendations stand:
+1. Carry the patch, like #749, at the owner's explicit request (§11). It is marked
+   CARRIED and deleted when upstream fixes the line.
+2. Patch `manifestHasKind` only. The other 17 `Array.isArray(...kinds)` sites go in
+   the upstream report.
+3. No re-inject safety net here; that is left to upstream.

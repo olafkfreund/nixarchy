@@ -264,10 +264,29 @@ jobs:
           done
 
           echo "::error::nixarchy.cachix.org does not have main's omarchy ($hash)."
-          echo "Every build is green and nothing is being cached. The most"
-          echo "likely cause is CACHIX_AUTH_TOKEN: cachix exits 0 when a token"
-          echo "is rejected, so no job has failed and none will. Check the"
-          echo "token before looking anywhere else."
+
+          # A push to main carrying [skip ci] runs no build, so nothing pushes
+          # that rev's closure -- and every commit changes every derivation,
+          # a docs-only one included (AGENTS.md §5). That is the common cause
+          # and it is decidable from the commit alone, so say it first (#840).
+          # Deliberately NOT an API query for "did build.yml succeed on this
+          # sha": measured, it reads 0 while main's build is merely still
+          # running, and 1 for a skipped commit once a later scheduled build
+          # happens to cover it -- wrong in both directions.
+          if git log -1 --format=%B | grep -qiE '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]'; then
+            echo "The head commit carries a skip-CI marker, so no build ran for"
+            echo "it and nothing pushed this closure. That is the cause; the token"
+            echo "is not. The next build of main pushes it."
+            exit 1
+          fi
+
+          echo "First read main's run history -- a path is only pushed by a"
+          echo "build that ran on this commit and finished:"
+          echo "  gh run list --branch main --workflow build.yml --limit 5"
+          echo "No completed build for $(git rev-parse --short HEAD) answers it."
+          echo
+          echo "Only if one did complete: CACHIX_AUTH_TOKEN. cachix exits 0 when"
+          echo "a token is rejected, so no job fails and none will."
           echo
           echo "Before that: confirm this ran on main. The omarchy derivation"
           echo "depends on the flake's rev, so a path evaluated from any other"

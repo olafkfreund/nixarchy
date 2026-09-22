@@ -614,6 +614,22 @@ of your own footprint.
 
 Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
 
+**Two ways a local VM outlives your attention, both from 2026-09-22.**
+
+- **A wedged `nix build` looks exactly like a working one.** An
+  `install-encrypted` build was reported "still running" for hours: it had
+  printed `timeout reached; test terminating...`, then sat at 0% CPU for
+  **11h17m** against an 85-minute `globalTimeout`, holding a qemu VM while a
+  pull request's install check failed on a timing race beside it. The process
+  table said alive. `ps -o etime=,%cpu= -p <pid>` against the check's own
+  timeout, and the mtime of its log, say wedged. Killing the `nix build` does not
+  reap its VM either: a sandbox child runs as a `nixbld` user outside your
+  process group, so find it and kill it **by pid**.
+- **Never `pkill` by process name on this host.** `pkill -x qemu-system-x86`,
+  meant for one throwaway VM, also names every CI install VM on p620. It did no
+  harm only because those run as `nixbld` users and the command ran without
+  root. Kill the pid you started, and nothing else.
+
 ## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the
@@ -684,6 +700,24 @@ Both of these were written here in one day, and both lost tracking silently:
 
 Neither produces an error. Check the issues actually closed rather than
 assuming the body did it.
+
+### A skip marker anywhere in the message skips CI, even quoted
+
+GitHub skips push and pull-request workflows when the head commit's message
+contains `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]` or
+`[actions skip]` -- **anywhere**, including inside a sentence explaining the
+marker. #880 fixed the cache probe's diagnosis of exactly that, and its squash
+commit took the PR body as its message. The body quoted the marker four times,
+so `build` and `install-check` never ran for the commit that shipped the fix.
+Nothing went red; it showed only because the run list for `fa3d5bd` held
+`pages` and nothing else.
+
+A squash merge of a multi-commit branch uses the PR description as the commit
+body, so **the PR description is part of the commit message.** When writing
+about the marker, name it without its literal form -- "a skip-CI marker" -- in
+commit messages and PR descriptions alike. If it has already happened, both
+`build.yml` and `install-check.yml` accept `workflow_dispatch`:
+`gh workflow run build.yml --ref main`, and the same for `install-check.yml`.
 
 ### `auto=on` is not "will merge"
 

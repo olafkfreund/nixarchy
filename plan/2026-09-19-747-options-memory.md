@@ -268,3 +268,41 @@ statistics/failure-fallback assertion and all existing proof-push cases.
 Bash syntax, ShellCheck, nixfmt, statix, deadnix, and whitespace checks passed.
 Actionlint passed with external ShellCheck/Pyflakes disabled after its default
 external-tool invocation stalled; changed shell code was checked separately.
+
+## Addition — 2026-09-22: a warning before the ceiling
+
+Not in the plan as approved; added at the maintainer's direction, with the
+reduction itself still outstanding.
+
+**Where #747 stands.** Everything this plan implemented is on `main` (#757, #760,
+#795): the peak is measured on every run and printed to the log. That produced
+the hosted statistics the plan asked for -- six `main` builds at **11,490 to
+12,153 MiB of 16,384**, 70-74%, stable. The garbage-collector lever was measured
+and rejected (-20% RSS for +68% CPU). A demonstrated reduction is the part left,
+and it is research: the next experiment named above is the repeated editor-home
+evaluations.
+
+**The gap this closes.** The step recorded the number and did nothing with it.
+Past 16 GB the runner is killed and the job reports `cancelled` with no failed
+step, which AGENTS.md §6 lists three other causes for. So the step now emits a
+`::warning::` at 14,336 MiB (87.5%) -- loud while there is room to act, and
+never a failure, because the check has already passed by then.
+
+**Proved** with the step's own shell, extracted from `build.yml` and run under
+`bash -eo pipefail` against stubbed `/usr/bin/time` output, so no 12 GB
+evaluation was spent:
+
+| stubbed peak | result | exit |
+| --- | --- | --- |
+| 11,490 MiB (today's real reading) | no warning | 0 |
+| 14,335 MiB | no warning | 0 |
+| 14,336 MiB | **warning** | 0 |
+| 14,800 MiB | **warning** | 0 |
+| 14,800 MiB, guard removed | no warning | 0 |
+
+The first attempt at that last break did not apply: a `sed` address expected
+`peak_mib -ge` adjacent, and the line reads `"$peak_mib" -ge`. It was caught
+because the break was checked for having landed before its result was read.
+
+#747 stays open.
+

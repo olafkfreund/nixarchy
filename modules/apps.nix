@@ -3604,8 +3604,7 @@ in
                 # calls would otherwise report a state that never existed.
                 # Property order is systemd's, so read by key rather than line.
                 props=$(systemctl --user show \
-                  -p SubState -p Result -p ExecMainStatus \
-                  -p ExecMainExitTimestampMonotonic nixarchy-rebuild \
+                  -p SubState -p Result -p ExecMainStatus nixarchy-rebuild \
                   2>/dev/null || true)
                 get() { printf '%s\n' "$props" | sed -n "s/^$1=//p" | tail -1; }
 
@@ -3634,59 +3633,7 @@ in
                 # exit is meaningless unless it failed; say 0 rather than leave
                 # the key out, so the panel never has to test for absence.
                 [ "$state" = failed ] || code=0
-
-                # When it finished, so a settled result can say WHICH run it is
-                # describing (#919). The unit stays loaded across a reboot --
-                # #765 omits --collect on purpose -- so without this the bar
-                # would claim a fresh success at every login.
-                #
-                # Monotonic, not realtime: it is a clock the panel can compare
-                # against its own uptime without a timezone or a format to
-                # parse, and systemd reports 0 for a unit that has never run.
-                # Same key-absent rule as `exit`: always present, 0 when it
-                # means nothing.
-                # How long ago it finished, in whole seconds, computed HERE
-                # rather than in the panel -- the same reason the state mapping
-                # is a command (#765 PR 5): nothing in the suite drives QML, so
-                # arithmetic left there ships untested.
-                #
-                # Both clocks are systemd's monotonic one, which /proc/uptime
-                # also reports, so this needs no timezone and no date parsing
-                # and survives a clock change. -1 means "cannot say": never
-                # ran, still running, or /proc/uptime unreadable. A negative
-                # difference means the unit finished before this boot, which is
-                # exactly what the panel must not report as a fresh result.
-                finished=$(get ExecMainExitTimestampMonotonic)
-                ago=-1
-                case "$state" in
-                  succeeded | failed)
-                    case "$finished" in
-                      "" | 0 | *[!0-9]*) ;;
-                      *)
-                        up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null || true)
-                        case "$up" in
-                          "" | *[!0-9.]*) ;;
-                          *) ago=$(( ''${up%%.*} - finished / 1000000 )) ;;
-                        esac
-                        ;;
-                    esac
-                    ;;
-                esac
-                [ "$ago" -ge 0 ] 2>/dev/null || ago=-1
-
-                # Two values from one read, and they are not interchangeable:
-                # `finishedUsec` is a STABLE id for this run, which is what the
-                # bar keys "the user has seen this result" on; `finishedAgoSec`
-                # grows with every poll and is for display only. Keying the
-                # acknowledgement on the seconds-ago would mean no result is
-                # ever acknowledged, because the number changes each time.
-                case "$finished" in
-                  "" | *[!0-9]*) finished=0 ;;
-                esac
-                [ "$state" = succeeded ] || [ "$state" = failed ] || finished=0
-
-                printf '{"state":"%s","exit":%s,"finishedUsec":%s,"finishedAgoSec":%s}\n' \
-                  "$state" "$code" "$finished" "$ago"
+                printf '{"state":"%s","exit":%s}\n' "$state" "$code"
               '';
             })
 

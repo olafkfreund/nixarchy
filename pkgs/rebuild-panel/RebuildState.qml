@@ -20,18 +20,6 @@ Singleton {
   property int exitCode: 0
   readonly property bool active: root.state === "running"
 
-  // How long ago the run this state describes finished, in seconds, straight
-  // from nixarchy-rebuild-state (#919). The unit outlives the session -- #765
-  // omits --collect -- so a settled result has to say WHICH run it describes,
-  // or the bar claims a fresh success at every login. -1 is "cannot say":
-  // never ran, still running, or it finished before this boot.
-  property int finishedAgoSec: -1
-
-  // A stable id for the run the state describes -- systemd's monotonic finish
-  // timestamp. The bar keys "already seen" on this, NOT on finishedAgoSec,
-  // which grows with every poll and would never compare equal.
-  property double finishedUsec: 0
-
   property var lines: []
   property double startedAt: 0
   property int elapsedSec: 0
@@ -101,8 +89,6 @@ Singleton {
         var parsed = JSON.parse(stateOut.text)
         root.state = String(parsed.state)
         root.exitCode = Number(parsed.exit)
-        root.finishedAgoSec = Number(parsed.finishedAgoSec)
-        root.finishedUsec = Number(parsed.finishedUsec || 0)
       } catch (e) {
         // A malformed answer is not a state. Keep the last one we believed
         // rather than flicking the panel to idle under a running build.

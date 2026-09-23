@@ -50,38 +50,12 @@ Panel {
   implicitWidth: button.visible ? button.implicitWidth : 0
   implicitHeight: button.implicitHeight
 
-  // A settled result the user has not looked at yet. Applying from a panel
-  // closes that panel -- the shell reloads every plugin when activation
-  // rewrites a plugin link (#710, and modules/AGENTS.md) -- so the thing that
-  // was going to print "applied" is gone before it can (#919). This is what is
-  // left on screen afterwards, and it is why success has to linger: failure
-  // already did, success did not, and success is what the user is waiting for.
-  //
-  // Acknowledged by OPENING it: no new verb, no dismiss button, and the
-  // acknowledgement is keyed on the run rather than on the state, so a second
-  // apply reporting the same "succeeded" still draws.
-  property double acknowledgedRun: 0
-  readonly property bool settled: RebuildState.state === "succeeded"
-                                  || RebuildState.state === "failed"
-  readonly property bool unreadResult:
-    RebuildState.state === "succeeded" && RebuildState.finishedUsec > 0
-    && RebuildState.finishedUsec !== root.acknowledgedRun
-
-  onOpenedChanged: function () {
-    if (root.opened && root.settled) root.acknowledgedRun = RebuildState.finishedUsec
-  }
-
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
     text: ""
-    // Failure keeps behaving exactly as it did: visible until the state
-    // changes, never dismissed. A machine that did not rebuild should go on
-    // saying so. Only SUCCESS is the acknowledgeable one, because it is the
-    // one that had no indicator at all.
-    visible: RebuildState.active || root.opened
-             || RebuildState.state === "failed" || root.unreadResult
+    visible: RebuildState.active || root.opened || RebuildState.state === "failed"
     active: RebuildState.active
     useActiveColor: true
     activeColor: RebuildState.state === "failed" ? Color.urgent : Color.accent

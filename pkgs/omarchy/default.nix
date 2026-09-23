@@ -2004,6 +2004,105 @@ stdenvNoCC.mkDerivation {
                       '    }')
                     substituteInPlace "$shellQml" --replace-fail "$rescanOld" "$rescanNew"
 
+                    # A layout-only shell.json save -- moving one bar icon --
+                    # rebuilt every panel, menu and overlay plugin, froze the bar
+                    # for 28-75 s on a machine with 52 of them, and flooded the
+                    # journal with ~99 IpcHandler re-registrations (#901).
+                    #
+                    # Two causes, one per patch below. onShellConfigChanged fires
+                    # pluginsChanged() -- the "the set of plugins changed" signal --
+                    # for ANY save. And its panel listener assigns
+                    # shell.panelEntries a fresh JS array, which is an
+                    # Instantiator's model: QML does not diff a JS array, so every
+                    # delegate is destroyed and recreated even when the contents
+                    # are identical.
+                    #
+                    # CARRIED, and meant to be dropped, like the #749, #877 and
+                    # #893 blocks above: AGENTS.md section 11 puts Omarchy fixes
+                    # upstream, and this is carried at the owner's request until it
+                    # lands there. Delete it the moment upstream diffs the list.
+                    # The whole block is the needle, so a reworded one fails this
+                    # build.
+                    # printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+
+                    # The two helpers, before computePanelEntries -- a single
+                    # unique anchor, asserted by --replace-fail itself.
+                    helpersAnchor='  function computePanelEntries() {'
+                    helpersNew=$(printf '%s\n' \
+                      '  // nixarchy CARRIED patch (#901): what "the enabled set changed" means,' \
+                      '  // using the same predicate every consumer uses, so "changed" is exactly' \
+                      '  // what they would see change. Ids carry no spaces.' \
+                      '  function enabledPluginSignature() {' \
+                      '    var reg = shell.pluginRegistry' \
+                      '    if (!reg) return ""' \
+                      '    var ids = []' \
+                      '    for (var id in reg.installedPlugins)' \
+                      '      if (reg.isEnabled(id)) ids.push(id)' \
+                      '    ids.sort()' \
+                      '    return ids.join(" ") + "|" + shell.selectedBarId' \
+                      '  }' \
+                      "" \
+                      '  // Same manifest OBJECT, not a deep compare: a rescan produces new' \
+                      '  // manifest objects, so a real plugin change still rebuilds.' \
+                      '  function samePanelEntries(a, b) {' \
+                      '    if (!a || !b || a.length !== b.length) return false' \
+                      '    for (var i = 0; i < a.length; i++) {' \
+                      '      if (a[i].id !== b[i].id) return false' \
+                      '      if (a[i].kind !== b[i].kind) return false' \
+                      '      if (a[i].keepLoaded !== b[i].keepLoaded) return false' \
+                      '      if (a[i].manifest !== b[i].manifest) return false' \
+                      '    }' \
+                      '    return true' \
+                      '  }' \
+                      "" \
+                      "$helpersAnchor")
+                    substituteInPlace "$shellQml" --replace-fail "$helpersAnchor" "$helpersNew"
+
+                    # A: fan out only when the enabled set changed. registryRevision
+                    # still moves unconditionally -- it drives cheap bindings, and
+                    # dropping it could leave a bar switch unnoticed. The else
+                    # branch keeps settings reaching keep-loaded plugins, which is
+                    # the #877 case one patch up.
+                    cfgOld=$(printf '%s\n' \
+                      '  onShellConfigChanged: {' \
+                      '    if (failedBarId !== "") failedBarId = ""' \
+                      '    pluginRegistry.registryRevision++' \
+                      '    pluginRegistry.pluginsChanged()' \
+                      '  }')
+                    cfgNew=$(printf '%s\n' \
+                      '  property string _enabledPluginSignature: ""' \
+                      "" \
+                      '  onShellConfigChanged: {' \
+                      '    if (failedBarId !== "") failedBarId = ""' \
+                      '    pluginRegistry.registryRevision++' \
+                      '    // nixarchy CARRIED patch (#901): a layout or settings-only save must' \
+                      '    // not rebuild every plugin. The first load (signature "" -> real)' \
+                      '    // still fans out, as today.' \
+                      '    var signature = shell.enabledPluginSignature()' \
+                      '    if (signature !== shell._enabledPluginSignature) {' \
+                      '      shell._enabledPluginSignature = signature' \
+                      '      pluginRegistry.pluginsChanged()' \
+                      '    } else {' \
+                      '      shell.syncPluginApis()' \
+                      '    }' \
+                      '  }')
+                    substituteInPlace "$shellQml" --replace-fail "$cfgOld" "$cfgNew"
+
+                    # B: never replace an identical panel list. This also covers the
+                    # registry's own moveBarWidget/setBarWidget, which emit
+                    # pluginsChanged() before writing shell.json -- so `omarchy bar
+                    # set` paid the fan-out twice.
+                    panelOld='    function onPluginsChanged() { if (!shell.pluginReloading) shell.panelEntries = shell.computePanelEntries() }'
+                    panelNew=$(printf '%s\n' \
+                      '    function onPluginsChanged() {' \
+                      '      if (shell.pluginReloading) return' \
+                      '      // nixarchy CARRIED patch (#901): QML rebuilds every panel when the' \
+                      '      // Instantiator model is reassigned; skip an identical list.' \
+                      '      var next = shell.computePanelEntries()' \
+                      '      if (!shell.samePanelEntries(shell.panelEntries, next)) shell.panelEntries = next' \
+                      '    }')
+                    substituteInPlace "$shellQml" --replace-fail "$panelOld" "$panelNew"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

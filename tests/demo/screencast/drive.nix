@@ -11,12 +11,17 @@
   sessionEnv,
 }:
 let
-  # The beats, as tab-separated lines the shell can read without a JSON parser
-  # in the loop. `expect` and `caption` are carried through for the gate and
-  # the editor rather than used here.
+  # The beats, as UNIT-SEPARATOR (\037) delimited lines the shell can read
+  # without a JSON parser in the loop.
+  #
+  # Not tab, and this is not taste. Tab is whitespace, and bash collapses runs
+  # of whitespace IFS characters into one delimiter -- so an empty field
+  # disappears and every later field shifts left. A beat with no `id` but a
+  # `route` (install-pick) would have put the route into the id and never
+  # opened. Found by testing the gate, which had the identical bug.
   beatLines = pkgs.lib.concatMapStringsSep "\n" (
     b:
-    builtins.concatStringsSep "\t" [
+    builtins.concatStringsSep "\037" [
       b.label
       b.action
       # Nix renders a float as 2.400000; trimmed so the table and any timing
@@ -73,7 +78,7 @@ in
       printf '{"t0":%s,"beats":[' "$t0" > "$beats"
       first=1
 
-      while IFS=$'\t' read -r label action hold id route command; do
+      while IFS=$'\037' read -r label action hold id route command; do
         [ -n "$label" ] || continue
 
         # Observed BEFORE the action, because what the gate wants to know is

@@ -49,6 +49,45 @@ palette per GIF. The recorder's rule is **under 1 MB**; capping the palette at
 96 colours is what keeps a desktop gradient under it. Record at a 16:10 region
 (`wl-screenrec -g "<x>,<y> 2304x1440"`) so nothing needs cropping afterwards.
 
+## Recording a real desktop is a script now, not an afternoon
+
+`tests/demo/screencast/` (#930). The rules above still hold — they are what it
+automates. What changed is that a take is repeatable and the desktop it
+borrowed is provably given back.
+
+```
+screencast-prep        snapshot, then hide third-party bar widgets
+screencast-record OUT  capture + drive + restore, in one command
+verify-beats           does the recording show what the shot list promised?
+screencast-edit OUT    both cuts from one master
+screencast-restore     put it back; screencast-recover for a take that died
+```
+
+Four things about it that were learned rather than designed:
+
+- **Prep refuses; it does not tidy.** It will not close your windows or dismiss
+  your notifications — it stops and names them. Neither is recoverable, and a
+  harness that costs somebody unsaved work has cost more than it saved.
+- **Restore goes through the shell's IPC**, never by writing `shell.json`, and
+  re-reads the live state after a settle delay. A plugin whose kind is `bar`
+  takes no placement: `omarchy plugin enable <id> right` leaves it disabled,
+  which is how the first real run put every third-party plugin back except the
+  machine's actual bar.
+- **`OMARCHY_PATH` must be the tree the shell was LAUNCHED from.**
+  `omarchy-shell` selects the instance with `qs ipc -p "$OMARCHY_PATH/shell"`,
+  so a session that predates a rebuild and an SSH shell that inherits the new
+  one never match — and the symptom is `omarchy-shell is not running` against a
+  shell that plainly is. The driver derives it from the running process.
+- **The video gate is not the GIF gate.** `verify-frames.sh`'s diversity half
+  cannot fail at 60 fps, so the video path samples a window per beat at its
+  OBSERVED time and OCRs each beat separately. It refuses a file carrying
+  subtitles, because otherwise a caption satisfies the expectation it captions.
+
+A video is **16:9**, which the whole-desktop-at-16:10 rule above does not
+cover. That is a deliberate departure for a different medium rather than an
+oversight: a hero video is not a still, and cropping a 1920x1080 capture to
+16:10 would throw away picture to satisfy a rule about screenshots.
+
 ## What a recording may show
 
 A capture of a real desktop shows whatever is on it.

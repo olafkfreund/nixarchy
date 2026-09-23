@@ -303,6 +303,33 @@ so, in numbers.
   flagged as interacting with, now measured rather than predicted. The rest is
   ordinary graphics-stack weight (SDL, mesa) that any compositor drags in.
 
+- **Step 3 is settled by a proxy, on the owner's decision (2026-09-23).** The
+  step asks for a human to watch the host desktop. What is measurable instead
+  is the property that *makes* a window impossible: whether the backend needs
+  a host display at all. Same qemu binary, one flag varied, `DISPLAY` and
+  `WAYLAND_DISPLAY` stripped:
+
+  | | no host display | with one |
+  |---|---|---|
+  | `-display egl-headless -device virtio-gpu-gl` | **runs** to the timeout | -- |
+  | `-display gtk` | **`gtk initialization failed`** | runs, and opens a window |
+
+  So `headless` is not "a window we do not look at": it is a configuration
+  that runs where no display exists, and therefore cannot open one. `gtk`
+  refuses outright without a display. That is the distinguishing property,
+  and it is what the template's comment claims.
+
+  **And the `gtk` half of step 3 is not a working configuration on this host
+  anyway.** With the template's `virtio-gpu-gl` attached, qemu refuses before
+  it gets anywhere near a window: `OpenGL is not supported by display backend
+  'gtk'`. This qemu is built without GL in its gtk backend, so "flip backend
+  to gtk and confirm a window appears" would have failed for a reason that has
+  nothing to do with windows. Worth knowing before anyone tries it.
+
+  What this does **not** prove is the literal sentence in the step -- that
+  nothing appeared on a particular desktop on a particular day. It proves the
+  mechanism that guarantees it.
+
 ## Tests
 
 The existing `checks.microvm-hyprland` and `-tcg` come free from the `genAttrs`

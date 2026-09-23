@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 912
 intent: intent/2026-09-23-912-ship-flatsnap.md
 ---

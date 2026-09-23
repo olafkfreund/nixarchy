@@ -137,4 +137,24 @@ results.
 
 ## Deviations / results
 
-(filled in during implementation)
+- **Before starting.** #906 had merged, so the branch was rebased on main before step 1.
+  Baseline eval of `nixosConfigurations.vm.config.system.build.toplevel.drvPath`
+  (`--no-eval-cache`): **29.75 s, 2.10 GB**.
+- **Step 5.** The row check is a shell assertion over the generated
+  `nixarchy/omarchy-menu.jsonc` (the file `menu-verbs` also reads). The row is
+  not an option value, so there is no `{ on; off; }` pair for it. Red (a),
+  dropping the nixos.nix import, fails evaluation with "The option
+  `programs.nixarchy.flatsnap' does not exist". That is red, but as an eval
+  error rather than `on=` output.
+- **Step 6: the checks are different from the plan.** nixarchy has no
+  `pages.yml`; that was nixarchy-pkg's. The real checks are three steps in
+  `build.yml`'s lint job, all run locally from the workflow file:
+  - "Every manual page is in the sidebar": the page is listed in
+    `docs/_config.yml`, `docs/llms.txt`, `docs/manual/index.md` and `README.md`.
+  - "Every default plugin has a row in the manual": `<!-- nixarchy.flatsnap -->`
+    in `plugins.md`.
+  - `readme-counts.sh --check`. Adding a default changes `docs/index.md`
+    "Ten … seven" to "Eleven … eight", done with `readme-counts.sh --fix`,
+    which touched only that line.
+
+  The Jekyll build is green.

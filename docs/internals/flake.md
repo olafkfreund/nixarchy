@@ -450,6 +450,45 @@ and `xdg-utils` are already in the reference closure.
 `olafkfreund/nixarchy-ghtui`, the id `olafkfreund.github-actions`, and the same
 `menu.py` `register` check.
 
+### The Flatpak and Snap panel, on by default (#912)
+
+```nix
+nixarchy-flatsnap = {
+```
+
+[nixarchy-flatsnap](https://github.com/olafkfreund/nixarchy-flatsnap) is two
+things, and nixarchy takes both from this one input:
+
+- **The plugin** (`packages.default`), a default in `modules/home.nix` like
+  nixarchy-pkg. It is on wherever nixarchy is, and
+  `defaultPlugins.flatsnap = false` opts out.
+- **The NixOS module** (`nixosModules.default`), imported unconditionally in
+  `modules/nixos.nix` next to nix-flatpak. It reads
+  `~/.config/nixarchy/flatsnap.nix` (which `nixarchy-apply` copies, #904) and
+  turns it into `services.flatpak.packages` and, for Snaps, nix-snapd plus a
+  reconciler unit.
+
+**nixarchy is now the one place nix-snapd is imported.** `default` is the
+plugin's module *and* nix-snapd. A downstream flake that also imports
+`nix-snapd.nixosModules.default` declares `services.snap` twice, and evaluation
+fails before any assertion can run, so no check here can catch it for them. The
+manual's page says what to remove, and quotes the error.
+
+**Inert until used.** With nothing declared there is no snapd, no setuid
+`snap-confine`, and no `nixarchy-flatsnap-snaps` unit. `tests/options.nix`
+(`flatsnapSnapd`) holds that both ways.
+
+Measured at 12d33d5 (2026-09-23): the plugin output is **42 KiB**. snapd's
+closure is **1.0 GiB**, and reaches a machine only once a Snap is declared. The
+input `follows` nixarchy's `nixpkgs` and `nix-flatpak`, and adds one `nix-snapd`
+node (plus its `flake-parts` and `flake-compat`) to the lock.
+
+**Bumping the pin:** a commit on the plugin's `main`, then
+`nix flake lock --update-input nixarchy-flatsnap`. Check that the lock still has
+one `nix-snapd` and no second `nixpkgs`, and that `options` (`flatsnapIsADefault`,
+`flatsnapSnapd`, the menu row) and `menu-verbs` pass. The plugin's own
+`nix flake check` (a VM test and a gating eval) is its release gate.
+
 ### The herdr sessions widget, on by default (#771)
 
 ```nix

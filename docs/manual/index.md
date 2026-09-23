@@ -67,6 +67,7 @@ the documentation as much as the code.
 | Filling out pdfs | same as Omarchy — [read there](https://omarchy.org/manual/filling-out-pdfs/) |
 | Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |
 | **Other packages** | **differs on NixOS** — [read here](other-packages) |
+| **Flatpak and Snap** | **differs on NixOS** — [read here](flatpak-and-snap) |
 | **Configuring nixarchy** | **nixarchy only** — [read here](configuration) |
 | **nixarchy's plugins** | **nixarchy only** — [read here](plugins) |
 | **Preview changes** | **nixarchy only** — [read here](preview) |

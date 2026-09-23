@@ -729,7 +729,7 @@ by name (`build.yml`, "Every manual page is in the sidebar").
 
 **Installing software** — from the menu, from all of nixpkgs, without installing at all, and when the thing is not packaged
 
-  [Other packages](https://olafkfreund.github.io/nixarchy/manual/other-packages) · [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first) · [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview) · [Prebuilt Binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries) · [Python](https://olafkfreund.github.io/nixarchy/manual/python)
+  [Other packages](https://olafkfreund.github.io/nixarchy/manual/other-packages) · [Flatpak and Snap](https://olafkfreund.github.io/nixarchy/manual/flatpak-and-snap) · [Try It First](https://olafkfreund.github.io/nixarchy/manual/try-it-first) · [Preview changes](https://olafkfreund.github.io/nixarchy/manual/preview) · [Prebuilt Binaries](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries) · [Python](https://olafkfreund.github.io/nixarchy/manual/python)
 
 **Development** — toolchains per project, an Arch or Debian userland, a disposable VM, a phone
 

@@ -25,6 +25,7 @@ machine use the menu row, or copy the line from a fresh install.
 | Plugin | What it's for | Status | Open it |
 |---|---|---|---|
 | [Package manager](#package-manager) | apps, services, packages and options | **on by default** | Install ▸ Packages · Super+Alt+N <!-- nixarchy.pkg --> |
+| [Flatpak and Snap](#flatpak-and-snap) | apps nixpkgs does not carry, from Flathub or the Snap Store | **on by default** | Install ▸ Flatpak & Snap <!-- nixarchy.flatsnap --> |
 | [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Apps ▸ Podman · Super+Alt+O <!-- nixarchy.podman --> |
 | [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P <!-- olafkfreund.gitlab-pipelines --> |
 | [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H <!-- nixarchy.herdr --> |
@@ -59,6 +60,19 @@ rebuild asks for your password through the Omarchy dialog.
 ![Searching nixpkgs for a package](../img/plugins/pkg-search.jpg)
 
 ![Searching NixOS options, then setting one through a form](../img/plugins/pkg-options.jpg)
+
+## Flatpak and Snap
+
+[nixarchy-flatsnap](https://github.com/olafkfreund/nixarchy-flatsnap) · [its own site](https://olafkfreund.github.io/nixarchy-flatsnap/)
+
+Paste a Flathub or Snapcraft link, an app ID, or an `install` line, check what
+the app can reach, and queue it. **Apply** installs it declaratively: Flatpaks
+through nix-flatpak, and Snaps through nix-snapd plus a small reconciler that
+removes only what it installed. snapd runs only while a Snap is declared. See
+[Flatpak and Snap](flatpak-and-snap) for the keys, the security notes and
+removal.
+
+Turn it off with `programs.nixarchy.defaultPlugins.flatsnap = false;`.
 
 ## Podman
 

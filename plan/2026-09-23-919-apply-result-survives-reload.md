@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 919
 spec: spec/2026-09-23-919-apply-result-survives-reload.md
 ---

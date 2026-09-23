@@ -41,7 +41,11 @@ let
     ]
   ) shots.beats;
 
-  beatFile = pkgs.writeText "screencast-beats.tsv" beatLines;
+  # The trailing newline is load-bearing. Without it `while read` returns
+  # non-zero on the final line and never runs the body for it -- the first real
+  # take lost its `endcard` beat and nothing reported a problem: 17 entries for
+  # an 18-beat list.
+  beatFile = pkgs.writeText "screencast-beats.tsv" (beatLines + "\n");
 in
 {
   drive = pkgs.writeShellApplication {
@@ -51,6 +55,7 @@ in
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.procps
+      pkgs.wtype
     ];
     text = ''
       ${sessionEnv}
@@ -64,6 +69,16 @@ in
       # recording is exactly when something might.
       now() { cut -d' ' -f1 /proc/uptime; }
 
+      # Every layer-shell surface that is not the bar or the wallpaper -- i.e.
+      # an open panel. This is what makes "did the beat open anything?"
+      # answerable during the take rather than only by the gate afterwards.
+      panels() {
+        hyprctl layers -j 2>/dev/null |
+          jq -r '[.[].levels | to_entries[].value[]? | .namespace]
+                 | map(select(test("^omarchy-(bar|background)$") | not))
+                 | join(" ")' 2>/dev/null || true
+      }
+
       omarchy-shell shell ping >/dev/null 2>&1 || {
         echo "screencast-drive: the shell is not reachable." >&2
         echo "OMARCHY_PATH=''${OMARCHY_PATH:-unset} -- it must be the tree the" >&2
@@ -75,6 +90,7 @@ in
       # the gate can seek into the recording without knowing when recording
       # started in wall-clock terms.
       t0=$(now)
+      opened_nothing=0
       printf '{"t0":%s,"beats":[' "$t0" > "$beats"
       first=1
 
@@ -120,18 +136,52 @@ in
         printf '{"label":"%s","at":%s}' "$label" "$(echo "$at $t0" | awk '{printf "%.2f", $1 - $2}')" >> "$beats"
         echo "  $label at $(echo "$at $t0" | awk '{printf "%.1f", $1 - $2}')s"
 
-        sleep "$hold"
+        # A plugin beat that opened nothing is a beat the viewer will not see,
+        # and the take should say so while it can still be re-run -- not leave
+        # it for the gate to find in an hour.
+        if [ "$action" = plugin ] || [ "$action" = menu ]; then
+          sleep 1
+          if [ -z "$(panels)" ]; then
+            echo "  (warning: $label opened no panel)" >&2
+            opened_nothing=$((opened_nothing + 1))
+          fi
+          sleep "$(awk -v h="$hold" 'BEGIN { d = h - 1; if (d < 0) d = 0; print d }')"
+        else
+          sleep "$hold"
+        fi
 
-        # Close what the beat opened, so the next one starts from the desktop
-        # rather than from a stack of panels.
+        # Close what the beat opened, so the next starts from the desktop rather
+        # than from a stack of panels.
+        #
+        # wtype, not hyprctl. A shell panel is a layer-shell surface:
+        # `killactive` does not touch it, and `sendshortcut ',escape,'` is a
+        # SYNTHETIC shortcut that a layer surface holding keyboard focus never
+        # receives. wtype goes through the virtual-keyboard protocol, which is
+        # the path a real keypress takes -- and a real Escape has always worked.
         case "$action" in
-          plugin | menu) omarchy-shell shell dismiss >/dev/null 2>&1 || hyprctl dispatch killactive >/dev/null 2>&1 || true ;;
+          plugin | menu)
+            wtype -k Escape >/dev/null 2>&1 || true
+            sleep 0.4
+            # If it is still up, say so rather than stacking the next panel on
+            # top of it. Namespaces, not a layer COUNT: the bar and the
+            # background are layers too, so a count moves 3 to 3 when a panel
+            # closes and reads as a failure.
+            if [ -n "$(panels)" ]; then
+              echo "  (warning: $label left a panel open: $(panels))" >&2
+              wtype -k Escape >/dev/null 2>&1 || true
+              sleep 0.4
+            fi
+            ;;
           term) hyprctl dispatch closewindow class:screencast.term >/dev/null 2>&1 || true ;;
           *) : ;;
         esac
       done < ${beatFile}
 
       printf '],"duration":%s}\n' "$(echo "$(now) $t0" | awk '{printf "%.2f", $1 - $2}')" >> "$beats"
+      if [ "$opened_nothing" -gt 0 ]; then
+        echo "screencast-drive: $opened_nothing beat(s) opened no panel -- the take is not usable" >&2
+        exit 1
+      fi
       echo "screencast-drive: done. Observed beat times in $beats"
     '';
   };

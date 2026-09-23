@@ -528,6 +528,10 @@
     reason = "Vendored unchanged. `usermod -aG docker $USER` adds a group membership that users.users.<name>.extraGroups owns on NixOS, so the change is lost at the next rebuild.";
     allow = "account-tools";
   };
+  "omarchy-shell-config" = {
+    class = "patch";
+    reason = "refresh_shell_config drops the rescanPlugins fallback (#901). When a shell still rebuilding its bar from the previous save missed the 2 s reloadConfig IPC timeout, upstream fell back to reloading every plugin; the shell applies the write through its own file watch anyway.";
+  };
   "omarchy-snapshot" = {
     class = "replace";
     reason = "Upstream drives snapper through limine, which is neither the bootloader here nor packaged, and `@` holds almost no system anyway. Snapshots /home and /var/lib, and restores from the running system.";

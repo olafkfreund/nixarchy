@@ -42,6 +42,28 @@ spec: spec/2026-09-23-901-shell-json-no-full-rebuild.md
   with `--admin` on the owner's instruction, without waiting for the hour-long
   install checks.
 
+## Deviation recorded during implementation (owner-approved, option 1)
+
+- **Step 2 passed:** an external `jq` + `mv` write of `shell.json`, with no
+  `reloadConfig`, was applied by the shell's own file watch within 0.5 s under
+  `QS_DISABLE_FILE_WATCHER=1`.
+- **Step 5 failed its pass criterion:** with `SLOT_CREATE` instrumented in
+  `ModuleSlot`, one Bar Folder `absorb` created **12** bar slots with the
+  unpatched helper and **12** with the no-op helper. The "rebuilds twice" in the
+  spec came from the overlap-based handler count, which is unreliable; there is
+  no double rebuild to remove. The 12 are the whole right-hand region, which is
+  Part 1's target.
+- **So Part 2 is reduced** to dropping only the `rescanPlugins` fallback:
+  `refresh_shell_config` keeps `omarchy-shell shell reloadConfig … || true` and
+  loses the full-plugin-reload fallback. That fallback fires when a busy shell
+  misses the 2 s IPC timeout; plausible on p620, not reproduced. Same needle,
+  same carried-patch style.
+
+- **Bin ledger (found by CI on #907):** shipping `omarchy-shell-config` modified makes it a
+  `patch`-class command, and `checks.bin-ledger` requires a row for every such command.
+  Added `"omarchy-shell-config"` to `data/bin-ledger.nix` with the reason. The plan
+  did not list this bookkeeping step.
+
 ## Steps
 
 1. **`pkgs/omarchy/default.nix`:** insert the #901 block after line 2005.

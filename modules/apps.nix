@@ -348,6 +348,18 @@ let
           description = "Browse, add and apply packages in a panel";
         };
 
+        # Flatpak & Snap (#912). Same shape as install.packages: the helper, and
+        # `when` hides the row once the plugin is turned off. The plugin's own
+        # module defines an identical row through menu.extraEntries; equal
+        # definitions merge, and the plugin drops its copy in a later release.
+        "install.flatsnap" = {
+          icon = "󰏗";
+          label = "Flatpak & Snap";
+          action = "nixarchy-plugin nixarchy.flatsnap";
+          when = "nixarchy-plugin --enabled nixarchy.flatsnap";
+          description = "Paste a Flathub or Snapcraft link and install it declaratively";
+        };
+
         # The GitLab pipelines panel (#770). nixarchy declares these rows and
         # its copy carries `menu.managed`, so the panel does not also write
         # them into the user's menu extension file.

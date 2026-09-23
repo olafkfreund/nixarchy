@@ -227,7 +227,7 @@ replace a real directory. It stays enabled, and the managed copy takes over.
 
 ## Plugin Browser
 
-[nixarchy-plugin-browser](https://github.com/olafkfreund/nixarchy-plugin-browser)
+[nixarchy-plugin-browser](https://github.com/olafkfreund/nixarchy-plugin-browser) · [its own site](https://olafkfreund.github.io/nixarchy-plugin-browser/)
 
 **What it solves.** The Omarchy plugin marketplace is written for Arch. Plenty
 of its plugins call `pacman` or `yay`, or read files that don't exist on
@@ -275,6 +275,16 @@ your session started with.
 `rm -rf ~/.config/omarchy/plugins/io.github.olafkfreund.nixarchy-plugin-browser`.
 nixarchy won't replace a real directory. It stays enabled, and the managed
 copy takes over.
+
+![The Plugin Browser: a search for monitor, hyprmoncfg's preview and its two verdicts, then Display Watcher, which passes both](../img/features/plugin-browser.gif)
+
+![A search for monitor: 77 of the marketplace's plugins, most-starred first, with each one's verification badge](../img/plugins/plugin-browser-list.webp)
+
+![hyprmoncfg's details: its marketplace preview, then review required, and needs review on NixOS because it installs itself with pacman or yay](../img/plugins/plugin-browser-details.webp)
+
+![Display Watcher's details: security passed, and likely ok on NixOS](../img/plugins/plugin-browser-pass.webp)
+
+*Recorded on a real desktop in Tokyo Night, composed onto the default wallpaper. The plugins shown are public marketplace entries.*
 
 ## Rebuild
 

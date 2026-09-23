@@ -80,6 +80,7 @@ is the same catalogue, `data/microvm-templates.nix`.
 | `node` | `nodejs` (LTS), `pnpm`, 3 GiB RAM | ephemeral — `pnpm install` inside `/mnt/host` if `node_modules` should outlive the VM |
 | `agent-claude` | `agent` plus codex and opencode, with the model endpoints and GitHub pre-allowed | `claude-code` only when unfree is allowed — `NIXPKGS_ALLOW_UNFREE=1 nixarchy vm run <name>`, or `allowUnfree` on a permanent machine; never in the public cache |
 | `k3s` | single-node k3s server, 4 GiB RAM, 2 vCPU | `/var/lib/rancher` is a 20 GiB volume, so the cluster and its generated token survive a restart; traefik and servicelb off; `kubectl` inside the guest only |
+| `hyprland` | a Wayland compositor with `grim`, `tesseract`, `wtype` and an accessibility-forced Chromium, on one 1920x1080 virtual monitor | for testing desktop tooling without a real session. No omarchy shell — this is plain NixOS. The first template that asks for a GPU, and the largest: about 5.2 GiB to realise, so the first run is a long one. The compositor is a user service — `systemctl --user status hyprland` from the ttyS0 console if a capture comes back empty |
 
 Every template is a plain NixOS module — nothing here invents nixarchy
 vocabulary. If you outgrow one, copy `module` out of the catalogue entry

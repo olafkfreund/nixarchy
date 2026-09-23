@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 913
 intent: intent/2026-09-23-913-plugin-browser.md
 ---

@@ -658,6 +658,28 @@ let
           action = "nixarchy-plugin nixarchy.rebuild";
           description = "Copy the selection into your flake and nixos-rebuild switch";
         };
+        # Add Plugin opens the Plugin Browser (#913): browse the marketplace and
+        # audit a plugin before it is installed. Upstream's Git-URL prompt stays,
+        # one row down, for a URL you already have. `when` hides this row once
+        # the panel is turned off; the URL row stays.
+        "setup.plugin.add" = {
+          icon = "󰖟";
+          label = "Add Plugin";
+          action = "nixarchy-plugin io.github.olafkfreund.nixarchy-plugin-browser";
+          when = "nixarchy-plugin --enabled io.github.olafkfreund.nixarchy-plugin-browser";
+          aliases = [
+            "marketplace"
+            "plugin browser"
+            "install plugin"
+          ];
+          description = "Search the plugin marketplace; audit before installing · Super+Alt+U";
+        };
+        "setup.plugin.add-url" = {
+          icon = "󰌷";
+          label = "Add Plugin from URL";
+          action = "omarchy-launch-floating-terminal-with-presentation 'omarchy-plugin-add'";
+          description = "Install a plugin from its Git URL, without the audit";
+        };
       }
       // lib.optionalAttrs devenvEnabled {
         # The Dev environments panel (#802). The helper rather than a bare

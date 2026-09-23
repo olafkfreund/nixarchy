@@ -289,6 +289,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-plugin-browser-on-by-default-913
+    # A commit on master (no tags); bump it the way that page says.
+    nixarchy-plugin-browser = {
+      url = "github:olafkfreund/nixarchy-plugin-browser/cd3a5607d1184d98a5ca082fd88ada6febd6b627";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {

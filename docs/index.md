@@ -70,9 +70,10 @@ a key, keyboard-first, in the desktop's own look:
 - look after Podman containers;
 - follow GitLab pipelines and GitHub Actions;
 - see which coding agent in your herdr sessions needs you;
-- manage MicroVMs and Distrobox boxes.
+- manage MicroVMs and Distrobox boxes;
+- browse the plugin marketplace, and audit a plugin before installing it.
 
-Ten ship by default: seven are always on, and three turn on with their feature. Voice will be opt-in.
+Eleven ship by default: eight are always on, and three turn on with their feature. Voice will be opt-in.
 
 [![The Podman panel: containers, images and volumes, then a container stopping](img/features/podman.gif)](img/features/podman.gif)
 

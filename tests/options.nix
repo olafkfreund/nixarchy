@@ -144,6 +144,7 @@ let
       devenv = false;
       ai-mirror = false;
       rebuild = false;
+      plugin-browser = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
@@ -944,6 +945,32 @@ let
       on = hasGh defaultHomeOn;
       off = hasGh noDefaultsHome || hasGh defaultHome;
     };
+    # #913: the Plugin Browser is a default wherever nixarchy is on, and
+    # nowhere else -- it is what Setup > Plugins > Add Plugin opens.
+    pluginBrowserIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser"
+        && hookLists "io.github.olafkfreund.nixarchy-plugin-browser" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser"
+        || defaultHome.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser";
+    };
+    # Its audit fails closed without bwrap, so bubblewrap comes with it, and
+    # so does its CLI (the audit and the agent hand-off the panel runs).
+    pluginBrowserPackages =
+      let
+        hasBwrap = h: builtins.any (p: (p.pname or "") == "bubblewrap") h.home.packages;
+        hasCli =
+          h:
+          builtins.any (
+            p: builtins.match ".*nixarchy-plugin-browser.*" (p.name or "") != null
+          ) h.home.packages;
+      in
+      {
+        on = hasBwrap defaultHomeOn && hasCli defaultHomeOn;
+        off = hasBwrap noDefaultsHome || hasBwrap defaultHome || hasCli noDefaultsHome;
+      };
     # #809: the defaults' runtime tools arrive without being asked for, so they
     # lose to whatever the user installed themselves. Without the priority, a
     # user's own `python3.withPackages` beside a panel's bare python3 is two
@@ -965,6 +992,7 @@ let
           "jq"
           "iproute2"
           "herdr"
+          "bubblewrap"
         ];
         ours = h: builtins.filter (p: builtins.elem (p.pname or "") toolNames) h.home.packages;
         allLowPrio =

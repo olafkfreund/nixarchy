@@ -158,3 +158,22 @@ results.
     which touched only that line.
 
   The Jekyll build is green.
+- **Step 7: done on razer (2026-09-23), starting from gen 2936 (nixos_config 9cc3fb29b).**
+  The `/tmp` clone had nixarchy on this branch, with nixos_config's own nix-snapd
+  input and import removed (2 lines).
+  - **Stock (`switch-to-configuration test`):** snapd inactive, no reconciler unit,
+    `install.flatsnap` in `/etc/nixarchy/omarchy-menu.jsonc`, the plugin installed
+    under `~/.config/omarchy/plugins/nixarchy.flatsnap`, and `nixarchy-apply`
+    knows flatsnap. The post-boot defaults hook lists and enabled it, and the panel
+    opens on razer (screenshot).
+  - **Apply through the plugin's installed CLI** (`NIXARCHY_FLAKE=<clone>`): preflight
+    `ready`, then `applied` (gen 2937). snapd came up, hello-world and
+    gnome-calculator 51.0 ran, and `managed: [hello-world]`.
+  - **Un-declare both and apply** (gen 2938): both removed, `hello` (installed by
+    hand) kept, and `managed` empty.
+  - **Rollback:** disabled the plugin, removed its `enabled-once` marker, removed
+    `hello`, switched back to 2936, deleted 2937 and 2938, and refreshed the boot
+    menu. Posted on the bus.
+- **Found in step 7: razer's shell runs with `QS_DISABLE_FILE_WATCHER=1`.** A plugin
+  installed by an activation loads at the next shell start, not live.
+  Unchanged behaviour, noted for anyone testing a default plugin live.

@@ -113,35 +113,77 @@ It may not be ours to fix.
 - File anything in anyone else's repository unprompted (§11).
 - Change any user-visible default while investigating.
 
-## Open questions
+## Open questions — answered (2026-09-24)
 
-These are the approver's to decide, and the first two change the shape of
-everything after them.
+The owner set the scope and asked for the other three to be investigated
+before the spec. All four are now settled, and two of the answers change what
+the spec has to say.
 
-1. **Scope.** Is this issue (a) document the hazard and make our own tree
-   safe, and report upstream; (b) that, plus a supported writer command in
-   nixarchy that does the stop/write/relaunch dance; or (c) also attempt a
-   local mitigation in the vendored shell? My recommendation is (a), with (b)
-   only if something we ship actually needs to write the file — and right now
-   I do not think anything does, which is worth confirming before building a
-   command for it.
+**1. Scope: (a).** Document the hazard, make our own tree safe, and report
+upstream. No writer command, no local patch to the vendored shell.
 
-2. **Is the `OMARCHY_PATH` mismatch a cause or a coincidence?** The issue notes
-   the owner's login environment held a *newer* `OMARCHY_PATH` than the running
-   shell, because the shell had not been restarted after a rebuild, and says
-   "that may matter". #930 hit the same mismatch from the other side and it was
-   load-bearing there. If it is a precondition, the bug is narrower than it
-   looks and the advice changes. Determining this needs one controlled repro
-   on real hardware and should probably come **before** the spec rather than
-   inside it.
+**2. The `OMARCHY_PATH` mismatch is a red herring. The bug does not need it.**
 
-3. **Does it still reproduce on current Quickshell?** The report is 0.3.1 /
-   Qt 6.11.2. If a newer Quickshell has fixed it, the whole upstream half
-   collapses into a version bump and the outcome above is mostly documentation.
+Reproduced on razer under the *control* condition — the running shell and the
+login environment on the same tree,
+`wlbf63znxqwjyjhkv1mv9na2zyhx582z-nixarchy-omarchy-tree`, verified before
+touching anything. Writing the file back byte for byte (both hashes
+`b0adf5cc6221a0f0`) produced, within four seconds:
 
-4. **Is a whole-desktop VM check worth building for this?** `checks.session`
-   boots a real desktop, so a write-under-a-running-shell test may be reachable
-   there — but it is a ~10–20 minute check and nothing in CI currently builds
-   anything in `tests/demo/`. Cheap answer: a static check that nothing in the
-   tree writes `shell.json`. Expensive answer: the real thing. Worth deciding
-   deliberately rather than defaulting to the cheap one because it is cheap.
+    omarchy.bar        Function not found.
+    omarchy.clock      Target not found.
+    omarchy.network    Target not found.
+
+    WARN: QQmlVMEMetaObject: Internal error - attempted to evaluate a
+          function in an invalid context
+    WARN scene: @plugins/bar/Bar.qml[2008:-1]: TypeError: Property
+          'pluginBarApiFor' … is not a function
+
+61 `invalid context` errors in the following minute. `omarchy-restart-shell`
+recovered it and `shell.json` was byte-identical to the backup throughout.
+
+So the issue's "that may matter" is answered: **it does not**. The bug is
+general, which makes it worse than the report implied — every user of the
+settings UI is exposed, not only someone whose session predates a rebuild.
+
+One thing did *not* reproduce: **the segfault.** The shell PID was unchanged
+across the whole run, and nothing in the journal mentions a signal. Variant 1
+(the bar breaking) is reliable; variant 2 (the crash in
+`IpcHandler::updateRegistration`) needs some further condition we have not
+identified. The spec should not claim otherwise.
+
+**3. There is no version to upgrade to, and the obvious upstream fix is
+already in.**
+
+`v0.3.1` is the latest upstream tag — there is nothing newer to bump to, and
+razer runs it. The one commit on master that looks like this bug,
+`28771c7c74b4` *"ipc: ensure handler deregistration upon destruction"*
+(2026-08-02), is **already an ancestor of the tag**: `v0.3.1` (2026-08-21) is
+11 commits ahead of it and 0 behind.
+
+That is the single most useful thing found here. The duplicate-registration
+warnings look exactly like a deregistration bug, so the natural upstream
+report is "this was fixed in 28771c7c, please release it" — and that report
+would be wrong. The honest one is that 0.3.1 *contains* that fix and still
+does this, which is a different and more valuable bug report.
+
+**4. A VM can reach a running shell, so the expensive check is not
+hypothetical.**
+
+`checks.session` boots a real desktop and asserts on `pgrep -a quickshell`;
+`checks.plugin` already waits for `shell.json` to be written *by a live shell*
+(`tests/plugin.nix:656`) and reads it back. So "write the file under a running
+shell and assert the bar survives" is reachable at a layer we already own —
+better than the intent first guessed.
+
+The cheap check is also worth having, and would guard a claim the tree already
+makes in three places: `modules/home.nix:315` "nothing here writes
+shell.json", `:673` "it never edits your shell.json", and `:1749` "the shell
+rewrites that whole file from memory, so a second writer loses updates".
+Nothing in our tree writes it today, so that check starts green — and per §1 it
+is only worth adding if it can be made to fail, which for a grep-shaped
+assertion means adding a writer and watching it go red.
+
+Both, then: the static one because it is seconds and guards a stated
+invariant, and the VM one because it is the only thing that can see the actual
+defect.

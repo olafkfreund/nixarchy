@@ -182,6 +182,8 @@ pkgs.testers.runNixOSTest rec {
             rebuild = false;
             # Ungated too (#913): the Plugin Browser is on wherever nixarchy is.
             plugin-browser = false;
+            # Ungated too (#912), for the same reason.
+            flatsnap = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

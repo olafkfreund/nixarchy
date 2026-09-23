@@ -179,3 +179,14 @@ results.
   Unchanged behaviour, noted for anyone testing a default plugin live.
 - **Eval cost (plan Tests):** `vm` toplevel drvPath, `--no-eval-cache`: with #912 **30.43 s / 29.59 s** (2.05–2.12 GB), against main **29.75 s / 31.64 s** (2.07–2.10 GB). Within run-to-run noise.
 - **Step 8: done.** Re-pinned to `fbc8a60`, the merge of olafkfreund/nixarchy-flatsnap#2 on its main; the TEMP comment is gone. The lock still has one `nix-snapd` and no second `nixpkgs` or `nix-flatpak`, and `options` and `menu-verbs` are green. The pin is one plugin commit newer than the step 7 razer run (`deaca41`). `050d3a6`, from Copilot's second review, changes only the panel (confinement per channel; Enter in the overrides field arms the confirm) and adds a `confinements` field to `resolve`. No module, menu or apply code changed, and the plugin's own `nix flake check` and `tests/model.sh` cover it, so razer was not re-run.
+- **CI `system` (`checks.plugin`) failed:** "the Remove Plugin row still shows
+  itself with no plugins installed". An ungated default must also be turned off
+  in `tests/plugin.nix`'s `machine` node, which needs an empty plugin directory.
+  `tests/AGENTS.md` already documents this ("Miss the second and
+  `checks.plugin` fails …"), and step 5 missed it because it updated only
+  `noDefaultsHome`. Fixed with `flatsnap = false` there. Copilot's review
+  flagged the same thing twice, plus three docs points, fixed in the same commit:
+  - `docs/llms.txt`'s plugin overview now names Flatpak and Snap;
+  - the manual page and `plugins.md` described snapd as off as soon as no Snap
+    is declared, but after un-declaring the last one it stays on for one more
+    apply (`pendingRemoval`), and both now say so.

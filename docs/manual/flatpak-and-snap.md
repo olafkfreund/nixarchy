@@ -58,9 +58,12 @@ Read this before adding Snaps.
   its publisher, not as sandboxed. The panel says this on every Snap.
 - **Classic Snaps have no sandbox at all.** They take two presses, and are marked
   in red.
-- **snapd runs only while you have a Snap.** On a machine that declares none,
-  there is no snapd daemon and no setuid helper, and none of snapd's 1 GiB
-  closure.
+- **snapd runs only while you have a Snap, or one is still being removed.** On
+  a machine that has never declared one, there is no snapd daemon, no setuid
+  helper, and none of snapd's 1 GiB closure. Removing your last Snap keeps snapd
+  for one more apply: the Snap stays in `flatsnap.nix` as `pendingRemoval` until
+  it has actually gone, and the next change you make in the panel clears it,
+  after which snapd is off again.
 - **Flatpak permissions are shown before you queue.** Overrides take a second
   `Enter`. nix-flatpak keeps any `flatpak override` you set yourself.
 

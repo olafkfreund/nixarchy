@@ -68,7 +68,8 @@ rebuild asks for your password through the Omarchy dialog.
 Paste a Flathub or Snapcraft link, an app ID, or an `install` line, check what
 the app can reach, and queue it. **Apply** installs it declaratively: Flatpaks
 through nix-flatpak, and Snaps through nix-snapd plus a small reconciler that
-removes only what it installed. snapd runs only while a Snap is declared. See
+removes only what it installed. snapd runs only while a Snap is declared or
+still being removed. See
 [Flatpak and Snap](flatpak-and-snap) for the keys, the security notes and
 removal.
 

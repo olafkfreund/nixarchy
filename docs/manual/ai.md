@@ -71,6 +71,36 @@ flake only changes at a rebuild. An agent that does not know which side of that
 line a request falls on will do the wrong kind of change, and the wrong kind is
 the one that silently does not last.
 
+### The Nix skills
+
+The sixteen above are nixarchy's, and they stop at the edge of this desktop.
+Beside them the machine installs [nix-skills](https://github.com/olafkfreund/nix-skills),
+which covers Nix itself -- the language, nixpkgs, Home Manager, and the tools
+around them -- written against the upstream manuals rather than from memory:
+
+| skill | owns |
+|---|---|
+| `devenv-project` | `devenv.nix` and `devenv.yaml` themselves: languages, tasks, services, the lockfile, shell activation |
+| `home-manager` | Home Manager as its own system -- on NixOS, on nix-darwin, or standalone |
+| `microvm-nix` | declarative microVMs with microvm.nix inside a flake |
+| `nix-darwin` | macOS system configuration and `darwin-rebuild` generations |
+| `nix-language` | the language: scope, laziness, functions, strings, paths -- against versioned upstream references |
+| `nix-workflow` | which command to reach for, finding store paths and libraries, development shells, debugging a build |
+| `nixos-wiki` | the retained NixOS Wiki, and checking a page still applies before believing it |
+| `nixpkgs-development` | package expressions, build helpers, overrides, overlays, and the `lib` API against the pinned package set |
+
+Names are not shared between the two sets: one of nixarchy's own always wins,
+and a skill you wrote by hand under `~/.agents/skills/` wins over both. When
+one is left alone the activation says so rather than replacing it.
+
+Turn them off with:
+
+```nix
+programs.nixarchy.nixSkills = false;
+```
+
+The links go at the next rebuild; nothing you wrote yourself is touched.
+
 ## The agents are given a server that knows NixOS
 
 Skills tell an agent how this machine is shaped. They cannot tell it whether

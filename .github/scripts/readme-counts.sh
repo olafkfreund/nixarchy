@@ -443,6 +443,25 @@ for f in "$readme" "$root/docs/manual/ai.md"; do
   done
 done
 
+# The same, for the input's skills, which have one table (docs/manual/ai.md).
+# The count above says the number moved; this says which one the table forgot
+# -- and it is the only thing standing between a hand-written table and
+# somebody else's release cadence (#888).
+nix_skill_names=$(jq -r '.[]' "$nix_skills_tree/skills.json" 2>/dev/null | sort)
+# An empty list here would pass silently, which is the whole of section 4. The
+# count above is already derived from this file, so disagreement means the jq
+# read something other than the list of names.
+if [ "$(printf '%s\n' "$nix_skill_names" | grep -c .)" -ne "$nix_skills" ]; then
+  echo "::error::nix-skills-rows: read $(printf '%s\n' "$nix_skill_names" | grep -c .) names but counted $nix_skills -- refusing" >&2
+  fail=1
+fi
+for s in $nix_skill_names; do
+  if ! grep -qE "^\| \`$s\`" "$root/docs/manual/ai.md"; then
+    echo "::error::nix-skills-rows: ai.md has no table row for \`$s\`" >&2
+    fail=1
+  fi
+done
+
 # A floor. Thirty-six quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.

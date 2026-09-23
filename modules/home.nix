@@ -984,38 +984,14 @@ in
                   "${menuExtensionPath}"
 
                 # Why: modules/AGENTS.md#agent-skills-relinked-on-every-activation
-                ${
-                  let
-                    skillsDir = "${omarchyPath}/default/agents/skills";
-                  in
-                  ''
-                    # Clean up everywhere a link was ever planted, .codex included:
-                    # dropping it from the link list alone would strand the old links.
-                    for agentdir in .agents/skills .claude/skills .codex/skills .pi/agent/skills; do
-                      dest="${config.home.homeDirectory}/$agentdir"
-                      [ -d "$dest" ] || continue
-
-                      for link in "$dest"/*; do
-                        [ -L "$link" ] || continue
-                        case "$(readlink "$link")" in
-                          /nix/store/*/agents/skills/*) run rm -f "$link" ;;
-                        esac
-                      done
-                    done
-
-                    # Link where each agent reads. Not .codex: Codex reads
-                    # ~/.agents/skills too and does not merge same-named skills.
-                    for agentdir in .agents/skills .claude/skills .pi/agent/skills; do
-                      dest="${config.home.homeDirectory}/$agentdir"
-                      run mkdir -p "$dest"
-
-                      ${pkgs.findutils}/bin/find ${skillsDir} -mindepth 1 -maxdepth 1 -type d |
-                        while read -r skill; do
-                          run ln -sfn "$skill" "$dest/$(basename "$skill")"
-                        done
-                    done
-                  ''
-                }
+                #
+                # A command, not a loop here: an activation block is reachable
+                # only by activating, so nothing could check the one thing that
+                # decides whether every agent on this machine sees its skills
+                # (#888). checks.skills-relink drives the package instead.
+                run ${pkgs.callPackage ../pkgs/skills-relink.nix { }}/bin/nixarchy-skills-relink \
+                  "${config.home.homeDirectory}" \
+                  --own "${omarchyPath}/default/agents/skills"
 
                 # Why: modules/AGENTS.md#declared-plugins-linked-in-by-the-id-their-manifes
                 run mkdir -p "${config.xdg.configHome}/omarchy/plugins"

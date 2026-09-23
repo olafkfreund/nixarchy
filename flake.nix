@@ -2035,6 +2035,7 @@
           # back out of the three agent configs, and leaves one the user wrote
           # (#773). The real package against fixtures, both cases.
           ai-mirror-mcp-remove = import ./tests/ai-mirror-mcp-remove.nix { pkgs = pkgsFor.${system}; };
+          skills-relink = import ./tests/skills-relink.nix { pkgs = pkgsFor.${system}; };
 
           bar-keyed-sync = import ./tests/bar-keyed-sync.nix {
             pkgs = pkgsFor.${system};

@@ -2128,6 +2128,16 @@ stdenvNoCC.mkDerivation {
                       '}')
                     substituteInPlace "$shellConfigHelper" --replace-fail "$refreshOld" "$refreshNew"
 
+                    # Any length or order change in a bar region -- one icon moved, one dragged
+                    # into a Bar Folder, one widget put or removed -- rebuilt every widget in that
+                    # region on every monitor (#901): Bar.qml handed each ModuleList Repeater a
+                    # fresh JS array, which QML never diffs. The patch keeps a keyed ListModel per
+                    # ModuleList (BarModel.syncEntries: move / insert / remove / set), so only the
+                    # affected slots are created or destroyed. checks.bar-keyed-sync runs the sync
+                    # against a real ListModel. CARRIED, and meant to be dropped with the rest of
+                    # #901; --fuzz=0 so any upstream change to these two files fails this build.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./901-bar-keyed-layout.patch}
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

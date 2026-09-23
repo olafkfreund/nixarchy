@@ -1,0 +1,93 @@
+--- a/shell/plugins/bar/BarModel.js
++++ b/shell/plugins/bar/BarModel.js
+@@ -101,6 +101,46 @@
+   return changes
+ }
+ 
++// nixarchy #901: keyed sync for each ModuleList's slot model. A layout change
++// (move, absorb into a folder, put, remove) now moves, inserts or removes only
++// the affected slots. Handing the Repeater a fresh JS array instead destroyed
++// and recreated every widget in the region, on every monitor.
++function slotKeys(entries) {
++  var seen = {}
++  var keys = []
++  for (var i = 0; i < entries.length; i++) {
++    var id = entryId(entries[i])
++    seen[id] = (seen[id] || 0) + 1
++    keys.push(id + "#" + seen[id])
++  }
++  return keys
++}
++
++function syncEntries(model, entries) {
++  var list = Array.isArray(entries) ? entries : []
++  var keys = slotKeys(list)
++  // Drop vanished slots first, so everything after them stays put instead of
++  // being moved up one by one.
++  var wanted = {}
++  for (var w = 0; w < keys.length; w++) wanted[keys[w]] = true
++  for (var r = model.count - 1; r >= 0; r--)
++    if (!wanted[model.get(r).slotKey]) model.remove(r, 1)
++  for (var i = 0; i < list.length; i++) {
++    var json = JSON.stringify(list[i])
++    var found = -1
++    for (var j = i; j < model.count; j++) {
++      if (model.get(j).slotKey === keys[i]) { found = j; break }
++    }
++    if (found === -1) {
++      model.insert(i, { slotKey: keys[i], entryJson: json })
++      continue
++    }
++    if (found !== i) model.move(found, i, 1)
++    if (model.get(i).entryJson !== json) model.setProperty(i, "entryJson", json)
++  }
++  if (model.count > list.length) model.remove(list.length, model.count - list.length)
++}
++
+ function expandPath(value, home) {
+   var path = String(value || "")
+   if (path === "") return ""
+--- a/shell/plugins/bar/Bar.qml
++++ b/shell/plugins/bar/Bar.qml
+@@ -1721,6 +1721,11 @@
+ 
+     property var entries: []
+     property string region: ""
++    // nixarchy #901: the Repeaters read a keyed model kept in sync with entries,
++    // so a layout change moves slots instead of rebuilding them all.
++    readonly property ListModel slotModel: ListModel {}
++    onEntriesChanged: BarModel.syncEntries(slotModel, entries)
++    Component.onCompleted: BarModel.syncEntries(slotModel, entries)
+ 
+     visible: entries.length > 0
+     // A hidden list must not build its modules. The center section declares
+@@ -1740,11 +1745,11 @@
+         spacing: 0
+ 
+         Repeater {
+-          model: moduleListRoot.entries
++          model: moduleListRoot.slotModel
+ 
+           ModuleSlot {
+-            required property var modelData
+-            entry: modelData
++            required property string entryJson
++            entry: JSON.parse(entryJson)
+             region: moduleListRoot.region
+           }
+         }
+@@ -1758,11 +1763,11 @@
+         spacing: 0
+ 
+         Repeater {
+-          model: moduleListRoot.entries
++          model: moduleListRoot.slotModel
+ 
+           ModuleSlot {
+-            required property var modelData
+-            entry: modelData
++            required property string entryJson
++            entry: JSON.parse(entryJson)
+             region: moduleListRoot.region
+           }
+         }

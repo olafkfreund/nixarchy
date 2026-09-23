@@ -116,5 +116,30 @@ pkgs.runCommand "nixarchy-apply-imports"
         }
         echo "a host that imports the written file is not warned at"
 
+        # #904: flatsnap.nix, from the nixarchy-flatsnap plugin, is a part like
+        # the other three. Without the file nothing changes -- a machine that
+        # never installed the plugin must import exactly what it did before.
+        grep -q '\./nixarchy/flatsnap\.nix' "good/hosts/$host/nixarchy-apps.nix" && {
+          echo "flatsnap imported although ~/.config/nixarchy/flatsnap.nix does not exist" >&2
+          cat "good/hosts/$host/nixarchy-apps.nix" >&2
+          exit 1
+        }
+        echo "no flatsnap.nix, no flatsnap import"
+
+        # With it, apply copies it beside the others -- byte for byte, not just
+        # a file of that name -- and imports the copy.
+        cat > "$HOME/.config/nixarchy/flatsnap.nix" <<'EOF'
+    { programs.nixarchy.flatsnap.flatpaks = [ { appId = "org.gnome.Calculator"; } ]; }
+    EOF
+        log=$(NIXARCHY_FLAKE=$PWD/good $apply 2>&1 || true)
+        cmp -s "$HOME/.config/nixarchy/flatsnap.nix" "good/hosts/$host/nixarchy/flatsnap.nix" &&
+          grep -q '\./nixarchy/flatsnap\.nix' "good/hosts/$host/nixarchy-apps.nix" || {
+          echo "apply did not carry flatsnap.nix into the flake (#904)" >&2
+          cat "good/hosts/$host/nixarchy-apps.nix" >&2
+          printf '%s\n' "$log" >&2
+          exit 1
+        }
+        echo "flatsnap.nix is copied and imported"
+
         touch $out
   ''

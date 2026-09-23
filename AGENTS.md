@@ -402,6 +402,27 @@ Two other ways a check stops checking, both found in one week:
   there. That happened here twice: once discarding pushed work (recoverable
   from the remote), once rebasing the wrong branch. If something else may be
   driving the tree, `git worktree add` and work there.
+- **A `git pull -q` you do not read the status of is a branch on an unknown
+  base -- and `git reset --soft` then adopts everything between that base and
+  your index.** #922 was opened claiming "one commit, one file, 24 insertions"
+  and contained **34 files and 2548 insertions**: three already-merged pull
+  requests, re-landed under somebody else's subject. The chain was
+  `git checkout main 2>/dev/null; git pull -q --ff-only` -- whose failure was
+  swallowed, so the branch was cut from a `main` four merges old -- followed by
+  `git reset --soft <ref>` to tidy the commits, which re-parented onto that old
+  base and swept everything since into the commit as if it were new work.
+
+  What makes it dangerous is that **every signal agreed with the mistake.**
+  The working tree was correct, so the check passed; `git diff origin/main
+  --stat` printed one file, because at that moment it was comparing against the
+  pre-merge `main`; the PR looked right until GitHub recomputed it. Only a
+  trial merge showed four conflicts. So: **read the status of the `pull` that
+  precedes a branch**, and after any `reset --soft` or rebase, check
+  `git merge-base origin/main HEAD` is what you think and `git show --stat
+  <commit>` lists only your files. `git diff origin/main` is not that check --
+  it answers about whatever `origin/main` is in your local refs, which is
+  exactly the thing that was stale.
+
 - **`git checkout -- <path>` restores the INDEX, not the commit.** So a
   break-it-and-watch-it-fail loop (§1) that does `git add -A` before running
   the check — which a flake evaluation requires, since it sees only tracked

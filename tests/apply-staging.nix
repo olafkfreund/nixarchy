@@ -101,6 +101,29 @@ pkgs.runCommand "nixarchy-apply-staging"
       bad "apply did not write hosts/$host/nixarchy-apps.nix at all"
     fi
 
+    # ---- flatsnap rides along, and only when it exists (#904) ------------
+    # The nixarchy.flatsnap plugin writes flatsnap.nix; nixarchy ships no
+    # template for it. Both halves are asserted, because the "only when it
+    # exists" half is what keeps a machine without the plugin untouched -- and
+    # it is the half a loop that stopped skipping would break silently.
+    newflake "$PWD/nofs"
+    NIXARCHY_FLAKE=$PWD/nofs $apply >/dev/null 2>&1 || true
+    if [ ! -e "$PWD/nofs/nixarchy/flatsnap.nix" ]; then
+      ok "no flatsnap.nix means nothing is copied"
+    else
+      bad "apply wrote nixarchy/flatsnap.nix with no source file"
+    fi
+
+    printf '%s\n' '{ }' > "$HOME/.config/nixarchy/flatsnap.nix"
+    newflake "$PWD/withfs"
+    NIXARCHY_FLAKE=$PWD/withfs $apply >/dev/null 2>&1 || true
+    if staged "$PWD/withfs" nixarchy/flatsnap.nix; then
+      ok "flatsnap.nix is copied into the flake and staged"
+    else
+      bad "flatsnap.nix was not copied or not staged: $(ls "$PWD/withfs/nixarchy" 2>/dev/null | tr '\n' ' ')"
+    fi
+    rm -f "$HOME/.config/nixarchy/flatsnap.nix"
+
     # ---- root layout: today's behaviour, which must not regress ----------
     newflake "$PWD/root"
     NIXARCHY_FLAKE=$PWD/root $apply >/dev/null 2>&1 || true

@@ -3352,7 +3352,11 @@ in
                 # itself is told apart from a new pick -- and kept, not overwritten.
                 applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
                 mkdir -p "$applied"
-                for part in apps services advanced; do
+                # flatsnap is written by the nixarchy.flatsnap plugin rather than
+                # by nixarchy, and there is no flatsnap-template.nix: the loop's
+                # own `[ -f "$src" ] || continue` is what makes a machine without
+                # that plugin see no change at all (#904).
+                for part in apps services advanced flatsnap; do
                   src="$srcdir/$part.nix"
                   [ -f "$src" ] || continue
                   dst="$base/nixarchy/$part.nix"

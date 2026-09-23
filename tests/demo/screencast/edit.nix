@@ -64,8 +64,26 @@ in
       # muted track is still a track, and a hero video should carry nothing it
       # does not use. faststart so the moov atom is at the front and a browser
       # can start playing before the whole file arrives.
+      # ---- speed, so the take can take as long as it needs ------------------
+      # The owner's brief is 60 seconds for the CUT, not the take. An acting
+      # beat waits on a real container or a real box, and that wait is not
+      # something a viewer should pay for -- so the whole master is sped up by
+      # whatever it takes to land near the target, and the captions are placed
+      # in the sped-up timebase.
+      #
+      # setpts scales the WHOLE stream rather than per beat: a per-beat filter
+      # would need the trims spliced back together, and every splice is a place
+      # for a frame to go missing. One factor keeps the beat times a simple
+      # division, which is what the caption loop below relies on.
+      raw=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$master")
+      target=''${SCREENCAST_TARGET_SECONDS:-60}
+      speed=$(awk -v r="$raw" -v t="$target" 'BEGIN { s = r / t; if (s < 1) s = 1; printf "%.4f", s }')
+      echo "screencast-edit: master ''${raw}s -> target ''${target}s (speed x$speed)"
+
+      vf_speed="setpts=PTS/$speed"
+
       echo "screencast-edit: clean cut"
-      ffmpeg -v error -i "$master" -an \
+      ffmpeg -v error -i "$master" -an -vf "$vf_speed" \
         -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p \
         -movflags +faststart -y "$dir/nixarchy-clean.mp4"
 
@@ -81,8 +99,12 @@ in
       while IFS=$'\t' read -r label hold caption; do
         [ -n "$label" ] || continue
         [ "$caption" != "-" ] || continue
-        at=$(jq -r --arg l "$label" '.beats[] | select(.label == $l) | .at' "$beats")
-        [ -n "$at" ] && [ "$at" != "null" ] || continue
+        raw_at=$(jq -r --arg l "$label" '.beats[] | select(.label == $l) | .at' "$beats")
+        [ -n "$raw_at" ] && [ "$raw_at" != "null" ] || continue
+        # Into the sped-up timebase, or every caption would drift by the whole
+        # speed factor and land on the wrong beat.
+        at=$(awk -v a="$raw_at" -v s="$speed" 'BEGIN { printf "%.2f", a / s }')
+        hold=$(awk -v h="$hold" -v s="$speed" 'BEGIN { printf "%.2f", h / s }')
         # Lower third, fading in over the first third of the beat.
         end=$(awk -v a="$at" -v h="$hold" 'BEGIN { printf "%.2f", a + h }')
         [ -z "$filter" ] || filter="$filter,"
@@ -103,13 +125,13 @@ in
         # which is what every social platform normalises to anyway, so mixing
         # louder only means being turned down with less headroom.
         ffmpeg -v error -i "$master" -stream_loop -1 -i "$music" \
-          -filter_complex "[0:v]''${filter}[v];[1:a]volume=0.12,afade=t=in:d=1.5,loudnorm=I=-14:TP=-1.5[a]" \
+          -filter_complex "[0:v]$vf_speed,''${filter}[v];[1:a]volume=0.12,afade=t=in:d=1.5,loudnorm=I=-14:TP=-1.5[a]" \
           -map '[v]' -map '[a]' -shortest \
           -c:v libx264 -crf 20 -preset slow -pix_fmt yuv420p -c:a aac -b:a 160k \
           -movflags +faststart -y "$dir/nixarchy-social.mp4"
       else
         echo "  (no SCREENCAST_MUSIC set -- captions only, no bed)"
-        ffmpeg -v error -i "$master" -vf "$filter" -an \
+        ffmpeg -v error -i "$master" -vf "$vf_speed,$filter" -an \
           -c:v libx264 -crf 20 -preset slow -pix_fmt yuv420p \
           -movflags +faststart -y "$dir/nixarchy-social.mp4"
       fi

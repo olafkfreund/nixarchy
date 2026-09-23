@@ -8,6 +8,7 @@
 {
   pkgs,
   shots ? import ./shots.nix,
+  acts ? import ./acts.nix,
   sessionEnv,
 }:
 let
@@ -46,6 +47,19 @@ let
   # take lost its `endcard` beat and nothing reported a problem: 17 entries for
   # an 18-beat list.
   beatFile = pkgs.writeText "screencast-beats.tsv" (beatLines + "\n");
+
+  # The acting fragments, as one case statement each. Written as a case rather
+  # than eval'd from a variable so shellcheck can see them and the script stays
+  # readable when something goes wrong mid-take.
+  actCase =
+    phase:
+    pkgs.lib.concatStrings (
+      pkgs.lib.mapAttrsToList (id: a: ''
+        ${id})
+          ${a.${phase} or ":"}
+          ;;
+      '') acts.acts
+    );
 in
 {
   drive = pkgs.writeShellApplication {
@@ -109,6 +123,15 @@ in
         # when the panel could first have been on screen -- not when the
         # command returned.
         at=$(now)
+
+        # Whatever this beat needs to exist, made before the panel opens so the
+        # panel has something real to show. Every name is demo-*.
+        if [ -n "$id" ]; then
+          case "$id" in
+            ${actCase "before"}
+            *) : ;;
+          esac
+        fi
 
         case "$action" in
           settle) : ;;
@@ -175,6 +198,15 @@ in
           term) hyprctl dispatch closewindow class:screencast.term >/dev/null 2>&1 || true ;;
           *) : ;;
         esac
+
+        # And undo it. The recorder's trap sweeps as well, for a take that dies
+        # between the two.
+        if [ -n "$id" ]; then
+          case "$id" in
+            ${actCase "after"}
+            *) : ;;
+          esac
+        fi
       done < ${beatFile}
 
       printf '],"duration":%s}\n' "$(echo "$(now) $t0" | awk '{printf "%.2f", $1 - $2}')" >> "$beats"
@@ -215,6 +247,9 @@ in
       cleanup() {
         kill "$rec" 2>/dev/null || true
         wait "$rec" 2>/dev/null || true
+        # Demo objects first: a take killed between a beat's before and after
+        # leaves one behind, and every name here is demo-*.
+        ${acts.sweep}
         screencast-restore || true
       }
       trap cleanup EXIT INT TERM HUP

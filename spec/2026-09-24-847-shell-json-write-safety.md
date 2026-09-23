@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 847
 intent: intent/2026-09-24-847-shell-json-write-safety.md
 ---

@@ -2103,6 +2103,31 @@ stdenvNoCC.mkDerivation {
                       '    }')
                     substituteInPlace "$shellQml" --replace-fail "$panelOld" "$panelNew"
 
+                    # After every external shell.json write (omarchy bar, Bar Folder layout.sh)
+                    # refresh_shell_config sends reloadConfig, and if the shell misses the 2 s IPC
+                    # timeout -- which a shell still rebuilding its bar from the previous save
+                    # does -- it fell back to rescanPlugins: a reload of every plugin (#901). The
+                    # shell applies the write through its own file watch anyway (proven under
+                    # QS_DISABLE_FILE_WATCHER=1), so the fallback only ever added a full reload.
+                    # CARRIED, and meant to be dropped with the rest of #901 once upstream fixes
+                    # it. The whole function is the needle, so a reworded one fails this build.
+                    # printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+                    shellConfigHelper=$out/share/omarchy/bin/omarchy-shell-config
+                    refreshOld=$(printf '%s\n' \
+                      'refresh_shell_config() {' \
+                      '  if ! omarchy-shell shell reloadConfig >/dev/null 2>&1; then' \
+                      '    omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 || true' \
+                      '  fi' \
+                      '}')
+                    refreshNew=$(printf '%s\n' \
+                      'refresh_shell_config() {' \
+                      '  # nixarchy CARRIED patch (#901): no rescanPlugins fallback. A busy shell' \
+                      '  # missing the 2 s IPC timeout made it reload every plugin; the file watch' \
+                      '  # (userConfigFile watchChanges) applies the write regardless.' \
+                      '  omarchy-shell shell reloadConfig >/dev/null 2>&1 || true' \
+                      '}')
+                    substituteInPlace "$shellConfigHelper" --replace-fail "$refreshOld" "$refreshNew"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

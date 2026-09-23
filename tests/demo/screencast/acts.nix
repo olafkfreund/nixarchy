@@ -55,14 +55,10 @@
       '';
     };
 
-    "nixarchy.devenv" = {
-      before = ''
-        mkdir -p ~/demo-project && (cd ~/demo-project && nixarchy dev init python >/dev/null 2>&1 || true)
-      '';
-      after = ''
-        rm -rf ~/demo-project
-      '';
-    };
+    # devenv's project is made in PREP, not here. razer has no devenv projects
+    # at all, so the panel would open on an empty list -- and scaffolding one
+    # inside its own 2.4s beat means recording a spinner. Prepared ahead, the
+    # panel has something real to show the moment it opens.
 
     "nixarchy.microvm" = {
       # `create` writes a declaration; it does not build. Building a guest
@@ -75,24 +71,33 @@
       '';
     };
 
-    "nixarchy.herdr" = {
-      before = ''
-        herdr-sessions demo on >/dev/null 2>&1 || echo "  (herdr demo mode unavailable -- skipping)" >&2
-      '';
-      after = ''
-        herdr-sessions demo off >/dev/null 2>&1 || true
-      '';
-    };
+    # herdr has no demo mode here. The binary is `herdr`, not
+    # `herdr-sessions`, and `herdr session` offers only list/attach/stop --
+    # tests/demo/default.nix's `demo on` is a verb this build does not have.
+    #
+    # So the panel shows the machine's real sessions, on the owner's decision
+    # (2026-09-23): they are machine names rather than anything private. That
+    # is a judgement about THIS machine, and anyone reusing this harness should
+    # look at `herdr session list` before recording rather than assume it.
   };
 
-  # Run unconditionally by the recorder's trap, so a take killed between
-  # `before` and `after` still leaves nothing behind. Every name is demo-*;
-  # nothing here can touch something the owner made.
+  # Run by prep, so the take starts from something real rather than
+  # scaffolding it on camera.
+  stage = ''
+    mkdir -p ~/demo-project
+    if [ ! -f ~/demo-project/devenv.nix ]; then
+      (cd ~/demo-project && nixarchy dev init python >/dev/null 2>&1) ||
+        echo "  (could not scaffold ~/demo-project -- the devenv panel may be empty)" >&2
+    fi
+  '';
+
+  # Run unconditionally by the recorder's trap, so a take killed between a
+  # beat's `before` and `after` still leaves nothing behind. Every name is
+  # demo-*; nothing here can touch something the owner made.
   sweep = ''
+    rm -rf ~/demo-project
     podman rm -f demo-web >/dev/null 2>&1 || true
     distrobox rm --force demo-box >/dev/null 2>&1 || true
     nixarchy vm rm demo-vm >/dev/null 2>&1 || true
-    herdr-sessions demo off >/dev/null 2>&1 || true
-    rm -rf ~/demo-project
   '';
 }

@@ -10,7 +10,10 @@
 # live desktop changes it, and the machine has to come back. Everything about
 # prep/restore below is shaped by that: refuse rather than mutate, snapshot
 # before touching, verify on the way back, and never trust the happy path.
-{ pkgs }:
+{
+  pkgs,
+  acts ? import ./acts.nix,
+}:
 let
   # Where the snapshot lives. Under XDG state rather than /tmp: a reboot must
   # not lose the only copy of somebody's real desktop.
@@ -156,6 +159,11 @@ rec {
         echo "  hiding $id"
         omarchy plugin disable "$id" >/dev/null 2>&1 || echo "  (could not disable $id)" >&2
       done
+
+      # What the take needs to exist before the camera rolls. razer has no
+      # devenv projects, so that panel would open on an empty list -- and
+      # scaffolding one inside its own beat records a spinner.
+      ${acts.stage}
 
       omarchy-toggle-idle stay-awake >/dev/null 2>&1 || true
       echo "screencast-prep: ready. $(printf '%s' "$hide" | grep -c . || true) plugin(s) hidden."

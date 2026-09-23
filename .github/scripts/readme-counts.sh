@@ -199,6 +199,38 @@ skills=$(find -L "$omarchy" -name SKILL.md 2>/dev/null | wc -l)
 skills_cap=$(word_for "$skills")
 skills_word=$(printf '%s' "$skills_cap" | tr '[:upper:]' '[:lower:]')
 
+# The INPUT's skills, counted rather than stated (#888). nix-skills is its own
+# repository and moves on its own: it was six when this was specified and eight
+# by the time it was written, with nix-darwin landing mid-plan. A number typed
+# into five pages would have been wrong within the week -- section 4's
+# hand-maintained list, with somebody else's release cadence behind it.
+#
+# NIX_SKILLS_TREE for a caller that already has the tree, else the pinned
+# input's own path, the same shape OMARCHY_TREE has above.
+nix_skills_tree=${NIX_SKILLS_TREE:-}
+if [ -z "$nix_skills_tree" ]; then
+  # `nix eval "$root#inputs.nix-skills"` does NOT work: a flake ref after `#`
+  # selects an OUTPUT, and inputs are not outputs. `flake archive` is the one
+  # command that prints an input's realised store path.
+  nix_skills_tree=$(
+    nix flake archive --json --no-write-lock-file "$root" 2>/dev/null |
+      jq -r '.inputs["nix-skills"].path // empty'
+  )
+fi
+nix_skills=$(
+  if [ -n "$nix_skills_tree" ] && [ -f "$nix_skills_tree/skills.json" ]; then
+    jq 'if type == "array" then length else (.skills // .) | length end' \
+      "$nix_skills_tree/skills.json" 2>/dev/null
+  fi
+)
+if [ -z "$nix_skills" ] || [ "$nix_skills" -lt 1 ] 2>/dev/null; then
+  echo "::error::nix-skills count came out as '${nix_skills:-empty}' -- refusing" >&2
+  echo "  set NIX_SKILLS_TREE to the input's tree, or run from a flake that locks it." >&2
+  fail=1
+  nix_skills=0
+fi
+nix_skills_word=$(printf '%s' "$(word_for "$nix_skills")" | tr '[:upper:]' '[:lower:]')
+
 # The installer's question count (#557), which the README stated twice with two
 # different numbers and nothing checking either. The authority is
 # validate_answers in installer/install.sh: the answers a full install REQUIRES
@@ -253,8 +285,31 @@ quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'
 quantity "skills" "$skills_word" \
-  '^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead:$' \
-  's/^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead:$/So '"$skills_word"' skills ship here instead:/'
+  '^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead[,:].*$' \
+  's/^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead/So '"$skills_word"' skills ship here instead/'
+# One per place that states it, so a page that drifts is named rather than a
+# number merely being wrong somewhere (#888).
+quantity "nix-skills-readme" "$nix_skills_word" \
+  '.*with ([a-z]+) Nix skills beside them:$' \
+  's/with [a-z]+ Nix skills beside them:/with '"$nix_skills_word"' Nix skills beside them:/'
+readme_saved2=$readme
+readme="$root/docs/index.md"
+quantity "nix-skills-index" "$nix_skills_word" \
+  '.*and ([a-z]+) Nix skills beside them\.$' \
+  's/and [a-z]+ Nix skills beside them\./and '"$nix_skills_word"' Nix skills beside them./'
+readme="$root/docs/manual/ai.md"
+quantity "nix-skills-manual-ai" "$nix_skills_word" \
+  '.*and ([a-z]+) Nix skills beside them:$' \
+  's/and [a-z]+ Nix skills beside them:/and '"$nix_skills_word"' Nix skills beside them:/'
+readme="$root/docs/llms.txt"
+quantity "nix-skills-llms-front" "$nix_skills_word" \
+  '.*alongside ([a-z]+) Nix skills from nix-skills.*' \
+  's/alongside [a-z]+ Nix skills from nix-skills/alongside '"$nix_skills_word"' Nix skills from nix-skills/'
+quantity "nix-skills-llms-manual" "$nix_skills_word" \
+  '.*NixOS agent skills and ([a-z]+) Nix skills.*' \
+  's/NixOS agent skills and [a-z]+ Nix skills/NixOS agent skills and '"$nix_skills_word"' Nix skills/'
+readme=$readme_saved2
+
 quantity "apps-total" "$a_total" \
   '.*\| ([0-9]+) apps in the selection \|.*' \
   "s/\| [0-9]+ apps in the selection \| [0-9]+ from nixpkgs, [0-9]+ as NixOS modules, [0-9]+ built here, [0-9]+ with no equivalent \|/| $a_total apps in the selection | $a_nixpkgs from nixpkgs, $a_mod as NixOS modules, $a_ours built here, $a_un with no equivalent |/"
@@ -308,8 +363,8 @@ quantity "skills-llms-manual" "$skills_word" \
   's/the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
 readme="$root/docs/manual/ai.md"
 quantity "skills-manual-ai" "$skills_word" \
-  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one:$' \
-  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one:$/'"$skills_word"' skills instead of one:/'
+  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one[,:].*$' \
+  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one/'"$skills_word"' skills instead of one/'
 # The manual's front page said "thirteen" for three skills' worth of releases
 # (#664) -- the fourth copy of this number, and the only one nothing read.
 readme="$root/docs/index.md"
@@ -388,12 +443,12 @@ for f in "$readme" "$root/docs/manual/ai.md"; do
   done
 done
 
-# A floor. Thirty-one quantities are declared above; a run that checked fewer
+# A floor. Thirty-six quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.
 checked=$(printf '%b' "$report" | grep -c .)
-if [ "$fail" -eq 0 ] && [ "$checked" -lt 31 ]; then
-  echo "::error::only $checked of 31 quantities were accounted for" >&2
+if [ "$fail" -eq 0 ] && [ "$checked" -lt 36 ]; then
+  echo "::error::only $checked of 36 quantities were accounted for" >&2
   fail=1
 fi
 

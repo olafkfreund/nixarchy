@@ -39,7 +39,7 @@ mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
 `~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
 reads `~/.agents/skills` too and would list every skill twice — but ships
-sixteen skills instead of one:
+sixteen skills instead of one, and eight Nix skills beside them:
 
 | skill | owns |
 |---|---|

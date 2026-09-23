@@ -505,7 +505,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So sixteen skills ship here instead:
+So sixteen skills ship here instead, with eight Nix skills beside them:
 
 | skill | owns |
 |---|---|

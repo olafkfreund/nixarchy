@@ -64,32 +64,116 @@ let
     pkgs.gnused
     pkgs.procps
   ];
+
+  shots = import ./shots.nix;
+
+  # What the gate joins against, GENERATED rather than written by hand.
+  #
+  # It was written by hand for the first five takes -- a `nix eval` pasted into
+  # a shell -- and that is a list naming things that exist elsewhere, which
+  # fails open (AGENTS.md section 4): a beat renamed in shots.nix and not here
+  # is a missing join, and a missing join is a beat the gate silently stops
+  # checking. Generating it is the only version that cannot drift.
+  #
+  # Tab-separated with a "-" placeholder for an absent expectation, for the
+  # reason verify-beats.sh states at its read loop: tab is whitespace, bash
+  # collapses runs of it, and an empty field would shift the hold into the
+  # expectation.
+  shotsFile = pkgs.writeText "screencast-shots.usv" (
+    pkgs.lib.concatMapStringsSep "\n" (
+      b:
+      builtins.concatStringsSep "\t" [
+        b.label
+        (if (b.expect or null) == null then "-" else b.expect)
+        (toString b.hold)
+      ]
+    ) shots.beats
+    + "\n"
+  );
 in
 rec {
   # Exported so drive.nix takes the same environment rather than re-deriving
   # it, and so `all` below can wire the whole harness in one place.
   inherit sessionEnv;
 
+  # Every command in the harness, by name. `all` and the flake attributes are
+  # both DERIVED from this, so adding one here is enough and there is no second
+  # place to forget -- the same construction tests/demo's scenes use, and for
+  # the same reason (#816, AGENTS.md section 4). The previous version listed
+  # the six paths by hand inside `all`.
+  commands = {
+    inherit
+      prep
+      restore
+      recover
+      verify
+      coverage
+      ;
+  }
+  // (
+    let
+      d = import ./drive.nix { inherit pkgs sessionEnv; };
+      e = import ./edit.nix { inherit pkgs; };
+    in
+    {
+      inherit (d) drive record;
+      inherit (e) edit;
+    }
+  );
+
   # Everything, as one package. This is what gets copied to a machine with a
   # session on it.
   all = pkgs.symlinkJoin {
     name = "screencast";
-    paths = [
-      prep
-      restore
-      recover
-    ]
-    ++ (
-      let
-        d = import ./drive.nix { inherit pkgs sessionEnv; };
-        e = import ./edit.nix { inherit pkgs; };
-      in
-      [
-        d.drive
-        d.record
-        e.edit
-      ]
-    );
+    paths = pkgs.lib.attrValues commands;
+  };
+
+  # ----------------------------------------------------------- the gate ----
+  # verify-beats.sh, with the generated shot list wired in so no caller can
+  # pass a stale one. Takes the take's DIRECTORY rather than three paths: the
+  # driver writes master.mkv and beats.json side by side, so asking for both
+  # is an invitation to point the gate at one take's video and another's times.
+  verify = pkgs.writeShellApplication {
+    name = "screencast-verify";
+    runtimeInputs = [
+      pkgs.ffmpeg
+      pkgs.tesseract
+      pkgs.imagemagick
+      pkgs.jq
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
+    ];
+    text = ''
+      dir=''${1:-$PWD}
+      shift || true
+      [ -f "$dir/master.mkv" ] || { echo "screencast-verify: no master.mkv in $dir" >&2; exit 1; }
+      [ -f "$dir/beats.json" ] || { echo "screencast-verify: no beats.json in $dir" >&2; exit 1; }
+      exec bash ${./verify-beats.sh} "$dir/master.mkv" "$dir/beats.json" ${shotsFile} "$@"
+    '';
+  };
+
+  # The plugin-count assertion (plan step 9). A package rather than a
+  # `checks.` entry on purpose: wiring it into a workflow is a CI-gate change
+  # and needs a human (AGENTS.md section 11), so it is raised in the PR rather
+  # than wired here. Until then it is runnable by name, which is strictly more
+  # than the shell script alone was.
+  coverage = pkgs.writeShellApplication {
+    name = "screencast-coverage";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.gawk
+    ];
+    text = ''
+      # The repo root, explicitly. shot-coverage.sh defaults it from its own
+      # $0 -- correct when run from the worktree, and wrong the moment it is
+      # run from the store, where `../../..` is `/`. It refused rather than
+      # passing on an empty plugin list, which is its own design working, but a
+      # wrapper that can only ever be run from the store must pass the root.
+      exec bash ${./shot-coverage.sh} "''${1:-$PWD}"
+    '';
   };
 
   # ---------------------------------------------------------------- prep ----

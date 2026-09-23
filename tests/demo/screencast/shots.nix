@@ -27,9 +27,9 @@
 #   spine   2 + 3 + 4 + 5 + 4 + 5 + 6       = 29.0
 #   theme   3 + 2.5 + 3 + 2.5               = 11.0
 #   montage 9 x 2.4                         = 21.6
-#   tail    5 + 4                           =  9.0
+#   tail    3.5 + 5 + 4                     = 12.5
 #                                             ------
-#                                             70.6
+#                                             74.1
 #
 # That is over the 60-second brief, and deliberately so. The brief is 60
 # seconds for the CUT, and screencast-edit speeds the whole master to
@@ -182,12 +182,21 @@ in
       action = "plugin";
       id = "nixarchy.pkg";
       hold = 5;
-      # What the panel actually prints, read off a frame of take 4 rather than
-      # guessed: a filter box over the tabs `Apps Services Selection Options
-      # Drafts Flakes`. The first three expectations here were "Packages",
-      # "Search" and "nixpkgs" -- all three plausible, none of them words this
-      # picker puts on screen, so the gate failed a beat that was perfect.
-      expect = "Apps|Services|Flakes|filter";
+      # Read off a frame rather than guessed, TWICE, and the second time is the
+      # instructive one.
+      #
+      # The panel prints a filter box over the tabs `Apps Services Selection
+      # Options Drafts Flakes`. The first expectation was
+      # "Packages|Search|nixpkgs" -- all plausible, none of them words this
+      # picker uses -- so the gate failed a beat that was perfect. The second
+      # was "Apps|Services|Flakes|filter", taken from the frame, and it passed
+      # the good take *and a deliberately broken one*: shifting this beat's
+      # observed time onto the root menu still matched, because that menu's own
+      # rows are Setup, Style, **Apps**, Learn, Trigger, Install, Remove.
+      #
+      # An expectation has to be unique to the panel, not merely present on it.
+      # `Drafts` and `Flakes` are; `Apps` is a word half this desktop uses.
+      expect = "Drafts|Flakes";
       caption = "Every package and every NixOS option, in one picker.";
     }
     {
@@ -249,7 +258,7 @@ in
       action = "plugin";
       id = "nixarchy.pkg";
       hold = 3;
-      expect = "Apps|Services|Flakes|filter";
+      expect = "Drafts|Flakes";
       # The claim the owner asked for, and the reason this beat reopens a panel
       # the viewer has already seen in the old theme rather than a new one:
       # the comparison is the point.
@@ -266,6 +275,35 @@ in
   ]
   ++ montage
   ++ [
+    {
+      # nixi, the help assistant (owner, 2026-09-23: "we did not show our nixi
+      # help assistant plugin .. lets include that for next time").
+      #
+      # It is NOT a shell plugin -- it is `services.nixi`, a home-manager
+      # module -- so it is absent from `defaultPluginSet`, and shot-coverage.sh
+      # was green with the video never mentioning it. That check compares the
+      # shot list against the twelve plugins and can say nothing about anything
+      # that is not one; the gap was found by a person watching the cut. Worth
+      # knowing before trusting the count: "all twelve plugins" is a smaller
+      # claim than "everything nixarchy does".
+      #
+      # The beat shows the MENU and does not run a question. Deliberate:
+      # `nixarchy-ask logs` prints an AI reading of this machine's journal, and
+      # docs/AGENTS.md is explicit that a real desktop leaks what is behind it
+      # -- #764 caught an email verification code that way. A public video must
+      # not carry somebody's logs, and the menu makes the point on its own.
+      label = "nixi-ask";
+      action = "menu";
+      route = "trigger.ask";
+      hold = 3.5;
+      # Read off a live frame. Whole phrases rather than single words, because
+      # an expectation has to be unique to the panel and not merely present on
+      # it -- `Apps` matched a different menu entirely and passed a broken take
+      # (see the `search` beat). No `?`: it is a regex metacharacter, and the
+      # apostrophe in "What's wrong?" is the kind of glyph OCR mangles.
+      expect = "Make it faster|Am I exposed|GPU not working|Disk is full";
+      caption = "Stuck? Ask the desktop, in plain English.";
+    }
     {
       label = "rollback";
       action = "menu";

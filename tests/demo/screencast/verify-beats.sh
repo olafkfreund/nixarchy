@@ -134,7 +134,15 @@ while IFS=$'\t' read -r label expect hold; do
     awk -v o="$off" -v d="$duration" 'BEGIN { exit !(o < d) }' || continue
 
     png="$work/$label-$i.png"
-    ffmpeg -v error -ss "$off" -i "$master" -frames:v 1 -y "$png" 2>/dev/null || continue
+    # -nostdin, and it is load-bearing. ffmpeg reads standard input, and this
+    # runs inside a `while read` loop whose standard input is the shot list --
+    # so without it ffmpeg eats bytes from the file the loop is iterating.
+    # The symptom is not an error: labels come back with their leading
+    # characters missing (`theme` as `heme`, `montage-gitlab` as
+    # `ontage-gitlab`), which then fail the join and read as beats the take
+    # never reached. It survived every run until a 23rd beat moved the byte
+    # offsets, and the run before that had reported "all 22 beats" (#930).
+    ffmpeg -nostdin -v error -ss "$off" -i "$master" -frames:v 1 -y "$png" 2>/dev/null || continue
     [ -s "$png" ] || continue
 
     # Upscaled before OCR for the reason verify-frames.sh gives: at video size

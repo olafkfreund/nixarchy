@@ -170,10 +170,30 @@ pkgs.runCommand "nixarchy-menu-verbs"
     scan '\bnixarchy-plugin +[a-z][-a-z.]*'               2 nixarchy-plugin plugin-ids
     scan '\bnixarchy-plugin +--enabled +[a-z][-a-z.]*'    3 nixarchy-plugin plugin-ids
     pluginrows=$(grep -coE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} || true)
-    # Packages, Podman and Boxes (Boxes is on), GitLab Pipelines, GitHub
-    # Actions, Herdr, Sandbox, Dev environments (#802), and Rebuild (#765).
-    test "$pluginrows" -ge 9 || {
-      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected Packages, Podman, Boxes, GitLab Pipelines, GitHub Actions, Herdr, Sandbox, Dev environments and Rebuild" >&2
+    # A floor, so that "every plugin row vanished" is not a silent pass. Eleven
+    # rows ship today; the ids are NOT listed here, on purpose. This line used
+    # to name nine of them in prose, and two panels were added -- Flatpak &
+    # Snap (#910) and the Plugin Browser (#913) -- without either the number or
+    # the prose moving. Nothing went red, because the floor is a minimum: the
+    # guard kept passing while its own description of what it guarded was two
+    # rows out of date, which is section 4's hand-maintained list failing open.
+    #
+    # So the number is the only thing maintained by hand -- once, in `floor`,
+    # because the first version of this fix wrote it twice and the message
+    # promptly disagreed with the test it described -- and the message prints
+    # the ids actually found rather than a list that can rot away from them.
+    #
+    # Eleven rows, twelve installed plugins: olafkfreund.ai-mirror has no
+    # menu row and is not meant to have one (#773 -- it is connected to no
+    # agent by default). So the two numbers are not supposed to match, and
+    # deriving this floor from the installed ids would assert something
+    # false.
+    floor=11
+    test "$pluginrows" -ge "$floor" || {
+      echo "ERROR: $pluginrows menu rows open a nixarchy plugin, expected at least $floor" >&2
+      echo "       found:" >&2
+      grep -oE '\bnixarchy-plugin +[a-z][-a-z.]*' ${menu} |
+        sed 's/.*nixarchy-plugin  *//' | sort -u | sed 's/^/         /' >&2
       exit 1
     }
 

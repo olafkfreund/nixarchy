@@ -267,6 +267,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#the-flatpak-and-snap-panel-on-by-default-912
+    # A commit on main (no tags); bump it the way that page says. Its
+    # nix-snapd is the only one nixarchy imports (modules/nixos.nix).
+    nixarchy-flatsnap = {
+      url = "github:olafkfreund/nixarchy-flatsnap/fbc8a6044b7414167a67032be534389a914035de";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nix-flatpak.follows = "nix-flatpak";
+    };
+
     # Why: docs/internals/flake.md#the-herdr-sessions-widget-on-by-default-771
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.

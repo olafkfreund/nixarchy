@@ -633,6 +633,7 @@ in
       type = lib.types.attrsOf lib.types.bool;
       default = {
         pkg = true;
+        flatsnap = true;
         gitlab = true;
         github = true;
         herdr = true;
@@ -1643,6 +1644,12 @@ in
         pkg = {
           id = "nixarchy.pkg";
           src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+        # Flatpak & Snap from the menu, on wherever nixarchy is (#912). Its CLI
+        # uses curl, jq and nix-instantiate from the base system, like pkg's.
+        flatsnap = {
+          id = "nixarchy.flatsnap";
+          src = inputs.nixarchy-flatsnap.packages.${pkgs.stdenv.hostPlatform.system}.default;
         };
         # Wherever podman is on -- the Services row or Boxes -- and nowhere
         # else: a podman panel with no podman behind it is a broken panel.

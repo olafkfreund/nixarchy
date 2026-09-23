@@ -48,6 +48,7 @@ nav:
   - { path: /manual/preview,                  title: Preview Changes }
   - { path: /manual/channels,                 title: Stable or Unstable }
   - { path: /manual/other-packages,           title: Packages }
+  - { path: /manual/flatpak-and-snap,         title: Flatpak and Snap }
   - { path: /manual/configuration,            title: Configuring nixarchy }
   - { path: /manual/plugins,                  title: nixarchy's Plugins }
   - { path: /manual/try-it-first,             title: Try It First }

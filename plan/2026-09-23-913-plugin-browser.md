@@ -148,6 +148,11 @@ This plan is self-contained: it carries every approved spec decision.
     name left out counts as on", so it gains `plugin-browser = false`.
     Without that line, four cases fail (the two new ones,
     `defaultPluginsNoHookWhenEmpty` and `defaultRuntimeToolsLowPriority`).
+  - The same holds for the `machine` node's `defaultPlugins` block in
+    `tests/plugin.nix`: that VM needs an empty plugin directory, and without
+    the line `checks.plugin` fails with "the Remove Plugin row still shows
+    itself with no plugins installed". `tests/AGENTS.md` names both
+    fixtures for any ungated default; they were found in step 7.
   - `defaultRuntimeToolsLowPriority`'s spelled-out `toolNames` gains
     `bubblewrap`. The CLI is a named env with no `pname`, so
     `pluginBrowserPackages` finds it by name.

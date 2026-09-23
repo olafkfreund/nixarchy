@@ -830,6 +830,23 @@ let
     # Named by value, not read from data/etc-overlay.nix, for the reason the
     # three above are. `off` is Mode A: none of these may reach a machine that
     # imported the module and asked for nothing.
+    # #891: avahi-daemon cannot restart onto its own stale pid file, and a
+    # nixarchy install rebuilds right after the first boot, which is where it
+    # showed up. Asserted by the `+` prefix specifically, because that is the
+    # part that was measured rather than guessed -- without it the ExecStartPre
+    # fails with Permission denied (ProtectSystem=strict, and no
+    # CAP_DAC_OVERRIDE in the bounding set) and the drop-in is a silent no-op.
+    # Mode A gains nothing: the machine keeps whatever nixpkgs gives it.
+    avahiClearsStalePid = {
+      on = pkgs.lib.hasPrefix "+" (
+        adopter.config.systemd.services.avahi-daemon.serviceConfig.ExecStartPre or ""
+      );
+      # Mode A has no avahi-daemon unit at all, so this indexes through `or`
+      # rather than into it: a bare access throws "attribute 'avahi-daemon'
+      # missing" instead of answering false.
+      off = (loaderOff.systemd.services.avahi-daemon.serviceConfig or { }) ? ExecStartPre;
+    };
+
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;

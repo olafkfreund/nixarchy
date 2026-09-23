@@ -261,3 +261,104 @@ files are artefacts, not code, and are deleted separately if unwanted.
 
 The one irreversible thing in the whole plan is a published video, which is why
 step 12 is a human watching it and not a check.
+
+## Deviation: the theme block, and what take 4 found (2026-09-23)
+
+### A fourth act, asked for after the plan was approved
+
+The owner asked, mid-implementation, to *"also show that we can change themes
+and background and that the plugin follow that as well"*. That is four new
+beats (`theme`, `theme-apply`, `theme-follows`, `background`) between
+`plugin-browser` and the montage, and one new driver action, `exec`, for a
+command with no panel to open or dismiss.
+
+Four beats rather than one, because a single beat that opened the switcher and
+also applied a theme would have its picker on screen at the start and a
+repainted desktop at the end -- and whichever of the two the gate sampled, the
+other would be unchecked.
+
+It sits before the montage on purpose: everything after it records in the new
+theme, so *the plugins follow* is shown nine more times rather than claimed
+once.
+
+**This changed the safety contract, which is the part worth reading.** `prep`
+had recorded the theme in `manifest.json` since it was written, and `restore`
+had never put it back. That was harmless for exactly as long as no beat changed
+the theme -- and `shell.json` compares byte-identical either way, because the
+theme does not live there. So the take's own restore check could not have
+caught it. `restore` now sets the recorded theme back, and `prep` sets a known
+start theme (`SCREENCAST_START_THEME`, default `Osaka Jade`) *after* writing
+the manifest, so the snapshot is the owner's and not the demo's.
+
+Proved the section 1 way rather than assumed: prep run with
+`SCREENCAST_START_THEME='Tokyo Night'` on razer moved the live desktop to Tokyo
+Night and recorded `Osaka Jade`; `screencast-restore` reported
+`restoring theme Osaka Jade`, `omarchy-theme-current` answered `Osaka Jade`,
+`shell.json` was byte-identical and the snapshot directory was removed.
+
+### Three defects take 4 found
+
+**1. Every observed time was two seconds behind the picture.** The recorder
+starts `gpu-screen-recorder` and sleeps 2s for steady state, and only then does
+the driver take its zero -- so `beats.json` described the driver, not the
+recording. The gate sampled `[at+0.6, at+hold]` and spent the first third of
+every short beat looking at the *previous* one. Nothing reported it because
+both halves were self-consistent: the driver's log and `beats.json` agreed with
+each other and disagreed only with the video. The arithmetic that shows it is
+the last beat ending at 67.3 against a 69.2-second master. The recorder now
+exports `SCREENCAST_REC_T0`, taken immediately after the launch and before the
+sleep; take 5's last beat ends at 86.88 against an 86.60-second master, a 0.28s
+residual that is gpu-screen-recorder's own shutdown and sits inside the gate's
+0.6s settle.
+
+**2. `menu` recorded the launcher, under a caption about the menu.** Route
+`root` is *"What would you like to do?"* -- Applications, Clipboard History,
+Calculator. The Omarchy menu, the one with Install, is a row inside it, and
+there is no route that lands on it: a route is an item id, and summoning an id
+opens that item's submenu rather than the list it sits in. Worse, **an unknown
+route falls back to root silently** -- `menu`, `omarchy`, `omarchy.menu` and
+`main` were each tried live and each produced a byte-identical launcher
+screenshot. A wrong guess here does not fail; it records the wrong panel. The
+beat now takes the route a person takes: open `root`, arrow down one, enter,
+via a new `keys` field. A beat with `keys` re-stamps its own time afterwards,
+because `at` means "the earliest this beat's content could be on screen", and
+for a beat that walks two rows into a menu that is after the walk.
+
+**3. `search` failed on a perfect frame.** The expectation was
+`Packages|Search|nixpkgs` -- three plausible words, none of which that picker
+puts on screen. It prints a filter box over the tabs `Apps Services Selection
+Options Drafts Flakes`. The first version of the new `theme` beat repeated the
+identical mistake, naming five themes the carousel had not reached; the
+switcher is a coverflow with exactly **one** legible name at a time, so its
+expectation is now the whole theme list.
+
+The general lesson, and it is the one worth carrying: **an expectation written
+from what a panel plausibly says is a coin flip, and it fails against correct
+footage.** Read it off a frame. Both of these cost a take each.
+
+### Runtime
+
+The shot list is now 70.6 seconds of beats against a 60-second brief, and
+deliberately so: the brief is 60 seconds for the *cut*, and `screencast-edit`
+speeds the master to `SCREENCAST_TARGET_SECONDS`. Take 5's master is 86.6s and
+both cuts came out at 60.02s.
+
+### Verification of this deviation
+
+| | |
+|---|---|
+| prep with a different start theme, then restore | theme returned, `shell.json` byte-identical, snapshot removed |
+| take 5, 22 beats | no beat opened nothing; restore clean including the theme |
+| `verify-beats` on take 5 | **all 22 beats show what the shot list promised** |
+| both cuts | 60.02s each; the clean cut carries no audio stream |
+
+### Still outstanding
+
+`shots.usv`, which `verify-beats` joins against, **has no producer in the
+repo** -- it was generated by hand from `shots.nix` with a `nix eval` to run the
+gate. That is a hand-maintained list in exactly the sense of AGENTS.md section
+4 and it fails open: a beat renamed in `shots.nix` and not in the file it is
+compared against is a missing join. It belongs in the bundle beside
+`screencast-beats.tsv` and `screencast-captions.usv`, which already are
+generated, and that is part of wiring these outputs into `flake.nix` (step 11,
+still not done -- the harness is built with `nix build --impure --expr` today).

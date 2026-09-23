@@ -151,14 +151,25 @@ rec {
 
       hide=$(jq -r '.[].id' "$state/disabled.json")
 
-      jq -n --slurpfile d "$state/disabled.json" \
-        --arg theme "$(omarchy-theme-current 2>/dev/null || echo unknown)" \
+      theme=$(omarchy-theme-current 2>/dev/null || echo unknown)
+      jq -n --slurpfile d "$state/disabled.json" --arg theme "$theme" \
         '{disabled: $d[0], theme: $theme}' > "$state/manifest.json"
 
       for id in $hide; do
         echo "  hiding $id"
         omarchy plugin disable "$id" >/dev/null 2>&1 || echo "  (could not disable $id)" >&2
       done
+
+      # A known theme to start from, so the `theme-apply` beat can name a
+      # visibly different one and the take does not depend on what the machine
+      # happened to be wearing. AFTER the manifest above, which is what restore
+      # reads to put the original back -- setting it first would snapshot the
+      # demo theme as the owner's and never return them to their own.
+      start=''${SCREENCAST_START_THEME:-Osaka Jade}
+      if [ "$start" != "$(omarchy-theme-current 2>/dev/null || echo unknown)" ]; then
+        echo "  theme -> $start (yours is $theme, restored afterwards)"
+        omarchy-theme-set "$start" >/dev/null 2>&1 || echo "  (could not set theme $start)" >&2
+      fi
 
       # What the take needs to exist before the camera rolls. razer has no
       # devenv projects, so that panel would open on an empty list -- and
@@ -199,6 +210,18 @@ rec {
         done
 
       omarchy-toggle-idle resume >/dev/null 2>&1 || true
+
+      # The theme the machine had. prep has recorded this since it was written,
+      # and nothing put it back -- which was harmless only for as long as no
+      # beat changed it. The `theme` beat does, so this is now load-bearing:
+      # without it the take ends with the owner's desktop in whatever theme the
+      # video wanted, and shell.json compares equal because the theme does not
+      # live there.
+      theme=$(jq -r '.theme // "unknown"' "$state/manifest.json")
+      if [ "$theme" != "unknown" ] && [ "$theme" != "$(omarchy-theme-current 2>/dev/null || echo unknown)" ]; then
+        echo "  restoring theme $theme"
+        omarchy-theme-set "$theme" >/dev/null 2>&1 || echo "  (could not set theme $theme)" >&2
+      fi
 
       # Settle before reading back: an immediate comparison would pass on
       # exactly the race this is guarding against, because the shell has not

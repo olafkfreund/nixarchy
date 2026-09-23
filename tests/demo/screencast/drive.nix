@@ -39,6 +39,7 @@ let
       (if (b.id or "") == "" then "-" else b.id)
       (if (b.route or "") == "" then "-" else b.route)
       (if (b.command or "") == "" then "-" else b.command)
+      (if (b.keys or "") == "" then "-" else b.keys)
     ]
   ) shots.beats;
 
@@ -103,12 +104,27 @@ in
       # The take's own zero. Every observed time below is relative to it, so
       # the gate can seek into the recording without knowing when recording
       # started in wall-clock terms.
-      t0=$(now)
+      # The recorder's zero when it gave us one, our own otherwise.
+      #
+      # This was a real, systematic off-by-two. The recorder starts
+      # gpu-screen-recorder and then sleeps 2s to let it reach steady state,
+      # so the video is already two seconds old when the driver starts
+      # counting -- and every observed time in beats.json was two seconds
+      # behind the picture it describes. The gate then sampled [at+0.6,
+      # at+hold] of the PREVIOUS beat for the first third of every short one,
+      # and take 4 failed `menu` on a frame of bare desktop while the menu was
+      # open and correct one second later.
+      #
+      # Nothing reported it because both halves were self-consistent: the
+      # driver's log and beats.json agreed with each other, and disagreed only
+      # with the recording. The arithmetic that shows it: the last beat ends
+      # at 67.3 by beats.json and the master is 69.2 seconds long.
+      t0=''${SCREENCAST_REC_T0:-$(now)}
       opened_nothing=0
       printf '{"t0":%s,"beats":[' "$t0" > "$beats"
       first=1
 
-      while IFS=$'\t' read -r label action hold id route command; do
+      while IFS=$'\t' read -r label action hold id route command keys; do
         [ -n "$label" ] || continue
         # "-" stands in for an absent field. Tab is whitespace, and bash
         # collapses runs of whitespace IFS characters into one delimiter, so
@@ -118,6 +134,7 @@ in
         [ "$id" != "-" ] || id=""
         [ "$route" != "-" ] || route=""
         [ "$command" != "-" ] || command=""
+        [ "$keys" != "-" ] || keys=""
 
         # Observed BEFORE the action, because what the gate wants to know is
         # when the panel could first have been on screen -- not when the
@@ -143,6 +160,13 @@ in
               omarchy-menu >/dev/null 2>&1 &
             fi
             ;;
+          exec)
+            # A command with no panel and nothing to dismiss: a theme set, a
+            # background cycle. Synchronous, because the whole point of these
+            # beats is that the NEXT one is recorded after the change has
+            # landed -- backgrounding it would race the montage into a repaint.
+            eval "$command" >/dev/null 2>&1 || echo "  (exec failed: $command)" >&2
+            ;;
           term)
             # setsid, so the terminal outlives this loop's process group the
             # way tests/demo/default.nix's `terminal()` does.
@@ -153,6 +177,24 @@ in
             exit 1
             ;;
         esac
+
+        # Navigation inside whatever just opened. wtype for the reason the
+        # dismiss below gives: a layer surface holding keyboard focus never
+        # receives a synthetic hyprctl shortcut.
+        #
+        # And the beat's time is re-stamped afterwards. `at` means "the
+        # earliest this beat's content could be on screen" -- for a beat that
+        # has to walk two rows into a menu, that is after the walk, not before
+        # it. Leaving the pre-action stamp would point the gate at the parent
+        # menu and fail a beat that is on screen and correct.
+        if [ -n "$keys" ]; then
+          sleep 1
+          for k in $keys; do
+            wtype -k "$k" >/dev/null 2>&1 || echo "  (key $k not delivered)" >&2
+            sleep 0.3
+          done
+          at=$(now)
+        fi
 
         [ "$first" = 1 ] || printf ',' >> "$beats"
         first=0
@@ -240,6 +282,13 @@ in
       # 60fps because a 2.4s montage beat at 30 looks stuttery.
       gpu-screen-recorder -w "$monitor" -f 60 -c mkv -o "$master" &
       rec=$!
+      # The video's own zero, so beats.json describes the recording rather than
+      # this script. Taken immediately after the launch: what is left over is
+      # gpu-screen-recorder's own start-up, a fraction of a second, which the
+      # gate's 0.6s settle already absorbs. Taken BEFORE the steady-state sleep
+      # below, because that sleep is recorded footage.
+      SCREENCAST_REC_T0=$(cut -d' ' -f1 /proc/uptime)
+      export SCREENCAST_REC_T0
 
       # The restore runs whatever happens to this script -- including SIGHUP,
       # which is what a dropped SSH connection sends and which the first draft

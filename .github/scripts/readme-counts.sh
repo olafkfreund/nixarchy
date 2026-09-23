@@ -462,6 +462,43 @@ for s in $nix_skill_names; do
   fi
 done
 
+# docs/llms.txt's one-line plugins summary, against the manual's table (#917).
+#
+# build.yml already checks that every default plugin has a ROW in
+# docs/manual/plugins.md. Nothing checked the sentence an LLM reads first, so
+# it went stale silently every time a default was added: at the time this was
+# written it still said "ai-mirror coming" -- which the table had as on by
+# default -- and named neither the Plugin Browser nor Dev environments.
+#
+# By DISPLAY NAME rather than by id, because the sentence is prose and the ids
+# are not in it. The names come from the table's own first column, so there is
+# no second list here to maintain; a row added to the manual makes this fail
+# until the summary names it too.
+#
+# It lives here rather than in build.yml because that is a workflow edit, and
+# this script is already run by the step that would have carried it.
+llms_plugins=$(grep -m1 "the shell panels nixarchy ships" "$root/docs/llms.txt" || true)
+if [ -z "$llms_plugins" ]; then
+  echo "::error::llms-plugins: no \"the shell panels nixarchy ships\" line in docs/llms.txt -- refusing" >&2
+  fail=1
+else
+  plugin_named=0
+  # Only rows carrying an id marker: Voice has no plugin yet and no marker.
+  while IFS= read -r row; do
+    name=${row#*[}
+    name=${name%%]*}
+    plugin_named=$((plugin_named + 1))
+    printf '%s' "$llms_plugins" | grep -qiF -- "$name" || {
+      echo "::error::llms-plugins: docs/llms.txt's plugins line does not name \"$name\"" >&2
+      fail=1
+    }
+  done < <(grep -E '^\| \[.*<!-- [a-z][a-z.-]+ -->' "$root/docs/manual/plugins.md")
+  if [ "$plugin_named" -lt 5 ]; then
+    echo "::error::llms-plugins: only $plugin_named plugin rows found in the manual -- the table moved; refusing" >&2
+    fail=1
+  fi
+fi
+
 # A floor. Thirty-six quantities are declared above; a run that checked fewer
 # means something stopped matching and this reported calm about numbers it
 # never looked at.

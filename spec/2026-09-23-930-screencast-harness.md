@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 930
 intent: intent/2026-09-23-930-screencast-harness.md
 ---

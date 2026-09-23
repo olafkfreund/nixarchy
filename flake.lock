@@ -737,6 +737,27 @@
         "type": "github"
       }
     },
+    "nixarchy-plugin-browser": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790152831,
+        "narHash": "sha256-UWi8NOK7p29dJiKFw3lrF/68gMpiX7JDuOIytHWyBuY=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-plugin-browser",
+        "rev": "cd3a5607d1184d98a5ca082fd88ada6febd6b627",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-plugin-browser",
+        "rev": "cd3a5607d1184d98a5ca082fd88ada6febd6b627",
+        "type": "github"
+      }
+    },
     "nixarchy-podman": {
       "inputs": {
         "nixpkgs": [
@@ -931,6 +952,7 @@
         "nixarchy-herdr": "nixarchy-herdr",
         "nixarchy-microvm": "nixarchy-microvm",
         "nixarchy-pkg": "nixarchy-pkg",
+        "nixarchy-plugin-browser": "nixarchy-plugin-browser",
         "nixarchy-podman": "nixarchy-podman",
         "nixarchy-voice": "nixarchy-voice",
         "nixi": "nixi",

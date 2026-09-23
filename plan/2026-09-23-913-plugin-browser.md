@@ -141,6 +141,23 @@ This plan is self-contained: it carries every approved spec decision.
 | `nix flake check` | green |
 | desktop (step 8) | all four observations |
 
+## Deviations recorded during implementation
+
+- **Step 5 also touches two existing test inputs.**
+  - `noDefaultsHome` switches the defaults off by listing each name, and "a
+    name left out counts as on", so it gains `plugin-browser = false`.
+    Without that line, four cases fail (the two new ones,
+    `defaultPluginsNoHookWhenEmpty` and `defaultRuntimeToolsLowPriority`).
+  - `defaultRuntimeToolsLowPriority`'s spelled-out `toolNames` gains
+    `bubblewrap`. The CLI is a named env with no `pname`, so
+    `pluginBrowserPackages` finds it by name.
+- **`tests/coverage.py`: the plugin id joins `not_invocations`.** Its
+  command pattern `\b(?:omarchy|nixarchy)-[a-z0-9-]+` matches after the last
+  dot of `io.github.olafkfreund.nixarchy-plugin-browser`, which is the
+  argument to `nixarchy-plugin`, not a command. The row's command,
+  `nixarchy-plugin`, is still checked. This follows the set's two existing
+  exclusions, each a name that is not an invocation.
+
 ## Rollback
 
 - Revert the PR. Homes lose the plugin link and its packages on the next

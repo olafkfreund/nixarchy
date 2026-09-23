@@ -237,6 +237,7 @@ pkgs.runCommand "nixarchy-apply-staging"
           printf 'SubState=%s\n' "''${UNIT_STATE:-}"
           printf 'Result=%s\n' "''${UNIT_RESULT:-}"
           printf 'ExecMainStatus=%s\n' "''${UNIT_CODE:-0}"
+          printf 'ExecMainExitTimestampMonotonic=%s\n' "''${UNIT_FINISHED:-0}"
           ;;
         *" show "*) echo "''${UNIT_STATE:-}" ;;
         *) echo "$*" >> "$sccalls" ;;
@@ -244,9 +245,18 @@ pkgs.runCommand "nixarchy-apply-staging"
     }
     export -f systemctl
 
+    # One field out of the JSON, by name. The panel reads it with JSON.parse;
+    # this only has to be able to tell the fields apart.
+    field() { printf '%s' "$1" | sed -n 's/.*"'"$2"'":\([^,}]*\).*/\1/p'; }
+
+    # UNIT_FINISHED is systemd's monotonic microseconds. 1 is "a moment after
+    # boot", which is always in this machine's past, so `ago` is computable and
+    # non-negative without the test knowing the uptime.
     says() {
-      got=$(UNIT_STATE="$2" UNIT_RESULT="$3" UNIT_CODE="$4" $state)
-      if [ "$got" = "$1" ]; then
+      got=$(UNIT_STATE="$2" UNIT_RESULT="$3" UNIT_CODE="$4" UNIT_FINISHED="''${6:-1}" $state)
+      want_state=$(field "$1" state)
+      want_exit=$(field "$1" exit)
+      if [ "$(field "$got" state)" = "$want_state" ] && [ "$(field "$got" exit)" = "$want_exit" ]; then
         ok "$5"
       else
         bad "$5 -- said $got, wanted $1"
@@ -258,6 +268,34 @@ pkgs.runCommand "nixarchy-apply-staging"
     says '{"state":"failed","exit":3}'    exited  exit-code 3 "a unit that failed AFTER activating keeps nh's exit code"
     says '{"state":"failed","exit":1}'    failed  exit-code 1 "a failed unit reads as failed"
     says '{"state":"idle","exit":0}'      ""      ""        0 "no unit at all reads as idle"
+
+    # ---- which run a settled result describes (#919) -----------------------
+    # The bar keeps a successful rebuild visible until it is acknowledged, and
+    # keys "already seen" on finishedUsec. If that value moved with every poll
+    # -- as finishedAgoSec does -- no result would ever be acknowledged and the
+    # icon would never go away. So the two are asserted apart, deliberately.
+    settled=$(UNIT_STATE=exited UNIT_RESULT=success UNIT_CODE=0 UNIT_FINISHED=1 $state)
+    [ "$(field "$settled" finishedUsec)" = 1 ] &&
+      ok "a settled result carries the unit's finish timestamp, unchanged" ||
+      bad "finishedUsec was $(field "$settled" finishedUsec), wanted the stub's 1"
+
+    ago=$(field "$settled" finishedAgoSec)
+    case "$ago" in
+      "" | -1 | *[!0-9]*) bad "a settled result should say how long ago; got '$ago'" ;;
+      *) ok "and how long ago it finished, computed here rather than in QML" ;;
+    esac
+
+    running=$(UNIT_STATE=running UNIT_RESULT="" UNIT_CODE=0 UNIT_FINISHED=1 $state)
+    [ "$(field "$running" finishedAgoSec)" = "-1" ] &&
+      ok "a RUNNING unit says -1, so the panel cannot report a stale finish" ||
+      bad "a running unit said finishedAgoSec=$(field "$running" finishedAgoSec), wanted -1"
+
+    # A unit that never ran reports 0 for the timestamp, and 0 must not read as
+    # "finished at boot" -- it means there is nothing to report.
+    never=$(UNIT_STATE=exited UNIT_RESULT=success UNIT_CODE=0 UNIT_FINISHED=0 $state)
+    [ "$(field "$never" finishedAgoSec)" = "-1" ] &&
+      ok "a zero timestamp reads as 'cannot say', not as a finish at boot" ||
+      bad "a zero timestamp said finishedAgoSec=$(field "$never" finishedAgoSec), wanted -1"
 
     [ "$fails" -eq 0 ] || exit 1
     touch $out

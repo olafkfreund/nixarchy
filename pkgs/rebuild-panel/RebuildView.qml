@@ -27,6 +27,17 @@ FocusScope {
     return Math.floor(s / 60) + "m " + (s % 60) + "s"
   }
 
+  // The arithmetic is in nixarchy-rebuild-state, not here: nothing in this
+  // suite drives QML, so logic left in a panel ships untested (#765 PR 5).
+  // This only formats what that command already decided.
+  function agoText(): string {
+    var s = RebuildState.finishedAgoSec
+    if (s < 0) return ""
+    if (s < 90) return " · just now"
+    if (s < 5400) return " · " + Math.round(s / 60) + " min ago"
+    return " · " + Math.round(s / 3600) + " h ago"
+  }
+
   Keys.onPressed: function (event) {
     if (event.key === Qt.Key_Escape) { root.closeRequested(); event.accepted = true }
     // No key starts a rebuild: the button is deliberately the only way in, and
@@ -41,8 +52,8 @@ FocusScope {
     PanelSectionHeader {
       width: parent.width
       text: RebuildState.state === "running" ? "Rebuilding · " + root.elapsedText()
-        : RebuildState.state === "failed" ? "The rebuild failed (exit " + RebuildState.exitCode + ")"
-        : RebuildState.state === "succeeded" ? "Rebuild finished"
+        : RebuildState.state === "failed" ? "The rebuild failed (exit " + RebuildState.exitCode + ")" + root.agoText()
+        : RebuildState.state === "succeeded" ? "Rebuild finished" + root.agoText()
         : "Apply changes"
     }
 

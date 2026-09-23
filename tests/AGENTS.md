@@ -175,24 +175,72 @@ What only a person can prove: `nixarchy apply --detach --yes` on real
 hardware, then `journalctl --user -fu nixarchy-rebuild` shows the build, the
 dialog asks once, and the unit ends `Result=success`.
 
-## The panel one: nothing in the suite presses a button
+## The panel one: its buttons are pressed over IPC, and its pixels are not
 
 The rebuild panel (#765 PR 5, `pkgs/rebuild-panel/`) is covered in three
-places, and none of them is the panel itself:
+places. #896 closed most of the gap that used to be here.
 
 - `checks.qml` proves its three QML files parse -- and only that;
 - `checks.apply-staging` proves the state mapping, because it is a command
   (`nixarchy-rebuild-state`) and not logic inside QML. That split exists for
   this reason;
-- `checks.session` proves `nixarchy-plugin nixarchy.rebuild` opens it over a
-  running unit.
+- `checks.session` opens it with `nixarchy-plugin nixarchy.rebuild`, then
+  drives its three actions over the shell's IPC and asserts what each one did:
+  the unit started, the journal reached the clipboard, a terminal launched. It
+  also asserts reattach after close/open, and -- the one that matters most --
+  that **opening the panel starts nothing**, because every other assertion
+  still passes if a regression made it rebuild on open.
 
-What no check reaches: pressing _Rebuild now_, _Copy log_ or _Open full log in
-terminal_, the confirm text, the elapsed time, and the log tail rendering.
-Nothing here drives a click in the shell's QML, and OCR is not an option --
-#765 PR 1 already found this theme unreadable to it, which is why the session
-probe waits on a `polkit-agent-helper@*` unit rather than on text. So the
-panel's behaviour is a by-hand check on real hardware, listed in the PR.
+Three things about how those assertions are written, each of which would
+otherwise be a green light:
+
+- **`Open full log in terminal` is NOT asserted either, and this one was
+  *proven* worthless rather than suspected.** The assertion matched
+  `pgrep -af omarchy-launch-floating-terminal-with-presentation`; the break ran
+  in CI with `openInTerminal()` gutted and **came back green**. The pattern is
+  searched across every process in the session, and something else already has
+  one, so it never measured the button. The plan had warned about the adjacent
+  trap -- `RebuildState` follows the unit's journal itself, so a
+  `journalctl.*nixarchy-rebuild` match is satisfied by the panel's own
+  follower -- and the matcher written to dodge *that* fell into a wider one.
+  Retargeting it wants a before/after count of matching processes, or a marker
+  only the button can produce; neither was worth two more CI round trips at the
+  time, and a row that cannot fail is worse than no row.
+**`Copy log` is the one action with no assertion, and that is a decision, not
+an oversight.** Two CI runs put the unit's journal on the clipboard and then
+compared `wl-paste` against it; both timed out while the assertions on either
+side passed. The row was dropped rather than retried (§10, and the spec said so
+in advance). What is *not* established is which of these is true:
+
+- the assertion is wrong -- a trailing newline, a stale selection, or the
+  journal growing between the snapshot and the copy; or
+- **the button is broken.** `wl-copy` forks a daemon to serve the selection,
+  and `RebuildState.copyLog()` runs it as `sh -c "journalctl … | wl-copy"`
+  inside a Quickshell `Process`. If Quickshell reaps that process group when
+  the `Process` finishes, the forked `wl-copy` dies with it and the clipboard
+  is never served.
+
+The second is worth ruling out **by hand on real hardware** before writing any
+more of the first: press Copy log after a failed rebuild and paste somewhere.
+If it does not paste, the check was right and the panel needs fixing.
+
+Note also what the first attempt got wrong, because the shape recurs: the
+assertion asserted the journal was non-empty *before* comparing, precisely so
+that an emptied `copyLog()` could not pass by leaving an empty clipboard to
+match an empty journal.
+- **An unknown verb is asserted to fail.** `omarchy-shell` wraps `qs ipc call`,
+  which exits 0 on IPC-level errors and writes them to stdout; the wrapper
+  repairs that by matching `Function not found.` **per function name**. That is
+  why the panel has a verb per button rather than one `invoke(action)` whose
+  bad argument would return quietly -- and why the check proves the mechanism
+  once rather than assuming it.
+
+What still reaches nothing: the **rendering** -- the confirm text, the elapsed
+time, the log tail. OCR is not an option (#765 PR 1 found this theme unreadable
+to it, which is why the session probe waits on a `polkit-agent-helper@*` unit
+rather than on text), and nothing here drives a click in the shell's QML. And
+"one polkit dialog per Apply" stays where it was: a real networked switch, by
+hand, on real hardware.
 
 ## The cold-cache one: nobody here can watch a network image fail to fetch
 
@@ -444,6 +492,17 @@ Two branches only these can reach, as illustration:
   the full transcript plus the host state the fixture does not control, because
   a check that disagrees with itself across two runners and cannot say what
   differed is one people learn to re-run until green.
+- **A `VAR=value cmd` prefix does not reach a `$(substitution)` in the same
+  line**, and in `session.nix` that silently strips the session environment.
+  `as_user` builds exactly that prefix (`XDG_RUNTIME_DIR=… DBUS_…=… <cmd>`),
+  so `as_user('test "$(wl-paste)" = "$(journalctl …)"')` runs **wl-paste
+  without XDG_RUNTIME_DIR** -- the shell expands the substitutions before
+  `test` is executed, and the assignment applies only to `test`. It fails with
+  `XDG_RUNTIME_DIR is invalid or not set in the environment`, which reads as a
+  broken VM session rather than a broken assertion, and the assertion could
+  never have passed whatever the thing under test did. Make the command that
+  needs the environment *be* the command: `as_user("wl-paste > /tmp/clip")`,
+  then compare the files in a separate step. #896 lost a CI round trip to this.
 - **Never name a shell variable `out` in a `runCommand` script.** `$out` is the
   derivation's output path, and assigning to it means every assertion passes
   and the build then fails with *"builder failed to produce output path"* —

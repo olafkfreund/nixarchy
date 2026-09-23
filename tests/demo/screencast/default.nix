@@ -62,7 +62,33 @@ let
     pkgs.procps
   ];
 in
-{
+rec {
+  # Exported so drive.nix takes the same environment rather than re-deriving
+  # it, and so `all` below can wire the whole harness in one place.
+  inherit sessionEnv;
+
+  # Everything, as one package. This is what gets copied to a machine with a
+  # session on it.
+  all = pkgs.symlinkJoin {
+    name = "screencast";
+    paths = [
+      prep
+      restore
+      recover
+    ]
+    ++ (
+      let
+        d = import ./drive.nix { inherit pkgs sessionEnv; };
+        e = import ./edit.nix { inherit pkgs; };
+      in
+      [
+        d.drive
+        d.record
+        e.edit
+      ]
+    );
+  };
+
   # ---------------------------------------------------------------- prep ----
   prep = pkgs.writeShellApplication {
     name = "screencast-prep";

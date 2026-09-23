@@ -72,6 +72,56 @@ overwrite — the asymmetry is a bug.
 connection still restores was false. And `SIGKILL`/OOM/power loss cannot be
 trapped at all, which is what the recovery path is for.
 
+## What the first real take found (2026-09-23)
+
+The take ran end to end and restored the desktop byte-identically. It also
+found three defects and prompted two decisions, all of which change the steps
+below.
+
+**1. Panels stack; nothing was closing them.** Shell panels are layer-shell
+surfaces, so `hyprctl dispatch killactive` does not touch them. Nor does
+`hyprctl dispatch sendshortcut ',escape,'` -- a *synthetic* shortcut is not
+delivered to a layer surface holding keyboard focus. **`wtype -k Escape`
+works**, because it goes through the virtual-keyboard protocol, which is the
+path a real keypress takes. Measured by namespace:
+
+```
+still open:         nixarchy-podman-menu  omarchy-background  omarchy-bar
+after wtype Escape: omarchy-background  omarchy-bar
+```
+
+The owner said Escape closes them, and was right; my first measurement counted
+*all* layers -- bar and background included -- so a panel closing moved 3 to 3
+and read as a failure. **Count namespaces, not layers.**
+
+**2. The last beat is silently dropped.** `concatMapStringsSep "\n"` leaves no
+trailing newline, so `while read` returns non-zero on the final line and never
+runs the body for it. `endcard` is missing from `beats.json`: 17 beats for an
+18-beat shot list, with nothing reporting a problem. Any shot list loses its
+last beat until this is fixed.
+
+**3. Nothing asserted a panel actually opened.** The driver recorded a time and
+moved on. A beat that opened nothing produced an entry indistinguishable from
+one that worked, and only the gate -- run afterwards -- would have caught it.
+The namespace check from (1) makes this assertable *during* the take.
+
+**Decision: panels perform real operations** (owner, 2026-09-23). "Show how the
+plugins work" means a viewer sees a container start, a box open, a VM appear --
+not a panel holding still. That makes razer the subject rather than the stage,
+so every acting beat is **demo-scoped and self-cleaning**: `demo-*` names only,
+created at the start of its beat, removed at the end, and swept by the same
+trap that restores `shell.json`. `docs/AGENTS.md` already requires this shape.
+
+**Decision: Apply is excluded** (owner). A real rebuild takes minutes and
+changes the machine. The Install beat shows the line being written to
+`apps.nix` and the Rebuild panel opening, which is the honest depiction of
+"nothing is built until you apply" anyway.
+
+**Consequence: the take gets longer and the edit speeds it up.** The 60-second
+budget now applies to the *cut*, not the take. Acting beats run at whatever
+they need and `screencast-edit` applies `setpts` per beat, so a slow container
+start does not cost the viewer anything.
+
 ## Steps
 
 **1. `screencast-prep`, narrowed.** It may change only what it can put back:

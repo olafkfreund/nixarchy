@@ -1217,6 +1217,17 @@ stdenvNoCC.mkDerivation {
 
                     skills=$out/share/omarchy/default/agents/skills
 
+                    # The boundary between our devenv skill and nix-skills'
+                    # devenv-project (#888): ours is devenv ON a nixarchy machine,
+                    # theirs is what devenv.nix's options mean. Both are installed
+                    # on every machine, so an agent with no line between them
+                    # answers from whichever it read first. Asserted here because
+                    # the line lives in prose, and prose is what gets tidied away.
+                    grep -q devenv-project "$skills/devenv/SKILL.md" || {
+                      echo "devenv/SKILL.md no longer hands off to devenv-project (#888)" >&2
+                      exit 1
+                    }
+
                     # Paths. $OMARCHY_PATH is exported for every one of these readers, and
                     # hardcoding a store hash into documentation would be wrong at the next
                     # bump anyway.

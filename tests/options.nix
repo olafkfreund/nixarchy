@@ -97,6 +97,8 @@ let
   defaultMachine = configWith { };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
+  # #888: the same machine with the nix-skills input turned off.
+  skillsOffHome = homeOn { nixSkills = false; } { };
 
   # #766's default plugins, exercised with fixtures rather than the real four:
   # those arrive with their own inputs in later PRs, and a test that fetched
@@ -610,6 +612,32 @@ let
     mcpInertWithoutOsConfig = {
       on = hasAny defaultHomeOn mcpActivationNames;
       off = hasAny defaultHome mcpActivationNames;
+    };
+
+    # ---- #888: the Nix skills, and the switch that takes them away --------
+    #
+    # The store path is in the activation script, so both halves are readable
+    # without building anything. `share/nix-skills` is the input tree's own
+    # segment, which nothing of ours produces -- so this cannot be satisfied
+    # by our own skills being linked.
+    nixSkillsGuardsTheInput = {
+      on = pkgs.lib.hasInfix "share/nix-skills" (activationText defaultHomeOn);
+      off = pkgs.lib.hasInfix "share/nix-skills" (activationText skillsOffHome);
+    };
+
+    # Turning the input off must not turn OURS off with it. Without this the
+    # pair above passes for a relink that stopped running altogether.
+    nixSkillsOffLeavesOursAlone = {
+      on = pkgs.lib.hasInfix "default/agents/skills" (activationText skillsOffHome);
+      off = pkgs.lib.hasInfix "share/nix-skills" (activationText skillsOffHome);
+    };
+
+    # A standalone home-manager user has no NixOS module to have set it either
+    # way, so `osConfig.programs.nixarchy.nixSkills or false` must read false
+    # rather than throw. The shape that breaks when the `or false` goes.
+    nixSkillsInertWithoutOsConfig = {
+      on = pkgs.lib.hasInfix "share/nix-skills" (activationText defaultHomeOn);
+      off = pkgs.lib.hasInfix "share/nix-skills" (activationText defaultHome);
     };
 
     # ---- #773: ai-mirror, on every machine, connected to no agent -------

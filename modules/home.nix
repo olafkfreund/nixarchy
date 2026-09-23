@@ -279,6 +279,21 @@ let
   # The GitLab pipelines panel as nixarchy installs it (#770): upstream's copy
   # plus `menu.managed`, which tells its menu.py that nixarchy owns the rows,
   # and the MIT notice from the source tree when upstream's package omits it.
+  # The Nix skills as nixarchy installs them (#888), with the MIT notice carried
+  # in from the source tree -- the package does not install it, and a tree
+  # shipped on every machine has to say what licence it is under. Exactly what
+  # gitlabPipelines below does, and for the same reason.
+  nixSkillsTree = pkgs.runCommand "nixarchy-nix-skills" { } ''
+    cp -r ${inputs.nix-skills.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    chmod -R u+w $out
+    [ -f $out/LICENSE ] || cp ${inputs.nix-skills}/LICENSE $out/LICENSE
+  '';
+
+  # Off takes them away at the next switch, which is what the relink's
+  # share/nix-skills clean-up is for. `or false` because standalone Home
+  # Manager has no osConfig (Mode A).
+  nixSkills = osConfig.programs.nixarchy.nixSkills or false;
+
   gitlabPipelines = pkgs.runCommand "nixarchy-gltui" { } ''
     cp -r ${inputs.nixarchy-gltui.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
     chmod -R u+w $out
@@ -987,38 +1002,14 @@ in
                   "${menuExtensionPath}"
 
                 # Why: modules/AGENTS.md#agent-skills-relinked-on-every-activation
-                ${
-                  let
-                    skillsDir = "${omarchyPath}/default/agents/skills";
-                  in
-                  ''
-                    # Clean up everywhere a link was ever planted, .codex included:
-                    # dropping it from the link list alone would strand the old links.
-                    for agentdir in .agents/skills .claude/skills .codex/skills .pi/agent/skills; do
-                      dest="${config.home.homeDirectory}/$agentdir"
-                      [ -d "$dest" ] || continue
-
-                      for link in "$dest"/*; do
-                        [ -L "$link" ] || continue
-                        case "$(readlink "$link")" in
-                          /nix/store/*/agents/skills/*) run rm -f "$link" ;;
-                        esac
-                      done
-                    done
-
-                    # Link where each agent reads. Not .codex: Codex reads
-                    # ~/.agents/skills too and does not merge same-named skills.
-                    for agentdir in .agents/skills .claude/skills .pi/agent/skills; do
-                      dest="${config.home.homeDirectory}/$agentdir"
-                      run mkdir -p "$dest"
-
-                      ${pkgs.findutils}/bin/find ${skillsDir} -mindepth 1 -maxdepth 1 -type d |
-                        while read -r skill; do
-                          run ln -sfn "$skill" "$dest/$(basename "$skill")"
-                        done
-                    done
-                  ''
-                }
+                #
+                # A command, not a loop here: an activation block is reachable
+                # only by activating, so nothing could check the one thing that
+                # decides whether every agent on this machine sees its skills
+                # (#888). checks.skills-relink drives the package instead.
+                run ${pkgs.callPackage ../pkgs/skills-relink.nix { }}/bin/nixarchy-skills-relink \
+                  "${config.home.homeDirectory}" \
+                  --own "${omarchyPath}/default/agents/skills"${lib.optionalString nixSkills " \\\n                  --guarded \"${nixSkillsTree}/share/nix-skills\""}
 
                 # Why: modules/AGENTS.md#declared-plugins-linked-in-by-the-id-their-manifes
                 run mkdir -p "${config.xdg.configHome}/omarchy/plugins"

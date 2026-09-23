@@ -417,6 +417,17 @@ Two other ways a check stops checking, both found in one week:
   where `$out` is `./result` returns nothing, silently. Use `find -L`.
   `readme-counts.sh` counted zero skills this way, and only failed loudly
   because it refuses on an implausible count.
+- **A flake's INPUTS are not reachable through `#`.** `nix eval --raw
+  ".#inputs.foo.outPath"` looks obviously right and is not: everything after
+  `#` is an attribute path into the flake's *outputs*, so this fails with
+  `does not provide attribute 'packages.x86_64-linux.inputs.foo.outPath'` --
+  an error that reads as a broken flake rather than as the wrong question.
+  `nix flake archive --json . | jq -r '.inputs["foo"].path'` is the command
+  that prints an input's realised store path. Written into
+  `readme-counts.sh` here and caught only because the count it derived then
+  refused at zero (#888); as a silent fallback it would have been a green
+  light.
+
 - **`builtins.tryEval` does not catch a missing attribute.** It catches
   `throw` and `assert`, and nothing else — so `tryEval (v.${n})` around an
   attribute access reads as a guard and is not one. A walk over

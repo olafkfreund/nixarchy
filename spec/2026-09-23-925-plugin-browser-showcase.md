@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 925
 intent: intent/2026-09-23-925-plugin-browser-showcase.md
 ---

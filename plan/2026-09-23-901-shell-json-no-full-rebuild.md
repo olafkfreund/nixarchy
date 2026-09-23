@@ -59,6 +59,11 @@ spec: spec/2026-09-23-901-shell-json-no-full-rebuild.md
   misses the 2 s IPC timeout; plausible on p620, not reproduced. Same needle,
   same carried-patch style.
 
+- **Bin ledger (found by CI on #907):** shipping `omarchy-shell-config` modified makes it a
+  `patch`-class command, and `checks.bin-ledger` requires a row for every such command.
+  Added `"omarchy-shell-config"` to `data/bin-ledger.nix` with the reason. The plan
+  did not list this bookkeeping step.
+
 ## Steps
 
 1. **`pkgs/omarchy/default.nix`:** insert the #901 block after line 2005.

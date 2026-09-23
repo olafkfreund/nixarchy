@@ -445,6 +445,15 @@ Two other ways a check stops checking, both found in one week:
   the derivation you mean (`nix derivation show` and grep for the break), then
   `nix build '<drv>^*'`. Building by attribute path is what lets a stale
   evaluation back in.
+- **An editor or agent hook can reformat a `.nix` file in a style this repo
+  does not use, silently.** On the owner's machines, Claude Code's managed
+  settings run `nixpkgs-fmt` on every `.nix` file after an edit. This repo
+  formats with `nixfmt` (`nix fmt`), so a three-line edit to
+  `pkgs/omarchy/default.nix` came back as a 262-line leading-comma rewrite,
+  and the edit tool reported plain success (#897). The tell is
+  `nix fmt -- --ci` failing once and then passing: that is `nixfmt` reverting
+  the hook, not a flaky formatter. After any edit to a `.nix` file, run
+  `nix fmt` and read `git diff --stat` before committing.
 
 ## 6. How to run the checks, and what each one costs
 

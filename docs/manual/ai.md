@@ -35,9 +35,10 @@ programs.nixarchy.apps.hey-cli.enable = true;
 Omarchy ships one agent skill, `omarchy`, and symlinks it into the skill
 directories of Claude Code, Codex, Pi and the generic `~/.agents/skills`
 location, so most harnesses load it automatically. nixarchy keeps the
-mechanism — `omarchy-provision-user` symlinks every directory under
-`$OMARCHY_PATH/default/agents/skills/` into `~/.claude/skills`,
-`~/.agents/skills`, `~/.codex/skills` and `~/.pi/agent/skills` — but ships
+mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
+symlinked into `~/.claude/skills`, `~/.agents/skills` and
+`~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
+reads `~/.agents/skills` too and would list every skill twice — but ships
 sixteen skills instead of one:
 
 | skill | owns |

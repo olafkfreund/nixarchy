@@ -1073,14 +1073,16 @@ stdenvNoCC.mkDerivation {
                     esac
 
                     # Agent skills. omarchy-provision-user symlinks every directory under
-                    # default/agents/skills/ into ~/.claude/skills, ~/.agents/skills,
-                    # ~/.codex/skills and ~/.pi/agent/skills, so whatever is here is what an
-                    # AI agent on this machine is told to do. Upstream's are written for
-                    # Arch: they point at /usr/share/omarchy, and their decision framework
-                    # answers "install a package" with `omarchy pkg add`, which is a script
-                    # this repo replaced with one that deliberately refuses. Shipping them
-                    # unchanged means an agent confidently doing imperative things a rebuild
-                    # then wipes -- the one failure mode that looks like success.
+                    # default/agents/skills/ into ~/.claude/skills, ~/.agents/skills and
+                    # ~/.pi/agent/skills (upstream also does ~/.codex/skills; patched out
+                    # below, since Codex reads ~/.agents/skills and listed each skill twice),
+                    # so whatever is here is what an AI agent on this machine is told to do.
+                    # Upstream's are written for Arch: they point at /usr/share/omarchy, and
+                    # their decision framework answers "install a package" with `omarchy pkg
+                    # add`, a script this repo replaced with one that deliberately refuses.
+                    # Shipping them unchanged means an agent confidently doing imperative
+                    # things a rebuild then wipes -- the one failure mode that looks like
+                    # success.
                     #
                     # The `omarchy` skill is renamed to `nixarchy`, so the skill an agent
                     # loads is named for the system it is actually on, and a new `nixos`
@@ -1324,6 +1326,16 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
                       --replace-fail 'xdg-mime default HEY.desktop' \
                         'xdg-mime default omarchy-HEY.desktop'
+
+                    # No skill links into ~/.codex/skills: Codex reads ~/.agents/skills
+                    # too and does not merge same-named skills, so upstream's list made it
+                    # show every skill twice. Matches the relink loop in modules/home.nix;
+                    # --replace-fail so an upstream change here breaks the build, not Codex.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-provision-user \
+                      --replace-fail '~/.claude/skills ~/.codex/skills ~/.pi/agent/skills' \
+                        '~/.claude/skills ~/.pi/agent/skills' \
+                      --replace-fail 'ln -sfn "$skill" ~/.codex/skills/"$name"' \
+                        ': # nixarchy: not ~/.codex/skills; Codex reads ~/.agents/skills'
 
                     # The same chromium-browser.desktop rename as omarchy-launch-webapp, on
                     # the three other paths that name the file rather than launch it.

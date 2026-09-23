@@ -17,7 +17,11 @@ flake, with its menus rewired to Nix instead of pacman.
 
 ## See it in action
 
-![The desktop, and the menu everything is driven from](img/desktop/menu.webp)
+<video class="hero-video" src="video/nixarchy.mp4" poster="video/nixarchy-poster.webp"
+       autoplay muted loop playsinline
+       aria-label="A minute of nixarchy: the menu, a package install written to a file you own, every plugin panel, a theme change, and a rollback">
+  <a href="video/nixarchy.mp4">A minute of nixarchy (video, 3.7 MB)</a>
+</video>
 
 ![Search every package and NixOS option from one picker, with its type and docs](img/plugins/pkg-panel.webp)
 

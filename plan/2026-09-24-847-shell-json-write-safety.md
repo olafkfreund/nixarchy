@@ -148,3 +148,80 @@ Nothing here fixes the defect, and the PR must not imply it does. The
 deliverable is that the hazard is written down where people look, our tree
 cannot acquire a writer without CI saying so, the documented recovery is
 guarded, and the upstream report is good enough to be acted on.
+
+## Root cause, as far as reading gets it (2026-09-24)
+
+Step 6 asked which side the duplicate registration belongs to, and said to
+read rather than guess. Read. This is what the report in step 5 should carry,
+and it answers "so how do we fix this" with something more useful than "report
+it".
+
+### Why the bar goes dead rather than merely reloading
+
+`IpcHandlerRegistry::registerHandler` (`src/io/ipchandler.cpp:356`, v0.3.1)
+**does not replace** an existing handler for a target. It appends to a vector,
+and if the target is already taken it warns and leaves the newcomer **inert**:
+
+    auto& targetVec = this->knownHandlers[handler->targetState.target];
+    targetVec.append(handler);
+    if (this->handlers.contains(handler->targetState.target)) {
+      qmlWarning(handler) << "Handler was registered but will not be used ...";
+    } else {
+      this->handlers.insert(handler->targetState.target, handler);
+    }
+
+So the first handler to claim a target keeps it. If that first handler belongs
+to a generation that is being torn down, every later one for the same target is
+registered-but-unused, and IPC to that target answers `Target not found` while
+the QML behind it throws `invalid context`. That is variant 1 exactly, and it
+is a *consequence of ordering*, not of anything the writer did — which is why
+writing identical bytes is enough.
+
+`deregisterHandler` does promote `targetVec.first()` when the active handler
+leaves. The promoted one is whichever happens to be first in the vector, which
+is not necessarily a live one.
+
+### Why deregistration is too late
+
+`28771c7c` — already in v0.3.1 — deregisters in `~IpcHandler()`. That is
+**destruction** time, and QML object destruction is garbage-collector timed
+rather than tied to generation teardown. So on reload the new generation's
+handlers can register while the old generation's are still alive and still
+holding the targets. The fix that would actually work is deregistration at
+*generation teardown*, or a `registerHandler` that demotes the incumbent
+instead of going inert. Either is a Quickshell change.
+
+### And one duplicate exists before any reload
+
+Measured on a freshly restarted shell on razer, one monitor, nothing reloaded:
+exactly one warning, for `omarchy.bar`. So `Bar.qml`'s handler is registered
+twice from a clean start — and it is declared at `Bar.qml:1185`, *outside* the
+`Variants { model: Quickshell.screens }` blocks that begin at `:1196`, so
+per-screen instantiation does not explain it. Something loads that component
+twice.
+
+**That one is Omarchy's, not ours.** nixarchy patches `Bar.qml`
+(`pkgs/omarchy/901-bar-keyed-layout.patch`) and that patch touches neither
+`IpcHandler` nor `Variants` — checked, because a bug we introduced by patching
+would be ours to fix and this one is not.
+
+It matters because it is the seed: the target that is already double-registered
+on a healthy shell is the one most exposed when a reload adds a third.
+
+### So: can we fix it here?
+
+No, and the plan should not pretend otherwise. Three local fixes were
+considered and all fail on cost rather than on difficulty:
+
+- **patch Quickshell** — a use-after-free in a dependency's IPC layer, carried
+  forever and re-applied at every bump;
+- **patch `Bar.qml` to deduplicate** — belongs upstream, same carrying cost,
+  and does not address the reload leak at all;
+- **make the shell restart rather than reload on a `shell.json` change** —
+  shell-side behaviour, upstream, and it would undo #710 from the other side.
+
+What this work delivers is that the hazard is written where people look, our
+tree cannot acquire a writer without CI saying so, the documented recovery is
+guarded by a check that will not invert, and the upstream report names the
+function, the line, the ordering, and the fact that the obvious fix is already
+in the tag that reproduces. That is the fix path. It runs through upstream.

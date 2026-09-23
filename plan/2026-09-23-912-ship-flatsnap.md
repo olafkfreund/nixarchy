@@ -190,3 +190,4 @@ results.
   - the manual page and `plugins.md` described snapd as off as soon as no Snap
     is declared, but after un-declaring the last one it stays on for one more
     apply (`pendingRemoval`), and both now say so.
+- **Rebased onto #915 (Plugin Browser, another ungated default).** Conflicts were only in the two "all defaults off" lists (`tests/options.nix` `noDefaultsHome` and `tests/plugin.nix` `machine`), resolved by keeping both `plugin-browser = false` and `flatsnap = false`. The two merged cleanly as text but not in meaning: the home-page count is now "Twelve … nine" (`readme-counts.sh --fix`, that line only). `options`, `menu-verbs`, `plugin` (VM), `readme-counts --check` and both docs steps are green on the rebased head.

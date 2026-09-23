@@ -555,6 +555,60 @@ system lacks.
    three capability regexes in `Model.js` if either side reworded them.
 5. Build `checks.options` and `checks.plugin`.
 
+### The Plugin Browser, on by default (#913)
+
+```nix
+nixarchy-plugin-browser = {
+```
+
+**Setup ▸ Plugins ▸ Add Plugin** opens this panel instead of upstream's
+Git-URL prompt. It searches the marketplace catalog (plugins.omarchy.org)
+and audits a plugin **before** it is installed. The audit clones it at a
+pinned commit and scans it inside bubblewrap. It gives two verdicts: a
+security one, and a NixOS-compatibility one (FHS paths, `pacman`/`yay`,
+writes to `/etc`, bundled ELFs). An install lands **disabled** at the audited
+commit. It is a default because Add Plugin is on every machine, and without
+it that row installs whatever a URL points at, unchecked (#361).
+
+`packages` carries the plugin's CLI (`omarchy-plugin-audit`,
+`omarchy-plugin-browser`, `nixarchy-plugin-fix`) and **bubblewrap**. The audit
+fails closed without `bwrap`, and it runs with a fixed PATH that includes
+`/etc/profiles/per-user/$USER/bin`. So the per-user profile is the right
+place for bubblewrap, and turning the plugin off removes it again. Like every
+default's tools, both are `lowPrio` (#809).
+
+Upstream's stock row stays one row down as `setup.plugin.add-url` ("Add
+Plugin from URL"), unaudited, for a URL you already have. It is also what is
+left once the panel is turned off, because `setup.plugin.add` has a `when`.
+The flake's own `homeManagerModules` is **not** used: nixarchy seeds
+Super+Alt+U itself.
+
+A changed menu row needs a **re-login**. The session keeps the
+`OMARCHY_PATH` tree it logged in with, and the menu reads its defaults from
+there. So after a switch that brings this in, Add Plugin still opens the
+Git-URL prompt until you log out and back in. `omarchy-restart-shell` alone
+is not enough, and neither are the keybindings, which run with Hyprland's
+login-time environment. Found on razer, 2026-09-23.
+
+Measured at cd3a560 (2026-09-23): the plugin output is **204 KiB**, the CLI
+wrappers **20 KiB**, and the source tree on the ISO **544 KiB**. bubblewrap
+0.12.0 is **112 KiB**; the rest of its closure is glibc and libraries the
+reference system already has. The catalog (about 8 MB, cached for an hour)
+and one preview per opened plugin are fetched at **run time**, only when the
+panel is used.
+
+**Bumping the pin:**
+
+1. Pick the commit on `master` and read the diff
+   (`gh api repos/olafkfreund/nixarchy-plugin-browser/compare/<old>...<new>`).
+2. Edit the rev, then `nix flake lock`. The lock diff touches
+   `nixarchy-plugin-browser` alone, and `follows` keeps it on our nixpkgs.
+3. The manifest id must still be `io.github.olafkfreund.nixarchy-plugin-browser`:
+   the menu row, the seeded bind and `tests/options.nix` name it.
+4. Build `checks.options` and `checks.plugin`. The plugin's own
+   `checks.default` runs its scanner tests and the pacman/yay grep; ours
+   runs the grep again on the installed copy.
+
 <a id="221-222"></a>
 ### #221/#222
 

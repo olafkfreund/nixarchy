@@ -157,6 +157,11 @@ This plan is self-contained: it carries every approved spec decision.
   argument to `nixarchy-plugin`, not a command. The row's command,
   `nixarchy-plugin`, is still checked. This follows the set's two existing
   exclusions, each a name that is not an invocation.
+- **Step 6 also updates `docs/index.md`.** It states the number of default
+  plugins in words ("Ten ship by default: seven are always on"), and CI's
+  `readme-counts.sh --check` derives that number from the repository. It
+  now says Eleven and eight, and the feature list there gains the
+  marketplace line.
 
 ## Rollback
 

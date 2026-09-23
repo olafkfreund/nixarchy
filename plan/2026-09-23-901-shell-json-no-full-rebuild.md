@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 901
 spec: spec/2026-09-23-901-shell-json-no-full-rebuild.md
 ---

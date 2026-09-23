@@ -746,17 +746,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1790157042,
-        "narHash": "sha256-nrkNEeDcN8t6/2N7SPOmxdqWKy0WpbgXERi6Ib03Ook=",
+        "lastModified": 1790164089,
+        "narHash": "sha256-XJZsGI2jmVQAMxNuEuPrItA9sefbPFiRHaRauD90Hvg=",
         "owner": "olafkfreund",
         "repo": "nixarchy-flatsnap",
-        "rev": "fbc8a6044b7414167a67032be534389a914035de",
+        "rev": "12e138712151a842f17a871dcb872370e5cacd2c",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-flatsnap",
-        "rev": "fbc8a6044b7414167a67032be534389a914035de",
+        "rev": "12e138712151a842f17a871dcb872370e5cacd2c",
         "type": "github"
       }
     },

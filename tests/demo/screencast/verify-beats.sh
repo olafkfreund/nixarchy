@@ -102,11 +102,16 @@ checked=0
 # with an empty `expect` shifted its hold into that field and the gate
 # reported 'nothing matching /3/'. Found by running this against a
 # synthetic recording before trusting it.
-while IFS=$'\037' read -r label expect hold; do
+while IFS=$'\t' read -r label expect hold; do
   [ -n "$label" ] || continue
   # A beat with no expectation is a deliberate breath (the desktop, the end
   # card). Counted, so "checked" cannot quietly be zero.
   checked=$((checked + 1))
+  # "-" is the shot list's placeholder for an absent field. Tab is whitespace
+  # and bash collapses runs of it, so an empty field would shift every later
+  # one left -- the hold landed in expect and the gate reported "nothing
+  # matching /3/". A placeholder cannot collapse.
+  [ "$expect" != "-" ] || expect=""
   [ -n "$expect" ] && [ "$expect" != "null" ] || { echo "  --      $label (no expectation)"; continue; }
 
   at=$(jq -r --arg l "$label" '.beats[] | select(.label == $l) | .at' "$beatsjson")

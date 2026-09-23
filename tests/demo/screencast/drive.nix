@@ -21,7 +21,7 @@ let
   # opened. Found by testing the gate, which had the identical bug.
   beatLines = pkgs.lib.concatMapStringsSep "\n" (
     b:
-    builtins.concatStringsSep "\037" [
+    builtins.concatStringsSep "\t" [
       b.label
       b.action
       # Nix renders a float as 2.400000; trimmed so the table and any timing
@@ -35,9 +35,9 @@ let
         else
           t
       )
-      (b.id or "")
-      (b.route or "")
-      (b.command or "")
+      (if (b.id or "") == "" then "-" else b.id)
+      (if (b.route or "") == "" then "-" else b.route)
+      (if (b.command or "") == "" then "-" else b.command)
     ]
   ) shots.beats;
 
@@ -78,8 +78,16 @@ in
       printf '{"t0":%s,"beats":[' "$t0" > "$beats"
       first=1
 
-      while IFS=$'\037' read -r label action hold id route command; do
+      while IFS=$'\t' read -r label action hold id route command; do
         [ -n "$label" ] || continue
+        # "-" stands in for an absent field. Tab is whitespace, and bash
+        # collapses runs of whitespace IFS characters into one delimiter, so
+        # an empty field vanishes and every later one shifts left --
+        # install-pick would have put its route into the id and opened
+        # nothing. A placeholder cannot collapse.
+        [ "$id" != "-" ] || id=""
+        [ "$route" != "-" ] || route=""
+        [ "$command" != "-" ] || command=""
 
         # Observed BEFORE the action, because what the gate wants to know is
         # when the panel could first have been on screen -- not when the

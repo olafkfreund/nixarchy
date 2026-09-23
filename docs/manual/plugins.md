@@ -75,6 +75,14 @@ removal.
 
 Turn it off with `programs.nixarchy.defaultPlugins.flatsnap = false;`.
 
+![The Flatpak and Snap panel: a Flathub link for GNOME Calculator typed in, its card showing publisher, license and sandbox permissions, and Enter queueing it](../img/features/flatsnap.gif)
+
+![hello-world's card from the Snap Store: channel, strict confinement, and the red line saying Snap confinement on NixOS is weaker than on Ubuntu](../img/plugins/flatsnap-snap.webp)
+
+![The Declared list after apply, with GNOME Calculator and hello-world both installed](../img/plugins/flatsnap-installed.webp)
+
+*Recorded on a nixarchy laptop in Tokyo Night, applying into its real configuration; the build log is shortened.*
+
 ## Podman
 
 [nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman) · [its own site](https://olafkfreund.github.io/nixarchy-podman/)

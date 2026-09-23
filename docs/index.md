@@ -61,12 +61,22 @@ machine will then refuse to build.
 
 See **[other packages](manual/other-packages)** for the whole flow.
 
+Some software is only current as a Flatpak or a Snap. Paste its Flathub or
+Snapcraft link into **Install ▸ Flatpak & Snap**, see what it can reach, and it
+becomes a declaration too, not a terminal command the next rebuild forgets.
+
+[![A Flathub link for GNOME Calculator pasted into the Flatpak and Snap panel, its card with publisher, license and sandbox permissions, and Enter queueing it](img/features/flatsnap.gif)](img/features/flatsnap.gif)
+
+See **[Flatpak and Snap](manual/flatpak-and-snap)**, including what Snap
+confinement means on NixOS.
+
 ## Panels, not terminals
 
 The jobs nixarchy adds to Omarchy live in the shell itself. Each is a panel on
 a key, keyboard-first, in the desktop's own look:
 
 - search and install packages, set NixOS options, and apply;
+- install Flatpak and Snap apps from a pasted link;
 - look after Podman containers;
 - follow GitLab pipelines and GitHub Actions;
 - see which coding agent in your herdr sessions needs you;

@@ -11,6 +11,8 @@ pick writes a *declaration*, and **Apply** builds it.
 
 Open it from **Install ▸ Flatpak & Snap**.
 
+![The Flatpak and Snap panel: a Flathub link for GNOME Calculator typed in, its card showing publisher, license and sandbox permissions, and Enter queueing it](../img/features/flatsnap.gif)
+
 ## Paste what you have
 
 | Paste | Becomes |
@@ -43,7 +45,9 @@ what the sandbox lets the app reach, and for a Snap its confinement.
 | `a` | apply: `nixarchy-apply`, with the build log in the panel |
 | `Esc` | one step back; closes from the top |
 
-Nothing is installed until you press `a`. Queuing writes
+Nothing is installed until you press `a`.
+
+![Pressing a on the Declared list: the rebuild streams into the panel (build log shortened), the desktop reloads, and the panel reopens with both apps installed](../img/features/flatsnap-apply.gif) Queuing writes
 `~/.config/nixarchy/flatsnap.nix`, which apply copies into your flake next to
 `apps.nix`, like every other selection.
 
@@ -56,6 +60,8 @@ Read this before adding Snaps.
   AppArmor, a setuid `snap-confine`, and a bubblewrap patched to drop
   `PR_SET_NO_NEW_PRIVS`. Treat a "strict" Snap here about as far as you trust
   its publisher, not as sandboxed. The panel says this on every Snap.
+![hello-world's card: channel, confinement, and the red line saying Snap confinement on NixOS is weaker than on Ubuntu](../img/plugins/flatsnap-snap.webp)
+
 - **Classic Snaps have no sandbox at all.** They take two presses, and are marked
   in red.
 - **snapd runs only while you have a Snap, or one is still being removed.** On
@@ -102,3 +108,5 @@ error: The option `services.snap.enable' … is already declared in …
 
 Remove your own nix-snapd input and its import. `services.snap` then comes from
 nixarchy, and everything you had set on it keeps working.
+
+*Recorded on a nixarchy laptop in Tokyo Night, applying into its real configuration; the build log is shortened.*

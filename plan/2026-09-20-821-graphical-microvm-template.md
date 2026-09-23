@@ -246,11 +246,29 @@ so, in numbers.
   back to the tmpfs log that dies with the VM. That is probe lesson 2 from step
   1, undone by the value beneath it. Set to `true`.
 
-- **Step 4 was not started** in the stashed work. The environment half is done
-  here (`QT_ACCESSIBILITY`, `GTK_MODULES`, `services.gnome.at-spi2-core`). The
-  browser wrappers are not: no browser is in the template's package list, so
-  adding Chromium is a closure decision that interacts with step 8's
-  measurement rather than a wrapper edit. Flagged rather than taken.
+- **Step 4 is complete; the browser half needed no wrapper.** The environment
+  half (`QT_ACCESSIBILITY`, `GTK_MODULES`, `services.gnome.at-spi2-core`) was
+  done first, and the browser half was flagged rather than taken because
+  adding Chromium is a closure decision that lands inside step 8's
+  measurement. It is taken now, and the plan's word "wrappers" is wrong:
+  nixpkgs' `chromium` already accepts `commandLineArgs` and puts it through
+  its own existing wrapper, so `(chromium.override { commandLineArgs =
+  "--force-renderer-accessibility"; })` is the whole change and there is no
+  second wrapper to keep in step with the first. **Electron gets no wrapper
+  at all** -- it is a runtime each application bundles, not a package present
+  here to wrap, so a caller adding one passes the flag itself, and the
+  template's comment and the `note` both say so. Step 8's figure therefore
+  measures a closure with Chromium in it, which is the honest one to publish.
+
+- **The template was the only statix red in the tree, before this work.**
+  `repeated_keys` on `environment.*` (three keys) and `microvm.*` (three),
+  so the branch could not go green on lint. Both are grouped now. This
+  repository's own position is that statix is right about it -- `modules/`'s
+  register says "two places setting services is two places to look" -- so
+  they were grouped rather than silenced. The cost is that
+  `environment.sessionVariables` is now seventy lines from the
+  `services.gnome.at-spi2-core` it only works with, which is a comment's job
+  to bridge, and both ends now say so.
 
 - **`data/microvm-templates.nix` still carries the throwaway
   `verify-hyprland` entry**, which its own comment says is reverted before the

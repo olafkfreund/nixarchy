@@ -28,9 +28,9 @@ because it is four states of one feature. That is what "asserted in both
 states" means, and it is exactly the coverage `modules/AGENTS.md` says protects
 Mode A.
 
-So there is no free win in having fewer machines, and the structural change is
-the right one. This question was worth asking — it would have saved the whole
-job if the answer had gone the other way — and the answer is no.
+So there is no free win in having fewer machines: whatever is done, all 21
+have to exist. This question was worth asking — a "yes" would have cancelled
+the work — and the answer is no.
 
 **Question 2: how much do the two halves share?** Counted across the 109 cases
 the `cases` attrset defines:
@@ -42,9 +42,9 @@ the `cases` attrset defines:
 | **read both** | **8** |
 | read neither directly (helpers, literals, package lists) | 31 |
 
-**Eight.** The overlap is small enough that the split does not force a choice
-between duplicating fixtures and losing cases — it forces a decision about
-eight named cases, which is a reviewable list rather than a structural problem.
+**Eight.** Small enough that a split would have been viable — which mattered
+while a split was the plan. It is kept here because it is the number any future
+split needs, and because it says the two families really are mostly separate.
 
 **Question 1: does the split reduce the peak or move it?** **Measured, and the
 answer changes the design.**
@@ -124,9 +124,10 @@ reading both). It is not needed to start.
 
 ## Risks
 
-- **A split that loses a case is invisible.** Two derivations that each pass
-  say nothing about a case that ended up in neither. The plan's first step is
-  therefore a count that must match before and after, and the PR carries it.
+- **A move that loses a case is invisible.** A check that still passes says
+  nothing about a case that stopped being evaluated on the way into a group.
+  The plan's first step is therefore a count of `cases` keys that must match
+  before and after, and the PR carries both numbers.
 - **Regrouping is a large mechanical diff** in a 5,400-line file, and a
   mechanical diff is where a case quietly changes meaning. Mitigated by the
   case count above and by `git diff --stat` being dominated by moves rather

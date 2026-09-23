@@ -177,3 +177,4 @@ results.
 - **Found in step 7: razer's shell runs with `QS_DISABLE_FILE_WATCHER=1`.** A plugin
   installed by an activation loads at the next shell start, not live.
   Unchanged behaviour, noted for anyone testing a default plugin live.
+- **Eval cost (plan Tests):** `vm` toplevel drvPath, `--no-eval-cache`: with #912 **30.43 s / 29.59 s** (2.05–2.12 GB), against main **29.75 s / 31.64 s** (2.07–2.10 GB). Within run-to-run noise.

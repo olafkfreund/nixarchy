@@ -108,15 +108,23 @@ in
       # Omarchy's own widgets (omarchy.*) and nixarchy's stay; only third-party
       # marketplace plugins are hidden, and keystroke is kept deliberately --
       # a video whose middle act is keybindings is better for showing them.
-      hide=$(omarchy-shell shell listPlugins 2>/dev/null | jq -r '
-        .[]? | select(.enabled == true)
-             | select(.id | test("^omarchy\\.|^nixarchy\\.|olafkfreund") | not)
-             | select(.id != "evindor.keystroke")
-             | .id')
+      # The KINDS are recorded, not just the ids, because putting a plugin back
+      # depends on what it is. `omarchy plugin enable <id> right` places a bar
+      # WIDGET; a plugin whose kind is `bar` replaces the bar, and the same
+      # call with a placement leaves it disabled. Measured: skal.bar failed to
+      # come back until the argument was dropped, and then answered "Now using
+      # skal.bar as the bar" (#930).
+      omarchy-shell shell listPlugins 2>/dev/null | jq -r '
+        [ .[]? | select(.enabled == true)
+               | select(.id | test("^omarchy\\.|^nixarchy\\.|olafkfreund") | not)
+               | select(.id != "evindor.keystroke")
+               | { id: .id, kinds: (.kinds // []) } ]' > "$state/disabled.json"
 
-      printf '%s' "$hide" | jq -R -s --arg theme "$(omarchy-theme-current 2>/dev/null || echo unknown)" \
-        '{disabled: (split("\n") | map(select(length > 0))), theme: $theme}' \
-        > "$state/manifest.json"
+      hide=$(jq -r '.[].id' "$state/disabled.json")
+
+      jq -n --slurpfile d "$state/disabled.json" \
+        --arg theme "$(omarchy-theme-current 2>/dev/null || echo unknown)" \
+        '{disabled: $d[0], theme: $theme}' > "$state/manifest.json"
 
       for id in $hide; do
         echo "  hiding $id"
@@ -143,11 +151,18 @@ in
       # rewrites that file from memory and watches it (modules/AGENTS.md), so a
       # file written under a running shell is overwritten by it -- prep avoids
       # that and restore must too, or the asymmetry is a bug.
-      jq -r '.disabled[]' "$state/manifest.json" | while read -r id; do
-        [ -n "$id" ] || continue
-        echo "  restoring $id"
-        omarchy plugin enable "$id" right >/dev/null 2>&1 || echo "  (could not enable $id)" >&2
-      done
+      # A bar-kind plugin takes no placement; a widget does. Passing `right` to
+      # a bar leaves it disabled, which is how skal.bar failed to come back the
+      # first time this was run for real.
+      jq -r '.disabled[] | "\(.id)\t\(.kinds | join(","))"' "$state/manifest.json" |
+        while IFS=$'\t' read -r id kinds; do
+          [ -n "$id" ] || continue
+          echo "  restoring $id"
+          case ",$kinds," in
+            *,bar,*) omarchy plugin enable "$id" >/dev/null 2>&1 || echo "  (could not enable $id)" >&2 ;;
+            *) omarchy plugin enable "$id" right >/dev/null 2>&1 || echo "  (could not enable $id)" >&2 ;;
+          esac
+        done
 
       omarchy-toggle-idle resume >/dev/null 2>&1 || true
 

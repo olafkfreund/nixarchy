@@ -73,13 +73,16 @@ print(f"all {len(rows)} Install rows are mapped or accounted for")
 # `omarchy-pkg-present omarchy-emacs`, which is a package, not a command. And
 # remove.webapp greps Exec= lines for `omarchy-webapp-handler`, which is a
 # pattern. Both were flagged the first time this ran, and both are fine.
+# A third (#913): the Plugin Browser's id, io.github.olafkfreund.nixarchy-plugin-browser,
+# is the ARGUMENT to `nixarchy-plugin` in setup.plugin.add, and `\b` matches
+# after its last dot. The command in that row is `nixarchy-plugin`, checked.
 tree_raw = open(os.environ["treeMenu"]).read()
 tree_raw = re.sub(r"^\s*//[^\n]*(\n|$)", "", tree_raw, flags=re.M)
 tree_raw = re.sub(r",(\s*[}\]])", r"\1", tree_raw)
 menu = json.loads(tree_raw)
 have = set(os.listdir(os.path.join(os.environ["omarchyPath"], "bin")))
 have |= set(os.listdir(os.path.join(os.environ["vm"], "sw", "bin")))
-not_invocations = {"omarchy-emacs", "omarchy-webapp-handler"}
+not_invocations = {"omarchy-emacs", "omarchy-webapp-handler", "nixarchy-plugin-browser"}
 
 missing = {}
 for key, row in menu.items():

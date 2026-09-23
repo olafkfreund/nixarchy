@@ -240,6 +240,10 @@ in
     ./preview.nix
     ./flatpaks.nix
     inputs.nix-flatpak.nixosModules.nix-flatpak
+    # Flatpak & Snap from the menu (#912). `default` = the plugin's module plus
+    # nix-snapd; nixarchy is now the one place nix-snapd is imported. Inert until
+    # ~/.config/nixarchy/flatsnap.nix declares something: no snapd, no unit.
+    inputs.nixarchy-flatsnap.nixosModules.default
 
     # Declarative secrets, for the bundled services that need one. Imported
     # unconditionally and INERT: upstream gates its whole config on

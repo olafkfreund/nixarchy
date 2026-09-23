@@ -146,6 +146,8 @@ let
       devenv = false;
       ai-mirror = false;
       rebuild = false;
+      plugin-browser = false;
+      flatsnap = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
@@ -967,11 +969,48 @@ let
         || defaultHome.programs.nixarchy.plugins ? "olafkfreund.github-actions"
         || fixtureNixarchyOff.programs.nixarchy.plugins ? "olafkfreund.github-actions";
     };
+    # #912: the Flatpak & Snap panel is a default wherever nixarchy is on, and
+    # nowhere else: opted out, standalone or with nixarchy off, it is gone.
+    flatsnapIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.flatsnap"
+        && hookLists "nixarchy.flatsnap" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.flatsnap"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.flatsnap"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.flatsnap";
+    };
     # Its CLI comes with it, and only where it resolves.
     githubPackages = {
       on = hasGh defaultHomeOn;
       off = hasGh noDefaultsHome || hasGh defaultHome;
     };
+    # #913: the Plugin Browser is a default wherever nixarchy is on, and
+    # nowhere else -- it is what Setup > Plugins > Add Plugin opens.
+    pluginBrowserIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser"
+        && hookLists "io.github.olafkfreund.nixarchy-plugin-browser" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser"
+        || defaultHome.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "io.github.olafkfreund.nixarchy-plugin-browser";
+    };
+    # Its audit fails closed without bwrap, so bubblewrap comes with it, and
+    # so does its CLI (the audit and the agent hand-off the panel runs).
+    pluginBrowserPackages =
+      let
+        hasBwrap = h: builtins.any (p: (p.pname or "") == "bubblewrap") h.home.packages;
+        hasCli =
+          h:
+          builtins.any (
+            p: builtins.match ".*nixarchy-plugin-browser.*" (p.name or "") != null
+          ) h.home.packages;
+      in
+      {
+        on = hasBwrap defaultHomeOn && hasCli defaultHomeOn;
+        off = hasBwrap noDefaultsHome || hasBwrap defaultHome || hasCli noDefaultsHome;
+      };
     # #809: the defaults' runtime tools arrive without being asked for, so they
     # lose to whatever the user installed themselves. Without the priority, a
     # user's own `python3.withPackages` beside a panel's bare python3 is two
@@ -993,6 +1032,7 @@ let
           "jq"
           "iproute2"
           "herdr"
+          "bubblewrap"
         ];
         ours = h: builtins.filter (p: builtins.elem (p.pname or "") toolNames) h.home.packages;
         allLowPrio =
@@ -1207,6 +1247,22 @@ let
     # The boot menu is capped for the installer's machines only. A cap on the
     # MENU, not on the generations -- nh.clean owns those, and
     # `nixos-rebuild --rollback` still reaches the one before this.
+    # #912: nixarchy imports nix-snapd for everyone, and it must stay inert.
+    # snapd -- and its setuid snap-confine -- exists only once a snap is
+    # declared: the stock vm has neither the daemon nor the reconciler.
+    flatsnapSnapd =
+      let
+        withSnap =
+          (inputs.self.nixosConfigurations.vm.extendModules {
+            modules = [ { programs.nixarchy.flatsnap.snaps = [ { name = "hello-world"; } ]; } ];
+          }).config;
+        vmCfg = inputs.self.nixosConfigurations.vm.config;
+      in
+      {
+        on = withSnap.services.snap.enable && withSnap.systemd.services ? nixarchy-flatsnap-snaps;
+        off = vmCfg.services.snap.enable || vmCfg.systemd.services ? nixarchy-flatsnap-snaps;
+      };
+
     storeBootLimit = {
       on = inputs.self.nixosConfigurations.vm.config.boot.loader.systemd-boot.configurationLimit != null;
       off = adopter.config.boot.loader.systemd-boot.configurationLimit != null;
@@ -2501,6 +2557,9 @@ pkgs.runCommand "nixarchy-options"
       pkgs.writeText "box-templates.ini"
         boxesOn.environment.etc."nixarchy/box-templates.ini".text;
     boxTemplateCount = builtins.length (builtins.attrNames (import ../data/box-templates.nix));
+    # #912: the menu the session reads, to find nixarchy's own row in it.
+    flatsnapMenu =
+      inputs.self.nixosConfigurations.vm.config.environment.etc."nixarchy/omarchy-menu.jsonc".source;
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
     herdrSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
@@ -5404,6 +5463,15 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "the herdr widget has store shebangs and both copyright holders"
+
+        # ---- #912: the Flatpak & Snap row ----
+        # nixarchy's own row, in the menu the session actually reads.
+        grep -q '"install.flatsnap"' "$flatsnapMenu" &&
+          grep -q 'nixarchy-plugin nixarchy.flatsnap' "$flatsnapMenu" || {
+          echo "flatsnapRow: Install -> Flatpak & Snap is not in the generated menu ($flatsnapMenu)" >&2
+          exit 1
+        }
+        echo "the generated menu has Install -> Flatpak & Snap"
 
           touch $out
       ''

@@ -25,6 +25,7 @@ machine use the menu row, or copy the line from a fresh install.
 | Plugin | What it's for | Status | Open it |
 |---|---|---|---|
 | [Package manager](#package-manager) | apps, services, packages and options | **on by default** | Install ▸ Packages · Super+Alt+N <!-- nixarchy.pkg --> |
+| [Flatpak and Snap](#flatpak-and-snap) | apps nixpkgs does not carry, from Flathub or the Snap Store | **on by default** | Install ▸ Flatpak & Snap <!-- nixarchy.flatsnap --> |
 | [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Apps ▸ Podman · Super+Alt+O <!-- nixarchy.podman --> |
 | [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P <!-- olafkfreund.gitlab-pipelines --> |
 | [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H <!-- nixarchy.herdr --> |
@@ -32,6 +33,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D <!-- nixarchy.distrobox --> |
 | [Dev environments](#dev-environments) | the per-project environments on this machine | **on wherever devenv is** | Apps ▸ Dev environments · Super+Alt+E <!-- nixarchy.devenv --> |
 | [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A <!-- olafkfreund.github-actions --> |
+| [Plugin Browser](#plugin-browser) | the plugin marketplace, audited before you install | **on by default** | Setup ▸ Plugins ▸ Add Plugin · Super+Alt+U <!-- io.github.olafkfreund.nixarchy-plugin-browser --> |
 | [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
@@ -58,6 +60,20 @@ rebuild asks for your password through the Omarchy dialog.
 ![Searching nixpkgs for a package](../img/plugins/pkg-search.jpg)
 
 ![Searching NixOS options, then setting one through a form](../img/plugins/pkg-options.jpg)
+
+## Flatpak and Snap
+
+[nixarchy-flatsnap](https://github.com/olafkfreund/nixarchy-flatsnap) · [its own site](https://olafkfreund.github.io/nixarchy-flatsnap/)
+
+Paste a Flathub or Snapcraft link, an app ID, or an `install` line, check what
+the app can reach, and queue it. **Apply** installs it declaratively: Flatpaks
+through nix-flatpak, and Snaps through nix-snapd plus a small reconciler that
+removes only what it installed. snapd runs only while a Snap is declared or
+still being removed. See
+[Flatpak and Snap](flatpak-and-snap) for the keys, the security notes and
+removal.
+
+Turn it off with `programs.nixarchy.defaultPlugins.flatsnap = false;`.
 
 ## Podman
 
@@ -200,6 +216,57 @@ replace a real directory. It stays enabled, and the managed copy takes over.
 ![A running install check expanded to its jobs, and the install job to its eight steps with their status and timers](../img/plugins/github-actions-steps.webp)
 
 *Recorded on an authenticated desktop, in Gruvbox, showing public repositories only.*
+
+## Plugin Browser
+
+[nixarchy-plugin-browser](https://github.com/olafkfreund/nixarchy-plugin-browser)
+
+**What it solves.** The Omarchy plugin marketplace is written for Arch. Plenty
+of its plugins call `pacman` or `yay`, or read files that don't exist on
+NixOS. They install cleanly and then break, and upstream's Add Plugin only
+asks for a Git URL: it can't tell you any of this before the plugin is on
+your desktop.
+
+**What it does.** **Setup ▸ Plugins ▸ Add Plugin** (or **Super+Alt+U**) opens
+a searchable list of the whole marketplace, with each plugin's preview
+image. Open one and it is audited first, in a bubblewrap sandbox, at a
+pinned commit. You get two verdicts:
+- **Security:** what it runs, and whether that needs a look;
+- **NixOS:** likely fine, needs review, or blocked, with the file and line
+  of each finding.
+
+`i` installs it **disabled**, at the commit that was audited. You turn it on
+in Setup ▸ Plugins when you're ready. `c` copies the install command, `o`
+opens its repository, and `?` lists every key.
+
+**Asking your agent about a finding.** `e` (explain) and `f` (fix) hand the
+audit to your default agent, the one `nixarchy ask` uses, in a terminal:
+- explain proposes changes and edits nothing;
+- fix edits a disposable copy, shows you the diff, re-audits it, and asks
+  whether to install it, keep the patch, or discard it.
+
+The agent runs with its auto-approve flags on a copy of **untrusted** code.
+The terminal says so and asks first (the answer defaults to No). A prompt
+injection hidden in a plugin could still make the agent run commands as you
+while it works. If that isn't a risk you want, don't use `e` and `f`.
+
+**Adding by URL.** **Setup ▸ Plugins ▸ Add Plugin from URL** is upstream's
+prompt, unchanged. It installs whatever the URL points at, **without** the
+audit.
+
+**The network.** The catalog (plugins.omarchy.org, cached for an hour) and the
+preview of each plugin you open are fetched when you use the panel, and
+never otherwise. Previews can be turned off with `{"previews": false}` in
+`~/.config/nixarchy-plugin-browser/config.json`.
+
+**After the switch that brings it in,** log out and back in once. Until you
+do, Add Plugin still opens the old prompt: the menu is read from the tree
+your session started with.
+
+**If you installed it by hand before,** remove your copy before switching:
+`rm -rf ~/.config/omarchy/plugins/io.github.olafkfreund.nixarchy-plugin-browser`.
+nixarchy won't replace a real directory. It stays enabled, and the managed
+copy takes over.
 
 ## Rebuild
 

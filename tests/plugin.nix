@@ -180,6 +180,10 @@ pkgs.testers.runNixOSTest rec {
             # Ungated (#765 PR 5): on every nixarchy machine, so an empty
             # plugin directory needs it off here like nixarchy.pkg.
             rebuild = false;
+            # Ungated too (#913): the Plugin Browser is on wherever nixarchy is.
+            plugin-browser = false;
+            # Ungated too (#912), for the same reason.
+            flatsnap = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

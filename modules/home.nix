@@ -648,6 +648,7 @@ in
       type = lib.types.attrsOf lib.types.bool;
       default = {
         pkg = true;
+        flatsnap = true;
         gitlab = true;
         github = true;
         herdr = true;
@@ -655,14 +656,16 @@ in
         distrobox = true;
         microvm = true;
         devenv = true;
+        plugin-browser = true;
       };
       example = lib.literalExpression "{ podman = false; }";
       description = ''
         nixarchy's own shell plugins, installed and turned on for you: the
         package manager, GitLab pipelines, GitHub Actions and herdr panels
         always, podman when podman is on, distrobox when Boxes is on,
-        microvms always, dev environments when the devenv service is on. A
-        name left out counts as on.
+        microvms always, dev environments when the devenv service is on, and
+        the Plugin Browser (Setup > Plugins > Add Plugin) always. A name left
+        out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -1633,6 +1636,12 @@ in
           id = "nixarchy.pkg";
           src = inputs.nixarchy-pkg.packages.${pkgs.stdenv.hostPlatform.system}.default;
         };
+        # Flatpak & Snap from the menu, on wherever nixarchy is (#912). Its CLI
+        # uses curl, jq and nix-instantiate from the base system, like pkg's.
+        flatsnap = {
+          id = "nixarchy.flatsnap";
+          src = inputs.nixarchy-flatsnap.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
         # Wherever podman is on -- the Services row or Boxes -- and nowhere
         # else: a podman panel with no podman behind it is a broken panel.
         # `or false` also covers standalone Home Manager, whose osConfig is null.
@@ -1698,6 +1707,18 @@ in
           src = inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
           gate = osConfig.programs.nixarchy.services.devenv.enable or false;
           packages = [ inputs.nixarchy-devenv.packages.${pkgs.stdenv.hostPlatform.system}.cli ];
+        };
+        # The Plugin Browser: Add Plugin opens it (#913). It audits a marketplace
+        # plugin in bubblewrap before a disabled, commit-pinned install, and the
+        # audit fails closed without bwrap -- so bubblewrap comes with it, on the
+        # per-user profile the audit's fixed PATH already includes.
+        plugin-browser = {
+          id = "io.github.olafkfreund.nixarchy-plugin-browser";
+          src = inputs.nixarchy-plugin-browser.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+          packages = [
+            inputs.nixarchy-plugin-browser.packages.${pkgs.stdenv.hostPlatform.system}.cli
+            pkgs.bubblewrap
+          ];
         };
         # The ai-mirror widget, on every machine (#773): it shows when an agent
         # is watching or driving, draws the confirm dialog, and a click stops a

@@ -348,6 +348,18 @@ let
           description = "Browse, add and apply packages in a panel";
         };
 
+        # Flatpak & Snap (#912). Same shape as install.packages: the helper, and
+        # `when` hides the row once the plugin is turned off. The plugin's own
+        # module defines an identical row through menu.extraEntries; equal
+        # definitions merge, and the plugin drops its copy in a later release.
+        "install.flatsnap" = {
+          icon = "󰏗";
+          label = "Flatpak & Snap";
+          action = "nixarchy-plugin nixarchy.flatsnap";
+          when = "nixarchy-plugin --enabled nixarchy.flatsnap";
+          description = "Paste a Flathub or Snapcraft link and install it declaratively";
+        };
+
         # The GitLab pipelines panel (#770). nixarchy declares these rows and
         # its copy carries `menu.managed`, so the panel does not also write
         # them into the user's menu extension file.
@@ -657,6 +669,28 @@ let
           label = "Apply changes";
           action = "nixarchy-plugin nixarchy.rebuild";
           description = "Copy the selection into your flake and nixos-rebuild switch";
+        };
+        # Add Plugin opens the Plugin Browser (#913): browse the marketplace and
+        # audit a plugin before it is installed. Upstream's Git-URL prompt stays,
+        # one row down, for a URL you already have. `when` hides this row once
+        # the panel is turned off; the URL row stays.
+        "setup.plugin.add" = {
+          icon = "󰖟";
+          label = "Add Plugin";
+          action = "nixarchy-plugin io.github.olafkfreund.nixarchy-plugin-browser";
+          when = "nixarchy-plugin --enabled io.github.olafkfreund.nixarchy-plugin-browser";
+          aliases = [
+            "marketplace"
+            "plugin browser"
+            "install plugin"
+          ];
+          description = "Search the plugin marketplace; audit before installing · Super+Alt+U";
+        };
+        "setup.plugin.add-url" = {
+          icon = "󰌷";
+          label = "Add Plugin from URL";
+          action = "omarchy-launch-floating-terminal-with-presentation 'omarchy-plugin-add'";
+          description = "Install a plugin from its Git URL, without the audit";
         };
       }
       // lib.optionalAttrs devenvEnabled {

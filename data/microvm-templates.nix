@@ -56,6 +56,19 @@
     note = "A bare NixOS shell with nothing added beyond modules/microvm/guest.nix -- the fastest way to a throwaway prompt, and the template every other one starts from.";
   };
 
+  hyprland = {
+    label = "Hyprland";
+    module = ../modules/microvm/templates/hyprland.nix;
+    note = "A Wayland compositor with grim, tesseract, wtype and foot, on one 1920x1080 virtual monitor. No omarchy shell. The first template that asks for a GPU device.";
+  };
+
+  # THROWAWAY -- #821 plan step 2 verification. Reverted before the PR.
+  verify-hyprland = {
+    label = "Verify Hyprland";
+    module = ../modules/microvm/templates/verify-hyprland.nix;
+    note = "Throwaway verification wrapper for #821.";
+  };
+
   python = {
     label = "Python";
     module = ../modules/microvm/templates/python.nix;

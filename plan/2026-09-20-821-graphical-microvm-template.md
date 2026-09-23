@@ -204,6 +204,58 @@ runner. A template that takes ten minutes to realise on first run should say
 so, in numbers.
 → verify by the figure appearing in the `note`.
 
+## Deviations found while implementing
+
+- **There is no `checks.microvm-hyprland`, and the Tests section below assumes
+  one.** The `genAttrs` at `flake.nix:1240-1268` produces
+  **`packages.microvm-<name>`** and `-tcg`, not checks:
+
+  ```
+  nix eval .#packages.x86_64-linux --apply '...hyprland...'
+  [ "microvm-hyprland" "microvm-hyprland-tcg" ]
+  nix eval .#checks.x86_64-linux  --apply '...hyprland...'
+  [ ]
+  ```
+
+  And **no workflow names any `microvm-` package**; `grep -rn "microvm-"
+  .github/workflows/` finds only `checks.microvm-boot` in the nightly list. So
+  the template as planned ships with nothing building it on any pull request --
+  AGENTS.md §4's recorded trap in its exact form ("`tests/demo`'s scenes are
+  `packages`, not `checks`, and no workflow builds any of them").
+
+  Step 7 therefore cannot be "build both variants and see"; there is no check
+  to settle. The options, none of which this plan may choose alone because a
+  workflow edit is a CI-gate change (§4, §11):
+  1. add `checks.microvm-hyprland{,-tcg}` and name them in a PR-triggered
+     workflow -- a maintainer decision, raised in the PR rather than wired
+     here;
+  2. add them to the nightly list beside `microvm-boot`, which is where the
+     other VM-booting microvm check already lives;
+  3. ship the template with the hole named in `tests/AGENTS.md`, which is what
+     §3 asks for when no layer can reach something.
+
+  The measurement step 7 wanted -- whether `virtio-gpu-gl` and `egl-headless`
+  work under `-tcg` on a runner with no GPU -- is still worth making by hand
+  (`nix build .#packages.x86_64-linux.microvm-hyprland-tcg`), and its answer
+  belongs in the PR either way.
+
+- **`debug:enable_stdout_logs` was set to `false`, under a comment explaining
+  why it must be true.** The comment says stdout logs are "what makes
+  `journalctl --user -u hyprland` say why a dead compositor died"; under a
+  systemd user service stdout *is* the journal, so `false` sends the `CRIT`
+  back to the tmpfs log that dies with the VM. That is probe lesson 2 from step
+  1, undone by the value beneath it. Set to `true`.
+
+- **Step 4 was not started** in the stashed work. The environment half is done
+  here (`QT_ACCESSIBILITY`, `GTK_MODULES`, `services.gnome.at-spi2-core`). The
+  browser wrappers are not: no browser is in the template's package list, so
+  adding Chromium is a closure decision that interacts with step 8's
+  measurement rather than a wrapper edit. Flagged rather than taken.
+
+- **`data/microvm-templates.nix` still carries the throwaway
+  `verify-hyprland` entry**, which its own comment says is reverted before the
+  PR. It is kept while steps 3, 5 and 7 remain, because they need it.
+
 ## Tests
 
 The existing `checks.microvm-hyprland` and `-tcg` come free from the `genAttrs`

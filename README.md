@@ -439,15 +439,18 @@ basename is what it stores.
 ## What works
 
 The panels below are described in prose further down and are easier to believe
-in motion. Each is a real session, recorded in a VM and gated on what the
-frames actually show (`tests/demo/`).
+in motion. Each is a real session, recorded in a VM (Flatpak & Snap: on a test
+laptop, since it needs Flathub and the Snap Store) and gated on what the frames
+actually show (`tests/demo/`).
 
 | | |
 |---|---|
-| ![The Packages panel: searching nixpkgs, adding a package, and applying without a terminal](docs/img/features/pkg.gif) | ![The Distrobox panel: creating an Arch box from a template and entering it](docs/img/features/boxes.gif) |
-| **Install ▸ Packages** — `Super+Alt+N` | **Trigger ▸ Boxes** — `Super+Alt+D` |
-| ![The Herdr panel: agent sessions and what each one is doing](docs/img/features/herdr.gif) | ![The Dev environments panel: scaffolding a devenv project and entering it](docs/img/features/devenv.gif) |
-| **Apps ▸ Herdr** — `Super+Alt+H` | **Apps ▸ Dev environments** — `Super+Alt+E` |
+| ![The Packages panel: searching nixpkgs, adding a package, and applying without a terminal](docs/img/features/pkg.gif) | ![The Flatpak and Snap panel: pasting a Flathub link, reading the app's card, and queueing it](docs/img/features/flatsnap.gif) |
+| **Install ▸ Packages** — `Super+Alt+N` | **Install ▸ Flatpak & Snap** |
+| ![The Distrobox panel: creating an Arch box from a template and entering it](docs/img/features/boxes.gif) | ![The Herdr panel: agent sessions and what each one is doing](docs/img/features/herdr.gif) |
+| **Trigger ▸ Boxes** — `Super+Alt+D` | **Apps ▸ Herdr** — `Super+Alt+H` |
+| ![The Dev environments panel: scaffolding a devenv project and entering it](docs/img/features/devenv.gif) | |
+| **Apps ▸ Dev environments** — `Super+Alt+E` | |
 
 More under [`docs/img/features/`](docs/img/features), and the rest of the tour
 is on [the site](https://olafkfreund.github.io/nixarchy/).

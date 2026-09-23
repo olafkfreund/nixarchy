@@ -424,6 +424,25 @@ in
       };
     };
 
+    nixSkills = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Give this machine's agents the Nix skills from
+        [nix-skills](https://github.com/olafkfreund/nix-skills), alongside
+        nixarchy's own.
+
+        They are grounded in the upstream Nix manual and answer the questions
+        nixarchy's own skills do not: the language itself, packaging, Home
+        Manager, nix-darwin, MicroVMs, devenv projects, and the NixOS wiki.
+
+        They never take a name one of nixarchy's skills already holds, nor one
+        you wrote yourself: a name already in use is reported and left alone.
+        Turning this off removes their links at the next switch, and leaves
+        everything else where it was.
+      '';
+    };
+
     allowUnfree = lib.mkOption {
       type = lib.types.bool;
       default = true;

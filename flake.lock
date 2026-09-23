@@ -135,6 +135,28 @@
     "home-manager_2": {
       "inputs": {
         "nixpkgs": [
+          "nix-skills",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790080548,
+        "narHash": "sha256-u4sa7RCbwvk8cZmAGs35F7o0h4IqDc3wsrrnjQvMumk=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "cbcbfa2778e0c5653ef349df3ebae8288efac3c0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "cbcbfa2778e0c5653ef349df3ebae8288efac3c0",
+        "type": "github"
+      }
+    },
+    "home-manager_3": {
+      "inputs": {
+        "nixpkgs": [
           "nixarchy-voice",
           "nixpkgs"
         ]
@@ -153,7 +175,7 @@
         "type": "github"
       }
     },
-    "home-manager_3": {
+    "home-manager_4": {
       "inputs": {
         "nixpkgs": [
           "zen-browser",
@@ -594,6 +616,28 @@
         "type": "github"
       }
     },
+    "nix-skills": {
+      "inputs": {
+        "home-manager": "home-manager_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790158809,
+        "narHash": "sha256-CFG7MJuYHTfr3Bx0AqjxMCMEvxEZRXUD9u3AoIDmoDw=",
+        "owner": "olafkfreund",
+        "repo": "nix-skills",
+        "rev": "0ef9aeba8ea349815924f2e622a1811318f0f33f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "ref": "0ef9aeb",
+        "repo": "nix-skills",
+        "type": "github"
+      }
+    },
     "nixarchy-devenv": {
       "inputs": {
         "nixpkgs": [
@@ -763,7 +807,7 @@
         "ai-mirror": [
           "ai-mirror"
         ],
-        "home-manager": "home-manager_2",
+        "home-manager": "home-manager_3",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -924,6 +968,7 @@
         "microvm": "microvm",
         "nix-flatpak": "nix-flatpak",
         "nix-index-database": "nix-index-database",
+        "nix-skills": "nix-skills",
         "nixarchy-devenv": "nixarchy-devenv",
         "nixarchy-distrobox": "nixarchy-distrobox",
         "nixarchy-ghtui": "nixarchy-ghtui",
@@ -1068,7 +1113,7 @@
     },
     "zen-browser": {
       "inputs": {
-        "home-manager": "home-manager_3",
+        "home-manager": "home-manager_4",
         "nixpkgs": [
           "nixpkgs"
         ]

@@ -239,6 +239,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The Nix skills nixarchy's agents get alongside its own (#888). Pinned at
+    # or after the commit that added the MIT licence (nix-skills#33): a
+    # repository with no licence grants no right to ship it on every machine,
+    # which is what ai-mirror needed too (#773).
+    nix-skills = {
+      url = "github:olafkfreund/nix-skills/0ef9aeb";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-pkg = {

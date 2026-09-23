@@ -274,6 +274,35 @@ so, in numbers.
   `verify-hyprland` entry**, which its own comment says is reverted before the
   PR. It is kept while steps 3, 5 and 7 remain, because they need it.
 
+- **Step 7 is answered as far as a build and a boot can answer it, and no
+  further.** Both variants build. `-tcg` drops `-enable-kvm` and keeps
+  `-display egl-headless` and `-device virtio-gpu-gl`, and the guest **boots
+  to Multi-User System** with `Started Seat management daemon` and
+  `Started User Manager for UID 1000`, no `Failed to start` for anything, and
+  **no GL, virgl or EGL complaint from qemu at all**. So the GPU device and the
+  headless display are accepted without KVM, which was the open question.
+
+  **What is still unproven: that Hyprland itself runs under `-tcg`.** It is a
+  *user* service, so it never appears on the system console, and TCG is slow
+  enough that seven minutes of boot did not yield a shell to ask
+  `systemctl --user status hyprland`. Three runs went into this; a fourth would
+  not have been cheaper than saying so. Per section 3 that hole is named here
+  rather than closed on paper, and it belongs in `tests/AGENTS.md` and
+  `tests/install-matrix.py` before the PR.
+
+  Two harness traps found doing it, both mine rather than the template's:
+  piping a command list into `microvm-run` on stdin makes **`Serial Getty on
+  ttyS0` fail its dependency**, so the autologin the template relies on never
+  happens and the run looks like a template fault; `script -qec` gives it a pty
+  and the getty starts. And a `timeout` around `microvm-run` is not optional --
+  section 6 records a local VM sitting wedged for eleven hours.
+
+- **Step 8: 5.2 GiB** for the KVM variant's closure, 5.8 GiB for `-tcg`. The
+  note now carries the figure rather than an adjective. **Chromium is 909 MiB
+  of it**, about a sixth -- which is the closure cost step 4's browser half was
+  flagged as interacting with, now measured rather than predicted. The rest is
+  ordinary graphics-stack weight (SDL, mesa) that any compositor drags in.
+
 ## Tests
 
 The existing `checks.microvm-hyprland` and `-tcg` come free from the `genAttrs`

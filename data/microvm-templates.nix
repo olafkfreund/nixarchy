@@ -59,7 +59,7 @@
   hyprland = {
     label = "Hyprland";
     module = ../modules/microvm/templates/hyprland.nix;
-    note = "A Wayland compositor with grim, tesseract, wtype and foot, on one 1920x1080 virtual monitor. No omarchy shell. The first template that asks for a GPU device.";
+    note = "A Wayland compositor with grim, tesseract, wtype and foot, plus Chromium forced to expose its accessibility tree, on one 1920x1080 virtual monitor. No omarchy shell -- this is plain NixOS, so none of the omarchy commands are here. The first template that asks for a GPU device, and the largest: about 5.2 GiB to realise, roughly a sixth of it Chromium, so the first run is a long one. The compositor is a user service: reach it with 'systemctl --user status hyprland' from the ttyS0 console, and check there first if a capture comes back empty.";
   };
 
   # THROWAWAY -- #821 plan step 2 verification. Reverted before the PR.

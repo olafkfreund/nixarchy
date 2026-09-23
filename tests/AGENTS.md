@@ -426,6 +426,35 @@ scenes are `packages`, not `checks`, and no workflow builds any of them.** The
 published GIF of a command that errors, silently, with `main` green. Anything
 in there that names a command is unguarded by construction.
 
+## Nothing here can watch a compositor die, or a window open on your desktop
+
+The `hyprland` microvm template (#821) has two properties no check in this
+repository can reach, and both are named here rather than closed on paper,
+which is what §3 asks for.
+
+**A dead compositor.** Hyprland runs as a *user* service in that guest, so it
+never appears on the system console a VM check reads. Its unit has
+`Restart=no`, `enable_stdout_logs = true` and a note telling the reader to run
+`systemctl --user status hyprland` -- all asserted by evaluation, so the
+mechanism that makes a failure discoverable is guarded. **Whether a killed
+compositor is actually noticed by a person is not.** Two `runNixOSTest`
+attempts to kill it and look wedged: the driver reported the test running with
+no qemu process at all and a log untouched for 26 minutes -- CLAUDE.md §6's
+"a wedged `nix build` looks exactly like a working one", exactly. The harness
+was what failed, not the template.
+
+**A window on the host.** `microvm.graphics.backend = "headless"` exists so
+the VM opens nothing on the desktop of whoever runs it, and no check here has
+a desktop to look at. What *is* measured is the property that makes a window
+impossible: with `DISPLAY` and `WAYLAND_DISPLAY` stripped, `egl-headless` runs
+and `gtk` fails with `gtk initialization failed`. Headless is not a window
+nobody looked at; it is a configuration that runs where no display exists.
+
+A related trap for anyone tempted to check the other half by hand: with the
+template's `virtio-gpu-gl` attached, `-display gtk` never reaches a window at
+all -- qemu refuses with `OpenGL is not supported by display backend 'gtk'`,
+because this qemu is built without GL in its gtk backend.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

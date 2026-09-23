@@ -270,9 +270,9 @@ so, in numbers.
   `services.gnome.at-spi2-core` it only works with, which is a comment's job
   to bridge, and both ends now say so.
 
-- **`data/microvm-templates.nix` still carries the throwaway
-  `verify-hyprland` entry**, which its own comment says is reverted before the
-  PR. It is kept while steps 3, 5 and 7 remain, because they need it.
+- **The throwaway `verify-hyprland` entry and its module are gone**, as that
+  entry's own comment said they would be. It was kept while steps 3, 5 and 7
+  were open; all three are now answered or named as holes, so nothing needs it.
 
 - **Step 7 is answered as far as a build and a boot can answer it, and no
   further.** Both variants build. `-tcg` drops `-enable-kvm` and keeps
@@ -329,6 +329,35 @@ so, in numbers.
   What this does **not** prove is the literal sentence in the step -- that
   nothing appeared on a particular desktop on a particular day. It proves the
   mechanism that guarantees it.
+
+- **Step 5: the mechanism is verified, the observation is not, and that is the
+  honest split.** The step's own answer is "the note tells the reader to check
+  `systemctl --user status`, and the service is `Restart=no` so a failure stays
+  failed and visible rather than flapping". All four parts of that are asserted
+  by evaluation:
+
+  ```
+  { conditionUser = "dev"; lingers = true; restart = "no";
+    seatd = true; stdoutLogs = true; }
+  ```
+
+  `Restart = "no"` is the load-bearing one -- a flapping compositor is the
+  failure mode the step exists for, and it is the one a passing capture cannot
+  distinguish from a working one. `enable_stdout_logs = true` is what makes
+  `journalctl --user -u hyprland` answer at all, and it was set to `false`
+  under a comment saying it must be true, so it is worth asserting rather than
+  assuming.
+
+  **What was not done: killing the compositor in a booted VM and watching.**
+  Two `runNixOSTest` attempts wedged -- the driver reported the test running
+  with **no qemu process at all** and a log untouched for 26 minutes, which is
+  section 6's "a wedged `nix build` looks exactly like a working one" in its
+  exact form. Killed by pid, no VM left behind. A third attempt was not made:
+  the harness, not the template, is what was failing, and section 3 prefers a
+  named hole to a check that closes it on paper.
+
+  So: **a dead compositor is discoverable by construction, and nobody has yet
+  watched one die.** That belongs in `tests/AGENTS.md` before the PR.
 
 ## Tests
 

@@ -270,9 +270,8 @@
     # Why: docs/internals/flake.md#the-flatpak-and-snap-panel-on-by-default-912
     # A commit on main (no tags); bump it the way that page says. Its
     # nix-snapd is the only one nixarchy imports (modules/nixos.nix).
-    # TEMP pin: re-pin to main after nixarchy-flatsnap#2
     nixarchy-flatsnap = {
-      url = "github:olafkfreund/nixarchy-flatsnap/deaca41af4c63e4ad1477207ce108a06269ddcd0";
+      url = "github:olafkfreund/nixarchy-flatsnap/fbc8a6044b7414167a67032be534389a914035de";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.nix-flatpak.follows = "nix-flatpak";
     };

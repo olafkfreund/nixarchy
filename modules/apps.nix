@@ -349,9 +349,9 @@ let
         };
 
         # Flatpak & Snap (#912). Same shape as install.packages: the helper, and
-        # `when` hides the row once the plugin is turned off. The plugin's own
-        # module defines an identical row through menu.extraEntries; equal
-        # definitions merge, and the plugin drops its copy in a later release.
+        # `when` hides the row once the plugin is turned off. nixarchy is the
+        # row's only source: the plugin dropped its own extraEntries copy
+        # (olafkfreund/nixarchy-flatsnap#4).
         "install.flatsnap" = {
           icon = "󰏗";
           label = "Flatpak & Snap";

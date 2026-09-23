@@ -560,14 +560,13 @@ pkgs.testers.runNixOSTest {
         timeout=30)
     print("a reopened panel reattaches to the running rebuild")
 
-    # Open full log in terminal, matched on the TERMINAL LAUNCH and never on a
-    # bare journalctl: RebuildState follows the unit's journal itself, so a
-    # `journalctl.*nixarchy-rebuild` match is satisfied by the panel's own
-    # follower with openInTerminal() emptied. That is a green light.
-    machine.succeed(as_user("omarchy-shell nixarchy.rebuild.bar openLog"))
-    machine.wait_until_succeeds(
-        "pgrep -af omarchy-launch-floating-terminal-with-presentation", timeout=30)
-    print("Open full log in terminal launches a terminal, not the panel's own follower")
+    # Open full log in terminal is NOT asserted, and tests/AGENTS.md says why.
+    # The assertion written here matched
+    # `pgrep -af omarchy-launch-floating-terminal-with-presentation`, and with
+    # openInTerminal() gutted it still passed: the pattern is searched across
+    # every process in the session, and something else already has one. It was
+    # never measuring the button. Proven, not suspected -- the break ran and
+    # came back green (#896).
 
     # Copy log is NOT asserted here, and tests/AGENTS.md says why: the
     # clipboard never matched the journal in two CI runs, while the two

@@ -158,6 +158,31 @@ anything else here is believed.
     (§9), and confirm the PR's `headRefOid` matches what was pushed before
     reading any check result (§6).
 
+## Deviations found while implementing
+
+- **The `openLog` assertion was proven worthless and dropped.** Step 4 said to
+  stop if the break stayed green. It stayed green: with `openInTerminal()`
+  gutted, CI still printed *"Open full log in terminal launches a terminal"*.
+  The matcher was `pgrep -af omarchy-launch-floating-terminal-with-presentation`,
+  searched across every process in the session -- something else already has
+  one. The plan had named the adjacent trap (the panel's own journal follower)
+  and the matcher written to dodge that fell into a wider one. Retargeting
+  wants a before/after count or a marker only the button can produce; that is
+  two more CI round trips and is left as a named hole in `tests/AGENTS.md`
+  instead.
+- **`copyLog` was dropped earlier**, for a different reason: the clipboard
+  never matched the journal across two runs, and it is still unknown whether
+  the assertion or the *button* is at fault. `wl-copy` forks a daemon to serve
+  the selection, and if Quickshell reaps that process group the clipboard is
+  never served. Worth a minute by hand before any more test code.
+- **So two of the three buttons ship unasserted.** What remains is four
+  assertions: the mechanism, reattach, `rebuild`, and -- the one the design
+  actually rests on -- that opening the panel starts nothing.
+- **Three of the five were not individually proven red**, and that is a
+  deliberate cost decision rather than an oversight: `checks.session` does not
+  run locally, so each pair is a CI round trip. The two proven are the two that
+  could have been green lights, and one of them *was*.
+
 ## Tests
 
 | check | expected green | §1 break, and the expected red |

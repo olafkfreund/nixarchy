@@ -194,10 +194,18 @@ places. #896 closed most of the gap that used to be here.
 Three things about how those assertions are written, each of which would
 otherwise be a green light:
 
-- **`Open full log in terminal` matches the terminal launch, never a bare
-  `journalctl`.** `RebuildState` follows the unit's journal itself, so a
+- **`Open full log in terminal` is NOT asserted either, and this one was
+  *proven* worthless rather than suspected.** The assertion matched
+  `pgrep -af omarchy-launch-floating-terminal-with-presentation`; the break ran
+  in CI with `openInTerminal()` gutted and **came back green**. The pattern is
+  searched across every process in the session, and something else already has
+  one, so it never measured the button. The plan had warned about the adjacent
+  trap -- `RebuildState` follows the unit's journal itself, so a
   `journalctl.*nixarchy-rebuild` match is satisfied by the panel's own
-  follower with `openInTerminal()` emptied.
+  follower -- and the matcher written to dodge *that* fell into a wider one.
+  Retargeting it wants a before/after count of matching processes, or a marker
+  only the button can produce; neither was worth two more CI round trips at the
+  time, and a row that cannot fail is worse than no row.
 **`Copy log` is the one action with no assertion, and that is a decision, not
 an oversight.** Two CI runs put the unit's journal on the clipboard and then
 compared `wl-paste` against it; both timed out while the assertions on either

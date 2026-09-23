@@ -107,11 +107,37 @@ fourth command restores from the manifest with no prep session running, and
 → verify: `kill -9` the driver mid-take, confirm the desktop is dirty, then
 `screencast-recover` and confirm the manifest verifies.
 
-**5. `screencast-drive`** reads `shots.nix` and exports the four environment
-variables `tests/demo/default.nix`'s `user()` documents — `XDG_RUNTIME_DIR`,
-`WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE` and the one that is easy to
-miss, `DBUS_SESSION_BUS_ADDRESS`. Without it `omarchy-shell shell ping` answers
-"not running" against a shell that is running.
+**5. `screencast-drive`** reads `shots.nix` and exports the environment a
+session needs. **The spec named the wrong variable and this step corrects it,
+measured on razer.**
+
+`tests/demo/default.nix`'s `user()` re-exports `XDG_RUNTIME_DIR`,
+`DBUS_SESSION_BUS_ADDRESS`, `HYPRLAND_INSTANCE_SIGNATURE` and `WAYLAND_DISPLAY`,
+and all four are still needed. But setting them did **not** fix
+`omarchy-shell shell ping`, which went on answering "not running" against a
+shell that was plainly running.
+
+The cause is `OMARCHY_PATH`. `omarchy-shell` selects the instance with
+`qs ipc -n -p "$OMARCHY_PATH/shell"` (line 59 of that script), so the path must
+be the tree the shell was **launched from** — not the one the current system
+provides. On razer they differ: the login session holds
+`…-k8l5dsm…-nixarchy-omarchy-tree` while an SSH shell inherits
+`…-wlbf63z…-nixarchy-omarchy-tree` from a later rebuild. Two trees, so `-p`
+matched nothing and the failure looked like a dead shell.
+
+So the driver derives `OMARCHY_PATH` **from the running process**, never from
+the environment:
+
+```sh
+tree=$(pgrep -af quickshell | grep -oE '\-p [^ ]+' | head -1 | cut -d' ' -f2)
+export OMARCHY_PATH="${tree%/shell}"
+```
+
+Verified: with that export, `omarchy-shell shell ping` answers `ok`.
+
+**This is general and belongs in `AGENTS.md`**, not only here: any agent driving
+a live Omarchy session after a rebuild-without-re-login hits it, and the symptom
+names the wrong thing.
 
 → verify: a ten-second take that opens one panel over SSH.
 

@@ -251,6 +251,11 @@ and the problem was one of the first two.
 
 ## Hand-offs
 
+- The **syntax and options of `devenv.nix` itself** (languages, tasks,
+  services) → the `devenv-project` skill. This skill is about devenv on a
+  nixarchy machine: where it activates, what nixarchy wires up, and what
+  belongs in a project rather than in the system. What a given option
+  means is that one's subject (#888).
 - Installing something **on the machine** → the `nixos` skill.
 - A **daemon or systemd unit** the machine runs → the `nixos-services` skill.
   A `services.postgres` inside `devenv.nix` is a process for this project only;

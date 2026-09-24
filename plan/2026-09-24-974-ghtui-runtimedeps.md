@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 974
 spec: spec/2026-09-24-974-ghtui-runtimedeps.md
 ---

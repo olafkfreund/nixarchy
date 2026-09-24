@@ -172,3 +172,129 @@ report that result and revise the design rather than lower the target silently.
   `checks.*` entry, test framework, or CI workflow change is proposed here.
 - Confirm the existing hosted options step still records RSS and time on the
   final change. A profile report alone does not close #747.
+
+## Amendment — 2026-09-24: rescope the population, and why one at a time cannot work
+
+**Status of this amendment: approved 2026-09-24.** The design gate in
+`plan/2026-09-19-747-options-memory.md` step 6 required spec approval before an
+implementation plan could be drafted; that approval is this line, and the plan
+may now be written. Nothing is implemented by this amendment itself.
+
+### What changed since the spec was approved
+
+Four interventions were implemented and measured against the real check. All
+four were null, and the reason they were null is now understood and is the
+substance of this amendment.
+
+| intervention | evaluator work removed | peak RSS |
+|---|---|---|
+| deduplicate scattered fixtures | −5.0% calls | 12.05 → 12.18 GB |
+| deduplicate six identical **adjacent** fixtures | −2.4% calls | 12.44 → 12.52 GB |
+| scope a single-use deeply-forced binding | 0 by construction | 12.46 → 12.46 GB |
+| builder attribute set | n/a — retains 0.157 MB | not addressable |
+
+Two measurements explain all four.
+
+**The live set is 8.04 GB of a 12.56 GB peak.** Read from the collector's
+post-collection `In-use heap`, not inferred from RSS, which overstates it by
+1.56×. Every per-fixture figure in the earlier execution record was computed
+from RSS and is inflated by about half.
+
+**The live-heap profile climbs monotonically to the final collection.**
+Eighteen collections, one non-monotonic step:
+
+```
+ 1  0.00   4  0.47   7  1.30  10  2.15  13  3.29  16  5.78
+ 2  0.23   5  0.67   8  1.72  11  2.07  14  4.43  17  6.83
+ 3  0.32   6  0.93   9  1.80  12  2.62  15  4.83  18  8.04  <- peak
+```
+
+Nothing of consequence is released. A working remedy turns that tail into a
+plateau; this is the signature of one that has not landed.
+
+### The consequence, and it is the whole amendment
+
+**The remedy is not additive.** Releasing one fixture out of ten leaves the
+other nine pinning a monotonic climb — the released one becomes a dip, not a
+lower peak. Every single-target experiment will therefore read null, which is
+exactly what four of them did.
+
+So the proposal is not "rescope a fixture". It is **rescope the population of
+deeply-forced fixtures in one change**.
+
+### Exact files and transformation
+
+`tests/options.nix` only. No module, no option, no `checks.*` entry, no
+workflow.
+
+For each binding that is (a) declared in the top-level `let` and (b) forced to
+`system.build.toplevel` or otherwise deeply walked, move the declaration into
+an inner `let` at the binding's use site, so it becomes unreachable once that
+case collapses to booleans.
+
+The forcing sites, with the systems each materialises — `mvVm` is
+`cfg: name: cfg.microvm.vms.${name}.config.config`, so each microvm binding
+materialises a host **and** a nested guest:
+
+| binding | line | uses | systems | addressable |
+|---|---|---:|---:|---|
+| `vm` | 1706 | 79 | 1 | **no** — rooted in `inputs.self` |
+| `mvTemplateOk` | 2159 | — | 2 | already inner-`let` |
+| `mvTemplateBad` | 2165 | — | ~1.5 | already inner-`let` |
+| `mvInvariantSmall` | 2196 | 3 | 2 | yes |
+| `mvInvariantBig` | 2211 | 3 | 2 | yes |
+| `loaderOff` | 399 | 17 | 1 | yes, but 16 uses are narrow |
+| `notImported` | 417 | 1 | 1 | yes — already tried alone, null |
+
+≈10.5 systems against 8.04 GB live is **~0.77 GB per system**, consistent with
+~1.09 GB for a full nixarchy desktop and lower for leaner guests and Mode A
+hosts. **The arithmetic closes; nothing is unaccounted for.**
+
+`vm` is flake-rooted: a flake output is one shared thunk `nix eval` holds for
+the whole evaluation, and nothing in this file can release it. **The floor is
+one system.** Any target must be stated against that floor rather than against
+zero.
+
+### Coverage proof
+
+Corrected from the version this spec originally carried, which was wrong for
+this class of change:
+
+- `builtins.deepSeq report report` compared **byte for byte**, before and
+  after, **in the same tree** — closures cannot be compared across commits
+  (AGENTS.md §5).
+- The check's own `broken` set must remain empty, i.e. the built check still
+  passes. That requires building it, not only evaluating it.
+- **Not** unchanged evaluator counters. This change alters where values are
+  declared, not how many are computed, so the counters should barely move —
+  but requiring them constant is the mistake the earlier spec made for a
+  different experiment, where it would have admitted only a variant that
+  optimised nothing.
+
+### Verification, and it is not a peak number
+
+**The tail shape, not the delta.** A remedy that lands turns the monotonic
+climb into a plateau-plus-sawtooth. That is §1's "prove it landed" applied to a
+fix rather than a bug, and it is far more sensitive than a peak inside a ~3%
+RSS band.
+
+Reported as live heap via `GC_PRINT_STATS`, which PR #943 adds to the CI step
+and which costs nothing measurable.
+
+### Risks, stated plainly
+
+- **A single diff touching every heavy fixture in a 5,500-line check is hard to
+  review.** That is the main argument against this shape, and the counter is
+  that the alternative — one at a time — is measurably guaranteed to read null.
+- **It may still land null.** If the climb continues after the change, the
+  remedy did not take effect, and the tail shape will say so rather than
+  leaving it to a 3% band.
+- **Targeting the wrong bindings wastes a review.** The table above is derived
+  from a source inventory plus the arithmetic closing; it has not been
+  confirmed by per-binding measurement, because that needs one heavy run per
+  binding and the plan permits one experiment at a time.
+- **This is not obviously worth doing.** The check passes today at 74% of the
+  ceiling, and #943 makes the failure readable if it ever stops passing. A
+  reviewer may reasonably decide that is enough and that a large diff against a
+  test file is not justified by a headroom problem that has not yet bitten.
+  That judgement belongs to the approver and this amendment does not assume it.

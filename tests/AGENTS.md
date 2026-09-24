@@ -229,6 +229,30 @@ the warning reads well is checked by a human — enabling
 `programs.nixarchy.dictation` on a stable machine should print it and install
 nothing.
 
+## Menu aliases: the words are a judgement, and nothing here checks them
+
+`checks.options` asserts that the Nixi row carries its `when` guard and that no
+second nixi row exists, and `checks.menu-verbs` asserts the actions are
+commands the CLI accepts. Neither says anything about the **nine Ask rows'
+aliases** added in #961, and no check here can.
+
+Two reasons, both worth knowing before someone writes a check that looks like
+coverage:
+
+- **The matching is not ours.** The palette that searches these rows is
+  nixarchy-menu, in another repository. Nothing in this tree exercises it, so
+  "typing `system slow` finds *Make it faster*" is unverifiable from here.
+- **The aliases are a guess about wording.** Whether a user types "lag" rather
+  than "slow" is a judgement about people, not a property of the file. A check
+  that asserts the alias list equals a literal would pass forever and prove
+  only that somebody wrote it down twice.
+
+So the aliases are checked by a human typing into the palette. What IS worth
+guarding mechanically, and is: that adding them did not disturb the assertion
+in `pkgs/omarchy/default.nix`, which requires at least ten `trigger.ask*` rows
+and a floating-terminal action on each. The aliases key goes in before
+`action`, so that value is untouched.
+
 ## The stub-only detach: `run --detach` never runs a real unit on a PR
 
 `checks.microvm-template` proves `nixarchy vm run --detach` against **stub**

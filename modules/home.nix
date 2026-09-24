@@ -403,7 +403,9 @@ let
   # Standalone Home Manager has no osConfig, so it resolves nothing (Mode A).
   resolvedDefaults = lib.filterAttrs (
     name: p:
-    (osConfig.programs.nixarchy.enable or false) && p.gate && (cfg.defaultPlugins.${name} or true)
+    (osConfig.programs.nixarchy.enable or false)
+    && p.gate
+    && (cfg.defaultPlugins.${name} or p.enableByDefault)
   ) cfg.defaultPluginSet;
   defaultIds = lib.mapAttrsToList (_: p: p.id) resolvedDefaults;
 
@@ -666,7 +668,8 @@ in
         always, podman when podman is on, distrobox when Boxes is on,
         microvms always, dev environments when the devenv service is on, and
         the Plugin Browser (Setup > Plugins > Add Plugin) always. A name left
-        out counts as on.
+        out counts as on. `menu` (nixarchy-menu, which replaces the Omarchy
+        menu) is the exception: it is off unless set to `true`.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -694,6 +697,21 @@ in
             packages = lib.mkOption {
               type = lib.types.listOf lib.types.package;
               default = [ ];
+            };
+            # What a name left out of `defaultPlugins` counts as. Per entry,
+            # not a `false` in that option's default: a host setting any key
+            # there replaces the whole default attrset, so it would not
+            # survive `{ podman = false; }` (#946).
+            enableByDefault = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+            };
+            # The bar section `omarchy-plugin-enable` is given. "" gives none,
+            # so a clone of a first-party plugin (clonedFrom) takes that
+            # plugin's own bar slot instead of moving to the right (#946).
+            placement = lib.mkOption {
+              type = lib.types.str;
+              default = "right";
             };
           };
         }
@@ -1764,6 +1782,27 @@ in
           id = "nixarchy.flatsnap";
           src = inputs.nixarchy-flatsnap.packages.${pkgs.stdenv.hostPlatform.system}.default;
         };
+        # nixarchy-menu, the Raycast-style replacement for the Omarchy menu
+        # (#946). Opt-in: `defaultPlugins.menu = true`. It is a clone of
+        # omarchy.menu, so it keeps that plugin's bar slot (placement "") and
+        # the hook below turns any other omarchy.menu clone off before it.
+        # voxtype is optional; the plugin finds it on PATH when present.
+        menu = {
+          id = "nixarchy.menu";
+          src = inputs.nixarchy-menu.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+          enableByDefault = false;
+          placement = "";
+          packages = [
+            pkgs.python3
+            pkgs.jq
+            pkgs.fd
+            pkgs.wl-clipboard
+            pkgs.xdg-utils
+            pkgs.libnotify
+            pkgs.curl
+            pkgs.wtype
+          ];
+        };
         # Wherever podman is on -- the Services row or Boxes -- and nowhere
         # else: a podman panel with no podman behind it is a broken panel.
         # `or false` also covers standalone Home Manager, whose osConfig is null.
@@ -1902,12 +1941,45 @@ in
           omarchy-shell shell ping >/dev/null 2>&1 || exit 0
           omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 
+          # The bar section each is enabled into; "" keeps a clone in the
+          # slot of the plugin it replaces (#946).
+          declare -A placement=(${
+            lib.concatMapStringsSep " " (p: "[${lib.escapeShellArg p.id}]=${lib.escapeShellArg p.placement}") (
+              lib.attrValues resolvedDefaults
+            )
+          })
+          plugins="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
+
           mkdir -p "$state"
           list=$(omarchy-plugin-list --json 2>/dev/null) || list='[]'
           for id in "''${todo[@]}"; do
+            # A real directory here is a hand install, and activation leaves
+            # it in place of ours (see the plugins activation above).
+            if [ -e "$plugins/$id" ] && [ ! -L "$plugins/$id" ]; then
+              printf '%s is a hand install; rm -rf %s and log in again to use the declared one\n' \
+                "$id" "$plugins/$id" | systemd-cat -t nixarchy-default-plugins
+            fi
             if jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' <<<"$list" >/dev/null; then
               : >"$state/$id"
-            elif out=$(omarchy-plugin-enable "$id" right 2>&1); then
+              continue
+            fi
+            # A clone of a first-party plugin must be the only one: any other
+            # enabled clone of the same source goes off FIRST, because turning
+            # it off afterwards restores the source beside ours (#946).
+            src=$(jq -r --arg id "$id" 'first(.[] | select(.id == $id) | .clonedFrom // "") // ""' <<<"$list")
+            if [ -n "$src" ]; then
+              jq -r --arg id "$id" --arg src "$src" \
+                '.[] | select(.clonedFrom == $src and .id != $id and .enabled) | .id' <<<"$list" |
+                while IFS= read -r other; do
+                  omarchy-plugin-disable "$other" 2>&1 | systemd-cat -t nixarchy-default-plugins || true
+                done
+            fi
+            if [ -n "''${placement[$id]:-}" ]; then
+              set -- "$id" "''${placement[$id]}"
+            else
+              set -- "$id"
+            fi
+            if out=$(omarchy-plugin-enable "$@" 2>&1); then
               : >"$state/$id"
             else
               printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins

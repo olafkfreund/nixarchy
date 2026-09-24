@@ -152,3 +152,16 @@ Revert the merge. The input, entry and hook change go with it.
 - **The enable-once marker for `nixarchy.menu` stays behind.** That is
   harmless, and it means a later re-merge will not re-enable it for a user
   who had since turned it off.
+
+## Deviations during implementation
+
+- **Step 4:** each id's placement travels in a bash associative array
+  (`declare -A placement=([id]=placement …)`) built with `lib.escapeShellArg`,
+  instead of `id<TAB>placement` lines. The behaviour is the same, and the
+  quoting is simpler. The hand-install hint runs for every id still to do,
+  before the already-enabled check, so a hand copy that is already enabled
+  still logs it once.
+- **Step 5:** step 4's shellcheck runs in `checks.options` itself, on the hook
+  as rendered with the real `menu` entry on (`defaultHookScript`, `-S warning`).
+  The same shell section asserts that the real plugin passes the validator
+  (`menuValidated`).

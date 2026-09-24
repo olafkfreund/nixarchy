@@ -120,7 +120,7 @@ in
       # with the recording. The arithmetic that shows it: the last beat ends
       # at 67.3 by beats.json and the master is 69.2 seconds long.
       t0=''${SCREENCAST_REC_T0:-$(now)}
-      opened_nothing=0
+      opened_nothing=""
       printf '{"t0":%s,"beats":[' "$t0" > "$beats"
       first=1
 
@@ -205,12 +205,30 @@ in
         # and the take should say so while it can still be re-run -- not leave
         # it for the gate to find in an hour.
         if [ "$action" = plugin ] || [ "$action" = menu ]; then
-          sleep 1
+          # Poll rather than check once. A single look at 1s reported "opened
+          # no panel" for a beat that take 6's gate then OCR'd as correct --
+          # a panel that finished rendering just after the poll. The gate
+          # samples a window and was right; this was a false negative that
+          # condemned a usable 90-second take.
+          #
+          # Half the hold, capped at 3s, so a genuinely dead beat is still
+          # caught early rather than at the end of the recording.
+          waited=0
+          limit=$(awk -v h="$hold" 'BEGIN { l = h / 2; if (l > 3) l = 3; printf "%.1f", l }')
+          while [ -z "$(panels)" ]; do
+            awk -v w="$waited" -v l="$limit" 'BEGIN { exit !(w < l) }' || break
+            sleep 0.5
+            waited=$(awk -v w="$waited" 'BEGIN { printf "%.1f", w + 0.5 }')
+          done
           if [ -z "$(panels)" ]; then
-            echo "  (warning: $label opened no panel)" >&2
-            opened_nothing=$((opened_nothing + 1))
+            echo "  (warning: $label opened no panel within ''${limit}s)" >&2
+            # Named, not just counted. The first version printed the name to
+            # stderr and recorded it nowhere, so a take that failed in a
+            # scrolled-past line left no way to know WHICH beat -- the only
+            # honest response was to re-run the whole take.
+            opened_nothing="$opened_nothing $label"
           fi
-          sleep "$(awk -v h="$hold" 'BEGIN { d = h - 1; if (d < 0) d = 0; print d }')"
+          sleep "$(awk -v h="$hold" -v w="$waited" 'BEGIN { d = h - w; if (d < 0) d = 0; print d }')"
         else
           sleep "$hold"
         fi
@@ -252,8 +270,12 @@ in
       done < ${beatFile}
 
       printf '],"duration":%s}\n' "$(echo "$(now) $t0" | awk '{printf "%.2f", $1 - $2}')" >> "$beats"
-      if [ "$opened_nothing" -gt 0 ]; then
-        echo "screencast-drive: $opened_nothing beat(s) opened no panel -- the take is not usable" >&2
+      if [ -n "$opened_nothing" ]; then
+        # The names, and in beats.json as well as on stderr -- a take can fail
+        # hours after the operator stopped watching the terminal.
+        echo "screencast-drive: these beats opened no panel --$opened_nothing" >&2
+        echo "The take is not usable. Re-run, or check whether the panel is" >&2
+        echo "simply slow: the gate samples a window and may disagree." >&2
         exit 1
       fi
       echo "screencast-drive: done. Observed beat times in $beats"

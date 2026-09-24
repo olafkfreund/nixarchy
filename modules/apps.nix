@@ -3349,20 +3349,11 @@ in
                 yes="" nopreview="" detach=""
                 while [ $# -gt 0 ]; do
                   case "$1" in
-                    # --yes widened with #967. It meant "do not ask before
-                    # rebuilding"; it now ALSO means "and accept whatever
-                    # ~/.config/nixarchy/*.nix currently says", because those
-                    # files are imported as NixOS modules and a changed one is
-                    # confirmed below. Written here rather than only in a commit
-                    # message: CLAUDE.md section 4 records that widening
-                    # something breaks whoever relied on it being narrow, and
-                    # the caller most affected is the menu, which passes --yes.
                     --yes) yes=1 ;;
                     --no-preview) nopreview=1 ;;
                     --detach) detach=1 ;;
                     *)
                       echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
-                      echo "  --yes also confirms any change to ~/.config/nixarchy/*.nix" >&2
                       exit 2
                       ;;
                   esac
@@ -3448,62 +3439,6 @@ in
                 for part in apps services advanced flatsnap; do
                   src="$srcdir/$part.nix"
                   [ -f "$src" ] || continue
-
-                  # #967: these files are imported as full NixOS modules, so
-                  # anything running as the user that writes one of them writes
-                  # ROOT system configuration at the next apply -- a service, a
-                  # users entry, a security.sudo rule. advanced.nix is free-form
-                  # by design, so there is no shape to check.
-                  #
-                  # The record below is the one already kept for `dst`, aimed at
-                  # `src` instead. That one tells an edit made IN THE FLAKE apart
-                  # from a new pick, and preserves it; this one tells a change
-                  # made to the SOURCE apart from one the user agreed to.
-                  #
-                  # This does NOT stop a determined attacker: $applied is under
-                  # $XDG_STATE_HOME, so whatever edits the source can edit the
-                  # record. It stops a tool that writes config without knowing
-                  # nixarchy's state layout, and the accident of a file you
-                  # forgot you had.
-                  #
-                  # flatsnap is skipped for the prompt and recorded anyway: the
-                  # nixarchy-flatsnap plugin validates and confirms that file
-                  # itself, and confirming twice is noise -- but a machine on an
-                  # older plugin still gets the record.
-                  srec="$applied/src.$(printf '%s' "$src" | sha256sum | cut -c1-16)"
-                  if [ "$part" != flatsnap ]; then
-                    if [ ! -f "$srec" ] || ! sha256sum <"$src" | cmp -s - "$srec"; then
-                      if [ -f "$srec.content" ]; then
-                        echo "nixarchy: $src changed since you last applied it."
-                        diff -u "$srec.content" "$src" | head -40 || true
-                      else
-                        echo "nixarchy: $src has not been confirmed before."
-                        echo "  Asked once per file; after this it is silent unless it changes."
-                      fi
-                      echo "  It is imported as a NixOS module, so it is built as root."
-                      if [ -z "$yes" ]; then
-                        if [ -t 0 ]; then
-                          printf '  Build it? [y/N] '
-                          read -r reply || reply=n
-                          case "$reply" in
-                            [yY]*) ;;
-                            *) echo "Not applying. Nothing was built." >&2; exit 1 ;;
-                          esac
-                        else
-                          # No terminal and no --yes: refuse rather than build.
-                          # --detach already requires --yes, so the supervised
-                          # path is unaffected; this is a caller that has neither.
-                          echo "nixarchy: refusing to build an unconfirmed $src with no terminal to ask." >&2
-                          echo "  Re-run with --yes if this change is yours." >&2
-                          exit 1
-                        fi
-                      fi
-                    fi
-                  fi
-                  # Recorded after the answer, never before: a refusal must not
-                  # bless the content it refused.
-                  sha256sum <"$src" >"$srec"
-                  cp "$src" "$srec.content"
 
                   dst="$base/nixarchy/$part.nix"
                   imports="$imports ./nixarchy/$part.nix"

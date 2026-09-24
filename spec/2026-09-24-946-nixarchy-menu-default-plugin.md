@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 946
 intent: intent/2026-09-24-946-nixarchy-menu-default-plugin.md
 ---

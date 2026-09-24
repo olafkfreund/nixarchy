@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 949
 spec: spec/2026-09-24-949-default-agent-ids.md
 ---

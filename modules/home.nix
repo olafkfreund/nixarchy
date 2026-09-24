@@ -5,6 +5,7 @@ inputs:
   # standalone configuration.
   osConfig ? null,
   config,
+  options,
   lib,
   pkgs,
   ...
@@ -792,6 +793,41 @@ in
         "codex"
       ]
       ++ lib.optional (appEnabled "claude-code" || defaultAgent == "claude") "claude";
+    }
+    // lib.optionalAttrs (options.services ? voxtype) {
+      # #942. Dictation's bridge, behind a NAME guard rather than a value one.
+      #
+      # home-manager's services.voxtype exists on unstable and NOT on
+      # release-26.05, which checks.stable-eval evaluates against. A definition
+      # for an option that does not exist is an evaluation ERROR, and guarding
+      # the VALUE does not help: the module system attaches the definition to
+      # the path and then rejects the path, printing `condition = true` while
+      # it does so. Measured -- this is what stable-eval failed with before the
+      # guard, and the same shape as `options.services.ollama ? modelsDir` in
+      # modules/local-ai.nix and the `pkgs ? hyprland-preview-share-picker`
+      # guard in modules/nixos.nix. Prefer what unstable has, so nothing
+      # changes for the people on it.
+      voxtype = {
+        enable = lib.mkDefault (osConfig.programs.nixarchy.dictation.enable or false);
+
+        # Plain assignment, not mkDefault: a list is a merging type, and
+        # mkDefault on one silently drops the whole contribution the moment a
+        # user adds an element. See the header of modules/services/default.nix.
+        loadModels = [ "base.en" ];
+
+        # Makes the module pull in wtype and wl-clipboard, which are how the
+        # transcription reaches the focused window -- a daemon that runs and
+        # cannot type is this issue's own failure wearing a different hat.
+        wayland.display = lib.mkDefault "$WAYLAND_DISPLAY";
+
+        # `settings` is deliberately NOT set. The module writes it through
+        # xdg.configFile -- a read-only store symlink -- and our own
+        # omarchy-voxtype-config, which the bar's Dictation indicator runs on
+        # click, calls `voxtype configure` against that same path, as does
+        # `voxtype config set`. A symlink breaks both. The option is
+        # `mkIf (settings != { })`, so leaving it unset writes nothing and the
+        # seed below supplies the file instead.
+      };
     };
 
     # And the three defaults nixarchy deliberately does NOT change.
@@ -855,7 +891,24 @@ in
         runs Hyprland against Omarchy's own hyprland.lua with --config, so it
         needs nothing in ~/.config/hypr, and both desktops work: yours stays
         yours, Omarchy's is Omarchy's.
-      '';
+      ''
+      # The dictation daemon comes from home-manager's services.voxtype, which
+      # release-26.05 does not have. Without this the option would accept the
+      # value and produce nothing -- which is the defect #942 exists to fix.
+      ++
+        lib.optional
+          ((osConfig.programs.nixarchy.dictation.enable or false) && !(options.services ? voxtype))
+          ''
+            nixarchy: programs.nixarchy.dictation is on, and this Home Manager
+            has no services.voxtype -- it arrived after release-26.05.
+
+            voxtype is on PATH, but nothing starts the daemon, downloads the
+            whisper model or seeds the config, so F9 and Super+Ctrl+X do
+            nothing.
+
+            Follow home-manager's unstable branch (see the manual's "Stable or
+            unstable"), or turn programs.nixarchy.dictation off.
+          '';
 
     home = {
       # The runtime dependencies go in only when the NixOS module is not
@@ -1224,7 +1277,7 @@ in
     # a unit somebody wrote by hand for their own reasons does not contain a
     # wrapped store path and is left alone.
     home.activation.nixarchyVoxtypeUnitMigration =
-      lib.mkIf (osConfig.programs.nixarchy.dictation.enable or false)
+      lib.mkIf ((options.services ? voxtype) && (osConfig.programs.nixarchy.dictation.enable or false))
         (
           lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
             voxUnit="${config.xdg.configHome}/systemd/user/voxtype.service"
@@ -1942,37 +1995,6 @@ in
       };
     };
 
-    # #942. Dictation's bridge, and it is a `services.*` option rather than a
-    # `programs.*` one -- so it does NOT nest in the block above, however much
-    # it reads like voice's twin.
-    #
-    # Home Manager's own module writes the unit with
-    # `ExecStart = ${getExe package} daemon`, a stable path. That matters: the
-    # issue was found after `voxtype setup systemd` wrote an ExecStart pointing
-    # at `.voxtype-wrapped` inside a store path, which breaks at the next
-    # upgrade or garbage collection. Nothing here runs `voxtype setup`.
-    services.voxtype = {
-      enable = lib.mkDefault (osConfig.programs.nixarchy.dictation.enable or false);
-
-      # Plain assignment, not mkDefault: a list is a merging type, and
-      # mkDefault on one silently drops the whole contribution the moment a
-      # user adds an element. See the header of modules/services/default.nix.
-      loadModels = [ "base.en" ];
-
-      # Makes the module pull in wtype and wl-clipboard, which are how the
-      # transcription reaches the focused window -- a daemon that runs and
-      # cannot type is this issue's own failure wearing a different hat.
-      wayland.display = lib.mkDefault "$WAYLAND_DISPLAY";
-
-      # `settings` is deliberately NOT set. The module writes it through
-      # xdg.configFile -- a read-only store symlink -- and our own
-      # omarchy-voxtype-config, which the bar's Dictation indicator runs on
-      # click, calls `voxtype configure` against that same path, as does
-      # `voxtype config set`. A symlink breaks both. The option is
-      # `mkIf (settings != { })`, so leaving it unset writes nothing and the
-      # seed below supplies the file instead.
-    };
-
     # After= is ORDERING, not readiness: PipeWire is socket activated and a
     # source can still be unavailable when the daemon starts. This makes the
     # common case right and does not make the race impossible. No restart loop
@@ -1985,8 +2007,11 @@ in
     # beside it. Measured: `unit=yes` with `dictation.enable = false`. That is
     # a Mode A break, and the kind AGENTS.md means by "the off state is the one
     # a refactor breaks quietly".
-    systemd.user.services.voxtype = lib.mkIf (osConfig.programs.nixarchy.dictation.enable or false) {
-      Unit.After = [ "pipewire.service" ];
-    };
+    # Guarded on the option NAME as well as the switch: with no
+    # services.voxtype there is no module to order, and this alone would create
+    # a unit carrying an After= and no ExecStart.
+    systemd.user.services.voxtype = lib.mkIf (
+      (options.services ? voxtype) && (osConfig.programs.nixarchy.dictation.enable or false)
+    ) { Unit.After = [ "pipewire.service" ]; };
   };
 }

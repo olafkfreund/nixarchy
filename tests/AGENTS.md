@@ -219,6 +219,16 @@ dictation and break the indicator in the same commit, which is why
 `dictationStartsADaemon` asserts the *absence* of an `xdg.configFile` entry
 rather than only the presence of a unit.
 
+**And the stable branch is a third hole.** `services.voxtype` arrived in Home
+Manager after release-26.05, so on stable `modules/home.nix` skips the bridge
+behind `options.services ? voxtype` and emits a warning instead. `checks.options`
+evaluates against unstable and cannot see that path; `checks.stable-eval` takes
+it, but with dictation off, so the warning it guards is never rendered. What is
+proven on stable is only that the name guard keeps the expression valid. Whether
+the warning reads well is checked by a human — enabling
+`programs.nixarchy.dictation` on a stable machine should print it and install
+nothing.
+
 ## The stub-only detach: `run --detach` never runs a real unit on a PR
 
 `checks.microvm-template` proves `nixarchy vm run --detach` against **stub**

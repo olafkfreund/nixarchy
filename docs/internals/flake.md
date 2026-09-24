@@ -489,6 +489,51 @@ one `nix-snapd` and no second `nixpkgs`, and that `options` (`flatsnapIsADefault
 `flatsnapSnapd`, the menu row) and `menu-verbs` pass. The plugin's own
 `nix flake check` (a VM test and a gating eval) is its release gate.
 
+### nixarchy-menu, opt-in (#946)
+
+```nix
+nixarchy-menu = {
+```
+
+[nixarchy-menu](https://github.com/olafkfreund/nixarchy-menu) is a
+Raycast-style replacement for the Omarchy menu (id `nixarchy.menu`,
+`clonedFrom: omarchy.menu`). It hands off to every default agent, and it has
+Nixi and skill-backed help rows. nixarchy takes its `packages.<sys>.plugin`.
+
+**Off unless `defaultPlugins.menu = true`.** It is the one default with
+`enableByDefault = false`. That is a per-entry default, because the
+`defaultPlugins` attrset is replaced wholesale when a host sets any key, so a
+`menu = false` there would not survive `{ podman = false; }`.
+
+**It takes the stock menu's place.** The entry has `placement = ""`, so
+`omarchy-plugin-enable` gets no section, and the shell puts the clone in
+`omarchy.menu`'s own bar slot. Before enabling it, the enable-once hook turns
+off any other enabled plugin with the same `clonedFrom` (an old
+`evindor.keystroke`, say). It has to be done in that order: disabling a clone
+*after* another is on restores the stock menu beside it.
+
+**A hand install wins until removed.** A real directory at
+`~/.config/omarchy/plugins/nixarchy.menu`, for example from nixarchy-menu's own
+`bin/nixarchy-menu install`, is left alone, as for every plugin. The hook logs
+the fix to `nixarchy-default-plugins`:
+
+```bash
+rm -rf ~/.config/omarchy/plugins/nixarchy.menu   # then log in again
+```
+
+**The inputs follow.** Its only inputs are `nixpkgs` and `omarchy`
+(`flake = false`, used by its checks), so both follow nixarchy's and the lock
+gains one node.
+
+Measured at 8775661 (2026-09-24): the closure is **84.7 MiB**, of which the
+Smart Match engine and both models are most. It reaches a machine only when
+it is switched on.
+
+**Bumping the pin:** move `url` to a newer commit on nixarchy-menu `main`, then
+`nix flake lock --update-input nixarchy-menu`. `checks.options` builds it
+through the plugin validator, which fails if the manifest id stops being
+`nixarchy.menu`.
+
 ### The herdr sessions widget, on by default (#771)
 
 ```nix

@@ -819,6 +819,30 @@
         "type": "github"
       }
     },
+    "nixarchy-menu": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "omarchy": [
+          "omarchy"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790271385,
+        "narHash": "sha256-bb4AXpZ3Ov0cfIVpbPqgM2z57OVbBNBqPh3XwD/A8VQ=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-menu",
+        "rev": "8775661650ec7d169ca6f0b17a49922dc8005b49",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-menu",
+        "rev": "8775661650ec7d169ca6f0b17a49922dc8005b49",
+        "type": "github"
+      }
+    },
     "nixarchy-microvm": {
       "inputs": {
         "nixpkgs": [
@@ -1091,6 +1115,7 @@
         "nixarchy-ghtui": "nixarchy-ghtui",
         "nixarchy-gltui": "nixarchy-gltui",
         "nixarchy-herdr": "nixarchy-herdr",
+        "nixarchy-menu": "nixarchy-menu",
         "nixarchy-microvm": "nixarchy-microvm",
         "nixarchy-pkg": "nixarchy-pkg",
         "nixarchy-plugin-browser": "nixarchy-plugin-browser",

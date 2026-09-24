@@ -285,6 +285,15 @@
       inputs.nix-flatpak.follows = "nix-flatpak";
     };
 
+    # Why: docs/internals/flake.md#nixarchy-menu-opt-in-946
+    # A commit on main (no tags); bump it the way that page says. Its only
+    # inputs are these two, so it adds nothing to the lock but itself.
+    nixarchy-menu = {
+      url = "github:olafkfreund/nixarchy-menu/8775661650ec7d169ca6f0b17a49922dc8005b49";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.omarchy.follows = "omarchy";
+    };
+
     # Why: docs/internals/flake.md#the-herdr-sessions-widget-on-by-default-771
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.

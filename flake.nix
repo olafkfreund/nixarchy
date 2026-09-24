@@ -310,7 +310,7 @@
     # Why: docs/internals/flake.md#the-plugin-browser-on-by-default-913
     # A commit on master (no tags); bump it the way that page says.
     nixarchy-plugin-browser = {
-      url = "github:olafkfreund/nixarchy-plugin-browser/f60d2b2e6b7bc10af9b7f0f25911ac2a67a5ea06";
+      url = "github:olafkfreund/nixarchy-plugin-browser/b380ebbb0cf4dd2aaa55177f399f0778c50890d4";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

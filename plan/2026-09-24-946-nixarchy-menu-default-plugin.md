@@ -187,3 +187,31 @@ Revert the merge. The input, entry and hook change go with it.
     placement if ours was already on. The re-enable takes the source back
     off after `restoreCloneSource` (`PluginRegistry.qml:548-549`).
   - Step 7 tests this exact case on razer.
+
+## Razer results (2026-09-24, step 7; toplevel k0rxjvx4 from nixos_config 758b4af with nixarchy at c4fea64)
+
+- **Case 1, the Codex scenario** (a hand-copied `nixarchy.menu` and
+  `evindor.keystroke` both enabled): **pass.**
+  - HM logged "nixarchy.menu is your own directory, not replacing it", and
+    the hook logged the `rm` hint.
+  - The hook disabled `evindor.keystroke` and re-enabled ours.
+    `omarchy-menu toggle root` (the stock Super+Space path) opens
+    nixarchy-menu, and the bar is pixel-identical apart from the clock.
+  - A disabled `omarchy.menu` entry is left in the bar layout where the rival
+    sat. It isn't drawn, and `restoreCloneSource` removes every source entry
+    before restoring, so it is harmless.
+- **Case 2, the declared plugin** (hand copy removed): **pass.** The link
+  points at `/nix/store/gh2g5346...-nixarchy-menu`, the pinned build.
+  Super+Space opens it, the bar is unchanged, and there are 0 failed units.
+  - Test-procedure note: activating the same toplevel twice doesn't re-run
+    HM, so the home-manager unit had to be restarted.
+- **Case 3, the off switch** (menu no longer declared): **FAIL, a design gap.**
+  - HM's stale cleanup removes the link, so the plugin is gone. But
+    `omarchy.menu` stays in `disabledPlugins`.
+  - Result: **no menu button, and Super+Space opens nothing.**
+  - Removing files never runs the shell's `restoreCloneSource`, which only a
+    disable does. The spec's "clean off switch" outcome is not met. This is
+    stopped for a user decision before any fix.
+- **Restored:** 2954 (06kpcydy), the hand copy back and enabled in its slot,
+  `evindor.keystroke` and `omarchy.menu` disabled, the stray entry removed,
+  no marker, 0 failed units.

@@ -254,6 +254,33 @@ is not content equality and the wording never claims it is.
 plugin is found when somebody asks, not when it happens. That is an improvement
 on a journal line nobody reads and it is not the same as being told.
 
+## apply-confirm: what it proves, and the one assertion still unproven
+
+`checks.apply-confirm` drives the real `nixarchy-apply` against fixture files
+(#967). Three things about it are worth knowing before trusting or editing it.
+
+**A stubbed `nh` on PATH does not work.** `writeShellApplication` builds a
+strict PATH from `runtimeInputs` and prepends it, so the real `nh` always wins.
+That is the property making the script hermetic, and it defeats the usual trick.
+"Did it reach the rebuild?" is therefore read from apply's own log -- it prints
+"The rebuild failed" only after invoking `nh` -- which is a proxy, not a
+process observation.
+
+**`$out` is in scope.** Capturing apply's output into a variable called `out`
+made every assertion pass and then broke `mkdir -p $out`: the derivation failed
+to produce its own output with nothing in the log saying why. The variable is
+`log`.
+
+**The strongest assertion is NOT yet proven to fail.** Case 4 asserts a changed
+file is *not built* without confirmation. Breaking the comparison two different
+ways turned the check red both times -- on "first run did not say the file was
+unconfirmed" and on "the refusal did not say the file changed" -- so the check
+is not blind. But neither break made case 4's own `built &&` line fire, so that
+line has never been observed failing. It may be unfalsifiable in this harness
+for the same reason the stub is: apply's path to `nh` is reached or not for
+reasons the fixture does not fully control. Treat it as unproven until somebody
+makes it go red, and do not add assertions in its shape without doing so.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

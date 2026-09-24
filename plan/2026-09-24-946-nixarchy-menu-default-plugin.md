@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 946
 spec: spec/2026-09-24-946-nixarchy-menu-default-plugin.md
 ---

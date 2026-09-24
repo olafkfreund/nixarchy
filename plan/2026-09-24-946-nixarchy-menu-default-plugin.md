@@ -176,3 +176,14 @@ Revert the merge. The input, entry and hook change go with it.
   - CI builds the rest
 
   The pinned plugin's closure, measured at `8775661`, is **84.7 MiB**.
+- **Step 4, after the Codex review (P2, accepted):** the pre-disable also
+  covers a target that is **already enabled**, such as a hand install sitting
+  beside an enabled `evindor.keystroke`. Before, that case was marked done
+  and both stayed on, and `resolveEnabledId` picked the alphabetically first
+  one.
+  - The hook now lists the enabled rivals first. It only marks-and-skips when
+    ours is on **and** there are no rivals.
+  - Otherwise it disables the rivals, then (re-)enables ours, with no
+    placement if ours was already on. The re-enable takes the source back
+    off after `restoreCloneSource` (`PluginRegistry.qml:548-549`).
+  - Step 7 tests this exact case on razer.

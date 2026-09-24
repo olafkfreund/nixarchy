@@ -1959,22 +1959,33 @@ in
               printf '%s is a hand install; rm -rf %s and log in again to use the declared one\n' \
                 "$id" "$plugins/$id" | systemd-cat -t nixarchy-default-plugins
             fi
+            # A clone of a first-party plugin must be the only one: any other
+            # enabled clone of the same source goes off BEFORE ours is
+            # enabled, because turning one off restores the source (#946).
+            src=$(jq -r --arg id "$id" 'first(.[] | select(.id == $id) | .clonedFrom // "") // ""' <<<"$list")
+            others=""
+            if [ -n "$src" ]; then
+              others=$(jq -r --arg id "$id" --arg src "$src" \
+                '.[] | select(.clonedFrom == $src and .id != $id and .enabled) | .id' <<<"$list")
+            fi
+            enabled=""
             if jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' <<<"$list" >/dev/null; then
+              enabled=1
+            fi
+            if [ -n "$enabled" ] && [ -z "$others" ]; then
               : >"$state/$id"
               continue
             fi
-            # A clone of a first-party plugin must be the only one: any other
-            # enabled clone of the same source goes off FIRST, because turning
-            # it off afterwards restores the source beside ours (#946).
-            src=$(jq -r --arg id "$id" 'first(.[] | select(.id == $id) | .clonedFrom // "") // ""' <<<"$list")
-            if [ -n "$src" ]; then
-              jq -r --arg id "$id" --arg src "$src" \
-                '.[] | select(.clonedFrom == $src and .id != $id and .enabled) | .id' <<<"$list" |
-                while IFS= read -r other; do
-                  omarchy-plugin-disable "$other" 2>&1 | systemd-cat -t nixarchy-default-plugins || true
-                done
-            fi
-            if [ -n "''${placement[$id]:-}" ]; then
+            while IFS= read -r other; do
+              [ -n "$other" ] || continue
+              omarchy-plugin-disable "$other" 2>&1 | systemd-cat -t nixarchy-default-plugins || true
+            done <<<"$others"
+            # Already on (a hand install, say) with a rival that was just
+            # turned off: enabling ours again takes the source back off, and
+            # with no placement it stays where it is.
+            if [ -n "$enabled" ]; then
+              set -- "$id"
+            elif [ -n "''${placement[$id]:-}" ]; then
               set -- "$id" "''${placement[$id]}"
             else
               set -- "$id"

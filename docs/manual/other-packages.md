@@ -14,8 +14,8 @@ pacman. None of that applies here, and the reasons are on the
 The Install menu still exists and still has every row Omarchy ships. Each row
 has been mapped to how NixOS installs the thing, beside a few apps upstream does
 not list. There are 67 apps in total:
-50 are plain nixpkgs packages,
-6 are NixOS modules,
+49 are plain nixpkgs packages,
+7 are NixOS modules,
 9 are built by nixarchy itself because nixpkgs does not carry them,
 and 2 have no equivalent and say so in the menu.
 

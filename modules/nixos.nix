@@ -1430,6 +1430,24 @@ in
       {
         "omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
 
+        # The flake nixarchy-apply rebuilds, for the tools and plugins that
+        # cannot ask the module system and cannot rely on the session
+        # environment (#950). environment.sessionVariables carries
+        # NIXARCHY_FLAKE for anything started inside a session; a systemd unit,
+        # a sudo without a login shell, and a plugin spawned outside one get
+        # none of it and answer /etc/nixos whatever this option says.
+        #
+        # Declarative for the same reason nixarchy/managed below is: it is in
+        # the closure and rewritten by every rebuild, so it cannot go stale
+        # against the option it is generated from. No trailing newline -- a
+        # reader doing $(cat ...) would strip one anyway, and one answer is
+        # easier to document than two.
+        #
+        # No mkIf: cfg.flake has a default, so this exists wherever the module
+        # is on. A reader wants an answer, not "the file is there when somebody
+        # changed the default".
+        "nixarchy/flake".text = cfg.flake;
+
         # Why: modules/AGENTS.md#the-ownership-marker-for-the-shell-tools-that-cann
         "nixarchy/managed" = lib.mkIf cfg.installerManaged {
           text = ''

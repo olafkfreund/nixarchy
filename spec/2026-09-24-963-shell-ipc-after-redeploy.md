@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 963
 intent: intent/2026-09-24-963-shell-ipc-after-redeploy.md
 ---

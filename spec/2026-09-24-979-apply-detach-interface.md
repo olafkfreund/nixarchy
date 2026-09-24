@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 979
 intent: intent/2026-09-24-979-apply-detach-interface.md
 ---

@@ -165,3 +165,14 @@ Revert the merge. The input, entry and hook change go with it.
   as rendered with the real `menu` entry on (`defaultHookScript`, `-S warning`).
   The same shell section asserts that the real plugin passes the validator
   (`menuValidated`).
+- **Step 6:** a whole `nix flake check` fails on `packages.grok-bot` being
+  unfree (`Refusing to evaluate package 'grok-bot-0.24.0'`). That is
+  pre-existing: evaluating its `drvPath` on main `a5460e2` fails identically,
+  and nixarchy's CI never runs a whole `flake check`, only named checks. So
+  step 6 is instead:
+  - the PR workflow's lint, run locally: `nix fmt -- --ci` (0 changed),
+    statix and deadnix all exit 0
+  - `checks.options`, which passes
+  - CI builds the rest
+
+  The pinned plugin's closure, measured at `8775661`, is **84.7 MiB**.

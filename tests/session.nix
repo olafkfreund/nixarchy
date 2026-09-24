@@ -1757,5 +1757,39 @@ pkgs.testers.runNixOSTest {
     print("ai-mirror: widget on, MCP cannot self-answer, requests lapse and end "
           "with their server, and the kill switch is bound and works")
 
+    # ---- writing shell.json under a running shell, and getting back (#847) --
+    #
+    # READ THIS BEFORE "FIXING" A FAILURE HERE. This does NOT assert that
+    # writing shell.json is survivable. It is not: the write triggers a reload,
+    # and Quickshell's IpcHandlerRegistry::registerHandler leaves a new handler
+    # inert when the target is already claimed, so IPC targets go to "Target
+    # not found" until the shell is restarted. Identical bytes are enough. That
+    # defect is upstream (see docs/internals/shell-json-reload.md) and this
+    # check cannot see it.
+    #
+    # What it asserts is the RECOVERY, which is the part we own and the part
+    # modules/AGENTS.md now tells people to use: after such a write,
+    # omarchy-restart-shell brings the IPC targets back. A failure here means
+    # the documented escape hatch stopped working -- not that the upstream bug
+    # was fixed, and not that it got worse.
+    #
+    # Deliberately shaped so it cannot invert. An assertion that the write is
+    # harmless would go red the day upstream fixes this, which is exactly the
+    # trap AGENTS.md section 1 describes: a deliberate change turns a check red
+    # and the instinct is to satisfy it rather than ask what it measured.
+    machine.succeed(as_user("cp -a ~/.config/omarchy/shell.json /tmp/shell.json.bak"))
+    # 847-allow: the one deliberate write in the tree, and the point of the
+    # check below. build.yml's "Nothing we ship writes shell.json" step honours
+    # this marker and nothing else does.
+    machine.succeed(as_user("cat /tmp/shell.json.bak > ~/.config/omarchy/shell.json"))  # 847-allow
+    machine.sleep(4)
+    machine.succeed(as_user("omarchy-restart-shell"))
+    machine.wait_until_succeeds(as_user("omarchy-shell shell ping"), timeout=60)
+    # cmp, because a recovery that silently rewrote the user's file would be a
+    # worse bug than the one this is about.
+    machine.succeed(as_user("cmp /tmp/shell.json.bak ~/.config/omarchy/shell.json"))
+    print("a shell.json written under the running shell is recovered by "
+          "omarchy-restart-shell, with the file unchanged")
+
   '';
 }

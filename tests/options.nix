@@ -972,7 +972,9 @@ let
     # after it, the shell restores the source beside ours.
     defaultPluginsPreDisable =
       let
-        t = hookText fixtureHome;
+        # Inside the to-do loop only: the restore pass above it (amendment
+        # 1) enables a source before disabling an orphan, which is right there.
+        t = pkgs.lib.last (pkgs.lib.splitString ''for id in "''${todo[@]}"'' (hookText fixtureHome));
         at = s: builtins.stringLength (builtins.head (pkgs.lib.splitString s t));
       in
       {
@@ -980,6 +982,22 @@ let
           pkgs.lib.hasInfix "omarchy-plugin-disable" t
           && at "omarchy-plugin-disable" < at "omarchy-plugin-enable";
         off = at "omarchy-plugin-enable" < at "omarchy-plugin-disable";
+      };
+    # #946 amendment 1: a dropped clone's source comes back. The marker
+    # records the source, and the restore runs before the to-do loop, so a
+    # login with nothing new to enable still restores.
+    defaultPluginsRestoreSource =
+      let
+        t = hookText fixtureHome;
+        at = s: builtins.stringLength (builtins.head (pkgs.lib.splitString s t));
+        loop = ''for id in "''${todo[@]}"'';
+      in
+      {
+        on =
+          pkgs.lib.hasInfix ''printf '%s\n' "$src" >"$state/$id"'' t
+          && pkgs.lib.hasInfix ''--before "$id"'' t
+          && at ''--before "$id"'' < at loop;
+        off = at loop < at ''--before "$id"'';
       };
     # #946: the real nixarchy-menu entry is opt-in.
     menuIsOptIn = {

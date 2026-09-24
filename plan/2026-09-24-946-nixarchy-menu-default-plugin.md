@@ -275,3 +275,9 @@ Revert the merge. The input, entry and hook change go with it.
     post "done". Record the results here.
 14. **Then carry on with the rest of step 9:** a Codex re-review of the new
     commits, then the PR.
+- **Step 11 deviation:** `defaultPluginsPreDisable` compared the first
+  `omarchy-plugin-disable` with the first `omarchy-plugin-enable` in the whole
+  hook. The restore pass above the to-do loop enables a source before it
+  disables an orphan, which is correct, so the case now compares the two
+  **inside the to-do loop only**. `defaultPluginsRestoreSource` fails when the
+  restore block is moved after the loop (checked, then restored).

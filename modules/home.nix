@@ -1931,7 +1931,20 @@ in
           for id in ${lib.escapeShellArgs defaultIds}; do
             [ -e "$state/$id" ] || todo+=("$id")
           done
-          [ ''${#todo[@]} -gt 0 ] || exit 0
+          plugins="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
+          # A clone nixarchy enabled (its marker names the plugin it replaces)
+          # that is no longer declared and whose files are gone: removing the
+          # files never ran the shell's restore, so the source is still off
+          # and nothing replaces it -- put it back (#946).
+          declared=${lib.escapeShellArg (" " + lib.concatStringsSep " " defaultIds + " ")}
+          gone=()
+          for marker in "$state"/*; do
+            [ -f "$marker" ] || continue
+            id=''${marker##*/}
+            case "$declared" in *" $id "*) continue ;; esac
+            [ -n "$(head -n1 "$marker")" ] && [ ! -e "$plugins/$id" ] && gone+=("$id")
+          done
+          [ ''${#todo[@]} -gt 0 ] || [ ''${#gone[@]} -gt 0 ] || exit 0
 
           # The shell may still be starting. No answer means next login.
           for _ in $(seq 120); do
@@ -1941,6 +1954,19 @@ in
           omarchy-shell shell ping >/dev/null 2>&1 || exit 0
           omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 
+          for id in "''${gone[@]}"; do
+            src=$(head -n1 "$state/$id")
+            # Beside the clone's orphaned bar entry, so the source takes its
+            # place; anywhere if that entry is gone too.
+            if out=$(omarchy-plugin-enable "$src" --before "$id" 2>&1) ||
+              out=$(omarchy-plugin-enable "$src" 2>&1); then
+              omarchy-plugin-disable "$id" 2>&1 | systemd-cat -t nixarchy-default-plugins || true
+              rm -f "$state/$id"
+            else
+              printf '%s: %s\n' "$src" "$out" | systemd-cat -t nixarchy-default-plugins
+            fi
+          done
+
           # The bar section each is enabled into; "" keeps a clone in the
           # slot of the plugin it replaces (#946).
           declare -A placement=(${
@@ -1948,7 +1974,6 @@ in
               lib.attrValues resolvedDefaults
             )
           })
-          plugins="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
 
           mkdir -p "$state"
           list=$(omarchy-plugin-list --json 2>/dev/null) || list='[]'
@@ -1973,7 +1998,7 @@ in
               enabled=1
             fi
             if [ -n "$enabled" ] && [ -z "$others" ]; then
-              : >"$state/$id"
+              printf '%s\n' "$src" >"$state/$id"
               continue
             fi
             while IFS= read -r other; do
@@ -1991,7 +2016,7 @@ in
               set -- "$id"
             fi
             if out=$(omarchy-plugin-enable "$@" 2>&1); then
-              : >"$state/$id"
+              printf '%s\n' "$src" >"$state/$id"
             else
               printf '%s: %s\n' "$id" "$out" | systemd-cat -t nixarchy-default-plugins
             fi

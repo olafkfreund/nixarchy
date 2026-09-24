@@ -512,6 +512,16 @@ off any other enabled plugin with the same `clonedFrom` (an old
 `evindor.keystroke`, say). It has to be done in that order: disabling a clone
 *after* another is on restores the stock menu beside it.
 
+**Turning it off brings the stock menu back.** Setting `menu` back to
+`false` removes the plugin link, but removing files never runs the shell's
+restore, so `omarchy.menu` would stay disabled with nothing in its place. The
+hook's enabled-once marker therefore records what a clone replaces. At the
+next login, for a marker whose clone is no longer declared and whose files are
+gone, the hook re-enables that source beside the clone's orphaned bar entry,
+disables the orphan, and removes the marker. The limit: the hook exists only
+while at least one default resolves. With every default off, run
+`omarchy plugin enable omarchy.menu` once by hand.
+
 **A hand install wins until removed.** A real directory at
 `~/.config/omarchy/plugins/nixarchy.menu`, for example from nixarchy-menu's own
 `bin/nixarchy-menu install`, is left alone, as for every plugin. The hook logs

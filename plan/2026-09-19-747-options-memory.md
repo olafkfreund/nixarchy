@@ -310,8 +310,9 @@ because the break was checked for having landed before its result was read.
 ## Implementation plan — 2026-09-24: the population rescope
 
 Drafted against the amendment approved the same day
-(`spec/2026-09-19-747-options-memory.md`, "Amendment — 2026-09-24"). **Status:
-draft, for approval.** No implementation edits until this is approved.
+(`spec/2026-09-19-747-options-memory.md`, "Amendment — 2026-09-24").
+**Status: approved 2026-09-24.** Implementation may proceed; the steps below
+are the contract, and step 8's refusal to iterate is part of it.
 
 ### The decisions, carried over so this is self-contained
 

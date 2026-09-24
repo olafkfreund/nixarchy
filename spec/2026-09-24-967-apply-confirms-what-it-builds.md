@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 967
 intent: intent/2026-09-24-967-apply-confirms-what-it-builds.md
 ---

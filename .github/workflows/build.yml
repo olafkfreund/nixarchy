@@ -819,7 +819,16 @@ jobs:
           # recovery works. That line carries `847-allow`, which is looked up
           # in the ORIGINAL line -- comments are stripped before matching, so a
           # marker cannot be found in the stripped copy.
-          files=$(grep -rl 'shell\.json' \
+          # The LIVE config is always .../omarchy/shell.json. This matters:
+          # tests/demo/screencast/ snapshots the file to "$state/shell.json"
+          # and writes "$state/shell.json.sha256" beside it, and an earlier
+          # version of this step flagged BOTH -- one because a snapshot shares
+          # the basename, one because the pattern had no end anchor so
+          # shell.json.sha256 matched shell.json. Found by rebasing onto a main
+          # that had just gained that directory, which is exactly the
+          # cross-PR breakage AGENTS.md section 9 describes.
+          P='omarchy/shell\.json'
+          files=$(grep -rl "$P" \
             --include='*.nix' --include='*.sh' --include='*.qml' --include='*.py' \
             modules pkgs installer tests 2>/dev/null || true)
           rc=0
@@ -827,11 +836,11 @@ jobs:
             while IFS=: read -r n rest; do
               [ -n "$n" ] || continue
               case "$(sed -n "${n}p" "$f")" in *847-allow*) continue ;; esac
-              echo "::error file=$f,line=$n::writes shell.json, which breaks a running shell (#847): $rest"
+              echo "::error file=$f,line=$n::writes the live shell.json, which breaks a running shell (#847): $rest"
               rc=1
             done < <(
               sed -e 's@[[:space:]]*#.*$@@' -e 's@[[:space:]]*//.*$@@' "$f" |
-              grep -nE '(>>?[[:space:]]*"?[^"|;&[:space:]]*shell\.json|tee[[:space:]]+[^|;&]*shell\.json|(mv|cp|install)[[:space:]][^|;&]*[[:space:]]"?[^"|;&[:space:]]*shell\.json"?[[:space:]]*\)?"?[[:space:]]*$)'
+              grep -nE ">>?[[:space:]]*\"?[^\"|;&[:space:]]*${P}\"?[[:space:]]*\)?\"?[[:space:]]*\$|tee[[:space:]]+[^|;&]*${P}([[:space:]]|\"|\$)|(mv|cp|install)[[:space:]][^|;&]*[[:space:]]\"?[^\"|;&[:space:]]*${P}\"?[[:space:]]*\)?\"?[[:space:]]*\$"
             )
           done
           if [ $rc -ne 0 ]; then
@@ -839,7 +848,7 @@ jobs:
             echo "See docs/internals/shell-json-reload.md."
             exit 1
           fi
-          echo "nothing under modules/, pkgs/, installer/ or tests/ writes shell.json"
+          echo "nothing under modules/, pkgs/, installer/ or tests/ writes the live shell.json"
 
       - name: Verify shebangs were patched
         run: |

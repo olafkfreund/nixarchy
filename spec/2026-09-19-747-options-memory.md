@@ -175,9 +175,10 @@ report that result and revise the design rather than lower the target silently.
 
 ## Amendment — 2026-09-24: rescope the population, and why one at a time cannot work
 
-**Status of this amendment: draft, for approval.** The design gate in
-`plan/2026-09-19-747-options-memory.md` step 6 requires spec approval before an
-implementation plan is drafted. Nothing here is implemented.
+**Status of this amendment: approved 2026-09-24.** The design gate in
+`plan/2026-09-19-747-options-memory.md` step 6 required spec approval before an
+implementation plan could be drafted; that approval is this line, and the plan
+may now be written. Nothing is implemented by this amendment itself.
 
 ### What changed since the spec was approved
 

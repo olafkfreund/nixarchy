@@ -1773,7 +1773,7 @@ in
           gate = osConfig.virtualisation.podman.enable or false;
         };
         # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
-        # drives and the python its actions.py runs on (#770).
+        # drives and the python its gitlab.py runs on (#770).
         gitlab = {
           id = "olafkfreund.gitlab-pipelines";
           src = gitlabPipelines;

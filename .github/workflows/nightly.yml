@@ -127,6 +127,26 @@ jobs:
   install-iso:
     name: install from the ISO, with no network
     runs-on: [self-hosted, nixos, kvm, big]
+    # One of two chains, so at most TWO install-class jobs share p620 at a
+    # time (#935). The workflow-level `concurrency: nightly` stops two nightly
+    # RUNS overlapping and does nothing about jobs inside one -- all five
+    # install-class jobs started at 03:10:14 on 2026-09-24 and
+    # install-encrypted was starved to its 90-minute cap, finishing its steps
+    # at minute 92. AGENTS.md section 6 already carries the measurement this
+    # contradicts: two concurrent installs both succeed, three to four all
+    # fail at the in-guest timeout.
+    #
+    # `needs`, not a concurrency group: a group keeps ONE pending job and
+    # CANCELS the next, so five jobs across two groups would run two, queue
+    # two and cancel one -- turning over-subscription into eviction, which
+    # section 6 also warns reads as a failure.
+    #
+    # `if: always()`, because a chained job is skipped when its predecessor
+    # fails, and `report` needs all of these. Without it, one install failure
+    # would silently take a second check with it -- a check that does not run
+    # reading as one that passed.
+    needs: [install]
+    if: always()
     # The ISO build dominates: the squashfs alone is most of it.
     timeout-minutes: 180
     steps:
@@ -215,6 +235,10 @@ jobs:
   reinstall-vm:
     name: build a user image, reinstall from it, boot the result
     runs-on: [self-hosted, nixos, kvm, big]
+    # The second chain; see install-iso above for why `needs` and not a
+    # concurrency group, and why `if: always()`.
+    needs: [install-encrypted]
+    if: always()
     timeout-minutes: 200
     steps:
       - uses: actions/checkout@v5

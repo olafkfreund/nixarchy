@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 946
 spec: spec/2026-09-24-946-nixarchy-menu-default-plugin.md
 ---
@@ -215,3 +215,63 @@ Revert the merge. The input, entry and hook change go with it.
 - **Restored:** 2954 (06kpcydy), the hand copy back and enabled in its slot,
   `evindor.keystroke` and `omarchy.menu` disabled, the stray entry removed,
   no marker, 0 failed units.
+
+## Amendment 1: the off switch restores the source (spec amendment 1, approved 5c52092)
+
+### Decisions, carried over
+- **Marker content.** The enabled-once marker holds the plugin's
+  `clonedFrom`. It is written at enable time, and also when the plugin is
+  found already on. For a plugin that isn't a clone, it stays empty.
+- **Restore pass, at the start of the hook.** A **dropped clone** is a marker
+  whose id isn't in the declared ids, whose content (the source) is
+  non-empty, and whose `$plugins/$id` is gone. Once the shell answers, for
+  each dropped clone the hook:
+  - runs `omarchy-plugin-enable "$source" --before "$id"`, which puts the
+    source beside the orphaned bar entry
+  - runs `omarchy-plugin-disable "$id"`, which removes the orphan, since there
+    is no manifest
+  - removes the marker once the enable worked
+
+  A marker whose directory still exists is left alone.
+- **Early exit** only when the to-do list and the dropped-clone list are
+  both empty.
+- **Limit** (documented in flake.md): with every default off, there is no
+  hook, so no restore. The manual command is `omarchy plugin enable
+  omarchy.menu`.
+
+### Steps
+10. **`modules/home.nix` hook.**
+    - Write `$src` into the marker on both marking paths.
+    - Before the `todo` early exit, build `gone` (id and source pairs) from
+      the markers, keeping those not in `defaultIds` whose directory is gone.
+    - Change the early exit to `[ ${#todo[@]} -gt 0 ] || [ ${#gone[@]} -gt 0 ] || exit 0`.
+    - After the shell ping, run the restore loop for `gone`.
+
+    → Verify: `checks.options` shellcheck is still clean.
+11. **`tests/options.nix`,** a new case `defaultPluginsRestoreSource`:
+    - on: the hook text writes `"$src"` into the marker, and
+      `--before "$id"` appears before the to-do enable loop
+    - off: `--before` appears after the to-do loop
+
+    → Verify: it passes, and it fails when the restore block is moved after
+    the loop (checked once, then restored).
+12. **`docs/internals/flake.md`:** in the nixarchy-menu section, a sentence
+    on the off switch restoring the stock menu, and the limit.
+    → Verify: rendered by reading it.
+13. **Razer re-check** (claimed on the bus; no generation kept):
+    - Build the toplevel with `menu = true`, activate in test mode, remove
+      the hand copy, restart the HM unit, and run the hook. That writes the
+      marker with `omarchy.menu`.
+    - Then activate razer's own 2954 system (menu not declared) and run the
+      hook again.
+
+    → Verify:
+    - The menu button is back in the same slot (the bar matches the pre-test
+      screenshot).
+    - `omarchy-menu toggle root` opens the **stock** menu.
+    - The `nixarchy.menu` marker is gone.
+
+    Then restore the hand copy, re-enable it, remove the stray entries, and
+    post "done". Record the results here.
+14. **Then carry on with the rest of step 9:** a Codex re-review of the new
+    commits, then the PR.

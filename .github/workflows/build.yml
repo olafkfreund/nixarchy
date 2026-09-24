@@ -1425,6 +1425,46 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         env:
           NIX_SHOW_STATS: "1"
+          # Boehm prints a post-collection `In-use heap` line per collection,
+          # which is the LIVE set. Measured on one run: 12.56 GB RSS against
+          # 8.04 GB live, a factor of 1.56 (#747).
+          #
+          # It does NOT replace the RSS reading below, and the distinction is
+          # the point. RSS is what the 16 GB ceiling is measured against, so
+          # RSS is what the warning must watch. Live heap is what a CHANGE is
+          # measured against: it is reported by the collector rather than
+          # inferred from process memory, so it is immune to the ~3%
+          # run-to-run RSS band that made several #747 experiments
+          # uninterpretable. Two quantities, two jobs.
+          #
+          # Free: 790292 kB / 2.74 s with the flag against 788216 kB / 2.60 s
+          # without, measured rather than assumed.
+          GC_PRINT_STATS: "1"
+          # A readable failure instead of an invisible one.
+          #
+          # Past 16 GB the kernel kills the runner and the job reports
+          # `cancelled` with NO failed step -- which AGENTS.md section 6 lists
+          # three other causes for, so today the one failure this check is
+          # most likely to hit is the one nobody can diagnose. With a cap,
+          # Boehm refuses and nix exits `error: out of memory` on a red step.
+          #
+          # 14 GiB, and the number is chosen rather than guessed. The heap
+          # reached 11.70 GB on a real run (RSS 12.56, live 8.04), and six
+          # readings on main sat at 11.5-12.2 GB RSS. 14 GiB leaves ~2.3 GB of
+          # honest headroom over the worst observed heap, and RSS runs about
+          # 0.86 GB above heap, so the cap bites at ~14.9 GB RSS -- before the
+          # 16 GB kill, which is the whole point.
+          #
+          # Verified honoured by this binary in both directions, because two
+          # investigations disagreed about whether it is: a deliberately low
+          # cap gives `GC Warning: Out of Memory! ... error: out of memory`
+          # and exit 1; an ample cap passes and exits 0.
+          #
+          # The trade, stated: a legitimate growth past 14 GiB becomes a hard
+          # failure rather than a survivable run. That window is narrow -- past
+          # ~15.1 GB of heap the runner is killed anyway -- and inside it the
+          # current outcome is a `cancelled` nobody can attribute.
+          GC_MAXIMUM_HEAP_SIZE: "15032385536"
         # Evaluated, not booted -- each option here does its work by putting a
         # package in a list, so evaluation is where the answer is. Not cheap
         # though, and the expensive axis is MEMORY: a developer machine
@@ -1452,23 +1492,43 @@ jobs:
           # annotation is the "loud somewhere else" section 4 asks for.
           rc=0
           if command -v /usr/bin/time >/dev/null; then
+            # stderr to a file so the collector's per-collection lines can be
+            # parsed, then replayed so the log is unchanged for a reader.
+            # `-o` already takes GNU time's own output, so stderr is free.
             /usr/bin/time -v -o options-time.txt \
-              .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options || rc=$?
+              .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.options \
+              2> options-gc.txt || rc=$?
+            cat options-gc.txt >&2
             peak=$(awk '/Maximum resident set size/ { print $NF }' options-time.txt)
             wall=$(awk -F': ' '/Elapsed .wall clock/ { print $NF }' options-time.txt)
+            # The LIVE set: the largest post-collection `In-use heap`. This is
+            # what the check is limited by, and unlike RSS it is reported by
+            # the collector rather than inferred from process memory -- so it
+            #
+            # `|| true` on the pipeline and a `-` default: a Boehm that stops
+            # printing these must not fail a check that passed, and an empty
+            # value must read as "not measured" rather than as zero.
+            live_kib=$(grep -oE 'In-use heap: [0-9]+% \([0-9]+ KiB' options-gc.txt 2>/dev/null |
+              grep -oE '\([0-9]+' | tr -d '(' | sort -n | tail -1 || true)
+            if [ -n "${live_kib:-}" ]; then
+              live_mib=$(( live_kib / 1024 ))
+            else
+              live_mib=""
+            fi
             # stdout AS WELL as the summary. A step summary is readable only
             # by opening the run in a browser -- `gh run view --log` and the
             # jobs API both omit it -- so a number written only there cannot be
             # compared across runs by anything that is not a person looking.
             # Trending it was half of #747's point.
             echo "options: peak RSS $(( ${peak:-0} / 1024 )) MiB of 16384 MiB," \
-              "wall ${wall:-unknown}"
+              "live heap ${live_mib:-unmeasured} MiB, wall ${wall:-unknown}"
             {
               echo "### checks.options"
               echo ""
               echo "| | |"
               echo "|---|---|"
               echo "| peak RSS | $(( ${peak:-0} / 1024 )) MiB of 16384 MiB |"
+              echo "| peak live heap | ${live_mib:-unmeasured} MiB |"
               echo "| wall clock | ${wall:-unknown} |"
             } >> "$GITHUB_STEP_SUMMARY"
             # Loud before it is fatal (#747). Past 16 GB the runner is killed,

@@ -1246,6 +1246,63 @@ else
 fi
 say ""
 
+# ---- a plugin of ours standing behind one of yours (#959) ----------------
+# Only ever reports on a machine that ALREADY runs nixarchy: it reads the
+# manifest activation writes, and prints nothing when there is none. That
+# silence is deliberate -- doctor's primary reader has never had nixarchy
+# installed and must not be shown a section about it.
+#
+# The failure this exists for: a real directory at a declared plugin's id is
+# left alone, correctly, because it may be a working copy. When it is a clone
+# of the SAME plugin we ship, it holds its version through every pin bump, and
+# the only signal was one line in the activation journal. On razer that meant a
+# green deploy of plugin 0.3.0 running 0.2.0.
+#
+# VERSIONS, not commits, and that is a real limit rather than a shortcut. There
+# is no commit to compare: the module has a store path, and the revision lives
+# in the flake lock. Both sides carry a manifest.json version already, it needs
+# no git and no network, and a shallow clone answers as well as a full one.
+# What it cannot do is tell two diverged branches apart at the same version --
+# it says "same version", never "identical".
+#
+# It reports and does not decide. A clone NEWER than ours is somebody working,
+# not a fault: a rule that moved it aside would have destroyed 28 commits on
+# this maintainer's own machine.
+plugin_manifest="$config_home/omarchy/plugins/.nixarchy-managed"
+if [ -f "$plugin_manifest" ] && grep -q '^!' "$plugin_manifest" 2>/dev/null; then
+  said_plugin_header=no
+  while IFS=$'\t' read -r marked ourver; do
+    case "$marked" in !?*) ;; *) continue ;; esac
+    pid=${marked#!}
+    pdir="$config_home/omarchy/plugins/$pid"
+    [ -d "$pdir" ] || continue
+
+    if [ "$said_plugin_header" = no ]; then
+      say "${bold}Plugins of yours that nixarchy is not replacing${off}"
+      said_plugin_header=yes
+    fi
+
+    yourver=$(jq -r '.version // "?"' "$pdir/manifest.json" 2>/dev/null || echo "?")
+
+    if [ "$yourver" = "?" ] || [ "$ourver" = "?" ]; then
+      finding "$pid" "$dim" "your own directory. nixarchy declares this id and is not managing it."
+      notes+=("$pid: a directory of yours stands in for a plugin nixarchy declares, so it will not follow a pin bump.")
+    elif [ "$yourver" = "$ourver" ]; then
+      finding "$pid" "$dim" "yours and nixarchy's are both $yourver."
+      notes+=("$pid: the same version today, and it will NOT follow the next pin bump -- the drift starts silently, with nothing to see.")
+    elif [ "$(printf '%s\n%s\n' "$yourver" "$ourver" | sort -V | tail -1)" = "$yourver" ]; then
+      finding "$pid" "$ok" "yours is $yourver, newer than nixarchy's $ourver. Nothing to do."
+    else
+      finding "$pid" "$warn" "yours is $yourver; nixarchy ships $ourver."
+      say "     nixarchy is not replacing your directory, so this machine runs $yourver."
+      say "     If you did not mean to keep it:"
+      say "       ${bold}mv $pdir $pdir.mine${off}"
+      say "       ${bold}systemctl --user restart home-manager-$USER${off}"
+    fi
+  done < "$plugin_manifest"
+  [ "$said_plugin_header" = yes ] && say ""
+fi
+
 # ---- the snippet ---------------------------------------------------------
 say "${bold}Add this to your configuration${off}"
 say ""

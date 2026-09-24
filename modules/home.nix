@@ -477,6 +477,14 @@ let
         ''}
         mkdir -p $out
         echo -n "$id" > $out/id
+        # The version we ship, for #959: when a real directory shadows this
+        # plugin, activation records ours beside the id so nixarchy-doctor can
+        # say "yours is 0.2.0, ours is 0.3.0". Not a commit -- there is none
+        # here. `src` is a store path; the revision lives in the flake lock and
+        # reaching it would mean threading inputs.<name>.rev through every
+        # plugin. The manifest version is on both sides already, needs no git,
+        # and is exactly what the herdr case turned on.
+        jq -r '.version // "?"' "$src/manifest.json" | tr -d '\n' > $out/version
         ln -s "$src" $out/plugin
       ''
   ) cfg.plugins;
@@ -1109,6 +1117,18 @@ in
                       target=$(readlink -f ${drv}/plugin)
                       if [ -e "${dir}/$id" ] && [ ! -L "${dir}/$id" ]; then
                         echo "nixarchy: ${dir}/$id is your own directory, not replacing it"
+                        # Recorded as DECLARED-but-not-linked (#959). Without this
+                        # line nothing downstream can tell "we never shipped that"
+                        # from "we shipped it and something is standing in front of
+                        # it" -- which is how a hand-cloned plugin held its commit
+                        # through a pin bump on razer, with a green deploy.
+                        #
+                        # The marker goes in the same file rather than a second one
+                        # so the removal loop below is untouched: it greps exact
+                        # lines, so "!id" never matches a bare "id" and a shadowed
+                        # plugin is never removed -- already what this branch wants.
+                        ourver=$(cat ${drv}/version 2>/dev/null || echo "?")
+                        printf '!%s\t%s\n' "$id" "$ourver" >> "${staging}"
                       else
                         if [ "$(readlink "${dir}/$id")" != "$target" ]; then
                           run ln -sfn "$target" "${dir}/$id"
@@ -1127,9 +1147,16 @@ in
                         fi
                       done < "${manifest}"
                     fi
-                    # The manifest exists only while this module planted something: an
-                    # empty file in a user's plugins directory means nothing to them.
-                    # Hidden names are ignored by the shell's watcher.
+                    # The manifest exists only while this module DECLARED something.
+                    # It used to say "planted", and that stopped being true with
+                    # #959: a machine where every declared plugin is shadowed by a
+                    # real directory now writes a manifest of nothing but "!" lines,
+                    # having planted none of them. That is the point -- it is the
+                    # only record that we meant to.
+                    #
+                    # An empty file in a user's plugins directory still means nothing
+                    # to them, so nothing declared is still no manifest. Hidden names
+                    # are ignored by the shell's watcher.
                     if [ ! -s "${staging}" ]; then
                       run rm -f "${manifest}" "${staging}"
                     elif cmp -s "${staging}" "${manifest}"; then

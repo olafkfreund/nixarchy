@@ -1794,6 +1794,15 @@
             inherit (self.packages.${system}) doctor;
           };
 
+          # The plugin section (#959). Same argument as the Graphics one, and
+          # the state is even further out of reach: it needs a user who cloned
+          # a plugin by hand before nixarchy shipped one at that id, which no
+          # VM and no installer here produces.
+          doctor-plugins = import ./tests/doctor-plugins.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+          };
+
           # The same argument for the Wireless section, and a sharper one: the
           # install VM has a virtio NIC and no radio, so none of the three
           # no-wlan0 cases can occur there at all. Two users hit them in one

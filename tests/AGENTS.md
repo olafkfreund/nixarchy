@@ -229,6 +229,31 @@ the warning reads well is checked by a human — enabling
 `programs.nixarchy.dictation` on a stable machine should print it and install
 nothing.
 
+## The plugin shadow check: a state no VM can reach, and a limit it admits
+
+`checks.doctor-plugins` fakes six homes because the state it is about cannot be
+produced by any machine here: it needs a user who cloned a plugin by hand
+*before* nixarchy shipped one at that id. No installer makes that, and no VM has
+ever done it. Faking `$XDG_CONFIG_HOME` is the only layer that reaches it.
+
+The fixture that matters is **`newer`**. A clone ahead of what we ship is
+somebody working, not a fault -- one sat 28 commits ahead on a maintainer's own
+machine -- and a rule that moved it aside would have destroyed it. The check
+asserts doctor does **not** offer a fix there, and that assertion has been seen
+failing: breaking the branch produces
+
+    FAIL: newer: offered to move aside a clone that is AHEAD of ours
+
+**What it compares, and cannot:** versions from `manifest.json`, not commits.
+There is no commit to compare -- the module holds a store path and the revision
+lives in the flake lock. So two diverged branches at the same version read as
+"same version", and doctor says that rather than "identical". Version equality
+is not content equality and the wording never claims it is.
+
+**What no check here reaches:** nothing runs doctor automatically. A shadowed
+plugin is found when somebody asks, not when it happens. That is an improvement
+on a journal line nobody reads and it is not the same as being told.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

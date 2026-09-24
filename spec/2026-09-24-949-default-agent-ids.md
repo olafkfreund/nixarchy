@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 949
 intent: intent/2026-09-24-949-default-agent-ids.md
 ---

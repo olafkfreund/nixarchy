@@ -274,6 +274,17 @@ in
       turn them on in `programs.omarchy-voice`
     '';
 
+    # #942. Separate from `voice` above and deliberately so: voice is speech
+    # into desktop ACTIONS, dictation is speech into the focused window. They
+    # are different packages and the manual keeps them distinct.
+    dictation.enable = lib.mkEnableOption ''
+      voxtype dictation: hold F9 to speak into the focused window, or toggle
+      with Super+Ctrl+X. Downloads a ~150 MB whisper model on first activation,
+      into your data directory rather than the store, so a machine with no
+      network gets a failed unit you can see rather than a feature that
+      silently does nothing
+    '';
+
     # Why: modules/AGENTS.md#nixarchy-wrote-this-machine-as-a-property-of-the-c
     installerManaged = lib.mkOption {
       type = lib.types.bool;

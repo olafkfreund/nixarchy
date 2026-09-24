@@ -1083,6 +1083,61 @@ let
         on = !(hasVoice defaultHomeOn) && defaultHomeOn.programs ? omarchy-voice;
         off = hasVoice noDefaultsHome || hasVoice defaultHome || hasVoice fixtureNixarchyOff;
       };
+    # #942: dictation installed voxtype and created no daemon, so F9 fired
+    # into nothing. Two cases: the daemon exists and its config stays the
+    # user's, and the ExecStart is a path that survives an upgrade.
+    #
+    # `homeOn { dictation.enable = true; }` is the machine switch; the home
+    # side reads it through osConfig, the way voice does.
+    dictationStartsADaemon =
+      let
+        # The model-loader unit, NOT `voxtype`, and that is the whole point.
+        # Asserting on `voxtype` passed against a deliberate break of the
+        # bridge: this module also sets `systemd.user.services.voxtype.Unit.
+        # After`, gated on osConfig, so the attribute exists whether or not the
+        # daemon is actually configured. The case was measuring our own
+        # ordering line. The model loader is produced only by Home Manager's
+        # module, and only when it is genuinely enabled.
+        unit = h: (h.systemd.user.services or { }) ? voxtype-model-loader;
+      in
+      {
+        # The config assertion rides HERE rather than in a case of its own,
+        # and that is the point. Written alone it was
+        # `on = !(managed h); off = managed h` -- the same expression on the
+        # same home, negated -- which satisfies `on && !off` for any h and can
+        # never go red. A case that cannot fail is section 1's whole subject.
+        # Carried on the enabled home beside the unit, it varies with the
+        # feature and breaks the moment `settings` is set.
+        on =
+          let
+            h = homeOn { dictation.enable = true; } { };
+          in
+          unit h && !((h.xdg.configFile or { }) ? "voxtype/config.toml");
+        off = unit defaultHomeOn;
+      };
+
+    # The ExecStart must be a stable package path. The issue was found after
+    # `voxtype setup systemd` wrote one pointing at `.voxtype-wrapped` inside a
+    # store path, which breaks at the next upgrade or garbage collection --
+    # so a unit that merely EXISTS is not the property worth asserting.
+    dictationExecIsStable =
+      let
+        # toString, because ExecStart is a LIST here and not a string --
+        # `[ "/nix/store/...-voxtype-1.0.1/bin/voxtype daemon " ]`. The first
+        # version called hasInfix straight on it and died with "cannot coerce a
+        # list to a string", caught by a thirty-second evaluation rather than
+        # by an eight-minute check run.
+        exec = h: toString (h.systemd.user.services.voxtype.Service.ExecStart or "");
+      in
+      {
+        on =
+          let
+            e = exec (homeOn { dictation.enable = true; } { });
+          in
+          pkgs.lib.hasInfix "/bin/voxtype daemon" e && !(pkgs.lib.hasInfix ".voxtype-wrapped" e);
+        off = exec defaultHomeOn != "";
+      };
+
     # #771: the herdr sessions widget is a default wherever nixarchy is on,
     # and nowhere else: opted out, standalone or with nixarchy off, it is gone.
     herdrIsADefault = {

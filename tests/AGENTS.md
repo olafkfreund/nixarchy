@@ -179,6 +179,46 @@ omarchy-shell omarchy.clock status             # "Target not found." = still bro
 normally, upstream has fixed it and both this section and the check's comment
 need rewriting — that is news, not a regression.
 
+## The dictation one: a unit that is `active` is not a feature that works
+
+`checks.options` asserts that enabling dictation creates the `voxtype` user
+unit, that its `ExecStart` is a stable package path rather than the
+`.voxtype-wrapped` an imperative `voxtype setup systemd` writes, and that the
+config was *not* taken over as a read-only store symlink (#942).
+
+**All three are properties of the evaluated configuration, and none of them is
+dictation working.** What no check here reaches:
+
+- a real microphone, or PipeWire offering a usable source;
+- the user being in `input` — `pkgs/doctor.sh` checks it on a real machine and
+  names dictation as the reason, and nothing in a sandbox can;
+- Wayland text injection actually reaching the focused window, which is what
+  `wtype` is pulled in for;
+- whether the ~150 MB model download succeeds on a given network;
+- whether the unit survives an upgrade and a garbage collection — the failure
+  that produced the issue in the first place.
+
+So a VM seeing `systemctl --user is-active voxtype` print `active` proves the
+wiring and nothing else. The original bug was a feature that looked installed
+and did nothing; the shape it can take *after* this fix is a daemon that runs
+and still does nothing, and no check here can tell them apart.
+
+Checked by hand on real hardware, and this is the whole list:
+
+```sh
+systemctl --user is-active voxtype     # active
+systemctl --user status voxtype-model-loader   # the model actually arrived
+# hold F9 and speak into a text field
+voxtype configure                      # still writes ~/.config/voxtype/config.toml
+```
+
+That last line is not incidental. The config is seeded rather than managed
+precisely so `voxtype configure` — which the bar's Dictation indicator runs on
+click — keeps working. A change that sets `services.voxtype.settings` would fix
+dictation and break the indicator in the same commit, which is why
+`dictationStartsADaemon` asserts the *absence* of an `xdg.configFile` entry
+rather than only the presence of a unit.
+
 ## The stub-only detach: `run --detach` never runs a real unit on a PR
 
 `checks.microvm-template` proves `nixarchy vm run --detach` against **stub**

@@ -727,65 +727,72 @@ in
     # without reading this file, so the README feature table and
     # docs/manual/getting-started.md both name it and both show the one line
     # above.
-    services.nixi.enable = lib.mkDefault true;
+    # One `services` block, not three keys: statix refuses a third top-level
+    # `services.*` assignment as a repeated key, exactly as the `programs`
+    # block below records for itself. #942's voxtype bridge is the third, so
+    # nixi's two fold together here rather than the new one landing a thousand
+    # lines from the option it bridges.
+    services = {
+      nixi.enable = lib.mkDefault true;
 
-    # The one nixi default nixarchy DOES change, and the only one it needs to.
-    #
-    # Upstream's default is `lib.optional (pkgs.config.allowUnfree or false)
-    # "claude" ++ [ "codex" ]` -- conditional on a flag modules/nixos.nix sets,
-    # so the agent set moved with allowUnfree and nobody ever chose it. That is
-    # how claude-agent-acp, and the unfree claude-code under it, arrived in
-    # every system closure: 650 MiB nobody asked for, in every installed
-    # machine and in a public cache (#725).
-    #
-    # Named rather than inherited, so the set is a property of nixarchy instead
-    # of a side effect. opencode is added because it speaks ACP itself and pins
-    # no adapter at all; codex is Apache-2.0 (data/apps.nix); claude stays by
-    # decision, its 650 MiB and its licence consequence accepted in #725's spec.
-    #
-    # Plain assignment, not mkDefault: a list is a merging type, and mkDefault
-    # on one is dropped whole the moment a user adds an element (AGENTS.md 7).
-    # A user naming their own agents concatenates with these, which is right --
-    # their machine, their adapters.
-    #
-    # claude keeps upstream's allowUnfree guard, and it is a guard rather than a
-    # defaulting trick: nixi forces pkgs.claude-agent-acp whenever "claude" is
-    # in this list, and BOTH that adapter and claude-code throw under
-    # allowUnfree = false. An unconditional list is an evaluation failure on
-    # every machine that sets programs.nixarchy.allowUnfree = false -- measured,
-    # not guessed. nixarchy allows unfree by default, so the default machine
-    # gets all three.
-    # claude is pinned where this machine actually USES claude, not wherever
-    # unfree happens to be allowed.
-    #
-    # The person this condition exists for is the menu-chooser. Picking Claude
-    # from Install runs omarchy-default-agent, which writes `claude` into
-    # ~/.config/omarchy/defaults/agent AND adds claude-code to
-    # ~/.config/nixarchy/apps.nix through nixarchy-pkg-add. nixi reads that
-    # defaults file and treats the name as an EXPLICIT choice -- its fallback
-    # (nixi-nixarchy#13) deliberately does not override one -- so a machine
-    # whose user chose Claude and no longer has claude-agent-acp gets an error
-    # at SUPER+H, not a different agent. Keying on the apps entry keeps them
-    # working with no action from them at all (#731).
-    #
-    # Keying on allowUnfree instead, as this did, put claude-agent-acp and the
-    # unfree claude-code -- 651 MiB, 42% of a public 5 GB cache, for two
-    # packages that are FETCHED rather than built -- into every closure CI
-    # pushes, including two that never wanted them.
-    #
-    # Both halves are needed: appEnabled catches the menu, defaultAgent catches
-    # the declarative user, whose modules/apps.nix mapping installs claude-code
-    # without going through the apps catalogue at all.
-    #
-    # It cannot pin an adapter on a machine that refuses unfree: claude-code is
-    # `unfree = true` in data/apps.nix, so it cannot be enabled there, and
-    # defaultAgent = "claude" already fails to evaluate with nixpkgs' own
-    # message naming the package (modules/apps.nix).
-    services.nixi.agents = [
-      "opencode"
-      "codex"
-    ]
-    ++ lib.optional (appEnabled "claude-code" || defaultAgent == "claude") "claude";
+      # The one nixi default nixarchy DOES change, and the only one it needs to.
+      #
+      # Upstream's default is `lib.optional (pkgs.config.allowUnfree or false)
+      # "claude" ++ [ "codex" ]` -- conditional on a flag modules/nixos.nix sets,
+      # so the agent set moved with allowUnfree and nobody ever chose it. That is
+      # how claude-agent-acp, and the unfree claude-code under it, arrived in
+      # every system closure: 650 MiB nobody asked for, in every installed
+      # machine and in a public cache (#725).
+      #
+      # Named rather than inherited, so the set is a property of nixarchy instead
+      # of a side effect. opencode is added because it speaks ACP itself and pins
+      # no adapter at all; codex is Apache-2.0 (data/apps.nix); claude stays by
+      # decision, its 650 MiB and its licence consequence accepted in #725's spec.
+      #
+      # Plain assignment, not mkDefault: a list is a merging type, and mkDefault
+      # on one is dropped whole the moment a user adds an element (AGENTS.md 7).
+      # A user naming their own agents concatenates with these, which is right --
+      # their machine, their adapters.
+      #
+      # claude keeps upstream's allowUnfree guard, and it is a guard rather than a
+      # defaulting trick: nixi forces pkgs.claude-agent-acp whenever "claude" is
+      # in this list, and BOTH that adapter and claude-code throw under
+      # allowUnfree = false. An unconditional list is an evaluation failure on
+      # every machine that sets programs.nixarchy.allowUnfree = false -- measured,
+      # not guessed. nixarchy allows unfree by default, so the default machine
+      # gets all three.
+      # claude is pinned where this machine actually USES claude, not wherever
+      # unfree happens to be allowed.
+      #
+      # The person this condition exists for is the menu-chooser. Picking Claude
+      # from Install runs omarchy-default-agent, which writes `claude` into
+      # ~/.config/omarchy/defaults/agent AND adds claude-code to
+      # ~/.config/nixarchy/apps.nix through nixarchy-pkg-add. nixi reads that
+      # defaults file and treats the name as an EXPLICIT choice -- its fallback
+      # (nixi-nixarchy#13) deliberately does not override one -- so a machine
+      # whose user chose Claude and no longer has claude-agent-acp gets an error
+      # at SUPER+H, not a different agent. Keying on the apps entry keeps them
+      # working with no action from them at all (#731).
+      #
+      # Keying on allowUnfree instead, as this did, put claude-agent-acp and the
+      # unfree claude-code -- 651 MiB, 42% of a public 5 GB cache, for two
+      # packages that are FETCHED rather than built -- into every closure CI
+      # pushes, including two that never wanted them.
+      #
+      # Both halves are needed: appEnabled catches the menu, defaultAgent catches
+      # the declarative user, whose modules/apps.nix mapping installs claude-code
+      # without going through the apps catalogue at all.
+      #
+      # It cannot pin an adapter on a machine that refuses unfree: claude-code is
+      # `unfree = true` in data/apps.nix, so it cannot be enabled there, and
+      # defaultAgent = "claude" already fails to evaluate with nixpkgs' own
+      # message naming the package (modules/apps.nix).
+      nixi.agents = [
+        "opencode"
+        "codex"
+      ]
+      ++ lib.optional (appEnabled "claude-code" || defaultAgent == "claude") "claude";
+    };
 
     # And the three defaults nixarchy deliberately does NOT change.
     #
@@ -989,6 +996,21 @@ in
                   "${config.xdg.configHome}/omarchy/branding/about.txt"
                 seed_file "${omarchyPath}/logo.txt" \
                   "${config.xdg.configHome}/omarchy/branding/screensaver.txt"
+
+                # #942. Dictation's config, seeded rather than managed, for the
+                # reason this whole block exists: `voxtype configure` and
+                # `voxtype config set` both write this file, and the bar's
+                # Dictation indicator runs the first of them on click. Home
+                # Manager's services.voxtype would write it as a read-only
+                # store symlink through xdg.configFile, so `settings` is left
+                # unset there and this supplies upstream's default instead.
+                #
+                # Unconditional, like every other seed here: a config file for
+                # a daemon that is not running costs nothing, and gating it on
+                # the option would mean a machine that enables dictation later
+                # never gets one.
+                seed_file "${omarchyPath}/default/voxtype/config.toml" \
+                  "${config.xdg.configHome}/voxtype/config.toml"
 
                 # Why: modules/AGENTS.md#the-extensions-directory-and-one-thing-to-undo-in-
                 run mkdir -p "${config.xdg.configHome}/omarchy/extensions"
@@ -1871,6 +1893,53 @@ in
         # Why: modules/AGENTS.md#left-at-home-managers-own-default-everywhere-else-
         enableSystemdUnit = lib.mkDefault false;
       };
+    };
+
+    # #942. Dictation's bridge, and it is a `services.*` option rather than a
+    # `programs.*` one -- so it does NOT nest in the block above, however much
+    # it reads like voice's twin.
+    #
+    # Home Manager's own module writes the unit with
+    # `ExecStart = ${getExe package} daemon`, a stable path. That matters: the
+    # issue was found after `voxtype setup systemd` wrote an ExecStart pointing
+    # at `.voxtype-wrapped` inside a store path, which breaks at the next
+    # upgrade or garbage collection. Nothing here runs `voxtype setup`.
+    services.voxtype = {
+      enable = lib.mkDefault (osConfig.programs.nixarchy.dictation.enable or false);
+
+      # Plain assignment, not mkDefault: a list is a merging type, and
+      # mkDefault on one silently drops the whole contribution the moment a
+      # user adds an element. See the header of modules/services/default.nix.
+      loadModels = [ "base.en" ];
+
+      # Makes the module pull in wtype and wl-clipboard, which are how the
+      # transcription reaches the focused window -- a daemon that runs and
+      # cannot type is this issue's own failure wearing a different hat.
+      wayland.display = lib.mkDefault "$WAYLAND_DISPLAY";
+
+      # `settings` is deliberately NOT set. The module writes it through
+      # xdg.configFile -- a read-only store symlink -- and our own
+      # omarchy-voxtype-config, which the bar's Dictation indicator runs on
+      # click, calls `voxtype configure` against that same path, as does
+      # `voxtype config set`. A symlink breaks both. The option is
+      # `mkIf (settings != { })`, so leaving it unset writes nothing and the
+      # seed below supplies the file instead.
+    };
+
+    # After= is ORDERING, not readiness: PipeWire is socket activated and a
+    # source can still be unavailable when the daemon starts. This makes the
+    # common case right and does not make the race impossible. No restart loop
+    # until a real machine shows one is needed -- a restart loop hides the
+    # failure it papers over.
+    # mkIf, and it is not decoration. Written unconditionally this creates the
+    # `voxtype` unit attribute even on a machine with dictation OFF, because an
+    # attribute path is enough to bring the unit into existence -- the module's
+    # own `mkIf cfg.enable` produces nothing, and this produced a half a unit
+    # beside it. Measured: `unit=yes` with `dictation.enable = false`. That is
+    # a Mode A break, and the kind AGENTS.md means by "the off state is the one
+    # a refactor breaks quietly".
+    systemd.user.services.voxtype = lib.mkIf (osConfig.programs.nixarchy.dictation.enable or false) {
+      Unit.After = [ "pipewire.service" ];
     };
   };
 }

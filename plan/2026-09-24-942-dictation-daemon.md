@@ -193,3 +193,59 @@ All green, so the hardware test is not blocked on anything else: the user is in
 142 MB model is **already downloaded** — so `loadModels` has nothing to fetch
 there and that risk is not exercised by this particular test. A machine without
 the model is still untested.
+
+## Step 9 — the hardware result, 2026-09-24
+
+razer, switched to this branch with `--override-input`, `dictation.enable` was
+already true in `~/.config/nixarchy/apps.nix` (since 21 Sep — which is how the
+bug was found in the first place).
+
+**The migration fired on its first real machine, and it was needed.** Before:
+
+```
+-rw-r--r-- ~/.config/systemd/user/voxtype.service    (a real file)
+ExecStart=/nix/store/hf9lrj7…/bin/.voxtype-wrapped daemon
+```
+
+After:
+
+```
+~/.config/systemd/user/voxtype.service -> /nix/store/…-home-manager-files/…
+ExecStart=/nix/store/hf9lrj7…/bin/voxtype daemon
+After=graphical-session.target
+After=pipewire.service
+voxtype: active          voxtype-model-loader: active
+voxtype status: idle
+~/.config/voxtype/config.toml   -rw-r--r--  mtime 11:10  (untouched)
+```
+
+Without the migration this switch would have failed at `checkLinkTargets`, so
+the deviation above is not hypothetical — it was the difference between the fix
+working and the rebuild erroring on the machine the issue was filed from.
+
+The model loader found the existing weights rather than re-downloading:
+`✓ Model ready: base.en (141 MB)`.
+
+**What this run did NOT prove**, and it is the honest half:
+
+- **Dictation itself.** Holding F9 and speaking is the owner's to do. The
+  daemon answers `idle`, which is the wiring and not the feature.
+- **The download path.** razer already had the 142 MB model, so `loadModels`
+  fetched nothing. A machine without it is still untested.
+- **Survival across an upgrade and a GC**, which is the failure that produced
+  the issue.
+
+### An unrelated blocker found on the way, now #947
+
+Current `main` imports `nix-snapd`'s module itself, and razer's own flake
+imports it too, so evaluation failed before anything could be tested:
+
+```
+error: The option `services.snap.enable' … is already declared in …
+```
+
+Both halves name the **same store path** — one module imported as two values,
+which the module system cannot dedupe. razer's pin (`3ed0dea`) does not
+reference nix-snapd; `main` does. So it is triggered by the pin bump alone and
+has nothing to do with dictation. Filed as #947; razer's flake was edited
+temporarily to test, and reverted afterwards.

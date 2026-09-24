@@ -1216,6 +1216,37 @@ let
         on = spec."trigger.vm".action == "nixarchy-plugin nixarchy.microvm" && spec ? "trigger.vm-list";
         off = builtins.any (pkgs.lib.hasPrefix "trigger.vm.") (builtins.attrNames spec);
       };
+    # #961: the Nixi row is generated and guarded, and its id is "help" on
+    # purpose. nixi's install.py writes a row under exactly that id into
+    # ~/.config/omarchy/extensions/omarchy-menu.jsonc, and the user's file
+    # overrides this one BY ID -- so sharing the id is what makes two Nixi rows
+    # unreachable. A second row under any other id is the regression.
+    #
+    # `on` reads the `when` STRING rather than the row's presence. The row is
+    # unconditional in overrideSpec -- the guard runs when the menu is drawn,
+    # not when it is built -- so `spec ? "help"` stays true with the guard
+    # deleted, and a case written that way could not go red for the thing it
+    # exists to protect. That is the #942 shape: an assertion satisfied by
+    # something the module produces anyway.
+    #
+    # The guard is `command -v nixi`, not `nixarchy-plugin --enabled <id>`:
+    # nixi comes from services.nixi.enable, not from programs.nixarchy.plugins,
+    # so nixarchy-plugin does not accept its id and checks.menu-verbs refuses
+    # the row outright. Found by that check, not by review.
+    #
+    # `off` is the id decision, not a negation of `on`: no SECOND nixi row.
+    nixiRowIsGuardedAndSingle =
+      let
+        spec = menuSpec defaultMachine;
+      in
+      {
+        on =
+          (spec."help".when or "") == "command -v nixi >/dev/null" && (spec."help".action or "") == "nixi";
+        off = pkgs.lib.any (n: n != "help" && pkgs.lib.hasInfix "nixi" (pkgs.lib.toLower n)) (
+          builtins.attrNames spec
+        );
+      };
+
     # Its permanent-VM features run nixarchy.pkg's script by path
     # (Model.js:988), so wherever the panel is, the package panel is too.
     microvmNeedsPkg = {

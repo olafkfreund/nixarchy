@@ -141,15 +141,15 @@ let
   # things that cannot work is worse than no menu.
   askMenuRows = builtins.toFile "ask-menu-rows.jsonc" ''
     "trigger.ask": {"icon":"󰚩","label":"Ask","aliases":["ai","agent","help","fix"],"when":"[[ -n \"$(omarchy-default-agent)\" ]]"},
-    "trigger.ask.logs": {"icon":"󰌪","label":"What's wrong?","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask logs"},
-    "trigger.ask.optimize": {"icon":"󰓅","label":"Make it faster","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask optimize"},
-    "trigger.ask.security": {"icon":"󰒃","label":"Am I exposed?","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask security"},
-    "trigger.ask.disk": {"icon":"󰋊","label":"Disk is full","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask disk"},
-    "trigger.ask.gpu": {"icon":"󰢮","label":"GPU not working","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask gpu"},
-    "trigger.ask.update": {"icon":"󰚰","label":"What changed?","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask update"},
-    "trigger.ask.backup": {"icon":"󰊢","label":"Back up my config","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask backup"},
-    "trigger.ask.install": {"icon":"󰐗","label":"Install something","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask install"},
-    "trigger.ask.anything": {"icon":"󰭹","label":"Ask anything","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask anything"},
+    "trigger.ask.logs": {"icon":"󰌪","label":"What's wrong?","aliases":["error","errors","broken","crash","logs","journal","failed","why"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask logs"},
+    "trigger.ask.optimize": {"icon":"󰓅","label":"Make it faster","aliases":["slow","lag","laggy","faster","speed","performance","why"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask optimize"},
+    "trigger.ask.security": {"icon":"󰒃","label":"Am I exposed?","aliases":["security","hacked","ports","exposed","firewall","open"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask security"},
+    "trigger.ask.disk": {"icon":"󰋊","label":"Disk is full","aliases":["disk","space","full","storage","free","garbage"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask disk"},
+    "trigger.ask.gpu": {"icon":"󰢮","label":"GPU not working","aliases":["gpu","graphics","nvidia","amd","driver","display","why"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask gpu"},
+    "trigger.ask.update": {"icon":"󰚰","label":"What changed?","aliases":["update","updated","changed","upgrade","generation","rollback"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask update"},
+    "trigger.ask.backup": {"icon":"󰊢","label":"Back up my config","aliases":["backup","back up","save","copy","restore"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask backup"},
+    "trigger.ask.install": {"icon":"󰐗","label":"Install something","aliases":["install","add","package","software","app"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask install"},
+    "trigger.ask.anything": {"icon":"󰭹","label":"Ask anything","aliases":["ask","question","chat","anything","ai"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-ask anything"},
     "setup.local-ai": {"icon":"󰭹","label":"Local AI","aliases":["ollama","local model"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-local-ai"},
   '';
 

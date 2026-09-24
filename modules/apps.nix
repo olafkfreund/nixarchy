@@ -355,6 +355,38 @@ let
         # The panel that ships on by default (#766). The helper, never a bare
         # `omarchy-shell shell toggle`: toggling a plugin that is off exits 0
         # and does nothing, and `when` hides the row once it is turned off.
+        # Nixi's chat panel (#961). The id is "help" DELIBERATELY: nixi's
+        # install.py writes a row under exactly that id into the user's
+        # ~/.config/omarchy/extensions/omarchy-menu.jsonc, and that file
+        # overrides this one by id. Sharing the id is what makes two Nixi rows
+        # unreachable -- rename this to setup.nixi and every machine that ran
+        # nixi's installer gets both.
+        #
+        # `action` is a bare command, not a floating terminal, unlike the
+        # trigger.ask rows. The assertion in pkgs/omarchy/default.nix covers
+        # trigger.ask* and setup.local-ai only; this row is the counter-example
+        # if that is ever widened.
+        "help" = {
+          icon = "󰙴";
+          label = "Nixi";
+          aliases = [
+            "help"
+            "how"
+            "ask"
+            "nixi"
+          ];
+          action = "nixi";
+          # `command -v nixi`, NOT `nixarchy-plugin --enabled <id>`. nixi is
+          # installed by services.nixi.enable (modules/home.nix), a module from
+          # nixi's own flake -- it is not in programs.nixarchy.plugins, so
+          # nixarchy-plugin does not know that id and checks.menu-verbs refuses
+          # the row. Same shape as the antigravity agent row, which guards on
+          # `command -v agy`: the row runs `nixi`, so the question is whether
+          # `nixi` is there.
+          when = "command -v nixi >/dev/null";
+          description = "Ask Nixi anything about this machine";
+        };
+
         "install.packages" = {
           icon = "󰏖";
           label = "Packages";

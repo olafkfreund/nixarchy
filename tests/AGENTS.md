@@ -281,6 +281,31 @@ for the same reason the stub is: apply's path to `nh` is reached or not for
 reasons the fixture does not fully control. Treat it as unproven until somebody
 makes it go red, and do not add assertions in its shape without doing so.
 
+## The agent-id comparison, and the two ways it could have been useless
+
+`pkgs/omarchy/default.nix`'s menu check now asserts every
+`setup.default.agent.*` row's `action` names an id `omarchy-default-agent`
+accepts, parsed out of that script in the same derivation (#949). Before it,
+the menu named 14 ids and the script accepted 10, and the four extra rows
+printed a usage line into a detached terminal nobody sees.
+
+**The parse is the risk, and it has two opposite tails.** Matching nothing
+gives an empty set and flags every row -- loud and obvious. Over-matching gives
+a set that accepts everything and passes having checked nothing -- a green
+light, which is the failure this repository keeps rediscovering. So the check
+**refuses an implausible count** (fewer than 10 accepted ids) rather than
+reporting one, the way `readme-counts.sh` refuses at zero. Both halves were
+seen failing:
+
+    menu rows name agents omarchy-default-agent rejects: ['setup.default.agent.nosuch']
+    the accepted-agent parse found 0 ids; ... This check is refusing rather than passing.
+
+**What it cannot reach:** whether `openclaw` actually launches once installed,
+and whether the three llm-agents.nix attribute names (`cursor-agent`,
+`hermes-agent`, `muse-code`) are still correct. The second is a claim about
+another repository printed to users, and nothing here notices when it goes
+stale -- a source of quietly wrong advice rather than a broken build.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

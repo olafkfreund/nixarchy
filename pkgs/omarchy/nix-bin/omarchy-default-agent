@@ -50,6 +50,7 @@ attr_for() {
     gemini)   echo gemini-cli ;;
     copilot)  echo github-copilot-cli ;;
     grok)     echo grok-cli ;;
+    openclaw) echo openclaw ;;
     *)        echo "" ;;
   esac
 }
@@ -97,8 +98,15 @@ antigravity | agy) agent="antigravity"; name="Antigravity" ;;
 # a maintained gemini-cli and people still ask for it by name, so both stay.
 gemini | gemini-cli) agent="gemini"; name="Gemini" ;;
 copilot | github-copilot) agent="copilot"; name="GitHub Copilot" ;;
+# The menu has rows for these four and the case did not, so each printed a usage
+# line and exited 1 -- into a detached terminal nobody sees (#949). openclaw is
+# in nixpkgs; the other three are not, and get the third route below.
+cursor-agent | cursor) agent="cursor-agent"; name="Cursor Agent" ;;
+hermes) agent="hermes"; name="Hermes" ;;
+muse) agent="muse"; name="Muse" ;;
+openclaw) agent="openclaw"; name="OpenClaw" ;;
 *)
-  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|antigravity|pi|omp>" >&2
+  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|antigravity|pi|omp|cursor-agent|hermes|muse|openclaw>" >&2
   exit 1
   ;;
 esac
@@ -182,6 +190,53 @@ if [[ -n $attr ]]; then
 
   echo "Not building. $name is in your configuration but not installed yet."
   echo "Run 'nixarchy apply' when you are ready."
+  exit 0
+fi
+
+# Packaged elsewhere, and named rather than carried (#949).
+#
+# numtide/llm-agents.nix has all three. It is NOT a nixarchy input and must not
+# become one: lib.inputSources collects every flake's outPath and every input of
+# theirs transitively, and installer/cd.nix and installer/host.nix both carry
+# that onto the offline ISO and every installed host. llm-agents.nix pins its
+# own nixpkgs-unstable and documents being tested only against it, so `follows`
+# is not safely available -- one nixpkgs source tree measures about 486 MB, and
+# checks.iso-budget exists to refuse it.
+#
+# The reason is printed, not just recorded here: without it the next person
+# reads "packaged over there" as "so add the input".
+elsewhere_attr_for() {
+  case "$1" in
+    cursor-agent) echo cursor-agent ;;
+    hermes)       echo hermes-agent ;;
+    muse)         echo muse-code ;;
+    *)            echo "" ;;
+  esac
+}
+
+elsewhere=$(elsewhere_attr_for "$agent")
+if [[ -n $elsewhere ]]; then
+  # Recorded before the advice, like the nixpkgs path above: the selection is
+  # the user's answer to "which agent", and it stays their answer whether or
+  # not they go and install it.
+  record
+
+  echo
+  echo "$name is recorded as your default agent, and is not installed."
+  echo
+  echo "It is not in nixpkgs. numtide/llm-agents.nix packages it as"
+  echo "$elsewhere. Add that flake as an input and the package to your"
+  echo "configuration."
+  echo
+  echo "nixarchy does not carry it: llm-agents.nix pins its own nixpkgs, and"
+  echo "nixarchy puts every input's source tree on the ISO and on every"
+  echo "installed machine -- about 486 MB, for one optional agent."
+  if [[ $agent == cursor-agent ]]; then
+    echo
+    echo "Note: cursor-agent is unfree wherever it comes from, so a machine"
+    echo "with nixpkgs.config.allowUnfree = false cannot install it at all."
+  fi
+  echo
   exit 0
 fi
 

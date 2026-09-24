@@ -143,6 +143,42 @@ And **OCR cannot read the Omarchy theme's dialogs** any better than its
 greeter: wait on a system fact the dialog causes (here, a
 `polkit-agent-helper@*` unit) rather than on its text.
 
+## The uncheckable one: no layer asserts that writing `shell.json` is safe
+
+Because it is not, and encoding a known-broken behaviour is a check that
+inverts the day it is fixed.
+
+Writing `~/.config/omarchy/shell.json` while the shell runs — **even byte for
+byte identical** — leaves the bar's IPC targets answering `Target not found`
+until `omarchy-restart-shell` (#847). The cause is upstream:
+`IpcHandlerRegistry::registerHandler` does not replace an incumbent handler for
+a target, so after a reload a handler from a generation being torn down can
+keep the target and every replacement is registered-but-unused. The full
+evidence, and the report for upstream, is `docs/internals/shell-json-reload.md`.
+
+**What `checks.session` asserts is the recovery, not the defect**: write the
+file back under the running shell, `omarchy-restart-shell`, and the targets
+answer again with the file unchanged. That invariant is true now and stays true
+after an upstream fix, so it cannot go red for the wrong reason. A failure
+there means the documented escape hatch broke — read the comment in the check
+before treating it as anything else.
+
+The defect itself is checked **by hand**, and this paragraph is what makes that
+a documented hole rather than an undocumented one (§3 of the root `AGENTS.md`:
+a documented hole gets tested by a human, an undocumented one gets tested by a
+user). The repro is four commands:
+
+```sh
+cp -a ~/.config/omarchy/shell.json /tmp/bak
+cat /tmp/bak > ~/.config/omarchy/shell.json    # same bytes
+sleep 4
+omarchy-shell omarchy.clock status             # "Target not found." = still broken
+```
+
+`omarchy-restart-shell` puts it back. If that last command ever answers
+normally, upstream has fixed it and both this section and the check's comment
+need rewriting — that is news, not a regression.
+
 ## The stub-only detach: `run --detach` never runs a real unit on a PR
 
 `checks.microvm-template` proves `nixarchy vm run --detach` against **stub**

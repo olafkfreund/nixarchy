@@ -1423,8 +1423,36 @@ will bite the next plugin too:
   `applyShellConfig` uses a valid user file *instead of* the defaults. Writing
   a file that holds only `plugins` takes the whole bar away. Extend an existing
   file, or create one from `$OMARCHY_PATH/config/omarchy/shell.json`, as the
-  shell does. The shell watches the file and reloads it, so an atomic replace
-  is picked up live, with no IPC.
+  shell does.
+- **Do not write `shell.json` while the shell is running. It breaks the
+  shell** (#847). This paragraph used to end by saying the shell watches the
+  file, so an atomic replace is picked up live with no IPC needed — which read
+  as reassurance and was an instruction to do the thing that breaks. That
+  sentence is paraphrased rather than quoted here on purpose: a verbatim copy
+  would be found by anyone grepping for the advice, and by any check written to
+  assert it is gone. Same trap as a skip-CI marker quoted in a commit message
+  (§8 of the root `AGENTS.md`). Measured
+  on razer: writing the file back **byte for byte identical**, with the running
+  shell and the login environment verified on the same tree first, left
+  `omarchy.clock` and `omarchy.network` answering `Target not found`, threw
+  `Property 'pluginBarApiFor' … is not a function` from `Bar.qml`, and produced
+  61 `invalid context` errors in the following minute. Only
+  `omarchy-restart-shell` recovers it.
+
+  Identical bytes are enough because nothing about the *content* is involved:
+  the watcher fires on the write, and Quickshell's
+  `IpcHandlerRegistry::registerHandler` does not replace an incumbent handler
+  for a target — it appends and leaves the newcomer inert. Whichever handler
+  claimed the target first keeps it, and after a reload that can be one
+  belonging to a generation being torn down. It is not conditional on an
+  `OMARCHY_PATH` mismatch; that was tested and ruled out.
+
+  So: **change it through the running shell's own writer or its IPC, never by
+  editing the file.** `modules/home.nix:1749` gives the same rule for an
+  independent reason — the shell rewrites that whole file from memory, so a
+  second writer loses updates — and `tests/demo/screencast/` restores a
+  borrowed desktop that way. If you must edit it by hand, stop the shell
+  first.
 - **A Home Manager module that moves from per-file links to a
   whole-directory link breaks every upgraded home.** nixi 0.9 linked its
   plugin file by file, leaving a real directory; 0.10 links the directory.

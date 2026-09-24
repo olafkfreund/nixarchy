@@ -791,6 +791,56 @@ jobs:
           [ $rc -eq 0 ] || exit 1
           echo "every default plugin has a row in the manual, and every row is a default"
 
+      - name: Nothing we ship writes shell.json
+        run: |
+          # Writing that file under a running shell breaks the shell (#847):
+          # the watcher fires, and Quickshell's registerHandler leaves the new
+          # handler inert if the target is already claimed, so IPC targets go
+          # to "Target not found". Identical bytes are enough. modules/home.nix
+          # states the rule in prose three times (:315, :673, :1749) and until
+          # now nothing enforced it.
+          #
+          # WRITES, not mentions. The tree is full of legitimate mentions, and
+          # two of them broke the first version of this step:
+          #
+          #   * `# in Setup > Plugins still wins, and nothing here writes
+          #     shell.json.` -- the `>` in "Setup > Plugins" matched as a
+          #     redirection, because the path pattern ran greedily across the
+          #     whole sentence. Hence [^"|;&[:space:]]*: nothing between the
+          #     `>` and the path.
+          #   * prose generally. Comments are stripped before matching rather
+          #     than filtered afterwards, because a comment can say anything.
+          #   * `cp ~/.config/omarchy/shell.json /tmp/bak` is a READ. The first
+          #     pattern matched any cp naming the file, in either direction, so
+          #     backing the file up counted as writing it. Hence the trailing
+          #     `$`: for cp/mv/install it must be the DESTINATION.
+          #
+          # tests/session.nix writes it once, deliberately, to prove the
+          # recovery works. That line carries `847-allow`, which is looked up
+          # in the ORIGINAL line -- comments are stripped before matching, so a
+          # marker cannot be found in the stripped copy.
+          files=$(grep -rl 'shell\.json' \
+            --include='*.nix' --include='*.sh' --include='*.qml' --include='*.py' \
+            modules pkgs installer tests 2>/dev/null || true)
+          rc=0
+          for f in $files; do
+            while IFS=: read -r n rest; do
+              [ -n "$n" ] || continue
+              case "$(sed -n "${n}p" "$f")" in *847-allow*) continue ;; esac
+              echo "::error file=$f,line=$n::writes shell.json, which breaks a running shell (#847): $rest"
+              rc=1
+            done < <(
+              sed -e 's@[[:space:]]*#.*$@@' -e 's@[[:space:]]*//.*$@@' "$f" |
+              grep -nE '(>>?[[:space:]]*"?[^"|;&[:space:]]*shell\.json|tee[[:space:]]+[^|;&]*shell\.json|(mv|cp|install)[[:space:]][^|;&]*[[:space:]]"?[^"|;&[:space:]]*shell\.json"?[[:space:]]*\)?"?[[:space:]]*$)'
+            )
+          done
+          if [ $rc -ne 0 ]; then
+            echo "Change it through the shell's own writer or its IPC instead."
+            echo "See docs/internals/shell-json-reload.md."
+            exit 1
+          fi
+          echo "nothing under modules/, pkgs/, installer/ or tests/ writes shell.json"
+
       - name: Verify shebangs were patched
         run: |
           # Line 1 only. Several scripts legitimately contain `#!/bin/bash`

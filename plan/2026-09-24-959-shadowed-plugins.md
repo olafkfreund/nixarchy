@@ -16,7 +16,19 @@ Self-contained; nothing here needs the intent or spec open.
    sectioned. The accepted weakness: nothing runs doctor automatically, so this
    makes the problem *diagnosable*, not *announced*.
 
-2. **Report, do not decide.** Same `origin` is necessary and insufficient: p620's
+2. **Report, do not decide.** **The comparison is by VERSION, not commit --
+   approved as a deviation during implementation.** The plan as written could
+   not be built: doctor needs "the commit nixarchy ships" and activation cannot
+   know it. `validatedPlugins` builds from `plugin.src`, a store path; the
+   revision lives in the flake lock and reaching it would mean threading
+   `inputs.<name>.rev` through every plugin. I caught this having already
+   written `cat .nixarchy-shipped-$pid` into doctor -- a file nothing writes,
+   invented mid-edit because the value did not exist. Both manifests carry a
+   `version`, on both sides, needing no git and no network, and that is exactly
+   what the herdr case turned on (0.2.0 against 0.3.0). Step 3 (`git` in
+   `runtimeInputs`) is therefore **withdrawn**: reverted, not needed. The limit,
+   stated rather than hidden: two diverged branches at the same version read as
+   "same version", and doctor never claims "identical". Same `origin` is necessary and insufficient: p620's
    `olafkfreund.github-actions` clone is same-origin and **28 commits ahead**,
    entirely deliberate. Doctor names the directory, both commits, and which of
    ahead / behind / equal / unrelated applies, showing the fix only for

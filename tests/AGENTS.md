@@ -336,6 +336,38 @@ side of the port the script is on.
 whole bug. `checks.session` boots a desktop but does not rebuild under one.
 Checked by hand on p620.
 
+## A PATH stub loses to runtimeInputs, and it has now cost three attempts
+
+`writeShellApplication` builds a **strict PATH from `runtimeInputs`** and
+prepends it, so a stub of one of that script's own dependencies is never
+reached. The real binary always wins. This is the property that makes those
+scripts hermetic and it defeats the obvious way to test them.
+
+It has been hit three times in one day, each time with a different symptom:
+
+- `tests/apply-confirm.nix` stubbed `nh`, which `nixarchy-apply` declares. The
+  stub's trace never appeared, so "did it rebuild" had to be read from apply's
+  own log instead.
+- `tests/apply-detach-interface.nix` stubbed `systemctl`, which
+  `nixarchy-apply` also declares (`pkgs.systemd`, for `--detach`). Worse: the
+  never-ran case **passed for the wrong reason** -- the real `systemctl`
+  reports nothing in the sandbox, which happens to be the expected answer. A
+  false green, not a failure.
+- `tests/shell-ipc-resolve.nix` stubbed `qs` and it **worked**, because
+  `omarchy-shell` is upstream's and unwrapped. PATH is the whole mechanism
+  there.
+
+**So the rule is about which side of the port the script is on**, not about
+stubbing. Ours are wrapped; upstream's are not. Before writing a stub, check
+whether the command is in the target's `runtimeInputs`, and if it is, find
+another observable -- the script's own output, or a file it writes.
+
+**What `apply-detach-interface` therefore does not cover:** `--status`'s
+mapping, including the `none`-not-`succeeded` case that the whole feature
+exists for (a unit that never ran reads `Result=success ExecMainStatus=0`).
+Only `--expect-sha256` is asserted, because it touches the file system rather
+than systemd.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

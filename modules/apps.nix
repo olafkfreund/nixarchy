@@ -3346,14 +3346,32 @@ in
               text = ''
                 # The two answers as flags, for a caller with no terminal (#765).
                 # Anything else exits 2: an unknown flag must never mean "switch".
-                yes="" nopreview="" detach=""
+                yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation=""
+                expect=()
                 while [ $# -gt 0 ]; do
                   case "$1" in
                     --yes) yes=1 ;;
                     --no-preview) nopreview=1 ;;
                     --detach) detach=1 ;;
+                    --status) status=1 ;;
+                    --json) json=1 ;;
+                    --log) wantlog=1 ;;
+                    --follow) follow=1 ;;
+                    --invocation) shift; invocation=''${1:?--invocation needs an id} ;;
+                    # Repeatable, <part>=<sha256>. Opt-in on purpose (#979,
+                    # #967): a caller that checked a file says so, and one that
+                    # did not is neither protected nor blocked. The other shape
+                    # -- refuse every changed file from every caller -- shipped
+                    # and was reverted the same evening, because the callers
+                    # that cannot answer are exactly the ones it stopped.
+                    --expect-sha256) shift; expect+=("''${1:?--expect-sha256 needs <part>=<sha256>}") ;;
                     *)
                       echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
+                      echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
+                      echo "       nixarchy-apply --status [--json]" >&2
+                      echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
+                      echo "" >&2
+                      echo "  --json is a stable contract; the plain --status output is NOT." >&2
                       exit 2
                       ;;
                   esac
@@ -3366,6 +3384,57 @@ in
                 # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
                 # A supervised user unit, so a closed window or a shell restart
                 # cannot kill a switch halfway; its state and log are the unit's.
+                # The detached rebuild's state, for callers (#979).
+                #
+                # SubState and InvocationID decide "none", NEVER Result: the
+                # unit runs with RemainAfterExit and without --collect (see the
+                # detach block below for why), and a unit that has never run
+                # reads Result=success ExecMainStatus=0. Reading Result first
+                # answers "succeeded" for a rebuild that never happened, which
+                # is the one wrong answer that matters.
+                rebuild_state() {
+                  local sub res code inv
+                  eval "$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null |
+                    sed -n 's/^SubState=/sub=/p; s/^Result=/res=/p; s/^ExecMainStatus=/code=/p; s/^InvocationID=/inv=/p')"
+                  sub=''${sub:-} res=''${res:-} code=''${code:-} inv=''${inv:-}
+                  if [ -z "$inv" ] && { [ -z "$sub" ] || [ "$sub" = dead ]; }; then
+                    printf 'none\t\t\t\n'
+                    return
+                  fi
+                  case "$sub" in
+                    running | start*) printf 'running\t%s\t%s\t%s\n' "$res" "$code" "$inv" ;;
+                    *)
+                      if [ "$res" = success ] && [ "''${code:-0}" = 0 ]; then
+                        printf 'succeeded\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                      else
+                        printf 'failed\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                      fi
+                      ;;
+                  esac
+                }
+
+                # Queries act and exit: they are not an apply.
+                if [ -n "$status" ]; then
+                  IFS=$'\t' read -r st res code inv < <(rebuild_state)
+                  if [ -n "$json" ]; then
+                    printf '{"state":"%s","result":"%s","exit":%s,"invocation":%s}\n' \
+                      "$st" "$res" "''${code:-0}" \
+                      "$( [ -n "$inv" ] && printf '"%s"' "$inv" || printf 'null' )"
+                  else
+                    echo "$st''${inv:+ (invocation $inv)}"
+                  fi
+                  exit 0
+                fi
+
+                if [ -n "$wantlog" ]; then
+                  if [ -z "$invocation" ]; then
+                    IFS=$'\t' read -r _ _ _ invocation < <(rebuild_state)
+                  fi
+                  # That run, not everything the unit ever did.
+                  exec journalctl --user -u nixarchy-rebuild \
+                    ''${invocation:+--invocation="$invocation"} ''${follow:+-f}
+                fi
+
                 if [ -n "$detach" ]; then
                   [ -n "$yes" ] || {
                     echo "nixarchy-apply: --detach needs --yes: a unit has no terminal to answer" >&2
@@ -3436,6 +3505,25 @@ in
                 # flatsnap: written by the nixarchy-flatsnap plugin (#904). Like the
                 # others it is copied only when it exists, so a machine without
                 # the plugin imports exactly what it did before.
+                # #979: build only what the caller checked. Opt-in -- an empty
+                # array means nothing is asserted and nothing is refused, which
+                # is why this can exist at all where #967's blanket refusal
+                # could not. Checked BEFORE the copy loop, so a mismatch copies
+                # nothing and builds nothing.
+                for pair in ''${expect+"''${expect[@]}"}; do
+                  part=''${pair%%=*}
+                  want=''${pair#*=}
+                  file="$srcdir/$part.nix"
+                  have=$( [ -f "$file" ] && sha256sum <"$file" | cut -d" " -f1 || echo "" )
+                  if [ "$have" != "$want" ]; then
+                    echo "nixarchy-apply: $part.nix is not what you checked." >&2
+                    echo "  you passed: $want" >&2
+                    echo "  on disk:    ''${have:-<no such file>}" >&2
+                    echo "  Nothing was copied and nothing was built." >&2
+                    exit 4
+                  fi
+                done
+
                 for part in apps services advanced flatsnap; do
                   src="$srcdir/$part.nix"
                   [ -f "$src" ] || continue

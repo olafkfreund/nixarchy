@@ -2126,6 +2126,12 @@
           # longer silences it on a hosts/<hostname> layout -- where the app set
           # froze rather than breaking, and apply reported success throughout.
           # See tests/apply-imports.nix.
+          # #979: --status, --log and --expect-sha256, against stub systemd.
+          apply-detach-interface = import ./tests/apply-detach-interface.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           apply-imports = import ./tests/apply-imports.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

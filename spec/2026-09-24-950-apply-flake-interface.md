@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 950
 intent: intent/2026-09-24-950-apply-flake-interface.md
 ---

@@ -455,6 +455,33 @@ template's `virtio-gpu-gl` attached, `-display gtk` never reaches a window at
 all -- qemu refuses with `OpenGL is not supported by display backend 'gtk'`,
 because this qemu is built without GL in its gtk backend.
 
+## The screencast harness is scripts, not checks, and nothing in CI runs it
+
+`tests/demo/screencast/` (#930) sits beside `tests/demo/`, and inherits that
+directory's oldest problem: **no workflow builds any of it.** AGENTS.md section
+4 records the same hole for the demo scenes, where a GIF of a deleted command
+would have gone on publishing with `main` green.
+
+So what is guarded here, and by what, stated plainly:
+
+| | guarded by | runs in CI |
+|---|---|---|
+| prep refuses on open windows, a stale snapshot, an unreachable shell | by hand, on a real session | no |
+| restore returns `shell.json` byte-identical | by hand, hash compared independently | no |
+| `verify-beats` fails a beat that did not happen | three tests against a synthetic recording | no |
+| every shipped plugin is in the shot list | `shot-coverage.sh` | **no, and it could be** |
+
+That last row is the one worth fixing. `shot-coverage.sh` is a seconds-long
+text comparison with no VM and no desktop — exactly the cheap shape this file
+recommends — and it is the only piece here that a pull request could run. It
+is not wired, because adding a `checks.*` entry means a workflow edit and that
+is a human's call (section 4, section 11). Raised rather than done.
+
+What no layer can reach, and which no amount of scripting changes: whether the
+recording is **good**. The gate proves each beat happened and that the cut
+carries the caption it claims. Whether a viewer understands it is a person
+watching, and that is the last step of the plan rather than an afterthought.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

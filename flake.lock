@@ -868,17 +868,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1790152831,
-        "narHash": "sha256-UWi8NOK7p29dJiKFw3lrF/68gMpiX7JDuOIytHWyBuY=",
+        "lastModified": 1790273053,
+        "narHash": "sha256-0+hIbmeY5inw2U+525YCsCskJzdG5clh74tpgxYz7XY=",
         "owner": "olafkfreund",
         "repo": "nixarchy-plugin-browser",
-        "rev": "cd3a5607d1184d98a5ca082fd88ada6febd6b627",
+        "rev": "f60d2b2e6b7bc10af9b7f0f25911ac2a67a5ea06",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-plugin-browser",
-        "rev": "cd3a5607d1184d98a5ca082fd88ada6febd6b627",
+        "rev": "f60d2b2e6b7bc10af9b7f0f25911ac2a67a5ea06",
         "type": "github"
       }
     },

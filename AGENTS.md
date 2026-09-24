@@ -969,6 +969,36 @@ spelling is present, which is not the same claim. The same mistake closed
 scheduled nightly, and green — the agent that picked it up checked and said
 so rather than building a second one.
 
+**The same rule applies inside one file, and that is where it caught me.** An
+analysis of #747 proposed binding a repeated fixture evaluation once, having
+grepped `tests/options.nix` and found the same constructor called with
+identical arguments eight times. The grep was right and the proposal was a
+rediscovery: eighty lines above the code being read, the file already says
+*"Nix does not memoise a function call, so every `(configWith { })` written
+out below was another evaluation of the same machine"*, followed by the three
+fixtures bound once each — #738's work.
+
+The same comment carried the number that made the proposal pointless. **One
+configuration measured 10.6 GB of RSS on its own, and the whole check peaks at
+11.5 GB**, so the duplicates cannot be simultaneously live and deduplicating
+them cannot move the peak. Both the technique and the evidence against using
+it for this were already written down, in the file being edited.
+
+So before proposing a change to a file, grep **that file** for the concept and
+not only for the pattern you came to find — and read what any comment near it
+already measured. The reviewer who caught this found it in one pass, from the
+same source, which is the whole argument for asking.
+
+A second, narrower trap from the same review: **a coverage criterion is only
+valid for the kind of change it was written for.** The proposal offered to
+prove itself safe by requiring the evaluator's function, primitive, value and
+set counters to be *unchanged*. That is correct for #747's earlier
+garbage-collector experiment, which deliberately did not change the workload —
+and exactly backwards for a change that removes evaluations, where those
+counters must move. A variant satisfying it would be one that had optimised
+nothing. Copying a verification from a neighbouring experiment is as
+dangerous as copying a setting from a neighbouring machine (§2).
+
 **Every issue gets a milestone and an area label when it is filed.** Not
 later. An issue with no milestone is invisible in every view that groups by
 one, which makes it work nobody can see and nobody schedules. The nightly

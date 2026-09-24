@@ -112,10 +112,40 @@ script is in the same derivation.
      declarative line to add. Menu actions have no terminal, so this needs the
      floating-terminal route the other rows use.
 
-   I lean to **(a) where the agent is packaged and (b) where it is not**, which
-   needs the four looked up before either can be promised. The check in
-   question 2 is worth having under any of them, because it is what stops the
-   next upstream agent from re-opening this.
+   **Decided: (a), and the four have now been looked up.** The constraint set
+   afterwards is that the agents do not have to be installed -- only ready to
+   install -- and that route (a) means nixpkgs, not mise.
+
+   | id | nixpkgs | numtide/llm-agents.nix |
+   |---|---|---|
+   | `openclaw` | **yes** -- `openclaw` 2026.6.33; binaries verified as `openclaw`, `clawdbot`, `moltbot` | yes |
+   | `cursor-agent` | only `cursor-cli`, which is **unfree** and ships no `cursor-agent` binary | `cursor-agent` |
+   | `hermes` | no -- only `vimPlugins.hermes-nvim`, a Neovim ACP client | `hermes-agent` |
+   | `muse` | no -- `muse` is a **MIDI sequencer**; mapping the name would install a music program | `muse-code` |
+
+   **llm-agents.nix cannot be an input here, and this is measured rather than
+   argued.** `lib.inputSources` (`flake.nix:1508`) collects `flake.outPath` for
+   every flake *and every input of theirs, transitively*, and both
+   `installer/cd.nix` and `installer/host.nix` carry the result -- so an input's
+   source tree lands on the offline ISO and on every installed host whether or
+   not anything references it. llm-agents.nix pins its own `nixpkgs-unstable`
+   and documents that it is "only built and tested against" it, so `follows` is
+   not safely available. One nixpkgs source tree measures **486 MB** here:
+
+       $ du -sh $(nix flake archive --json . | jq -r '.inputs["nixpkgs"].path')
+       486M
+
+   `checks.iso-budget` exists to fail on exactly that.
+
+   **So the shape is three routes, not two.** `openclaw` takes the existing
+   nixpkgs route. The other three get a third branch beside the mise one,
+   which already sets the precedent of being honest about what a route costs:
+   record the choice, name llm-agents.nix and the attribute, and print the
+   input line for the user to add themselves. Zero closure cost, the row stops
+   lying, and "ready for install" is satisfied without nixarchy carrying half a
+   gigabyte for four optional agents.
+
+   No agent is installed by default under any of this.
 
 2. **Where should the comparison live?** Extending the existing check in
    `pkgs/omarchy/default.nix` is the smallest diff and puts it where the menu

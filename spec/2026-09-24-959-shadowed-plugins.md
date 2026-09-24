@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 959
 intent: intent/2026-09-24-959-shadowed-plugins.md
 ---

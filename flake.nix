@@ -202,7 +202,7 @@
     # literal name "claude". That still matters from #731 on and is carried
     # forward here; see that issue for the reasoning.
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/1e25cb8784a51e4d7a3f978ca3050ecd94173b1f";
+      url = "github:olafkfreund/nixi-nixarchy/4e6c1b578224677592ae4fa02fef4701d62bf4f1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

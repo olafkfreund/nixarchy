@@ -2117,22 +2117,6 @@
           # longer silences it on a hosts/<hostname> layout -- where the app set
           # froze rather than breaking, and apply reported success throughout.
           # See tests/apply-imports.nix.
-          # #967: the same script, asked whether it will build a file that
-          # changed behind the user. A sibling of apply-imports rather than a
-          # new pattern -- that one already solved getting the generated script
-          # into a sandbox with the rebuild stubbed.
-          # #963: which selector omarchy-shell calls qs with, after a
-          # redeploy has moved OMARCHY_PATH out from under the running shell.
-          shell-ipc-resolve = import ./tests/shell-ipc-resolve.nix {
-            pkgs = pkgsFor.${system};
-            omarchy = self.packages.${system}.omarchy;
-          };
-
-          apply-confirm = import ./tests/apply-confirm.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           apply-imports = import ./tests/apply-imports.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

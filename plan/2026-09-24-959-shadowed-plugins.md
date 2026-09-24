@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 959
 spec: spec/2026-09-24-959-shadowed-plugins.md
 ---

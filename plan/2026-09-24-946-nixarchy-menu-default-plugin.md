@@ -281,3 +281,21 @@ Revert the merge. The input, entry and hook change go with it.
   disables an orphan, which is correct, so the case now compares the two
   **inside the to-do loop only**. `defaultPluginsRestoreSource` fails when the
   restore block is moved after the loop (checked, then restored).
+
+## Razer results, amendment 1 (2026-09-24, step 13; nixarchy a9d9736, ON 0d4q6hn4 / OFF pjhsi8fi)
+
+- **ON** (the menu declared, the hand copy removed, HM re-run, the hook):
+  the link points at `/nix/store/gh2g5346...-nixarchy-menu`, and the marker
+  is `omarchy.menu`. `nixarchy.menu` is enabled in the same left slot, and
+  `omarchy.menu` is disabled.
+- **OFF** (the menu no longer declared, HM re-run so the link is removed, the
+  hook): **pass.**
+  - Before the hook: left `[nixarchy.menu (orphan), omarchy.workspaces]`, and
+    `omarchy.menu` disabled. This is the old failure.
+  - After it: left `[omarchy.menu, omarchy.workspaces]`, `disabledPlugins`
+    cleared, and the marker gone. The Omarchy menu button is in the leftmost
+    slot, and `omarchy-menu toggle root` opens the stock menu
+    (`isOpen omarchy.menu: true`). 0 failed units.
+- **Restored:** 2954 (06kpcydy). The hand copy is back and enabled, the
+  layout is byte-identical to the pre-test snapshot, there is no marker, and
+  there are 0 failed units.

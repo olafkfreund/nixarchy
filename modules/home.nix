@@ -1197,6 +1197,53 @@ in
         /etc/profiles/per-user/${config.home.username}/bin /run/current-system/sw/bin
     '';
 
+    # #942: clear the hand-written voxtype unit before Home Manager trips over
+    # it. Measured on razer, which is the state of anyone who followed
+    # Omarchy's own install instructions:
+    #
+    #   -rw-r--r-- ~/.config/systemd/user/voxtype.service   (a REAL file)
+    #   ExecStart=/nix/store/...-voxtype-1.0.1/bin/.voxtype-wrapped daemon
+    #
+    # `voxtype setup systemd` writes that, and Home Manager writes its own
+    # units into the same directory. `checkLinkTargets` refuses to replace a
+    # real file it does not own, so without this, turning dictation on does not
+    # fix dictation -- it makes `home-manager-<user>.service` FAIL, for exactly
+    # the people the fix is for. modules/AGENTS.md records the same collision
+    # from nixi 0.9 -> 0.10 and says any module making the same move needs the
+    # same step.
+    #
+    # entryBefore checkLinkTargets, because that is the check being tripped;
+    # every other activation here is entryAfter writeBoundary, which is far too
+    # late.
+    #
+    # Narrow on purpose, three ways. It runs only when dictation is being
+    # turned ON -- a machine that leaves it off keeps whatever unit its owner
+    # wrote, because we are not taking the name over. It removes only a real
+    # FILE, never a symlink, which is what Home Manager's own would be. And it
+    # matches on `.voxtype-wrapped`, the signature of `voxtype setup systemd`:
+    # a unit somebody wrote by hand for their own reasons does not contain a
+    # wrapped store path and is left alone.
+    home.activation.nixarchyVoxtypeUnitMigration =
+      lib.mkIf (osConfig.programs.nixarchy.dictation.enable or false)
+        (
+          lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+            voxUnit="${config.xdg.configHome}/systemd/user/voxtype.service"
+            if [ -f "$voxUnit" ] && [ ! -L "$voxUnit" ] &&
+               ${pkgs.gnugrep}/bin/grep -q '\.voxtype-wrapped' "$voxUnit"; then
+              echo "nixarchy: removing the hand-written voxtype.service" \
+                "(ExecStart pointed at .voxtype-wrapped, which breaks on the" \
+                "next upgrade); nixarchy manages this unit now" >&2
+              run rm -f "$voxUnit"
+              # The enable symlinks too, or systemd is left pointing at a unit
+              # that no longer exists and reports it on every daemon-reload.
+              for w in "${config.xdg.configHome}"/systemd/user/*.wants/voxtype.service; do
+                [ -L "$w" ] || continue
+                run rm -f "$w"
+              done
+            fi
+          ''
+        );
+
     # ---- #623: the NixOS MCP server, in the agents that have one --------
     #
     # Three agents, not the four this module seeds skills into. `~/.agents`

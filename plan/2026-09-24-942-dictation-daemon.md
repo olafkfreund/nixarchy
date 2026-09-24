@@ -123,3 +123,73 @@ does nothing — has a second form this cannot rule out: a daemon reporting
 `active` with no microphone, no `input` membership, or no usable PipeWire
 source. Step 9 is the only thing that tests for it, and step 7 says so in the
 tree rather than leaving it implied.
+
+## Deviation — 2026-09-24: a migration step the plan did not have
+
+Found while establishing step 9's preconditions on razer, before any rebuild.
+
+**The fix as planned would have broken the machines it was written for.**
+
+razer carries a **real file** at `~/.config/systemd/user/voxtype.service`,
+active and enabled:
+
+```
+-rw-r--r-- 1 olafkfreund users 424 …/.config/systemd/user/voxtype.service
+ExecStart=/nix/store/hf9lrj7…-voxtype-1.0.1/bin/.voxtype-wrapped daemon
+WantedBy=graphical-session.target
+```
+
+That is what `voxtype setup systemd` writes, and it is the state of anyone who
+followed Omarchy's own install instructions — which is precisely the population
+this issue exists for. Home Manager writes its user units into the same
+directory, and `checkLinkTargets` refuses to replace a real file it does not
+own. So `dictation.enable = true` would not have fixed dictation on those
+machines; it would have failed `home-manager-<user>.service`.
+
+`modules/AGENTS.md:1459` records the identical collision from nixi 0.9 → 0.10
+and says outright that any module making the same move needs the same step.
+This is that step.
+
+### What was added
+
+`home.activation.nixarchyVoxtypeUnitMigration` in `modules/home.nix`, anchored
+`entryBefore [ "checkLinkTargets" ]` — every other activation in this file is
+`entryAfter [ "writeBoundary" ]`, which is far too late, and `checkLinkTargets`
+is itself `entryBefore [ "writeBoundary" ]`.
+
+**Narrow three ways, because the failure mode here is deleting something that
+is not ours:**
+
+1. It runs only when dictation is being turned **on**. A machine that leaves it
+   off keeps whatever unit its owner wrote — we are not taking the name over.
+2. It removes only a real **file**, never a symlink, which is what Home
+   Manager's own unit would be.
+3. It matches on `.voxtype-wrapped`, the signature of `voxtype setup systemd`.
+   A unit somebody wrote by hand for their own reasons contains no wrapped
+   store path and is left alone.
+
+It also removes any `*.wants/voxtype.service` enable symlinks, or systemd is
+left pointing at a unit that no longer exists and says so on every reload.
+
+### Proved against all four shapes, with the guard lifted verbatim
+
+```
+a  hand-written (.voxtype-wrapped)  acted=yes  unit=gone     wants=0
+b  someone's own unit               acted=no   unit=present  wants=0
+c  Home Manager's symlink           acted=no   unit=present  wants=0
+d  nothing there                    acted=no   unit=gone     wants=0
+```
+
+Row **b** is the one that matters: a guard that removed that file would be
+destroying a user's own configuration to install ours.
+
+And the gating, measured on the real module: the activation is present with
+dictation on and absent with it off.
+
+### Step 9's other preconditions, checked on razer
+
+All green, so the hardware test is not blocked on anything else: the user is in
+`input`, PipeWire offers a capture source, voxtype 1.0.1 is present, and the
+142 MB model is **already downloaded** — so `loadModels` has nothing to fetch
+there and that risk is not exercised by this particular test. A machine without
+the model is still untested.

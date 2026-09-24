@@ -1174,6 +1174,50 @@ link's inode and passed with the bug fully present, because
 unlink-then-symlink in the same directory gets the freed inode straight
 back. Assert on what the watcher reacts to, not on what looks equivalent.
 
+**What that reload actually is, measured (#919).** The issue was filed
+saying an apply "reloads Hyprland and closes the panel before it can say
+applied", and the closing is real -- but the mechanism is narrower than
+the framing, and the difference decides whether there is anything here
+worth changing.
+
+Five activations on one machine in one day, read out of the journal
+rather than reproduced:
+
+    12:51  generation 2941   plugin links changed   reload logged
+    12:59  generation 2942   no plugin change       nothing
+    14:05  generation 2943   no plugin change       nothing
+    16:31  generation 2944   no plugin change       nothing
+    20:19  generation 2945   plugin links changed   reload logged
+
+Two things follow. **A rebuild that changes no plugin does not reload
+anything** -- which is #710's fix still holding, a year of rebuilds later,
+and it is what makes the reconcile-don't-relink rule above load-bearing
+rather than a nicety. And the reload, when it happens, is **per plugin
+and not a restart of the shell**: `NRestarts=0` across all five, and what
+the shell logs is
+
+    DEBUG qml: Local plugin changed, reloading: io.github.olafkfreund.nixi
+    DEBUG qml: Local plugin changed, reloading: nixarchy.flatsnap
+
+naming each id. So "the apply reloads the shell" is not what happens.
+The shell keeps running; the plugins whose links moved are re-read.
+
+This is why suppressing the reload was rejected rather than implemented.
+It fires only when plugin code genuinely changed, and a rebuild that
+changes plugin code *should* re-read it -- suppressing that means not
+reconciling during activation, which is the bug #710 fixed from the other
+side. The fix for #919 was therefore to make the result survive the
+reload, not to prevent it.
+
+**And a plugin can reach the watched directory without being one of
+ours.** `io.github.olafkfreund.nixi` and `nixi-button` are linked in from
+nixi's own home-manager module, not from `defaultPluginSet` -- so
+anything that reasons about "the plugins nixarchy ships" by reading that
+set will not see them. That is a real blind spot rather than a
+hypothetical: `tests/demo/screencast/shot-coverage.sh` asserts the promo
+video shows every shipped plugin, was green, and the video did not
+mention nixi at all (#930).
+
 <a id="the-first-run-theme-above-is-applied-headless-whic"></a>
 ### The first-run theme above is applied headless, which by design skips…
 

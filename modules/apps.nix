@@ -22,18 +22,33 @@ let
   devenvEnabled = cfg.enable && cfg.services.devenv.enable;
 
   # Why: modules/AGENTS.md#the-command-each-app-puts-on-path-so-the-menu-can-
+  #
+  # `binary` first, and until #942 it was read NOWHERE. The field existed, was
+  # documented, had exactly one user, and did nothing: the derivation below
+  # answers from `attr or name` and `meta.mainProgram`, so `android-tools`
+  # answered "android-tools" and the generated row's `command -v` test named a
+  # command that does not exist -- the row never dimmed on a machine with adb
+  # installed, which is the precise failure its own comment was written to
+  # prevent. Section 2's "a setting the tool does not read": before shipping
+  # one, find the line that reads it.
+  #
+  # It also matters for an `option` app, which has no `attr` at all: without
+  # this the fallback is the app's own name, and `command -v dictation` can
+  # never match.
   appBinary =
     name: app:
-    let
-      path = lib.splitString "." (app.attr or name);
-      probe = builtins.tryEval (
-        let
-          p = if app.ours or false then cfg.apps.${name}.package or null else lib.attrByPath path null pkgs;
-        in
-        if p == null then null else (p.meta.mainProgram or null)
-      );
-    in
-    if probe.success && probe.value != null then probe.value else name;
+    app.binary or (
+      let
+        path = lib.splitString "." (app.attr or name);
+        probe = builtins.tryEval (
+          let
+            p = if app.ours or false then cfg.apps.${name}.package or null else lib.attrByPath path null pkgs;
+          in
+          if p == null then null else (p.meta.mainProgram or null)
+        );
+      in
+      if probe.success && probe.value != null then probe.value else name
+    );
 
   available = lib.filterAttrs (_: a: !(a ? unavailable)) apps;
   unavailable = lib.filterAttrs (_: a: a ? unavailable) apps;

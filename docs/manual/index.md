@@ -42,7 +42,7 @@ the documentation as much as the code.
 | Unified clipboard history | same as Omarchy — [read there](https://omarchy.org/manual/unified-clipboard-history/) |
 | Reminders | same as Omarchy — [read there](https://omarchy.org/manual/reminders/) |
 | Notices | same as Omarchy — [read there](https://omarchy.org/manual/notices/) |
-| Text extraction dictation | same as Omarchy — [read there](https://omarchy.org/manual/text-extraction-dictation/) |
+| Text extraction dictation | **differs on NixOS** — Omarchy installs it imperatively; here you turn on `dictation` and the daemon, a seeded config and a ~150 MB whisper model come with it. The keys are unchanged: [read there](https://omarchy.org/manual/text-extraction-dictation/) |
 | Screenshots recording | same as Omarchy — [read there](https://omarchy.org/manual/screenshots-recording/) |
 | Toggles idle screensaver | same as Omarchy — [read there](https://omarchy.org/manual/toggles-idle-screensaver/) |
 | Omarchy cli | same as Omarchy — [read there](https://omarchy.org/manual/omarchy-cli/) |

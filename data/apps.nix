@@ -426,12 +426,33 @@
     attr = "antigravity";
     unfree = true;
   };
+  # #942. `option`, not `attr`: installing the package alone is what this row
+  # did before, and it left dictation silently dead -- no daemon, no config, no
+  # model, so F9 and Super+Ctrl+X fired into nothing. The module behind this
+  # option turns on home-manager's `services.voxtype`, which writes the unit
+  # with a stable ExecStart and fetches the model.
+  #
+  # `binary`, because an `option` app has no `attr` for `appBinary` to read a
+  # mainProgram from, and without it the generated row's `command -v` test
+  # would name `dictation` -- a command that does not exist. That field did
+  # nothing at all until #942; see modules/apps.nix's appBinary.
   dictation = {
     menuId = "install.ai.dictation";
     label = "Dictation";
     category = "AI";
-    attr = "voxtype";
+    option = [
+      "programs"
+      "nixarchy"
+      "dictation"
+    ];
     arch = "voxtype-bin";
+    binary = "voxtype";
+    note = ''
+      Hold F9 to dictate, or toggle with Super+Ctrl+X. Downloads a ~150 MB
+      whisper model on first activation, into your own data directory rather
+      than the store. `~/.config/voxtype/config.toml` is seeded once and is
+      then yours to edit.
+    '';
   };
   grok-bot = {
     menuId = "install.ai.grok-bot";

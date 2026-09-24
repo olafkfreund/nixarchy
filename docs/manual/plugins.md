@@ -363,7 +363,9 @@ once.
 · **opt-in, coming**
 
 **What it solves.** Operating the desktop by talking to it. It turns voice into
-actions, not only text; [dictation](ai) (Voxtype) stays for typing.
+actions, not only text; [dictation](ai) (Voxtype) stays for typing — turn that
+on with `dictation` and hold F9, or toggle with Super+Ctrl+X. It brings a
+daemon and a ~150 MB whisper model of its own, separate from the 6.7 GiB here.
 
 **What it does.** A wake word or toggle key is heard locally, whisper.cpp
 transcribes it on your CPU, a model you have signed in to answers, and a local

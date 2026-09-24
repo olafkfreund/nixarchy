@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 942
 intent: intent/2026-09-24-942-dictation-daemon.md
 ---

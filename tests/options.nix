@@ -1247,6 +1247,25 @@ let
         );
       };
 
+    # #950: /etc/nixarchy/flake answers "which flake does apply rebuild?" for
+    # a reader that cannot ask the module system and cannot rely on the session
+    # environment -- a systemd unit, a bare sudo, a plugin spawned outside the
+    # session. Those all answered /etc/nixos whatever the option said, which is
+    # why nixarchy-flatsnap scrapes the value out of nixarchy-apply's source.
+    #
+    # The assertion reads the TEXT, never `etc ? "nixarchy/flake"`. Presence is
+    # free the moment the attribute is written, and would pass with cfg.flake
+    # replaced by a hardcoded "/etc/nixos" -- which is the whole bug wearing the
+    # fix's clothes.
+    flakePathIsReadableFromEtc =
+      let
+        moved = configWith { flake = "/home/alice/nixos-config"; };
+      in
+      {
+        on = (moved.environment.etc."nixarchy/flake".text or "") == "/home/alice/nixos-config";
+        off = (defaultMachine.environment.etc."nixarchy/flake".text or "") != "/etc/nixos";
+      };
+
     # Its permanent-VM features run nixarchy.pkg's script by path
     # (Model.js:988), so wherever the panel is, the package panel is too.
     microvmNeedsPkg = {

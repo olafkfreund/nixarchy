@@ -272,7 +272,7 @@
     # Why: docs/internals/flake.md#the-github-actions-panel-on-by-default-772
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-ghtui = {
-      url = "github:olafkfreund/nixarchy-ghtui/4f51f7f9114bc959976aa227ea8e6cf4ea91d68d";
+      url = "github:olafkfreund/nixarchy-ghtui/928078f0b39e5f11aa523de9e437324dc4feabce";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

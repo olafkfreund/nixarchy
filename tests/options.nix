@@ -123,8 +123,22 @@ let
         id = "nixarchy.other";
         src = fixturePlugin "nixarchy.other";
       };
+      # #946: an opt-in clone of a first-party plugin, like nixarchy-menu.
+      clone = {
+        id = "nixarchy.clone";
+        src = pkgs.runCommand "nixarchy-fixture-clone" { } ''
+          mkdir -p $out
+          echo 'import QtQuick' > $out/Menu.qml
+          echo '{"schemaVersion":1,"id":"nixarchy.clone","name":"fixture","version":"0.0.0","clonedFrom":"omarchy.menu","kinds":["menu"],"entryPoints":{"menu":"Menu.qml"}}' > $out/manifest.json
+        '';
+        enableByDefault = false;
+        placement = "";
+      };
     };
   };
+  hookText = h: h.xdg.configFile.${defaultHook}.text;
+  # The real nixarchy-menu entry switched on (#946).
+  menuOnHome = homeOn { } { programs.nixarchy.defaultPlugins.menu = true; };
   defaultHook = "omarchy/hooks/post-boot.d/default-plugins";
   installsFixture = h: h.programs.nixarchy.plugins ? "nixarchy.fixture";
   hookLists =
@@ -917,6 +931,81 @@ let
         on = hookLists "nixarchy.other" h && h.programs.nixarchy.plugins ? "nixarchy.other";
         off = installsFixture h || hookLists "nixarchy.fixture" h;
       };
+    # #946: an entry with enableByDefault = false is off until its name is
+    # set to true, and stays off when the host sets some OTHER name -- which
+    # replaces the whole defaultPlugins default attrset.
+    defaultPluginsEnableByDefault = {
+      on = hookLists "nixarchy.clone" (
+        homeOn { } (fixtureDefaults {
+          programs.nixarchy.defaultPlugins.clone = true;
+        })
+      );
+      off = hookLists "nixarchy.clone" fixtureHome;
+    };
+    defaultPluginsEnableByDefaultSurvivesOtherKeys =
+      let
+        h = homeOn { } (fixtureDefaults {
+          programs.nixarchy.defaultPlugins = {
+            fixture = false;
+          };
+        });
+      in
+      {
+        on = hookLists "nixarchy.other" h;
+        off = hookLists "nixarchy.clone" h;
+      };
+    # #946: placement "" enables with no section (the clone keeps its
+    # source's slot); every other entry still gets `right`.
+    defaultPluginsPlacement =
+      let
+        t = hookText (
+          homeOn { } (fixtureDefaults {
+            programs.nixarchy.defaultPlugins.clone = true;
+          })
+        );
+      in
+      {
+        on = pkgs.lib.hasInfix "[nixarchy.clone]=''" t && pkgs.lib.hasInfix "[nixarchy.fixture]=right" t;
+        off = pkgs.lib.hasInfix "[nixarchy.clone]=right" t;
+      };
+    # #946: other clones of the same source are turned off BEFORE the enable;
+    # after it, the shell restores the source beside ours.
+    defaultPluginsPreDisable =
+      let
+        # Inside the to-do loop only: the restore pass above it (amendment
+        # 1) enables a source before disabling an orphan, which is right there.
+        t = pkgs.lib.last (pkgs.lib.splitString ''for id in "''${todo[@]}"'' (hookText fixtureHome));
+        at = s: builtins.stringLength (builtins.head (pkgs.lib.splitString s t));
+      in
+      {
+        on =
+          pkgs.lib.hasInfix "omarchy-plugin-disable" t
+          && at "omarchy-plugin-disable" < at "omarchy-plugin-enable";
+        off = at "omarchy-plugin-enable" < at "omarchy-plugin-disable";
+      };
+    # #946 amendment 1: a dropped clone's source comes back. The marker
+    # records the source, and the restore runs before the to-do loop, so a
+    # login with nothing new to enable still restores.
+    defaultPluginsRestoreSource =
+      let
+        t = hookText fixtureHome;
+        at = s: builtins.stringLength (builtins.head (pkgs.lib.splitString s t));
+        loop = ''for id in "''${todo[@]}"'';
+      in
+      {
+        on =
+          pkgs.lib.hasInfix ''printf '%s\n' "$src" >"$state/$id"'' t
+          && pkgs.lib.hasInfix ''--before "$id"'' t
+          && at ''--before "$id"'' < at loop;
+        off = at loop < at ''--before "$id"'';
+      };
+    # #946: the real nixarchy-menu entry is opt-in.
+    menuIsOptIn = {
+      on = menuOnHome.programs.nixarchy.plugins ? "nixarchy.menu" && hookLists "nixarchy.menu" menuOnHome;
+      off =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.menu"
+        || hookLists "nixarchy.menu" defaultHomeOn;
+    };
     # A plugin whose feature is off (podman, boxes) is not installed.
     defaultPluginsGate = {
       on = installsFixture fixtureHome;
@@ -2682,6 +2771,10 @@ pkgs.runCommand "nixarchy-options"
     # #912: the menu the session reads, to find nixarchy's own row in it.
     flatsnapMenu =
       inputs.self.nixosConfigurations.vm.config.environment.etc."nixarchy/omarchy-menu.jsonc".source;
+    # #946: the real nixarchy-menu through the plugin validator, and the
+    # enable-once hook as rendered with it on, for shellcheck.
+    menuValidated = menuOnHome.programs.nixarchy.pluginChecks."nixarchy.menu";
+    defaultHookScript = pkgs.writeText "default-plugins-hook" (hookText menuOnHome);
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
     herdrSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
@@ -5594,6 +5687,17 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "the generated menu has Install -> Flatpak & Snap"
+
+        # ---- #946: nixarchy-menu ----
+        [ "$(cat "$menuValidated/id")" = nixarchy.menu ] || {
+          echo "menuValidated: the pinned nixarchy-menu does not validate as nixarchy.menu ($menuValidated)" >&2
+          exit 1
+        }
+        ${pkgs.shellcheck}/bin/shellcheck -s bash -S warning "$defaultHookScript" || {
+          echo "defaultHookScript: the enable-once hook fails shellcheck ($defaultHookScript)" >&2
+          exit 1
+        }
+        echo "nixarchy-menu validates, and the enable-once hook passes shellcheck"
 
           touch $out
       ''

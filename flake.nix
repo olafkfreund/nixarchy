@@ -2121,6 +2121,13 @@
           # changed behind the user. A sibling of apply-imports rather than a
           # new pattern -- that one already solved getting the generated script
           # into a sandbox with the rebuild stubbed.
+          # #963: which selector omarchy-shell calls qs with, after a
+          # redeploy has moved OMARCHY_PATH out from under the running shell.
+          shell-ipc-resolve = import ./tests/shell-ipc-resolve.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           apply-confirm = import ./tests/apply-confirm.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 967
 spec: spec/2026-09-24-967-apply-confirms-what-it-builds.md
 ---

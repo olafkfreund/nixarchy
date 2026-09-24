@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 946
 intent: intent/2026-09-24-946-nixarchy-menu-default-plugin.md
 ---
@@ -212,3 +212,51 @@ because nixarchy manages it there.
   - Set `menu = false` and check that the stock menu comes back.
 - **Closure:** `nix path-info -S` of the pinned plugin is re-measured and
   recorded in the plan. It was 84.7 MiB at the spec.
+
+## Amendment 1: the off switch restores the source (user decision, 2026-09-24)
+
+**Found on razer** (plan step 7, case 3): when a declared clone is no longer
+declared, HM's stale-symlink cleanup removes its link. The shell then no
+longer knows the plugin, but the source (`omarchy.menu`) stays in
+`disabledPlugins`, and the clone's bar entry stays behind as an orphan. The
+result is **no menu button, and Super+Space opens nothing**. Removing files
+never runs `restoreCloneSource`, which only a disable does, so the intent's
+"clean off switch" outcome was not met. The user chose to have the hook
+restore the source.
+
+**Design:**
+
+1. **The marker records the source.** When the hook enables a default (or
+   finds it already on), the enabled-once marker holds its `clonedFrom`
+   (`printf '%s\n' "$src" >"$state/$id"`). For a plugin that isn't a clone
+   the marker is empty, exactly as today. Old markers are empty, so they
+   never trigger what follows.
+2. **Restore pass, at the start of the hook.** For each marker whose id is
+   **not** declared any more, whose content (the source) is non-empty, and
+   whose plugin directory `$plugins/$id` is gone, the clone was dropped.
+   Once the shell answers, the hook, for each dropped clone:
+   - runs `omarchy-plugin-enable "$source" --before "$id"`, so the source
+     lands right beside the clone's orphaned bar entry, in its place
+   - runs `omarchy-plugin-disable "$id"`. With no manifest, that only
+     removes the orphaned entry.
+   - removes the marker once the enable worked, so it never runs again and a
+     later re-declare enables afresh
+
+   A marker whose directory still exists (a hand install at that id) is left
+   alone.
+3. **Early exit.** The hook's "nothing to do, exit" now needs both the
+   to-do list and the dropped-clone list to be empty.
+
+**Limit, documented:** the hook exists only while at least one default
+plugin resolves (`lib.mkIf (resolvedDefaults != { })`). A host that turns off
+the menu **and every other default** gets no restore. That's rare (`pkg` and
+`rebuild` are on wherever nixarchy is), and the flake.md section gives the
+one command, `omarchy plugin enable omarchy.menu`.
+
+**Verification added:**
+- **checks.options:**
+  - The hook text writes `$src` into the marker.
+  - The restore pass (`--before`) comes before the to-do loop.
+  - The early exit tests both lists.
+- **razer:** re-run case 3. After `menu` is dropped, the menu button is back
+  in the same slot, Super+Space opens the stock menu, and the marker is gone.

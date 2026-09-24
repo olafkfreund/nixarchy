@@ -306,3 +306,103 @@ because the break was checked for having landed before its result was read.
 
 #747 stays open.
 
+
+## Implementation plan — 2026-09-24: the population rescope
+
+Drafted against the amendment approved the same day
+(`spec/2026-09-19-747-options-memory.md`, "Amendment — 2026-09-24"). **Status:
+draft, for approval.** No implementation edits until this is approved.
+
+### The decisions, carried over so this is self-contained
+
+- **The remedy is not additive.** Four single-target interventions were
+  measured and all read null. Releasing one fixture out of ten leaves nine
+  pinning a monotonic climb, so the released one is a dip rather than a lower
+  peak. The population is rescoped in one change or not at all.
+- **The live set is 8.04 GB of a 12.56 GB peak.** RSS overstates by 1.56×.
+- **The profile climbs monotonically to the final collection.** A remedy that
+  lands turns that tail into a plateau; that is the verification.
+- **`vm` is flake-rooted and immovable from this file.** The floor is one
+  system. ~10.5 systems account for the 8.04 GB at ~0.77 GB each.
+- **Coverage proof:** `deepSeq report` byte-identical in the same tree, plus
+  the built check still passing. **Not** unchanged evaluator counters.
+
+### Steps
+
+1. **Record the pre-change profile**, under the heavy lock, in a quiet window:
+   `GC_PRINT_STATS=1 nix eval --option eval-cache false .#checks.x86_64-linux.options`.
+   Keep the full sequence of `In-use heap` lines, not only the maximum — the
+   shape is the instrument.
+   → verify: 18-ish collections, monotonic, ending at the peak. If the
+   baseline is NOT monotonic, stop: the premise has changed and this plan does
+   not apply.
+
+2. **Capture the coverage baseline in the same tree**:
+   `nix eval --raw --apply 'd: builtins.deepSeq d.report d.report'` on the
+   check, saved to a file.
+   → verify: non-empty, and it names every case.
+
+3. **Rescope `mvInvariantSmall` (L2196) and `mvInvariantBig` (L2211)** into a
+   `let` local to `microvmProblems`, their only consumer. Two bindings, ~4
+   systems — the largest addressable block.
+   → verify: `nix-instantiate --parse` clean, `nix fmt` clean.
+
+4. **Rescope `notImported` (L417)** into `modeAInert`, its only use. Already
+   done once as an isolated experiment and measured null; it is included here
+   because the amendment's whole point is that it only pays as part of the
+   population.
+   → verify: as above.
+
+5. **Leave `loaderOff` (L399) bound.** Seventeen uses, sixteen of them narrow,
+   and a narrowly-forced binding measures 0 KiB live. Rescoping it would be a
+   large diff for no predicted gain, and the rule the amendment carries is to
+   bind at the narrowest scope covering the reuse — seventeen uses spanning the
+   file is that scope.
+   → verify: stated in the PR, so the omission is deliberate rather than
+   overlooked.
+
+6. **Measure the post-change profile**, same command, same lock, same window
+   discipline, in the variant tree.
+   → verify — and this is the acceptance test: **the tail is a plateau or
+   sawtooth rather than a monotonic climb.** A lower peak alone is not
+   sufficient evidence (it sits inside a ~3% RSS band); an unchanged shape is
+   sufficient evidence of failure regardless of the peak.
+
+7. **Prove coverage**: `deepSeq report` from the variant compared byte for byte
+   against step 2's baseline, and `nix build .#checks.x86_64-linux.options` in
+   the variant tree so `broken` is actually exercised.
+   → verify: `cmp` silent, build green.
+
+8. **If the shape does not change, stop and report the negative.** Do not
+   iterate by adding more bindings until something moves — that is
+   retry-until-green against a 3% band, and §10 forbids it. Record the profile
+   and leave #747 open.
+
+### Tests
+
+| command | expected |
+|---|---|
+| baseline profile | monotonic, peak at last collection |
+| variant profile | **plateau or sawtooth tail** |
+| `cmp` of the two `report` captures | silent |
+| `nix build .#checks.x86_64-linux.options` (variant) | green |
+| `nix fmt -- --ci`, statix, deadnix | clean |
+
+Both profile runs need the heavy lock and a quiet host: §6 forbids heavy local
+evaluation while an install job is active, and the plan's step 2 discipline
+(recheck the queue inside the lock, immediately before the timed command)
+caught a race twice on 2026-09-24.
+
+### Rollback
+
+One file, `tests/options.nix`, and the change is movement of declarations
+rather than logic. Reverting restores the current bindings exactly. No option,
+no module, no CI gate, nothing in a system closure, no user-visible behaviour.
+
+### What this plan does not claim
+
+It does not claim the change will work. The amendment's own risk section says
+it may land null, and step 8 exists to report that rather than to keep going.
+It also does not claim the work is worth doing — the check passes today at 74%
+of the ceiling and PR #943 makes its failure readable — and that judgement was
+left to the approver rather than assumed.

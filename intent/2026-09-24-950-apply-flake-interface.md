@@ -34,40 +34,35 @@ back to `/etc/nixos` and evaluates a different flake than the one apply
 rebuilds. Since nixarchy-flatsnap#11 that fallback at least warns, but the
 scraping is still load-bearing.
 
-**Reading the tree for this turned up two problems the issue does not name,
-and they change what "expose the flake" has to mean.**
+**A correction to this intent, made after it was approved.** The paragraphs
+that stood here claimed `programs.nixarchy.flake` was "ignored by almost
+everything", on the strength of 17 occurrences of `${NIXARCHY_FLAKE:-/etc/nixos}`
+across 14 files. **That claim is wrong**, and it is wrong in exactly the way
+CLAUDE.md section 12 warns about: I searched for the fallback spelling instead
+of asking whether anything makes the option reach those scripts.
 
-**1. Two different resolution orders ship today, and most of the tree ignores
-the option.** `programs.nixarchy.flake` is declared at `modules/apps.nix:1067`
-with the default `/etc/nixos`. Only two places honour it:
+It does. `modules/nixos.nix:1172` sets
 
-| | |
-|---|---|
-| `modules/apps.nix:2559`, `:3317` | `''${NIXARCHY_FLAKE:-${cfg.flake}}` -- the option is the fallback |
-| 17 occurrences, 14 files | `${NIXARCHY_FLAKE:-/etc/nixos}` -- a hardcoded literal |
+```nix
+environment.sessionVariables = {
+  NIXARCHY_FLAKE = cfg.flake;
+```
 
-**Two of the seventeen are in `modules/apps.nix` itself** (`:2055`, `:2500`),
-four hundred lines from the two that honour `cfg.flake`. The rest are
-`nixarchy-try:53`, `nixarchy-preview:39`,
-`nixarchy-reinstall-iso:41`, `nixarchy-config-repo:25`, `nixarchy-home-backup`
-:32, `omarchy-update:25`, `omarchy-system-factory-reset:59`, `pkgs/secret.nix`
-:195, `pkgs/doctor.sh:597` and three `nixarchy-local-ai` sites.
+so in any logged-in session the variable is always set and all 17 sites resolve
+to the option. The literal is a fallback that normally never fires. Scope (b)
+in the original open questions -- "convert the fourteen sites" -- would have
+been work with no user-visible effect, and I would have argued for it.
 
-So on a machine that sets `programs.nixarchy.flake = "/home/alice/nixos-config"`
-and does not export `NIXARCHY_FLAKE`, `nixarchy-apply` rebuilds alice's flake
-and `omarchy-update`, `nixarchy-preview` and `nixarchy-try` all reach for
-`/etc/nixos`. That is a setting the tools do not read -- CLAUDE.md section 2's
-quieter form -- and nothing reports it.
+**The real problem is narrower and still real.** `sessionVariables` are
+established at login. They are not present in a systemd system service, in a
+`sudo` invocation that does not take a login shell, or in any process that did
+not inherit the session environment. In those contexts every one of those 17
+sites silently answers `/etc/nixos` regardless of what the option says.
 
-**2. Two of those scripts tell the user to set the option they ignore.**
-`pkgs/doctor.sh:600` prints *"Set programs.nixarchy.flake, or export
-NIXARCHY_FLAKE"* three lines after resolving `${NIXARCHY_FLAKE:-/etc/nixos}`
-itself. `nixarchy-config-repo:434` does the same. A user who follows that
-advice changes nothing and is given no way to find out.
-
-The skills carry the literal too (`skills/nixos/SKILL.md:110` presents
-`echo "${NIXARCHY_FLAKE:-/etc/nixos}"` as *"what Nixarchy's own commands
-use"*), so the wrong answer is documented as the right one.
+That is also the best explanation for why nixarchy-flatsnap scrapes the script
+in the first place: a plugin cannot rely on its own environment carrying the
+answer, so it went looking for the value at its source. The scrape is a symptom
+of there being no environment-independent way to ask.
 
 ## Proposed outcome
 
@@ -90,8 +85,9 @@ variable stays the override.
 
 ## Affected users and systems
 
-- Anyone who has moved their flake off `/etc/nixos` -- 14 files answer with
-  `/etc/nixos` and 2 answer with their path -- today they have a
+- Anyone who has moved their flake off `/etc/nixos`, in any context where the
+  session environment is absent: a systemd unit, a bare `sudo`, a plugin
+  spawned outside the session -- today they have a
   half-configured machine and no signal.
 - External plugins that run a rebuild: nixarchy-flatsnap (found it),
   nixarchy-pkg, and the Rebuild panel.

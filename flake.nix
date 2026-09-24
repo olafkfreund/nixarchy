@@ -289,7 +289,7 @@
     # No flake upstream, so nothing to follow; a commit on master, bumped the
     # way that page says.
     nixarchy-herdr = {
-      url = "github:olafkfreund/nixarchy-herdr/ffd9439e1391ca92876f4443fdd33271b1849b46";
+      url = "github:olafkfreund/nixarchy-herdr/58ab568a66107f7a21f4f73973966bc11aa2a6e2";
       flake = false;
     };
 

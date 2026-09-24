@@ -2173,6 +2173,59 @@ stdenvNoCC.mkDerivation {
                       '}')
                     substituteInPlace "$shellConfigHelper" --replace-fail "$refreshOld" "$refreshNew"
 
+                    # #963: omarchy-shell finds the running instance by CONFIG
+                    # PATH. On Arch that is /usr/share/omarchy -- one stable
+                    # path, so the match is correct and cheap. Here it is a
+                    # store path that changes on every rebuild, so after a
+                    # redeploy the caller holds the new one, the running shell
+                    # registered under the old one, and every IPC call misses:
+                    # a plugin keybind that silently does nothing.
+                    #
+                    # Not sent upstream, because there is no bug upstream. This
+                    # is a consequence of the port making the path unstable.
+                    #
+                    # Path FIRST: a machine that has not rebuilt since login
+                    # never reaches the fallback, so the ordinary case cannot
+                    # regress. The fallback asks qs which instances exist and
+                    # selects by id, which survives the path moving.
+                    #
+                    # Measured before it was written: a stable symlink in front
+                    # of OMARCHY_PATH does NOT work -- qs matches the path as
+                    # given, not canonicalised, so the symlink is simply a
+                    # different string and finds nothing.
+                    shellBin=$out/share/omarchy/bin/omarchy-shell
+                    ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
+                    ipcNew=$(printf '%s\n' \
+                      '# nixarchy patch (#963): resolve the instance before calling.' \
+                      'qs_sel=(-p "$OMARCHY_PATH/shell")' \
+                      'if ! qs ipc -n -p "$OMARCHY_PATH/shell" call __nixarchy_probe __nixarchy_probe >/dev/null 2>&1; then' \
+                      '  qs_listing=$(qs list --all 2>/dev/null) || qs_listing=""' \
+                      '  qs_ids=()' \
+                      '  qs_id=""' \
+                      '  while IFS= read -r qs_line; do' \
+                      '    case $qs_line in' \
+                      '      Instance\ *:) qs_id=''${qs_line#Instance }; qs_id=''${qs_id%:} ;;' \
+                      '      *Config\ path:*/shell/shell.qml)' \
+                      '        [[ -n $qs_id ]] && qs_ids+=("$qs_id"); qs_id="" ;;' \
+                      '    esac' \
+                      '  done <<< "$qs_listing"' \
+                      '  # A parse that finds no Instance lines at all is a qs whose' \
+                      '  # output format moved, not a machine with no shell. Reporting' \
+                      '  # "not running" there would restore exactly the silent failure' \
+                      '  # this patch exists to remove, so refuse instead.' \
+                      '  if [[ -n $qs_listing && ! $qs_listing =~ Instance ]]; then' \
+                      '    fail "cannot read qs list output; omarchy-shell cannot find the shell"' \
+                      '  fi' \
+                      '  if (( ''${#qs_ids[@]} > 1 )); then' \
+                      '    fail "more than one omarchy shell is running (''${qs_ids[*]}); refusing to guess"' \
+                      '  fi' \
+                      '  if (( ''${#qs_ids[@]} == 1 )); then' \
+                      '    qs_sel=(-i "''${qs_ids[0]}")' \
+                      '  fi' \
+                      'fi' \
+                      'output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n "''${qs_sel[@]}" call -- "$@" 2>/dev/null)')
+                    substituteInPlace "$shellBin" --replace-fail "$ipcOld" "$ipcNew"
+
                     # Any length or order change in a bar region -- one icon moved, one dragged
                     # into a Bar Folder, one widget put or removed -- rebuilt every widget in that
                     # region on every monitor (#901): Bar.qml handed each ModuleList Repeater a

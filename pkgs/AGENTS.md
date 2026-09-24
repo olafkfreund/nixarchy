@@ -115,6 +115,27 @@ CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
 purpose; a fenced block is what an agent copies.
 
+### The first patch to `omarchy-shell` (#963)
+
+`omarchy-shell` matched the running Quickshell instance by **config path**. On
+Arch that is `/usr/share/omarchy` -- one stable path across upgrades, so the
+match is correct and there is nothing to send upstream. Here it is a store path
+that changes on every rebuild, so after a redeploy the caller holds the new one,
+the running shell registered under the old one, and every IPC call misses. The
+symptom is a plugin keybind that silently does nothing on a machine that looks
+fine.
+
+The replacement tries the caller's path **first**, so a machine that has not
+rebuilt since login never reaches the new code, and falls back to
+`qs ipc -i <instance>` resolved from `qs list --all`.
+
+**Measured before it was written:** a stable symlink in front of `OMARCHY_PATH`
+does not work. `qs` matches the path as given, not canonicalised, so the symlink
+is a different string and finds nothing.
+
+`--replace-fail`, like everything else here, so an Omarchy bump that rewords
+that line fails the build rather than quietly restoring the store-path match.
+
 ### Aether's lockfile
 
 Kept because the patch it describes came off at 4.29.9 and may have to go back

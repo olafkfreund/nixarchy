@@ -306,6 +306,36 @@ and whether the three llm-agents.nix attribute names (`cursor-agent`,
 another repository printed to users, and nothing here notices when it goes
 stale -- a source of quietly wrong advice rather than a broken build.
 
+## shell-ipc-resolve: three sandbox traps, two of them already written down
+
+`checks.shell-ipc-resolve` drives the patched `omarchy-shell` against a stub
+`qs` (#963). Getting the fixture to run at all cost three attempts, and two of
+the three were already recorded somewhere in this repo:
+
+- **A heredoc inside an indented Nix string.** nixfmt strips the block's common
+  indent, so the stub's shebang came out mangled, `qs` was never found, and
+  every case reported "not running". CLAUDE.md section 5 says to use
+  `printf '%s\n'`; `pkgs/omarchy/default.nix` does so three times for exactly
+  this reason.
+- **No `/usr/bin/env` in the build sandbox.** `env` gives "bad interpreter", the
+  stub never runs, and the symptom is identical to the one above from a
+  different cause. Already recorded in AGENTS.md section 4 against
+  `tests/proof-push.nix`. The shebang is `${pkgs.bash}/bin/bash`.
+- **`$out` is in scope.** Capturing the script's output into `out` made all five
+  assertions pass and then failed the derivation with nothing in the log.
+  `tests/apply-confirm.nix` hit this first and it is noted there; this file hit
+  it again four hours later, so the note was not enough on its own.
+
+**A PATH stub works here and does not in `apply-confirm`.** `nixarchy-apply` is
+a `writeShellApplication` with a strict PATH built from `runtimeInputs`, so the
+real binary always wins; `omarchy-shell` is upstream's and unwrapped, so PATH is
+the whole mechanism. Same trick, opposite result, and the difference is which
+side of the port the script is on.
+
+**What no check reaches:** a real redeploy under a live session, which is the
+whole bug. `checks.session` boots a desktop but does not rebuild under one.
+Checked by hand on p620.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

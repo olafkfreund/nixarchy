@@ -303,8 +303,24 @@ let
   '';
 
   # The GitHub Actions panel, the same way (#772): gltui is its fork.
+  ghtui = inputs.nixarchy-ghtui.packages.${pkgs.stdenv.hostPlatform.system}.default;
+
+  # The panel declares the tools its scripts invoke (nixarchy-ghtui#37), and
+  # that list has to be read off the INPUT rather than off `githubActions`
+  # below: `cp -r` makes a new derivation, and a new derivation has no
+  # passthru, so `githubActions.runtimeDeps` is an evaluation error rather than
+  # a list. Bound here because the cause and the reason are the same two lines
+  # -- at the plugin entry, 1,500 lines down, it reads as naming the same
+  # package twice for no visible reason.
+  #
+  # Ours used to repeat `gh python3 xdg-utils` by hand. The panel's copy is the
+  # authoritative one: it knows what its own scripts call, and a tool it starts
+  # calling that we do not ship is section 7's runtimeInputs failure -- a
+  # command that is not there reads as a wrong answer, not a missing one.
+  githubActionsDeps = ghtui.runtimeDeps;
+
   githubActions = pkgs.runCommand "nixarchy-ghtui" { } ''
-    cp -r ${inputs.nixarchy-ghtui.packages.${pkgs.stdenv.hostPlatform.system}.default} $out
+    cp -r ${ghtui} $out
     chmod -R u+w $out
     touch $out/menu.managed
     [ -f $out/LICENSE ] || cp ${inputs.nixarchy-ghtui}/LICENSE $out/LICENSE
@@ -1853,11 +1869,9 @@ in
         github = {
           id = "olafkfreund.github-actions";
           src = githubActions;
-          packages = [
-            pkgs.gh
-            pkgs.python3
-            pkgs.xdg-utils
-          ];
+          # Why: the binding beside githubActions, which says why this cannot
+          # come from `src`.
+          packages = githubActionsDeps;
         };
         # The herdr sessions widget, with herdr itself and the tools its
         # herdr-sessions script calls (#771).

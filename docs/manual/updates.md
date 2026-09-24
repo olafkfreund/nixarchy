@@ -104,6 +104,38 @@ input. `omarchy update` moves all of them;
 specific fix, the second is the
 better habit — see [Updating NixOS](updating-nixos.md#the-long-way-and-when-you-want-it).
 
+## When nixarchy takes over a module your flake also imports
+
+An input nixarchy pulls in can collide with the same input in your own flake,
+and the error names neither of them:
+
+```
+error: The option `services.snap.enable' in `…/flake.nix, via option
+flake.nixosModules.default' is already declared in `…/flake.nix, via option
+flake.nixosModules.default'.
+```
+
+Both halves of that message name the **same store path**. It is one module
+imported as two separate values, which the module system cannot deduplicate, so
+there is no version skew to go hunting for -- comparing the two flakes' locks
+finds them identical.
+
+This is live today for **nix-snapd**. nixarchy imports
+`nixarchy-flatsnap.nixosModules.default` (`modules/nixos.nix`), and that pulls
+nix-snapd in, so a host that also carries
+`inputs.nix-snapd.nixosModules.default` gets it twice. Importing it yourself was
+the correct thing to do before nixarchy took it over, which means this lands
+precisely on long-standing users, and it is triggered by the **pin bump alone**
+-- nothing about your own configuration has to change.
+
+**The fix is to drop your own import.** Snap still works: it comes from
+nixarchy, inert until `~/.config/nixarchy/flatsnap.nix` declares something.
+
+nixarchy cannot detect this for you. A module's `imports` are what *build* the
+option set, so they cannot ask whether an option already exists -- guarding the
+import on `options ? services.snap` is an infinite recursion, not a missing
+feature (checked, #947).
+
 ## Machines that update themselves
 
 A machine can pull its configuration from a git repository on a timer instead

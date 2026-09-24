@@ -71,14 +71,45 @@ ahead/behind/equal/unrelated in two calls and needs no network. A shallow clone
 that cannot answer reports **unrelated**, which is the safe direction: it asks a
 human to look rather than staying quiet.
 
-### The manifest gap
+### The manifest gap -- corrected after approval, and it is now a dependency
 
-The intent's third open question: a shadowed plugin is never written to
-`${staging}`, so nixarchy has no record it meant to plant it. **This spec does
-not change that**, and says why rather than leaving it implied: doctor already
-knows the declared set from the configuration it is reading, so it does not need
-the manifest to find these. Recording intent separately is a real improvement
-for *other* consumers and is a separate issue, not a dependency of this one.
+**This section said doctor "already knows the declared set from the
+configuration it is reading". That is wrong**, and reading `pkgs/doctor.sh`
+rather than assuming is what found it. Its header states the opposite as a
+design decision:
+
+> Deliberately inspects the live system rather than evaluating a flake: this
+> has to be useful *before* nixarchy is an input, and `nix run` on a flake that
+> is not yet imported anywhere is the only entry point a new user has.
+
+Doctor reads `/run/current-system/sw` and `$XDG_CONFIG_HOME`. It never
+evaluates module config, and it must not start: being useful before nixarchy is
+an input is the reason it exists.
+
+So it has to learn the declared set **from disk**, and the only candidate is
+`~/.config/omarchy/plugins/.nixarchy-managed` (`modules/home.nix:1094`) -- which
+today lists what activation **linked**, and therefore omits exactly the
+shadowed ids this issue is about. Doctor reading it would see no trace of the
+problem.
+
+**So the intent's third open question is answered: the manifest change is a
+dependency, not a separate issue.** The reconcile step records the declared id
+in both cases, distinguishing linked from shadowed:
+
+```
+nixarchy.herdr
+!nixarchy.distrobox      # declared, not linked -- a real directory is there
+```
+
+A leading marker rather than a second file, so the "a plugin dropped from the
+configuration goes away" loop directly above keeps working on the same list --
+it greps for exact lines, so a marked id is simply not matched and not removed,
+which is already the behaviour that branch wants.
+
+This also makes the finding possible **without git at all** for the first
+question ("is something shadowing a declared plugin?"), leaving git needed only
+to say ahead/behind. That is a better failure mode than the risks section
+assumed.
 
 ## Alternatives rejected
 
@@ -92,10 +123,13 @@ for *other* consumers and is a separate issue, not a dependency of this one.
 
 ## Risks
 
-- **Doctor grows a git dependency.** It reads the running system and must not
-  need anything not already there. `git` is in the closure of a machine that can
-  clone a plugin, but doctor must degrade to "cannot tell" rather than error if
-  it is absent.
+- **Doctor grows a git dependency, for part of the answer only.** With the
+  manifest change above, "something is shadowing a declared plugin" needs no
+  git. Only ahead/behind does, and doctor must degrade to naming the directory
+  and both paths rather than erroring when `git` is absent.
+- **Doctor must not start evaluating config.** The manifest is a file on disk,
+  which keeps its pre-install contract intact. Any future temptation to read
+  module options here breaks the reason it exists.
 - **`~/.config/omarchy/plugins` may hold directories for plugins we do not
   declare.** Those are not our business and must not be reported at all -- the
   section walks the *declared* set, not the directory.

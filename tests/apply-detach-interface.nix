@@ -72,6 +72,30 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     grep -qi "is not what you checked" <<<"$res" || fail "a mismatching hash was not refused"
     [ ! -e flake/nixarchy/apps.nix ] || fail "a refused apply copied the file anyway"
 
+    # 5. --detach forwards the pins into the unit (#986).
+    #
+    # The gap this closes: the --detach branch exited before the hash loop
+    # ran, so a caller that pinned what it checked and asked for a detached
+    # build got an UNPINNED build, silently. Case 4 passed throughout, because
+    # it never passed --detach -- section 3's lesson landing on a check I
+    # wrote: it held constant the one variable that mattered.
+    #
+    # STATIC, and that is a limitation rather than a choice. The obvious
+    # behavioural test stubs systemd-run and reads the unit's command line;
+    # that cannot work, because nixarchy-apply is a writeShellApplication with
+    # pkgs.systemd in runtimeInputs and the strict PATH beats any stub. The
+    # first version of this case did it anyway and failed for that reason, not
+    # for the bug -- the fourth time in this repository a PATH stub has lost to
+    # runtimeInputs (see tests/AGENTS.md).
+    #
+    # So the assertion is on the shipped script: the systemd-run invocation
+    # must expand the expect array. It cannot tell a forwarded pin from a
+    # malformed one, and says so rather than implying otherwise.
+    grep -q 'expect-sha256=' "$apply" \
+      || fail "the --detach branch does not forward --expect-sha256 into the unit"
+    grep -A6 'systemd-run --user --unit=nixarchy-rebuild' "$apply" | grep -q 'expect-sha256=' \
+      || fail "--expect-sha256 is accepted but not forwarded by the systemd-run call"
+
     mkdir -p $out
-    echo "apply detach interface: 2 cases asserted (--status is unreachable here)"
+    echo "apply detach interface: 3 cases asserted (--status is unreachable here)"
   ''

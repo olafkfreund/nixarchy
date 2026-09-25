@@ -3365,6 +3365,14 @@ in
                     # and was reverted the same evening, because the callers
                     # that cannot answer are exactly the ones it stopped.
                     --expect-sha256) shift; expect+=("''${1:?--expect-sha256 needs <part>=<sha256>}") ;;
+                    # The --detach branch forwards these into the unit, and a
+                    # unit's command line is easier to read with one word per
+                    # pair. #986: before this they were dropped entirely, so a
+                    # caller that pinned what it checked and asked for a
+                    # detached build got an UNPINNED build and no warning --
+                    # exactly the guarantee the flag exists to give, missing in
+                    # the mode a panel actually uses.
+                    --expect-sha256=*) expect+=("''${1#--expect-sha256=}") ;;
                     *)
                       echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
                       echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
@@ -3463,7 +3471,8 @@ in
                     --setenv=NIXARCHY_FLAKE="$flake" \
                     --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
                     --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
-                    -- "$(readlink -f "$0")" --yes --no-preview
+                    -- "$(readlink -f "$0")" --yes --no-preview \
+                    ''${expect+"''${expect[@]/#/--expect-sha256=}"}
                   echo "Rebuilding in the background. Follow it with:"
                   echo "  journalctl --user -fu nixarchy-rebuild"
                   exit 0

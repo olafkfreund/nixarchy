@@ -419,6 +419,32 @@ runs about ten minutes in, so "remove the slice and watch it fail" costs a full
 run. The before-state is an observed failure across three nightlies, which is
 better evidence than a synthetic break anyway.
 
+## A test file in tests/ is not a check, and the coverage gate cannot see that
+
+`tests/shell-ipc-resolve.nix` shipped with #963 and `flake.nix` named it
+**nowhere**. It had never run. Found only because #982 tried to register a
+sibling beside it and the anchor was not there.
+
+The gate in `build.yml` asserts that every entry in `checks` is built by some
+workflow. It cannot assert the other direction -- that every file in `tests/`
+is in `checks` -- so a test that is written, reviewed and merged without a
+`flake.nix` entry is invisible to it. That is AGENTS.md section 4's headline
+failure arriving through the one door the guard does not watch.
+
+Both are registered now. Worth a comparison rather than discipline, in the
+shape section 4 asks for: `tests/*.nix` against the attribute names under
+`checks`, failing on anything in the first and not the second.
+
+## shell-restart-tree asserts on the script, not on a run
+
+The patched `omarchy-restart-shell` reads `/run/current-system/etc/set-environment`
+by absolute path, which a `runCommand` cannot fake. So the four cases grep the
+shipped script.
+
+**What that cannot reach:** whether the relaunched shell actually comes up on
+the new tree. That needs a session that has rebuilt since login, which no check
+here has. p620 is one most days, so it is a hand check.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

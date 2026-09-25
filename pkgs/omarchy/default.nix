@@ -2136,6 +2136,23 @@ stdenvNoCC.mkDerivation {
                     # of OMARCHY_PATH does NOT work -- qs matches the path as
                     # given, not canonicalised, so the symlink is simply a
                     # different string and finds nothing.
+                    # Why: pkgs/AGENTS.md#the-tree-a-restarted-shell-runs-982
+                    restartBin=$out/share/omarchy/bin/omarchy-restart-shell
+                    relaunchOld="hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null"
+                    relaunchNew=$(printf '%s\n' \
+                      '# nixarchy patch (#982): relaunch on the CURRENT tree.' \
+                      'nixarchy_tree=$(sed -n '"'"'s/^export OMARCHY_PATH="\(.*\)"$/\1/p'"'"' \' \
+                      '  /run/current-system/etc/set-environment 2>/dev/null | tail -n 1)' \
+                      'if [[ -n ''${nixarchy_tree:-} ]]; then' \
+                      '  # printf, not escaped quotes: this string crosses a Nix'"'"'"'"'"'"'"'"' '"'"'"'"'"'"'"'"' string,' \
+                      '  # a shell string and hyprctl'"'"'"'"'"'"'"'"'s own parser, and a backslash means' \
+                      '  # something different in each. printf has no backslashes to lose.' \
+                      '  hyprctl dispatch "$(printf '"'"'hl.dsp.exec_cmd("env OMARCHY_PATH=%s omarchy-launch-shell")'"'"' "$nixarchy_tree")" >/dev/null' \
+                      'else' \
+                      "  hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null" \
+                      'fi')
+                    substituteInPlace "$restartBin" --replace-fail "$relaunchOld" "$relaunchNew"
+
                     shellBin=$out/share/omarchy/bin/omarchy-shell
                     ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
                     ipcNew=$(printf '%s\n' \

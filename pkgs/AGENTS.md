@@ -115,6 +115,34 @@ CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
 purpose; a fenced block is what an agent copies.
 
+<a id="the-tree-a-restarted-shell-runs-982"></a>
+### The tree a restarted shell runs (#982)
+
+`omarchy-restart-shell` relaunches through `hyprctl dispatch exec_cmd`, and
+Hyprland spawns that child with **its own** environment, fixed at login. So a
+rebuild changed `OMARCHY_PATH` and a restart still came up on the old tree:
+generated menu data only took effect at the next re-login, which is how #961's
+Ask aliases shipped and were invisible on razer.
+
+The script already read the session's `OMARCHY_PATH` for the **kill**, under a
+comment noting that the user manager receives Hyprland's environment at session
+start. That read was used for the kill and discarded for the launch.
+
+**The session value is not fresh either.** `environment.sessionVariables` reach
+a login shell through `/etc/set-environment` and never reach a RUNNING user
+manager, so `systemctl --user show-environment` answers with the login-time path
+too. Measured on p620: `/run/current-system` said `h2qc3mkc...`, the user
+manager said `rp5i87d4...`. That is why the patch reads the generated file.
+
+**Only the launch changes.** The kill keeps the session value, because the
+running shell registered under the login-time path -- killing by the new one
+finds nothing and leaves two shells.
+
+**Ours, though the script is upstream's.** On Arch `OMARCHY_PATH` is
+`/usr/share/omarchy`: stable across upgrades, so inheriting a login-time value
+is correct and free. The port made it a store path that moves every rebuild.
+Third symptom of that one fact, after #963 and the workaround already at line 8.
+
 <a id="the-browser-theme-policy-and-why-402-broke-it"></a>
 ### The browser theme policy, and why 4.0.2 broke it here
 

@@ -2127,6 +2127,22 @@
           # froze rather than breaking, and apply reported success throughout.
           # See tests/apply-imports.nix.
           # #979: --status, --log and --expect-sha256, against stub systemd.
+          # #982: a restarted shell runs the generation's tree, not the one it
+          # logged in with.
+          shell-restart-tree = import ./tests/shell-restart-tree.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #963, and it was registered by NOTHING until #982 went looking --
+          # the file shipped and `checks` never named it, so it had never run.
+          # The coverage gate asserts every entry in `checks` is built by a
+          # workflow; it cannot see a test file that is in no entry.
+          shell-ipc-resolve = import ./tests/shell-ipc-resolve.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           apply-detach-interface = import ./tests/apply-detach-interface.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

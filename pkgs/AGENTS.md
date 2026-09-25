@@ -115,6 +115,36 @@ CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
 purpose; a fenced block is what an agent copies.
 
+<a id="display-text-size-on-a-managed-config-948"></a>
+### `display text size` on a config it cannot edit (#948)
+
+`omarchy display text size N` edits the terminal configs with `sed -i`. On Arch
+those are ordinary files in `$HOME` and it works. Here they can be Home Manager
+symlinks into the store, and sed dies with
+
+    sed: couldn't open temporary file /nix/store/sedXXXXXX: Read-only file system
+
+while the shell and GTK sizes still apply -- a partial result and an error
+nobody can act on. Ours rather than upstream's: the port made the files
+read-only. Same discriminator as #963 and #982.
+
+**Two fixes that look right and are not.** `sed --follow-symlinks` writes to the
+store target, which is equally read-only -- upstream's kitty branch already does
+this and it does not help. And letting `sed -i` replace the symlink with a real
+file appears to work while quietly taking the file out of Home Manager's
+management, so the next rebuild fights it. That is worse than the error.
+
+**The guard is its own file**, `pkgs/omarchy/text-size-managed-guard.sh`, spliced
+in with `--replace-fail`. Inline was tried first and refused: the install phase
+was 1,910 bytes from `MAX_ARG_STRLEN` (#997), and the failure said only
+"Argument list too long". A path costs about 60 bytes; the block cost 1,630.
+
+**There is no nixarchy option to name in the message.** nixarchy *seeds* these
+files and never manages them, so on a stock machine they are real files and the
+existing edit works. They are symlinks only where the user manages them
+themselves, so the message points at wherever they declare it rather than
+inventing a `programs.nixarchy.*` that does not exist.
+
 <a id="the-tree-a-restarted-shell-runs-982"></a>
 ### The tree a restarted shell runs (#982)
 

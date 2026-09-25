@@ -249,13 +249,21 @@ questions_word=$(word_for "$questions" | tr '[:upper:]' '[:lower:]')
 plugins_block=$(awk '/^      defaultPluginSet = \{/{f=1} f; f && /^      \};/{exit}' "$root/modules/home.nix")
 p_total=$(grep -c 'id = "' <<<"$plugins_block" || true)
 p_gated=$(grep -c 'gate = ' <<<"$plugins_block" || true)
+# A third category, and the subtraction below used to have only two. #946 added
+# nixarchy.menu with `enableByDefault = false`: it is neither always on nor
+# gated on a feature, and `p_total - p_gated` counted it as always on. The
+# README then read "ten are always on" for a plugin that ships OFF -- a false
+# sentence written to satisfy a derived number, which is exactly what section 4
+# warns a proxy does when a second meaning appears under it.
+p_off=$(grep -c 'enableByDefault = false' <<<"$plugins_block" || true)
 if [ "$p_total" -lt 5 ]; then
   echo "::error::default-plugins: found $p_total ids under 'defaultPluginSet = {' in modules/home.nix -- the block moved; refusing" >&2
   fail=1
   p_total=0
 fi
 p_word=$(word_for "$p_total")
-p_on_word=$(word_for "$((p_total - p_gated))" | tr '[:upper:]' '[:lower:]')
+p_on_word=$(word_for "$((p_total - p_gated - p_off))" | tr '[:upper:]' '[:lower:]')
+p_off_word=$(word_for "$p_off" | tr '[:upper:]' '[:lower:]')
 p_gated_word=$(word_for "$p_gated" | tr '[:upper:]' '[:lower:]')
 
 quantity "commands" "$commands" \
@@ -410,14 +418,17 @@ quantity "apps-other-unavailable" "$a_un" \
 readme="$root/docs/index.md"
 dp='ship by default: '
 quantity "default-plugins" "$p_word" \
-  "^([A-Z][a-z]+) ${dp}[a-z]+ are always on, and [a-z]+ turn on.*" \
+  "^([A-Z][a-z]+) ${dp}[a-z]+ are always on, [a-z]+ turn on.*" \
   "s/^[A-Z][a-z]+ ${dp}/$p_word ${dp}/"
 quantity "default-plugins-on" "$p_on_word" \
-  "^[A-Z][a-z]+ ${dp}([a-z]+) are always on, and [a-z]+ turn on.*" \
+  "^[A-Z][a-z]+ ${dp}([a-z]+) are always on, [a-z]+ turn on.*" \
   "s/^([A-Z][a-z]+ ${dp})[a-z]+ are always on/\1$p_on_word are always on/"
 quantity "default-plugins-gated" "$p_gated_word" \
-  "^[A-Z][a-z]+ ${dp}[a-z]+ are always on, and ([a-z]+) turn on.*" \
-  "s/(are always on, and )[a-z]+ turn on/\1$p_gated_word turn on/"
+  "^[A-Z][a-z]+ ${dp}[a-z]+ are always on, ([a-z]+) turn on.*" \
+  "s/(are always on, )[a-z]+ turn on/\1$p_gated_word turn on/"
+quantity "default-plugins-optin" "$p_off_word" \
+  "^[A-Z][a-z]+ ${dp}[a-z]+ are always on, [a-z]+ turn on with their feature, and ([a-z]+) (is|are) opt-in.*" \
+  "s/(turn on with their feature, and )[a-z]+ (is|are) opt-in/\1$p_off_word \2 opt-in/"
 # Deliberately NOT a quantity: the search index's row count (README, "about
 # 137,000 rows"). modules/apps.nix builds the index on each machine from its own
 # options.json and nixpkgs, so no exact figure is true of every machine, and

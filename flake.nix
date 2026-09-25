@@ -305,14 +305,14 @@
     # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-distrobox = {
-      url = "github:olafkfreund/nixarchy-distrobox/dd9e89cd4b5b47f24f1cb542c521ea3a98d2d7b7";
+      url = "github:olafkfreund/nixarchy-distrobox/74d1337d7cdf9da83f57e66716cbc089a6f5532a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Why: docs/internals/flake.md#the-dev-environments-panel-wherever-devenv-is-802
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-devenv = {
-      url = "github:olafkfreund/nixarchy-devenv/83ff7e6eb9d96d48f7ca7343ef7e26a24a5297b4";
+      url = "github:olafkfreund/nixarchy-devenv/f4821857764c73bb0ebc5eacd465fc870bd6680b";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

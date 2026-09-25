@@ -87,7 +87,7 @@ a key, keyboard-first, in the desktop's own look:
 - manage MicroVMs and Distrobox boxes;
 - browse the plugin marketplace, and audit a plugin before installing it.
 
-Twelve ship by default: nine are always on, and three turn on with their feature. Voice will be opt-in.
+Thirteen ship by default: nine are always on, three turn on with their feature, and one is opt-in. Voice will be opt-in.
 
 [![The Podman panel: containers, images and volumes, then a container stopping](img/features/podman.gif)](img/features/podman.gif)
 

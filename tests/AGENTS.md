@@ -368,6 +368,57 @@ exists for (a unit that never ran reads `Result=success ExecMainStatus=0`).
 Only `--expect-sha256` is asserted, because it touches the file system rather
 than systemd.
 
+## wait_for_console_text rescans its whole buffer, once per arriving line
+
+`checks.install-encrypted` never finished -- not once, in any nightly. It was
+filed as eviction, then as starvation, and #937 split the nightly's install
+chains to fix the starvation. None of that was it.
+
+`wait_for_console_text`
+(`nixos/lib/test-driver/src/test_driver/machine/__init__.py`):
+
+```python
+while True:
+    console.write(self.last_lines.get(block=block))   # append ONE line
+    console.seek(0)
+    matches = re.search(regex, console.read())        # rescan the WHOLE buffer
+```
+
+With that check's pattern -- `assphrase for` with a kernel-line group between
+**every character**, thirteen nested quantifiers, from #834 -- each rescan
+backtracks over everything received since the wait began. **Then it feeds
+back**: driver CPU grows with the buffer, starves the qemu on the same host,
+the guest advances more slowly, the wait continues, the buffer grows. The
+2026-09-25 nightly's target advanced **7 ms of guest time in 56 minutes**, with
+the wall cost per guest millisecond doubling every line.
+
+**The numbers are smaller than they sound**, which is the part worth
+remembering: 452 lines, about 45 KB. A plain quadratic over 45 KB is nothing.
+It is the *backtracking* over a growing input that costs, so "the buffer is
+small" is not a reason to rule this out.
+
+**Do not fix it by cheapening the pattern.**
+`spec/2026-09-21-834-luks-prompt-race.md` measured that: joining the letters
+with a loose quantifier matches a decoy containing no prompt, and a false
+positive sends the passphrase to whatever is listening. The `DECOY` assertion
+in the check exists to catch that edit, and it would have been the only thing
+to catch it.
+
+The fix bounds the **input**: poll a 64 KiB tail of `get_console_log()` instead.
+91m52s (a timeout, so really unbounded) became **13m49s**.
+
+**The control is what made this findable.** `checks.install` ran on the same
+runner in the same minute and finished in 2m34s. Two checks, one variable --
+`install-encrypted` sets `console=ttyS0` and waits on the console; `install`
+does neither -- and byte-identical qemu invocations. When a VM check is
+mysteriously slow, look for the sibling that is not.
+
+**What could not be proven cheaply**, stated rather than implied: there is no
+fast synthetic break. The bounded assertion sits inside the test script, which
+runs about ten minutes in, so "remove the slice and watch it fail" costs a full
+run. The before-state is an observed failure across three nightlies, which is
+better evidence than a synthetic break anyway.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

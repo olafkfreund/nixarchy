@@ -13,7 +13,7 @@ the desktop already is: a chord and a list, keyboard-first, in the shell's own
 look.
 
 Some are **on by default**: installed with nixarchy and turned on at your first
-login. Others are on their way, and one stays **opt-in** on purpose. Each entry
+login. Others are on their way, and some stay **opt-in** on purpose. Each entry
 below says which. Turning one on happens *once*, so a plugin you switch off in
 **Setup → Plugins** stays off. [Configuring nixarchy](configuration#nixarchys-own-plugins)
 covers how to stop nixarchy installing one at all.
@@ -36,6 +36,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Plugin Browser](#plugin-browser) | the plugin marketplace, audited before you install | **on by default** | Setup ▸ Plugins ▸ Add Plugin · Super+Alt+U <!-- io.github.olafkfreund.nixarchy-plugin-browser --> |
 | [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
+| [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **opt-in** | Super+Alt+Space, once you turn it on <!-- nixarchy.menu --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
 
 ## Package manager
@@ -356,6 +357,33 @@ once.
 **[Watch the nixarchy desktop showcase](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)**, recorded by an agent through ai-mirror.
 
 *Not recorded yet. It needs an agent driving the desktop, which is [#816](https://github.com/olafkfreund/nixarchy/issues/816) pass C.*
+
+## Menu
+
+[nixarchy-menu](https://github.com/olafkfreund/nixarchy-menu) · **opt-in**
+
+**What it solves.** Omarchy's menu is a tree you walk: Install, then a
+submenu, then a row. That is fast once you know where a thing lives and slow
+while you are learning. A palette is the other shape -- type what you want and
+let it find the row.
+
+**What it does.** Replaces the Omarchy menu with a Raycast-style palette over
+the same rows. It is a clone of `omarchy.menu`, so it takes that plugin's slot
+rather than adding a second button, and nixarchy turns any other clone of the
+same menu off before enabling it -- two plugins claiming the menu is a fight
+the first one alphabetically wins, silently.
+
+**It is opt-in, and stays that way for now.** Turn it on with
+
+```nix
+programs.nixarchy.defaultPlugins.menu = true;
+```
+
+It has run on the maintainer's machines rather than on everyone's, and
+replacing the menu is not a change to make on somebody's behalf. The search
+terms the palette matches come from nixarchy's own menu data (#961), so the
+Ask topics answer to symptoms -- "slow", "hacked", "disk full" -- rather than
+only to their labels.
 
 ## Voice
 

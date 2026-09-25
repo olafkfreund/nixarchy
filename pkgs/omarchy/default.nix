@@ -2137,6 +2137,17 @@ stdenvNoCC.mkDerivation {
                     # given, not canonicalised, so the symlink is simply a
                     # different string and finds nothing.
                     # Why: pkgs/AGENTS.md#the-tree-a-restarted-shell-runs-982
+                    # Why: pkgs/AGENTS.md#display-text-size-on-a-managed-config-948
+                    #
+                    # The guard is a FILE, not an inline block: this phase was
+                    # 1,910 bytes from MAX_ARG_STRLEN when #948 first tried it
+                    # inline, and the build failed with "Argument list too
+                    # long" naming nothing (#997). A path costs ~60 bytes.
+                    textSizeBin=$out/share/omarchy/bin/omarchy-display-text-size
+                    substituteInPlace "$textSizeBin" --replace-fail \
+                      'set_terminal_size() {' \
+                      "$(printf '%s\n' 'set_terminal_size() {' "$(cat ${./text-size-managed-guard.sh})")"
+
                     restartBin=$out/share/omarchy/bin/omarchy-restart-shell
                     relaunchOld="hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null"
                     relaunchNew=$(printf '%s\n' \

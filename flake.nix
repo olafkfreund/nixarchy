@@ -2129,6 +2129,13 @@
           # #979: --status, --log and --expect-sha256, against stub systemd.
           # #982: a restarted shell runs the generation's tree, not the one it
           # logged in with.
+          # #948: `display text size` skips a config it cannot edit, and says
+          # where to change it, instead of printing a sed error.
+          text-size-managed = import ./tests/text-size-managed.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           shell-restart-tree = import ./tests/shell-restart-tree.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

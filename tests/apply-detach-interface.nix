@@ -96,6 +96,24 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     grep -A6 'systemd-run --user --unit=nixarchy-rebuild' "$apply" | grep -q 'expect-sha256=' \
       || fail "--expect-sha256 is accepted but not forwarded by the systemd-run call"
 
+    # 6. The bytes that were hashed are the bytes that get built (#986 item 2).
+    #
+    # apply used to hash the file and then `cp` it 28 lines later, with nothing
+    # held in between, so a write in that window was built unchecked -- the pin
+    # proved the bytes at check time, not the bytes that were built. It now
+    # snapshots the file, hashes the snapshot, and copies the snapshot.
+    #
+    # ASSERTED STATICALLY, and that is a limitation rather than a preference.
+    # The behavioural version races a writer against apply; the window is
+    # microseconds on this machine, a 0.3 s sleep never landed in it, and the
+    # case stayed GREEN with the snapshot removed. A timing fixture that cannot
+    # fail is the green light section 1 is about, so it was deleted rather than
+    # shipped. What is asserted is that the copy loop reads the snapshot.
+    grep -q 'src="\$pinned/\$part.nix"' "$apply" \
+      || fail "the copy loop no longer reads the pinned snapshot (#986 item 2)"
+    grep -q 'sha256sum <"\$pinned/\$part.nix"' "$apply" \
+      || fail "the hash is no longer taken from the snapshot"
+
     mkdir -p $out
-    echo "apply detach interface: 3 cases asserted (--status is unreachable here)"
+    echo "apply detach interface: 4 cases asserted (--status is unreachable here)"
   ''

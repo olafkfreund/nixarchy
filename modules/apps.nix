@@ -3519,11 +3519,26 @@ in
                 # is why this can exist at all where #967's blanket refusal
                 # could not. Checked BEFORE the copy loop, so a mismatch copies
                 # nothing and builds nothing.
+                # A SNAPSHOT is taken and the snapshot is hashed, so what gets
+                # built is the exact bytes that were checked (#986 item 2).
+                # Hashing the file and copying it later reads it twice, 28 lines
+                # apart with nothing held in between -- a write in that window
+                # was built unchecked, which is the guarantee this flag exists
+                # to give. No shared lock is needed for this: the caller's file
+                # can change freely afterwards, and what is built is still what
+                # it pinned.
+                pinned=$(mktemp -d)
+                trap 'rm -rf "$pinned"' EXIT
                 for pair in ''${expect+"''${expect[@]}"}; do
                   part=''${pair%%=*}
                   want=''${pair#*=}
                   file="$srcdir/$part.nix"
-                  have=$( [ -f "$file" ] && sha256sum <"$file" | cut -d" " -f1 || echo "" )
+                  if [ -f "$file" ]; then
+                    cp "$file" "$pinned/$part.nix"
+                    have=$(sha256sum <"$pinned/$part.nix" | cut -d" " -f1)
+                  else
+                    have=""
+                  fi
                   if [ "$have" != "$want" ]; then
                     echo "nixarchy-apply: $part.nix is not what you checked." >&2
                     echo "  you passed: $want" >&2
@@ -3534,7 +3549,17 @@ in
                 done
 
                 for part in apps services advanced flatsnap; do
-                  src="$srcdir/$part.nix"
+                  # The snapshot, for a part the caller pinned: the bytes that
+                  # were hashed above, not whatever is on disk now (#986).
+                  # `srcmsg` is what a MESSAGE names, always the user's own
+                  # file -- telling somebody to edit a temp directory would be
+                  # worse than the race this fixes.
+                  srcmsg="$srcdir/$part.nix"
+                  if [ -f "$pinned/$part.nix" ]; then
+                    src="$pinned/$part.nix"
+                  else
+                    src="$srcmsg"
+                  fi
                   [ -f "$src" ] || continue
 
                   dst="$base/nixarchy/$part.nix"
@@ -3549,7 +3574,7 @@ in
                     cp "$dst" "$kept"
                     echo "NOTE: $dst was edited in the flake since the last apply."
                     echo "  Your version is kept at $kept -- move the change into"
-                    echo "  $src, which is the file apply copies from."
+                    echo "  $srcmsg, which is the file apply copies from."
                   fi
                   cp "$src" "$dst"
                   sha256sum <"$dst" >"$record"

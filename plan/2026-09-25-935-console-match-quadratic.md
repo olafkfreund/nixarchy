@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 935
 spec: spec/2026-09-25-935-console-match-quadratic.md
 ---

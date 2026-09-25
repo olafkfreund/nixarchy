@@ -528,6 +528,10 @@
     reason = "Vendored unchanged. `usermod -aG docker $USER` adds a group membership that users.users.<name>.extraGroups owns on NixOS, so the change is lost at the next rebuild.";
     allow = "account-tools";
   };
+  "omarchy-shell" = {
+    class = "patch";
+    reason = "It found the running Quickshell instance by config path, which on Arch is the stable /usr/share/omarchy and here is a store path that moves on every rebuild -- so after a redeploy the caller held the new one, the shell had registered under the old one, and every IPC call missed silently (#963). The patch tries the caller's path first, so a machine that has not rebuilt since login is untouched, and falls back to resolving the instance id from `qs list --all`.";
+  };
   "omarchy-shell-config" = {
     class = "patch";
     reason = "refresh_shell_config drops the rescanPlugins fallback (#901). When a shell still rebuilding its bar from the previous save missed the 2 s reloadConfig IPC timeout, upstream fell back to reloading every plugin; the shell applies the write through its own file watch anyway.";

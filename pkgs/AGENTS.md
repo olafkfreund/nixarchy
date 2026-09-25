@@ -256,6 +256,33 @@ Moved here from `pkgs/omarchy/default.nix`'s install phase by #997: that phase
 was 1,910 bytes from `MAX_ARG_STRLEN`, and 56% of its 129 KB was comments. The
 code it explains carries a `# Why:` pointer back to this anchor.
 
+### A patch needs its ledger row in the SAME change
+
+`checks.bin-ledger` compares `data/bin-ledger.nix` against what the package
+actually ships: a row is a claim that the shipped file differs from upstream's,
+and the build decides whether it does. Add a `substituteInPlace` without a row
+and it refuses:
+
+    omarchy-shell: shipped as `patch` and has no row.
+
+**This was missed three times in one session** -- `omarchy-shell` (#963),
+`omarchy-display-text-size` (#948) and `omarchy-restart-shell` (#982, where a
+`vendor` row had to become `patch`). Each time the check caught it, and each
+time it caught it on `main` rather than on the branch, because the patch was
+merged without waiting for the `omarchy` job.
+
+So: **when you add or change a `substituteInPlace` in this file, edit
+`data/bin-ledger.nix` before you commit.** The row says why this port diverges,
+and it is the only place that answer is written down. `--seed` prints a
+skeleton.
+
+Two failure shapes, not one:
+
+- **no row at all** -- a newly patched command;
+- **a `vendor` row where the build now produces `patch`** -- a command that was
+  vendored unchanged and has just started diverging. The message names both
+  directions, and the second is easy to miss because the row exists.
+
 ### The first patch to `omarchy-shell` (#963)
 
 `omarchy-shell` matched the running Quickshell instance by **config path**. On

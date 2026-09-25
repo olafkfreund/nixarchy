@@ -114,6 +114,33 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     grep -q 'sha256sum <"\$pinned/\$part.nix"' "$apply" \
       || fail "the hash is no longer taken from the snapshot"
 
+    # 7. The three #986 item-3 gaps, asserted on the shipped script.
+    #
+    # Static for the reason case 5 gives: nixarchy-apply declares pkgs.systemd
+    # in runtimeInputs, so a stub systemctl loses to the strict PATH and a
+    # behavioural test of --status cannot be written here at all.
+    #
+    # (a) A stale DEAD unit must read as `none`, not as a result. One left over
+    #     from an earlier session keeps its InvocationID, so requiring an empty
+    #     id reported a run from a previous boot as the current one -- the same
+    #     class as reading Result first, which the code already warns about.
+    grep -q 'if \[ -z "\$sub" \] || \[ "\$sub" = dead \]; then' "$apply" \
+      || fail "a dead unit no longer reports none regardless of InvocationID"
+    grep -q 'z "\$inv" \] && {' "$apply" \
+      && fail "the none test still requires an empty InvocationID (#986 item 3)"
+
+    # (b) --json is built with jq, not printf: it is the contract half of the
+    #     output and must stay valid JSON.
+    grep -q 'jq -cn --arg state' "$apply" \
+      || fail "--status --json is not built with jq, so it is not escaped"
+
+    # (c) --log must not hand a pager to a script, and must be capped when
+    #     there is no invocation to scope it by.
+    grep -q 'journalctl --user -u nixarchy-rebuild --no-pager -o cat' "$apply" \
+      || fail "--log still pages, which hangs a non-interactive caller"
+    grep -q 'jscope=(-n 200)' "$apply" \
+      || fail "--log is not capped when there is no invocation to scope it"
+
     mkdir -p $out
-    echo "apply detach interface: 4 cases asserted (--status is unreachable here)"
+    echo "apply detach interface: 5 cases asserted (--status is unreachable here)"
   ''

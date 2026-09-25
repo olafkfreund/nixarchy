@@ -3342,6 +3342,13 @@ in
                 pkgs.nh
                 # systemd-run and systemctl, for --detach (#765).
                 pkgs.systemd
+                # --status --json, which is the CONTRACT half of that output
+                # and so must be valid JSON rather than a printf that happens
+                # to look like it (#986). Declared because this is a
+                # writeShellApplication with a strict PATH: an undeclared
+                # command reads as a wrong answer rather than a missing one,
+                # which is the whole reason section 7 makes a point of it.
+                pkgs.jq
               ];
               text = ''
                 # The two answers as flags, for a caller with no terminal (#765).
@@ -3405,7 +3412,15 @@ in
                   eval "$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null |
                     sed -n 's/^SubState=/sub=/p; s/^Result=/res=/p; s/^ExecMainStatus=/code=/p; s/^InvocationID=/inv=/p')"
                   sub=''${sub:-} res=''${res:-} code=''${code:-} inv=''${inv:-}
-                  if [ -z "$inv" ] && { [ -z "$sub" ] || [ "$sub" = dead ]; }; then
+                  # `dead` is NONE whether or not an InvocationID survives it
+                  # (#986 item 3). A unit left over from an earlier session --
+                  # stopped, or reset-failed -- keeps its InvocationID while
+                  # holding no result for THIS session, and requiring an empty
+                  # id here reported that stale run as the current one. That is
+                  # the same class as reading Result first, which the comment
+                  # above already warns about: an answer about a run that is
+                  # not the one being asked about.
+                  if [ -z "$sub" ] || [ "$sub" = dead ]; then
                     printf 'none\t\t\t\n'
                     return
                   fi
@@ -3425,9 +3440,16 @@ in
                 if [ -n "$status" ]; then
                   IFS=$'\t' read -r st res code inv < <(rebuild_state)
                   if [ -n "$json" ]; then
-                    printf '{"state":"%s","result":"%s","exit":%s,"invocation":%s}\n' \
-                      "$st" "$res" "''${code:-0}" \
-                      "$( [ -n "$inv" ] && printf '"%s"' "$inv" || printf 'null' )"
+                    # jq, not printf: --json is the CONTRACT half of this
+                    # output (nixarchy-flatsnap parses it), and a contract that
+                    # emits invalid JSON the first time systemd says something
+                    # with a quote in it is not one. `exit` stays a number and
+                    # `invocation` stays null-or-string.
+                    jq -cn --arg state "$st" --arg result "$res" \
+                      --argjson exit "''${code:-0}" \
+                      --arg inv "$inv" \
+                      '{state: $state, result: $result, exit: $exit,
+                        invocation: (if $inv == "" then null else $inv end)}'
                   else
                     echo "$st''${inv:+ (invocation $inv)}"
                   fi
@@ -3439,8 +3461,21 @@ in
                     IFS=$'\t' read -r _ _ _ invocation < <(rebuild_state)
                   fi
                   # That run, not everything the unit ever did.
-                  exec journalctl --user -u nixarchy-rebuild \
-                    ''${invocation:+--invocation="$invocation"} ''${follow:+-f}
+                  # --no-pager and -o cat: a caller reading this is a script
+                  # or a panel, and a pager on a pipe is a hang rather than
+                  # output (#986 item 3). With no invocation to scope it -- a
+                  # machine that has never detached -- the unit's whole history
+                  # would be dumped, so it is capped.
+                  jscope=()
+                  if [ -n "$invocation" ]; then
+                    jscope=(--invocation="$invocation")
+                  else
+                    # No invocation to scope it: a machine that has never
+                    # detached would otherwise get the unit's whole history.
+                    jscope=(-n 200)
+                  fi
+                  [ -n "$follow" ] && jscope+=(-f)
+                  exec journalctl --user -u nixarchy-rebuild --no-pager -o cat "''${jscope[@]}"
                 fi
 
                 if [ -n "$detach" ]; then

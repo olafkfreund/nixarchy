@@ -668,7 +668,43 @@ pkgs.testers.runNixOSTest {
     assert re.search(luks_prompt, "Please enter passphrase for disk d (cryptroot): ")
     assert re.search(luks_prompt, "Passphrase for /dev/disk/by-uuid/deadbeef: ")
 
-    target.wait_for_console_text(luks_prompt, timeout=600)
+    # NOT wait_for_console_text, and this is #935 (the whole check never
+    # finished once, in any nightly).
+    #
+    # That helper appends one line to a StringIO and then re-searches the
+    # ENTIRE buffer, on every arriving line
+    # (nixos/lib/test-driver/.../machine/__init__.py: console.seek(0);
+    # re.search(regex, console.read())). With THIS pattern -- thirteen
+    # kernel-line groups, one between every character -- each rescan
+    # backtracks over everything received since the wait began.
+    #
+    # It then feeds back: driver CPU grows with the buffer, starves the qemu
+    # on the same host, the guest advances more slowly, the wait continues,
+    # the buffer grows. The 2026-09-25 nightly's target advanced SEVEN
+    # MILLISECONDS of guest time in 56 minutes, with the wall cost per guest
+    # millisecond doubling every line, and was killed at the 90-minute cap
+    # having produced 452 lines -- about 45 KB.
+    #
+    # The pattern is NOT the thing to fix. spec/2026-09-21-834-luks-prompt-race
+    # measured the obvious cheapening (join the letters with a loose
+    # quantifier) and rejected it: it matches a decoy containing no prompt,
+    # and a false positive here sends the passphrase to whatever is listening.
+    # The DECOY assertion above exists to catch exactly that edit.
+    #
+    # So the INPUT is bounded instead. 64 KiB is three orders of magnitude
+    # above the SPLIT fixture (~200 characters) and larger than the entire
+    # failing run, so it bounds the worst case without changing the normal
+    # one. At 115200 baud a second of console is at most ~11 KB, so a prompt
+    # cannot age out of the window between polls.
+    luks_window = 65536
+    assert luks_window < 1 << 20, "the console window must stay bounded (#935)"
+    luks_deadline = time.monotonic() + 600
+    while True:
+        if re.search(luks_prompt, target.get_console_log()[-luks_window:]):
+            break
+        if time.monotonic() > luks_deadline:
+            raise Exception("no LUKS passphrase prompt on the serial console within 600s")
+        time.sleep(1)
     target.send_console("${luksPassphrase}\n")
     print("stage 1 asked for the passphrase on the serial console")
 

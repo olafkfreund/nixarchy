@@ -209,6 +209,10 @@
     reason = "Vendored unchanged. Writes /etc/systemd/resolved.conf with `tee` to switch DNS providers. That file is generated from services.resolved on NixOS, so the write is reverted by the next rebuild.";
     allow = "etc-write";
   };
+  "omarchy-display-text-size" = {
+    class = "patch";
+    reason = "Its terminal-font step edits ~/.config/{alacritty,ghostty,foot,kitty} with `sed -i`. On Arch those are ordinary files; here they can be Home Manager symlinks into the store, so sed dies with `couldn't open temporary file /nix/store/sedXXXXXX: Read-only file system` while the shell and GTK sizes still apply -- a partial result and an error nobody can act on (#948). A guard returns early and names the files instead, so an unmanaged config keeps today's behaviour.";
+  };
   "omarchy-games-retro-cores" = {
     class = "replace";
     reason = "Upstream filters a hardcoded list of 23 preferred cores against /usr/lib/libretro. Lists whatever the built retroarch package actually carries, labelled from libretro-core-info.";
@@ -486,8 +490,8 @@
     allow = "rfkill";
   };
   "omarchy-restart-shell" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Reads OMARCHY_PATH out of `systemctl --user show-environment` and try-restarts the invitation units; session state only.";
+    class = "patch";
+    reason = "The relaunch goes through `hyprctl dispatch exec_cmd`, and Hyprland spawns that child with its own login-time environment -- so after a rebuild the shell came back up on the OLD omarchy tree and generated menu data only took effect at the next re-login (#982). The launch now reads the tree from /run/current-system/etc/set-environment and passes it explicitly. Only the launch: the kill keeps the session value, because the running shell registered under the login-time path and killing by the new one would leave two shells.";
     allow = "systemctl-user";
   };
   "omarchy-restart-trackpad" = {

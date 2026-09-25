@@ -431,9 +431,22 @@ is in `checks` -- so a test that is written, reviewed and merged without a
 `flake.nix` entry is invisible to it. That is AGENTS.md section 4's headline
 failure arriving through the one door the guard does not watch.
 
-Both are registered now. Worth a comparison rather than discipline, in the
-shape section 4 asks for: `tests/*.nix` against the attribute names under
-`checks`, failing on anything in the first and not the second.
+Both are registered now, and `checks.test-registration` (#1000) is the
+comparison section 4 asks for: every `tests/*.nix` is imported by some `checks`
+entry, or is named exempt with its reason. One exemption today --
+`with-vm-cleanup.nix`, a helper four install tests import.
+
+It matches `import ./tests/<name>.nix`, not the bare filename: a grep for the
+name passes if it appears in a **comment**, and whether the file is imported is
+the property. It misses a check that built its path dynamically; nothing does.
+
+And it **refuses** rather than reports when fewer than 50 imports parse -- a
+regex matching nothing would otherwise flag all 88 files, and one that
+over-matched would accept everything and pass having checked nothing. Same
+floor as #949's agent-id comparison and `readme-counts.sh`'s refusal at zero.
+
+**What it still cannot reach:** a registered check that no workflow builds.
+That is the existing gate's direction, and it holds.
 
 ## shell-restart-tree asserts on the script, not on a run
 

@@ -2131,6 +2131,15 @@
           # logged in with.
           # #948: `display text size` skips a config it cannot edit, and says
           # where to change it, instead of printing a sed error.
+          # #1000: every tests/*.nix is imported by some checks entry, or is
+          # named exempt with its reason. The existing coverage gate asserts
+          # the other direction and cannot see this one.
+          test-registration = import ./tests/test-registration.nix {
+            pkgs = pkgsFor.${system};
+            flakeFile = ./flake.nix;
+            testsDir = ./tests;
+          };
+
           text-size-managed = import ./tests/text-size-managed.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

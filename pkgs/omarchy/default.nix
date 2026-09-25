@@ -915,36 +915,11 @@ stdenvNoCC.mkDerivation {
 
         exec setsid uwsm-app -- "$browser_bin" --app="$1" "''${@:2}"'
 
-            # The theme accent stopped reaching the browser in 4.0.2. The session
-            # check caught it: /etc/chromium/policies/managed/color.json was never
-            # written, and wait_until_succeeds sat on it for the full 900 seconds.
+            # Why: pkgs/AGENTS.md#the-browser-theme-policy-and-why-402-broke-it
             #
-            # 4.0.1 wrote the policy inline from omarchy-theme-set-browser, as the
-            # user, into whichever policy directories existed -- and the NixOS
-            # module creates those four owned by browserThemeUser (the tmpfiles
-            # rules in modules/nixos.nix) precisely so that unprivileged write
-            # lands. 4.0.2 moved it into a new privileged helper, which sudo- or
-            # pkexec-escalates to root, pins PATH to FHS directories that hold none
-            # of install/mktemp/rm here, and installs color.json as root:root under
-            # an /etc/sudoers.d rule naming a /usr/bin path. None of those three
-            # exist on NixOS, so every path through it fails.
-            #
-            # So the escalation goes and the write is the user's again, which is the
-            # arrangement the tmpfiles rules already provide and the one that has
-            # been shipping. Upstream is hardening against a `chmod a+rw` policy
-            # directory writable by every account on the machine; ours is 0755 owned
-            # by one named desktop user who is in wheel already, so routing the same
-            # write through a NOPASSWD sudo rule would move it rather than restrict
-            # it. Keeping upstream's shape -- root-owned directories plus
-            # security.sudo.extraRules on the store path -- was considered and
-            # rejected for that: it makes the module, the package and every VM user
-            # agree on one path, and buys nothing this configuration does not have.
-            #
-            # The PATH pin is kept rather than deleted, retargeted at the store, so
-            # a hand-run `sudo omarchy-theme-set-browser-policy` still resolves its
-            # coreutils. The color validation, the symlink refusal and the atomic
-            # install are upstream's and untouched -- they are the half of 4.0.2
-            # that does work here.
+            # Short version: 4.0.2 moved the policy write into a helper that runs
+            # with a PATH this port does not have, so the accent stopped reaching
+            # the browser and checks.session sat on it for 900 seconds.
             substituteInPlace $out/share/omarchy/bin/omarchy-theme-set-browser-policy \
               --replace-fail 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin' \
               'export PATH=${lib.makeBinPath [ coreutils ]}' \
@@ -1072,44 +1047,12 @@ stdenvNoCC.mkDerivation {
                         ;;
                     esac
 
-                    # Agent skills. omarchy-provision-user symlinks every directory under
-                    # default/agents/skills/ into ~/.claude/skills, ~/.agents/skills and
-                    # ~/.pi/agent/skills (upstream also does ~/.codex/skills; patched out
-                    # below, since Codex reads ~/.agents/skills and listed each skill twice),
-                    # so whatever is here is what an AI agent on this machine is told to do.
-                    # Upstream's are written for Arch: they point at /usr/share/omarchy, and
-                    # their decision framework answers "install a package" with `omarchy pkg
-                    # add`, a script this repo replaced with one that deliberately refuses.
-                    # Shipping them unchanged means an agent confidently doing imperative
-                    # things a rebuild then wipes -- the one failure mode that looks like
-                    # success.
+                    # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch
                     #
-                    # The `omarchy` skill is renamed to `nixarchy`, so the skill an agent
-                    # loads is named for the system it is actually on, and a new `nixos`
-                    # skill owns packages and system changes. `diagnose-crash` keeps its
-                    # name: bin/omarchy-agent-crash reads that path literally.
-                    #
-                    # SKILL.md and contributing.md are replaced outright -- their guidance
-                    # is wrong here, not merely misspelt -- while the rest are patched, so
-                    # an upstream edit to a line we depend on fails the build instead of
-                    # quietly shipping Arch instructions again.
-                    #
-                    # The Default Agent menu, made to stop lying.
-                    #
-                    # Upstream's tick is `[[ "$(omarchy-default-agent)" == "claude" ]]`
-                    # -- purely "you picked this". On Arch that is also "this is
-                    # installed", because picking installs it there and then. Here the
-                    # build is a rebuild, so the two came apart and the menu showed
-                    # Claude ticked beside a terminal saying `claude: command not found`.
-                    #
-                    # Every agent's menu id is also the command it installs, which is what
-                    # lets one loop do all nine. --replace-fail, so a row upstream renames
-                    # stops the build rather than silently keeping the old meaning.
-                    #
-                    # No backslash before the ampersands: substituteInPlace is a literal
-                    # string replacement, not sed, and escaping them put `\&\&` into the
-                    # JSON -- which parses as an invalid control character, not as a shell
-                    # `&&`. The jsonc is re-parsed at the end of this phase for that reason.
+                    # Short version: upstream's skills are written for Arch and tell an
+                    # agent to run `omarchy pkg add`, which this repo replaced with a
+                    # script that refuses. Shipping them unchanged means an agent
+                    # confidently doing imperative things a rebuild then wipes.
                     menu=$out/share/omarchy/default/omarchy/omarchy-menu.jsonc
                     # 4.0.3 added four: cursor-agent, hermes, muse, openclaw. The
                     # assertion at the end of this phase is what found them -- it

@@ -280,7 +280,7 @@
     # A commit on main (no tags); bump it the way that page says. Its
     # nix-snapd is the only one nixarchy imports (modules/nixos.nix).
     nixarchy-flatsnap = {
-      url = "github:olafkfreund/nixarchy-flatsnap/09fe804fa186fdf695b1a7dc7adcfd07b1d55797";
+      url = "github:olafkfreund/nixarchy-flatsnap/e9993a17cea1644fa4fe9ffe8dbbe10b54956d55";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.nix-flatpak.follows = "nix-flatpak";
     };

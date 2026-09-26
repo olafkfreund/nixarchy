@@ -3236,6 +3236,7 @@ in
                   channel) shift; exec nixarchy-channel "$@" ;;
                   local-ai) shift; exec nixarchy-local-ai "$@" ;;
                   preview) shift; exec nixarchy-preview "$@" ;;
+                  remote) shift; exec nixarchy-remote "$@" ;;
                   rollback) shift; exec nixarchy-rollback "$@" ;;
                   unfreeze) shift; exec nixarchy-unfreeze "$@" ;;
 

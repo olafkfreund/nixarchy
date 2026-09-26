@@ -240,10 +240,27 @@ executing. There is now a CI step (`build.yml`, "Every check is run by some
 workflow, on pull requests", from #164/#166) that fails if any entry in
 `checks` is not built by a workflow that triggers on pull requests.
 
-So: adding a `checks.<name>` entry means also naming
-`nix build .#checks.x86_64-linux.<name>` in a workflow that runs on
-`pull_request` — and that workflow edit is a CI-gate change, which needs a
-human (see §10). Raise it in the PR rather than wiring it yourself.
+**That hole is now closed structurally, and this paragraph used to say
+otherwise.** `build.yml`'s `omarchy` job has a step, "Build every check no
+other job claims", which builds everything `.github/scripts/generated-checks.sh
+generated` emits — every check in the flake that is not on the `claimed` or
+`exempt` lists. So a NEW `checks.<name>` is run on pull requests the moment it
+exists, with no workflow edit at all. The `claimed` list is for a check some
+specific job builds, not a registry you must join.
+
+This section used to instruct the opposite: name it in a workflow yourself,
+and since that is a CI-gate change, raise it in the PR rather than doing it.
+Following that in #1015 produced a pull request whose body told a maintainer
+the coverage guard would fail and asked them for a one-line workflow edit.
+Both were false — `secret-enroll` had already built and passed inside the
+`omarchy` job — and the wrong claim was the expensive part, because it asked
+someone to act on it.
+
+So: **add the `checks.<name>` entry and stop.** Check it ran by reading the
+generated step's own list in the run log rather than assuming either way. You
+only touch a workflow when the check needs a job it does not have — a VM, a
+runner label, the nightly's budget — and that edit is still a CI-gate change
+that needs a human (see §10).
 
 Two other ways a check stops checking, both found in one week:
 

@@ -214,6 +214,14 @@ pkgs.runCommand "nixarchy-review-pins"
     cirow nightly.yml 30 finding "" "| nightly.yml | - | no runs at all | **is the workflow disabled?** |"
     cirow nightly.yml 30 finding "null''${T}null" "| nightly.yml | - | no runs at all | **is the workflow disabled?** |"
     cirow release.yml 8760 ok "null''${T}null" "| release.yml | - | no runs retained | ok |"
+    # A run IN FLIGHT, which is an EMPTY leading field rather than the "null"
+    # the seven cases around this one assume (#1010). gh's --jq renders a null
+    # conclusion as nothing at all, and tab is IFS whitespace, so the `read`
+    # this file's seven original cases were written against stripped it and
+    # shifted the timestamp into $conclusion -- reporting a workflow running
+    # right then as disabled. None of the other cases can vary that, because
+    # every one of them has a non-empty first field.
+    cirow build.yml 30 finding "''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | still running | ok |"
     cirow build.yml 30 finding "success''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | success | ok |"
     cirow build.yml 30 finding "success''${T}2026-09-12T12:00:00Z" "| build.yml | 48h ago | last run passed | **but nothing has run for 48h** |"
     cirow build.yml 30 finding "failure''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | failure | **read the run** |"

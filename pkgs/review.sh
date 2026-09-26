@@ -157,9 +157,21 @@ finding() {
 # "null" and the arithmetic error abandoned the function with no row at all.
 # `none` says what no runs means: `finding` for a scheduled workflow, `ok` for
 # one that runs only when somebody pushes a tag.
+#
+# Split by expansion, NOT by `read` (#1010). Two facts combine against it. gh's
+# --jq renders a null conclusion as an EMPTY FIELD rather than the "null" the
+# line above predicts, so a run in flight arrives as "\t<createdAt>" -- and tab
+# is IFS *whitespace*, which `read` strips from the front, shifting every field
+# left. The timestamp landed in $conclusion, $when came back empty, and
+# `[ -z "$when" ]` below reported a workflow running right then as "no runs at
+# all -- is the workflow disabled?". Expansion keeps an empty leading field, so
+# the `null | ""` arm further down does what it already says it does.
 ci_row() {
   local wf=$1 stale_hours=$2 none=$3 line=$4 now=$5 conclusion="" when="" started age
-  IFS=$'\t' read -r conclusion when <<<"$line"
+  if [ -n "$line" ]; then
+    conclusion=${line%%$'\t'*}
+    when=${line#*$'\t'}
+  fi
   if [ -z "$line" ] || [ "$when" = null ] || [ -z "$when" ]; then
     if [ "$none" = ok ]; then
       ok "$wf" "-" "no runs retained"

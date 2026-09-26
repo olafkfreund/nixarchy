@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1015
 intent: intent/2026-09-26-1015-remote-desktop-onboarding.md
 ---

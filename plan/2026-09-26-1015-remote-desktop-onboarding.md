@@ -40,6 +40,32 @@ fleet onboarding: enrollment and turning incoming connections on.
 The `setup.remote` menu parent is created here with one child. #1016 adds the
 second.
 
+## Deviations, recorded as they happened
+
+**Deviation 1 — the policy write is its own package.** Steps 3 and 6 assumed
+`tests/secret-enroll.nix` could drive `nixarchy secret enroll`. It cannot:
+`enroll` reads the hostname from `/proc/sys/kernel/hostname` and its recipient
+from `/etc/ssh/ssh_host_ed25519_key.pub`, and a nix build sandbox has no
+`/etc/ssh` and reports `localhost`. Measured with a `runCommand` probe, not
+assumed. A check written as planned would have exercised nothing while
+reading as coverage, which is §1's whole subject.
+
+So the decision and the write are lifted into `pkgs/sops-policy-add.nix`,
+registered as `packages.nixarchy-sops-policy-add`, and `do_enroll` calls it
+and prints the prose. The check runs that package — **this code, not a copy**,
+which is the argument `pkgs/ai-mirror-mcp-remove.nix` already makes for
+existing at all. `yq-go` moved out of `pkgs/secret.nix` with the yq work.
+
+**Deviation 2 — the check tests isolation, not rekeying.** Step 6 as written
+said: encrypt to A, enroll B, `sops updatekeys`, assert both decrypt. That is
+a test of the **shared-secret design the approver rejected**. With per-host
+passwords nothing is rekeyed and `updatekeys` never runs: `enroll` adds the
+rule that lets B create its own file. The check now asserts what per-host
+actually means — B encrypts and reads back its own secret, **A cannot read
+B's**, A's file, anchor, alias and comment are untouched, a second run exits 2
+without duplicating, a changed recipient exits 3 without modifying the file,
+and a missing policy exits 1 without creating one.
+
 ## Steps
 
 1. `pkgs/secret.nix`: add the `enroll` verb to the dispatcher (the `case` at
@@ -135,10 +161,14 @@ For `secret-enroll`, the four breaks, each reverted after:
 
 | break | must fail with |
 |---|---|
-| drop the `.creation_rules` append | host B cannot decrypt |
-| drop the already-present test | the second run duplicates the entry |
-| drop the host-key guard | a policy with an empty recipient |
+| drop the `.creation_rules` append in `sops-policy-add.nix` | beta cannot encrypt or decrypt its own file |
+| drop the already-present check | the second run exits 0 and duplicates the rule |
+| append on a recipient mismatch instead of exiting 3 | the policy hash changes |
 | misspell `enroll` in the menu row | `menu-verbs` names the row and the verb |
+
+The host-key guard is no longer among these: it lives in `do_enroll`, which
+the sandbox cannot reach (deviation 1). It is exercised by hand on this
+machine instead, and that is said in the PR rather than implied by a green.
 
 After each break, **prove the break landed** — `git diff`, or grep the file for
 what you meant to remove. A `sed -i` that matched nothing and a blind check are

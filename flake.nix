@@ -1051,6 +1051,13 @@
           # command is a package it can build.
           nixarchy-secret = pkgsFor.${system}.callPackage ./pkgs/secret.nix { };
 
+          # The policy append that `nixarchy secret enroll` performs, lifted
+          # out so checks.secret-enroll runs THIS code rather than a copy.
+          # enroll itself cannot be driven in a sandbox: it reads the
+          # hostname from /proc and the recipient from /etc/ssh, and a build
+          # sandbox has neither.
+          nixarchy-sops-policy-add = pkgsFor.${system}.callPackage ./pkgs/sops-policy-add.nix { };
+
           verify = pkgsFor.${system}.nixarchy-verify;
 
           # `nix run .#review` -- what needs updating, and what is quietly
@@ -2059,6 +2066,17 @@
           patched-files = import ./tests/patched-files.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
+          };
+
+          # enroll's policy append, against real age keys and real sops. It
+          # runs pkgs/sops-policy-add.nix rather than the CLI, because the CLI
+          # reads the hostname from /proc and its recipient from /etc/ssh and
+          # a sandbox has neither. Carries its own self-test: before the rule
+          # exists, sops must REFUSE to encrypt, or the check cannot show that
+          # enrolling did anything.
+          secret-enroll = import ./tests/secret-enroll.nix {
+            pkgs = pkgsFor.${system};
+            policyAdd = self.packages.${system}.nixarchy-sops-policy-add;
           };
 
           # The QML injected into upstream's Quickshell tree is copied, never

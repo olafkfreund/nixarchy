@@ -224,7 +224,7 @@
     # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
     # a branch is not a version.
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/a953559d2da99c2f8075869dab73e344b78988ae";
+      url = "github:olafkfreund/nixarchy-voice/647f9e5ecf488aa96efb9f7d8abb5949b0a15bc4";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";
@@ -251,14 +251,14 @@
     # Why: docs/internals/flake.md#the-package-manager-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-pkg = {
-      url = "github:olafkfreund/nixarchy-pkg/dd937f2cb289e81c51a7358152835879ef47bf96";
+      url = "github:olafkfreund/nixarchy-pkg/93add27ca534999154b4db35871bcf23dfa22f18";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Why: docs/internals/flake.md#the-podman-panel-wherever-podman-is-on-766
     # A commit on master (that repo's default branch, no tags).
     nixarchy-podman = {
-      url = "github:olafkfreund/nixarchy-podman/bc0b77adb86375269e2a35aee757ef5fa01d9efd";
+      url = "github:olafkfreund/nixarchy-podman/73d4a68eef3a18014e0eb2d987d9b84c50d7f179";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -272,7 +272,7 @@
     # Why: docs/internals/flake.md#the-github-actions-panel-on-by-default-772
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-ghtui = {
-      url = "github:olafkfreund/nixarchy-ghtui/928078f0b39e5f11aa523de9e437324dc4feabce";
+      url = "github:olafkfreund/nixarchy-ghtui/6d42838a371699af08b5f359466cf57c0542ca8a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -289,7 +289,7 @@
     # A commit on main (no tags); bump it the way that page says. Its only
     # inputs are these two, so it adds nothing to the lock but itself.
     nixarchy-menu = {
-      url = "github:olafkfreund/nixarchy-menu/8775661650ec7d169ca6f0b17a49922dc8005b49";
+      url = "github:olafkfreund/nixarchy-menu/2cce175c6ffd4747dc42f571760071dc2650282f";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.omarchy.follows = "omarchy";
     };
@@ -319,14 +319,14 @@
     # Why: docs/internals/flake.md#the-plugin-browser-on-by-default-913
     # A commit on master (no tags); bump it the way that page says.
     nixarchy-plugin-browser = {
-      url = "github:olafkfreund/nixarchy-plugin-browser/f60d2b2e6b7bc10af9b7f0f25911ac2a67a5ea06";
+      url = "github:olafkfreund/nixarchy-plugin-browser/b380ebbb0cf4dd2aaa55177f399f0778c50890d4";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
-      url = "github:olafkfreund/nixarchy-microvm/c498b3b16a7c5cccf928ae9b8c0bb6326e17d755";
+      url = "github:olafkfreund/nixarchy-microvm/27e5992c0a559f0d656552c565d7a05c8835ff97";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

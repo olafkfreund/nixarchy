@@ -44,8 +44,15 @@
   ssh-to-age,
   age,
   wl-clipboard,
+  callPackage,
 }:
 let
+  # The policy append, in its own package so tests/secret-enroll.nix runs this
+  # exact code against fixtures. `enroll` itself cannot be driven in a sandbox:
+  # it reads the hostname from /proc and the recipient from /etc/ssh, and a
+  # build sandbox has neither. Same argument as pkgs/ai-mirror-mcp-remove.nix.
+  policyAdd = callPackage ./sops-policy-add.nix { };
+
   # sops, holding the host's own key. Root-only by construction: the
   # conversion happens inside this script's own process, so the identity
   # exists nowhere a non-root process can read it. See rule 2 above.
@@ -208,6 +215,7 @@ writeShellApplication {
 
     HOST_SOPS=${lib.getExe hostSops}
     DISCOVER=${discover}
+    POLICY_ADD=${lib.getExe policyAdd}
 
     bold=$(printf '\033[1m')
     dim=$(printf '\033[2m')
@@ -232,6 +240,7 @@ writeShellApplication {
       nixarchy secret where <name>            what names this one
       nixarchy secret copy [<name>]           put one on the clipboard
       nixarchy secret remove [--user] <name>  take one out of the store
+      nixarchy secret enroll                  add THIS machine to .sops.yaml
 
     Two kinds, and the difference between them is the whole design:
 
@@ -244,9 +253,17 @@ writeShellApplication {
     running as you -- a browser, a dependency in a dev shell -- can read every
     secret on the machine. That is why there are two kinds and not one.
 
-    THIS MACHINE ONLY. Sharing a secret with a second machine means adding its
-    recipient to .sops.yaml and rekeying, which is sops' own job and its
-    sharpest edge: see `sops updatekeys` and
+    ONE SECRET, ONE MACHINE. A system secret lives in hosts/<host>/secrets.yaml
+    and is encrypted to that host alone, so a fleet has one per machine rather
+    than one shared between them -- a machine that is compromised is then one
+    machine's secrets, not everyone's.
+
+    `enroll` is what makes the second machine cheap: it adds this host's own
+    rule to a .sops.yaml that already describes others, and rekeys nothing.
+    Run it once per machine, then `new` as usual.
+
+    SHARING one secret between machines is a different thing, and it is sops'
+    own job and its sharpest edge: see `sops updatekeys` and
     https://github.com/getsops/sops#adding-and-removing-keys
     USAGE
     }
@@ -317,9 +334,14 @@ writeShellApplication {
 
       fail "$POLICY exists and has no rule for hosts/$HOST/secrets.yaml."
       say  ""
-      say  "  Not edited for you: this file is your policy, and a rule spliced"
-      say  "  in by pattern-matching is one that can silently stop matching."
-      say  "  Add this to it, beside the keys you already have:"
+      say  "  ''${bold}nixarchy secret enroll''${off} adds it, structurally -- it appends"
+      say  "  through yq rather than matching a pattern, and touches no other"
+      say  "  host's rule."
+      say  ""
+      say  "  Not done for you here, and the reason has not changed: this file"
+      say  "  is your policy, and a rule spliced in by pattern-matching is one"
+      say  "  that can silently stop matching. Or add it by hand, beside the"
+      say  "  keys you already have:"
       say  ""
       say  "    keys:"
       say  "      - &$HOST $recipient"
@@ -330,6 +352,89 @@ writeShellApplication {
       say  "              - *$HOST"
       say  ""
       return 1
+    }
+
+    # `nixarchy secret enroll` -- add THIS machine to a policy that already
+    # describes other machines.
+    #
+    # It is the only thing in this file that writes into an existing
+    # .sops.yaml, and it is a verb the user types rather than something `new`
+    # does on their behalf. ensure_policy's refusal above stays the default:
+    # it now names this command instead of being a dead end.
+    #
+    # STRUCTURAL, via yq. No regular expression decides where a rule goes,
+    # which is the whole reason the refusal exists.
+    #
+    # The recipient is written INLINE rather than as a YAML anchor. The
+    # hand-written first host keeps its `- &host age1...` / `- *host` pair --
+    # rewriting that would be churn in a file whose parse decides whether
+    # anything on any machine decrypts -- but anchors are the part of YAML
+    # that round-trips worst, so hosts added here do not gain one. yq resolves
+    # an alias when reading, so the check below sees the first host's real
+    # recipient either way.
+    #
+    # What this does NOT do is rekey anything. Secrets here are per-host:
+    # hosts/<host>/secrets.yaml is encrypted to that host alone. Enrolling
+    # gives this machine a rule so it can create ITS OWN file; no other host's
+    # file is read, written or re-encrypted, and `sops updatekeys` is not part
+    # of the flow.
+    do_enroll() {
+      require_host_key || exit 1
+
+      local recipient rc
+      recipient=$(ssh-to-age -i "$HOST_KEY.pub")
+
+      if [ ! -e "$POLICY" ]; then
+        fail "$POLICY does not exist yet."
+        say  ""
+        say  "  enroll adds this machine to a policy that already describes"
+        say  "  others, and there is nothing here to add it to. Run"
+        say  "  ''${bold}nixarchy secret new <name>''${off} instead: it writes the policy"
+        say  "  with this host as its first recipient."
+        exit 1
+      fi
+
+      step "Adding $HOST to $POLICY"
+
+      # The decision and the write are in their own package, so the check can
+      # drive them; the prose stays here. `|| rc=$?` rather than a bare call
+      # because writeShellApplication sets -e and 2 and 3 are answers.
+      rc=0
+      "$POLICY_ADD" "$POLICY" "$HOST" "$recipient" || rc=$?
+
+      case "$rc" in
+        0)
+          ok "enrolled, as the only recipient of hosts/$HOST/secrets.yaml"
+          say  ""
+          say  "  Nothing was rekeyed: secrets here are per-host, so this only"
+          say  "  lets this machine create its own file. Next:"
+          say  ""
+          say  "    ''${bold}nixarchy secret new <name>''${off}"
+          say  ""
+          say  "  then ''${bold}git add $POLICY''${off} -- a flake in a git worktree sees"
+          say  "  only tracked files, so an unstaged policy does not exist to it."
+          ;;
+        2)
+          ok "$POLICY already covers this host"
+          ;;
+        3)
+          say  ""
+          say  "  This machine's SSH host key has changed since it was enrolled"
+          say  "  -- a reinstall that kept the hostname does exactly this. Two"
+          say  "  rules for one path is worse than none: sops takes the first,"
+          say  "  so the machine would encrypt to a key it cannot read back."
+          say  ""
+          say  "  Replace the recipient in that rule by hand, then rekey what"
+          say  "  it already covers:"
+          say  ""
+          say  "    ''${bold}sops updatekeys hosts/$HOST/secrets.yaml''${off}"
+          return 1
+          ;;
+        *)
+          fail "could not add this host to $POLICY."
+          return 1
+          ;;
+      esac
     }
 
     # ---- the user half -----------------------------------------------------
@@ -704,6 +809,9 @@ writeShellApplication {
         ;;
       copy)
         do_copy "''${2:-}"
+        ;;
+      enroll)
+        do_enroll
         ;;
       "" | -h | --help | help)
         usage

@@ -67,6 +67,19 @@ happens instead is that [sops-nix](https://github.com/Mic92/sops-nix) renders
 the config file at activation from an encrypted secret, mode 0400, owned by
 you, under `/run` — never in the store and never in git.
 
+### From the menu, if you would rather not read the rest
+
+**Setup → Remote desktop → Allow connections** opens a terminal that reports
+the four things this needs — an SSH host key, a rule in `.sops.yaml`, the
+encrypted password, the service itself — and offers the next one you are
+missing. It does the mechanical steps and stops at the one edit it will not
+make for you, which is the two lines below.
+
+`nixarchy remote --status` is the same report with nothing offered.
+
+The rest of this section is what that command is doing, and it is worth
+reading once.
+
 ### Getting the password there
 
 One command does all of it:
@@ -119,6 +132,36 @@ Finally `git add` the encrypted file and rebuild. A flake in a git worktree
 sees only tracked files, so an unstaged `secrets.yaml` does not exist as far as
 evaluation is concerned, and the error says the path is missing rather than
 that it is untracked.
+
+### The second machine
+
+`.sops.yaml` says which recipients can decrypt which file, and `nixarchy
+secret new` writes it only when it is absent. On your second machine it exists
+and has no rule for that host, so the command stops rather than editing it — a
+creation rule spliced in by pattern-matching is one that can silently stop
+matching, and you would find out when a secret refused to decrypt.
+
+`nixarchy secret enroll` is the supported way through:
+
+```sh
+nixarchy secret enroll
+```
+
+It appends this host's rule structurally, leaves every other host's rule
+alone, and rekeys nothing. That last part is the design rather than a
+limitation: secrets here are **per host**, so `hosts/<host>/secrets.yaml` is
+encrypted to that machine alone, and enrolling only lets this one create its
+own. A machine that is compromised is then one machine's secrets rather than
+every machine's.
+
+A fleet is therefore `enroll`, `new`, the two lines, rebuild — once per
+machine, with a different password on each.
+
+If it reports that the policy already has a rule for this host with a
+*different* recipient, this machine's SSH host key has changed; a reinstall
+that kept the hostname does exactly that. It refuses rather than appending a
+second rule, because sops takes the first one and the machine would then
+encrypt to a key it cannot read back.
 
 Changing the password later means `nixarchy secret edit`, a rebuild, and then
 `systemctl --user restart hypr-rdp`. sops-nix restarts system units and this is

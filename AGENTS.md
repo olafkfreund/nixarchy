@@ -1077,3 +1077,16 @@ thing and meant another. None of them was a bug in this repo.
   pushed"*. Those checks did not pass; they never ran. When a PR is merged on
   the strength of "only one check failed", say which checks were never
   reached, and let `main`'s own run be their first.
+- **A field a tool renders as EMPTY cannot survive `read` with a whitespace
+  IFS, and the branch written for it then never runs.** Two facts have to line
+  up, which is why this survived a check with seven cases. `gh`'s `--jq` renders
+  a null `conclusion` as nothing at all, not the literal `null` -- so a run in
+  flight arrives as `"<TAB><createdAt>"`. And tab is IFS *whitespace*, which
+  `read` strips from the front, shifting every field left: the timestamp landed
+  in `$conclusion`, `$when` came back empty, and the review reported a workflow
+  running right then as *"no runs at all -- is the workflow disabled?"* (#1010).
+  `conclusion=${line%%$'\t'*}` keeps the empty field; `read` cannot. So: when a
+  field may legitimately be empty, split by expansion, and never let the first
+  column be the optional one. The check that missed it had cases for `""`,
+  `"null<TAB>null"`, success, stale, failure and unreadable -- **every one with a
+  non-empty first field**, so not one could vary the thing that breaks (§3).

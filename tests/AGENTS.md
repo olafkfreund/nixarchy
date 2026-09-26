@@ -103,6 +103,39 @@ touches `installer/disk-config.nix`. Both an online and an offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
+## The two-machine one: no check here ever opens an RDP connection
+
+`checks.session` boots one desktop. Remote desktop needs two machines -- one
+with a logged-in Hyprland session and one opening an SSH tunnel to it -- and
+nothing in this repository boots a pair. So the thing a user actually does
+with this feature is reached by no layer, at any price.
+
+What IS covered, and it is more than it sounds:
+
+- `checks.secret-enroll` proves the policy append against real age keys and
+  real sops: the enrolled host reads back its own secret, the first host
+  **cannot** read it, and the first host's rule, anchor and comment survive.
+  It carries its own self-test -- before the rule exists, sops must refuse to
+  encrypt, or the check cannot show that enrolling did anything.
+- `checks.options` asserts `programs.nixarchy.services.hypr-rdp` in both
+  states, which is where the off state gets defended.
+- the unit's own `ExecStartPre` refuses an empty password at runtime, and
+  `tests/options.nix` drives that guard against both a good and an empty
+  rendered config.
+
+What is left is a client connecting and seeing a desktop. That is a step in
+`pkgs/verify.sh` for a human, and it is written down here rather than left
+implicit because a documented hole gets tested by a person and an
+undocumented one gets tested by a user (#1015; connecting out is #1016).
+
+Worth knowing before you try to close it: `nixarchy secret enroll` itself
+cannot be driven in a sandbox either. It reads the hostname from
+`/proc/sys/kernel/hostname` and its recipient from
+`/etc/ssh/ssh_host_ed25519_key.pub`, and a nix build sandbox has no `/etc/ssh`
+and reports `localhost` -- measured, not assumed. That is why the decision and
+the write live in `pkgs/sops-policy-add.nix`, so the check runs the code the
+CLI runs rather than a copy of it.
+
 ## The stub-only one: `pkg-new` never runs a real nix-init here
 
 `tests/pkg-new.nix` drives the real `pkgs/pkg-new.sh` against **stub**

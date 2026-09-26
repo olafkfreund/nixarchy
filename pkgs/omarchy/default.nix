@@ -153,6 +153,24 @@ let
     "setup.local-ai": {"icon":"󰭹","label":"Local AI","aliases":["ollama","local model"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-local-ai"},
   '';
 
+  # Remote desktop (#1015). A group rather than a row, because #1016 adds
+  # connecting out beside it. From a file for the reason every fragment here
+  # is: one line of JSON containing shell, inside awk, inside bash, inside a
+  # Nix string is four levels of quoting that have to agree, and
+  # builtins.toFile has exactly one.
+  #
+  # No `when`: the row is the thing that tells you what is missing, so hiding
+  # it until nothing is missing would hide it from everyone who needs it.
+  #
+  # The glyphs are copied from setup.network and setup.monitors rather than
+  # chosen: they are proven to render with the shipped font. A Private Use
+  # Area codepoint the font lacks is a literal empty box in the menu, which
+  # is how the branding one was found (U+E900, tofu in the bar).
+  remoteMenuRows = builtins.toFile "remote-menu-rows.jsonc" ''
+    "setup.remote": {"icon":"󰛳","label":"Remote desktop","aliases":["rdp","remote","screen share"]},
+    "setup.remote.serve": {"icon":"󰍹","label":"Allow connections","aliases":["rdp","incoming","serve","allow"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote serve"},
+  '';
+
   antigravityMenuRow = builtins.toFile "antigravity-menu-row.jsonc" ''
     "setup.default.agent.antigravity": {"icon":"","label":"Antigravity","checked":"[[ \"$(omarchy-default-agent)\" == \"antigravity\" ]] && command -v agy >/dev/null","action":"omarchy-default-agent antigravity"},
   '';
@@ -1096,6 +1114,14 @@ stdenvNoCC.mkDerivation {
                     ${gawk}/bin/awk -v rowfile=${askMenuRows} '
                       BEGIN { while ((getline line < rowfile) > 0) rows = rows line "\n" }
                       !ins && /"trigger\.emoji":/ { printf "%s", rows; ins = 1 }
+                      { print }
+                    ' $menu > $menu.new && mv $menu.new $menu
+
+                    # Remote desktop, before the Defaults group so it sits with the
+                    # other network-shaped setup rows. Same file-not-inline reasoning.
+                    ${gawk}/bin/awk -v rowfile=${remoteMenuRows} '
+                      BEGIN { while ((getline line < rowfile) > 0) rows = rows line "\n" }
+                      !ins && /"setup\.default":/ { printf "%s", rows; ins = 1 }
                       { print }
                     ' $menu > $menu.new && mv $menu.new $menu
 

@@ -432,15 +432,42 @@ while IFS=$'\t' read -r name kind repo at modified; do
           finding "$name" "${at:0:9} (${age}d)" "?" "cannot reach GitHub"
         fi
       else
-        ahead=$(gh api "repos/$repo/compare/$newest...$at" --jq .ahead_by 2>/dev/null)
-        if [ -z "$ahead" ]; then
-          ok "$name" "${at:0:9} (${age}d)" "$newest, not comparable"
-        elif [ "$ahead" -gt 0 ]; then
-          ok "$name" "${at:0:9} (${age}d)" "$ahead commits past $newest"
-        else
-          finding "$name" "${at:0:9} (${age}d)" "$newest" \
-            "upstream tagged a release this pin does not have"
-        fi
+        # `status`, not `ahead_by` alone (#1006). ahead_by == 0 has TWO
+        # meanings and only one is a finding: the pin is behind the tag, or the
+        # pin IS the tag. Reading ahead_by alone put both in the else, so a pin
+        # sitting exactly on the newest release was reported as missing it --
+        # forever, since no bump can make ahead_by positive. Three rows of the
+        # 2026-09-26 review were that, two of them pins bumped the day before
+        # BECAUSE this review asked. A review that manufactures work stops
+        # being read.
+        #
+        # GitHub answers it directly: identical / ahead / behind / diverged.
+        # That also matches what the comment above says this is for -- whether
+        # the newest tag is ahead of US -- which `identical` answers no to.
+        # `|| cmp=""` because this script runs under errexit (writeShellApplication
+        # sets it), so a failing substitution ENDS the review rather than taking
+        # the branch written for it -- the "not comparable" arm below was dead
+        # code. A pin whose sha the repo no longer has (a force-push, a fork,
+        # a collected commit) is a 404, and the whole table stopped there with
+        # no message. tests/CLAUDE.md has the general form.
+        cmp=$(gh api "repos/$repo/compare/$newest...$at" \
+          --jq '"\(.status) \(.ahead_by) \(.behind_by)"' 2>/dev/null) || cmp=""
+        read -r cmp_status cmp_ahead cmp_behind <<<"$cmp" || true
+        case "$cmp_status" in
+          "")
+            ok "$name" "${at:0:9} (${age}d)" "$newest, not comparable"
+            ;;
+          identical)
+            ok "$name" "${at:0:9} (${age}d)" "at $newest"
+            ;;
+          ahead)
+            ok "$name" "${at:0:9} (${age}d)" "$cmp_ahead commits past $newest"
+            ;;
+          *)
+            finding "$name" "${at:0:9} (${age}d)" "$newest" \
+              "upstream tagged a release this pin does not have ($cmp_behind commits behind)"
+            ;;
+        esac
       fi
       ;;
     tag)

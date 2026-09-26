@@ -407,3 +407,114 @@ it may land null, and step 8 exists to report that rather than to keep going.
 It also does not claim the work is worth doing — the check passes today at 74%
 of the ceiling and PR #943 makes its failure readable — and that judgement was
 left to the approver rather than assumed.
+
+## Execution record — 2026-09-26 (steps 3, 5 and 6)
+
+The 2026-09-19 record above says step 3 was pending. It was run, along with
+several step 5 variants, across 09-19, 09-24 and 09-25, and none of it was
+written back here. This entry closes that gap and reaches the design gate.
+
+### The one valid baseline
+
+`/mnt/data/vmtest/747-capture-20260925-174952/`, and it is the only capture that
+satisfies step 2 in full:
+
+```
+rev: 585a2d40c37c2b9961381a2339041421d3917397   status: 0 modified
+lock sha256: c682cafc535e5734fbcbef2ea54e1fea344e66b245c0707940b0b8ec2c36c53b
+nix 2.34.8, GNU time 1.10, host p620, 2026-09-25T17:49:52+01:00
+queue: 0 runs in flight, 0 installs      load: 5.96, 4.21, 4.35
+mem available GB: 196                    recheck before timing: queue=0 load=7.82
+exit code 0, two store paths, evaluator statistics present
+```
+
+**Peak RSS 14.41 GB**, elapsed 2:52.61, heapSize 13.79 GB, totalBytes 32.78 GB,
+18 GC cycles, envs 200,893,291, sets 72,156,975.
+
+**The issue title's 11.5 GB is stale by 25%.**
+
+### The measured result: peak tracks workload, it does not drift
+
+Against the 09-19 capture at rev `a653d478` (envs 173,736,765, sets 62,340,459,
+totalBytes 27.97 GB, peak 12.24 GB):
+
+| | 09-19 | 09-25 | change |
+|---|---|---|---|
+| envs | 173,736,765 | 200,893,291 | +15.6% |
+| sets | 62,340,459 | 72,156,975 | +15.7% |
+| totalBytes | 27.97 GB | 32.78 GB | +17.2% |
+| peak RSS | 12.24 GB | 14.41 GB | +17.7% |
+
+The peak tracked the workload to within about one percentage point over six days
+and 46 commits. **Measured**, on two captures. What that supports: the peak is a
+function of how much is simultaneously reachable, not a retention defect that
+grew. It is consistent with the closed deduplication result — removing 5% of
+evaluator work did not move the peak, because the duplicates were never the
+thing being held.
+
+Two clean small points, same tree, for scale: one configuration alone is 2.34 GB
+(`747-onecfg-20260924T091100Z`) and one fixture alone is 1.79 GB
+(`747-fixture-20260924T091203Z`). Neither is a fraction of 14.41 that divides
+evenly, which is itself evidence against a single dominant root.
+
+### The projection, which is why this stops being a housekeeping issue
+
+At 0.799 GB per 10M envs, measured from the two captures above:
+
+```
+current                14.41 GB   headroom against ubuntu-latest's 16 GB: 1.59 GB
++ 5% more workload     15.13 GB
++10% more workload     15.85 GB
++15% more workload     16.57 GB   over the runner
+```
+
+Roughly 15% more fixture growth ends hosted evaluation of this check. The last
+six days supplied 15.6%.
+
+### The step 5 experiment is INVALID, and is recorded as such
+
+`747-divisor8-20260919T143440Z` is named for a GC free-space divisor and its own
+metadata records none. Compared with `747-baseline-20260919T143009Z`:
+
+- identical revision (`a653d478`), identical lock, identical command argv;
+- identical environment, `GC_FREE_SPACE_DIVISOR = None` in **both**;
+- identical workload — totalBytes 27.97 GB, envs 173,736,765, sets 62,340,459;
+- peak 12.24 GB vs 9.79 GB, cycles 18 vs 39;
+- **load average 16.36 vs 8.03**, on a host also running k3s, Chrome, Electron,
+  two agent processes and opencode.
+
+So a 20% apparent saving sits beside a 2x difference in host load and no
+recorded varied variable. Boehm's heap expansion responds to available system
+memory, which can move both the cycle count and the peak. The 20% is confounded
+and is **not** attribution evidence. Step 5's verification asks whether the
+variant actually landed; the metadata says it cannot be shown to have landed.
+
+This is recorded rather than deleted for the reason section 6 of the root
+`AGENTS.md` gives about its own corrected paragraph: a plausible causal claim in
+the direction that flatters the experiment is still not evidence.
+
+### Design gate — what is proposed, and not implemented here
+
+Evidence supports an optimization, but not the one the closed deduplication work
+or the divisor variant pointed at. Since the peak is proportional to what is
+simultaneously reachable, the only transformation the measurements support is
+**reducing how much of the fixture set is live at once** — which changes the
+shape of the check rather than tuning the evaluator.
+
+That needs a spec amendment naming exact files, transformation and coverage
+proof, and approval, before any implementation plan. Not drafted here, per step
+6. Two constraints any such proposal inherits, both already measured:
+
+- `report` is `inherit`ed and `derivationStrict` forces it, so every case bound
+  in the top-level `let` is reachable until the derivation is built. A proposal
+  that leaves that true cannot move the peak.
+- the eventual implementation must preserve exact case names and results, which
+  rules out dropping coverage to buy memory.
+
+**What remains unknown**, stated rather than implied: no capture isolates a
+single fixture family under a valid protocol, because every attempt to do so
+either changed the workload (making its saving attribution-only, as step 5
+warns) or ran on a host whose load was not controlled. A genuinely quiet p620
+has been available once in seven days.
+
+#747 stays open.

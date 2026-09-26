@@ -471,7 +471,46 @@ current                14.41 GB   headroom against ubuntu-latest's 16 GB: 1.59 G
 Roughly 15% more fixture growth ends hosted evaluation of this check. The last
 six days supplied 15.6%.
 
-### The step 5 experiment is INVALID, and is recorded as such
+### CORRECTION 2026-09-26: the step 5 experiment is VALID after all
+
+**The paragraph below called `747-divisor8` invalid, and that verdict was
+wrong.** It is kept, immediately after this correction, because the reasoning
+that produced it is the more useful record -- but do not act on it.
+
+The verdict rested on the capture's `metadata.json` recording
+`GC_FREE_SPACE_DIVISOR = None` for both runs. That field records the **parent**
+process's environment allowlist, not the child's, so it cannot show a variable
+exported for the timed command. The discriminating numbers were in the same
+`time.txt` the peak was read from, two lines above it:
+
+| | baseline | divisor8 |
+|---|---|---|
+| User time | 231.98 s | **390.81 s (+68.5%)** |
+| Percent of CPU | 166% | **258%** |
+| System time | 15.34 s | 13.85 s |
+| Voluntary context switches | 1,513,456 | 1,518,208 |
+| Peak RSS | 12.24 GB | 9.79 GB |
+| GC cycles | 18 | 39 |
+
+Host load cannot add 68.5% user CPU to *this* process for identical work -- it
+inflates wall clock and involuntary context switches, and those barely moved
+(2:28.64 to 2:36.64, 32,303 to 42,701). A parallel collector running twice as
+often produces exactly this signature, and the cycle count agrees. The
+collector setting was applied.
+
+`spec/2026-09-19-747-options-memory.md` had already recorded the user-CPU figure
+and already reached the right conclusion: **do not ship that collector
+setting**, because 20.0% lower peak costs 68.5% more user CPU, and a desktop
+measured at 258% CPU does not establish the same wall-time trade-off on a hosted
+runner with far fewer cores. That decision stands and is not changed by this
+correction.
+
+The error was reading the file for one column and missing what the line above
+already measured, when the spec beside it had recorded the same number. Section
+12 of the root `AGENTS.md` names that exact failure: grep the file for the
+concept, and read what a comment near it already measured.
+
+### Superseded verdict, kept for the record: "the step 5 experiment is INVALID"
 
 `747-divisor8-20260919T143440Z` is named for a GC free-space divisor and its own
 metadata records none. Compared with `747-baseline-20260919T143009Z`:
@@ -495,11 +534,31 @@ the direction that flatters the experiment is still not evidence.
 
 ### Design gate — what is proposed, and not implemented here
 
-Evidence supports an optimization, but not the one the closed deduplication work
-or the divisor variant pointed at. Since the peak is proportional to what is
-simultaneously reachable, the only transformation the measurements support is
-**reducing how much of the fixture set is live at once** — which changes the
-shape of the check rather than tuning the evaluator.
+**Superseded by the correction above.** Two directions have measured evidence,
+and the correction changes which one leads.
+
+**In-process rearrangement is a measured dead end.** Three variants, same tree,
+same workload:
+
+| variant | baseline | variant | effect |
+|---|---|---|---|
+| `747-scope-20260924T100114Z` | 13,067,540 kB | 13,066,424 kB | 0.008%, nothing |
+| `747-adjacency-20260924T095355Z` | 13,039,896 kB | 13,133,168 kB | 0.7% worse |
+| `747-bind-20260924T093059Z` | 12,633,552 kB | 12,774,056 kB | 1.1% worse |
+
+Narrowing scope, reordering adjacency and binding duplicates all fail. The
+fixtures are genuinely needed across cases, and the `runCommand` body at
+`tests/options.nix:2749` reaches several top-level bindings directly
+(`defaultHomeOn`, `homeOfBoxes boxesOn`, `vm`, `menuFile`). **Do not re-run
+these three.**
+
+**Collector tuning works, and the trade-off is no longer the one the spec
+judged.** The valid divisor result is 20.0% off the peak for 68.5% more user
+CPU. The spec rejected it on 2026-09-19 when the peak was 12.24 GB and headroom
+against a 16 GB runner was 3.76 GB, so the cost bought something optional. At
+14.41 GB the headroom is 1.59 GB, and 20% is 2.88 GB -- the difference between
+this check running on a hosted runner and not. Same number, different decision,
+because the thing it is weighed against moved.
 
 That needs a spec amendment naming exact files, transformation and coverage
 proof, and approval, before any implementation plan. Not drafted here, per step

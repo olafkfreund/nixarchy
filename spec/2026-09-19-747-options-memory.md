@@ -298,3 +298,117 @@ and which costs nothing measurable.
   reviewer may reasonably decide that is enough and that a large diff against a
   test file is not justified by a headroom problem that has not yet bitten.
   That judgement belongs to the approver and this amendment does not assume it.
+
+## Amendment 2 — 2026-09-26 — status: draft, awaiting approval
+
+Proposed under step 6 of the approved plan, which requires an amendment naming
+exact files, transformation and coverage proof, and approval before any
+implementation plan is drafted. Nothing here is implemented.
+
+### What changed since Amendment 1
+
+Amendment 1 measured `GC_FREE_SPACE_DIVISOR=8` at 20.0% lower peak for 68.5%
+more user CPU and concluded **do not ship that collector setting**. That
+conclusion was correct for the numbers it had. Two of those numbers have moved.
+
+| | 2026-09-19 | 2026-09-25 |
+|---|---|---|
+| peak RSS | 12.24 GB | **14.41 GB** |
+| headroom against a 16 GB runner | 3.76 GB | **1.59 GB** |
+| envs | 173,736,765 | 200,893,291 |
+
+The peak tracked the workload to within a percentage point over six days and 46
+commits (envs +15.6%, peak +17.7%). At the measured 0.799 GB per 10M envs, about
+15% more fixture growth ends hosted evaluation, and the preceding six days
+supplied 15.6%. Amendment 1 weighed a CPU cost against optional headroom; the
+same cost now buys the check's ability to run at all.
+
+### What is ruled out, and must not be re-run
+
+Three in-process variants, same tree and same workload, measured no improvement:
+
+| variant | baseline | variant | effect |
+|---|---|---|---|
+| `747-scope-20260924T100114Z` | 13,067,540 kB | 13,066,424 kB | 0.008% |
+| `747-adjacency-20260924T095355Z` | 13,039,896 kB | 13,133,168 kB | 0.7% worse |
+| `747-bind-20260924T093059Z` | 12,633,552 kB | 12,774,056 kB | 1.1% worse |
+
+Cause, from the source rather than inferred: `tests/options.nix:2743` builds
+`report` by `concatStringsSep` over `mapAttrsToList` across `cases`
+(`tests/options.nix:478`), and `:2751` does `inherit report` into the
+`runCommand` at `:2749`, where `derivationStrict` forces it. Every case's
+boolean is therefore forced in one evaluation, and each boolean forces a whole
+configuration held by one of the 145 top-level `let` bindings. The `runCommand`
+attribute set itself reaches `defaultHomeOn`, `homeOfBoxes boxesOn`, `vm` and
+`menuFile` directly, so those cannot be scoped away while the derivation is
+built in one process.
+
+### Proposed transformation — primary
+
+**Set the collector's free-space divisor for this one check in CI, and nowhere
+else.**
+
+- `.github/workflows/build.yml` — the `system` job's step that builds
+  `.#checks.x86_64-linux.options` (the `build-unless-proven.sh` invocations at
+  `build.yml:1499` and `:1549`). The variable is exported for that command only.
+- No change to `tests/options.nix`, so no case name, no assertion and no result
+  moves. This is the property that makes the change cheap to review.
+
+Why here rather than a Nix-level setting: it is a property of the machine the
+evaluation runs on, not of the expression, and the hosted runner is the
+constrained machine. A repository-wide setting would slow every unrelated
+evaluation for a problem one check has.
+
+### Acceptance test — and it is the objection Amendment 1 raised
+
+Amendment 1's reason for refusing was that a desktop measured at **258% CPU**
+does not establish the same wall-time trade-off on a runner with far fewer
+cores. That objection is not answered by any local measurement, and this
+amendment does not claim to answer it. It is the acceptance criterion:
+
+1. Measure the hosted `system` job's wall time for this step, three runs,
+   without the variable. Keep all samples.
+2. Measure three runs with it. Alternate. Do not repeat until favourable.
+3. Accept only if the median peak drops by at least 15% **and** the median wall
+   time of that step grows by no more than 25%.
+4. If wall time exceeds that, reject and fall back below.
+
+A local measurement cannot satisfy this, because the thing in question is core
+count. Nothing is merged on the strength of a p620 number.
+
+### Proposed transformation — fallback
+
+If the wall-time cost is unacceptable, split the evaluation across processes so
+no single one holds every fixture: several `checks.options-<family>` entries,
+each with its own `report` over its own subset of `cases`.
+
+`generated-checks.sh` derives its targets from the flake and its list is an
+opt-OUT, so new check entries are run without a workflow edit. But `options` is
+on the `claimed` list today, so a split needs that list edited — which touches
+the check-coverage guard and therefore needs a human, per section 11. Raised
+here rather than assumed.
+
+### Coverage proof
+
+For the primary transformation, coverage is unchanged by construction:
+`tests/options.nix` is not touched, and the check either passes with the same
+case set or fails. The proof is the existing check going green with the variable
+set, plus the acceptance measurement above.
+
+For the fallback, the proof obligation is real and is stated now rather than
+discovered later: a check asserting that the union of the split entries' case
+names equals the set today's single check asserts, with a floor that refuses on
+an implausible count -- the shape `readme-counts.sh` and #949's agent-id
+comparison already use. Without it, a split that silently drops a family passes.
+
+### Risks
+
+- **The primary change makes CI slower for everyone.** That is its whole cost,
+  and the acceptance test bounds it.
+- **It buys one step, not a trend.** 20% off 14.41 GB is 11.5 GB, which at the
+  measured growth rate is about eight months, not a fix. The fallback is the
+  structural answer and this does not replace it.
+- **A collector setting is a tuning parameter, not a guarantee.** A future Nix
+  or a different runner changes its effect, and nothing here would notice.
+  Exposing the evaluator statistics in CI -- which Amendment 1 already asked
+  for -- is what would make a regression visible.

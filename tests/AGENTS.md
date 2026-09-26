@@ -103,6 +103,42 @@ touches `installer/disk-config.nix`. Both an online and an offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
+## menu-verbs reads a literal line, and the spelling it cannot parse is green
+
+`tests/menu-verbs.nix` extracts a CLI's verbs by sed-ing for
+
+    case "${1:-}" in
+
+and nothing else. A command with a default verb naturally wants
+
+    case "${1:-serve}" in
+
+which is a better spelling of the dispatch and yields an **empty verb list**.
+That is not a failure: `scan` reports a row whose verb is missing from the
+list, so with no list every row naming that CLI passes. The check would go on
+being green while covering nothing -- for that CLI and only that CLI, which
+is the part that makes it hard to notice.
+
+The floor is the only thing between that and a silent pass:
+
+    test "$(wc -l < remote-verbs)" -ge 3
+
+and the file already says why (*"An empty verb list makes every row below
+pass, turning 'the dispatch stopped parsing' into a green check"*). It works,
+but it only fires for a CLI somebody remembered to give a floor, and nothing
+makes you.
+
+So when you wire a new command in:
+
+1. spell the dispatch `case "${1:-}" in` and handle `""` as the default verb,
+   with a comment at the line saying why, or the next person will tidy it back
+2. add the floor in the same edit as the `scan`
+3. read the printed `<cli> accepts: ...` line and check your verbs are on it.
+   A pass proves nothing until that line is non-empty and right
+
+Found writing `nixarchy-remote` (#1015), which was spelled `"${1:-serve}"`
+first.
+
 ## The two-machine one: no check here ever opens an RDP connection
 
 `checks.session` boots one desktop. Remote desktop needs two machines -- one

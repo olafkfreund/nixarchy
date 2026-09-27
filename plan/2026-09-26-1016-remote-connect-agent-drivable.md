@@ -64,6 +64,25 @@ Before starting step 1, confirm the base: `git merge-base origin/main HEAD`
 is `origin/main`, and `git show --stat` on each commit lists only this
 issue's files.
 
+## Deviations, recorded as they happened
+
+**Deviation 1 — step 3 is dropped: `ssh` needs no declaring.** The step rested
+on a measurement I made in the wrong place. I checked the omarchy *package's*
+references and found no openssh, and concluded the wizard would hit
+"command not found". But `runtimeDeps` is exposed through `passthru` and
+reaches the scripts via the NixOS module's `systemPackages` -- `bin/` is a
+symlink farm, deliberately not `wrapProgram`'d, because a generated wrapper
+has no `# omarchy:summary=` comment and the CLI would then report zero
+commands. So the package's references were never where `ssh` would appear.
+
+Proven rather than reasoned: with the addition reverted, the reference
+toplevel still has `sw/bin/ssh`. The reason is upstream's, not ours --
+`nixos/modules/programs/ssh.nix:338` sets
+`environment.corePackages = [ cfg.package ]` inside an unconditional
+`config = { }` block, so the ssh client is on every NixOS system by
+guarantee. A note at the call site records this so the next person does not
+re-add it.
+
 ## Steps
 
 1. Rebase onto the post-#1017 `main` → verify `nixarchy-remote`,

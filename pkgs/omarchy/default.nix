@@ -162,6 +162,11 @@ let
   # No `when`: the row is the thing that tells you what is missing, so hiding
   # it until nothing is missing would hide it from everyone who needs it.
   #
+  # `when` on the connect row, and not on the others: a row offering to open
+  # a desktop with no client installed is something we ship naming something
+  # that does not exist. serve needs nothing installed, so it is always shown
+  # -- it is the row that tells you what is missing.
+  #
   # The glyphs are copied from setup.network and setup.monitors rather than
   # chosen: they are proven to render with the shipped font. A Private Use
   # Area codepoint the font lacks is a literal empty box in the menu, which
@@ -169,6 +174,7 @@ let
   remoteMenuRows = builtins.toFile "remote-menu-rows.jsonc" ''
     "setup.remote": {"icon":"󰛳","label":"Remote desktop","aliases":["rdp","remote","screen share"]},
     "setup.remote.serve": {"icon":"󰍹","label":"Allow connections","aliases":["rdp","incoming","serve","allow"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote serve"},
+    "setup.remote.connect": {"icon":"󰐲","label":"Connect to a machine","aliases":["rdp","connect","remote","desktop"],"when":"command -v sdl-freerdp >/dev/null || command -v xfreerdp >/dev/null","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote connect"},
   '';
 
   antigravityMenuRow = builtins.toFile "antigravity-menu-row.jsonc" ''

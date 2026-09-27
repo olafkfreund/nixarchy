@@ -2068,6 +2068,17 @@
             pkgs = pkgsFor.${system};
           };
 
+          # connect backgrounds an `ssh -N -L` and must not leave it behind.
+          # The teardown is the one part of connecting that needs no second
+          # machine, so it is the part that gets a check; an actual RDP
+          # connection is named as a hole in tests/AGENTS.md. Carries its own
+          # self-test: an untrapped child must survive, or the trapped case
+          # proves nothing.
+          remote-tunnel = import ./tests/remote-tunnel.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # enroll's policy append, against real age keys and real sops. It
           # runs pkgs/sops-policy-add.nix rather than the CLI, because the CLI
           # reads the hostname from /proc and its recipient from /etc/ssh and

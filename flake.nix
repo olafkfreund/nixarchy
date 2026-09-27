@@ -521,7 +521,10 @@
       stableVm = nixpkgs-stable.lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
-        modules = vmModulesWith (homeManagerFor nixpkgs-stable.lib.trivial.release);
+        modules = [
+          self.nixosModules.nixarchy
+          ./vm/configuration.nix
+        ];
       };
 
       # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy

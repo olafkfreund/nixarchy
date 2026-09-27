@@ -23,7 +23,7 @@ import sys
 # Deliberately anchored on our own prefix. Prose quotes plenty of option paths
 # that are NixOS' rather than ours -- `services.tailscale.useRoutingFeatures`
 # is a real thing to write and no list here can say whether it exists.
-PATH = re.compile(r"programs\.nixarchy(?:\.[A-Za-z0-9_-]+)*")
+PATH = re.compile(r"(?:programs\.nixarchyThemeEngine|programs\.nixarchy)(?:\.[A-Za-z0-9_-]+)*")
 
 known = json.load(open(sys.argv[1]))
 options, groups = set(known["options"]), set(known["groups"])

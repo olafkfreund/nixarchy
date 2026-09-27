@@ -19,6 +19,7 @@ let
       inherit system;
       modules = [
         inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
         {
           programs.nixarchy = {
             enable = true;
@@ -49,6 +50,7 @@ let
       inherit system;
       modules = [
         inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
         { programs.nixarchy.enable = true; }
         extra
         {
@@ -228,6 +230,7 @@ let
       inherit system;
       modules = [
         inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
         {
           programs.nixarchy = {
             enable = true;

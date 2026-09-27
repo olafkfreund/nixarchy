@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1021
 spec: spec/2026-09-27-1021-unchecked-derived-numbers.md
 ---

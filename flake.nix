@@ -122,7 +122,7 @@
 
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
-      url = "github:Mic92/sops-nix/a8627b21b9107c5711c96b84f32a9a4b3d45295f";
+      url = "github:Mic92/sops-nix/5efb5a6f4f5ab192817d28557dd4d650fa14d866";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -2078,6 +2078,19 @@
           remote-tunnel = import ./tests/remote-tunnel.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+          };
+
+          # A host with remote desktop enabled can be described at all.
+          # hypr-rdp was unbuildable for twelve days behind a green suite
+          # (#1030): it requires a sops secret, and the pinned sops-nix
+          # called a builder nixpkgs had removed. checks.options enables it
+          # WITH a secret and still could not see it, because it reads the
+          # config tree and never forces the closure -- deliberately, per its
+          # own comment. This forces the drvPath, which is where the throw
+          # lives, so it costs an evaluation rather than a VM.
+          hypr-rdp-builds = import ./tests/hypr-rdp-builds.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
           };
 
           # enroll's policy append, against real age keys and real sops. It

@@ -168,6 +168,57 @@ So when you wire a new command in:
 Found writing `nixarchy-remote` (#1015), which was spelled `"${1:-serve}"`
 first.
 
+## A check that reads the config tree cannot see a closure that will not build
+
+`programs.nixarchy.services.hypr-rdp` was **unbuildable for twelve days**
+behind a green suite (#1030). nixarchy pinned sops-nix at a revision whose
+`sops-install-secrets` called `buildGo125Module`, which nixpkgs removed on
+2026-09-15. The feature requires a sops secret, so every configuration with
+it enabled died -- and the error named **Go**.
+
+`tests/options.nix` was not thin about this. It has a sops fixture, an
+`rdpOn` fixture enabling hypr-rdp **with a real `passwordSecret`**, and cases
+for the unit, the template, the firewall and both refusals. It still could
+not see it, for the reason written in its own comment:
+
+> Read as a list of failed assertions rather than by forcing
+> `system.build.toplevel`: the point is that THIS assertion fires, and a
+> config that fails to build for some unrelated reason would look identical
+> from outside.
+
+That reasoning is right for what it was written about, and its consequence is
+general: **`checks.options` reads the evaluated config tree and never forces
+the closure.** A package that cannot be built -- or, as here, cannot be
+*evaluated* -- is invisible to every case in it, however many there are.
+
+`checks.hypr-rdp-builds` closes that for this feature by forcing
+`system.build.toplevel.drvPath`. Two things about it worth copying:
+
+- **It costs an evaluation, not a VM.** `buildGo125Module` is an alias that
+  `throw`s, so the failure arrives while the drvPath is computed. A check
+  that needed a booted machine could not have caught this on the pull request
+  that introduced it.
+- **It is its own check, not a case in `checks.options`.** That check peaks at
+  12.9 GB on the hosted runner (#747). Its fixtures are tempting; a whole
+  system closure evaluation does not belong in it.
+
+**What it still cannot see**, and this is the part to read before trusting
+it. It proves the closure is describable. It says nothing about the daemon
+running, and two live defects sit past it:
+
+- **#1031** -- hypr-rdp cannot create its headless output on Hyprland 0.56,
+  because it sets the resolution with the legacy `keyword` IPC request that
+  0.56 dropped. Needs a live compositor.
+- **#1033** -- enabling remote desktop takes effect only at next login: the
+  unit is `WantedBy=graphical-session.target`, which is evaluated when the
+  target starts, and the menu row lives in the tree `OMARCHY_PATH` pointed at
+  when the session began. Needs a session that postdates a rebuild.
+
+All three were found by a person configuring three real machines in an
+afternoon. The generalisable rule is not about sops: **a feature whose tests
+only read its configuration has never been built by anything, and a feature
+nothing starts has never been run.**
+
 ## The two-machine one: no check here ever opens an RDP connection
 
 `checks.session` boots one desktop. Remote desktop needs two machines -- one

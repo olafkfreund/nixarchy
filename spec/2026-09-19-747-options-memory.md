@@ -299,7 +299,7 @@ and which costs nothing measurable.
   test file is not justified by a headroom problem that has not yet bitten.
   That judgement belongs to the approver and this amendment does not assume it.
 
-## Amendment 2 — 2026-09-26 — status: draft, awaiting approval
+## Amendment 2 — 2026-09-26 — status: approved
 
 Proposed under step 6 of the approved plan, which requires an amendment naming
 exact files, transformation and coverage proof, and approval before any
@@ -412,3 +412,108 @@ comparison already use. Without it, a split that silently drops a family passes.
   or a different runner changes its effect, and nothing here would notice.
   Exposing the evaluator statistics in CI -- which Amendment 1 already asked
   for -- is what would make a regression visible.
+
+## Amendment 3 — 2026-09-27 — status: draft, awaiting approval
+
+**Amendment 2's urgency rests on a number from the wrong machine, and I
+approved it before checking.** The approval stands in the history; this
+corrects what it rested on.
+
+### The measurement
+
+Every `system` run since 2026-09-22 already reports peak RSS, live heap and
+wall to stdout — deliberately, so they can be compared across runs without
+opening a browser. Eighteen successful `main` runs, harvested rather than
+re-measured:
+
+```sh
+for id in $(gh run list --branch main --workflow build.yml --limit 40 \
+              --json databaseId,conclusion -q \
+              '.[]|select(.conclusion=="success")|.databaseId'); do
+  gh run view "$id" --log 2>/dev/null | grep -m1 -oE 'peak RSS [0-9]+ MiB'
+done
+```
+
+| | ubuntu-latest, 18 samples | p620, the Amendment 2 basis |
+|---|---|---|
+| peak RSS, median | **12,910 MiB (12.6 GB)** | 14.41 GB |
+| min / max | 12,763 / 14,079 MiB | — |
+| headroom vs 16,384 MiB | **3.39 GB typical, 2.25 GB worst** | 1.59 GB |
+
+Daily medians 2026-09-25 / 26 / 27: **12,897 / 12,945 / 12,836 MiB.** Flat.
+
+### Why the two machines disagree, and it is not noise
+
+This plan already recorded the mechanism, in the superseded-verdict section:
+*"Boehm's heap expansion responds to available system memory, which can move
+both the cycle count and the peak."* p620 had **196 GB available** at capture
+time; the hosted runner has 16 GB. The collector expands lazily where memory
+is plentiful and collects sooner where it is not.
+
+So **the collector is already doing, unprompted, a weaker version of what
+`GC_FREE_SPACE_DIVISOR=8` would force.** That is why the hosted peak is 1.5 GB
+below the desktop one, and it is the single most important fact about this
+issue.
+
+### What follows
+
+**Amendment 2's primary transformation is deferred, not rejected.** Its
+reasoning was sound for its inputs: at 1.59 GB headroom, 20% off the peak buys
+the check's ability to run at all, and a 68.5% user-CPU cost is worth that. At
+**3.39 GB** it buys optional headroom again — which is the position Amendment 1
+weighed and refused, for reasons that have not changed.
+
+Shipping it now would spend 68.5% more user CPU on every `system` run, on a
+four-core runner where the wall-clock cost is explicitly unknown, against a
+ceiling the real machine is not approaching.
+
+**The trigger is already built and already correct.** `build.yml` warns at
+14,336 MiB. In 18 samples it has never fired; the 14,079 outlier came within
+257 MiB. When it fires on a hosted run — not on p620 — Amendment 2 is the
+response, its acceptance test is the gate, and nothing further needs
+designing.
+
+### What this does not claim
+
+Three days and 18 samples is a short window, and the 14,079 outlier is
+unexplained — it may be a noisier runner, or a genuine excursion. What is
+established is that the hosted peak is **not** 14.41 GB and is **not** visibly
+trending; what is not established is that it never will.
+
+The p620 growth figure (envs +15.6% in six days) is still real and still the
+reason this issue exists. It just does not translate into hosted peak at the
+rate Amendment 2 assumed, because the collector absorbs part of it.
+
+### Proposed change to the repository
+
+**None.** That is the recommendation.
+
+This amendment adds evidence and defers an approved design; it does not touch
+`tests/options.nix`, `build.yml` or any check. The harvest one-liner above is
+recorded here rather than made a script, because a diagnostic nothing runs is
+the shape section 4 warns about and this one is two lines when wanted.
+
+### Risks of doing nothing
+
+- **The window is short.** Mitigated by the existing warning, which is the
+  detector this relies on and which already exists.
+- **The warning fires only above 14,336 MiB**, so a slow climb through 13 GB
+  is invisible until it is nearly there. Whether that threshold should drop to
+  13,500 MiB is a fair question and is left open below rather than changed
+  here.
+- **p620 remains the machine developers measure on**, and it will keep saying
+  14.4 GB. Anyone reading that number without this amendment reaches Amendment
+  2's conclusion again.
+
+### Open questions
+
+1. **Should the warning threshold drop from 14,336 MiB?** At a 12,910 median
+   it gives 1,426 MiB of notice; at 13,500 it would give 590 and fire on the
+   observed outlier. More notice against more noise.
+2. **Should the harvest be a nightly row rather than a one-liner?** The nightly
+   review already reports on repository state, and a trend nobody plots is a
+   trend nobody sees. Against: it is a number that has not moved.
+3. **What was the 14,079 sample?** Worth one look before the next amendment,
+   because if it is a runner class rather than an excursion, the typical
+   headroom figure above is the wrong one to plan against.
+

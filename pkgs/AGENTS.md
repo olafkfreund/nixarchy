@@ -350,3 +350,259 @@ being unnecessary looks like.
 | `doctor-ldd` | the doctor's dynamic-link check, against binaries built broken |
 | `dashboard-clock` | the install dashboard against a rewound clock |
 | `explain` | the error explainer, against errors produced inside the check |
+
+## Why the install phase says so little
+
+These sections were inside `pkgs/omarchy/default.nix`'s `installPhase`,
+which is one shell string handed to `execve`. At 127,703 bytes it was
+2,181 from `MAX_ARG_STRLEN`, and 54% of it was explanation -- so #948's
+approved work was refused for want of 2 KB (#997). Root `AGENTS.md` §7
+already says long blocks move here and leave a `# Why:` pointer; this is
+that, applied to the ten largest.
+
+## The web-app keybinding upstream breaks, and the one-word fix
+
+Upstream's bug, carried here because it breaks every web app keybinding
+and the fix is one word.
+
+`xdg-settings get default-web-browser` does not read the mime database
+when $BROWSER is set. It takes $BROWSER as a command name and returns
+the FIRST .desktop under ~/.local/share/applications whose Exec matches
+it -- and a Chrome user has one of those per installed web app, all
+reading `Exec=google-chrome-stable --app-id=...`. So on a machine with
+`export BROWSER=google-chrome-stable` in its shell rc, this returns
+whichever PWA sorts first. Observed on a real host: it answered
+`chrome-aamlbainilhgmgbgbgcbcihnfgcnkgbd-Default.desktop`, which is
+Lidarr. That matches no arm of the case above, so every web app fell
+back to chromium -- a browser the user was not logged into -- and Email,
+Calendar and the rest opened nothing they recognised.
+
+Upstream already knows: omarchy-launch-browser, omarchy-default-browser
+and omarchy-remove-browser all guard the same call with `env -u BROWSER`.
+omarchy-launch-webapp is the one place they missed, and it is the one
+every SUPER+SHIFT web app binding goes through.
+
+Not NixOS-specific -- it breaks the same way on Arch -- so it belongs
+upstream, and --replace-fail is what makes this a loan rather than a
+fork: when they fix it, this line stops matching and the build fails,
+which is the reminder to delete it.
+
+## chromium-browser.desktop is renamed on three more paths that name it
+
+The same chromium-browser.desktop rename as omarchy-launch-webapp, on
+the three other paths that name the file rather than launch it.
+
+provision-user is the one that mattered. `xdg-settings set
+default-web-browser chromium.desktop` exits 2 -- "one of the files
+does not exist" -- under `set -euo pipefail`, so it aborted on the
+line BEFORE the xdg-mime patch above, which is why that patch had
+never once run on any machine. In a clean $HOME, against nixpkgs' own
+entry:
+
+  chromium.desktop          exit 2
+  chromium-browser.desktop  exit 0
+
+omarchy-default-browser names it twice and both halves were broken by
+it: `omarchy default browser chromium` exited 1 having set nothing,
+and the no-argument read fell through to printing the raw desktop id
+instead of "chromium" -- which is the string the menu shows as the
+current browser. omarchy-remove-browser only writes the fallback, and
+its `|| true` swallowed the failure, so removing Chrome quietly left
+the machine with a default browser that resolves to nothing.
+
+## Nothing may sed /etc/pam.d
+
+Nothing may sed /etc/pam.d.
+
+/etc/pam.d/sudo and /etc/pam.d/polkit-1 are symlinks into
+/etc/static/pam.d, and GNU `sed -i` does not follow a symlink: it
+writes a temporary file and renames it over the link, so the entry
+stops being NixOS-managed and becomes a stale regular file holding a
+copy of the stack. Two of the four scripts here do that on the way in
+and two on the way out, and the way out is the one that fires unasked:
+its guard is `grep -q pam_u2f.so /etc/pam.d/sudo`, which is TRUE on a
+machine that enabled u2fAuth the NixOS way -- so Remove FIDO2 detached
+the stack of a user who never ran Setup at all.
+
+The edit was inert either way. It inserts a bare `pam_u2f.so`, and
+every module NixOS names in these stacks is an absolute store path;
+the detached file is then silently restored by the next rebuild. So it
+read as a no-op that quietly broke /etc in between.
+
+The functions go rather than being emptied, and their call sites are
+replaced separately: `setup_pam_config` is then a single occurrence in
+each file, so what is left is a one-line anchor that cannot be broken
+by how this Nix string happens to be indented.
+A range that stops matching deletes nothing, and the --replace-fail
+below would then rewrite the header instead: check both ends.
+
+## The SDDM greeter theme, and why it is not omarchy-refresh-sddm's copy
+
+The SDDM greeter theme. Upstream installs this with omarchy-refresh-sddm,
+which copies default/sddm/omarchy into /usr/share/sddm/themes -- a path
+NixOS has no writable version of. Putting it in the package instead means
+the greeter travels with the Omarchy release it came from, and
+services.displayManager.sddm.theme = "omarchy" is all the module needs.
+
+Without it SDDM falls back to its stock theme and the login screen is a
+blue gradient with a placeholder avatar, which is the first thing anyone
+sees of the system.
+The boot splash. Upstream ships a complete Plymouth theme -- the script,
+the logo and the progress assets -- and installs it with
+`sudo cp -r ... /usr/share/plymouth/themes/omarchy` from
+omarchy-refresh-plymouth. Nothing did that here, so boot.plymouth.enable
+came up with NixOS' default theme and the one place a user cannot miss
+was the one place that was not branded.
+
+NixOS collects themes from boot.plymouth.themePackages by looking in
+share/plymouth/themes, so putting it there is the whole of it.
+
+## enable-user-units.sh enables six units in one call, so one absent unit loses all six
+
+install/user/first-run/enable-user-units.sh enables six user units in ONE
+`systemctl --user enable --now` under `set -euo pipefail`, so one absent
+unit fails the whole command:
+
+  Failed to enable unit: Unit omarchy-migrate-notify.service does not exist
+
+Two of them are deliberately absent -- modules/nixos.nix explains that
+omarchy-migrate-notify and omarchy-tailscale-receive can never satisfy their
+ConditionPath* on NixOS. What was missed is that upstream's first-run still
+NAMES them.
+
+omarchy-provision-first-run marks itself done only when EVERY step
+succeeded, so that one failure meant the marker was never written and
+first-run ran again at every login -- re-showing the welcome notification
+for the life of the machine. Reported as "this appears after each reboot";
+the log had been saying so all along:
+
+  Failed: enable user systemd units (exit code: 1)
+  One or more first-run steps failed; first-run will retry next login
+
+Replaced wholesale rather than patched: the unit list is a
+continuation-line command, and a whitespace-exact multi-line
+--replace-fail is the kind of patch an upstream reindent breaks. The grep
+is the drift detector --replace-fail would otherwise have given for free.
+
+## The rest of the lock screen theme: track, bar, passphrase field and dots
+
+And the rest of the theme: the progress track and its bar, the
+passphrase field, the padlock beside it and the dot that stands for
+one typed character.
+
+None of the five carries a name or a mark, so unlike the wordmark
+there is nothing to derive from upstream -- they are drawn, in
+nixarchy-plymouth-chrome.py, in the Tokyo Night palette the
+background already uses. Drawing rather than copying is the point:
+"no Omarchy artwork is reachable from the boot splash" is not
+satisfied by files that merely look different, and it is not
+satisfied by upstream's files either.
+
+They are generated here rather than committed as PNGs. Five binary
+blobs in the tree are five things no diff can review and no one can
+re-derive; a script is 200 lines that say why every number is what it
+is. It costs one python3 and five magick calls in a build that
+already runs both for the wordmark.
+
+The sizes are not free. omarchy.script divides by 84 and 96 to scale
+the lock against the entry field, and centres the bar in the track by
+their size difference, so the lock keeps upstream's dimensions and
+the bar is deliberately smaller than the box. See the script.
+
+## A keep-loaded plugin lost its shell API the first time shell.json changed
+
+A keep-loaded plugin (the Podman menu) lost its shell API the
+first time shell.json changed, and read barConfig as null
+until the shell restarted (#877). manifestHasKind tested
+kinds with Array.isArray. A manifest read through a QML
+property carries kinds as a Qt sequence -- length 2,
+"menu,bar-widget", Array.isArray false -- so the plugin's
+scoped API was recorded `no-menu`, re-checked as `menu` by
+prunePluginApis against the plain-JS manifest, revoked for
+the mismatch, and the plugin kept the destroyed object.
+Confirmed on razer with log lines in a copy of shell.qml.
+
+CARRIED, and meant to be dropped, like the #749 block above:
+AGENTS.md section 11 puts Omarchy fixes upstream, and this is
+carried only at the owner's request until it lands there.
+Delete it the moment upstream reads kinds without
+Array.isArray. The whole function is the needle, so a
+reworded one fails this build. checks.manifest-has-kind runs
+the result against a real Qt sequence.
+printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+
+## `omarchy plugin remove` rebuilt every plugin twice and took the bar with it
+
+`omarchy plugin remove` rebuilt every installed plugin TWICE,
+leaving the bar gone for ~53 s on a machine with 40 of them
+(#893). One removal starts two reloads: the watcher fires
+once per deleted file and is debounced through
+localPluginReloadTimer (150 ms), while the rescanPlugins IPC
+the remove script sends afterwards calls reloadPlugins()
+straight away. The second call lands mid-scan, sets
+pluginReloadPending, and onScanFinished throws the half-built
+first pass away ("Object or context destroyed during
+incubation" x18) and repeats it. Sending the IPC through the
+same timer merges the two into one reload.
+
+CARRIED, and meant to be dropped, like the #877 and #749
+blocks above: AGENTS.md section 11 puts Omarchy fixes
+upstream, and this is carried at the owner's request until it
+lands there. Delete it the moment upstream debounces the IPC.
+The whole function is the needle, so a reworded one fails
+this build.
+printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+
+## A layout-only shell.json save rebuilt every plugin and froze the bar
+
+A layout-only shell.json save -- moving one bar icon --
+rebuilt every panel, menu and overlay plugin, froze the bar
+for 28-75 s on a machine with 52 of them, and flooded the
+journal with ~99 IpcHandler re-registrations (#901).
+
+Two causes, one per patch below. onShellConfigChanged fires
+pluginsChanged() -- the "the set of plugins changed" signal --
+for ANY save. And its panel listener assigns
+shell.panelEntries a fresh JS array, which is an
+Instantiator's model: QML does not diff a JS array, so every
+delegate is destroyed and recreated even when the contents
+are identical.
+
+CARRIED, and meant to be dropped, like the #749, #877 and
+#893 blocks above: AGENTS.md section 11 puts Omarchy fixes
+upstream, and this is carried at the owner's request until it
+lands there. Delete it the moment upstream diffs the list.
+The whole block is the needle, so a reworded one fails this
+build.
+printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+
+## omarchy-shell finds its instance by config path, which moves here
+
+#963: omarchy-shell finds the running instance by CONFIG
+PATH. On Arch that is /usr/share/omarchy -- one stable
+path, so the match is correct and cheap. Here it is a
+store path that changes on every rebuild, so after a
+redeploy the caller holds the new one, the running shell
+registered under the old one, and every IPC call misses:
+a plugin keybind that silently does nothing.
+
+Not sent upstream, because there is no bug upstream. This
+is a consequence of the port making the path unstable.
+
+Path FIRST: a machine that has not rebuilt since login
+never reaches the fallback, so the ordinary case cannot
+regress. The fallback asks qs which instances exist and
+selects by id, which survives the path moving.
+
+Measured before it was written: a stable symlink in front
+of OMARCHY_PATH does NOT work -- qs matches the path as
+given, not canonicalised, so the symlink is simply a
+different string and finds nothing.
+Why: pkgs/AGENTS.md#the-tree-a-restarted-shell-runs-982
+Why: pkgs/AGENTS.md#display-text-size-on-a-managed-config-948
+
+The guard is a FILE, not an inline block: this phase was
+1,910 bytes from MAX_ARG_STRLEN when #948 first tried it
+inline, and the build failed with "Argument list too
+long" naming nothing (#997). A path costs ~60 bytes.
+

@@ -38,23 +38,30 @@ ok()   { echo -e "  \033[32m✓\033[0m $1"; }
 
 usage() {
   cat <<'EOF'
-usage: nixarchy-remote [serve|--status]
+usage: nixarchy-remote [serve|connect|--status]
 
   serve       report what is missing to accept RDP connections, and fix it
+  connect     open another machine's desktop, over an SSH tunnel
   --status    report only, change nothing
 
 This shares the Hyprland session you are already logged into. It is not
 remote login: with nobody logged in there is no session to connect to, and
-rebooting a machine remotely locks you out of it until someone does.
+rebooting a machine remotely locks you out of it until someone does. The
+same is true of the machine you connect TO.
+
+connect opens no port anywhere. It forwards a local port over SSH, so the
+credential is the SSH key you already have.
 EOF
 }
 
 status_only=false
+mode=serve
 # Spelled `"${1:-}"` and not `"${1:-serve}"` so tests/menu-verbs.nix can read
 # the verbs out of this block -- it seds for that exact line, and a dispatch
 # it cannot parse yields an empty verb list, which makes every menu row pass.
 case "${1:-}" in
   "" | serve) ;;
+  connect) mode=connect ;;
   --status) status_only=true ;;
   -h | --help) usage; exit 0 ;;
   *) echo "nixarchy-remote: unknown argument '$1'; --help lists them" >&2; exit 1 ;;
@@ -125,6 +132,140 @@ report() {
     fail "the service is not enabled"
   fi
 }
+
+# ---- connect: another machine's desktop, over the tunnel ------------------
+#
+# `ssh` is not in pkgs/omarchy/default.nix's runtime list and does not need to
+# be: nixos/modules/programs/ssh.nix sets `environment.corePackages` from an
+# unconditional config block, so the client is on every NixOS system. Checked
+# by reverting the addition and finding sw/bin/ssh still there; do not re-add
+# it on the strength of the package's references, which is the wrong place to
+# look -- runtimeDeps reaches these scripts through systemPackages.
+
+# Something listening, asked in pure bash so this needs no ss, lsof or nc.
+listening() { (echo >"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+rdp_client() {
+  # sdl-freerdp first: `wlfreerdp --version` prints "client has been
+  # deprecated ... As replacement there is a SDL3 based client available", and
+  # xfreerdp's flag surface is identical to SDL3's -- FreeRDP 3 shares one
+  # command line -- so the tie is broken by which one upstream is keeping.
+  # xfreerdp remains a fallback for anyone who prefers X11.
+  command -v sdl-freerdp 2>/dev/null && return 0
+  command -v xfreerdp 2>/dev/null && return 0
+  return 1
+}
+
+# Machines you can SSH to, which under tunnel-only is the same set as machines
+# you can reach. Nothing is probed: a port scan of the tailnet is not what
+# opening a menu should do, and "something is listening on 3389" is not "there
+# is a desktop there" anyway.
+machines() {
+  if [ -r "$HOME/.ssh/config" ]; then
+    # Wildcards are patterns, not machines. `Host *` is configuration.
+    awk 'tolower($1) == "host" { for (i = 2; i <= NF; i++)
+           if ($i !~ /[*?!]/) print $i }' "$HOME/.ssh/config"
+  fi
+  if command -v tailscale >/dev/null 2>&1; then
+    # `OS == "linux"` and not every peer. A tailnet is phones, tablets and
+    # televisions as well as machines -- this one answered with "Living Room
+    # TV", "Pixel 9 Pro XL" and "olaf'"'"'s Tab S8 Ultra" before the filter, and
+    # offering a television as a desktop to connect to is the list implying
+    # reachability in its worst form. Found by running it, not by reading it.
+    #
+    # NOT filtered on `.Online`: a machine hidden because tailscale believes
+    # it is down is a list lying in the other direction, and the ssh attempt
+    # is what actually discovers whether it answers.
+    tailscale status --json 2>/dev/null \
+      | jq -r '.Peer // {} | .[] | select(.OS == "linux") | .HostName // empty' 2>/dev/null
+  fi
+}
+
+do_connect() {
+  local client host port ssh_pid
+
+  client=$(rdp_client) || {
+    fail "no RDP client installed."
+    say  ""
+    say  "  Add one from \033[1mSetup > Install > Remote desktop client\033[0m,"
+    say  "  or to your configuration:"
+    say  ""
+    say  "    programs.nixarchy.apps.freerdp.enable = true;"
+    say  ""
+    say  "  Only this machine needs it. The one you connect to does not."
+    return 1
+  }
+
+  mapfile -t hosts < <(machines | sort -u)
+  [ "${#hosts[@]}" -gt 0 ] || {
+    fail "no machines to offer."
+    say  ""
+    say  "  This list is your \033[1m~/.ssh/config\033[0m Host entries, plus your"
+    say  "  tailnet if Tailscale is on. Add a Host entry for the machine you"
+    say  "  want and it will appear here."
+    return 1
+  }
+
+  step "Which machine?"
+  say  "  Your ~/.ssh/config hosts, plus the Linux machines on your tailnet."
+  say  "  These are machines you can SSH to -- not machines known to be"
+  say  "  serving a desktop. hypr-rdp shares a session someone is already"
+  say  "  logged into, so a machine with nobody at it has nothing to show."
+  say  ""
+  if [ -t 0 ] && [ -t 1 ] && command -v gum >/dev/null 2>&1; then
+    host=$(printf '%s\n' "${hosts[@]}" | gum filter --placeholder "machine") || return 130
+  else
+    printf '  %s\n' "${hosts[@]}"
+    return 1
+  fi
+  [ -n "$host" ] || return 1
+
+  # A free local port rather than 3389, so a second connection does not
+  # collide with the first.
+  port=0
+  for p in $(seq 33890 33929); do
+    listening "$p" || { port=$p; break; }
+  done
+  [ "$port" != 0 ] || { fail "no free local port in 33890-33929."; return 1; }
+
+  step "Opening the tunnel to $host"
+  ssh -N -L "$port:localhost:3389" "$host" &
+  ssh_pid=$!
+  # The tunnel dies with this script, on every exit path. A forward nobody can
+  # see is a forward nobody closes.
+  # shellcheck disable=SC2064
+  trap "kill $ssh_pid 2>/dev/null || true" EXIT INT TERM
+
+  local waited=0
+  while ! listening "$port"; do
+    kill -0 "$ssh_pid" 2>/dev/null || { fail "ssh to $host exited."; return 1; }
+    sleep 1
+    waited=$((waited + 1))
+    [ "$waited" -lt 20 ] || { fail "the tunnel did not come up in 20s."; return 1; }
+  done
+  ok "localhost:$port reaches $host:3389"
+
+  # Said BEFORE the client opens. A warning explained afterwards is a warning
+  # people learn to click through.
+  step "The certificate warning is expected"
+  say  "  hypr-rdp generates a self-signed certificate once and reuses it, so"
+  say  "  what your client can do is remember it. Accept it on a connection"
+  say  "  you have reason to trust, and be suspicious if it ever changes."
+  say  ""
+  say  "  The username is \033[1mnixarchy\033[0m unless that machine changed it. It is"
+  say  "  deliberately not a login name."
+  say  ""
+
+  # /dynamic-resolution pairs with the module's default headless output, which
+  # resizes to the client -- so the session follows the window instead of
+  # letterboxing.
+  "$client" /v:"localhost:$port" /u:nixarchy /dynamic-resolution
+}
+
+if [ "$mode" = connect ]; then
+  do_connect
+  exit $?
+fi
 
 report
 $status_only && exit 0

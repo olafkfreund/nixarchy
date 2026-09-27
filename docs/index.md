@@ -37,7 +37,7 @@ upstream release is a source bump, not a re-port.
 
 ## Search everything, install declaratively
 
-The app selection carries 67 applications. **Install ▸ Search** offers the
+The app selection carries 68 applications. **Install ▸ Search** offers the
 rest of NixOS — one fuzzy picker over **about 137,000 rows**: every nixpkgs package,
 every NixOS option, and the app selection, with each entry's type, default and
 documentation in a preview pane.

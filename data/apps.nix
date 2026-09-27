@@ -531,6 +531,37 @@
     binary = "adb";
   };
 
+  freerdp = {
+    # The client half of remote desktop (#1016). The machine being connected
+    # TO needs none of this -- it needs programs.nixarchy.services.hypr-rdp --
+    # so this is opt-in on the machine doing the connecting, rather than a
+    # runtime dependency of the omarchy package that would land on both.
+    #
+    # `binary`, because the attribute is not a command: this package ships
+    # xfreerdp, wlfreerdp, sdl-freerdp, a proxy and a shadow server, so
+    # nixpkgs states no mainProgram -- correctly -- and without this the
+    # catalogue would look for `freerdp` and report the app missing on a
+    # machine that has it.
+    #
+    # sdl-freerdp rather than the others, and it was measured rather than
+    # chosen: `wlfreerdp --version` prints "client has been deprecated ... As
+    # replacement there is a SDL3 based client available" on every run. That
+    # leaves xfreerdp and sdl-freerdp, whose flag surface is identical --
+    # FreeRDP 3 shares one command line -- so capability does not decide it.
+    # Upstream deprecating its own Wayland client in SDL3's favour does, and
+    # SDL3 needs no Xwayland hop on a Hyprland session. xfreerdp is still in
+    # the package and nixarchy-remote falls back to it.
+    #
+    # No menuId and no arch: upstream has no remote desktop at all, so there
+    # is no Install row to match and a plausible Arch name would fire on
+    # somebody else's package.
+    label = "Remote desktop client (FreeRDP)";
+    category = "Utility";
+    attr = "freerdp";
+    binary = "sdl-freerdp";
+    note = "Only needed on the machine you connect FROM. Reached by Setup > Remote desktop > Connect to a machine, which tunnels over SSH and opens no port.";
+  };
+
   scrcpy = {
     # Android apps from the phone you already own, and NOT emulation: it
     # mirrors and controls a device over USB or Wi-Fi, so everything works --

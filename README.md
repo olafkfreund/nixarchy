@@ -21,7 +21,7 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 Tracking an upstream release is a source bump, not a re-port.
 
 What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **67 applications** are selectable that way, **every other package and
+pacman, **68 applications** are selectable that way, **every other package and
 NixOS option is one `Install ▸ Search` away**, plugins and themes still install
 from a git URL at runtime the way upstream intends, and every command that
 assumed `/usr` either points at what NixOS uses or says why it cannot.
@@ -113,7 +113,7 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 67 apps in the selection are the ones Omarchy's own menu lists, and a few
+The 68 apps in the selection are the ones Omarchy's own menu lists, and a few
 it does not. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
@@ -138,7 +138,7 @@ from a terminal:
 ```
 
 **About 137,000 rows on a default install: some 25,000 NixOS options, 112,000
-packages, and 65 of the 67 apps** (the two with no nixpkgs equivalent cannot be
+packages, and 66 of the 68 apps** (the two with no nixpkgs equivalent cannot be
 indexed). The exact count is each machine's own, because the index is built from
 that system's options and package set. Three kinds,
 one picker, because you should not have to know which kind you want before you
@@ -471,7 +471,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 67 apps in the selection | 50 from nixpkgs, 6 as NixOS modules, 9 built here, 2 with no equivalent |
+| 68 apps in the selection | 50 from nixpkgs, 7 as NixOS modules, 9 built here, 2 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -539,7 +539,7 @@ behind the split, and the measurements behind refusing a CPU-only model, are in
 
 Almost nothing here waits on a maintainer.
 
-**56 of the 67 apps never touch this repo.** Brave, VSCode, Signal and the rest
+**57 of the 68 apps never touch this repo.** Brave, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own
@@ -598,7 +598,7 @@ Most of it is not our job, and should not be:
 
 | where the app comes from | who updates it |
 |---|---|
-| nixpkgs (56 of 67 apps) | **nobody** — your own `nix flake update` |
+| nixpkgs (57 of 68 apps) | **nobody** — your own `nix flake update` |
 | pinned in this repo (2) | a nightly bot, opening a PR |
 | `zen` | upstream's own flake |
 | `retroarch` | nixpkgs, via this flake's own pin — it is a rebuild with cores |

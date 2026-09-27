@@ -97,7 +97,7 @@
   };
   "nixarchy-remote" = {
     class = "new";
-    reason = "Not in upstream, which has no remote desktop at all. Turning hypr-rdp on is four states and only one of them is a switch -- an SSH host key, a .sops.yaml rule, an encrypted password, the service itself -- and the module refuses to build or to start without the password, because hypr-rdp given none serves an unauthenticated desktop. This reports the four and offers the next unmet one, doing the mechanical steps and printing the two lines that belong in a configuration.nix we do not own.";
+    reason = "Not in upstream, which has no remote desktop at all. Turning hypr-rdp on is four states and only one of them is a switch -- an SSH host key, a .sops.yaml rule, an encrypted password, the service itself -- and the module refuses to build or to start without the password, because hypr-rdp given none serves an unauthenticated desktop. This reports the four and offers the next unmet one, doing the mechanical steps and printing the two lines that belong in a configuration.nix we do not own. `connect` is the other direction: it lists the machines you can SSH to, forwards a local port over an `ssh -N -L` trapped on every exit path, and opens sdl-freerdp against it. No port is opened anywhere and ssh is not in the runtime list because NixOS installs the client from an unconditional environment.corePackages.";
     allow = "systemctl-user";
   };
   "nixarchy-preview" = {

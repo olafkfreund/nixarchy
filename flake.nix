@@ -24,6 +24,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Declarative runtime theme switching and application bridges. The input
+    # stays pinned so the offline image and installed systems agree on the
+    # plugin manifest and module interface.
+    nixarchy-omatheme = {
+      url = "github:olafkfreund/nixarchy-omatheme/e99ab505d9d10af1813acc3147371f994455d69c";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+    };
+
     # Stable nixpkgs, carried so CI can prove this flake still evaluates
     # against it (#527).
     #

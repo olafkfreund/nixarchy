@@ -61,9 +61,41 @@ report=""
 
 # A quantity: a name, its value, and a sed expression that finds it in the
 # README with the value as \1. Both halves refuse on their own.
+# Quantities whose fix legitimately rewrites a number another quantity checks.
+# A pair declares itself here, naming its partner, so "writes more than it
+# reads" can be an error for everyone else (#1021).
+paired=" pacman-scripts:pacman-scripts-of"
+paired="$paired apps-untouched:apps-untouched-of"
+paired="$paired apps-indexed:apps-indexed-of"
+paired="$paired apps-total:apps-row-nixpkgs,apps-row-modules,apps-row-ours,apps-row-unavailable "
+
 quantity() {
   local name=$1 value=$2 find=$3 repl=$4
   local current
+
+  # A fix that rewrites more numbers than its check captures leaves some
+  # number written and never compared -- which drifts with main green and is
+  # invisible by construction (#831, #1021). Counted here, where both
+  # patterns are already in hand, rather than by re-parsing this file.
+  #
+  # The (...) spans are STRIPPED before counting writes: they are preserved
+  # through \1, not rewritten. The first audit of this file skipped that and
+  # reported two false positives, which is how a guard earns being switched
+  # off.
+  local reads writes lhs
+  reads=$(grep -oF '(' <<<"$find" | wc -l)
+  lhs=${repl#s/}; lhs=${lhs%%/*}
+  while [[ $lhs == *'('*')'* ]]; do lhs="${lhs%%(*}${lhs#*)}"; done
+  writes=$(grep -oE '\[0-9\]\+|\[a-z\]\+' <<<"$lhs" | wc -l)
+  if [ "$writes" -gt "$reads" ] && [ "$writes" -gt 1 ] && [[ $paired != *" $name:"* ]]; then
+    echo "::error::$name: its fix rewrites $writes numbers, its check reads $reads." >&2
+    echo "::error::  Every number --fix can write, --check must be able to read," >&2
+    echo "::error::  or it drifts with main green. Give each number its own" >&2
+    echo "::error::  quantity, as pacman-scripts-of does -- or, if a sibling" >&2
+    echo "::error::  already checks it, declare the pair in \$paired." >&2
+    fail=1
+    return
+  fi
 
   if [ -z "$value" ] || [ "$value" = "0" ]; then
     echo "::error::$name computed as '${value:-empty}' -- refusing to check or fix" >&2

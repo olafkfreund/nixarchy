@@ -95,6 +95,11 @@
     class = "new";
     reason = "Not in upstream. programs.nixarchy.localAi enables the service but deliberately downloads no weights; this pulls a model at runtime and sizes it against VRAM, which Nix cannot read.";
   };
+  "nixarchy-remote" = {
+    class = "new";
+    reason = "Not in upstream, which has no remote desktop at all. Turning hypr-rdp on is four states and only one of them is a switch -- an SSH host key, a .sops.yaml rule, an encrypted password, the service itself -- and the module refuses to build or to start without the password, because hypr-rdp given none serves an unauthenticated desktop. This reports the four and offers the next unmet one, doing the mechanical steps and printing the two lines that belong in a configuration.nix we do not own.";
+    allow = "systemctl-user";
+  };
   "nixarchy-preview" = {
     class = "new";
     reason = "Not in upstream, where a config change is a pacman transaction with no dry run to look at. Builds nixosConfigurations.<host>.config.system.build.vm -- the same configuration re-evaluated under qemu-vm.nix -- and boots it in a window, on a managed disk that is refused when stale rather than silently reused.";

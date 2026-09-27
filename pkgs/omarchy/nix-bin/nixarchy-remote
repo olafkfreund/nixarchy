@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+
+# nixarchy:new
+# omarchy:summary=Let another machine reach this desktop over RDP, one step at a time.
+# omarchy:args=[serve|--status]
+# omarchy:examples=nixarchy remote serve
+
+# Turning remote desktop on is four things, and only one of them is a switch.
+# The module refuses to build without an encrypted password and refuses to
+# start without a rendered one -- both deliberate, because hypr-rdp fails open
+# and serves an unauthenticated desktop given no credentials. So a user who
+# flips the menu row meets an assertion, reads a manual page, and edits YAML.
+#
+# This reports the four states and offers the next unmet one. It does every
+# step that is mechanical and hands over the one that is not: the two lines
+# that declare the secret belong in hosts/<host>/configuration.nix, and
+# editing a file we do not own by pattern-matching is the same hazard the
+# .sops.yaml refusal exists for.
+#
+# It never prints anything out of the rendered config. The module's own
+# ExecStartPre guard takes the same care, for the same reason.
+#
+# Connecting OUT is #1016, not here.
+
+set -uo pipefail
+
+FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
+HOST=$(cat /proc/sys/kernel/hostname)
+POLICY="$FLAKE/.sops.yaml"
+STORE="$FLAKE/hosts/$HOST/secrets.yaml"
+SECRET=hypr-rdp-password
+
+say()  { echo -e "$1"; }
+step() { echo -e "\n\033[1;32m▸\033[0m \033[1m$1\033[0m"; }
+warn() { echo -e "  \033[33m!\033[0m $1"; }
+fail() { echo -e "  \033[31m✗\033[0m $1" >&2; }
+ok()   { echo -e "  \033[32m✓\033[0m $1"; }
+
+usage() {
+  cat <<'EOF'
+usage: nixarchy-remote [serve|--status]
+
+  serve       report what is missing to accept RDP connections, and fix it
+  --status    report only, change nothing
+
+This shares the Hyprland session you are already logged into. It is not
+remote login: with nobody logged in there is no session to connect to, and
+rebooting a machine remotely locks you out of it until someone does.
+EOF
+}
+
+status_only=false
+# Spelled `"${1:-}"` and not `"${1:-serve}"` so tests/menu-verbs.nix can read
+# the verbs out of this block -- it seds for that exact line, and a dispatch
+# it cannot parse yields an empty verb list, which makes every menu row pass.
+case "${1:-}" in
+  "" | serve) ;;
+  --status) status_only=true ;;
+  -h | --help) usage; exit 0 ;;
+  *) echo "nixarchy-remote: unknown argument '$1'; --help lists them" >&2; exit 1 ;;
+esac
+
+# gum confirm answers yes(0), no(1), quit(130), and something else when it
+# could not ask at all. An offer that silently does nothing is worse than no
+# offer, so an unanswerable question is a no that says so.
+confirm() {
+  local rc
+  if [ -t 0 ] && [ -t 1 ] && command -v gum &>/dev/null; then
+    gum confirm "$1"; rc=$?
+    case $rc in
+      0) return 0 ;;
+      1) return 1 ;;
+      130) exit 130 ;;
+      *) warn "could not ask; assuming no"; return 1 ;;
+    esac
+  fi
+  warn "not a terminal; assuming no"
+  return 1
+}
+
+# ---- the four states ------------------------------------------------------
+#
+# Each is read from the machine rather than from the flake. `systemctl --user
+# cat` is the honest test for "is the module on": the unit exists only when it
+# is, and that needs no evaluation of anything.
+
+# `systemctl --user` here is READ-ONLY, and the ledger row says so: `cat` asks
+# whether the unit exists at all, which is the honest test for "is the module
+# on" and needs no evaluation of anything, and `is-active` asks whether it is
+# up. Nothing is started, stopped, enabled or written.
+has_host_key() { [ -r /etc/ssh/ssh_host_ed25519_key.pub ]; }
+has_policy()   { [ -e "$POLICY" ] && grep -q "hosts/$HOST/secrets" "$POLICY"; }
+# sops encrypts VALUES, not keys, so presence is readable without decrypting
+# and without asking anyone for a passphrase.
+has_secret()   { [ -e "$STORE" ] && grep -q "^$SECRET:" "$STORE"; }
+unit_exists()  { systemctl --user cat hypr-rdp.service &>/dev/null; }
+unit_running() { systemctl --user is-active --quiet hypr-rdp.service; }
+
+report() {
+  step "Remote desktop on $HOST"
+
+  if has_host_key; then ok "this machine has an SSH host key to encrypt to"
+  else fail "no SSH host key -- sshd has never run here"; fi
+
+  if has_policy; then ok "$POLICY has a rule for this host"
+  else fail "$POLICY has no rule for this host"; fi
+
+  if has_secret; then ok "$SECRET is in hosts/$HOST/secrets.yaml"
+  else fail "no $SECRET secret"; fi
+
+  if unit_exists; then
+    ok "the service is enabled"
+    if unit_running; then
+      ok "and it is running"
+    else
+      # Not a fault on its own. The unit is part of graphical-session.target
+      # and conditioned on WAYLAND_DISPLAY, so over SSH it is correctly idle.
+      if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        warn "enabled but not running -- systemctl --user status hypr-rdp"
+      else
+        ok "not running, because this is not a graphical session"
+      fi
+    fi
+  else
+    fail "the service is not enabled"
+  fi
+}
+
+report
+$status_only && exit 0
+
+# ---- the next unmet step, and only the next one ---------------------------
+
+if ! has_host_key; then
+  step "First: sshd"
+  say "  The password is encrypted to this machine's SSH host key, and NixOS"
+  say "  generates that only when sshd is enabled, on the first boot after."
+  say "  So this is two rebuilds, not one, and there is no way around it."
+  say ""
+  say "  Add to \033[1m$FLAKE/hosts/$HOST/configuration.nix\033[0m:"
+  say ""
+  say "    services.openssh.enable = true;"
+  say ""
+  say "  rebuild, then run this again."
+  exit 1
+fi
+
+if ! has_policy; then
+  step "Next: enroll this machine"
+  say "  Nothing can encrypt to this host until .sops.yaml has a rule for it."
+  if confirm "Run nixarchy secret enroll now?"; then
+    nixarchy-secret enroll || exit 1
+  else
+    say "  Run \033[1mnixarchy secret enroll\033[0m when you are ready."
+    exit 1
+  fi
+fi
+
+if ! has_secret; then
+  step "Next: the password"
+  say "  hypr-rdp reads its password from its config file, and this machine"
+  say "  renders that file at activation from an encrypted secret. Without"
+  say "  one the rebuild fails on purpose -- hypr-rdp given no password does"
+  say "  not refuse to start, it serves your desktop to anyone who connects."
+  say ""
+  say "  Avoid a double quote, a backslash or a newline in the value: it is"
+  say "  written into a TOML string, and one that breaks the quoting makes"
+  say "  hypr-rdp fail to parse its config."
+  if confirm "Open the editor to set $SECRET now?"; then
+    nixarchy-secret new "$SECRET" || exit 1
+  else
+    say "  Run \033[1mnixarchy secret new $SECRET\033[0m when you are ready."
+    exit 1
+  fi
+fi
+
+if ! unit_exists; then
+  step "Last: two lines, by hand"
+  say "  These declare the secret and point the service at it. They go in"
+  say "  \033[1m$FLAKE/hosts/$HOST/configuration.nix\033[0m -- not in the menu's"
+  say "  services.nix, because nixarchy apply copies that into"
+  say "  hosts/$HOST/nixarchy/ and a relative ./secrets.yaml written there"
+  say "  would resolve one directory too deep."
+  say ""
+  say "    sops.secrets.$SECRET.sopsFile = ./secrets.yaml;"
+  say ""
+  say "    programs.nixarchy.services.hypr-rdp = {"
+  say "      enable = true;"
+  say "      passwordSecret = \"$SECRET\";"
+  say "    };"
+  say ""
+  say "  Not written for you: this is your configuration, and an edit made by"
+  say "  pattern-matching is one that lands in the wrong place quietly."
+  say ""
+  say "  Then \033[1mgit add $STORE $POLICY\033[0m and rebuild -- a flake in a git"
+  say "  worktree sees only tracked files, so an unstaged secret does not"
+  say "  exist as far as evaluation is concerned."
+  exit 0
+fi
+
+step "Everything is in place"
+say "  Nothing listens beyond this machine unless you changed \033[1mbind\033[0m, and the"
+say "  firewall stays closed unless you set \033[1mopenFirewall\033[0m. The shape worth"
+say "  wanting is a tailnet: bind 0.0.0.0:3389, firewall shut, tailscale0"
+say "  trusted -- your machines reach it and the coffee shop does not."
+say ""
+say "  From a machine that can SSH here, with no exposure at all:"
+say ""
+say "    ssh -L 3389:localhost:3389 $HOST"
+say ""
+say "  then point an RDP client at localhost:3389. The username defaults to"
+say "  \033[1mnixarchy\033[0m and is not your login name, on purpose."
+say ""
+say "  The manual: \033[1mhttps://olafkfreund.github.io/nixarchy/manual/remote-desktop\033[0m"

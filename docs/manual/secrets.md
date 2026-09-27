@@ -26,6 +26,7 @@ nixarchy secret copy            # put one on the clipboard
 nixarchy secret where <name>    # what names this one
 nixarchy secret edit            # change them
 nixarchy secret remove <name>
+nixarchy secret enroll          # add THIS machine to a .sops.yaml that has others
 ```
 
 Everything below is also in the menu, under **Setup ▸ Secrets**.

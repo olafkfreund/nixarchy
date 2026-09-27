@@ -105,6 +105,7 @@ pkgs.runCommand "nixarchy-menu-verbs"
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
     verbs_of ${secretcli}/bin/nixarchy-secret > secret-verbs
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
+    verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-remote  > remote-verbs
     for m in ${pkgs.lib.escapeShellArgs pluginSources}; do
       jq -r .id "$m/manifest.json"
     done | sort -u > plugin-ids
@@ -112,6 +113,7 @@ pkgs.runCommand "nixarchy-menu-verbs"
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
     echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
+    echo "nixarchy-remote accepts: $(tr '\n' ' ' < remote-verbs)"
     echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
 
     # A floor. An empty verb list makes every row below pass, turning "the
@@ -123,6 +125,11 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
     # NixOS meaning and stay out of the menu, so this floor is 2 and not 4.
     test "$(wc -l < channel-verbs)" -ge 2
+    # serve, --status, -h, --help. The floor is what turns "the dispatch
+    # stopped parsing" from a green into a red: nixarchy-remote spells its
+    # case block `"''${1:-}"` rather than `"''${1:-serve}"` precisely so
+    # verbs_of can read it, and this is what notices if that is undone.
+    test "$(wc -l < remote-verbs)" -ge 3
 
     fail=0
     checked=0
@@ -164,6 +171,11 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # found by a tester.
     scan '\bnixarchy-channel +[-a-z]+'  2 nixarchy-channel channel-verbs
     scan '\bnixarchy +channel +[-a-z]+' 3 nixarchy-channel channel-verbs
+
+    # The remote desktop rows (#1015), added with the rows for the same
+    # reason the three groups above were.
+    scan '\bnixarchy-remote +[-a-z]+'  2 nixarchy-remote remote-verbs
+    scan '\bnixarchy +remote +[-a-z]+' 3 nixarchy-remote remote-verbs
 
     # The plugin rows (#766): a row opening a plugin that is not installed
     # does nothing at all, so each id has to be one this machine installs.

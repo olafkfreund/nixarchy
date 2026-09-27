@@ -304,5 +304,75 @@ programs.nixarchy.services.hypr-rdp.output = "DP-1";
   something else — SSH, and a person, or wake-on-LAN and a display manager
   that autologs in, which is its own trade.
 
+## Letting an agent drive another machine
+
+Not through RDP. Accessibility does not cross it — the remote desktop arrives
+as pixels, so an agent looking at an RDP window sees the client's own chrome
+and nothing inside the session. It would be reduced to screenshots and
+coordinates.
+
+[ai-mirror](https://github.com/olafkfreund/ai-mirror), which nixarchy already
+carries, is the surface that works. It is an MCP server spoken over stdin and
+stdout, so an agent reaches a remote one by running it there:
+
+```nix
+command = "ssh";
+args = [ "desk" "ai-mirror" "mcp" ];
+```
+
+That gives the agent the other machine's real accessibility tree and window
+list — `a11y_find` by name, not a guess at a pixel.
+
+### What that grants, before you paste it
+
+**It is as strong as your SSH access to that machine, and no stronger.**
+
+Locally, ai-mirror will not let an agent turn control on: it asks, and a
+dialog on your screen is answered by whoever is at the keyboard. That gate
+holds for an agent reaching ai-mirror through MCP alone. It does not hold
+here. `ai-mirror control confirm` is an ordinary command, so an agent with a
+shell on that account answers its own dialog — and `ssh desk ai-mirror mcp`
+*is* a shell on that account.
+
+A forced-command key in `authorized_keys` does not fix it either. It
+restricts that key; it does not remove the ordinary key you already have to
+that machine, which is the same key the Connect row tunnels with.
+
+So on the far machine the dialog is a **notice, not a gate**. Read it that
+way.
+
+### What actually helps
+
+**Do not give the agent the key.** This is the only thing that changes the
+picture, and it is not a setting: a key for your fleet that is not loaded
+into `ssh-agent` and not readable by the account your agent runs as. An agent
+that cannot reach the machine cannot drive it, and everything above stops
+mattering.
+
+**Ask for less.** Observation — the accessibility tree, the window list, a
+screenshot — needs no control grant at all. An agent that only looks is a
+much smaller thing to hand over, even though nothing enforces the difference.
+
+**Read the log.** Every request, answer and stop is a line in
+`$XDG_RUNTIME_DIR/ai-mirror/audit.jsonl` on the machine that was driven. It is
+the one durable artifact here, and it is on the far machine, so:
+
+```sh
+ssh desk 'cat "$XDG_RUNTIME_DIR/ai-mirror/audit.jsonl"'
+```
+
+Single-quoted on purpose: the variable has to expand on the far machine,
+and `ssh desk cat "$XDG_RUNTIME_DIR/..."` would expand it here instead and
+look in the wrong place.
+
+An empty file means one of two things — nothing happened, or that machine
+rebooted, since `$XDG_RUNTIME_DIR` does not survive one. Do not read empty as
+all-clear.
+
+None of this is turned on for you. `programs.nixarchy.aiMirror.mcp` writes
+ai-mirror's *local* entry and nothing remote, and there is deliberately no
+option for the above: a switch named for remote agent control would promise a
+control that is not there.
+
 See also: [Security](security) for the firewall and SSH generally, and
 [Many machines, one repo](many-machines) for where `hosts/<name>/` comes from.

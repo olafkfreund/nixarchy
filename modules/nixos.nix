@@ -231,6 +231,7 @@ let
 in
 {
   imports = [
+    inputs.home-manager.nixosModules.home-manager
     inputs.hyprland.nixosModules.default
     inputs.nixarchy-omatheme.nixosModules.default
     (import ./apps.nix inputs)

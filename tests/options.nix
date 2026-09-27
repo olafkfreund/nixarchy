@@ -219,7 +219,6 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         {
           programs.nixarchy = {

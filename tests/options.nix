@@ -18,7 +18,6 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         {
           programs.nixarchy = {
@@ -27,11 +26,6 @@ let
           // settings;
         }
         {
-          users.users.someone = {
-            isNormalUser = true;
-            home = "/home/someone";
-          };
-          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -49,16 +43,10 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         { programs.nixarchy.enable = true; }
         extra
         {
-          users.users.someone = {
-            isNormalUser = true;
-            home = "/home/someone";
-          };
-          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -436,7 +424,6 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         {
           boot.loader.grub.device = "/dev/sda";
@@ -1946,7 +1933,6 @@ let
   adopter = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
     modules = [
-      inputs.home-manager.nixosModules.home-manager
       inputs.self.nixosModules.nixarchy
       {
         programs.nixarchy.enable = true;

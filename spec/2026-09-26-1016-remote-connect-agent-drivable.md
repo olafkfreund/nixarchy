@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1016
 intent: intent/2026-09-26-1016-remote-connect-agent-drivable.md
 ---

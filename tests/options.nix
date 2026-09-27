@@ -26,6 +26,10 @@ let
           // settings;
         }
         {
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
           home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
@@ -48,6 +52,10 @@ let
         { programs.nixarchy.enable = true; }
         extra
         {
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
           home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {

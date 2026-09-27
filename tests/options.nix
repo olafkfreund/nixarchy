@@ -26,6 +26,7 @@ let
           // settings;
         }
         {
+          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -47,6 +48,7 @@ let
         { programs.nixarchy.enable = true; }
         extra
         {
+          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";

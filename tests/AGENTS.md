@@ -103,6 +103,35 @@ touches `installer/disk-config.nix`. Both an online and an offline whole-disk
 install through it passed on 2026-09-08, which is what "no check covers this"
 is allowed to mean here: measured by a person, written down, and repeatable.
 
+## A check that dies before its first echo tells you nothing at all
+
+The section below says the floor is what catches an unparseable dispatch. It
+does -- eventually. What it did first was worse, and it cost six rounds of
+diagnosis on #1016.
+
+`verbs_of` ends in `grep -oE ... | ... | sort -u`. On a dispatch it cannot
+parse the `grep` matches nothing and exits 1, and under the builder's `set -e`
+that killed the whole check **before a single line was printed**. The reader
+got:
+
+    error: Cannot build '...-nixarchy-menu-verbs.drv'.
+           Reason: builder failed with exit code 1.
+
+and `nix log` returned an empty log. A correct red, for an unreadable reason,
+on a check whose name says "menu verbs" when the cause was a shell `case`
+block three files away. Twice I read that emptiness as the check not running.
+
+Two things fixed it, and they only work as a pair: `|| true` on the pipeline,
+so an empty result is a value rather than a death, and a `floor` helper that
+says which CLI came back empty and why that matters. Either alone is useless
+-- `|| true` without the floor is a silent pass, and the floor without
+`|| true` never executes.
+
+The general form, which is not about this file: **a guard that aborts before
+it can explain itself is only half a check.** When you add `set -e` or
+`pipefail` to something that runs assertions, ask what the first failing
+command prints, and whether the answer is "nothing".
+
 ## menu-verbs reads a literal line, and the spelling it cannot parse is green
 
 `tests/menu-verbs.nix` extracts a CLI's verbs by sed-ing for

@@ -173,17 +173,39 @@ clipboard rather than to a service.
 
 ## Reaching it: three shapes
 
-### Localhost, over an SSH tunnel
+### From the menu, over an SSH tunnel — the one to use
 
-Nothing to configure. Leave `bind` alone and forward the port from the client:
+Nothing to configure on the machine being connected to. On the machine you are
+connecting *from*, install a client once:
+
+```nix
+programs.nixarchy.apps.freerdp.enable = true;
+```
+
+then **Setup → Remote desktop → Connect to a machine**. It lists your
+`~/.ssh/config` hosts and the Linux machines on your tailnet, forwards a free
+local port over SSH, and opens the desktop. Zero exposure, one already-open
+port, and the authentication that matters is your SSH key. The tunnel closes
+when you close the client.
+
+The list is machines you can *SSH to* — not machines known to be serving a
+desktop. hypr-rdp shares a session someone is already logged into, so a
+machine with nobody at it has nothing to show.
+
+`sdl-freerdp` is what it launches. FreeRDP ships three clients and deprecated
+its Wayland one in favour of the SDL3 build, which is also the one that needs
+no Xwayland. `xfreerdp` is in the same package if you prefer it, and the menu
+row appears when either is installed.
+
+By hand, if you would rather:
 
 ```sh
 ssh -L 3389:localhost:3389 you@desk
+sdl-freerdp /v:localhost:3389 /u:nixarchy /dynamic-resolution
 ```
 
-then point the RDP client at `localhost:3389`. Zero exposure, one already-open
-port, and the authentication that matters is your SSH key. If you only ever
-connect from machines you can SSH to, stop here.
+`/dynamic-resolution` is worth the typing: the headless output resizes to your
+window, so the session follows the client instead of letterboxing.
 
 ### Over your tailnet — the one to want
 

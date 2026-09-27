@@ -207,6 +207,12 @@ NONET = os.environ.get("MATRIX_NONET") == "1"
 # is a client connecting and seeing a desktop, and that is a step in
 # pkgs/verify.sh for a human. A documented hole gets tested by a person; an
 # undocumented one gets tested by a user (#1015, #1016).
+#
+# The CLIENT half is in the same position. checks.remote-tunnel proves the
+# tunnel is trapped and the menu row is gated, which needs no second
+# machine; what it cannot prove is that sdl-freerdp opens a desktop and
+# that the headless output resizes to the window. Both are steps in
+# pkgs/verify.sh.
 NVME = os.environ.get("MATRIX_NVME") == "1"
 TARGET = "/dev/nvme0n1" if NVME else "/dev/vda"
 

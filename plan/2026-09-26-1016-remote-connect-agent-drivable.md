@@ -83,6 +83,22 @@ toplevel still has `sw/bin/ssh`. The reason is upstream's, not ours --
 guarantee. A note at the call site records this so the next person does not
 re-add it.
 
+**Deviation 2 — the `when`-gate assertion moved to `checks.remote-tunnel`.**
+The verification table put it in `tests/options.nix`'s menu pass. That check
+costs ~8 minutes and 11.5 GB of RSS, and the property is a grep of the
+generated menu -- which `remote-tunnel` already receives, because it takes the
+built `omarchy` to read the shipped script. Same assertion, seconds instead of
+minutes, and it goes red on a PR without waiting for the expensive job.
+
+**Deviation 3 — `menu-verbs` gained a fix, not just a registration.** Step 4
+assumed registering `connect` was all that was needed there. Breaking the
+dispatch showed the check dying before its first echo: `verbs_of` ends in a
+grep pipeline, an unparseable `case` block matches nothing, and `set -e` took
+the check down with no output and an empty `nix log`. `|| true` on the
+pipeline plus a `floor` helper that names the CLI were added in the same PR,
+because a guard that aborts before it can explain itself is half a check. The
+general form is written into `tests/AGENTS.md`.
+
 ## Steps
 
 1. Rebase onto the post-#1017 `main` → verify `nixarchy-remote`,

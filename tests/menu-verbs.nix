@@ -92,6 +92,13 @@ pkgs.runCommand "nixarchy-menu-verbs"
     #
     # The character class allows spaces so `"" | stable | unstable)` parses;
     # the `tr -d ' '` below already removes them.
+    # `|| true` on the pipeline, paired with the floor below. Without it an
+    # unparseable dispatch makes `grep -oE` match nothing, exit 1, and take
+    # the whole check down under `set -e` BEFORE a single line is printed --
+    # so the reader gets "builder failed with exit code 1" and an empty
+    # `nix log`. That is a correct red for an unreadable reason, and it cost
+    # six rounds of diagnosis on #1016. Empty is now a value the floor can
+    # describe rather than a death.
     verbs_of() {
       sed -n -e '/case "''${1:-}" in/,/^ *esac/p' \
              -e '/case "$target" in/,/^ *esac/p' "$1" \
@@ -99,7 +106,7 @@ pkgs.runCommand "nixarchy-menu-verbs"
         | tr -d ' )"' \
         | tr '|' '\n' \
         | grep -vE '^\*?$' \
-        | sort -u
+        | sort -u || true
     }
 
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
@@ -116,20 +123,37 @@ pkgs.runCommand "nixarchy-menu-verbs"
     echo "nixarchy-remote accepts: $(tr '\n' ' ' < remote-verbs)"
     echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
 
+    # Said out loud rather than left to `test`. A bare `test` that fails
+    # prints NOTHING, so the whole check exits 1 with no reason given and the
+    # reader gets "builder failed with exit code 1" against a file about menu
+    # rows -- when the cause is a CLI whose dispatch stopped being parseable.
+    # That cost four rounds of diagnosis on #1016.
+    floor() { # floor <list> <minimum> <cli>
+      local n
+      n=$(wc -l < "$1")
+      [ "$n" -ge "$2" ] && return 0
+      echo "ERROR: $3 yielded $n verbs, expected at least $2." >&2
+      echo "  verbs_of reads a dispatch by sed-ing for one literal line." >&2
+      echo "  A command spelled any other way yields an EMPTY list, and scan" >&2
+      echo "  only reports a verb absent from a NON-empty one -- so every" >&2
+      echo "  menu row naming $3 would pass unchecked." >&2
+      exit 1
+    }
+
     # A floor. An empty verb list makes every row below pass, turning "the
     # dispatch stopped parsing" into a green check -- the exact shape of failure
     # this file exists to reject.
-    test "$(wc -l < vm-verbs)"  -ge 5
+    floor vm-verbs 5 nixarchy-vm
     # new, edit, list, where, copy, remove -- plus the three help spellings.
-    test "$(wc -l < secret-verbs)" -ge 6
+    floor secret-verbs 6 nixarchy-secret
     # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
     # NixOS meaning and stay out of the menu, so this floor is 2 and not 4.
-    test "$(wc -l < channel-verbs)" -ge 2
+    floor channel-verbs 2 nixarchy-channel
     # serve, --status, -h, --help. The floor is what turns "the dispatch
     # stopped parsing" from a green into a red: nixarchy-remote spells its
     # case block `"''${1:-}"` rather than `"''${1:-serve}"` precisely so
     # verbs_of can read it, and this is what notices if that is undone.
-    test "$(wc -l < remote-verbs)" -ge 3
+    floor remote-verbs 3 nixarchy-remote
 
     fail=0
     checked=0

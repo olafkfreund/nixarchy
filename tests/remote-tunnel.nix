@@ -49,7 +49,30 @@ pkgs.runCommand "nixarchy-remote-tunnel"
         }
         echo "  ok: EXIT, INT and TERM are all trapped"
 
-        echo "== self-test: an UNTRAPPED background child does survive"
+        echo "== the connect row is gated on a client existing"
+    # The script handles a missing client gracefully, so this is not about a
+    # crash -- it is about a menu row that is always there and usually cannot
+    # do anything. `checks.options` asserts every row names a command that
+    # exists, which nixarchy-remote does; nothing there looks at `when`.
+    # It lives in this check rather than in options because options costs
+    # ~8 minutes and 11.5 GB of RSS, and this is a grep of a file already in
+    # hand.
+    menu=${omarchy}/share/omarchy/default/omarchy/omarchy-menu.jsonc
+    row=$(grep -m1 '"setup\.remote\.connect"' "$menu") || {
+      echo "FAIL: no setup.remote.connect row in the generated menu."; exit 1; }
+    case "$row" in
+      *'"when"'*freerdp*) ;;
+      *)
+        echo "FAIL: the connect row has no \`when\` naming an RDP client."
+        echo "  Without it the row is offered on every machine, including the"
+        echo "  ones that have nothing to open a desktop with."
+        echo "  row: $row"
+        exit 1
+        ;;
+    esac
+    echo "  ok: gated on sdl-freerdp or xfreerdp"
+
+    echo "== self-test: an UNTRAPPED background child does survive"
         # Without this the check below cannot fail, and a teardown test that
         # passes whether or not there is a teardown is a green light.
         cat > leaky.sh <<'SH'

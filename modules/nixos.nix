@@ -814,12 +814,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    programs.nixarchyThemeEngine = {
-      enable = lib.mkDefault (cfg.user != null);
-      user = lib.mkDefault (cfg.user or "omarchy");
-      managePlugin = false;
-    };
-
     assertions = [
       {
         # removeAttrs ignores a name that is not there, so a typo would leave
@@ -932,6 +926,12 @@ in
     # flags a repeated top-level key, and it is right that they read better
     # together.
     programs = {
+      nixarchyThemeEngine = {
+        enable = lib.mkDefault (cfg.user != null);
+        user = lib.mkDefault (cfg.user or "omarchy");
+        managePlugin = false;
+      };
+
       # Omarchy's screen recording, which could not work as shipped.
       #
       # gpu-screen-recorder is in the omarchy wrapper's runtime PATH, and that

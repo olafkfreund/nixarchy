@@ -299,7 +299,7 @@ and which costs nothing measurable.
   test file is not justified by a headroom problem that has not yet bitten.
   That judgement belongs to the approver and this amendment does not assume it.
 
-## Amendment 2 — 2026-09-26 — status: draft, awaiting approval
+## Amendment 2 — 2026-09-26 — status: approved
 
 Proposed under step 6 of the approved plan, which requires an amendment naming
 exact files, transformation and coverage proof, and approval before any

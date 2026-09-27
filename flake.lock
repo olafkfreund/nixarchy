@@ -875,17 +875,17 @@
         "omarchroma": "omarchroma"
       },
       "locked": {
-        "lastModified": 1790526880,
-        "narHash": "sha256-PY0lokXPrPhXnOxcVkq3FnYwtqcXNV/u+HtRfG7H/MI=",
+        "lastModified": 1790527654,
+        "narHash": "sha256-p3CfJFjqWgROw0YjivXHr5uD5qIVITvWZMfLGokY9Yc=",
         "owner": "olafkfreund",
         "repo": "nixarchy-omatheme",
-        "rev": "e99ab505d9d10af1813acc3147371f994455d69c",
+        "rev": "42b64ed98e76a8c7582b2755b304e21a50ba58b1",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-omatheme",
-        "rev": "e99ab505d9d10af1813acc3147371f994455d69c",
+        "rev": "42b64ed98e76a8c7582b2755b304e21a50ba58b1",
         "type": "github"
       }
     },

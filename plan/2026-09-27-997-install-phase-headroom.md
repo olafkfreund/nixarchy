@@ -63,6 +63,38 @@ of `pkgs/omarchy/default.nix`):
 Three of those (1278, 2199, 705) are code with attached comment; only the
 comment moves.
 
+## Deviations, recorded as they happened
+
+**Deviation 1 — pure comment runs, not paragraphs; ten of them, 16 KB not
+27 KB.** The plan's ten largest *paragraphs* included code. The biggest,
+1134-1198, is comments **inside an embedded python program** — editing that
+is changing executable code, which the spec did not approve and which the
+whole verification strategy is designed to avoid. Re-measured on pure comment
+runs of four lines or more: 86 of them, 68,167 bytes, the top ten worth
+16,109. Headroom goes to 16,381 rather than the projected ~29,000, which
+still clears #948's 48-line addition several times over.
+
+**Deviation 2 — `diff -r` alone is not the test; it needs two
+normalisations.** The plan said compare the built outputs and expect an empty
+diff. It is not empty, and cannot be, for two reasons that are both
+necessary rather than defects:
+
+- the package embeds the **git rev**, so a dirty or different tree differs;
+- the package embeds **its own `$out` path** in seven files, which must move
+  when the derivation hash does.
+
+With those two normalised the diff is genuinely empty. Stated here because
+the naive version of this test fails and would read as a broken refactor:
+
+```sh
+cp -r "$before"/. a/; cp -r "$after"/. b/
+sed -i -e "s|<old-hash>|OUT|g" -e "s|<new-hash>|OUT|g" -e "s|<rev>|REV|g" …
+diff -r a b        # exit 0, 0 lines
+```
+
+This is root `AGENTS.md` §5's "you cannot compare closures across commits" in
+miniature, and the normalisation is what makes the comparison possible at all.
+
 ## Steps
 
 1. Capture the baseline output path — `nix build --no-link --print-out-paths

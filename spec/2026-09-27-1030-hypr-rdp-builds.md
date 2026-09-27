@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1030
 intent: intent/2026-09-27-1030-hypr-rdp-builds.md
 ---

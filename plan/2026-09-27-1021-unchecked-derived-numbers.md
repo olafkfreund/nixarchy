@@ -60,6 +60,29 @@ Before any change, in `README.md`:
 Unguarded, on a different line and a different quantity from the one that
 started this issue. This is the break that must go red by the end.
 
+## Deviations, recorded as they happened
+
+**Deviation 1 — there is no `checks.readme-counts`.** Step 7 and the test
+list both named `nix build .#checks.x86_64-linux.readme-counts`. It does not
+exist: the script is a direct `run:` step in `build.yml:704`, inside the
+`omarchy` job, and `omarchy.yml:408` calls `--fix` on a bump. So
+`readme-counts.sh --check` *is* the test, and the plan's extra build was a
+command I assumed rather than looked up.
+
+**Deviation 2 — the self-test flagged the three quantities this PR fixes, and
+that was correct.** The plan expected it to be silent on the repaired file.
+It was not, because `apps-total`, `apps-untouched` and `apps-indexed` still
+*write* more than they *read* — what changed is that siblings now check the
+extras. That is precisely the `$paired` case the design already had for
+`pacman-scripts`, so the three declare their partners. The self-test finding
+them unprompted on its first run is the evidence it detects the shape rather
+than being fitted to one example.
+
+**Deviation 3 — `shellcheck` reports SC2012 on line 165 and it predates this
+branch.** `git stash && shellcheck` exits non-zero on `HEAD` too. An
+info-level `ls | sort`, left alone rather than fixed in a pull request about
+something else (§10).
+
 ## Steps
 
 1. `.github/scripts/readme-counts.sh`: add `apps-untouched-of`, checking the

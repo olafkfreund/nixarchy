@@ -2091,11 +2091,9 @@ let
   devenvOff = defaultMachine;
 
   devenvOn = configBeside {
-    programs = {
-      nixarchy.services.devenv.enable = true;
-      zsh.enable = true;
-      fish.enable = true;
-    };
+    programs.nixarchy.services.devenv.enable = true;
+    programs.zsh.enable = true;
+    programs.fish.enable = true;
   };
 
   # The cache is a separate decision from the package. Someone who set

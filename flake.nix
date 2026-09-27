@@ -209,10 +209,11 @@
     # Speech into desktop actions (#774). An input on every machine while the
     # app is on none, which is not a contradiction: data/apps.nix is data, and
     # this module only does anything once somebody sets
-    # services.omarchy-voice.enable in their own flake. It is not in
-    # defaultPluginSet and must not be -- about a gigabyte with whisper and the
-    # Piper models, and the models are IN the package, so an off switch would
-    # not shrink the machine or the ISO.
+    # programs.nixarchy.voice.enable (programs.omarchy-voice upstream). It is
+    # not in defaultPluginSet and must not be -- 6.7 GiB with whisper and the
+    # Piper models, measured at this pin and the last (#1022), and the models
+    # are IN the package, so an off switch would not shrink the machine or the
+    # ISO.
     #
     # nixarchy overrides none of its defaults, deliberately. Desktop control,
     # the notification log and the wake word all start off upstream as of
@@ -224,7 +225,7 @@
     # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
     # a branch is not a version.
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/647f9e5ecf488aa96efb9f7d8abb5949b0a15bc4";
+      url = "github:olafkfreund/nixarchy-voice/7c51dfb0580b99ac3ba80650f97fc152011465cd";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";

@@ -37,7 +37,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **opt-in** | Super+Alt+Space, once you turn it on <!-- nixarchy.menu --> |
-| [Voice](#voice) | operate the desktop by talking to it | **opt-in**, coming | — |
+| [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
 
 ## Package manager
 
@@ -388,21 +388,34 @@ only to their labels.
 ## Voice
 
 [nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice) · [its own site](https://olafkfreund.github.io/nixarchy-voice/)
-· **opt-in, coming**
 
 **What it solves.** Operating the desktop by talking to it. It turns voice into
-actions, not only text; [dictation](ai) (Voxtype) stays for typing — turn that
-on with `dictation` and hold F9, or toggle with Super+Ctrl+X. It brings a
-daemon and a ~150 MB whisper model of its own, separate from the 6.7 GiB here.
+actions, not only text; [dictation](ai) (Voxtype) stays for typing. Turn that
+on with `dictation` and hold F9, or toggle it with Super+Ctrl+X.
 
 **What it does.** A wake word or toggle key is heard locally, whisper.cpp
-transcribes it on your CPU, a model you have signed in to answers, and a local
-voice speaks the reply.
+transcribes it on your CPU, a model you have signed in to decides, and a local
+voice speaks the reply. What you do often becomes an **action**: a named recipe
+you say ("run dev setup"), pick in **Voice ▸ Actions** in the menu, or run with
+`omarchy-voice action run`. The easy way to make one is to do the thing by voice,
+then say "make that an action called …". She reads the recipe back and saves it
+when you confirm. A **routine** is an action on a schedule, run as a systemd
+user timer, and its result arrives as a notification. Commands run in her own
+terminal session, never typed into yours, and a command that fails is reported
+as a failure.
 
-**Why it's opt-in.** It needs a model account, it sends what you ask about
-(including screen and clipboard content) to that model, and it is about 1 GiB
-with its speech models. So it is not in the default install. A **Set up voice**
-menu row installs it and asks which backend to use. Notification logging, the
-wake word and desktop control all start off.
+**Why it's opt-in.** It needs a model account, and it sends what you ask about
+(including screen and clipboard content) to that model. It is 6.7 GiB with the
+whisper and Piper models, which are in the package. Every step goes through a
+policy gate: anything risky waits for your yes, a step can be approved once for
+good, and a deny rule can never be approved. Notification logging, the wake word
+and desktop control all start off.
 
-*Not recorded yet. Speech is the one thing a silent GIF cannot show; pass C decides what it can show instead.*
+**Turning it on.** Find **Voice** in **Install ▸ Search** and apply it, or set
+`programs.nixarchy.voice.enable = true`.
+
+![Voice ▸ Actions: a saved action run from the menu, ending on git status in Oma's own terminal](../img/features/voice.gif)
+
+![The Voice ▸ Actions menu: an action made by asking, and a routine](../img/plugins/voice-actions.webp)
+
+With sound, speech included: the three-minute recording on [the plugin's own site](https://olafkfreund.github.io/nixarchy-voice/#see-it).

@@ -105,6 +105,28 @@ A capture of a real desktop shows whatever is on it.
   every demo object. Record the starting state first; `omarchy-theme-current`
   and `omarchy-theme-bg-current` print what to restore.
 
+## Driving the menu in a recording
+
+Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
+
+- **Never close the palette with a second `toggle`.** On an open palette,
+  `toggle()` starts Voxtype dictation when `secondTap` is `"voice"`
+  (`NixarchyMenu.qml:57`). The search box then transcribes the room, and Return
+  means *Finish*, not *Open*. Close it with `wtype -k Escape`, and only when
+  `hyprctl layers` shows `omarchy-menu`. `omarchy menu close` addresses
+  Omarchy's own menu and does nothing to this one.
+- **A submenu's row order is not stable.** Rows are ranked by use
+  (`~/.local/state/nixarchy-menu/usage.json`, keyed `md5("<provider>/<row id>")`).
+  The same submenu comes up differently after every take, so "Down ×3" hits
+  a different row each time.
+  - Editing that file does not help: the shell reads it once at start and
+    writes its in-memory copy back as it exits.
+  - Typing does not filter a submenu either, because the search is global.
+  - Read the rows instead: grab the label column, OCR it (scaled 2x, grey,
+    inverted), and press Down as many times as the wanted row needs.
+- **Anything that opens a microphone hears the room.** A take is typed, not
+  spoken, unless the room is known to be empty.
+
 ## ImageMagick 7 traps
 
 - **`info:` mid-command is an INPUT.** `magick x.png -format '%w ' info: -trim

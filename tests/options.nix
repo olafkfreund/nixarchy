@@ -105,9 +105,7 @@ let
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
   # distinction this file exists to assert.
   defaultMachine = configWith { };
-  omathemeMachine = configNamed "omatheme" {
-    programs.nixarchy.user = "someone";
-  };
+  omathemeMachine = configNamed "omatheme" { user = "someone"; };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
   # #888: the same machine with the nix-skills input turned off.

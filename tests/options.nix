@@ -18,6 +18,7 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
+        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         {
           programs.nixarchy = {
@@ -43,6 +44,7 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
+        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         { programs.nixarchy.enable = true; }
         extra
@@ -95,7 +97,9 @@ let
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
   # distinction this file exists to assert.
   defaultMachine = configWith { };
-  omathemeMachine = configNamed "omatheme" { programs.nixarchy.user = "someone"; };
+  omathemeMachine = configNamed "omatheme" {
+    programs.nixarchy.user = "someone";
+  };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
   # #888: the same machine with the nix-skills input turned off.
@@ -217,6 +221,7 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
+        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         {
           programs.nixarchy = {
@@ -226,6 +231,11 @@ let
         }
         {
           networking.hostName = hostName;
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
+          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -416,6 +426,7 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
+        inputs.home-manager.nixosModules.home-manager
         inputs.self.nixosModules.nixarchy
         {
           boot.loader.grub.device = "/dev/sda";
@@ -1925,6 +1936,7 @@ let
   adopter = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
     modules = [
+      inputs.home-manager.nixosModules.home-manager
       inputs.self.nixosModules.nixarchy
       {
         programs.nixarchy.enable = true;

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 997
 intent: intent/2026-09-27-997-install-phase-headroom.md
 ---

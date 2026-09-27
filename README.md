@@ -467,7 +467,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Apps ▸ Herdr** | your herdr sessions and their agents in the bar ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)), with `herdr`. **On by default**, Super+Alt+H on a new install; `programs.nixarchy.defaultPlugins.herdr = false` removes it |
 | **Install ▸ Apply changes** | the rebuild itself in a panel (`pkgs/rebuild-panel/`, shipped with nixarchy): it asks before it starts, then shows the elapsed time and the log tail while `nixarchy-rebuild` runs, and keeps the exit code and the log if it fails. Closing it does not stop the rebuild. **On by default**; its bar icon shows only while one is running — `programs.nixarchy.defaultPlugins.rebuild = false` removes it |
 | **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **Coming**, and it asks a human before it takes control — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
-| **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in, and coming** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
+| **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |

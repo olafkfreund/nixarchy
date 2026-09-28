@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1037
 intent: intent/2026-09-28-1037-apply-branch-guard.md
 ---

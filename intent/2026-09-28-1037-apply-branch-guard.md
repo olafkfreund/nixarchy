@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1037
 author: Olaf Freund
 ---

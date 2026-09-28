@@ -22,11 +22,16 @@ bug (AGENTS.md §2 — a bug found by hand is not fixed until something can).
   `eval hl.monitor({...})`, and that Lua form was confirmed by hand on
   Hyprland 0.56.0 on p620.
 - One unit test beside upstream's two (`:604`, `:611`), asserting that
-  `"Hyprland IPC error: unknown request"` is detected. `buildRustPackage` runs
-  `cargo test` by default, so **the package build is itself a cheap check**: a
-  bump that drops the matcher change while the test survives fails the build.
-  Upstream's negative test (`"monitor rule failed"` is not matched) is
-  untouched and still passes.
+  `"Hyprland IPC error: unknown request"` is detected. Upstream's negative test
+  (`"monitor rule failed"` is not matched) is untouched and still passes.
+- **Upstream's package sets `doCheck = false`** (`pkg/nix/package.nix`), so a
+  unit test alone would never run. The override turns checks back on, scoped
+  to the module the patch touches: `doCheck = true; checkFlags = [
+  "hyprland::tests" ];`. Those tests are pure string functions -- no socket, no
+  compositor -- so the sandbox cannot fail them for its own reasons, and the
+  rest of upstream's suite, which it chose not to run, stays unrun. With that,
+  **the package build is itself a cheap check**: a bump that drops the matcher
+  change while the test survives fails the build.
 
 The patch sits beside what it patches, as `pkgs/omarchy/901-*.patch` does.
 The untracked `pkgs/patches/` directory from before the intent was approved
@@ -40,7 +45,11 @@ moves there; nothing else uses that path.
 # Why: docs/internals/flake.md#the-rdp-daemon-re-exported-from-its-own-flake-so-t
 hypr-rdp =
   inputs.hypr-rdp.packages.${final.stdenv.hostPlatform.system}.hypr-rdp.overrideAttrs
-    (old: { patches = (old.patches or [ ]) ++ [ ./pkgs/hypr-rdp/lua-fallback-on-unknown-request.patch ]; });
+    (old: {
+      patches = (old.patches or [ ]) ++ [ ./pkgs/hypr-rdp/lua-fallback-on-unknown-request.patch ];
+      doCheck = true;
+      checkFlags = [ "hyprland::tests" ];
+    });
 ```
 
 The vendor hash does not move: upstream's package uses `cargoHash`, the patch
@@ -103,10 +112,10 @@ environment this bug needs, so the probe goes there rather than into a new VM:
 - **Upstream reword.** If Hyprland changes the error text again, the patch
   compiles and the fallback silently stops firing — which the session probe
   now catches, on the next nixpkgs bump.
-- **Cargo test in the sandbox.** Upstream's tests may need something the
-  sandbox lacks (a Wayland socket). If `cargo test` fails for a reason
-  unrelated to the patch, the plan says so and scopes the run to the
-  `hyprland::tests` module rather than disabling checks.
+- **Turning checks on costs a test build.** `cargo test` compiles a test
+  binary on top of the release build. Measured when the plan runs it, and
+  stated in the PR; if it is large, the scoped filter already keeps the run
+  itself trivial, and the build is lazy -- only machines that enable RDP pay.
 - **p620 and p510** pick this up at their next deploy; no host changes in
   this repository.
 

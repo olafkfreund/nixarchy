@@ -1037,6 +1037,38 @@ recording is **good**. The gate proves each beat happened and that the cut
 carries the caption it claims. Whether a viewer understands it is a person
 watching, and that is the last step of the plan rather than an afterthought.
 
+## The notification one: a file stands in for the toast, and pixels never confirmed it
+
+`checks.session` sends a critical notification, closes it over D-Bus the way
+an application does, and asserts its popup file moves from
+`~/.local/state/omarchy/notifications/` into `history/` (#1032). With the
+patch removed the file never moves. With the fix changed to delete rather
+than archive, nothing reaches `history/`. So the check pins both the fix and
+the decision that a sender's close archives, like dismiss and expire.
+
+It is **two waits, and it had to be.** The first version tested
+`test ! -e <popup> && test -e history/<popup>` in one wait, and that failed
+identically whether the toast stayed or left without reaching history. It
+was red for both breaks, and it could not say which break it had seen. Split,
+the patch-out run fails at "left the screen" and the delete variant fails at
+"reached history". **A compound assertion that goes red has proven only that
+one of its halves is false.**
+
+**The file is a stand-in for "the toast is on screen", and the stand-in was
+never confirmed by pixels.** The plan asked the red run to OCR the screen
+after the close and read the toast still there. Twice it could not. The
+first time, earlier blocks' toasts were on screen. The second time, after
+`dismissAll`, the rebuild panel from an earlier block covered most of it. The
+link rests on the code: `persistPopupFile` writes the file when the toast is
+inserted, and every path that takes a toast off the screen archives or
+deletes it. That is a good reason, but it is not a measurement. Anybody
+tempted to extend this should close the rebuild panel first, or run the
+probe before that block.
+
+Do Not Disturb is asserted off before anything is sent. Silenced
+notifications never get a popup, so without that assertion the block would
+pass by never showing anything.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

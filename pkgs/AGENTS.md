@@ -576,6 +576,29 @@ The whole block is the needle, so a reworded one fails this
 build.
 printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
 
+## A notification its sender closed never left the screen
+
+`CloseNotification` from the app that posted a notification only
+forgot the shell's live reference (#1032). The popup row stayed,
+and a critical one -- duration 0, so no timer -- stayed until
+someone dismissed it by hand; the id was forgotten too, so the
+sender could not replace it either. nixarchy-voice had already
+stopped closing its own cards to work around it.
+
+`902-notification-sender-close.patch` takes Quickshell's close
+reason and, for `CloseRequested` only, removes the popup through
+`removePopup`. So it is archived to history exactly as dismiss
+and expire are: `removePopup` already states that rule ("leaving
+the screen for any reason ... becomes the newest history entry"),
+and `removePopupsByOriginalId`, which deletes, is for replacement.
+`checks.session` sends a critical notification, closes it over
+D-Bus, and watches its popup file move into `history/`.
+
+CARRIED, and meant to be dropped, like the #901 patch above:
+AGENTS.md section 11 puts Omarchy fixes upstream, and this is
+carried at the owner's request until `omacom/omarchy` fixes the
+same handler. `--fuzz=0`, so a reworded handler fails this build.
+
 ## omarchy-shell finds its instance by config path, which moves here
 
 #963: omarchy-shell finds the running instance by CONFIG

@@ -2010,6 +2010,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/install-phase-budget.nix
+          install-phase-budget = import ./tests/install-phase-budget.nix {
+            omarchy = self.packages.${system}.omarchy;
+            pkgs = pkgsFor.${system};
+          };
+
           installer-ui = import ./tests/installer-ui.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};

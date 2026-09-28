@@ -402,6 +402,17 @@ approved work was refused for want of 2 KB (#997). Root `AGENTS.md` §7
 already says long blocks move here and leave a `# Why:` pointer; this is
 that, applied to the ten largest.
 
+**`checks.install-phase-budget` now says when to do it again.** It fails once
+the phase passes **123,000** bytes: 8,058 short of the 131,058 a value can
+have (`MAX_ARG_STRLEN` 131,072, less `installPhase=` and its NUL), so red
+means tidy up, not a broken build. It measures only this phase, and it
+retires itself, failing with a message that says so, if the package ever
+moves to `__structuredAttrs`, which takes the phase out of the environment
+and the limit with it. The budget is one line in
+`tests/install-phase-budget.nix`. The figure moves by 12 bytes with git
+state, because `nixarchyRev` is spliced in twice and a dirty tree adds
+`-dirty` to each.
+
 ## The web-app keybinding upstream breaks, and the one-word fix
 
 Upstream's bug, carried here because it breaks every web app keybinding

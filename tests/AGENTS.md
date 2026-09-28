@@ -168,6 +168,56 @@ So when you wire a new command in:
 Found writing `nixarchy-remote` (#1015), which was spelled `"${1:-serve}"`
 first.
 
+## A drvPath in a derivation's environment is a build INPUT, not a note
+
+`checks.hypr-rdp-builds` was written to prove a configuration **evaluates**,
+by forcing `config.system.build.toplevel.drvPath`. That is the natural way to
+write it and it is wrong:
+
+```nix
+pkgs.runCommand "…" { drv = cfg.system.build.toplevel.drvPath; } ''…''
+```
+
+A `.drv` path in the environment makes that derivation a dependency, so nix
+did not evaluate the closure -- it **built the whole system**. The `omarchy`
+job went from its usual 6-13 minutes to 45 and a timeout, twice, and the
+first read was "cold cache after a flake bump" because a pin had just moved.
+
+Measured before blaming it, which is the only reason it was found:
+
+| | step 9, "Build every check no other job claims" |
+|---|---|
+| three passing runs on `main` | 6m25s, 12m40s, 12m45s |
+| the branch adding this check | 54m, cut at the 45m cap |
+
+The fix is to force the evaluation and leave nothing for nix to chase:
+
+```nix
+{ proof = builtins.stringLength cfg.system.activationScripts.setupSecrets.text; }
+```
+
+An integer. Same catch -- 3 seconds green on a good pin, 2 seconds red on the
+stale one -- against 45 minutes and a timeout.
+
+**The rule:** when a check's subject is evaluation, put a *value* in the
+environment, never a store path. A path is an instruction to build. If you
+want proof the forcing still happens, assert on something derived from the
+value (a length, a count) so a silent change to the shape makes the check
+refuse rather than pass.
+
+**And a second trap found in the same hour:** `--override-input` does NOT
+reach a `builtins.getFlake` inside `--expr`. It applies to installables.
+
+```sh
+nix eval --override-input sops-nix <old> --expr 'builtins.getFlake …'  # ignored
+nix build --override-input sops-nix <old> .#checks.x86_64-linux.<name> # applies
+```
+
+The first form silently evaluates the *current* input, so an experiment that
+means to test an old revision tests the new one and reports whatever the new
+one does. Verified by printing `f.inputs.sops-nix.rev` and finding the new
+hash, after twice concluding something from it.
+
 ## A check that reads the config tree cannot see a closure that will not build
 
 `programs.nixarchy.services.hypr-rdp` was **unbuildable for twelve days**

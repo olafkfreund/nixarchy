@@ -69,25 +69,36 @@ let
 in
 pkgs.runCommand "nixarchy-hypr-rdp-builds"
   {
-    # Forcing this string is the assertion. It is computed while this
-    # derivation is instantiated, so a closure that cannot be described makes
-    # the check unbuildable rather than failing inside it.
-    drv = withRdp.config.system.build.toplevel.drvPath;
+    # A NUMBER, not a store path, and that distinction is the whole cost of
+    # this check.
+    #
+    # The first version passed `config.system.build.toplevel.drvPath`. A .drv
+    # path in a derivation's environment is a build INPUT, so nix did not
+    # evaluate the closure -- it BUILT the entire system. On CI that took the
+    # `omarchy` job from its usual 6-13 minutes to 45 and a timeout, twice
+    # (#1030). Measured against three passing runs of the same step before
+    # blaming it, because "my change made it slow" is a claim like any other.
+    #
+    # The bug this exists for throws during EVALUATION -- `buildGo125Module`
+    # is an alias that `throw`s -- so evaluating is sufficient and building
+    # buys nothing. Taking the length of the activation script forces the
+    # script, which forces sops-install-secrets, and leaves an integer in the
+    # environment with no store reference for nix to chase.
+    proof = builtins.stringLength withRdp.config.system.activationScripts.setupSecrets.text;
   }
   ''
     set -o pipefail
-    case "$drv" in
-      /nix/store/*-nixos-system-*.drv) ;;
-      *)
-        echo "FAIL: the toplevel drvPath does not look like a system derivation:"
-        echo "  $drv"
-        exit 1
-        ;;
-    esac
-    echo "a host with hypr-rdp enabled describes a closure:"
-    echo "  $drv"
+    if [ "''${proof:-0}" -lt 32 ]; then
+      echo "FAIL: the secrets activation script is $proof characters."
+      echo "  That is too short to be real, so this check has stopped"
+      echo "  forcing what it was written to force."
+      exit 1
+    fi
+    echo "a host with hypr-rdp enabled evaluates: its secrets activation"
+    echo "script is $proof characters, which required sops-install-secrets."
     echo
-    echo "This proves the configuration evaluates. It does NOT prove the"
-    echo "daemon runs -- see #1031 and #1033, and tests/AGENTS.md."
+    echo "This proves the configuration EVALUATES. It does not build it, and"
+    echo "it does not prove the daemon runs -- see #1031 and #1033, and"
+    echo "tests/AGENTS.md."
     touch $out
   ''

@@ -27,6 +27,30 @@ Self-contained.
 the real bug on the real tree — but only until the pin moves. Run it first,
 keep the output, then fix.
 
+## Deviation, recorded as it happened
+
+**The check forces `setupSecrets.text`, not `toplevel.drvPath`, and the
+difference is 45 minutes.** Steps 2 and 5 said to force the drvPath. Doing so
+put a `.drv` path in the derivation's environment, which is a **build input**
+-- so nix built the entire system rather than evaluating it, and `omarchy`
+timed out at its 45-minute cap twice.
+
+Measured against three passing runs of the same step (6m25s, 12m40s, 12m45s)
+before attributing it, because the first reading was "cold cache after the
+flake bump" and a pin had just moved.
+
+Forcing `builtins.stringLength
+config.system.activationScripts.setupSecrets.text` leaves an integer in the
+environment, forces the same evaluation, and keeps every property the spec
+claimed: **3 seconds green on the new pin, 2 seconds red on the stale one**,
+with the same Go error.
+
+The red was re-proven with `--override-input` on an *installable*, after
+discovering that the same flag is silently ignored inside
+`--expr`/`builtins.getFlake` -- two earlier "it does not throw" results were
+therefore measuring the new input and meant nothing. Both traps are written
+into `tests/AGENTS.md`.
+
 ## Steps
 
 1. Capture the current failure: evaluate the fixture's drvPath on the

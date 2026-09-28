@@ -1069,6 +1069,45 @@ Do Not Disturb is asserted off before anything is sent. Silenced
 notifications never get a popup, so without that assertion the block would
 pass by never showing anything.
 
+## The branch guard: every caller run for real, and the one thing only root can show
+
+`checks.branch-guard` (#1037) runs the helper through every rule against
+throwaway repos with a local bare origin: on main, a feature branch, detached
+at and away from `origin/main`, an `origin/HEAD` of `master`, an unset
+`origin/HEAD`, no remote, not a repo, a `#attr` suffix, the override. Then it
+runs the **real** `nixarchy-apply`, `omarchy-update` and `autoUpdate` unit
+script against a checkout on a feature branch. Each refusal is proven by an
+observable, not an exit code: apply leaves the checkout clean and never
+reaches `nh` (with a positive control on main that does), and `autoUpdate`
+leaves `flake.lock` alone and writes the doctor's note. `checks.session`
+covers the `--detach` path the sandbox can't run: the parent starts the unit,
+the unit refuses where the panel can see it, and `ALLOW_BRANCH_DEPLOY=1`
+reaches it.
+
+Three things it cost, all general:
+
+- **An assertion about something that cannot happen here is a green light.**
+  "`autoUpdate` leaves the lock untouched" passed with the guard deleted,
+  because `nix` isn't in the sandbox and the update failed before it could
+  move anything. It took a stub `nix` that edits the lock (the one
+  `tests/options.nix` uses) to make that line able to fail. Before trusting
+  a "nothing changed" assertion, ask whether anything *could* have changed.
+- **Where a package's tools reach PATH is the property, not its closure.**
+  omarchy's `runtimeDeps` are `passthru`, and its `bin/` is unwrapped, so a
+  helper added there is absent from the package closure by design. It
+  reaches a machine through the module's `systemPackages`, and that is what
+  the check reads, passed in as a yes/no value.
+- **`msg=$(cmd); rc=$?` dies under the builder's errexit** the first time
+  `cmd` fails on purpose, and the check stops after its last green line with
+  nothing said. `msg=$(cmd) && rc=0 || rc=$?`.
+
+**What only a real machine showed:** a checkout owned by one user and read
+by another. The sandbox has one uid. On p620, root with `SUDO_*` stripped
+(as under systemd) gets `detected dubious ownership` from plain `git` on a
+user-owned clone outside the system's `safe.directory`, and the helper's
+`-c safe.directory` answers correctly there. `/etc/nixos` itself is trusted
+system-wide by `modules/nixos.nix`, so the managed path never depended on it.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

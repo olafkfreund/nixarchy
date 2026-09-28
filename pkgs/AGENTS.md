@@ -338,6 +338,48 @@ tag's unpatched lock, and against the old tag's as a control. Here the new one
 succeeded and the old one failed with the error above, which is what a fix
 being unnecessary looks like.
 
+<a id="a-rebuild-built-whatever-branch-the-checkout-was-on"></a>
+## A rebuild built whatever branch the checkout was on (#1037)
+
+`nixarchy-apply`, `omarchy-update` and `autoUpdate` all build
+`programs.nixarchy.flake`, whatever branch it has checked out. On a machine
+where coding agents share the config checkout, that is how an unmerged,
+unpushed branch was switched onto a live desktop, twice
+(olafkfreund/nixos_config#2052). `branch-guard.nix` is the one answer all
+three ask first, so they cannot disagree:
+
+- the default branch is `refs/remotes/origin/HEAD`, else `main`. It is read
+  from local refs only, because apply runs offline;
+- it proceeds on that branch, or on a HEAD detached exactly at
+  `origin/<default>` (nixos_config#2056's rule, so both tools give one
+  checkout the same answer);
+- it proceeds with no remote, outside a git checkout, or for a flake
+  reference that isn't a directory;
+- `ALLOW_BRANCH_DEPLOY=1` is the override, the same name nixos_config uses.
+  **Not** `apply --yes`: the rebuild panel runs `apply --detach --yes` every
+  time, so `--yes` would pass straight through.
+
+**Where each caller asks, and why there:**
+
+- `apply`: **after** its read-only modes (`--status`, `--json`, the journal
+  follow), which must still answer on a branch, and **before** the first
+  write, so a refusal leaves the checkout untouched. Not in the `--detach`
+  parent: the panel starts that and ignores its output, so a refusal there
+  would start no unit and the click would do nothing (#1033's defect). The
+  unit refuses instead, which the panel shows as a failed rebuild, and
+  `ALLOW_BRANCH_DEPLOY` is forwarded into it.
+- `omarchy-update`: before the #356 writability prompt, so it never offers
+  to `chown` a checkout it is about to refuse.
+- `autoUpdate`: before `nix flake update`, so a refused run doesn't move the
+  lock on somebody's branch either. It calls the helper **by store path**,
+  because `tests/options.nix` runs that script under a `PATH` of its own.
+
+**`-c safe.directory` is belt and braces, not the thing that makes root
+work.** `modules/nixos.nix` already trusts `programs.nixarchy.flake`
+system-wide, so root's git reads the user-owned `/etc/nixos`. The `-c`
+covers a `NIXARCHY_FLAKE` pointed somewhere the system config doesn't name,
+and reaches only the helper's own git calls.
+
 ## Tests
 
 | check | covers |

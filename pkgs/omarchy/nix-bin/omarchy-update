@@ -62,6 +62,10 @@ if [ ! -d "$flake" ]; then
   exit 1
 fi
 
+# A checkout on a branch nobody chose to deploy is refused before anything is
+# offered or touched (#1037); ALLOW_BRANCH_DEPLOY=1 says it was chosen.
+nixarchy-branch-guard "$flake"
+
 # Machines installed before this was fixed have a root-owned /etc/nixos and
 # meet this on their very first update (#356). The remedy is one chown and it
 # is known to work -- so offer to run it rather than printing it and exiting,

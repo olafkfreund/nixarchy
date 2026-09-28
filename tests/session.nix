@@ -582,6 +582,42 @@ pkgs.testers.runNixOSTest {
     print("a detached apply runs as nixarchy-rebuild, keeps its result, and logs to the journal")
     machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
     machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+
+    # #1037: a checkout on a branch nobody chose. The --detach parent must NOT
+    # refuse -- the panel ignores its output, so a refusal there is a click
+    # that does nothing -- and the unit must, where the panel can see it.
+    g = "${pkgs.git}/bin/git"
+    machine.succeed(as_user(
+        "rm -rf /tmp/bg /tmp/bg.origin && " + g + " init -q --bare -b main /tmp/bg.origin"
+        " && " + g + " clone -q /tmp/bg.origin /tmp/bg 2>/dev/null && cd /tmp/bg"
+        " && " + g + " symbolic-ref HEAD refs/heads/main && echo {} > flake.nix"
+        " && " + g + " add -A && " + g + " -c user.email=t@t -c user.name=t commit -qm base"
+        " && " + g + " push -q origin main && " + g + " remote set-head origin -a"
+        " && " + g + " switch -q -c agent/unmerged"))
+    def detached_log(env):
+        machine.succeed(as_user(env + " NIXARCHY_FLAKE=/tmp/bg nixarchy-apply --detach --yes"))
+        machine.wait_until_succeeds(
+            as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),
+            timeout=60)
+        inv = machine.succeed(
+            as_user("systemctl --user show -p InvocationID --value nixarchy-rebuild")).strip()
+        # --invocation, as nixarchy-apply's own log mode scopes it: this run only.
+        log = machine.succeed(as_user(
+            "journalctl --user -u nixarchy-rebuild --invocation=" + inv + " --no-pager -o cat"))
+        # An empty log would let the override case below pass by saying nothing.
+        assert log.strip(), "the detached unit's journal for " + inv + " is empty"
+        machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
+        machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
+        return log
+    log = detached_log("")
+    assert "refusing to rebuild from 'agent/unmerged'" in log, (
+        "a detached rebuild of a feature branch did not refuse in the unit:\n" + log)
+    print("a detached rebuild of a feature branch fails in the unit, with the refusal in its log")
+    log = detached_log("ALLOW_BRANCH_DEPLOY=1")
+    assert "refusing to rebuild" not in log, (
+        "ALLOW_BRANCH_DEPLOY=1 did not reach the detached unit:\n" + log)
+    print("ALLOW_BRANCH_DEPLOY=1 reaches the detached unit")
+
     machine.succeed(as_user("systemd-run --user --unit=nixarchy-rebuild --collect sleep 300"))
     busy = machine.execute(as_user("NIXARCHY_FLAKE=/nonexistent nixarchy-apply --detach --yes"))[0]
     assert busy == 3, f"a detach while nixarchy-rebuild runs exited {busy}, want 3"

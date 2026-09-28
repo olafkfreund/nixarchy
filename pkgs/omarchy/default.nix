@@ -121,6 +121,7 @@
   # `nixos-rebuild`, which every NixOS machine already has on PATH, nh is not
   # guaranteed to be installed, so it has to be carried here.
   nh,
+  callPackage,
 }:
 let
   # Everything the 438 scripts in bin/ invoke. Kept explicit rather than
@@ -233,6 +234,8 @@ let
     networkmanager
     fastfetch
     nh
+    # omarchy-update refuses a checkout on a branch nobody chose (#1037)
+    (callPackage ../branch-guard.nix { })
     btop
     ripgrep
     fd

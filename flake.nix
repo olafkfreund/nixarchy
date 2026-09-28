@@ -1078,6 +1078,7 @@
           # hostname from /proc and the recipient from /etc/ssh, and a build
           # sandbox has neither.
           nixarchy-sops-policy-add = pkgsFor.${system}.callPackage ./pkgs/sops-policy-add.nix { };
+          nixarchy-branch-guard = pkgsFor.${system}.callPackage ./pkgs/branch-guard.nix { };
 
           verify = pkgsFor.${system}.nixarchy-verify;
 
@@ -1999,6 +2000,12 @@
 
           # Why: tests/apply-staging.nix
           apply-staging = import ./tests/apply-staging.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
+          # Why: tests/branch-guard.nix
+          branch-guard = import ./tests/branch-guard.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
           };

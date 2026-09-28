@@ -234,7 +234,7 @@
     # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
     # a branch is not a version.
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/7c51dfb0580b99ac3ba80650f97fc152011465cd";
+      url = "github:olafkfreund/nixarchy-voice/37ceb43ca66c1c7dca97e4dba1f6be35fcef1766";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";

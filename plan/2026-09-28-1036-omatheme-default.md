@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1036
 spec: spec/2026-09-28-1036-omatheme-default.md
 ---

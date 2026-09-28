@@ -1,0 +1,64 @@
+Fire the Lua fallback when Hyprland answers "unknown request"
+
+hypr-rdp creates a headless output and then sets its resolution with
+Hyprland's legacy `keyword` IPC request. Hyprland 0.56 dropped that request
+for the Lua config, so the daemon dies at startup:
+
+    failed to initialize display capture
+      0: failed to set headless output resolution
+      1: Hyprland IPC error: unknown request
+
+keyword_monitor() already has the right fallback -- it translates the rule to
+`hl.monitor({...})` and sends it through `eval` -- and it never fires, because
+is_non_legacy_parser_error() matches only the string "non-legacy parsers"
+while 0.56 answers "unknown request".
+
+Verified on Hyprland 0.56.0 that the fallback itself is correct:
+
+    $ hyprctl keyword monitor "HEADLESS-1,1920x1080@60,auto,1"
+    unknown request
+    $ hyprctl eval 'hl.monitor({ output = "HEADLESS-2", mode = "1920x1080@60", position = "auto", scale = 1 })'
+    ok
+      HEADLESS-2  1920x1080@60.0  scale=1
+
+which is exactly what monitor_rule_to_lua() generates. So this widens the
+matcher, adds a test beside upstream's two that pins the new message, and
+changes nothing else.
+
+Carried here rather than fixed upstream, which is the wrong way round and is
+recorded as such: v0.1.6 is the newest tag and the narrow matcher is still on
+upstream main. Drop this patch as soon as a release carries the fix --
+olafkfreund/nixarchy#1031 tracks it.
+
+--- a/src/hyprland.rs
++++ b/src/hyprland.rs
+@@ -250,7 +250,14 @@
+ fn is_non_legacy_parser_error(error: &anyhow::Error) -> bool {
+     error
+         .chain()
+-        .any(|cause| cause.to_string().contains("non-legacy parsers"))
++        .any(|cause| {
++            let text = cause.to_string();
++            // Hyprland 0.56 dropped the legacy `keyword` request entirely and
++            // answers "unknown request"; older versions refused it with a
++            // message naming non-legacy parsers. Both mean the same thing:
++            // send the Lua form instead.
++            text.contains("non-legacy parsers") || text.contains("unknown request")
++        })
+ }
+ 
+ fn monitor_rule_to_lua(rule: &str) -> Result<String> {
+@@ -603,6 +610,13 @@
+ 
+         assert!(is_non_legacy_parser_error(&err));
+     }
++
++    #[test]
++    fn non_legacy_parser_error_detection_matches_unknown_request() {
++        let err = anyhow!("Hyprland IPC error: unknown request");
++
++        assert!(is_non_legacy_parser_error(&err));
++    }
+ 
+     #[test]
+     fn non_legacy_parser_error_detection_ignores_other_errors() {

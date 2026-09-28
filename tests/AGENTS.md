@@ -256,9 +256,10 @@ the closure.** A package that cannot be built -- or, as here, cannot be
 it. It proves the closure is describable. It says nothing about the daemon
 running, and two live defects sit past it:
 
-- **#1031** -- hypr-rdp cannot create its headless output on Hyprland 0.56,
-  because it sets the resolution with the legacy `keyword` IPC request that
-  0.56 dropped. Needs a live compositor.
+- **#1031** -- hypr-rdp could not create its headless output on Hyprland
+  0.56, because it set the resolution with the legacy `keyword` IPC request
+  that 0.56 dropped. Fixed by a carried patch (`pkgs/hypr-rdp/`), and now
+  seen by `checks.session`, which starts the daemon -- see below.
 - **#1033** -- enabling remote desktop takes effect only at next login: the
   unit is `WantedBy=graphical-session.target`, which is evaluated when the
   target starts, and the menu row lives in the tree `OMARCHY_PATH` pointed at
@@ -285,6 +286,22 @@ What IS covered, and it is more than it sounds:
   encrypt, or the check cannot show that enrolling did anything.
 - `checks.options` asserts `programs.nixarchy.services.hypr-rdp` in both
   states, which is where the off state gets defended.
+- `checks.session` **starts the daemon** (#1031) with a real sops secret
+  generated at build time, waits for its `Display prepared` line -- logged
+  only after it has set its headless output's mode -- and asserts its journal
+  has no `unknown request` and the unit is active. It first asserts that the
+  VM's Hyprland answers `unknown request` to `keyword`: the fix is a fallback,
+  and a compositor that still accepted `keyword` would let the probe pass
+  without ever taking it.
+
+  **The first version asserted the output's size and was blind.** Hyprland
+  makes a headless output 1920x1080, which is also the daemon's default, so
+  "a `hypr-rdp-N` output at 1920x1080" held with the patch removed and the
+  daemon crash-looping. A journal assertion beside it was blind too: `-o cat`
+  drops the identifier, and the `grep hypr-rdp` that followed discarded every
+  line it was meant to find. Only `is-active` went red. Both were caught by
+  §1's break, not by review -- **a configured value that equals the
+  platform's default cannot vary with the thing that sets it.**
 - the unit's own `ExecStartPre` refuses an empty password at runtime, and
   `tests/options.nix` drives that guard against both a good and an empty
   rendered config.

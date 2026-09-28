@@ -884,6 +884,27 @@ carries hypr-rdp, delete the input and this attribute, and every
 Lazy, so a machine that never enables RDP never builds it. Being in
 the overlay is not being on the system.
 
+**It carries one patch, and that is the wrong way round** (#1031).
+Hyprland 0.56 dropped the legacy `keyword` IPC request and answers
+`unknown request`. hypr-rdp already falls back to `eval hl.monitor({...})`
+for exactly this, but its guard, `is_non_legacy_parser_error()`, matched
+only the older refusal (`non-legacy parsers`), so the daemon created its
+headless output, failed to set its mode, and exited.
+`pkgs/hypr-rdp/lua-fallback-on-unknown-request.patch` widens that match
+and adds a test that pins the new message.
+
+The override also sets `doCheck = true` with `checkFlags = [
+"hyprland::tests" ]`. Upstream's package sets `doCheck = false`, so without
+this the patch's test would compile into nothing and a bump that dropped
+the fix would stay green. The filter keeps the run to the module the patch
+touches (15 tests, about a second), and leaves unrun the rest of the
+suite, which upstream chose not to run.
+
+**Retire it** when a hypr-rdp tag carries the wider matcher. Nothing has to
+be remembered: on that bump the patch stops applying and the build fails.
+Delete the file and the `overrideAttrs` together. When the input itself
+goes (see above), the patch goes with it.
+
 <a id="nixpkgs-is-on-0-3-0-whose-session-lock-aborts-on-d"></a>
 ### nixpkgs is on 0.3.0, whose session lock aborts on DPMS
 

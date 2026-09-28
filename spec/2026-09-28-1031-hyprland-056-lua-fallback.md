@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1031
 intent: intent/2026-09-28-1031-hyprland-056-lua-fallback.md
 ---

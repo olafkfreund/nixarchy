@@ -60,7 +60,7 @@ must print 0 (§6). Repeated before steps 2, 3, 6 and 7.
    exactly as in the spec, `# Why:` pointer kept. `nix fmt`, then read
    `git diff --stat` (the nixpkgs-fmt hook, §5).
    → verify: `nix build .#hypr-rdp --print-build-logs` green, and the log shows
-   `hyprland::tests` running with 3 passed. Record the build time with tests
+   `hyprland::tests` running with 15 passed (measured: 15 passed, 667 filtered out, 120 s). Record the build time with tests
    on, for the PR.
 
 3. **Unit test red (§1).** Commit steps 1–2 as a baseline first (the memory:
@@ -102,6 +102,41 @@ must print 0 (§6). Repeated before steps 2, 3, 6 and 7.
      measurement in a one-line comment -- not a guess.
    → verify: build the check (step 6's procedure), green.
 
+   **Deviations found while implementing** (recorded with the code):
+   - `user = "omarchy"` is set on the service, not left at the default. The
+     module asserts `user != null`, its default is `programs.nixarchy.user`,
+     and the session VM leaves that null. It's scoped to the service because
+     setting `programs.nixarchy.user` has side effects of its own (the
+     `input` group).
+   - sops-nix types `age.keyFile` as `pathNotInStore`, so a
+     `sessionAgeKey` activation script copies the key to
+     `/var/lib/sops-nix/key.txt`, and `setupSecrets.deps` names it.
+     `sops.validateSopsFiles = false`, because validation reads the file at
+     evaluation time. That was import-from-derivation on a generated file,
+     observed as the fixture building during `nix eval`.
+   - **(b) and (c) were blind, and step 6 caught it.** As first written, (b)
+     matched a `hypr-rdp`-prefixed output at 1920x1080, and (c) grepped
+     `journalctl -o cat` for `hypr-rdp` and then looked for `unknown
+     request`. With the patch removed, both passed and only (d) went red.
+     Hyprland makes a headless output 1920x1080, which is the daemon's
+     default, so the size cannot vary with the bug. `-o cat` drops the
+     identifier, so the grep discarded every error line. The claim written
+     here, that the daemon removes its output on exit so (b) "cannot pass by
+     accident", was never checked, and it was wrong.
+     **Retargeted:** (b) waits for the daemon's `Display prepared` line,
+     logged only after the mode is set. (c) reads `journalctl -b -t hypr-rdp`.
+     Measured in both runs' logs: `Display prepared` 1 (green) against 0
+     (red), and `unknown request` 0 against 20.
+
+   - The (b) timeout is 60 s, not "measured × 3". Measured on the first
+     green run: the output was up 0.67 s after the unit started and 74 s
+     before the probe reached it, so the wait took 0.07 s. Three times a
+     sub-second figure is about 2 s, which a loaded runner would break (§6:
+     timeouts inside the guest don't scale with load).
+   - The decision point did **not** apply. The daemon came fully up in the VM
+     (wlr-screencopy capture doesn't start until a client connects), so (d)
+     stays.
+
    **Decision point.** The daemon may fail in the VM *after* setting the mode
    for a reason unrelated to this bug (no GPU for capture, pipewire). If so,
    (d) is dropped, (b) and (c) carry the probe, and this plan is updated **in
@@ -140,7 +175,7 @@ must print 0 (§6). Repeated before steps 2, 3, 6 and 7.
 
 | command | expected |
 |---|---|
-| `nix build .#hypr-rdp` | green; `hyprland::tests` 3 passed |
+| `nix build .#hypr-rdp` | green; `hyprland::tests` 15 passed |
 | same, matcher hunk removed | red in `cargo test`, naming the new test |
 | `nix build '<session drv>^*'` | green; probe (a)–(c) pass |
 | same, patch out of the overlay | red on (b); journal shows `unknown request` |

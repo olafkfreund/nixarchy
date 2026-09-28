@@ -79,6 +79,26 @@ let
           --remove-rpath $out/bin/loader-probe
         patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1
       '';
+
+  # A real sops secret for the hypr-rdp probe (#1031), generated here as
+  # tests/secret-enroll.nix does, so no private key -- even a test one -- is
+  # committed. It protects nothing; the probe never connects.
+  rdpFixture =
+    pkgs.runCommand "session-rdp-fixture"
+      {
+        nativeBuildInputs = [
+          pkgs.age
+          pkgs.sops
+        ];
+      }
+      ''
+        export HOME=$TMPDIR
+        mkdir -p $out
+        age-keygen -o $out/age.key 2>/dev/null
+        printf 'hypr-rdp-password: %s\n' "$(head -c 18 /dev/urandom | base64)" > plain.yaml
+        sops --encrypt --age "$(age-keygen -y $out/age.key)" \
+          --input-type yaml --output-type yaml plain.yaml > $out/rdp.yaml
+      '';
 in
 # Drives a real Omarchy session and reports what it logged.
 #
@@ -119,7 +139,22 @@ pkgs.testers.runNixOSTest {
         # in vm/configuration.nix builds a full flake there; this test only
         # needs the copy to have a destination.
         flake = "/etc/nixos";
+        services.hypr-rdp = {
+          enable = true;
+          user = "omarchy";
+          passwordSecret = "hypr-rdp-password";
+        };
       };
+    };
+
+    sops = {
+      # sops-nix refuses a key file in the store (pathNotInStore), so
+      # sessionAgeKey below copies it out before setupSecrets decrypts.
+      age.keyFile = "/var/lib/sops-nix/key.txt";
+      # Validation reads the file at evaluation time: import-from-derivation on
+      # a file this test just generated, and nothing a user's file would teach.
+      validateSopsFiles = false;
+      secrets.hypr-rdp-password.sopsFile = "${rdpFixture}/rdp.yaml";
     };
 
     # Log in the way a user actually does: through SDDM's greeter. An earlier
@@ -179,26 +214,33 @@ pkgs.testers.runNixOSTest {
     # to install what is already there.
     environment.systemPackages = [ pkgs.vim ];
 
-    system.activationScripts.testFlakeDir = ''
-      mkdir -p /etc/nixos
-      chmod 0777 /etc/nixos
-    '';
+    system.activationScripts = {
+      testFlakeDir = ''
+        mkdir -p /etc/nixos
+        chmod 0777 /etc/nixos
+      '';
 
-    # The theme's own files turned back into a repository to clone from, the
-    # same way tests/plugin.nix serves its plugins: fetchgit hands over a plain
-    # directory with no .git, and a test machine has no network.
-    system.activationScripts.themeRepo = ''
-      if [ ! -d /srv/lumon/.git ]; then
-        mkdir -p /srv/lumon
-        cp -r --no-preserve=mode,ownership ${lumonTheme}/. /srv/lumon/
-        cd /srv/lumon
-        export HOME=/root
-        ${pkgs.git}/bin/git init -q -b main
-        ${pkgs.git}/bin/git -c user.email=t@t -c user.name=t add -A
-        ${pkgs.git}/bin/git -c user.email=t@t -c user.name=t commit -q -m lumon
-      fi
-      chmod -R a+rX /srv/lumon
-    '';
+      # The theme's own files turned back into a repository to clone from, the
+      # same way tests/plugin.nix serves its plugins: fetchgit hands over a plain
+      # directory with no .git, and a test machine has no network.
+      themeRepo = ''
+        if [ ! -d /srv/lumon/.git ]; then
+          mkdir -p /srv/lumon
+          cp -r --no-preserve=mode,ownership ${lumonTheme}/. /srv/lumon/
+          cd /srv/lumon
+          export HOME=/root
+          ${pkgs.git}/bin/git init -q -b main
+          ${pkgs.git}/bin/git -c user.email=t@t -c user.name=t add -A
+          ${pkgs.git}/bin/git -c user.email=t@t -c user.name=t commit -q -m lumon
+        fi
+        chmod -R a+rX /srv/lumon
+      '';
+
+      sessionAgeKey = pkgs.lib.stringAfter [ "specialfs" ] ''
+        install -D -m 0400 ${rdpFixture}/age.key /var/lib/sops-nix/key.txt
+      '';
+      setupSecrets.deps = [ "sessionAgeKey" ];
+    };
   };
 
   # Reading the greeter means reading pixels: SDDM's Qt greeter puts nothing
@@ -492,6 +534,36 @@ pkgs.testers.runNixOSTest {
     machine.send_chars("omarchy\n")
     machine.wait_until_succeeds("test \"$(stat -c %U /tmp/unit-pkexec-ok)\" = root", timeout=60)
     print("pkexec from a user unit reaches the Omarchy polkit dialog")
+
+    # ---- hypr-rdp brings its desktop up (#1031) ----------------------------
+    # On Hyprland 0.56 the daemon created its headless output, failed to set
+    # its mode through the removed `keyword` request, and exited, restarting
+    # until systemd gave up. pkgs/hypr-rdp/ carries the fix; this sees it.
+    #
+    # Not the output's size: Hyprland makes a headless output 1920x1080, the
+    # daemon's default, so that stays true with the bug fully present -- it
+    # passed with the patch removed. "Display prepared" is logged only after
+    # the mode is set (src/capture/wayland/output.rs:89, then capture setup).
+    def on_desktop(cmd):
+        return ("su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+                " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1) "
+                + cmd + "'")
+    # The variable: without a Hyprland that refuses `keyword`, everything
+    # below passes without ever taking the Lua fallback.
+    _, refused = machine.execute(on_desktop("hyprctl keyword monitor HEADLESS-9,640x480@60,auto,1"))
+    assert "unknown request" in refused, (
+        "this Hyprland still accepts the legacy keyword request (" + refused.strip()
+        + "), so the hypr-rdp probe no longer exercises the fallback it is for")
+    # -t, not -o cat and a grep for the name: -o cat drops the identifier, and
+    # the grep then threw away every line it was looking for.
+    rdp_log = "journalctl -b -t hypr-rdp --no-pager -o cat"
+    # Measured: logged 0.7 s after the unit starts, ~75 s before this line
+    # runs. 60 s is headroom for a loaded runner, not a guess at the daemon.
+    machine.wait_until_succeeds(rdp_log + " | grep -q 'Display prepared'", timeout=60)
+    journal = machine.succeed(rdp_log)
+    assert "unknown request" not in journal, journal
+    machine.succeed(on_desktop("systemctl --user is-active hypr-rdp"))
+    print("hypr-rdp set its headless output's mode and is serving on Hyprland 0.56")
 
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
     # Not a real switch: this VM is offline and cannot evaluate its flake. A

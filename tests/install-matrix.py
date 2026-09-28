@@ -196,14 +196,16 @@ NONET = os.environ.get("MATRIX_NONET") == "1"
 # The disk controller was the one variable no install test had ever varied --
 # the same shape of hole as every test installing as `omarchy`, the one
 # username that cannot diverge from the baked reference closure.
-# REMOTE DESKTOP IS NOT REACHED BY ANY CHECK IN THIS REPO, and it is written
+# AN RDP CONNECTION IS NOT REACHED BY ANY CHECK IN THIS REPO, and it is written
 # here rather than left implicit. `checks.session` boots one desktop; an RDP
 # connection needs two machines -- one with a logged-in Hyprland session and
 # one opening an SSH tunnel to it. Nothing in the matrix below boots a pair.
 #
 # What IS covered: checks.secret-enroll proves the policy append and per-host
 # isolation, checks.options asserts the module in both states, and the unit's
-# own ExecStartPre refuses an empty password at runtime. What is not covered
+# own ExecStartPre refuses an empty password at runtime. checks.session starts
+# the daemon and asserts it sets its headless output's mode and keeps serving,
+# on a Hyprland that refuses the legacy keyword request (#1031). What is not covered
 # is a client connecting and seeing a desktop, and that is a step in
 # pkgs/verify.sh for a human. A documented hole gets tested by a person; an
 # undocumented one gets tested by a user (#1015, #1016).

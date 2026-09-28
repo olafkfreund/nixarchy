@@ -781,7 +781,15 @@
         };
 
         # Why: docs/internals/flake.md#the-rdp-daemon-re-exported-from-its-own-flake-so-t
-        hypr-rdp = inputs.hypr-rdp.packages.${final.stdenv.hostPlatform.system}.hypr-rdp;
+        hypr-rdp =
+          inputs.hypr-rdp.packages.${final.stdenv.hostPlatform.system}.hypr-rdp.overrideAttrs
+            (old: {
+              patches = (old.patches or [ ]) ++ [ ./pkgs/hypr-rdp/lua-fallback-on-unknown-request.patch ];
+              # Upstream sets doCheck = false; scoped to the patched module so
+              # the patch's own test runs and nothing upstream chose to skip does.
+              doCheck = true;
+              checkFlags = [ "hyprland::tests" ];
+            });
 
         omarchy = final.callPackage ./pkgs/omarchy {
           src = omarchy;

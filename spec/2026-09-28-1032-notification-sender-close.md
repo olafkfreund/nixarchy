@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1032
 intent: intent/2026-09-28-1032-notification-sender-close.md
 ---

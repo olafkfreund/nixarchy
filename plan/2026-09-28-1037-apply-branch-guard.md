@@ -226,6 +226,20 @@ Repeated before steps 5, 6 and 7.
   With the stub, that break turns it red ("moved the lock on a refused
   branch").
 
+- **`checks.apply-detach-interface` was retargeted: it read the unit's
+  command through a fixed window.** CI's `omarchy` job went red on #1046 with
+  "`--expect-sha256` is accepted but not forwarded by the systemd-run call".
+  The forward was intact. The check ran `grep -A6` from the `systemd-run`
+  line, and the new `--setenv=ALLOW_BRANCH_DEPLOY` line pushed the forward to
+  the seventh line. It encoded the arrangement (within six lines) rather than
+  the property (the command forwards it), so it now reads the whole
+  continued command with `awk`. Proven against the shipped script: the new
+  extraction finds the forward in the 8-line command; the old `grep -A6`
+  misses it, reproducing the CI failure; and with the forward removed, the
+  new extraction goes red. **Missed locally because only `branch-guard` and
+  `session` were run.** Every `apply-*` check drives the same script, so all
+  of them are run before the next push.
+
 ## Tests
 
 | command | expected |

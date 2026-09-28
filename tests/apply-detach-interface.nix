@@ -93,7 +93,11 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     # malformed one, and says so rather than implying otherwise.
     grep -q 'expect-sha256=' "$apply" \
       || fail "the --detach branch does not forward --expect-sha256 into the unit"
-    grep -A6 'systemd-run --user --unit=nixarchy-rebuild' "$apply" | grep -q 'expect-sha256=' \
+    # The whole command, up to its first line without a trailing backslash --
+    # not a fixed window. `grep -A6` went red when #1037 added a --setenv line
+    # and moved the forward to the seventh line, with the forward intact.
+    awk '/systemd-run --user --unit=nixarchy-rebuild/ { on = 1 } on { print } on && !/\\$/ { exit }' \
+      "$apply" | grep -q 'expect-sha256=' \
       || fail "--expect-sha256 is accepted but not forwarded by the systemd-run call"
 
     # 6. The bytes that were hashed are the bytes that get built (#986 item 2).

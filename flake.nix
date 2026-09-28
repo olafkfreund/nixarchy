@@ -28,7 +28,7 @@
     # stays pinned so the offline image and installed systems agree on the
     # plugin manifest and module interface.
     nixarchy-omatheme = {
-      url = "github:olafkfreund/nixarchy-omatheme/935bb2b25f40cd735439e99b8d6b6ef1b6601b46";
+      url = "github:olafkfreund/nixarchy-omatheme/v0.1.0";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.home-manager.follows = "home-manager";
     };

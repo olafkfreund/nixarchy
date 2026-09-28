@@ -167,6 +167,12 @@ Repeated before steps 3, 4, 6 and 7.
   to be told apart, so the property is split: "left the screen", then
   "reached history". Both reds were re-run on the split probe.
 
+- **Step 9 will not happen: the owner decided nothing is posted upstream.**
+  Not for this fix, and not for #1031's hypr-rdp patch. The draft comment for
+  omacom/omarchy#13153 was withdrawn from #1041 without its text. The patch is
+  carried indefinitely, and `pkgs/AGENTS.md` still says to drop it if upstream
+  fixes the handler on its own. The `--fuzz=0` build failure will say when.
+
 ## Tests
 
 | command | expected |

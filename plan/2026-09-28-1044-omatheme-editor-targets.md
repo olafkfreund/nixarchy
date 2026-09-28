@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1044
 spec: spec/2026-09-28-1044-omatheme-editor-targets.md
 ---

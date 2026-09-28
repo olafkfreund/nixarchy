@@ -17,14 +17,11 @@
 # script comes out of the module rather than being copied here, so it cannot
 # drift from what nixarchy actually ships.
 let
+  testLib = import ./lib.nix { inherit inputs; };
   # The script alone. Taking it from system.build.toplevel would pull a whole
   # desktop closure into the hosted omarchy job, whose runner has ~14 GB of
   # disk -- see tests/apply-staging.nix for what that cost.
-  apply = builtins.head (
-    builtins.filter (
-      p: (p.pname or p.name or "") == "nixarchy-apply"
-    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
-  );
+  apply = testLib.vmPackage "nixarchy-apply";
 in
 pkgs.runCommand "nixarchy-apply-imports"
   {

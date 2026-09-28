@@ -1720,6 +1720,155 @@
         system:
         let
           images = boxImages.${system};
+          # Checks whose file takes { inputs, pkgs } and whose name is the
+          # file's. test-registration is handed this list (#1048), so a name
+          # here counts as registered; one that needs other arguments stays
+          # an explicit entry below.
+          uniformChecks = [
+            "apply-detach-interface"
+            "apply-imports"
+            "apply-staging"
+            # data/bin-ledger.nix, held to its own claim. Also the home of the
+            # pacman allowlist that used to live inline in build.yml. See
+            # tests/bin-ledger.nix and #447.
+            "bin-ledger"
+            "branch-guard"
+            # Boots the Omarchy session on a machine whose hyprland.lua belongs to
+            # somebody else -- the case the session entry exists for.
+            "coexist"
+            # The other two halves of that PR body. Same shape, same reason: both
+            # report on a release by grepping upstream's file layout, and a grep
+            # that has stopped matching prints what a quiet release prints. See
+            # tests/config-delta.nix and tests/patched-files.nix.
+            "config-delta"
+            # Every configuration this repository ships evaluates without
+            # warnings. See tests/config-warnings.nix for why that is a check
+            # and not a preference.
+            "config-warnings"
+            # The dashboard the installer draws while it works, against a clock
+            # that goes backwards -- which is what NTP does to a machine whose
+            # RTC was wrong, mid-install. Not covered by the VM checks: their
+            # clocks are stable, so every duration there is positive.
+            "dashboard-clock"
+            # The other half of that: every option path the README and the manual
+            # quote, checked against the option set they claim to describe. See
+            # tests/doc-options.nix and #214.
+            "doc-options"
+            "firmware-guard"
+            # The dangerous one. Installs into free space on a disk that already
+            # carries partitions and asserts those partitions are byte-identical
+            # afterwards -- entry and content. See tests/free-space.nix; #47 is
+            # the only item in the epic whose failure mode is destroying data
+            # that is not ours, and this is the gate it sits behind.
+            "free-space"
+            "generate-config-surface"
+            "hardware-modules"
+            # The profile a user with their own interpreter actually gets, built
+            # rather than inspected: #809's collision only exists once something
+            # calls buildEnv. See tests/home-profile.nix.
+            "home-profile"
+            # A host with remote desktop enabled can be described at all.
+            # hypr-rdp was unbuildable for twelve days behind a green suite
+            # (#1030): it requires a sops secret, and the pinned sops-nix
+            # called a builder nixpkgs had removed. checks.options enables it
+            # WITH a secret and still could not see it, because it reads the
+            # config tree and never forces the closure -- deliberately, per its
+            # own comment. This forces the drvPath, which is where the throw
+            # lives, so it costs an evaluation rather than a VM.
+            "hypr-rdp-builds"
+            "initrd-pin-guard"
+            "install"
+            # The same question with encrypt=yes -- the DEFAULT interactive
+            # answer, which until this check had no coverage past evaluation.
+            # Installs, asserts the ENCRYPTED initrd module list was pinned,
+            # boots the result through the LUKS passphrase prompt on the serial
+            # console, and proves autologin and the recovery secret on the ESP.
+            # See tests/install-encrypted.nix for why the passphrase prompt is
+            # not the obstacle tests/install.nix's header once took it for.
+            "install-encrypted"
+            # The same question as checks.install, asked of the artefact people
+            # download rather than of a test node: boots the ISO with no network
+            # device at all and installs from what the image carries.
+            "install-iso"
+            # The other image: the net ISO installing by FETCHING, from a
+            # substituter stood up inside the test's own vlan. The image people
+            # download for a network install had no install check at all until
+            # this one; see the file header for what it proves and what no
+            # sandboxed check can.
+            "install-iso-net"
+            # The #300 guarantee on a real disk: a dark substituter refused with
+            # the target intact. installer-store-space covers the same function
+            # with stubs; this is the only check that can fail if the installer
+            # wipes anyway, because it is the only one holding a disk.
+            "installer-refusal"
+            "installer-ui"
+            # The other half of the installer: the questions themselves, answered
+            # over a serial line. checks.installer-ui proves a widget can be drawn;
+            # this proves the wizard can be answered, which no harness passing
+            # --answers has ever done. See tests/installer-wizard.nix.
+            "installer-wizard"
+            # Built, not evaluated, and onto a config that already exists. See
+            # tests/integration.nix for the three bugs that shipped because every
+            # other check here starts from a clean machine.
+            "integration"
+            "iso-wifi"
+            # Two machines differing only by name must build the same parts, or
+            # an offline install has to build the difference. See #404.
+            "machine-name-free"
+            # And the same idea aimed at the menu: every action string checked
+            # against the subcommands the CLI it invokes actually has. See
+            # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
+            "menu-verbs"
+            # The other half of that: a declared machine actually boots, on the
+            # -tcg runner, and the ro-store mount is asserted from inside the
+            # running guest. See tests/microvm-boot.nix for why the KVM runner --
+            # the one nearly every user runs -- cannot be proved here.
+            "microvm-boot"
+            "offline-hardware-packages"
+            # Evaluation against stable, ~20s and no VM (#527). `stableVm` is
+            # passed in rather than reached through `inputs.self`, because it is
+            # deliberately not a nixosConfigurations entry -- see its definition.
+            # The per-package escape (#530-#532). Evaluation only, like
+            # stable-eval beside it: it asks which closure would be built, and
+            # that question does not require building one.
+            "other-channel"
+            # The package delta that goes in every Omarchy bump PR. Its dangerous
+            # failure is silence, so this feeds it a known answer. See
+            # tests/package-delta.nix.
+            "package-delta"
+            "patched-files"
+            # Adds a real third-party plugin from a real repo. The plugin system
+            # is the one deliberately imperative corner of Omarchy, and the part
+            # of it that could break here is the writable ~/.config/omarchy the
+            # seed creates.
+            "plugin"
+            # A previewed config's desktop actually renders: the vmVariant
+            # gains the software-GL fallbacks and sizing, only when nixarchy
+            # is on, all of it overridable. See tests/preview-variant.nix
+            # and #487.
+            "preview-variant"
+            # The reinstall image (#478): installer/cd.nix over a USER machine
+            # instead of the reference set, installed offline and booted. Asserts
+            # copy-never-build and that the machine that boots is the closure the
+            # image carried. CANNOT PASS until cd.nix writes the reference
+            # markers from `source.configs` (#480) -- the file header names the
+            # gap and the CARRIED step asserts it. Nightly-class cost: a full
+            # image build plus an offline install, ~3h on the big runner.
+            "reinstall-vm"
+            # The release notes, against a fixture repository whose diff is known.
+            # Same dangerous failure as the delta above, over more scans: a release
+            # note that reads calm because a grep stopped matching. See
+            # tests/release-notes.nix.
+            "release-notes"
+            # `nix run .#review` watches the pinned packages; this watches that
+            # it can still see them. See tests/review-pins.nix.
+            "review-pins"
+            # data/skill-parity.nix, held to upstream's own SKILL.md. See
+            # tests/skill-parity.nix and #643.
+            "skill-parity"
+            "swap-guard"
+            "try-nixarchy"
+          ];
         in
         {
           omarchy = self.packages.${system}.omarchy;
@@ -1746,24 +1895,11 @@
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) doctor;
           };
-          # Boots the Omarchy session on a machine whose hyprland.lua belongs to
-          # somebody else -- the case the session entry exists for.
-          coexist = import ./tests/coexist.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           # The installer's interactive screens, at every width worth caring
           # about. Nothing else draws them: every other harness passes
           # --answers, which is exactly how #133 shipped.
           # Why: tests/wifi-hwsim.nix
           wifi-hwsim = import ./tests/wifi-hwsim.nix {
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/iso-wifi.nix
-          iso-wifi = import ./tests/iso-wifi.nix {
-            inherit inputs;
             pkgs = pkgsFor.${system};
           };
 
@@ -1889,25 +2025,6 @@
             pkgs = pkgsFor.${system};
           };
 
-          # Every configuration this repository ships evaluates without
-          # warnings. See tests/config-warnings.nix for why that is a check
-          # and not a preference.
-          config-warnings = import ./tests/config-warnings.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Evaluation against stable, ~20s and no VM (#527). `stableVm` is
-          # passed in rather than reached through `inputs.self`, because it is
-          # deliberately not a nixosConfigurations entry -- see its definition.
-          # The per-package escape (#530-#532). Evaluation only, like
-          # stable-eval beside it: it asks which closure would be built, and
-          # that question does not require building one.
-          other-channel = import ./tests/other-channel.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           stable-eval = import ./tests/stable-eval.nix {
             inherit inputs stableVm;
             pkgs = pkgsFor.${system};
@@ -1998,107 +2115,9 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
-          # Why: tests/apply-staging.nix
-          apply-staging = import ./tests/apply-staging.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/branch-guard.nix
-          branch-guard = import ./tests/branch-guard.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           # Why: tests/install-phase-budget.nix
           install-phase-budget = import ./tests/install-phase-budget.nix {
             omarchy = self.packages.${system}.omarchy;
-            pkgs = pkgsFor.${system};
-          };
-
-          installer-ui = import ./tests/installer-ui.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: installer/AGENTS.md#generate-config-surface
-          generate-config-surface = import ./tests/generate-config-surface.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/initrd-pin-guard.nix
-          initrd-pin-guard = import ./tests/initrd-pin-guard.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/swap-guard.nix
-          swap-guard = import ./tests/swap-guard.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/firmware-guard.nix
-          firmware-guard = import ./tests/firmware-guard.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/hardware-modules.nix
-          hardware-modules = import ./tests/hardware-modules.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: tests/offline-hardware-packages.nix
-          offline-hardware-packages = import ./tests/offline-hardware-packages.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Why: installer/AGENTS.md#try-nixarchy-sh
-          try-nixarchy = import ./tests/try-nixarchy.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The dashboard the installer draws while it works, against a clock
-          # that goes backwards -- which is what NTP does to a machine whose
-          # RTC was wrong, mid-install. Not covered by the VM checks: their
-          # clocks are stable, so every duration there is positive.
-          dashboard-clock = import ./tests/dashboard-clock.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The other half of the installer: the questions themselves, answered
-          # over a serial line. checks.installer-ui proves a widget can be drawn;
-          # this proves the wizard can be answered, which no harness passing
-          # --answers has ever done. See tests/installer-wizard.nix.
-          installer-wizard = import ./tests/installer-wizard.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The package delta that goes in every Omarchy bump PR. Its dangerous
-          # failure is silence, so this feeds it a known answer. See
-          # tests/package-delta.nix.
-          package-delta = import ./tests/package-delta.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The other two halves of that PR body. Same shape, same reason: both
-          # report on a release by grepping upstream's file layout, and a grep
-          # that has stopped matching prints what a quiet release prints. See
-          # tests/config-delta.nix and tests/patched-files.nix.
-          config-delta = import ./tests/config-delta.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-          patched-files = import ./tests/patched-files.nix {
-            inherit inputs;
             pkgs = pkgsFor.${system};
           };
 
@@ -2111,19 +2130,6 @@
           remote-tunnel = import ./tests/remote-tunnel.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
-          };
-
-          # A host with remote desktop enabled can be described at all.
-          # hypr-rdp was unbuildable for twelve days behind a green suite
-          # (#1030): it requires a sops secret, and the pinned sops-nix
-          # called a builder nixpkgs had removed. checks.options enables it
-          # WITH a secret and still could not see it, because it reads the
-          # config tree and never forces the closure -- deliberately, per its
-          # own comment. This forces the drvPath, which is where the throw
-          # lives, so it costs an evaluation rather than a VM.
-          hypr-rdp-builds = import ./tests/hypr-rdp-builds.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
           };
 
           # enroll's policy append, against real age keys and real sops. It
@@ -2166,22 +2172,6 @@
             omarchySrc = omarchy;
           };
 
-          # The release notes, against a fixture repository whose diff is known.
-          # Same dangerous failure as the delta above, over more scans: a release
-          # note that reads calm because a grep stopped matching. See
-          # tests/release-notes.nix.
-          release-notes = import ./tests/release-notes.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # `nix run .#review` watches the pinned packages; this watches that
-          # it can still see them. See tests/review-pins.nix.
-          review-pins = import ./tests/review-pins.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           # What reaches nixarchy.cachix.org and what it costs: the allowlist
           # budget, proofs pushed alone, closures from main only (#697). Against
           # a stubbed nix, curl and cachix. See tests/cache-budget.nix.
@@ -2214,6 +2204,7 @@
             pkgs = pkgsFor.${system};
             flakeFile = ./flake.nix;
             testsDir = ./tests;
+            uniform = uniformChecks;
           };
 
           text-size-managed = import ./tests/text-size-managed.nix {
@@ -2235,16 +2226,6 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
-          apply-detach-interface = import ./tests/apply-detach-interface.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          apply-imports = import ./tests/apply-imports.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           # The proof push: a killed job keeps what it proved, a result too
           # large to BE a proof is skipped rather than failed, and a push that
           # genuinely fails still exits non-zero. All three were false on
@@ -2261,52 +2242,6 @@
             pkgs = pkgsFor.${system};
           };
 
-          # The profile a user with their own interpreter actually gets, built
-          # rather than inspected: #809's collision only exists once something
-          # calls buildEnv. See tests/home-profile.nix.
-          home-profile = import ./tests/home-profile.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # A previewed config's desktop actually renders: the vmVariant
-          # gains the software-GL fallbacks and sizing, only when nixarchy
-          # is on, all of it overridable. See tests/preview-variant.nix
-          # and #487.
-          preview-variant = import ./tests/preview-variant.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Two machines differing only by name must build the same parts, or
-          # an offline install has to build the difference. See #404.
-          machine-name-free = import ./tests/machine-name-free.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # And the same idea aimed at the menu: every action string checked
-          # against the subcommands the CLI it invokes actually has. See
-          # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
-          menu-verbs = import ./tests/menu-verbs.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # data/bin-ledger.nix, held to its own claim. Also the home of the
-          # pacman allowlist that used to live inline in build.yml. See
-          # tests/bin-ledger.nix and #447.
-          bin-ledger = import ./tests/bin-ledger.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # data/skill-parity.nix, held to upstream's own SKILL.md. See
-          # tests/skill-parity.nix and #643.
-          skill-parity = import ./tests/skill-parity.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
           # Upstream's /etc overlay: data/etc-overlay.nix says what answers each
           # file here (and modules/nixos.nix installs the rows it classes
           # `installed`), and this fails when upstream adds or drops one. See
@@ -2321,102 +2256,11 @@
             pkgs = pkgsFor.${system};
           };
 
-          # The other half of that: every option path the README and the manual
-          # quote, checked against the option set they claim to describe. See
-          # tests/doc-options.nix and #214.
-          doc-options = import ./tests/doc-options.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Built, not evaluated, and onto a config that already exists. See
-          # tests/integration.nix for the three bugs that shipped because every
-          # other check here starts from a clean machine.
-          integration = import ./tests/integration.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # Adds a real third-party plugin from a real repo. The plugin system
-          # is the one deliberately imperative corner of Omarchy, and the part
-          # of it that could break here is the writable ~/.config/omarchy the
-          # seed creates.
-          plugin = import ./tests/plugin.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           # Installs onto a blank disk, reboots into the result on the
           # bootloader the installer wrote, and asserts a rebuild builds
           # nothing. See tests/install.nix for why the second machine is not a
           # normal test node.
           install-teardown = import ./tests/install-teardown.nix {
-            pkgs = pkgsFor.${system};
-          };
-
-          install = import ./tests/install.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The same question with encrypt=yes -- the DEFAULT interactive
-          # answer, which until this check had no coverage past evaluation.
-          # Installs, asserts the ENCRYPTED initrd module list was pinned,
-          # boots the result through the LUKS passphrase prompt on the serial
-          # console, and proves autologin and the recovery secret on the ESP.
-          # See tests/install-encrypted.nix for why the passphrase prompt is
-          # not the obstacle tests/install.nix's header once took it for.
-          install-encrypted = import ./tests/install-encrypted.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The #300 guarantee on a real disk: a dark substituter refused with
-          # the target intact. installer-store-space covers the same function
-          # with stubs; this is the only check that can fail if the installer
-          # wipes anyway, because it is the only one holding a disk.
-          installer-refusal = import ./tests/installer-refusal.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The dangerous one. Installs into free space on a disk that already
-          # carries partitions and asserts those partitions are byte-identical
-          # afterwards -- entry and content. See tests/free-space.nix; #47 is
-          # the only item in the epic whose failure mode is destroying data
-          # that is not ours, and this is the gate it sits behind.
-          free-space = import ./tests/free-space.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The same question as checks.install, asked of the artefact people
-          # download rather than of a test node: boots the ISO with no network
-          # device at all and installs from what the image carries.
-          install-iso = import ./tests/install-iso.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The other image: the net ISO installing by FETCHING, from a
-          # substituter stood up inside the test's own vlan. The image people
-          # download for a network install had no install check at all until
-          # this one; see the file header for what it proves and what no
-          # sandboxed check can.
-          install-iso-net = import ./tests/install-iso-net.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
-          # The reinstall image (#478): installer/cd.nix over a USER machine
-          # instead of the reference set, installed offline and booted. Asserts
-          # copy-never-build and that the machine that boots is the closure the
-          # image carried. CANNOT PASS until cd.nix writes the reference
-          # markers from `source.configs` (#480) -- the file header names the
-          # gap and the CARRIED step asserts it. Nightly-class cost: a full
-          # image build plus an offline install, ~3h on the big runner.
-          reinstall-vm = import ./tests/reinstall-vm.nix {
-            inherit inputs;
             pkgs = pkgsFor.${system};
           };
 
@@ -2440,15 +2284,6 @@
               tcg = self.packages.${system}."microvm-${name}-tcg";
             }) (import ./data/microvm-templates.nix);
             nixarchyVm = self.packages.${system}.nixarchy-vm;
-          };
-
-          # The other half of that: a declared machine actually boots, on the
-          # -tcg runner, and the ro-store mount is asserted from inside the
-          # running guest. See tests/microvm-boot.nix for why the KVM runner --
-          # the one nearly every user runs -- cannot be proved here.
-          microvm-boot = import ./tests/microvm-boot.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
           };
 
           # Reads the box catalogue structurally -- see
@@ -2522,6 +2357,13 @@
               ''
             );
         }
+        // lib.genAttrs uniformChecks (
+          n:
+          import ./tests/${n}.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          }
+        )
       );
     };
 }

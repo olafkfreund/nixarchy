@@ -5,12 +5,14 @@
 # omarchy-mise-unshadow removes the ones written before that. A runCommand: both
 # are file operations against PATH, and checks.session installs no agents, so a
 # VM would pass without the fix.
+let
+  testLib = import ./lib.nix { };
+in
 pkgs.runCommand "nixarchy-mise-launchers" { } ''
   export HOME=$PWD/home USER=tester
   mkdir -p "$HOME/.local/bin" nixbin other
   fails=0
-  ok() { echo "  ok      $1"; }
-  bad() { echo "  FAILED  $1"; fails=$((fails + 1)); }
+  ${testLib.okBad}
   exe() { printf '#!${pkgs.runtimeShell}\nexit 0\n' > "$1"; chmod +x "$1"; }
   base=$PATH:${omarchy}/bin
 

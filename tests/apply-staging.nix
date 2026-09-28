@@ -15,25 +15,18 @@
 # system profile rather than being copied here, so it cannot drift from what the
 # module actually ships.
 let
+  testLib = import ./lib.nix { inherit inputs; };
   # The script alone, not the system profile it ships in. Taking it from
   # `system.build.toplevel` pulled a whole desktop closure into build.yml's
   # hosted `omarchy` job, whose runner has ~14 GB of disk: the job went quiet
   # and the runner was killed with SIGTERM, which reads as nothing at all.
   # Evaluating the module is unavoidable (the script is built by
   # writeShellApplication inside it); BUILDING the system is not.
-  apply = builtins.head (
-    builtins.filter (
-      p: (p.pname or p.name or "") == "nixarchy-apply"
-    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
-  );
+  apply = testLib.vmPackage "nixarchy-apply";
   # The rebuild panel's state mapping (#765 PR 5), taken the same way. It is a
   # command precisely so it can be run here: nothing in the suite drives QML,
   # so a state machine left in the panel would ship untested.
-  rebuildState = builtins.head (
-    builtins.filter (
-      p: (p.pname or p.name or "") == "nixarchy-rebuild-state"
-    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
-  );
+  rebuildState = testLib.vmPackage "nixarchy-rebuild-state";
 in
 pkgs.runCommand "nixarchy-apply-staging"
   {
@@ -50,8 +43,7 @@ pkgs.runCommand "nixarchy-apply-staging"
 
     host=$(uname -n)
     fails=0
-    ok() { echo "  ok      $1"; }
-    bad() { echo "  FAILED  $1"; fails=$((fails + 1)); }
+    ${testLib.okBad}
 
     # The selection nixarchy-apply reads.
     mkdir -p "$HOME/.config/nixarchy"

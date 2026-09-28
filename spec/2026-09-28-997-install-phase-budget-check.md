@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 997
 intent: intent/2026-09-28-997-install-phase-budget-check.md
 ---

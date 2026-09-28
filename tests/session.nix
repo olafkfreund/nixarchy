@@ -672,6 +672,37 @@ pkgs.testers.runNixOSTest {
         + " | grep -qx loaded", timeout=60)
     print("Rebuild now starts the nixarchy-rebuild unit")
 
+    # ---- a notification its sender closes leaves the screen (#1032) --------
+    # CloseNotification from the app that posted it only forgot the live
+    # reference, so the toast stayed -- for ever, for a critical one. The shell
+    # keeps one file per toast on screen (Service.qml persistPopupFile, used to
+    # restore them after a restart) and moves it to history/ when the toast
+    # leaves. With the bug the file never moves, which is what this watches;
+    # the history/ half pins the decision that a sender's close archives.
+    assert machine.succeed(as_user("omarchy-shell notifications isDnd")).strip() == "off", (
+        "Do Not Disturb is on: no popup would appear, and this block would pass "
+        "without testing anything")
+    # Earlier blocks leave toasts up; clear them so this one is the only one on
+    # screen. dismissAll archives them, and the assertions below name one file.
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    popups = "/home/omarchy/.local/state/omarchy/notifications"
+    nid = machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -u critical -p -a nixarchy-probe"
+        " -- close-me-1032 body")).strip()
+    machine.wait_until_succeeds("grep -l close-me-1032 " + popups + "/*.json", timeout=30)
+    name = machine.succeed("grep -l close-me-1032 " + popups + "/*.json").strip().split("/")[-1]
+    machine.succeed(as_user(
+        "busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications"
+        " org.freedesktop.Notifications CloseNotification u " + nid))
+    # Two waits, not one: a single compound test failed the same way whether
+    # the toast stayed (the bug) or left without reaching history (the
+    # decision reversed), and could not say which.
+    # Measured: the file appeared in 0.05 s and moved 1.03 s after the close.
+    # 30 s and 60 s are floors for a loaded runner, not guesses at the shell.
+    machine.wait_until_succeeds("test ! -e " + popups + "/" + name, timeout=60)
+    machine.wait_until_succeeds("test -e " + popups + "/history/" + name, timeout=30)
+    print("a critical notification closed by its sender left the screen, into history")
+
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it
     # reads it as `2>/dev/null` with a fallback: with no UPower the call fails

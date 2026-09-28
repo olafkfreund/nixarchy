@@ -122,6 +122,51 @@ Repeated before steps 3, 4, 6 and 7.
    Post it to `omacom/omarchy` only on an explicit go, then link it from
    #1032 and from the patch header.
 
+## Deviations found while implementing
+
+- **The probe sits before `# ---- power`, not after the hypr-rdp block.** It
+  needs `as_user`, which provides `DBUS_SESSION_BUS_ADDRESS` for
+  `notify-send` and `busctl --user`, and that is defined at `:572`, after the
+  hypr-rdp block. Placing it after the `omarchy-shell` IPC section also means
+  the IPC it uses for the Do Not Disturb assertion has already been proven.
+- **`notify-send` is named by store path** (`${pkgs.libnotify}`), because
+  libnotify being in Omarchy's runtime list does not put it on the test's
+  `PATH`.
+- **Step 1 confirmed:** the session machine ships Quickshell 0.3.1, built from
+  the same source tree where `CloseRequested` and `closed(reason)` were read.
+
+- **Upstream: a comment on `omacom/omarchy#13153`, not a new issue.** The
+  duplicate search found #13153 ("Chrome/Teams critical notifications never
+  expire", open). Its reporter says Teams' notifications "dismiss normally"
+  in the browser while the desktop toast stays. A web notification closed in
+  the page makes Chromium send `CloseNotification`, so #13153 is very likely
+  this bug seen from the user's side, diagnosed as a duration problem. A
+  second issue would split one bug across two threads. The comment gives the
+  root cause, the `notify-send` + `busctl` reproduction, a `dbus-monitor`
+  check the reporter can run, and the handler. It is still posted only on
+  the owner's explicit go, and only after `checks.session` has passed,
+  because the comment says we carry the fix with a VM test.
+
+- **The probe clears the screen first** (`omarchy-shell notifications
+  dismissAll`). Earlier blocks leave toasts up. `dismissAll` archives them,
+  and every assertion names one specific file, so nothing else changes. The
+  red and green runs both carry it, so they differ only in the patch.
+- **The screenshot confirmation in step 6 was inconclusive, twice, and is not
+  retried a third time.** OCR after the close, first with the earlier toasts
+  on screen and then with them dismissed, never read `close-me-1032`: the
+  rebuild panel from an earlier block stays open over most of the screen.
+  The check itself failed at the right assertion both times. The link
+  between the popup file and the toast rests on the code instead:
+  `persistPopupFile` writes it when the toast is inserted, and every removal
+  path (`removePopup`, `removePopupsByOriginalId`) archives or deletes it.
+  Said plainly in the PR and in `tests/AGENTS.md`, not claimed as seen.
+
+- **(e) is two waits, not one compound test.** The first red 2 run failed on
+  `test ! -e … && test -e history/…`, which fails the same way whether the
+  toast stayed or left without reaching history. The plan's two reds need
+  to be told apart, so the property is split: "left the screen", then
+  "reached history". Both reds were re-run on the split probe.
+
 ## Tests
 
 | command | expected |

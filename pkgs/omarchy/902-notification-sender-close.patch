@@ -1,0 +1,39 @@
+nixarchy #1032: a notification its SENDER closes leaves the screen.
+
+CloseNotification from the app that posted a notification only forgot the
+live reference; the popup row stayed, and a critical one (duration 0) stayed
+until dismissed by hand. The handler now takes Quickshell's close reason and,
+for CloseRequested only, removes the popup through removePopup -- archived to
+history like dismiss and expire, per the rule removePopup already states.
+
+CARRIED: upstream Omarchy has the same handler (it breaks on Arch too). Drop
+this when omacom/omarchy fixes it; applied with --fuzz=0, so the bump that
+rewords these lines fails the build and says so.
+
+--- a/shell/plugins/notifications/Service.qml
++++ b/shell/plugins/notifications/Service.qml
+@@ -162,9 +162,21 @@
+     liveRefs[snapshot.originalId] = notification
+     // Guard the delete: a newer notification may have reused this originalId
+     // (freedesktop replaces_id) and taken over the map slot.
+-    notification.closed.connect(function() {
+-      if (service.liveRefs[snapshot.originalId] === notification)
+-        delete service.liveRefs[snapshot.originalId]
++    notification.closed.connect(function(reason) {
++      if (service.liveRefs[snapshot.originalId] !== notification) return
++      delete service.liveRefs[snapshot.originalId]
++      // The SENDER closed it (CloseNotification). Dismiss and expire already
++      // went through removePopup; only a sender's close left the toast up --
++      // for ever, for a critical one. Archived like any other exit, and
++      // liveRefs is cleared first so removePopup sends no close back.
++      if (reason !== NotificationCloseReason.CloseRequested) return
++      Qt.callLater(function() {
++        for (var i = popupModel.count - 1; i >= 0; i--) {
++          var row = popupModel.get(i)
++          if (row && row.originalId === snapshot.originalId && !isRestoredRow(row))
++            service.removePopup(i, "close")
++        }
++      })
+     })
+ 
+     // DND bypass rules: chat apps abuse urgency=critical to force

@@ -2033,6 +2033,11 @@ stdenvNoCC.mkDerivation {
                     # #901; --fuzz=0 so any upstream change to these two files fails this build.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./901-bar-keyed-layout.patch}
 
+                    # A notification its sender closes stayed on screen -- for ever, if critical
+                    # (#1032). CARRIED until omacom/omarchy fixes the same handler; --fuzz=0 so
+                    # the bump that rewords it fails here. checks.session closes one and watches.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./902-notification-sender-close.patch}
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

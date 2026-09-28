@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1037
 spec: spec/2026-09-28-1037-apply-branch-guard.md
 ---

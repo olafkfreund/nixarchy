@@ -99,7 +99,19 @@ has_host_key() { [ -r /etc/ssh/ssh_host_ed25519_key.pub ]; }
 has_policy()   { [ -e "$POLICY" ] && grep -q "hosts/$HOST/secrets" "$POLICY"; }
 # sops encrypts VALUES, not keys, so presence is readable without decrypting
 # and without asking anyone for a passphrase.
-has_secret()   { [ -e "$STORE" ] && grep -q "^$SECRET:" "$STORE"; }
+# Two answers, and the rendered file is the authoritative one. The path
+# guess below is nixarchy's own convention -- what `nixarchy secret new`
+# writes -- and a configuration is free to point `sopsFile` anywhere. On a
+# machine using `secrets/hosts/<host>/rdp.yaml` the guess reported "no
+# secret" while the daemon was serving with that very secret, which is the
+# same defect as #1033: telling somebody something untrue about their own
+# machine.
+#
+# sops renders the config at activation, so its existence proves the secret
+# decrypted. Nothing is read out of it -- the module's own guard takes the
+# same care.
+has_rendered() { [ -e /run/secrets/rendered/hypr-rdp.toml ]; }
+has_secret()   { has_rendered || { [ -e "$STORE" ] && grep -q "^$SECRET:" "$STORE"; }; }
 unit_exists()  { systemctl --user cat hypr-rdp.service &>/dev/null; }
 unit_running() { systemctl --user is-active --quiet hypr-rdp.service; }
 
@@ -110,9 +122,11 @@ report() {
   else fail "no SSH host key -- sshd has never run here"; fi
 
   if has_policy; then ok "$POLICY has a rule for this host"
+  elif has_rendered; then ok "a secret is already rendered, so the policy works"
   else fail "$POLICY has no rule for this host"; fi
 
-  if has_secret; then ok "$SECRET is in hosts/$HOST/secrets.yaml"
+  if has_rendered; then ok "the password is rendered and readable by this user"
+  elif has_secret; then ok "$SECRET is in hosts/$HOST/secrets.yaml"
   else fail "no $SECRET secret"; fi
 
   if unit_exists; then
@@ -123,13 +137,40 @@ report() {
       # Not a fault on its own. The unit is part of graphical-session.target
       # and conditioned on WAYLAND_DISPLAY, so over SSH it is correctly idle.
       if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        warn "enabled but not running -- systemctl --user status hypr-rdp"
+        warn "enabled, and not running yet"
+        say  "    The unit is pulled in by graphical-session.target, which"
+        say  "    starts at LOGIN. A unit added since this session began is"
+        say  "    enabled, correct, and never picked up -- and NixOS does not"
+        say  "    start user units during a rebuild either. It has not failed;"
+        say  "    it has not run (#1033)."
+        needs_start=true
       else
         ok "not running, because this is not a graphical session"
       fi
     fi
   else
     fail "the service is not enabled"
+  fi
+
+  # The menu half of the same cause. OMARCHY_PATH is fixed when the session
+  # starts, so a menu row added by a later rebuild is in the tree the SYSTEM
+  # provides and not in the tree this SESSION reads. Reported as "the menu
+  # does not exist at all" on p620, and diagnosed by comparing exactly these
+  # two paths by hand.
+  #
+  # Skipped when the variable is unset, and phrased as an observation: a
+  # deliberate OMARCHY_PATH is somebody's choice, not an error.
+  local live
+  live=$(readlink -f /run/current-system/sw/share/omarchy 2>/dev/null || true)
+  if [ -n "${OMARCHY_PATH:-}" ] && [ -n "$live" ] && [ "$OMARCHY_PATH" != "$live" ]; then
+    warn "this session reads an older Omarchy than the system provides"
+    say  "    session: $OMARCHY_PATH"
+    say  "    system:  $live"
+    say  ""
+    say  "    Menu rows added by a rebuild since this session started are not"
+    say  "    in the tree it reads, so \033[1mSetup > Remote desktop\033[0m may be"
+    say  "    missing. Nothing here can change that: OMARCHY_PATH is set when"
+    say  "    the session starts. Log out and back in (#1033)."
   fi
 }
 
@@ -267,8 +308,33 @@ if [ "$mode" = connect ]; then
   exit $?
 fi
 
+needs_start=false
 report
 $status_only && exit 0
+
+# The half this command CAN fix. It already runs `secret enroll` and
+# `secret new` on the user's behalf, so starting a unit is not a new kind of
+# action for it -- and telling somebody to run a command you could run is the
+# friction this exists to remove.
+if [ "$needs_start" = true ]; then
+  step "Start it now?"
+  if confirm "Start hypr-rdp for this session?"; then
+    if systemctl --user start hypr-rdp.service; then
+      sleep 2
+      if unit_running; then
+        ok "running"
+      else
+        fail "it did not stay up. systemctl --user status hypr-rdp"
+        journalctl --user -u hypr-rdp.service -n 5 --no-pager 2>/dev/null | tail -5
+      fi
+    else
+      fail "could not start it."
+      journalctl --user -u hypr-rdp.service -n 5 --no-pager 2>/dev/null | tail -5
+    fi
+  else
+    say "  \033[1msystemctl --user start hypr-rdp\033[0m when you are ready."
+  fi
+fi
 
 # ---- the next unmet step, and only the next one ---------------------------
 

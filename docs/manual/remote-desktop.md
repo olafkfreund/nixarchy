@@ -163,6 +163,29 @@ that kept the hostname does exactly that. It refuses rather than appending a
 second rule, because sops takes the first one and the machine would then
 encrypt to a key it cannot read back.
 
+### It takes effect at the next login
+
+Enable it, rebuild, and **nothing appears to happen**: the service is not
+running and the menu row is not there. Neither is broken — both are waiting
+for a new session, for two separate reasons.
+
+The unit is pulled in by `graphical-session.target`, which starts at **login**.
+A unit written to disk afterwards is enabled, correct, and never picked up;
+NixOS does not start user units during a rebuild either. It has not failed, it
+has not run:
+
+```sh
+systemctl --user start hypr-rdp
+```
+
+The menu row is the same cause one layer over. `OMARCHY_PATH` is fixed when
+the session starts, so rows added by a later rebuild are in the tree the
+*system* provides and not in the tree the *session* reads. Nothing can change
+that from inside the session — logging out and back in is the fix, and
+`nixarchy remote connect` works from a terminal in the meantime.
+
+`nixarchy remote serve` reports both, and offers to start the unit.
+
 Changing the password later means `nixarchy secret edit`, a rebuild, and then
 `systemctl --user restart hypr-rdp`. sops-nix restarts system units and this is
 a user unit, so nothing restarts it for you.

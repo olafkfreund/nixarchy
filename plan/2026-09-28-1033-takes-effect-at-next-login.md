@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1033
 spec: spec/2026-09-28-1033-takes-effect-at-next-login.md
 ---

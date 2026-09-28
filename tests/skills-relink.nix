@@ -12,6 +12,7 @@
 # Codex reads ~/.agents/skills too and does not merge same-named skills, so
 # both listed every skill twice (#897).
 let
+  testLib = import ./lib.nix { };
   relink = pkgs.callPackage ../pkgs/skills-relink.nix { };
 
   # Real store paths, because the clean-up pattern is anchored at
@@ -41,8 +42,7 @@ pkgs.runCommand "nixarchy-skills-relink" { nativeBuildInputs = [ pkgs.coreutils 
   export HOME=$PWD/home
   mkdir -p "$HOME"
   fails=0
-  ok() { echo "  ok      $1"; }
-  bad() { echo "  FAILED  $1"; fails=$((fails + 1)); }
+  ${testLib.okBad}
 
   own=${ownTree}/agents/skills
   guarded=${inputTree}/share/nix-skills

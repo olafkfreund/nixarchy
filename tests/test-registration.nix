@@ -2,6 +2,9 @@
   pkgs,
   flakeFile,
   testsDir,
+  # flake.nix's uniformChecks (#1048): names registered by `lib.genAttrs`, so
+  # no literal import names them. Data, not text -- a comment can't count.
+  uniform,
 }:
 # #1000: a test file that no `checks` entry imports is invisible to every gate
 # this repository has.
@@ -21,6 +24,7 @@
 pkgs.runCommand "nixarchy-test-registration"
   {
     inherit flakeFile;
+    uniform = pkgs.lib.concatMapStringsSep " " (n: "${n}.nix") uniform;
     nativeBuildInputs = [
       pkgs.coreutils
       pkgs.gnugrep
@@ -35,15 +39,19 @@ pkgs.runCommand "nixarchy-test-registration"
     #   with-vm-cleanup.nix  a helper, imported by install, install-encrypted,
     #                        free-space and install-teardown rather than
     #                        registered under checks.
-    exempt="with-vm-cleanup.nix"
+    #   lib.nix              shared helpers (vmPackage, okBad) that checks
+    #                        import; not a check itself (#1048).
+    exempt="with-vm-cleanup.nix lib.nix"
 
     files=$(cd ${testsDir} && ls *.nix | sort)
     # `import ./tests/<name>.nix`, not a bare filename: a grep for the name
     # passes if it appears in a COMMENT, and whether the file is IMPORTED is
     # the property. This misses a check that built its path dynamically;
     # nothing does, and this comment is cheaper than handling it.
-    imports=$(grep -oE 'import \./tests/[a-z0-9-]+\.nix' "$flakeFile" |
-      sed 's|import \./tests/||' | sort -u)
+    imports=$( {
+      grep -oE 'import \./tests/[a-z0-9-]+\.nix' "$flakeFile" | sed 's|import \./tests/||'
+      printf '%s\n' $uniform
+    } | sort -u)
 
     n=$(printf '%s\n' "$imports" | grep -c . || true)
     # A parse that matches nothing would flag all 88 files, and one that

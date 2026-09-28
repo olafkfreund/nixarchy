@@ -10,13 +10,10 @@
 # uid), and the rebuild panel showing the refused unit. tests/AGENTS.md names
 # both.
 let
+  testLib = import ./lib.nix { inherit inputs; };
   system = pkgs.stdenv.hostPlatform.system;
   vm = inputs.self.nixosConfigurations.vm;
-  apply = builtins.head (
-    builtins.filter (
-      p: (p.pname or p.name or "") == "nixarchy-apply"
-    ) vm.config.environment.systemPackages
-  );
+  apply = testLib.vmPackage "nixarchy-apply";
   guard = inputs.self.packages.${system}.nixarchy-branch-guard;
   omarchy = inputs.self.packages.${system}.omarchy;
   # The generated unit script, with a placeholder flake the check fills in.
@@ -53,8 +50,7 @@ pkgs.runCommand "nixarchy-branch-guard-check"
     export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
     mkdir -p "$HOME"
     fails=0
-    ok() { echo "  ok      $1"; }
-    bad() { echo "  FAILED  $1"; fails=$((fails + 1)); }
+    ${testLib.okBad}
 
     # repo <dir> <default-branch>: a clone of a local bare origin, one commit,
     # origin/HEAD set -- the shape of a real config checkout, offline.

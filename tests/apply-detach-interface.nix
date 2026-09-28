@@ -8,11 +8,8 @@
 # a message was printed. Any message satisfies the second; only the first says
 # the refusal was real.
 let
-  apply = builtins.head (
-    builtins.filter (
-      p: (p.pname or p.name or "") == "nixarchy-apply"
-    ) inputs.self.nixosConfigurations.vm.config.environment.systemPackages
-  );
+  testLib = import ./lib.nix { inherit inputs; };
+  apply = testLib.vmPackage "nixarchy-apply";
 in
 pkgs.runCommand "nixarchy-apply-detach-interface"
   {

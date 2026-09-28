@@ -24,6 +24,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Declarative runtime theme switching and application bridges. The input
+    # stays pinned so the offline image and installed systems agree on the
+    # plugin manifest and module interface.
+    nixarchy-omatheme = {
+      url = "github:olafkfreund/nixarchy-omatheme/42b64ed98e76a8c7582b2755b304e21a50ba58b1";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+    };
+
     # Stable nixpkgs, carried so CI can prove this flake still evaluates
     # against it (#527).
     #
@@ -512,7 +521,10 @@
       stableVm = nixpkgs-stable.lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
-        modules = vmModulesWith (homeManagerFor nixpkgs-stable.lib.trivial.release);
+        modules = [
+          self.nixosModules.nixarchy
+          ./vm/configuration.nix
+        ];
       };
 
       # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy

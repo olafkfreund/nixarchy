@@ -231,7 +231,9 @@ let
 in
 {
   imports = [
+    inputs.home-manager.nixosModules.home-manager
     inputs.hyprland.nixosModules.default
+    inputs.nixarchy-omatheme.nixosModules.default
     (import ./apps.nix inputs)
     ./local-ai.nix
     ./fleet.nix
@@ -924,6 +926,12 @@ in
     # flags a repeated top-level key, and it is right that they read better
     # together.
     programs = {
+      nixarchyThemeEngine = {
+        enable = lib.mkDefault (cfg.user != null);
+        user = lib.mkDefault (cfg.user or "omarchy");
+        managePlugin = false;
+      };
+
       # Omarchy's screen recording, which could not work as shipped.
       #
       # gpu-screen-recorder is in the omarchy wrapper's runtime PATH, and that

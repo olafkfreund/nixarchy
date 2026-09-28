@@ -184,6 +184,9 @@ pkgs.testers.runNixOSTest rec {
             plugin-browser = false;
             # Ungated too (#912), for the same reason.
             flatsnap = false;
+            # The runtime theme plugin is also a default; this fixture must
+            # reach a genuinely empty plugin directory for its negative test.
+            omatheme = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

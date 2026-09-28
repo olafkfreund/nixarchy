@@ -19,6 +19,7 @@ let
       inherit system;
       modules = [
         inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
         {
           programs.nixarchy = {
             enable = true;
@@ -26,6 +27,11 @@ let
           // settings;
         }
         {
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
+          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -44,9 +50,15 @@ let
       inherit system;
       modules = [
         inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
         { programs.nixarchy.enable = true; }
         extra
         {
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
+          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -95,6 +107,7 @@ let
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
   # distinction this file exists to assert.
   defaultMachine = configWith { };
+  omathemeMachine = configNamed "omatheme" { user = "someone"; };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
   # #888: the same machine with the nix-skills input turned off.
@@ -162,6 +175,7 @@ let
       rebuild = false;
       plugin-browser = false;
       flatsnap = false;
+      omatheme = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
@@ -216,6 +230,7 @@ let
       inherit system;
       modules = [
         inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
         {
           programs.nixarchy = {
             enable = true;
@@ -224,6 +239,11 @@ let
         }
         {
           networking.hostName = hostName;
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
+          home-manager.users.someone.home.stateVersion = "25.05";
           boot.loader.grub.device = "/dev/sda";
           fileSystems."/" = {
             device = "/dev/sda1";
@@ -1028,6 +1048,21 @@ let
       on =
         defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg" && hookLists "nixarchy.pkg" defaultHomeOn;
       off = defaultHome.programs.nixarchy.plugins ? "nixarchy.pkg";
+    };
+    # #1023: Nixarchy owns the default plugin files while omatheme owns the
+    # runtime daemon and bridges. The two declarations must agree on the
+    # manifest without making the standalone module write it twice.
+    omathemeIsTheRuntimeDefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "io.github.nobledoodle.omarchroma"
+        && hookLists "io.github.nobledoodle.omarchroma" defaultHomeOn
+        && omathemeMachine.programs.nixarchyThemeEngine.enable
+        && omathemeMachine.programs.nixarchyThemeEngine.user == "someone"
+        && !omathemeMachine.programs.nixarchyThemeEngine.managePlugin;
+      off =
+        defaultHome.programs.nixarchy.plugins ? "io.github.nobledoodle.omarchroma"
+        || noDefaultsHome.programs.nixarchy.plugins ? "io.github.nobledoodle.omarchroma"
+        || defaultMachine.programs.nixarchyThemeEngine.enable;
     };
     # #765 PR 5: the rebuild panel, the same way. Ungated -- every nixarchy
     # machine rebuilds -- so "off" is Mode A alone, which is the state a

@@ -75,11 +75,12 @@ let
     );
 
   nodes = walk "programs.nixarchy" systemOptions ++ walk "programs.nixarchy" homeOptions;
+  themeNodes = walk "programs.nixarchyThemeEngine" eval.options.programs.nixarchyThemeEngine;
 
   known = pkgs.writeText "nixarchy-options.json" (
     builtins.toJSON {
-      options = lib.catAttrs "option" nodes;
-      groups = lib.catAttrs "group" nodes;
+      groups = lib.catAttrs "group" (nodes ++ themeNodes);
+      options = lib.catAttrs "option" (nodes ++ themeNodes);
     }
   );
 in

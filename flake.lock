@@ -864,6 +864,31 @@
         "type": "github"
       }
     },
+    "nixarchy-omatheme": {
+      "inputs": {
+        "home-manager": [
+          "home-manager"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "omarchroma": "omarchroma"
+      },
+      "locked": {
+        "lastModified": 1790527654,
+        "narHash": "sha256-p3CfJFjqWgROw0YjivXHr5uD5qIVITvWZMfLGokY9Yc=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-omatheme",
+        "rev": "42b64ed98e76a8c7582b2755b304e21a50ba58b1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-omatheme",
+        "rev": "42b64ed98e76a8c7582b2755b304e21a50ba58b1",
+        "type": "github"
+      }
+    },
     "nixarchy-pkg": {
       "inputs": {
         "nixpkgs": [
@@ -1057,6 +1082,22 @@
         "type": "github"
       }
     },
+    "omarchroma": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790283510,
+        "narHash": "sha256-go7GI2ojy09u3YrKcJeUxQpnQ6WfhqcP/zvVYPwXQsQ=",
+        "owner": "NobleDoodle",
+        "repo": "omarchroma",
+        "rev": "5d05f161c378f7daa43e4ec860ef335ac71f4272",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NobleDoodle",
+        "repo": "omarchroma",
+        "type": "github"
+      }
+    },
     "omarchy": {
       "flake": false,
       "locked": {
@@ -1117,6 +1158,7 @@
         "nixarchy-herdr": "nixarchy-herdr",
         "nixarchy-menu": "nixarchy-menu",
         "nixarchy-microvm": "nixarchy-microvm",
+        "nixarchy-omatheme": "nixarchy-omatheme",
         "nixarchy-pkg": "nixarchy-pkg",
         "nixarchy-plugin-browser": "nixarchy-plugin-browser",
         "nixarchy-podman": "nixarchy-podman",

@@ -684,6 +684,7 @@ in
         microvm = true;
         devenv = true;
         plugin-browser = true;
+        omatheme = true;
       };
       example = lib.literalExpression "{ podman = false; }";
       description = ''
@@ -1921,6 +1922,12 @@ in
             inputs.nixarchy-plugin-browser.packages.${pkgs.stdenv.hostPlatform.system}.cli
             pkgs.bubblewrap
           ];
+        };
+        # The runtime theme engine is enabled by the NixOS module; Nixarchy's
+        # default-plugin owner installs this manifest exactly once.
+        omatheme = {
+          id = "io.github.nobledoodle.omarchroma";
+          src = inputs.nixarchy-omatheme.packages.${pkgs.stdenv.hostPlatform.system}.omarchroma-plugin;
         };
         # The ai-mirror widget, on every machine (#773): it shows when an agent
         # is watching or driving, draws the confirm dialog, and a click stops a

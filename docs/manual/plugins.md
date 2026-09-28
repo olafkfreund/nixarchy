@@ -36,6 +36,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Plugin Browser](#plugin-browser) | the plugin marketplace, audited before you install | **on by default** | Setup ▸ Plugins ▸ Add Plugin · Super+Alt+U <!-- io.github.olafkfreund.nixarchy-plugin-browser --> |
 | [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
+| [Runtime themes](#runtime-themes) | switch the active palette across supported applications without a rebuild | **on by default** | Setup ▸ Themes <!-- io.github.nobledoodle.omarchroma --> |
 | [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **opt-in** | Super+Alt+Space, once you turn it on <!-- nixarchy.menu --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
 
@@ -357,6 +358,15 @@ once.
 **[Watch the nixarchy desktop showcase](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)**, recorded by an agent through ai-mirror.
 
 *Not recorded yet. It needs an agent driving the desktop, which is [#816](https://github.com/olafkfreund/nixarchy/issues/816) pass C.*
+
+## Runtime themes
+
+[omatheme](https://github.com/olafkfreund/nixarchy-omatheme) keeps the active
+palette in sync across the supported desktop and terminal targets. On NixOS,
+Stylix may continue to provide the declarative application template while
+omatheme switches the generated runtime files immediately.
+
+Turn it off with `programs.nixarchy.defaultPlugins.omatheme = false;`.
 
 ## Menu
 

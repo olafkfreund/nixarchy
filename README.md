@@ -80,6 +80,19 @@ and `omarchy plugin add <url>` still clone at runtime the way upstream intends,
 because trying one should be a command, not a rebuild. Where the line falls,
 and why, is [the NixOS philosophy](https://olafkfreund.github.io/nixarchy/manual/philosophy).
 
+### Runtime themes
+
+Nixarchy includes [omatheme](https://github.com/olafkfreund/nixarchy-omatheme)
+as its default runtime theme plugin. The NixOS module owns the theme daemon and
+application bridges; Nixarchy owns the plugin manifest, so one declaration
+installs it once. It works with or without Stylix: Stylix can remain the
+declarative template source, while omatheme switches the generated runtime
+files immediately.
+
+The default is enabled for a configured `programs.nixarchy.user`. Disable it
+with `programs.nixarchyThemeEngine.enable = false;`, or opt out of only the
+plugin with `programs.nixarchy.defaultPlugins.omatheme = false;`.
+
 Omarchy's Install menu runs `pacman -S`. Here it edits a file you own.
 
 Every app Omarchy offers is written to `~/.config/nixarchy/apps.nix` at first

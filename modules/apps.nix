@@ -3330,6 +3330,7 @@ in
             (pkgs.writeShellApplication {
               name = "nixarchy-apply";
               runtimeInputs = [
+                (pkgs.callPackage ../pkgs/branch-guard.nix { })
                 pkgs.coreutils
                 pkgs.diffutils
                 pkgs.gnugrep
@@ -3479,6 +3480,12 @@ in
                   exec journalctl --user -u nixarchy-rebuild --no-pager -o cat "''${jscope[@]}"
                 fi
 
+                # Refuse a checkout on a branch nobody chose to deploy (#1037):
+                # after the read-only modes above, before anything is written.
+                # Not in the --detach parent -- the panel ignores its output,
+                # so the unit refuses instead, where the panel can see it.
+                [ -n "$detach" ] || nixarchy-branch-guard "$flake"
+
                 if [ -n "$detach" ]; then
                   [ -n "$yes" ] || {
                     echo "nixarchy-apply: --detach needs --yes: a unit has no terminal to answer" >&2
@@ -3505,6 +3512,7 @@ in
                   systemd-run --user --unit=nixarchy-rebuild \
                     -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
                     --setenv=NIXARCHY_FLAKE="$flake" \
+                    --setenv=ALLOW_BRANCH_DEPLOY="''${ALLOW_BRANCH_DEPLOY:-}" \
                     --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
                     --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
                     -- "$(readlink -f "$0")" --yes --no-preview \

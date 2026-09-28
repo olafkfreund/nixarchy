@@ -411,6 +411,27 @@ rebuild runs to completion, and **nothing is ever installed**. `apply` now says
 so loudly rather than leaving you to work it out from an app that never
 appears.
 
+## Rebuilding refuses a branch you did not choose to deploy
+
+Installing an app from the menu, the bar's rebuild button, `omarchy update`
+and the nightly `autoUpdate` all build your flake **as it is checked out**.
+If that checkout is on a feature branch (yours, or one a coding agent left
+behind), rebuilding deploys that branch to this machine. So all four refuse
+when the checkout is on anything other than its default branch, and say so:
+
+    nixarchy: refusing to rebuild from 'feature/x' (a1b2c3d), not main.
+      switch back:      git -C /etc/nixos switch main
+      build it anyway:  ALLOW_BRANCH_DEPLOY=1 <the command you ran>
+
+The default branch is whatever `origin/HEAD` names, or `main` if that isn't
+set. A checkout detached exactly at `origin/main` counts as `main`. A
+checkout with no remote, or a flake that isn't a git checkout at all, is
+never refused. If your default branch isn't `main` and the message guesses
+wrong, `git remote set-head origin -a` teaches it once.
+
+From the bar, a refusal shows as a failed rebuild, with the message in its
+log.
+
 ## Why it isn't a package list
 
 Several of these are **not packages** on NixOS, and a flat `systemPackages`

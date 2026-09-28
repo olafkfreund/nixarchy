@@ -130,6 +130,102 @@ Repeated before steps 5, 6 and 7.
    link all three artifacts. `Closes #1037`. Before opening: `read_new`;
    post only if a trap qualifies.
 
+## Deviations found while implementing
+
+- **`apply`'s check sits just before the detach block (`:3487`), not right
+  after `flake=` (`:3398`).** Between the two, `apply` handles its read-only
+  modes: `--status`, `--json` and the journal follow. They read and exit.
+  With the check at `flake=`, a checkout on a branch would have refused a
+  status query. Just before the detach block is still before any write (the
+  first is the `git add` near `:3663`), and the `[ -n "$detach" ] ||`
+  condition is unchanged. The panel itself polls `nixarchy-rebuild-state`,
+  so it was never affected.
+- **`omarchy-update`'s check sits after the "no flake directory" test and
+  before the #356 writability prompt**, so a refused branch is the first
+  thing said, and the script never offers to `chown` a checkout it is about
+  to refuse.
+- **Step 1 confirmed `-c safe.directory` is honoured:** git 2.55's
+  `git-config(1)` puts the command scope in protected configuration.
+
+- **The spec overstated why `-c safe.directory` is needed.** It said that
+  without it the guard "would error on exactly the machines it exists for",
+  with `autoUpdate` as root reading the user-owned `/etc/nixos`. But
+  `modules/nixos.nix:967` already sets `safe.directory = [ cfg.flake ]`
+  system-wide on every nixarchy machine (plus the resolved path, `:1128`),
+  so root's git trusts the managed flake. Measured on p620: root's plain
+  `git` reads `/etc/nixos` with `SUDO_UID` removed, because
+  `/etc/gitconfig` carries the entry. The `-c` is kept, and only matters when
+  `NIXARCHY_FLAKE` points somewhere the system config doesn't name.
+  `installer/cd.nix:850` confirms `-c` reaches only the command it is passed
+  to, which is exactly how the helper uses it. Step 7 still runs, but
+  "no dubious ownership" there is already guaranteed by the module; it proves
+  the helper answers as root, not that `-c` was needed.
+- **A suspected second bug was measured and ruled out.** It looked as though
+  `autoUpdate`'s existing dirty-tree `git -C` (as root) would fail on
+  installed machines before reaching the guard. It doesn't, for the same
+  reason (`nixos.nix:967`). Nothing to file.
+
+- **`autoUpdate` calls the helper by store path, as the spec says; the plan
+  had put it in the unit's `path`.** `tests/options.nix` already runs the
+  generated script under a `PATH` of its own (`PATH="$PWD/au-stubs:$PATH"`),
+  with no helper on it. A bare name would have failed there with "command not
+  found", the `|| { note; exit 1; }` would have fired, and existing
+  `checks.options` cases ("auto-update refused the installer's staged flake")
+  would have gone red on a change that looks unrelated to them. Found by
+  reading `tests/AGENTS.md` ("run a unit's script, do not grep it") before
+  building. None of the existing harnesses that run `apply` or `autoUpdate`
+  have a remote, so the helper lets all of them through.
+- **The check's `printf | grep -q` pipes are here-strings.** Under the
+  `pipefail` every `runCommand` has, `grep -q` exiting at its first match can
+  SIGPIPE the writer and read as a miss (`tests/AGENTS.md`).
+
+- **Step 6 took the `checks.session` branch.** Its existing detach block
+  already runs `apply --detach --yes` against real systemd. Two cases were
+  added next to it, against a git repo with an origin on a feature branch:
+  - without the override: the parent starts the unit rather than refusing,
+    and the unit ends `exit-code` with the refusal in its journal;
+  - with `ALLOW_BRANCH_DEPLOY=1`: the refusal is absent from that run's
+    journal.
+  Each run's journal is scoped with `--invocation`, as `apply`'s own log
+  mode does, and it must not be empty, so a filter that matches nothing
+  can't pass the override case by default. So the detach parent's skip and
+  the `--setenv` forward are now proven by running, not only by reading the
+  script in `checks.branch-guard`.
+
+- **The "helper ships" assertion checks the system `PATH`, not Omarchy's
+  closure.** The first version asserted the helper was in the Omarchy
+  package's runtime closure, and failed. That was correct of it, because
+  `runtimeDeps` is `passthru`. The package's `bin/` is an unwrapped symlink
+  farm (`bin/omarchy` reads each script's header to list its commands), and
+  the commands reach a machine through the module's `systemPackages`
+  (`modules/nixos.nix:1189`). The property `omarchy-update` depends on is
+  "the helper is on the machine's `PATH`", so the check reads
+  `vm.config.environment.systemPackages`, passed in as a yes/no value rather
+  than a store path.
+- **The four output captures are `&& rc=0 || rc=$?`**, not `; rc=$?`. The
+  builder runs with `errexit`, so the first expected refusal (exit 1) ended
+  the check at the assignment with no message, right after "on main -> 0".
+  That's the trap `tests/AGENTS.md` records.
+
+- **Step 7, measured on p620, and it covered more than planned.** As root
+  with `SUDO_UID`/`SUDO_USER`/`SUDO_GID` removed (as under systemd), the
+  helper answers exit 0 on `/etc/nixos`, which is on main. Since
+  `/etc/nixos` is system-trusted, that alone can't show the helper's `-c`
+  doing anything, so the same was run on a `git clone --shared` in scratch
+  space, owned by the user and **not** system-trusted:
+  - plain root `git` refuses it (`detected dubious ownership`);
+  - the helper refuses its feature branch with the right message and passes
+    its main.
+  So the `-c safe.directory` path the sandbox can't reach is proven on a
+  real root/user split. The clone was removed; `/etc/nixos`'s branch was
+  never changed.
+- **The `autoUpdate` case gained a lock-moving `nix` stub** (the one
+  `tests/options.nix` uses). The first round of red runs showed "leaves
+  flake.lock untouched" staying green with the guard removed, because
+  without `nix` in the sandbox the update failed before touching the lock.
+  With the stub, that break turns it red ("moved the lock on a refused
+  branch").
+
 ## Tests
 
 | command | expected |

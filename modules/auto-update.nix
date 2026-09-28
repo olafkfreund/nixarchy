@@ -30,6 +30,9 @@
 }:
 let
   cfg = config.programs.nixarchy.autoUpdate;
+  # By store path, not the unit's path: tests/options.nix runs this script
+  # under a PATH of its own, and a bare name would fail there (#1037).
+  branchGuard = "${pkgs.callPackage ../pkgs/branch-guard.nix { }}/bin/nixarchy-branch-guard";
   fleet = config.programs.nixarchy.fleet;
 in
 {
@@ -154,6 +157,13 @@ in
               fi
             fi
           ''}
+
+          # A branch nobody chose to deploy fails the run -- before the lock is
+          # touched, and loudly via OnFailure, like a dirty tree (#1037).
+          ${branchGuard} "$flake" || {
+            note "auto-update: $flake is on a branch nobody chose to deploy"
+            exit 1
+          }
 
           # ONE input. A bare flake update moves nixarchy too, which is the
           # decision this module deliberately does not make.

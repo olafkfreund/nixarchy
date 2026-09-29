@@ -2809,6 +2809,8 @@ pkgs.runCommand "nixarchy-options"
     # #946: the real nixarchy-menu through the plugin validator, and the
     # enable-once hook as rendered with it on, for shellcheck.
     menuValidated = menuOnHome.programs.nixarchy.pluginChecks."nixarchy.menu";
+    # #1053: the source it installs, whose bar button must wear the snowflake.
+    menuSrc = menuOnHome.programs.nixarchy.plugins."nixarchy.menu".src;
     defaultHookScript = pkgs.writeText "default-plugins-hook" (hookText menuOnHome);
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
     herdrSrc =
@@ -5733,6 +5735,11 @@ pkgs.runCommand "nixarchy-options"
           exit 1
         }
         echo "nixarchy-menu validates, and the enable-once hook passes shellcheck"
+        grep -q nix-snowflake.png "$menuSrc/BarWidget.qml" && grep -q 'labelVisible: false' "$menuSrc/BarWidget.qml" || {
+          echo "menuSrc: nixarchy-menu's bar button does not wear the snowflake (#1053, $menuSrc)" >&2
+          exit 1
+        }
+        echo "nixarchy-menu's bar button wears the snowflake"
 
           touch $out
       ''

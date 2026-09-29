@@ -16,7 +16,7 @@ working:
   whole desktop and `installerManaged` is set.
 
 | file | what it owns |
-|---|---|
+| --- | --- |
 | `nixos.nix` | the system: session, greeter, graphics, services, the option surface |
 | `home.nix` | the Home Manager side: the seed, plugins, per-user state |
 | `apps.nix` | the app catalogue and the selection model (`nixarchy-apply`) |
@@ -27,7 +27,7 @@ working:
 ## Tests
 
 | check | covers |
-|---|---|
+| --- | --- |
 | `checks.options` | every option asserted in BOTH states — this is what protects Mode A |
 | `checks.session` | a booted desktop; does not run locally, CI only |
 | `checks.reference-toplevel` | the machine the installer writes, built |
@@ -60,6 +60,7 @@ working:
 ## `modules/nixos.nix`
 
 <a id="omarchys-session-launched-from-its-own-hyprland-lu"></a>
+
 ### Omarchy's session, launched from its own hyprland.lua in the store…
 
 ```nix
@@ -84,6 +85,7 @@ The VM never complained because a warning is not a failure -- it took
 somebody reading the journal on a machine that had actually logged in.
 
 <a id="nixarchy-wrote-this-machine-as-a-property-of-the-c"></a>
+
 ### "Nixarchy wrote this machine", as a property of the configuration rather
 
 ```nix
@@ -112,6 +114,7 @@ hosts/$(hostname) reads state the user is invited to edit, and would one
 day refuse a machine to its own owner.
 
 <a id="built-from-your-nixpkgs-through-this-flakes-overla"></a>
+
 ### Built from *your* nixpkgs through this flake's overlay, not from
 
 ```nix
@@ -134,6 +137,7 @@ you notice the hashes differ. Found by building a real config that had
 tesseract of its own.
 
 <a id="most-of-what-the-install-menu-offers-is-unfree"></a>
+
 ### Most of what the Install menu offers is unfree
 
 ```nix
@@ -170,6 +174,7 @@ evaluation time when an enabled app is unfree and allowUnfree is off, and
 names the fix.
 
 <a id="etc-nixos-belongs-to-the-installed-user-installer-"></a>
+
 ### /etc/nixos belongs to the installed user (installer/install.sh
 
 ```nix
@@ -216,6 +221,7 @@ covered by this entry. Name the real directory instead. Machines this
 installer writes have a real /etc/nixos, so the default is fine.
 
 <a id="the-literal-path-above-is-not-always-enough-becaus"></a>
+
 ### The literal path above is not always enough, because the ownership
 
 ```nix
@@ -239,6 +245,7 @@ silently ignored, which is what makes the file safe to reference
 before the first activation has written it.
 
 <a id="mise-is-in-omarchys-base-packages-and-its-dev-env-"></a>
+
 ### mise is in Omarchy's base packages and its dev-env installers lean on
 
 ```nix
@@ -258,6 +265,7 @@ This is what makes `omarchy install dev-env` work rather than print a
 wall of build errors.
 
 <a id="minus-hyprland-itself"></a>
+
 ### Minus Hyprland itself
 
 ```nix
@@ -283,6 +291,7 @@ else's. omarchy-session still runs the Lua config through
 config.programs.hyprland.package, which is the same binary either way.
 
 <a id="config-hypr-xdph-conf-which-the-package-seeds-into"></a>
+
 ### config/hypr/xdph.conf, which the package seeds into
 
 ```nix
@@ -312,6 +321,7 @@ one: the file is upstream's, so the edit is undone by the next
 Omarchy bump.
 
 <a id="passed-straight-through"></a>
+
 ### Passed straight through
 
 ```nix
@@ -330,6 +340,7 @@ set, and it is right to: two places setting services is two places to
 look.
 
 <a id="cups-avahi-and-nss-mdns-are-all-in-base-packages"></a>
+
 ### cups, avahi and nss-mdns are all in base.packages
 
 ```nix
@@ -355,6 +366,7 @@ Only browsed goes: avahi stays on for driverless IPP discovery, which
 is how modern printers are found and is what cupsd does by itself.
 
 <a id="three-files-from-upstreams-etc-overlay-installed-as-themselves"></a>
+
 ### Three files from upstream's /etc overlay, installed as themselves
 
 ```nix
@@ -398,6 +410,7 @@ Not `environment.etc` for the other fourteen. Those are behaviour changes
 path; the next section is what #649 decided for each.
 
 <a id="the-rest-of-upstreams-etc-overlay-as-nixos-options"></a>
+
 ### The rest of upstream's /etc overlay, as NixOS options
 
 Eleven of #642's fourteen `divergent` rows are now `native`: `modules/nixos.nix`
@@ -445,6 +458,7 @@ by value rather than by reading the manifest, for the reason the `installed`
 cases do.
 
 <a id="the-ownership-marker-for-the-shell-tools-that-cann"></a>
+
 ### The ownership marker, for the shell tools that cannot ask the module
 
 ```nix
@@ -467,6 +481,7 @@ existence, which is the only part that is cheap to get right in every
 shell script that needs it.
 
 <a id="the-other-half-of-that-script-which-this-module-le"></a>
+
 ### The other half of that script, which this module left behind
 
 ```nix
@@ -495,6 +510,7 @@ the user opens rather than replacing it. A mkDefault list would be
 dropped whole the moment they opened a port of their own.
 
 <a id="install-config-lockscreen-pam-sh-whose-one-line-is"></a>
+
 ### install/config/lockscreen-pam.sh, whose one line is `omarchy-apply-lock`
 
 ```nix
@@ -526,6 +542,7 @@ for good. Upstream's deny=10 needs the raw `rules` interface, and a
 lockout is a worse failure than the logging it would buy.
 
 <a id="omarchy-path-default-systemd-user-which-upstream-i"></a>
+
 ### $OMARCHY_PATH/default/systemd/user/, which upstream installs into
 
 ```nix
@@ -552,7 +569,7 @@ migrations, ConditionPathExists=/usr/bin/tailscale) can never hold here,
 and both jobs belong elsewhere on NixOS: migrations arrive with a
 rebuild, and Taildrop with services.tailscale.
 
-Each omarchy-* unit gets /run/current-system/sw on its PATH. NixOS gives
+Each omarchy-*unit gets /run/current-system/sw on its PATH. NixOS gives
 every unit a stub PATH of coreutils, findutils, grep, sed and systemd,
 and unlike the copies upstream drops in ~/.config/systemd/user that stub
 *overrides* the session PATH uwsm imported -- omarchy-system-sleep-
@@ -571,6 +588,7 @@ remove an [Install] symlink that lives in a read-only /etc, so the
 tuning would come back at the next login with the config it needs gone.
 
 <a id="default-systemd-user-app-slice-d-10-oomd-conf"></a>
+
 ### default/systemd/user/app.slice.d/10-oomd.conf
 
 ```nix
@@ -595,6 +613,7 @@ from systemd's 60% over 30s. Not carried over: those are a tuning
 preference, and the defaults still fire.
 
 <a id="bluez-bluez-tools-and-bluez-utils-are-all-in"></a>
+
 ### bluez, bluez-tools and bluez-utils are all in
 
 ```nix
@@ -615,6 +634,7 @@ README's known gaps. It is the same shape as UPower: the tools were
 installed, the daemon was not.
 
 <a id="our-own-splash-in-the-theme-directory-upstreams-oc"></a>
+
 ### Our own splash, in the theme directory upstream's occupies -- upstream
 
 ```nix
@@ -643,6 +663,7 @@ the alternative is guessing which of a machine's users logs into the
 desktop.
 
 <a id="docker-is-enabled-above-at-mkdefault-for-every-mac"></a>
+
 ### Docker runs rootless, and that is why there is no group
 
 ```nix
@@ -678,6 +699,7 @@ old default and was retargeted rather than satisfied, which is the
 distinction CLAUDE.md §1 draws.
 
 <a id="rootless-docker-and-the-display-manager"></a>
+
 #### Rootless Docker and the display manager
 
 ```nix
@@ -709,6 +731,7 @@ this corrects upstream's literal, not a user's choice, which is one of the
 two exceptions `modules/services/default.nix` names.
 
 <a id="default-fontconfig-conf-avail-50-omarchy-conf-whic"></a>
+
 ### default/fontconfig/conf.avail/50-omarchy.conf, which upstream symlinks
 
 ```nix
@@ -736,6 +759,7 @@ readFile on a derivation output is import-from-derivation and would
 make this module unevaluatable without building Omarchy first.
 
 <a id="default-environment-d-10-omarchy-fcitx-conf-plus-t"></a>
+
 ### default/environment.d/10-omarchy-fcitx.conf, plus the daemon that reads
 
 ```nix
@@ -760,6 +784,7 @@ opinion and still beats nixpkgs' placeholder, which is exactly the rule
 this module follows everywhere else: arrive beside what is installed.
 
 <a id="fcitx5-says-this-itself-in-a-notification-on-every"></a>
+
 ### fcitx5 says this itself, in a notification on every login
 
 ```nix
@@ -783,6 +808,7 @@ default is the right one -- so this is set rather than left to the user.
 ## `modules/home.nix`
 
 <a id="what-omarchy-path-points-at-and-the-source-of-ever"></a>
+
 ### What OMARCHY_PATH points at, and the source of every file seeded below
 
 ```nix
@@ -805,6 +831,7 @@ Omarchy ships, which is the honest answer when there is no selection for
 the Install rows to reach.
 
 <a id="each-declared-plugin-checked-at-build-time-against"></a>
+
 ### Each declared plugin, checked at build time against the schema the shell
 
 ```nix
@@ -835,6 +862,7 @@ directory named anything else would be a plugin the user cannot enable,
 disable or remove by the name they see on screen.
 
 <a id="a-plugin-that-shells-out-to-pacman-fails-the-rebui"></a>
+
 ### A plugin that shells out to pacman fails the REBUILD, not the click
 
 ```nix
@@ -868,6 +896,7 @@ after real code still trips this, which is the safe direction for a
 check about what a machine will execute.
 
 <a id="declares-which-plugins-are-present-and-deliberatel"></a>
+
 ### Declares which plugins are *present*, and deliberately not which are on
 
 ```nix
@@ -891,6 +920,7 @@ That still holds for every plugin you declare. nixarchy's own defaults are
 the one exception, next.
 
 <a id="the-default-plugins-are-on-from-the-first-login"></a>
+
 ### The default plugins are on from the first login, once
 
 ```nix
@@ -990,11 +1020,19 @@ How, and why this way:
   (gltui's own `register` did) keeps its `action` over nixarchy's. Nix cannot
   see that file, so no check can either; the manual tells users to delete the
   stale keys.
+- **nixarchy-menu's bar button is patched to wear the snowflake (#1053).**
+  It brings its own `BarWidget.qml`, which draws the Omarchy glyph, so the
+  stock button's replacement (`pkgs/omarchy/menu-bar-widget.qml`) never
+  reaches it. The `menu` entry's `src` inserts the same `labelVisible: false`
+  and PNG `Image` after its one `fontFamily: "omarchy"` line, with
+  `--replace-fail` so a nixarchy-menu bump that rewords the line fails the
+  build. tests/qml.nix lints the result; tests/options.nix asserts it.
 
 Nixi's own turn-on is separate and stays nixi's: its module does it, with its
 own marker (#709).
 
 <a id="omarchys-desktop-is-its-hyprland-config"></a>
+
 ### Omarchy's desktop is its Hyprland config
 
 ```nix
@@ -1013,6 +1051,7 @@ is the user's own with no bar and none of the keybindings. Worth a
 warning rather than leaving someone to work it out from an empty bar.
 
 <a id="whether-there-is-an-omarchy-session-entry-to-log-i"></a>
+
 ### Whether there is an Omarchy session entry to log into
 
 ```nix
@@ -1037,6 +1076,7 @@ standalone home-manager install has no NixOS module registering
 sessions at all.
 
 <a id="the-hyprland-toggles-tree-and-deliberately-only-fl"></a>
+
 ### The Hyprland toggles tree, and deliberately only flags.lua out of it
 
 ```nix
@@ -1060,6 +1100,7 @@ fires. Hiding the bar wrote the flag and changed nothing on screen
 until the shell was restarted.
 
 <a id="and-the-two-files-that-belong-in-it-which-upstream"></a>
+
 ### And the two files that belong in it, which upstream seeds from
 
 ```nix
@@ -1078,6 +1119,7 @@ is this repo's NIXARCHY banner rather than upstream's, by the same
 reasoning as the menu's snowflake.
 
 <a id="the-extensions-directory-and-one-thing-to-undo-in-"></a>
+
 ### The extensions directory, and one thing to undo in it
 
 ```nix
@@ -1101,6 +1143,7 @@ place. Only a link into /etc/nixarchy is touched: a file, or a
 link somebody else made, is theirs. #210.
 
 <a id="agent-skills-relinked-on-every-activation"></a>
+
 ### Agent skills, relinked on every activation
 
 ```nix
@@ -1141,6 +1184,7 @@ would not see these skills. Upstream's `~/.hermes/skills` is not linked
 either, as before this change.
 
 <a id="declared-plugins-linked-in-by-the-id-their-manifes"></a>
+
 ### Declared plugins, linked in by the id their manifest claims
 
 ```nix
@@ -1219,6 +1263,7 @@ video shows every shipped plugin, was green, and the video did not
 mention nixi at all (#930).
 
 <a id="the-first-run-theme-above-is-applied-headless-whic"></a>
+
 ### The first-run theme above is applied headless, which by design skips…
 
 ```nix
@@ -1238,6 +1283,7 @@ compositor, so a graphical-session unit is the right shape for it. It is
 a no-op on every later login, because it writes what dconf already holds.
 
 <a id="provider-files-for-the-local-model-when-the-system"></a>
+
 ### Provider files for the local model, when the system module turned it on
 
 ```nix
@@ -1272,6 +1318,7 @@ other key alone. Same reasoning as the pi settings below, arrived at the
 same way: both files already have an owner.
 
 <a id="pi-keeps-its-configuration-in-pi-agent-not-under-x"></a>
+
 ### pi keeps its configuration in ~/.pi/agent, not under XDG
 
 ```nix
@@ -1290,6 +1337,7 @@ version that does cannot break activation, and means a user's own extra
 providers survive.
 
 <a id="neovim-specs-written-once-and-gated-on-what-was-se"></a>
+
 ### Neovim specs, written once and gated on what was selected
 
 ```nix
@@ -1349,6 +1397,7 @@ and diffs, rather than comparing names. `nixFormatter` is read off
 from one string in modules/nixos.nix.
 
 <a id="same-extension-point-on-the-other-hook-omarchy-alr"></a>
+
 ### Same extension point, on the other hook Omarchy already runs
 
 ```nix
@@ -1378,6 +1427,7 @@ than the fortnight of changes that piled up after it, and a notification
 whose text does not match what clicking it will do is worse than none.
 
 <a id="left-at-home-managers-own-default-everywhere-else-"></a>
+
 ### Left at Home Manager's own default everywhere else, which is
 
 ```nix
@@ -1401,6 +1451,7 @@ up a declared container -- by calling `distrobox-assemble` itself,
 by bare name, the way the module comment already requires.
 
 <a id="nixi-the-one-plugin-turned-on-for-you"></a>
+
 ### nixi: the one plugin turned on for you, and two traps behind it
 
 ```nix
@@ -1465,6 +1516,7 @@ will bite the next plugin too:
 ## `modules/apps.nix`
 
 <a id="the-command-each-app-puts-on-path-so-the-menu-can-"></a>
+
 ### The command each app puts on PATH, so the menu can tell "you already…
 
 ```nix
@@ -1496,6 +1548,7 @@ copy first, by probing final.nixarchy-apps (flake.nix); this is the
 menu's half, asserted by tests/coverage.py against the flake's packages.
 
 <a id="the-curated-list-as-search-rows"></a>
+
 ### The curated list as search rows
 
 ```nix
@@ -1517,6 +1570,7 @@ cache.nixos.org, so it costs a 2.6 MiB download rather than an evaluation
 of every option on the machine.
 
 <a id="flatpaks-go-in-services-nix-rather-than-a-fourth-f"></a>
+
 ### Flatpaks go in services.nix rather than a fourth file
 
 ```nix
@@ -1543,6 +1597,7 @@ Five tab-separated fields, matching every other source: kind, name,
 summary, option type (unused here), preview.
 
 <a id="services-and-system-settings-as-nixos-configuratio"></a>
+
 ### Services and system settings, as NixOS configuration
 
 ```nix
@@ -1577,6 +1632,7 @@ This file is yours. Nothing regenerates or overwrites it once created;
 the current full list is always at /etc/nixarchy/services-template.nix.
 
 <a id="anything-at-all"></a>
+
 ### Anything at all
 
 ```nix
@@ -1603,6 +1659,7 @@ If you find yourself writing the same thing here on every machine, that
 is worth an issue -- it probably belongs in the catalogue.
 
 <a id="applications-available-through-the-omarchy-menu-as"></a>
+
 ### Applications available through the Omarchy menu, as NixOS configuration
 
 ```nix
@@ -1626,6 +1683,7 @@ The `#@ name` markers are how the menu finds a line to uncomment. Keep
 them and you can reformat, reorder and annotate this file freely.
 
 <a id="the-menu-defaults"></a>
+
 ### ── The menu defaults ───────────────────────────────────────────────────
 
 ```nix
@@ -1657,6 +1715,7 @@ copied from upstream's own menu at build time by the script below, so a
 rename upstream follows through instead of being frozen into this repo.
 
 <a id="backup-and-recovery-one-menu-542"></a>
+
 ### Backup and recovery, one menu (#542)
 
 ```nix
@@ -1728,6 +1787,7 @@ in practice, `menu.extraEntries."trigger.snapshot".target =
 for the old name would need.
 
 <a id="beside-roll-back-because-they-are-the-two-halves-o"></a>
+
 ### Beside Roll back, because they are the two halves of the same
 
 ```nix
@@ -1752,6 +1812,7 @@ is not worth drawing. /etc/nixarchy/managed is the same predicate the
 command itself gates on -- see modules/nixos.nix.
 
 <a id="the-off-disk-half-beside-the-on-disk-one"></a>
+
 ### The off-disk half, beside the on-disk one
 
 ```nix
@@ -1773,6 +1834,7 @@ nixosModules.nixarchy is not offered a thing that will refuse.
 A row that exists to say no is worse than no row.
 
 <a id="the-sandboxes-group-226"></a>
+
 ### The Sandboxes group (#226)
 
 ```nix
@@ -1800,7 +1862,7 @@ software CPU is what makes that true on every nixarchy machine.
 `nixarchy-vm` itself is installed unconditionally (this file,
 below -- same as `nixarchy dev init`), so there is no
 `programs.nixarchy.services.microvm.enable` to gate this on:
-#221 designed the disposable half to need no root and no rebuild,
+# 221 designed the disposable half to need no root and no rebuild,
 so nothing about it is opt-in.
 
 **Since #766 PR E the group is the MicroVMs panel.** `trigger.vm` opens
@@ -1812,6 +1874,7 @@ and opens `nixarchy vm list` in a terminal. The CLI stays, for the terminal
 and for the panel itself.
 
 <a id="dim-when-the-app-is-in-the-selection-or-already-on"></a>
+
 ### Dim when the app is in the selection *or* already on PATH
 
 ```nix
@@ -1833,6 +1896,7 @@ nixarchy is allowed to perform -- an app that arrived from
 the user's own configuration is not this menu's to take away.
 
 <a id="the-services-catalogue-as-menu-rows"></a>
+
 ### The services catalogue, as menu rows
 
 ```nix
@@ -1851,6 +1915,7 @@ carrying the id across is what keeps the generator from failing on a
 row nothing maps.
 
 <a id="the-tree-omarchy-path-points-at"></a>
+
 ### The tree OMARCHY_PATH points at
 
 ```nix
@@ -1874,6 +1939,7 @@ directories instead keeps everything inside them a real file, which is what
 `cp -r $OMARCHY_PATH/config/.` copies.
 
 <a id="the-doctor-and-verify-which-until-now-were-flake-a"></a>
+
 ### The doctor and verify, which until now were flake apps only
 
 ```nix
@@ -1897,6 +1963,7 @@ inputs.self.packages -- see the note on programs.nixarchy.package in
 modules/nixos.nix for what mixing nixpkgs instances does to buildEnv.
 
 <a id="uncomments-one-app-in-config-nixarchy-apps-nix"></a>
+
 ### Uncomments one app in ~/.config/nixarchy/apps.nix
 
 ```nix
@@ -1918,6 +1985,7 @@ against /etc/nixarchy/apps-template.nix by hand, and nothing said
 so.
 
 <a id="the-answer-to-i-want-a-package-the-menu-does-not-o"></a>
+
 ### The answer to "I want a package the menu does not offer"
 
 ```nix
@@ -1955,6 +2023,7 @@ constant at build time: script and system are the same generation,
 so the constant cannot go stale without the script being replaced.
 
 <a id="search-everything-this-machine-could-install-and-r"></a>
+
 ### Search everything this machine could install, and route the choice
 
 ```nix
@@ -1998,6 +2067,7 @@ an unreadable flake directory therefore reads as "queued", which is
 the honest claim for a machine that has never applied.
 
 <a id="ask-flathub-org-directly"></a>
+
 ### Ask flathub.org directly
 
 ```nix
@@ -2017,6 +2087,7 @@ other three kinds keep working on a machine with none; only
 this row fails, and it says so.
 
 <a id="one-name-for-the-commands-this-repo-adds-and-a-way"></a>
+
 ### One name for the commands this repo adds, and a way through to
 
 ```nix
@@ -2040,6 +2111,7 @@ you should not have to know which half of the desktop you are
 talking to before you can type a command.
 
 <a id="where-the-selection-lands"></a>
+
 ### Where the selection lands
 
 ```nix
@@ -2061,6 +2133,7 @@ a stray directory into it would be worse than writing the file
 where it has always gone.
 
 <a id="a-flake-cannot-read-a-file-outside-its-own-tree-so"></a>
+
 ### A flake cannot read a file outside its own tree, so the
 
 ```nix
@@ -2084,6 +2157,7 @@ and the copy it used to hold is written to nixarchy/apps.nix in
 the same run, before the stub replaces it.
 
 <a id="stage-what-was-written-or-a-flake-in-a-git-worktre"></a>
+
 ### Stage what was written, or a flake in a git worktree cannot see
 
 ```nix
@@ -2115,6 +2189,7 @@ print the fix rather than abort an apply that has already
 copied everything correctly.
 
 <a id="whether-anything-in-the-flake-actually-imports-it"></a>
+
 ### Whether anything in the flake actually imports it
 
 ```nix

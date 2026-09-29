@@ -322,7 +322,7 @@
     # Why: docs/internals/flake.md#the-dev-environments-panel-wherever-devenv-is-802
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-devenv = {
-      url = "github:olafkfreund/nixarchy-devenv/f4821857764c73bb0ebc5eacd465fc870bd6680b";
+      url = "github:olafkfreund/nixarchy-devenv/b82eb6a2c573074fb8a43c2dddff5884c6c83ea0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -2150,6 +2150,8 @@
           qml = import ./tests/qml.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+            menuPlugin =
+              self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
           };
 
           # A keep-loaded plugin lost its shell API at the first shell.json

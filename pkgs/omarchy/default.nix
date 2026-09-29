@@ -2047,6 +2047,14 @@ stdenvNoCC.mkDerivation {
                       --subst-var-by snowflake \
                       "${nixos-icons}/share/icons/hicolor/256x256/apps/nix-snowflake.png"
 
+                    # Hyprforge (#1059) saves to ~/.config/hypr/hyprforge.lua; the session
+                    # runs this store hyprland.lua, so the optional require belongs here.
+                    # Its exact text is what Hyprforge's Connect looks for.
+                    # Why: pkgs/AGENTS.md#hyprforge-s-hook-lives-in-the-store-hyprland-lua
+                    substituteInPlace $out/share/omarchy/config/hypr/hyprland.lua \
+                      --replace-fail 'require("hypr.autostart")' \
+                      $'require("hypr.autostart")\nrequire("default.hypr.require_optional").module("hypr.hyprforge") -- Hyprforge (Omarchy plugin)'
+
                     # The default plugins' binds (#766), in the SEED, so new homes get
                     # them and nobody's edited bindings.lua is touched. Appended after
                     # upstream's last line, asserted first so a reworded seed fails here.

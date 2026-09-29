@@ -354,6 +354,18 @@ let
     }
   '';
 
+  # Hyprforge (#1059): upstream (Aziz, MIT) has no flake, so it is packaged
+  # here like herdr. MIT needs the notice to travel with the code.
+  hyprforgePlugin = pkgs.runCommand "nixarchy-hyprforge" { } ''
+    cp -r ${inputs.nixarchy-hyprsettngs} $out
+    chmod -R u+w $out
+    rm -rf $out/test $out/preview.png
+    grep -q "Copyright (c) 2026 Aziz" $out/LICENSE || {
+      echo "nixarchy-hyprforge: LICENSE must keep its copyright holder" >&2
+      exit 1
+    }
+  '';
+
   # Omarchy's Neovim configuration, appended to the seed activation rather than
   # wrapped around it: this is a string the activation interpolates, so adding
   # it costs the diff it is worth instead of re-indenting three hundred lines
@@ -690,9 +702,10 @@ in
         package manager, GitLab pipelines, GitHub Actions and herdr panels
         always, podman when podman is on, distrobox when Boxes is on,
         microvms always, dev environments when the devenv service is on, and
-        the Plugin Browser (Setup > Plugins > Add Plugin) and `menu`
+        the Plugin Browser (Setup > Plugins > Add Plugin), `menu`
         (nixarchy-menu, which replaces the Omarchy menu; `false` brings the
-        stock menu back) always. A name left out counts as on.
+        stock menu back) and `hyprforge` (Hyprforge, a Hyprland settings
+        studio) always. A name left out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -1892,6 +1905,21 @@ in
         };
         # The herdr sessions widget, with herdr itself and the tools its
         # herdr-sessions script calls (#771).
+        # Hyprforge (#1059), a Hyprland settings studio. It saves to
+        # ~/.config/hypr/hyprforge.lua, which the session loads through a line
+        # pkgs/omarchy adds to the store hyprland.lua; Connect alone would not.
+        hyprforge = {
+          id = "aziz.hyprforge";
+          src = hyprforgePlugin;
+          # lua runs its baseline.lua, cmp checks a write, notify-send and
+          # wl-copy/wl-paste back its toasts and profile sharing.
+          packages = [
+            pkgs.lua
+            pkgs.diffutils
+            pkgs.libnotify
+            pkgs.wl-clipboard
+          ];
+        };
         herdr = {
           id = "nixarchy.herdr";
           src = herdrSessions;

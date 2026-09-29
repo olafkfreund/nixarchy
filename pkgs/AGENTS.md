@@ -140,6 +140,45 @@ The same line therefore goes into the store file, after
 
 `checks.session` writes the file and reads the option back through
 `hyprctl`. That is the only layer that can see "saved but never loaded" (§2).
+<a id="omarchy-restart-shell-waits-for-the-old-shell-to-be-gone-953"></a>
+
+### omarchy-restart-shell waits for the old shell to be gone (#953)
+
+A CARRIED patch, not reported upstream (the owner's decision). Upstream stops
+the running shell with:
+
+```sh
+while timeout 5 quickshell kill -p "$CONFIG_DIR" --any-display >/dev/null 2>&1; do :; done
+```
+
+Its comment promises that a kill "only returns once it has fully exited, so the
+no-duplicate launch below can't race a dying shell". `timeout 5` breaks that
+whenever teardown is slow:
+
+- a plugin-heavy shell measured about 14 s;
+- one in the middle of a plugin hot-reload, which a Home Manager switch that
+  swaps a plugin folder starts, stalls for 8–30 s.
+
+So the client gave up, the relaunch ran beside the dying shell, the new one
+printed "already running" and exited, and then the old one finished. On p620
+on 2026-09-29 that meant no shell and no bar for 17 minutes. Upstream's own
+readiness poll, about 12 s, then gave up too, so nothing recovered.
+
+Two `--replace-fail` edits fix it:
+
+- **The exit wait.** Loop while `quickshell list -p "$CONFIG_DIR"` still names
+  an instance, re-issuing the kill, bounded by `OMARCHY_SHELL_EXIT_TIMEOUT`
+  (60 s). Past the bound, say so and exit 1 **without** launching, because a
+  second shell beside a live one exits by construction. The list output is
+  captured and matched, never piped into `grep -q`
+  (tests/AGENTS.md#a-pipe-into-grep-q-can-fail-because-grep-matched).
+- **Readiness.** A deadline of `OMARCHY_SHELL_READY_TIMEOUT` (60 s) instead of
+  20 attempts, because a fresh plugin-heavy shell takes 30–60 s to answer IPC.
+
+**When to drop it:** once upstream waits for the old instance itself.
+`checks.shell-restart-race` runs upstream's unpatched script as its negative
+control, and goes red when that script stops ending with zero shells. That red
+is the signal, not a regression.
 
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)

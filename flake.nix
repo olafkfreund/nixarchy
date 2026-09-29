@@ -2226,6 +2226,14 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };
+          # #953: a restart never ends with zero shells, against stubs that make
+          # teardown slower than upstream's `timeout 5`; upstream's own script is
+          # the negative control.
+          shell-restart-race = import ./tests/shell-restart-race.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
 
           # #963, and it was registered by NOTHING until #982 went looking --
           # the file shipped and `checks` never named it, so it had never run.

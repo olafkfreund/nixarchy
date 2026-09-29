@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1053
 spec: spec/2026-09-29-1053-menu-snowflake.md
 ---

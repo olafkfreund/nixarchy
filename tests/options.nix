@@ -175,6 +175,7 @@ let
       plugin-browser = false;
       flatsnap = false;
       omatheme = false;
+      menu = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.

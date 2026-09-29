@@ -67,6 +67,39 @@ test -f "${omarchy}/shell/plugins/menu/MenuModel.js"
 - **#1069's `pathsToLink` stays**, with its comment updated to say it is now
   belt and braces.
 
+### 4. A scripted close never starts dictation (added at spec approval)
+
+Today, `omarchy-menu close` becomes `omarchy-shell shell hide omarchy.menu`,
+which calls the enabled clone's `close()`. The hotkey's second tap reaches the
+same function (toggle when open becomes hide, which becomes `close()`). So on
+a machine where voxtype is detected, voice is enabled and `secondTap` is
+`"voice"` (all three are defaults), **a script that closes the menu starts
+dictation**. The owner's p620 is in that state, measured read-only on
+2026-09-29.
+
+- **nixarchy-menu** gains a `dismiss()` function beside `close()`. It calls
+  `root.cancel()` and nothing else: no voice path. The shell reaches it with
+  `omarchy-shell shell call omarchy.menu dismiss "{}"` (the same `call` verb
+  `omarchy-menu refresh` already uses). `close()` is unchanged, so the
+  hotkey's second tap still starts voice as designed.
+- **nixarchy** carries a `--replace-fail` patch on `bin/omarchy-menu`'s
+  `close)` verb:
+  `omarchy-shell shell call omarchy.menu dismiss "{}" >/dev/null 2>&1 || exec omarchy-shell shell hide omarchy.menu`.
+  That is the voice-safe path first, and upstream's hide when the enabled
+  menu has no `dismiss`, as the stock one does not. The `pkgs/AGENTS.md`
+  entry states when to drop it: never, unless upstream grows an explicit
+  close.
+- **Tests:**
+  - nixarchy-menu gets a QML test beside its existing `tst_*.qml`: with voice
+    detected and enabled, `dismiss()` leaves the palette closed and voice
+    idle, while `close()` still starts voice. The latter pins that the design
+    is unchanged.
+  - nixarchy gets a stubbed `runCommand` in the style of
+    `shell-restart-race`. `omarchy-menu close` must call `dismiss` first,
+    then fall back to `hide` when `call` fails.
+  - **Break proof:** revert the `close)` patch, and the stub records a
+    `hide` first.
+
 ## Alternatives rejected
 
 - **A runtime path from `$OMARCHY_PATH`.** A QML import is static, so the URL

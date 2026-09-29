@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1058
 spec: spec/2026-09-29-1058-grep-q-pipefail.md
 ---

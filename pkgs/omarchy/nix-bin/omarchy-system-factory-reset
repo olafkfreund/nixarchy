@@ -101,8 +101,7 @@ baseline_subvolumes() {
 has_baseline() {
   local subvols
   subvols=$(baseline_subvolumes)
-  printf '%s\n' "$subvols" | grep -qx '@factory' &&
-    printf '%s\n' "$subvols" | grep -qx '@factory-home'
+  grep -qx '@factory' <<<"$subvols" && grep -qx '@factory-home' <<<"$subvols"
 }
 
 # ---------------------------------------------------------------------------

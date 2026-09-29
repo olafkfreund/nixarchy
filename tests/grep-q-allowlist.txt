@@ -1,0 +1,71 @@
+# Every pipe into grep -q in the tree that is left alone, and why it cannot
+# fail on a match. Read by checks.grep-q-pipefail (tests/grep-q-pipefail.nix).
+# Format: path<TAB>the line, trimmed<TAB>reason. One entry per occurrence:
+# a line that appears twice in one file is listed twice.
+# Why: tests/AGENTS.md#a-pipe-into-grep-q-can-fail-because-grep-matched
+
+.github/scripts/readme-counts.sh	printf '%s' "$llms_plugins" | grep -qiF -- "$name" || {	one write: one line taken with grep -m1
+.github/workflows/build.yml	printf '%s\n' "$allowed_ifs" | sed 's/^ *//' | grep -qxF "$cond" ||	step shell is bash -e, no pipefail; sed writes once, under 4 KiB
+installer/install.sh	ip -o -4 addr show scope global 2>/dev/null | grep -qv ' lo ' ||	one write: ip -o addr, one line per address
+installer/install.sh	ip -o -6 addr show scope global 2>/dev/null | grep -q . ||	one write: ip -o addr, one line per address
+installer/install.sh	if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then	one write: find -print -quit prints at most one line
+modules/apps.nix	if ! list_drafts | grep -qFx -- "$name"; then	one write: list_drafts, a short list
+modules/apps.nix	sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther' && return 0	one write: sed -n prints one line and quits
+modules/apps.nix	if sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then	one write: sed -n prints one line and quits
+modules/apps.nix	if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther'; then	one write: sed -n prints one line and quits
+modules/apps.nix	if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then	one write: sed -n prints one line and quits
+modules/apps.nix	if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then	one write: sed -n prints one line and quits
+pkgs/doctor.sh	if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx input; then	one write: id -nG | tr, one short list
+pkgs/secret.nix	if names_in_store "$USER_STORE" | grep -qx "$name"; then	names_in_store ends in || true, which absorbs 141
+pkgs/secret.nix	elif names_in_store "$SYS_STORE" | grep -qx "$name"; then	names_in_store ends in || true, which absorbs 141
+pkgs/verify.sh	if tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null | grep -q omarchy; then	one write: tr of one cmdline
+pkgs/verify.sh	if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx kvm; then	one write: id -nG | tr, one short list
+tests/apply-detach-interface.nix	"$apply" | grep -q 'expect-sha256=' \	one write: the awk that filters to the systemd-run block prints several lines but writes once at exit, under 4 KiB
+tests/apply-staging.nix	git -C "$1" status --porcelain -- "$2" | grep -qE '^[AM]'	one write: git status --porcelain of one path
+tests/apply-staging.nix	if git -C "$PWD/per-host" status --porcelain -- theirs.txt | grep -qE '^ M'; then	one write: git status --porcelain of one path
+tests/cache-budget.nix	"build --no-link") closure_of "\$3" | grep -q . ;;	stub script with no set -o pipefail; jq prints one line
+tests/cache-budget.nix	path-info*) closure_of "\$2" | grep -q . ;;	stub script with no set -o pipefail; jq prints one line
+tests/demo/default.nix	machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
+tests/demo/default.nix	"https://registry-1.docker.io/v2/ | grep -qE '401|200'",	one write: curl -w http_code, three bytes
+tests/install-encrypted.nix	installer.succeed("blkid /dev/vdb2 | grep -q crypto_LUKS"	one write: blkid prints one line
+tests/install-encrypted.nix	" | grep -q 'enable = true'")	one write: grep -A2, three lines
+tests/install-iso-net.nix	step LEASED sh -c 'ip -4 addr show | grep -q "192\.168\.1\."'	inside sh -c: no pipefail
+tests/install-iso-net.nix	cache.succeed("ip -4 addr show eth1 | grep -q 192.168.1.1/")	one write: ip addr of one interface, under 4 KiB
+tests/install-iso-net.nix	cache.succeed("curl -sf http://127.0.0.1:5000/nix-cache-info | grep -q StoreDir")	one write: curl of nix-cache-info, three lines
+tests/install-iso.nix	! grep "unable to download" "$log" | grep -qv nix-cache-info	inside sh -c: no pipefail
+tests/install.nix	target.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
+tests/install.nix	target.succeed("btrfs subvolume list / | grep -q @home-before-reset-")	one write: btrfs subvolume list, a few lines
+tests/installer-from-repo.nix	git -C "$wa" diff --cached --name-only | grep -q 'hosts/alpha/hardware-configuration.nix' \	one write: git diff --cached --name-only of a few files
+tests/installer-from-repo.nix	git -C "$wb" diff --cached --name-only | grep -q 'hosts/beta/default.nix' \	one write: git diff --cached --name-only of a few files
+tests/installer-network-profiles.nix	if grep -A25 '^carry_network_profiles()' ${installScript} | grep -q '/etc/nixos'; then	one write: grep -A25 of one function, about 1 KiB
+tests/installer-wizard.nix	reading = "stty -F /dev/ttyS0 -a | grep -q -- -icanon"	one write: stty -a, under 4 KiB
+tests/menu-verbs.nix	| sed -n '/^Commands:/,/^$/p' | awk '{print $1}' | grep -qx -- "$sub" || {	awk is the last producer: it writes once at exit, under 4 KiB
+tests/microvm-template.nix	if grep -oE -- "-drive '[^']*'" "$run" | grep -q store; then	one write: grep -o of one runner script, far under 4 KiB
+tests/options.nix	sed -n 's/^Before=//p' "$unit" | tr ' ' '\n' | grep -qxF 'home.mount' || {	one write: sed | tr of one unit line, under 4 KiB
+tests/options.nix	head -1 "$herdrSrc/$f" | grep -q '^#!/nix/store/' || {	one write: head -1
+tests/patched-files.nix	echo "$report" | grep 'omarchy-plymouth-set' | grep -q 'nix-bin' || {	one write: a grep-filtered line or two, under 4 KiB
+tests/patched-files.nix	echo "$report" | grep 'omarchy-plugin-clone' | grep -q 'sed -i' || {	one write: a grep-filtered line or two, under 4 KiB
+tests/patched-files.nix	echo "$report" | grep 'xdph.conf' | grep -q 'seeded' || {	one write: a grep-filtered line or two, under 4 KiB
+tests/plugin.nix	machine.succeed(f"readlink {decl} | grep -q '^/nix/store/'")	one write: readlink prints one line
+tests/qml.nix	if ! lint ${broken} | grep -q '\[syntax\]'; then	|| true absorbs 141: a race cannot reach the if
+tests/reinstall-vm.nix	! grep "unable to download" "$log" | grep -qv nix-cache-info	inside sh -c: no pipefail
+tests/session.nix	patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1	one write: patchelf --print-needed, a few lines
+tests/session.nix	machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
+tests/session.nix	"systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)	one write: systemctl list-units of one glob, a few lines
+tests/session.nix	"! systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=60)	one write: systemctl list-units of one glob, a few lines
+tests/session.nix	"systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)	one write: systemctl list-units of one glob, a few lines
+tests/session.nix	as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),	inside su -c: no pipefail
+tests/session.nix	as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),	inside su -c: no pipefail
+tests/session.nix	as_user("nixarchy-rebuild-state") + " | grep -q running", timeout=60)	one write: the command prints one short line
+tests/session.nix	as_user("omarchy-shell nixarchy.rebuild.bar status") + " | grep -q running",	one write: the command prints one short line
+tests/session.nix	as_user("omarchy-shell nixarchy.rebuild.bar status") + " | grep -q running",	one write: the command prints one short line
+tests/session.nix	as_user("nixarchy-rebuild-state") + " | grep -q idle", timeout=30)	one write: the command prints one short line
+tests/session.nix	machine.succeed(as_user("nixarchy-rebuild-state") + " | grep -q idle")	one write: the command prints one short line
+tests/session.nix	+ " | grep -qx loaded", timeout=60)	one write: systemctl show prints one word
+tests/session.nix	" | grep -q prefer-dark")	inside su -c: no pipefail
+tests/session.nix	"  head -1 \"$f\" 2>/dev/null | grep -q bash || continue\n"	one write: head -1, in a probe script
+tests/wifi-hwsim.nix	machine.succeed("iw dev | grep -q wlan0")	one write: iw dev, under 4 KiB
+tests/wifi-hwsim.nix	machine.succeed("iw dev | grep -q wlan1")	one write: iw dev, under 4 KiB
+tests/wifi-hwsim.nix	machine.wait_until_succeeds("nmcli -t -f DEVICE,TYPE device | grep -q '^wlan0:wifi'", timeout=60)	one write: nmcli -t of two fields, a few lines
+tests/wifi-hwsim.nix	machine.wait_until_succeeds("nmcli device wifi list --rescan yes | grep -q nixarchy-test", timeout=60)	one write: nmcli wifi list of a few simulated networks
+tests/wifi-hwsim.nix	"nmcli -t -f DEVICE,STATE device | grep -q '^wlan0:connected'", timeout=60)	one write: nmcli -t of two fields, a few lines

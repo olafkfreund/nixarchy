@@ -71,7 +71,7 @@ pkgs.runCommand "nixarchy-test-registration"
     missing=""
     for f in $files; do
       case " $exempt " in *" $f "*) continue ;; esac
-      printf '%s\n' "$imports" | grep -qxF "$f" || missing="$missing $f"
+      grep -qxF "$f" <<<"$imports" || missing="$missing $f"
     done
 
     if [ -n "$missing" ]; then

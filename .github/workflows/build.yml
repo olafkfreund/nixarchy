@@ -387,7 +387,7 @@ jobs:
           bad=""
           ungated=""
           for c in $claimed $exempt; do
-            printf '%s\n' "$names" | grep -qx "$c" ||
+            grep -qx "$c" <<<"$names" ||
               { bad="$bad $c:not-a-check"; continue; }
           done
           for c in $claimed; do

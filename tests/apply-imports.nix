@@ -76,7 +76,7 @@ pkgs.runCommand "nixarchy-apply-imports"
         # ...and nothing imports THAT file, so the warning has to fire. Before #734
         # it did not: the root-level import matched the filename and silenced it,
         # which is the bug -- a warning satisfied by the very condition it tests for.
-        printf '%s\n' "$log" | grep -q 'WARNING: nothing in' || {
+        [[ $log == *'WARNING: nothing in'* ]] || {
           echo "no warning, although the file apply wrote is imported by nobody." >&2
           echo "A stale root-level nixarchy-apps.nix satisfied a filename match:" >&2
           echo "  written:  stale/hosts/$host/nixarchy-apps.nix" >&2
@@ -88,7 +88,7 @@ pkgs.runCommand "nixarchy-apply-imports"
         echo "a stale root-level import no longer satisfies the per-host warning"
 
         # And the warning must not still be sending people to the root file.
-        printf '%s\n' "$log" | grep -q "hosts/$host/nixarchy-apps.nix" || {
+        [[ $log == *"hosts/$host/nixarchy-apps.nix"* ]] || {
           echo "the warning does not name the file apply actually wrote" >&2
           printf '%s\n' "$log" >&2
           exit 1
@@ -106,7 +106,7 @@ pkgs.runCommand "nixarchy-apply-imports"
     EOF
 
         log=$(NIXARCHY_FLAKE=$PWD/good $apply 2>&1 || true)
-        printf '%s\n' "$log" | grep -q 'WARNING: nothing in' && {
+        [[ $log == *'WARNING: nothing in'* ]] && {
           echo "warned although the host imports exactly the file apply wrote" >&2
           printf '%s\n' "$log" >&2
           exit 1

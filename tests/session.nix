@@ -463,8 +463,8 @@ pkgs.testers.runNixOSTest {
     # The dialog accepting the password is the thing under test; the session
     # starting is the consequence.
     machine.wait_until_succeeds(
-        "journalctl -b -u display-manager --no-pager"
-        " | grep -q 'Authentication for user .*omarchy.* successful'")
+        "out=$(journalctl -b -u display-manager --no-pager); "
+        "grep -q 'Authentication for user .*omarchy.* successful' <<<\"$out\"")
 
     # ---- session -------------------------------------------------------
     # systemd-logind starts user@1000.service asynchronously once the session
@@ -497,8 +497,8 @@ pkgs.testers.runNixOSTest {
     # greeter. pkexec is started by Hyprland so it sits in that session, as a
     # menu-launched rebuild does.
     machine.wait_until_succeeds(
-        "journalctl -b -t omarchy-shell --no-pager"
-        " | grep -q 'omarchy polkit agent registered'", timeout=120)
+        "out=$(journalctl -b -t omarchy-shell --no-pager); "
+        "grep -q 'omarchy polkit agent registered' <<<\"$out\"", timeout=120)
     machine.succeed(
         "cat > /tmp/pkexec-probe.sh <<'PROBE_EOF'\n"
         "export XDG_RUNTIME_DIR=/run/user/1000\n"
@@ -559,7 +559,7 @@ pkgs.testers.runNixOSTest {
     rdp_log = "journalctl -b -t hypr-rdp --no-pager -o cat"
     # Measured: logged 0.7 s after the unit starts, ~75 s before this line
     # runs. 60 s is headroom for a loaded runner, not a guess at the daemon.
-    machine.wait_until_succeeds(rdp_log + " | grep -q 'Display prepared'", timeout=60)
+    machine.wait_until_succeeds("out=$(" + rdp_log + "); grep -q 'Display prepared' <<<\"$out\"", timeout=60)
     journal = machine.succeed(rdp_log)
     assert "unknown request" not in journal, journal
     machine.succeed(on_desktop("systemctl --user is-active hypr-rdp"))
@@ -607,8 +607,8 @@ pkgs.testers.runNixOSTest {
         as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),
         timeout=60)
     machine.succeed(
-        "journalctl -b _SYSTEMD_USER_UNIT=nixarchy-rebuild.service --no-pager"
-        " | grep -q 'does not exist'")
+        "out=$(journalctl -b _SYSTEMD_USER_UNIT=nixarchy-rebuild.service --no-pager); "
+        "grep -q 'does not exist' <<<\"$out\"")
     print("a detached apply runs as nixarchy-rebuild, keeps its result, and logs to the journal")
     machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
     machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
@@ -1565,8 +1565,8 @@ pkgs.testers.runNixOSTest {
         # nobody.
         "cd $(dirname $(readlink -f /run/current-system/sw/bin/omarchy)) && "
         "for f in *; do "
-        "  grep -v '^[[:space:]]*#' \"$f\" 2>/dev/null "
-        "    | grep -q '/usr/' && basename \"$f\"; "
+        "  code=$(grep -v '^[[:space:]]*#' \"$f\" 2>/dev/null || true); "
+        "  [[ $code == *'/usr/'* ]] && basename \"$f\"; "
         "done; true").split()
     assert len(offenders) > 5, (
         f"the /usr scan inspected almost nothing ({offenders}); it is looking "

@@ -734,11 +734,11 @@ pkgs.runCommand "nixarchy-microvm-template"
     # three patterns (nixarchy-microvm Model.js:973-975 at 481e6c5). A help
     # line reworded is a feature silently switched off in the panel.
     help=$($vm help)
-    printf '%s\n' "$help" | grep -qE '\brun\b.*--detach' ||
+    grep -qE '\brun\b.*--detach' <<<"$help" ||
       { echo "(h) vmDetach pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
-    printf '%s\n' "$help" | grep -qE '\bvm console\b' ||
+    grep -qE '\bvm console\b' <<<"$help" ||
       { echo "(h) vmConsole pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
-    printf '%s\n' "$help" | grep -qE '\bset-template\b' ||
+    grep -qE '\bset-template\b' <<<"$help" ||
       { echo "(h) vmSetTemplate pattern no longer matches 'nixarchy vm help'" >&2; fail=1; }
 
     bash ${./microvm-mutations.sh} ${nixarchyVm}/bin/nixarchy-vm

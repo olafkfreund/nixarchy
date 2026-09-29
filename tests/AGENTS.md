@@ -1169,10 +1169,51 @@ ends:
   supplies the whole input, and no producer process is left to kill;
 - `grep -c`, or grep without `-q`: reads to EOF.
 
-It only bites where **both** hold: `pipefail` is on, and the producer can write
-after the matching line. `… | grep -q` appears about a hundred times in this
-tree. The follow-up to #1058 goes through them rather than assuming every one
-is exposed; a NixOS test's `machine.succeed` is not obviously under `pipefail`.
+It only bites where **both** hold: `pipefail` is on, and the producer can
+write after the matching line. #1060 read every one of the hundred sites
+rather than assuming. Where `pipefail` holds:
+
+- **on:** stdenv builders (`runCommand`, every phase: `setup.sh` sets it and
+  never restores it); `writeShellApplication`; the NixOS test driver, whose
+  `succeed`, `fail`, `execute` and `wait_until_succeeds` all run
+  `bash -c 'set -euo pipefail; …'`; a workflow step that says
+  `set -o pipefail`, or has `shell: bash` spelled out.
+- **off:** a pipe inside `su user -c '…'` or `sh -c '…'` (a fresh shell);
+  a GitHub Actions `run:` with no `shell:`, which is `bash -e {0}`.
+
+And when the producer can write after the match:
+
+- bash's `printf` and `echo` write once per line;
+- an external tool buffers, and writes in 4 KiB blocks, so output under
+  4 KiB is a single write at exit and cannot be cut off by an early exit;
+- `gh` writes line by line, and `journalctl` is unbounded: always capture.
+
+**The masking form is the worse one.** Under `! … | grep -q x`,
+`… | grep -q x && fail`, or `machine.fail("… | grep -q x")`, a match
+followed by SIGPIPE turns into a **pass**, with `x` present:
+
+```sh
+$ bash -c 'set -o pipefail; ! { printf "x\n"; sleep 0.2; printf "y\n"; } | grep -q x; echo rc=$?'
+rc=0
+```
+
+In a VM driver string, capture and use a here-string:
+`"out=$(journalctl -u foo); grep -q 'PAT' <<<\"$out\""`. The driver
+`shlex.quote`s the whole command, so nothing else needs escaping.
+
+**`checks.grep-q-pipefail` enforces this.** Every pipe into `grep -q`
+under `tests/`, `modules/`, `pkgs/`, `installer/`, `.github/` and
+`flake.nix` is either rewritten or listed in `tests/grep-q-allowlist.txt`
+as `path<TAB>the line, trimmed<TAB>why it cannot fail`. It scans every
+`*.nix`, `*.sh` and `*.yml` file, plus any extensionless file under those
+same roots whose first line is a bash or `sh` shebang — `--include` alone
+misses an extensionless script, and `pkgs/omarchy/nix-bin/` holds 37 of
+our own. The key is the
+line's text, not its number, so unrelated edits do not touch it. The
+check fails on a new line (rewrite it, or list it with a measured reason)
+and on an entry whose line is gone (delete it). It does not read
+reasons: an entry with a wrong reason is a review failure, not a check
+failure (see "An inventory check cannot check its own reasons" above).
 
 ## The cheap ones, which is where new checks usually belong
 
@@ -1266,8 +1307,9 @@ Two branches only these can reach, as illustration:
   of 200 runs report a miss when the pipe is starved, 0 of 200 on an idle
   machine, which is why it passed locally. The inverted form is worse: a
   `wantnot`, or `… | grep -q X && fail`, **passes** with X present. Use
-  `<<<"$x" grep -q`, or drop `-q` and send the output to `/dev/null` so grep
-  reads everything. The same holds for `pkgs/*.sh`, because
+  `grep -q … <<<"$x"` or `[[ $x == *…* ]]` (the section above has the forms;
+  relying on grep reading to EOF without `-q` is an implementation detail,
+  and ugrep is not GNU grep). The same holds for `pkgs/*.sh`, because
   `writeShellApplication` sets `pipefail` too.
 - **`step`-style helpers truncate their capture file before running the
   command.** In `tests/install-iso.nix` a `grep` placed inside `step` reads the

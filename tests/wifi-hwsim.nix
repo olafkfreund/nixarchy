@@ -125,7 +125,7 @@ pkgs.testers.runNixOSTest {
     # filled with this line every thirteen seconds; its absence is the fix,
     # and the negative is worth asserting because everything else can look
     # healthy while it repeats.
-    machine.fail("journalctl -u NetworkManager | grep -q 'Failed to D-Bus activate wpa_supplicant'")
+    machine.succeed("out=$(journalctl -u NetworkManager); ! grep -q 'Failed to D-Bus activate wpa_supplicant' <<<\"$out\"")
 
     machine.wait_for_unit("hostapd.service")
 
@@ -165,8 +165,8 @@ pkgs.testers.runNixOSTest {
     # And the access point's, which is independent of everything on the client
     # side: hostapd only logs this after the four-way handshake completes, so
     # it cannot be satisfied by a client that merely thinks it is connected.
-    machine.succeed("journalctl -u hostapd | grep -q AP-STA-CONNECTED")
-    machine.succeed("journalctl -u hostapd | grep -q EAPOL-4WAY-HS-COMPLETED")
+    machine.succeed("out=$(journalctl -u hostapd); grep -q AP-STA-CONNECTED <<<\"$out\"")
+    machine.succeed("out=$(journalctl -u hostapd); grep -q EAPOL-4WAY-HS-COMPLETED <<<\"$out\"")
 
     print(machine.succeed("nmcli device status"))
 

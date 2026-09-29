@@ -395,7 +395,7 @@ pkgs.testers.runNixOSTest {
         # Fetched, wire side: the cache served real cache traffic, not just
         # probes. nix-serve answers .narinfo lookups and nar downloads;
         # either appearing means substitution happened from this node.
-        cache.succeed("journalctl -u harmonia --no-pager | grep -qE 'narinfo|nar'")
+        cache.succeed("out=$(journalctl -u harmonia --no-pager); grep -qE 'narinfo|nar' <<<\"$out\"")
         print("the closure came over the wire from the local substituter")
 
         step("FLAKE", 120)

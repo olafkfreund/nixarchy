@@ -29,16 +29,21 @@ close() {
     menu_open || return 0
     sleep 0.2
   done
+  return 1 # still open: a toggle now would reach close() and its dictation path
 }
 
 shot() { # shot <file-name> [menu-id]; no menu-id captures the desktop
   local name=$1 menu=${2:-}
-  # The only menu IPC is `toggle`, so state is observed rather than assumed --
+  # Opening is IPC (`toggle`) and closing is Escape, so state is observed
+  # rather than assumed --
   # an earlier version assumed, and every second shot came out with the menu
   # in the wrong state.
   # `&&` alone returns non-zero when the menu is already shut, and set -e
   # then bails out of this function before the screenshot is taken.
-  menu_open && close || true
+  if menu_open && ! close; then
+    echo "  $name.png SKIPPED (menu would not close)" >&2
+    return
+  fi
   if [ -n "$menu" ]; then
     toggle "{\"menu\":\"$menu\"}"
     menu_open || toggle "{\"menu\":\"$menu\"}"

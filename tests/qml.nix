@@ -2,6 +2,8 @@
   pkgs,
   # The BUILT tree, for the upstream file our carried patches edit.
   omarchy,
+  # nixarchy-menu as installed, with the snowflake substituted in (#1053).
+  menuPlugin,
   ...
 }:
 # The QML this repo injects into upstream's Quickshell tree is copied, never
@@ -50,6 +52,7 @@ pkgs.runCommand "nixarchy-qml"
     # The rebuild panel is ours too (#765 PR 5), and lives in its own
     # directory rather than in the omarchy tree.
     panel = ../pkgs/rebuild-panel;
+    menu = menuPlugin;
   }
   ''
     set -o pipefail
@@ -80,11 +83,12 @@ pkgs.runCommand "nixarchy-qml"
     cp ${omarchy}/share/omarchy/shell/shell.qml patched-shell.qml
 
     for f in menu-bar-widget.qml switch-indicator.qml wrapped/shell-state-ipc.qml patched-shell.qml \
-      panel/Panel.qml panel/RebuildView.qml panel/RebuildState.qml; do
+      panel/Panel.qml panel/RebuildView.qml panel/RebuildState.qml menu-plugin/BarWidget.qml; do
       echo "== $f"
       case "$f" in
         wrapped/*|patched-shell.qml) report=$(lint "$f") ;;
         panel/*)   report=$(lint "$panel/''${f#panel/}") ;;
+        menu-plugin/*) report=$(lint "$menu/''${f#menu-plugin/}") ;;
         *)         report=$(lint "$src/$f") ;;
       esac
       # NOT `out=` -- that is the builder's output path, and clobbering it

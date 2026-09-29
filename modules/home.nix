@@ -1833,7 +1833,33 @@ in
         # voxtype is optional; the plugin finds it on PATH when present.
         menu = {
           id = "nixarchy.menu";
-          src = inputs.nixarchy-menu.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+          # Its bar button wears the snowflake, like omarchy.menu's
+          # (pkgs/omarchy/menu-bar-widget.qml, #1053). PNG: quickshell has no SVG plugin.
+          src =
+            let
+              snowflakeButton = ''
+                fontFamily: "omarchy"
+                      labelVisible: false
+                      Image {
+                        anchors.centerIn: parent
+                        source: "file://${pkgs.nixos-icons}/share/icons/hicolor/256x256/apps/nix-snowflake.png"
+                        readonly property int side: Math.round(button.fontSize * 1.3)
+                        sourceSize.width: side
+                        sourceSize.height: side
+                        width: side
+                        height: side
+                        smooth: true
+                        mipmap: true
+                        opacity: button.dimmed ? 0.45 : 1
+                      }'';
+            in
+            pkgs.applyPatches {
+              name = "nixarchy-menu";
+              src = inputs.nixarchy-menu.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
+              postPatch = ''
+                substituteInPlace BarWidget.qml --replace-fail 'fontFamily: "omarchy"' '${snowflakeButton}'
+              '';
+            };
           enableByDefault = false;
           placement = "";
           packages = [

@@ -2150,6 +2150,8 @@
           qml = import ./tests/qml.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+            menuPlugin =
+              self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
           };
 
           # A keep-loaded plugin lost its shell API at the first shell.json

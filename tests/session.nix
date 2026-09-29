@@ -610,7 +610,15 @@ pkgs.testers.runNixOSTest {
         "#1069: omarchy-menu summon install did not open a menu -- no "
         "omarchy-menu layer after 30 s. Check the journal for "
         "'MenuModel.js unavailable'.")
-    machine.succeed(on_desktop("wtype -k Escape"))
+    # Closed through qemu's keyboard, as tests/demo does: on_desktop sets no
+    # WAYLAND_DISPLAY, so a Wayland client like wtype cannot connect from it.
+    machine.send_key("esc")
+    for _ in range(10):
+        if "namespace: omarchy-menu" not in machine.succeed(on_desktop("hyprctl layers")):
+            break
+        time.sleep(1)
+    else:
+        raise AssertionError("#1069: the menu did not close on Escape, and would sit over every later section")
     print("summoning the menu opens one (#1069)")
 
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------

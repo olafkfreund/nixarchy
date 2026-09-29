@@ -12,24 +12,25 @@
 # let a caption satisfy its own expectation, so the gate runs on the raw
 # master and refuses a file that already carries captions.
 #
-# ALL TWELVE shipped plugins appear. Stated rather than left implicit, because
-# a reviewer counted the montage alone and concluded nine:
+# ALL FIFTEEN shipped plugins appear. Stated rather than left implicit,
+# because a reviewer counted the montage alone and concluded nine:
 #
-#   named beats  nixarchy.pkg (search), plugin-browser (audit),
-#                nixarchy.rebuild (apply)
+#   named beats  nixarchy.menu (menu), nixarchy.pkg (search),
+#                plugin-browser (audit), nixarchy.rebuild (apply)
 #   montage      microvm, podman, distrobox, devenv, github-actions,
-#                gitlab-pipelines, herdr, flatsnap, ai-mirror
+#                gitlab-pipelines, herdr, flatsnap, hyprforge,
+#                omarchroma, ai-mirror
 #
-# Three plus nine.
+# Four plus eleven.
 #
 # RUNTIME:
 #
 #   spine   2 + 3 + 4 + 5 + 4 + 5 + 6       = 29.0
 #   theme   3 + 2.5 + 3 + 2.5               = 11.0
-#   montage 9 x 2.4                         = 21.6
+#   montage 11 x 2.4                        = 26.4
 #   tail    3.5 + 5 + 4                     = 12.5
 #                                             ------
-#                                             74.1
+#                                             78.9
 #
 # That is over the 60-second brief, and deliberately so. The brief is 60
 # seconds for the CUT, and screencast-edit speeds the whole master to
@@ -104,6 +105,22 @@ let
           expect = "Flat|Snap";
         }
         {
+          short = "hyprforge";
+          id = "aziz.hyprforge";
+          name = "Hyprforge — every Hyprland setting, previewed live";
+          expect = "Hyprforge|Windows & Gaps|Borders & Colors";
+        }
+        {
+          # A bar widget only, like ai-mirror below -- but this one opens:
+          # `shell toggle` summons a bar-widget id through
+          # bar.summonBarWidget, whose open() shows a KeyboardPanel
+          # (namespace omarchy-keyboard-panel). So it keeps action = plugin.
+          short = "omarchroma";
+          id = "io.github.nobledoodle.omarchroma";
+          name = "Runtime themes — every app, without a rebuild";
+          expect = "Omarchroma|GTK and GNOME|Dark Reader";
+        }
+        {
           # ai-mirror is kinds=bar-widget ONLY. There is no panel for
           # nixarchy-plugin to open, and two takes failed on exactly that --
           # the driver's own assertion caught it both times. So this beat
@@ -132,25 +149,29 @@ in
     {
       label = "menu";
       action = "menu";
-      # `root` is the LAUNCHER -- "What would you like to do?", with
-      # Applications, Clipboard History and Calculator. The Omarchy menu, the
-      # one this beat is about, is a row inside it. There is no route that
-      # lands on it directly: a route is an item id, and summoning an id opens
-      # that item's own submenu rather than the list it sits in.
+      # nixarchy-menu (#1054). The `omarchy.menu` alias resolves to it, so
+      # `root` is what Super+Space opens on every machine: one palette of
+      # apps, commands and answers, with the whole Omarchy menu as a row.
+      # `id` names the plugin for shot-coverage.sh; the driver ignores it on a
+      # menu beat, since no act is keyed on it.
       #
-      # Worse, an unknown route falls back to root SILENTLY -- `menu`,
-      # `omarchy`, `omarchy.menu` and `main` were each tried live and each
-      # produced a byte-identical launcher screenshot. So a wrong guess here
-      # does not fail; it records the launcher under a caption about the menu,
-      # which is exactly what the first four takes did.
+      # No `keys`. The stock launcher's rows had a fixed order, so
+      # "Down Return" reached the Omarchy menu. nixarchy-menu orders rows by
+      # frecency, and the same keys would land on a different row on every
+      # machine. The beat holds on the root palette instead.
       #
-      # The honest route is the one a person takes: open root, arrow down one,
-      # enter. That is what `keys` is for.
+      # An unknown route still falls back to root SILENTLY -- four guessed
+      # routes once recorded byte-identical launchers -- so the expectation is
+      # text only this palette shows: its hint line and three of its rows.
+      # Not "Applications" or "Calculator", which other screens share, nor
+      # "What would you like to do?", which the stock launcher had too. Four
+      # alternatives, so a row frecency pushes off screen cannot fail a good
+      # take.
+      id = "nixarchy.menu";
       route = "root";
-      keys = "Down Return";
       hold = 3;
-      expect = "Install";
-      caption = "One menu. Every change.";
+      expect = "lists what you can type|Convert Anything|Emoji Picker|Omarchy Menu";
+      caption = "Super+Space: apps, commands, answers — and the whole Omarchy menu";
     }
     {
       label = "install-pick";
@@ -219,7 +240,7 @@ in
     # whichever of the two the gate sampled, the other would be unchecked.
     #
     # It sits here, before the montage, on purpose: everything after it is
-    # recorded in the new theme, so "the plugins follow" is shown nine more
+    # recorded in the new theme, so "the plugins follow" is shown eleven more
     # times rather than claimed once.
     {
       label = "theme";
@@ -282,9 +303,9 @@ in
       # It is NOT a shell plugin -- it is `services.nixi`, a home-manager
       # module -- so it is absent from `defaultPluginSet`, and shot-coverage.sh
       # was green with the video never mentioning it. That check compares the
-      # shot list against the twelve plugins and can say nothing about anything
+      # shot list against the fifteen plugins and can say nothing about anything
       # that is not one; the gap was found by a person watching the cut. Worth
-      # knowing before trusting the count: "all twelve plugins" is a smaller
+      # knowing before trusting the count: "all fifteen plugins" is a smaller
       # claim than "everything nixarchy does".
       #
       # The beat shows the MENU and does not run a question. Deliberate:

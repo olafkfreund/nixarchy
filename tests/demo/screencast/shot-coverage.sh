@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Every shipped plugin is in the shot list (#930, plan step 9).
 #
-# The shot list claims to show all twelve. That claim was already miscounted
+# The shot list claims to show all fifteen. That claim was already miscounted
 # once -- a reviewer read only the montage line and concluded nine -- so it is
 # asserted rather than written down.
 #
@@ -37,7 +37,8 @@ fi
 
 fails=0
 for id in $ids; do
-  if grep -qF "\"$id\"" "$shots"; then
+  # As an id = "…" field, so a plugin named only in a comment is not "shown" (#1062).
+  if grep -qF "id = \"$id\"" "$shots"; then
     echo "  ok      $id"
   else
     echo "  MISSING $id is a shipped plugin and the shot list never names it" >&2
@@ -49,7 +50,8 @@ done
 # would record a beat that opens nothing.
 while read -r cited; do
   [ -n "$cited" ] || continue
-  printf '%s\n' "$ids" | grep -qxF "$cited" || {
+  # A here-string, not a pipe: under pipefail a pipe into grep -q can fail because grep matched (#1058).
+  grep -qxF "$cited" <<<"$ids" || {
     echo "  STALE   $cited is in the shot list and is not a shipped plugin" >&2
     fails=$((fails + 1))
   }

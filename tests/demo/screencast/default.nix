@@ -153,11 +153,9 @@ rec {
     '';
   };
 
-  # The plugin-count assertion (plan step 9). A package rather than a
-  # `checks.` entry on purpose: wiring it into a workflow is a CI-gate change
-  # and needs a human (AGENTS.md section 11), so it is raised in the PR rather
-  # than wired here. Until then it is runnable by name, which is strictly more
-  # than the shell script alone was.
+  # The plugin-count assertion (plan step 9). Also `checks.shot-coverage` in
+  # flake.nix (#1062), so a pull request that ships a plugin without a shot
+  # goes red. This wrapper is the same script, runnable by name on a checkout.
   coverage = pkgs.writeShellApplication {
     name = "screencast-coverage";
     runtimeInputs = [
@@ -218,9 +216,11 @@ rec {
       sha256sum "$state/shell.json" | cut -d' ' -f1 > "$state/shell.json.sha256"
 
       # Everything prep is about to change, recorded before it changes it.
-      # Omarchy's own widgets (omarchy.*) and nixarchy's stay; only third-party
-      # marketplace plugins are hidden, and keystroke is kept deliberately --
-      # a video whose middle act is keybindings is better for showing them.
+      # Omarchy's own widgets (omarchy.*) and nixarchy's stay -- including
+      # Hyprforge and omarchroma, defaults with third-party ids (#1062); only
+      # third-party marketplace plugins are hidden, and keystroke is kept
+      # deliberately -- a video whose middle act is keybindings is better for
+      # showing them.
       # The KINDS are recorded, not just the ids, because putting a plugin back
       # depends on what it is. `omarchy plugin enable <id> right` places a bar
       # WIDGET; a plugin whose kind is `bar` replaces the bar, and the same
@@ -229,7 +229,7 @@ rec {
       # skal.bar as the bar" (#930).
       omarchy-shell shell listPlugins 2>/dev/null | jq -r '
         [ .[]? | select(.enabled == true)
-               | select(.id | test("^omarchy\\.|^nixarchy\\.|olafkfreund") | not)
+               | select(.id | test("^omarchy\\.|^nixarchy\\.|olafkfreund|^aziz\\.hyprforge$|^io\\.github\\.nobledoodle\\.omarchroma$") | not)
                | select(.id != "evindor.keystroke")
                | { id: .id, kinds: (.kinds // []) } ]' > "$state/disabled.json"
 

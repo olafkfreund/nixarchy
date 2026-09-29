@@ -595,6 +595,34 @@ pkgs.testers.runNixOSTest {
     machine.succeed("rm -f " + forge)
     machine.succeed(on_desktop("hyprctl reload"))
 
+    # ---- summoning the menu opens one (#1069) ------------------------------
+    # nixarchy-menu replaces omarchy.menu, and loads MenuModel.js from the
+    # system profile; when that path was missing the palette never loaded and
+    # Super+Space opened nothing, with the stock menu already disabled.
+    # Whichever menu is enabled answers omarchy.menu, and draws this layer.
+    machine.succeed(on_desktop("omarchy-menu summon install"))
+    for _ in range(30):
+        layers = machine.succeed(on_desktop("hyprctl layers"))
+        if "namespace: omarchy-menu" in layers:
+            break
+        time.sleep(1)
+    assert "namespace: omarchy-menu" in layers, (
+        "#1069: omarchy-menu summon install did not open a menu -- no "
+        "omarchy-menu layer after 30 s. Check the journal for "
+        "'MenuModel.js unavailable'.")
+    # Closed over IPC: omarchy-menu close -> shell hide omarchy.menu -> the
+    # enabled clone's close(), which cancels when voice is off (it is, here).
+    # Not wtype (on_desktop sets no WAYLAND_DISPLAY) and not a qemu Escape:
+    # a menu summoned over IPC did not hold keyboard focus for it.
+    machine.succeed(on_desktop("omarchy-menu close"))
+    for _ in range(10):
+        if "namespace: omarchy-menu" not in machine.succeed(on_desktop("hyprctl layers")):
+            break
+        time.sleep(1)
+    else:
+        raise AssertionError("#1069: the menu did not close on Escape, and would sit over every later section")
+    print("summoning the menu opens one (#1069)")
+
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
     # Not a real switch: this VM is offline and cannot evaluate its flake. A
     # detach at a missing flake still proves the unit, its kept result and its

@@ -1874,7 +1874,6 @@ pkgs.testers.runNixOSTest {
     # shell CAN answer through the CLI -- accepted and documented (Decision A,
     # spec/2026-09-22-773-ai-mirror-default.md) -- and the kill switch block
     # below uses exactly that as its setup.
-    import json
     def aim(cmd):
         return machine.succeed(
             "su omarchy -c 'export XDG_RUNTIME_DIR=/run/user/1000"

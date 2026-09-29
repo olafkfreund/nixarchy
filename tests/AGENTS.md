@@ -1108,6 +1108,47 @@ user-owned clone outside the system's `safe.directory`, and the helper's
 `-c safe.directory` answers correctly there. `/etc/nixos` itself is trusted
 system-wide by `modules/nixos.nix`, so the managed path never depended on it.
 
+<a id="a-pipe-into-grep-q-can-fail-because-grep-matched"></a>
+
+## A pipe into `grep -q` can fail because grep matched
+
+`checks.manifest-has-kind` once reported "manifestHasKind not found" for a file
+that contained it. `main` passed on the same source path seconds earlier, and a
+re-run passed (#1058). The line was:
+
+```sh
+printf '%s\n' "$fn" | grep -q 'function manifestHasKind' || fail "not found"
+```
+
+Three facts combine:
+
+- **`runCommand` and `writeShellApplication` run under `pipefail`**, so a
+  pipeline fails if *any* stage does.
+- **bash's `printf` writes line by line.** strace shows one `write()` per line,
+  four for a four-line string, even at 149 bytes.
+- **`grep -q` exits at the first match.** If the match is early, grep can be
+  gone before the producer's next `write()`, which then takes SIGPIPE.
+
+The result is `PIPESTATUS=141 0`. grep answered yes, and the pipeline reports
+no. It is deterministic once a delay separates the writes, and it did not
+reproduce in 8,000 runs on an idle workstation, even pinned to one busy CPU. It
+needs the writer preempted between lines, which a 2-vCPU hosted runner in the
+middle of a parallel `nix build` does. So a local loop that stays green proves
+nothing here.
+
+The safe spellings keep grep from being the one that decides when the input
+ends:
+
+- a string already in a variable: `[[ $x == *pat* ]]`, or `case` in `/bin/sh`;
+- `grep -q pat <<<"$x"` or `grep -q pat file`: the shell or the filesystem
+  supplies the whole input, and no producer process is left to kill;
+- `grep -c`, or grep without `-q`: reads to EOF.
+
+It only bites where **both** hold: `pipefail` is on, and the producer can write
+after the matching line. `… | grep -q` appears about a hundred times in this
+tree. The follow-up to #1058 goes through them rather than assuming every one
+is exposed; a NixOS test's `machine.succeed` is not obviously under `pipefail`.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

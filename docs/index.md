@@ -85,7 +85,10 @@ a key, keyboard-first, in the desktop's own look:
 - follow GitLab pipelines and GitHub Actions;
 - see which coding agent in your herdr sessions needs you;
 - manage MicroVMs and Distrobox boxes;
-- browse the plugin marketplace, and audit a plugin before installing it.
+- browse the plugin marketplace, and audit a plugin before installing it;
+- open anything from one palette on Super+Space: apps, the whole menu, sums, files;
+- tune every Hyprland setting with a live preview, and keep what you save;
+- switch the colour palette across your apps without a rebuild.
 
 Fifteen ship by default: twelve are always on, three turn on with their feature. Voice is opt-in.
 

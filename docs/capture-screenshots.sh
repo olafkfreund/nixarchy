@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Captures every Omarchy menu from a running nixarchy VM, for the README.
+# Captures nixarchy-menu's palette, and every Omarchy menu through it, from a
+# running nixarchy VM, for the README.
 # Run it ON the VM: ssh -p 2222 omarchy@localhost 'bash -s' < this
 #
 # The VM must have a real display backend:
@@ -20,8 +21,15 @@ eval "$(tr '\0' '\n' <"/proc/$pid/environ" |
   grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|HYPRLAND_INSTANCE_SIGNATURE)=' |
   sed 's/^/export /')"
 
-menu_open() { hyprctl layers 2>/dev/null | grep -q 'namespace: omarchy-menu'; }
+menu_open() { [[ $(hyprctl layers 2>/dev/null) == *'namespace: omarchy-menu'* ]]; }
 toggle() { omarchy-shell shell toggle omarchy.menu "$@" >/dev/null 2>&1 || true; sleep 1.2; }
+close() {
+  wtype -k Escape
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    menu_open || return 0
+    sleep 0.2
+  done
+}
 
 shot() { # shot <file-name> [menu-id]; no menu-id captures the desktop
   local name=$1 menu=${2:-}
@@ -30,7 +38,7 @@ shot() { # shot <file-name> [menu-id]; no menu-id captures the desktop
   # in the wrong state.
   # `&&` alone returns non-zero when the menu is already shut, and set -e
   # then bails out of this function before the screenshot is taken.
-  menu_open && toggle || true
+  menu_open && close || true
   if [ -n "$menu" ]; then
     toggle "{\"menu\":\"$menu\"}"
     menu_open || toggle "{\"menu\":\"$menu\"}"
@@ -63,7 +71,7 @@ shot 14-system system
 shot 19-trigger trigger
 shot 20-ask trigger.ask
 shot 21-setup-agent setup.default.agent
-menu_open && toggle || true
+menu_open && close || true
 
 echo
 echo "copy them in with:"

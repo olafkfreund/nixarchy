@@ -147,17 +147,21 @@ Everything is behind one key.
 
 ![The desktop, first boot](../img/desktop/desktop.jpg)
 
-**`Super + Space`** opens the menu — the same one upstream has, because it *is*
-upstream's. Nothing about the desktop was reimplemented.
+**`Super + Space`** opens the menu: [nixarchy-menu](plugins#menu), a palette.
+Type what you want (an app, a command, a sum, a file) and it finds the row.
+The whole Omarchy menu is still inside it, under **Omarchy Menu**, and every
+`omarchy menu` route still lands where it did. If you would rather walk the
+tree, `programs.nixarchy.defaultPlugins.menu = false;` brings the stock menu
+back.
 
-![The Omarchy menu](../img/desktop/menu.jpg)
+![Super+Space: nixarchy-menu's palette](../img/desktop/menu.jpg)
 
 **`Super + K`** shows every key binding, which is the faster way in if you do
 not know what you are looking for yet.
 
 ### Install ▸
 
-![The Install menu](../img/desktop/install.jpg)
+![Install, scoped: the same rows, searchable](../img/desktop/install.jpg)
 
 This is where nixarchy differs, and the difference is the whole point. Upstream's
 Install rows run `pacman -S`. Here they **write a line into

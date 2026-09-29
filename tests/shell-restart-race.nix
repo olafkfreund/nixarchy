@@ -100,7 +100,8 @@ pkgs.runCommand "nixarchy-shell-restart-race"
     #    3 s -- longer than upstream's readiness poll lasts against these stubs
     #    (20 x 0.1 s), so part 2 of the patch is exercised as well.
     run_case slow-patched "$patched" 7000 3000
-    [ "$rc" = 0 ] && [ "$shells" = 1 ] || fail "slow teardown: the patched restart did not end with one shell"
+    [ "$shells" = 1 ] || fail "slow teardown: the patched restart ended with $shells shells"
+    [ "$rc" = 0 ] || fail "slow teardown: one shell came up, but the restart reported failure (exit $rc)"
     grep -q already-running "$STATE/launches" && fail "slow teardown: the patched restart launched beside the dying shell"
     ran=$((ran + 1))
 
@@ -118,7 +119,8 @@ pkgs.runCommand "nixarchy-shell-restart-race"
 
     # 4. A fast teardown stays fast.
     run_case fast-patched "$patched" 500 0
-    [ "$rc" = 0 ] && [ "$shells" = 1 ] || fail "fast teardown: the patched restart did not end with one shell"
+    [ "$shells" = 1 ] || fail "fast teardown: the patched restart ended with $shells shells"
+    [ "$rc" = 0 ] || fail "fast teardown: the restart reported failure (exit $rc)"
     (( elapsed < 4000 )) || fail "fast teardown took ''${elapsed} ms"
     ran=$((ran + 1))
 

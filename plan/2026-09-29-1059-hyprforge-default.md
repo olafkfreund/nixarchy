@@ -139,3 +139,29 @@ Revert the squash commit.
   is no longer loaded.
 - The enabled-once marker stays, so a later re-add does not re-enable it for
   someone who turned it off.
+
+## Deviations, recorded while implementing
+
+- **Step 2:** `pkgs.lua5_4`, not `pkgs.lua`. nixpkgs' `lua` is 5.2. Arch's
+  `lua`, which upstream calls "already a Hyprland dependency" and
+  `baseline.lua` was written against, is 5.4. Both ran `baseline.lua` to
+  identical output on a thin input, which is too thin to rely on 5.2.
+- **Step 4:** `hyprforgeIsADefault`'s off state reads the already-bound
+  `noDefaultsHome`, `defaultHome` and `fixtureNixarchyOff`, as
+  `herdrIsADefault` does, not a new `homeOn { … hyprforge = false; }`. Every
+  `homeOn` is a full NixOS evaluation (#747). `noDefaultsHome` gains
+  `hyprforge = false`, so the opt-out is still what is tested.
+- **Step 4:** `hyprforgePackaged` checks the manifest id with `grep -E`,
+  because the check has no `jq` on its PATH.
+- **Step 6:** the probe parses `hyprctl getoption -j` in Python with a short
+  retry, not `… | grep -q`. That is the #1058 trap this repo just documented.
+  It imports `json` and `time` locally, since the script's own `import json`
+  comes 1,300 lines later.
+- **Step 7, no shot entry.** `tests/demo/screencast/shot-coverage.sh` is
+  already red on `main`: `io.github.nobledoodle.omarchroma` and
+  `nixarchy.menu` are missing, and no workflow runs it. A real Hyprforge shot
+  needs a recorded, gated scene, and a name added only to satisfy the grep
+  would be a false claim (§4). Filed as an issue for all three instead.
+- **Step 3:** the `# Why:` pointer at the hook lands on a new
+  `pkgs/AGENTS.md` section, "Hyprforge's hook lives in the store
+  hyprland.lua".

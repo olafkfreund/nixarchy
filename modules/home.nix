@@ -1911,10 +1911,11 @@ in
         hyprforge = {
           id = "aziz.hyprforge";
           src = hyprforgePlugin;
-          # lua runs its baseline.lua, cmp checks a write, notify-send and
-          # wl-copy/wl-paste back its toasts and profile sharing.
+          # lua 5.4 (what Arch ships, and upstream targets) runs baseline.lua;
+          # cmp checks a write; notify-send and wl-copy/wl-paste back its toasts
+          # and profile sharing.
           packages = [
-            pkgs.lua
+            pkgs.lua5_4
             pkgs.diffutils
             pkgs.libnotify
             pkgs.wl-clipboard

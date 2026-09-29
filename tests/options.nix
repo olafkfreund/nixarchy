@@ -176,6 +176,7 @@ let
       flatsnap = false;
       omatheme = false;
       menu = false;
+      hyprforge = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
@@ -1148,6 +1149,7 @@ let
           "iproute2"
           "herdr"
           "bubblewrap"
+          "lua"
         ];
         ours = h: builtins.filter (p: builtins.elem (p.pname or "") toolNames) h.home.packages;
         allLowPrio =
@@ -1246,6 +1248,16 @@ let
         noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || defaultHome.programs.nixarchy.plugins ? "nixarchy.herdr"
         || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.herdr";
+    };
+    # #1059: Hyprforge is on wherever nixarchy is.
+    hyprforgeIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "aziz.hyprforge"
+        && hookLists "aziz.hyprforge" defaultHomeOn;
+      off =
+        noDefaultsHome.programs.nixarchy.plugins ? "aziz.hyprforge"
+        || defaultHome.programs.nixarchy.plugins ? "aziz.hyprforge"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "aziz.hyprforge";
     };
     # #766 PR D: the Distrobox panel follows Boxes, like distrobox itself:
     # on with Boxes, off without them, off standalone and when opted out.
@@ -2789,6 +2801,9 @@ pkgs.runCommand "nixarchy-options"
     # #771: the herdr widget nixarchy installs, whose scripts run by path.
     herdrSrc =
       (defaultHomeOn.programs.nixarchy.defaultPluginSet.herdr or { src = "/nonexistent"; }).src;
+    # #1059: the Hyprforge plugin nixarchy installs, packaged from the fork.
+    hyprforgeSrc =
+      (defaultHomeOn.programs.nixarchy.defaultPluginSet.hyprforge or { src = "/nonexistent"; }).src;
     # A default whose pinned manifest renamed its id must fail its build.
     renamedDefault =
       pkgs.testers.testBuildFailure
@@ -5689,6 +5704,23 @@ pkgs.runCommand "nixarchy-options"
           }
         done
         echo "the herdr widget has store shebangs and both copyright holders"
+
+        # ---- #1059: hyprforgePackaged ----
+        # MIT: the notice travels with the code. Upstream's node tests are not
+        # shipped, and the id is the one the hook and the docs name.
+        grep -q "Copyright (c) 2026 Aziz" "$hyprforgeSrc/LICENSE" 2>/dev/null || {
+          echo "hyprforgePackaged: Hyprforge's LICENSE does not name its holder ($hyprforgeSrc)" >&2
+          exit 1
+        }
+        [ ! -e "$hyprforgeSrc/test" ] || {
+          echo "hyprforgePackaged: Hyprforge ships its test/ directory ($hyprforgeSrc)" >&2
+          exit 1
+        }
+        grep -Eq '"id": *"aziz[.]hyprforge"' "$hyprforgeSrc/manifest.json" || {
+          echo "hyprforgePackaged: Hyprforge's manifest id is not aziz.hyprforge ($hyprforgeSrc)" >&2
+          exit 1
+        }
+        echo "Hyprforge keeps its notice, drops its tests, and is aziz.hyprforge"
 
         # ---- #912: the Flatpak & Snap row ----
         # nixarchy's own row, in the menu the session actually reads.

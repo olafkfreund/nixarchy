@@ -93,6 +93,15 @@ The default is enabled for a configured `programs.nixarchy.user`. Disable it
 with `programs.nixarchyThemeEngine.enable = false;`, or opt out of only the
 plugin with `programs.nixarchy.defaultPlugins.omatheme = false;`.
 
+### Hyprland settings, previewed live
+
+Nixarchy ships [Hyprforge](https://github.com/AbdulazizAlwabel/omarchy-hyprforge)
+by Aziz as a default plugin: gaps, borders, blur, animations with a curve
+editor, per-app rules, profiles and every Hyprland option, previewed on your
+real windows before anything is saved. It is **Super+Space ▸ Hyprforge**, and
+what it saves is loaded by nixarchy's session. Opt out with
+`programs.nixarchy.defaultPlugins.hyprforge = false;`.
+
 Omarchy's Install menu runs `pacman -S`. Here it edits a file you own.
 
 Every app Omarchy offers is written to `~/.config/nixarchy/apps.nix` at first

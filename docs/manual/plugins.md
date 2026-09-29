@@ -38,6 +38,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Runtime themes](#runtime-themes) | switch the active palette across supported applications without a rebuild | **on by default** | Setup ▸ Themes <!-- io.github.nobledoodle.omarchroma --> |
 | [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **on by default** | Super+Space, and every Omarchy menu binding <!-- nixarchy.menu --> |
+| [Hyprforge](#hyprforge) | every Hyprland setting, previewed live on your real windows | **on by default** | Super+Space ▸ Hyprforge <!-- aziz.hyprforge --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
 
 ## Package manager
@@ -395,6 +396,38 @@ Either way the stock menu comes back in its place. The search
 terms the palette matches come from nixarchy's own menu data (#961), so the
 Ask topics answer to symptoms -- "slow", "hacked", "disk full" -- rather than
 only to their labels.
+
+## Hyprforge
+
+[Hyprforge](https://github.com/AbdulazizAlwabel/omarchy-hyprforge) by Aziz, via
+[nixarchy-hyprsettngs](https://github.com/olafkfreund/nixarchy-hyprsettngs) · MIT ·
+**on by default**
+
+**What it solves.** Changing how the desktop looks and behaves -- gaps,
+borders, blur, animations, input, a rule for one app -- means editing Lua under
+`~/.config/hypr` and reloading to see whether you got it right. Nothing shows a
+change before you commit to it, and nothing undoes one.
+
+**What it does.** A Hyprland studio: a live scale model of your screen, theme
+palette colours that follow `omarchy theme set`, a bezier and spring curve
+editor for animations, per-app rules, profiles, history, and every Hyprland
+option. Everything previews on your real windows and is checked by Hyprland
+before it is saved. Open it from **Super+Space ▸ Hyprforge**, or
+`omarchy-shell hyprforge toggle`.
+
+**Where your settings go.** Hyprforge saves to `~/.config/hypr/hyprforge.lua`,
+and nixarchy's session loads that file (#1059). You never need its **Connect**
+button. On a machine installed before Hyprforge arrived, the button still
+offers itself; clicking it is harmless and changes nothing.
+
+**Turning it off** -- Setup ▸ Plugins, or
+
+```nix
+programs.nixarchy.defaultPlugins.hyprforge = false;
+```
+
+-- removes the panel, but keeps what you saved applied. Delete
+`~/.config/hypr/hyprforge.lua` to go back to Omarchy's own settings.
 
 ## Voice
 

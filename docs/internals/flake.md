@@ -546,6 +546,53 @@ installed machine, and the offline ISO's reference closure.
 through the plugin validator, which fails if the manifest id stops being
 `nixarchy.menu`.
 
+### Hyprforge, on by default (#1059)
+
+```nix
+nixarchy-hyprsettngs = {
+```
+
+[Hyprforge](https://github.com/AbdulazizAlwabel/omarchy-hyprforge) is Aziz's
+Hyprland studio for Omarchy (MIT, id `aziz.hyprforge`). nixarchy pins it
+through olafkfreund's fork, `nixarchy-hyprsettngs`, which carried no commits of
+its own when it was pinned at `2392ad6`, identical to upstream's HEAD.
+
+**`flake = false`, packaged here, as herdr is.** Upstream has no flake.
+`modules/home.nix`'s `hyprforgePlugin` is a `runCommand` that copies the tree
+without `test/` and `preview.png`, and fails unless `LICENSE` still reads
+`Copyright (c) 2026 Aziz`. MIT requires the notice to travel with the code, and
+`checks.options` asserts it too (`hyprforgePackaged`).
+
+**The session has to load what it saves.** Hyprforge writes
+`~/.config/hypr/hyprforge.lua` and expects `~/.config/hypr/hyprland.lua` to
+require it. nixarchy's session runs the store `hyprland.lua` instead, so
+`pkgs/omarchy` adds Hyprforge's own optional-require line there
+(`pkgs/AGENTS.md#hyprforge-s-hook-lives-in-the-store-hyprland-lua`).
+`checks.session` writes the file and reads the option back through `hyprctl`.
+
+**Its tools** are `lua5_4` (what Arch ships as `lua`, and what `baseline.lua`
+was written against; nixpkgs' plain `lua` is 5.2), `diffutils` for `cmp`,
+`libnotify` and `wl-clipboard`, all `lowPrio`. `hyprctl`, coreutils and
+`omarchy-shell` are already on the session's PATH.
+
+**No menu row and no keybinding.** Its service writes a `.desktop` entry, and
+the Omarchy launcher, which nixarchy-menu uses too, lists desktop entries.
+
+Measured at `2392ad6` (2026-09-29): the plugin is **307.6 KiB**. `lua5_4`'s
+closure is 41.6 MiB, nearly all of it glibc and friends that every machine
+already carries.
+
+**Bumping the pin.** This is third-party code that runs unsandboxed in every
+user's shell, so read the diff before moving it:
+
+1. `gh api repos/olafkfreund/nixarchy-hyprsettngs/compare/<pinned>...<new>`. If
+   the fork is behind upstream, compare upstream too
+   (`AbdulazizAlwabel/omarchy-hyprforge`).
+2. Check that the hook line is still what `Engine.js`'s `hasHook` looks for
+   (`hypr.hyprforge`), and that `LICENSE` still names its holder.
+3. Move `url`, then `nix flake lock --update-input nixarchy-hyprsettngs`. The
+   lock diff touches this node alone.
+
 ### The herdr sessions widget, on by default (#771)
 
 ```nix

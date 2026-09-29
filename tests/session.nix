@@ -565,6 +565,36 @@ pkgs.testers.runNixOSTest {
     machine.succeed(on_desktop("systemctl --user is-active hypr-rdp"))
     print("hypr-rdp set its headless output's mode and is serving on Hyprland 0.56")
 
+    # ---- Hyprforge's saves reach the session (#1059) -----------------------
+    # Hyprforge writes ~/.config/hypr/hyprforge.lua and relies on hyprland.lua
+    # requiring it. The session runs the STORE hyprland.lua (--config), so
+    # without pkgs/omarchy's hook a save previews live and is gone at login.
+    # A value Omarchy never sets (its border_size is 2), in the form
+    # Hyprforge's Engine.js emits, read back through the running Hyprland.
+    import json
+    import time
+    forge = "/home/omarchy/.config/hypr/hyprforge.lua"
+    machine.succeed(
+        "printf '%s\\n' 'hl.config({ general = { border_size = 7 } })' > " + forge
+        + " && chown omarchy: " + forge)
+    machine.succeed(on_desktop("hyprctl reload"))
+
+    # Parsed here, not `| grep -q`: tests/AGENTS.md#a-pipe-into-grep-q-can-fail-because-grep-matched
+    def border_size():
+        return json.loads(machine.succeed(on_desktop("hyprctl getoption general:border_size -j")))
+
+    for _ in range(30):
+        seen = border_size()
+        if 7 in seen.values():
+            break
+        time.sleep(1)
+    assert 7 in seen.values(), (
+        "#1059: ~/.config/hypr/hyprforge.lua was written but the session never loaded it"
+        " -- saved but never loaded. general:border_size reads " + str(seen))
+    print("Hyprforge's saved file is loaded by the session:", seen)
+    machine.succeed("rm -f " + forge)
+    machine.succeed(on_desktop("hyprctl reload"))
+
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
     # Not a real switch: this VM is offline and cannot evaluate its flake. A
     # detach at a missing flake still proves the unit, its kept result and its

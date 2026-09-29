@@ -189,6 +189,8 @@ pkgs.testers.runNixOSTest rec {
             omatheme = false;
             # On by default too (#1052).
             menu = false;
+            # And Hyprforge (#1059).
+            hyprforge = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

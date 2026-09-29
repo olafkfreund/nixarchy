@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1069
 intent: intent/2026-09-29-1069-menu-modelpath.md
 ---

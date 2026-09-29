@@ -964,17 +964,17 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1790494491,
-        "narHash": "sha256-mQs1J6s37deI0PZf6OQKh+dZbVBPWXhfwwbStDGTB1c=",
+        "lastModified": 1790540406,
+        "narHash": "sha256-Lel3C1xbJRTHKTTcyunPV/4w4eYQHG3GXtM/7s2SSV8=",
         "owner": "olafkfreund",
         "repo": "nixarchy-voice",
-        "rev": "7c51dfb0580b99ac3ba80650f97fc152011465cd",
+        "rev": "37ceb43ca66c1c7dca97e4dba1f6be35fcef1766",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-voice",
-        "rev": "7c51dfb0580b99ac3ba80650f97fc152011465cd",
+        "rev": "37ceb43ca66c1c7dca97e4dba1f6be35fcef1766",
         "type": "github"
       }
     },

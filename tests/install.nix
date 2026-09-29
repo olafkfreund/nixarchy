@@ -761,8 +761,8 @@ pkgs.testers.runNixOSTest {
 
     target.send_chars("omarchy\n")
     target.wait_until_succeeds(
-        "journalctl -b -u display-manager --no-pager"
-        " | grep -q 'Authentication for user .*omarchy.* successful'")
+        "out=$(journalctl -b -u display-manager --no-pager); "
+        "grep -q 'Authentication for user .*omarchy.* successful' <<<\"$out\"")
     target.wait_until_succeeds("systemctl is-active user@1000.service")
     target.wait_until_succeeds("pgrep -u 1000 -f Hyprland")
     print("the installed machine reaches a Hyprland session")

@@ -595,10 +595,12 @@ for dir in "$state_dir"/*/ /var/lib/microvms/*/; do
       say_dim "nothing here is a GC root -- nix-collect-garbage can already have taken it"
     else
       # `--print-roots`, never `--gc`: this must read the store, not collect
-      # it. `|| true` because a store query is one more thing that can fail
-      # without killing the rest of this report -- the same reasoning as the
-      # Graphics grep above, which already did this once for real.
-      if timeout 15 nix-store --gc --print-roots 2>/dev/null | grep -qF "$target"; then
+      # it. Captured rather than piped: tests/AGENTS.md#a-pipe-into-grep-q-can-fail-because-grep-matched
+      roots_rc=0
+      roots=$(timeout 15 nix-store --gc --print-roots 2>/dev/null) || roots_rc=$?
+      if [ "$roots_rc" -ne 0 ]; then
+        hmm "$name: could not list GC roots" "nix-store --print-roots exited $roots_rc"
+      elif [[ $roots == *"$target"* ]]; then
         ok "$name: current is a live GC root" "$target"
       else
         bad "$name: current is not a GC root" "$target"

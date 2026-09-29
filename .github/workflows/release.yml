@@ -469,8 +469,9 @@ jobs:
           promised=$(awk '{ print $2 }' out/SHA256SUMS | grep -vxF "$ASSEMBLED")
 
           missing=""
+          assets=$(attached)
           for want in $built $promised; do
-            attached | grep -qxF "$want" || case " $missing " in
+            grep -qxF "$want" <<<"$assets" || case " $missing " in
               *" $want "*) ;;
               *) missing="$missing $want" ;;
             esac
@@ -485,8 +486,9 @@ jobs:
             done
 
             still=""
+            assets=$(attached)
             for want in $missing; do
-              attached | grep -qxF "$want" || still="$still $want"
+              grep -qxF "$want" <<<"$assets" || still="$still $want"
             done
             if [ -n "$still" ]; then
               echo "::error::the release is missing:$still"

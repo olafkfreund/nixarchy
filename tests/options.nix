@@ -3412,8 +3412,8 @@ pkgs.runCommand "nixarchy-options"
           # Comments stripped first. The path is named in the prose above the
           # gate as well as in the gate, and a check that a file mentions
           # something in a comment is not a check.
-          grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-config-repo" \
-            | grep -q '/etc/nixarchy/managed' || {
+          repo_code=$(grep -v '^[[:space:]]*#' "$vm/sw/bin/nixarchy-config-repo" || true)
+          [[ $repo_code == *'/etc/nixarchy/managed'* ]] || {
             echo "nixarchy-config-repo does not consult /etc/nixarchy/managed" >&2
             echo "  Its only gate would then be consent, not ownership." >&2
             exit 1
@@ -4570,7 +4570,7 @@ pkgs.runCommand "nixarchy-options"
         sed -i -E "/#@ $svcid([[:space:]]|\$)/d" "$svcfile"
         svcout=$(NIXARCHY_TEMPLATES="$tpldir" run nixarchy-service-enable "$svcid") || {
           echo "nixarchy-service-enable $svcid failed on a file without its row (#843)" >&2; exit 1; }
-        printf '%s\n' "$svcout" | grep -q "added the $svcid row" || {
+        [[ $svcout == *"added the $svcid row"* ]] || {
           echo "nixarchy-service-enable did not say it added the row: $svcout" >&2; exit 1; }
         grep -qE "^[[:space:]]*[^#[:space:]].*#@ $svcid([[:space:]]|\$)" "$svcfile" || {
           echo "the added $svcid row was not enabled" >&2; exit 1; }
@@ -4585,8 +4585,8 @@ pkgs.runCommand "nixarchy-options"
           echo "adding the $svcid row changed other lines of services.nix" >&2; exit 1; }
         helpout=$(run nixarchy-service-enable --help) || {
           echo "nixarchy-service-enable --help did not exit 0" >&2; exit 1; }
-        { printf '%s\n' "$helpout" | grep -q '^usage: nixarchy-service-enable' &&
-          printf '%s\n' "$helpout" | grep -qi 'missing'; } || {
+        { grep -q '^usage: nixarchy-service-enable' <<<"$helpout" &&
+          grep -qi 'missing' <<<"$helpout"; } || {
           echo "--help does not say usage and that a missing row is added: $helpout" >&2; exit 1; }
         svcsum=$(cksum < "$svcfile")
         rc=0; NIXARCHY_TEMPLATES="$tpldir" run nixarchy-catalogue-diff --add-one services definitely-not-a-row >/dev/null 2>&1 || rc=$?

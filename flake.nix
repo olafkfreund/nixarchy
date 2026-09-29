@@ -1770,6 +1770,8 @@
             # that is not ours, and this is the gate it sits behind.
             "free-space"
             "generate-config-surface"
+            # Every pipe into grep -q is rewritten or allowlisted with a reason (#1060).
+            "grep-q-pipefail"
             "hardware-modules"
             # The profile a user with their own interpreter actually gets, built
             # rather than inspected: #809's collision only exists once something

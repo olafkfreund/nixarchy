@@ -538,7 +538,8 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     }
                     sed -i 's/cp -aL /cp -aL --no-preserve=mode /g' "$clone"
-                    ! grep -v -- '--no-preserve=mode' "$clone" | grep -q 'cp -aL ' || {
+                    clone_rest=$(grep -v -- '--no-preserve=mode' "$clone" || true)
+                    [[ $clone_rest != *'cp -aL '* ]] || {
                       echo "omarchy-plugin-clone still has a cp -aL without --no-preserve=mode" >&2
                       exit 1
                     }
@@ -950,7 +951,8 @@ stdenvNoCC.mkDerivation {
             # Belt and braces, because a sed range that stops matching deletes
             # nothing and says nothing: the session check greps every shipped bin
             # for /usr in code, and this is the file that would trip it.
-            ! grep -v '^[[:space:]]*#' "$policy" | grep -q '/usr/' || {
+            policy_code=$(grep -v '^[[:space:]]*#' "$policy" || true)
+            [[ $policy_code != *'/usr/'* ]] || {
               echo "omarchy-theme-set-browser-policy still names a /usr path in code:" >&2
               grep -vn '^[[:space:]]*#' "$policy" | grep '/usr/' >&2
               exit 1

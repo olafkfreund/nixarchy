@@ -93,7 +93,7 @@ pkgs.runCommand "nixarchy-qml"
       esac
       # NOT `out=` -- that is the builder's output path, and clobbering it
       # fails later with `touch: unrecognized option` far from the cause.
-      if printf '%s' "$report" | grep -q '\[syntax\]'; then
+      if [[ $report == *'[syntax]'* ]]; then
         echo "FAIL: $f has a syntax error:"
         printf '%s\n' "$report" | grep -A2 '\[syntax\]'
         rc=1

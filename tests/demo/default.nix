@@ -223,8 +223,8 @@ let
 
       machine.send_chars("omarchy\n")
       machine.wait_until_succeeds(
-          "journalctl -b -u display-manager --no-pager"
-          " | grep -q 'Authentication for user .*omarchy.* successful'")
+          "out=$(journalctl -b -u display-manager --no-pager); "
+          "grep -q 'Authentication for user .*omarchy.* successful' <<<\"$out\"")
 
       # ---- the desktop ---------------------------------------------------
       # systemd-logind starts user@1000.service asynchronously once the

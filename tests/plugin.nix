@@ -187,6 +187,8 @@ pkgs.testers.runNixOSTest rec {
             # The runtime theme plugin is also a default; this fixture must
             # reach a genuinely empty plugin directory for its negative test.
             omatheme = false;
+            # On by default too (#1052).
+            menu = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

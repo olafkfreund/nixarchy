@@ -1030,12 +1030,13 @@ template's `virtio-gpu-gl` attached, `-display gtk` never reaches a window at
 all -- qemu refuses with `OpenGL is not supported by display backend 'gtk'`,
 because this qemu is built without GL in its gtk backend.
 
-## The screencast harness is scripts, not checks, and nothing in CI runs it
+## The screencast harness is scripts, and only its coverage is a check
 
 `tests/demo/screencast/` (#930) sits beside `tests/demo/`, and inherits that
 directory's oldest problem: **no workflow builds any of it.** AGENTS.md section
 4 records the same hole for the demo scenes, where a GIF of a deleted command
-would have gone on publishing with `main` green.
+would have gone on publishing with `main` green. One piece has since become a
+check; the rest has not.
 
 So what is guarded here, and by what, stated plainly:
 
@@ -1044,13 +1045,17 @@ So what is guarded here, and by what, stated plainly:
 | prep refuses on open windows, a stale snapshot, an unreachable shell | by hand, on a real session | no |
 | restore returns `shell.json` byte-identical | by hand, hash compared independently | no |
 | `verify-beats` fails a beat that did not happen | three tests against a synthetic recording | no |
-| every shipped plugin is in the shot list | `shot-coverage.sh` | **no, and it could be** |
+| every shipped plugin is in the shot list, as an `id = "…"` field | `checks.shot-coverage` (#1062) | **yes**, on every PR |
 
-That last row is the one worth fixing. `shot-coverage.sh` is a seconds-long
-text comparison with no VM and no desktop — exactly the cheap shape this file
-recommends — and it is the only piece here that a pull request could run. It
-is not wired, because adding a `checks.*` entry means a workflow edit and that
-is a human's call (section 4, section 11). Raised rather than done.
+That last row was the one worth fixing, and #1062 fixed it.
+`shot-coverage.sh` is a seconds-long text comparison with no VM and no
+desktop, and `checks.shot-coverage` runs it over copies of exactly
+`modules/home.nix` and `shots.nix`. It went unwired for months on the
+belief that a new `checks.*` entry needed a workflow edit. It does not:
+`build.yml`'s generated step builds any check no job claims (AGENTS.md
+section 4). While nothing ran it, three default plugins shipped without a
+shot. The check proves a beat is *written*, not that it records. That is
+still `verify-beats`, on a real desktop, at the next take.
 
 What no layer can reach, and which no amount of scripting changes: whether the
 recording is **good**. The gate proves each beat happened and that the cut

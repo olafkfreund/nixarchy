@@ -2226,6 +2226,18 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };
+
+          # #1062: every shipped plugin has a beat in the screencast's shot
+          # list. Only the two files it compares are inputs, so it rebuilds
+          # when one of them changes rather than on every commit.
+          shot-coverage = pkgsFor.${system}.runCommand "nixarchy-shot-coverage" { } ''
+            root=$TMPDIR/root
+            mkdir -p "$root/modules" "$root/tests/demo/screencast"
+            cp ${./modules/home.nix} "$root/modules/home.nix"
+            cp ${./tests/demo/screencast/shots.nix} "$root/tests/demo/screencast/shots.nix"
+            bash ${./tests/demo/screencast/shot-coverage.sh} "$root"
+            touch $out
+          '';
           # #953: a restart never ends with zero shells, against stubs that make
           # teardown slower than upstream's `timeout 5`; upstream's own script is
           # the negative control.

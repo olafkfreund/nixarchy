@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 953
 spec: spec/2026-09-29-953-restart-shell-zero-shells.md
 ---

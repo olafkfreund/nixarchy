@@ -489,7 +489,7 @@ one `nix-snapd` and no second `nixpkgs`, and that `options` (`flatsnapIsADefault
 `flatsnapSnapd`, the menu row) and `menu-verbs` pass. The plugin's own
 `nix flake check` (a VM test and a gating eval) is its release gate.
 
-### nixarchy-menu, opt-in (#946)
+### nixarchy-menu, on by default (#946, #1052)
 
 ```nix
 nixarchy-menu = {
@@ -500,10 +500,12 @@ Raycast-style replacement for the Omarchy menu (id `nixarchy.menu`,
 `clonedFrom: omarchy.menu`). It hands off to every default agent, and it has
 Nixi and skill-backed help rows. nixarchy takes its `packages.<sys>.plugin`.
 
-**Off unless `defaultPlugins.menu = true`.** It is the one default with
-`enableByDefault = false`. That is a per-entry default, because the
-`defaultPlugins` attrset is replaced wholesale when a host sets any key, so a
-`menu = false` there would not survive `{ podman = false; }`.
+**On by default since #1052; `defaultPlugins.menu = false` declines it.** #946
+shipped it off, through a per-entry `enableByDefault = false`: a `menu = false`
+in the `defaultPlugins` default attrset would not have survived a host setting
+`{ podman = false; }`, which replaces that attrset wholesale. With the menu on,
+nothing used the field and it was deleted; `menu` is deliberately absent from
+that attrset, because absent means on.
 
 **It takes the stock menu's place.** The entry has `placement = ""`, so
 `omarchy-plugin-enable` gets no section, and the shell puts the clone in
@@ -536,8 +538,8 @@ rm -rf ~/.config/omarchy/plugins/nixarchy.menu   # then log in again
 gains one node.
 
 Measured at 8775661 (2026-09-24): the closure is **84.7 MiB**, of which the
-Smart Match engine and both models are most. It reaches a machine only when
-it is switched on.
+Smart Match engine and both models are most. Since #1052 that reaches every
+installed machine, and the offline ISO's reference closure.
 
 **Bumping the pin:** move `url` to a newer commit on nixarchy-menu `main`, then
 `nix flake lock --update-input nixarchy-menu`. `checks.options` builds it

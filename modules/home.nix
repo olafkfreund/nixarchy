@@ -419,9 +419,7 @@ let
   # Standalone Home Manager has no osConfig, so it resolves nothing (Mode A).
   resolvedDefaults = lib.filterAttrs (
     name: p:
-    (osConfig.programs.nixarchy.enable or false)
-    && p.gate
-    && (cfg.defaultPlugins.${name} or p.enableByDefault)
+    (osConfig.programs.nixarchy.enable or false) && p.gate && (cfg.defaultPlugins.${name} or true)
   ) cfg.defaultPluginSet;
   defaultIds = lib.mapAttrsToList (_: p: p.id) resolvedDefaults;
 
@@ -692,9 +690,9 @@ in
         package manager, GitLab pipelines, GitHub Actions and herdr panels
         always, podman when podman is on, distrobox when Boxes is on,
         microvms always, dev environments when the devenv service is on, and
-        the Plugin Browser (Setup > Plugins > Add Plugin) always. A name left
-        out counts as on. `menu` (nixarchy-menu, which replaces the Omarchy
-        menu) is the exception: it is off unless set to `true`.
+        the Plugin Browser (Setup > Plugins > Add Plugin) and `menu`
+        (nixarchy-menu, which replaces the Omarchy menu; `false` brings the
+        stock menu back) always. A name left out counts as on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -722,14 +720,6 @@ in
             packages = lib.mkOption {
               type = lib.types.listOf lib.types.package;
               default = [ ];
-            };
-            # What a name left out of `defaultPlugins` counts as. Per entry,
-            # not a `false` in that option's default: a host setting any key
-            # there replaces the whole default attrset, so it would not
-            # survive `{ podman = false; }` (#946).
-            enableByDefault = lib.mkOption {
-              type = lib.types.bool;
-              default = true;
             };
             # The bar section `omarchy-plugin-enable` is given. "" gives none,
             # so a clone of a first-party plugin (clonedFrom) takes that
@@ -1827,7 +1817,8 @@ in
           src = inputs.nixarchy-flatsnap.packages.${pkgs.stdenv.hostPlatform.system}.default;
         };
         # nixarchy-menu, the Raycast-style replacement for the Omarchy menu
-        # (#946). Opt-in: `defaultPlugins.menu = true`. It is a clone of
+        # (#946), on by default (#1052); `defaultPlugins.menu = false` restores
+        # the stock menu. It is a clone of
         # omarchy.menu, so it keeps that plugin's bar slot (placement "") and
         # the hook below turns any other omarchy.menu clone off before it.
         # voxtype is optional; the plugin finds it on PATH when present.
@@ -1860,7 +1851,6 @@ in
                 substituteInPlace BarWidget.qml --replace-fail 'fontFamily: "omarchy"' '${snowflakeButton}'
               '';
             };
-          enableByDefault = false;
           placement = "";
           packages = [
             pkgs.python3

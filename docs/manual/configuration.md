@@ -208,6 +208,7 @@ programs.nixarchy.defaultPlugins.github = false;
 programs.nixarchy.defaultPlugins.herdr = false;
 programs.nixarchy.defaultPlugins.devenv = false;
 programs.nixarchy.defaultPlugins.plugin-browser = false;
+programs.nixarchy.defaultPlugins.menu = false;
 ```
 
 That never edits your `shell.json`, so a plugin you already have on stays on

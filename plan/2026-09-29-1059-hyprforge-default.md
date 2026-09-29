@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1059
 spec: spec/2026-09-29-1059-hyprforge-default.md
 ---

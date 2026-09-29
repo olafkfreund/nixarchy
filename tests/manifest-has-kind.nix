@@ -60,7 +60,9 @@ pkgs.runCommand "nixarchy-manifest-has-kind"
     # "menu", 4 = a sequence matched "bar", 8 = a null manifest matched.
     probe() {
       fn=$(extract "$1")
-      printf '%s\n' "$fn" | grep -q 'function manifestHasKind' || {
+      # Not `printf | grep -q`: under pipefail that can fail on a match (#1058).
+      # Why: tests/AGENTS.md#a-pipe-into-grep-q-can-fail-because-grep-matched
+      [[ $fn == *'function manifestHasKind'* ]] || {
         echo "FAIL: manifestHasKind not found in $1; upstream moved or renamed it"
         exit 1
       }

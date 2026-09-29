@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1052
 intent: intent/2026-09-29-1052-menu-on-by-default.md
 ---

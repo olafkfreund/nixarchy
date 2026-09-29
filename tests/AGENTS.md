@@ -674,6 +674,26 @@ shipped script.
 the new tree. That needs a session that has rebuilt since login, which no check
 here has. p620 is one most days, so it is a hand check.
 
+## shell-restart-race runs the script, with a quickshell that dies slowly
+
+`checks.shell-restart-race` (#953) runs the real `omarchy-restart-shell`,
+patched and upstream's, against PATH stubs. That works because the script is
+upstream's and unwrapped. The stubs model one config:
+
+- the old instance dies at a scripted time, and `quickshell kill` blocks until
+  then;
+- `quickshell list` prints a block copied verbatim from a real run;
+- a `hyprctl dispatch` launch "exits already running" while the old one lives.
+
+**What it pins:** a 7 s teardown ends with one shell; upstream's script ends
+with zero (the negative control); a wedged shell is reported with no second
+launch; a fast teardown stays fast.
+
+**What it cannot reach:** how long a real quickshell takes to tear down, and
+whether real `quickshell list` still prints `Process ID:`. The first is a hand
+check on p620: swap a plugin folder and restart at once. The second fails
+toward today's behaviour, not a hang.
+
 ## Menu aliases: the words are a judgement, and nothing here checks them
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no

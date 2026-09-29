@@ -1993,6 +1993,30 @@ stdenvNoCC.mkDerivation {
                       'fi')
                     substituteInPlace "$restartBin" --replace-fail "$relaunchOld" "$relaunchNew"
 
+                    # Why: pkgs/AGENTS.md#omarchy-restart-shell-waits-for-the-old-shell-to-be-gone-953
+                    killOld='while timeout 5 quickshell kill -p "$CONFIG_DIR" --any-display >/dev/null 2>&1; do :; done'
+                    killNew=$(printf '%s\n' \
+                      '# nixarchy CARRIED patch (#953): wait until no instance of this config remains.' \
+                      '# `timeout 5` gave up on a slow teardown, the launch below lost the race with' \
+                      '# the dying shell ("already running"), and the desktop was left with none.' \
+                      'exit_wait=''${OMARCHY_SHELL_EXIT_TIMEOUT:-60}' \
+                      'exit_deadline=$((SECONDS + exit_wait))' \
+                      '# Captured, not piped into grep -q: that can fail on a match (#1058).' \
+                      'while [[ $(quickshell list -p "$CONFIG_DIR" --any-display 2>/dev/null) == *"Process ID:"* ]]; do' \
+                      '  if (( SECONDS >= exit_deadline )); then' \
+                      '    echo "Omarchy shell did not exit within ''${exit_wait}s; not starting a second one." >&2' \
+                      '    exit 1' \
+                      '  fi' \
+                      '  timeout 5 quickshell kill -p "$CONFIG_DIR" --any-display >/dev/null 2>&1 || sleep 0.2' \
+                      'done')
+                    substituteInPlace "$restartBin" --replace-fail "$killOld" "$killNew"
+                    readyOld='for (( attempt = 0; attempt < 20; attempt++ )); do'
+                    readyNew=$(printf '%s\n' \
+                      '# nixarchy CARRIED patch (#953): a plugin-heavy shell takes 30-60 s to answer.' \
+                      'ready_deadline=$((SECONDS + ''${OMARCHY_SHELL_READY_TIMEOUT:-60}))' \
+                      'while (( SECONDS < ready_deadline )); do')
+                    substituteInPlace "$restartBin" --replace-fail "$readyOld" "$readyNew"
+
                     shellBin=$out/share/omarchy/bin/omarchy-shell
                     ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
                     ipcNew=$(printf '%s\n' \

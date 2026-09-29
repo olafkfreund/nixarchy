@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1059
 intent: intent/2026-09-29-1059-hyprforge-default.md
 ---

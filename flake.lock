@@ -819,6 +819,23 @@
         "type": "github"
       }
     },
+    "nixarchy-hyprsettngs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790669454,
+        "narHash": "sha256-ObDZRn2tR2lOBctylaFoVPjosRvOqYusu+Wi9m6PbDI=",
+        "owner": "olafkfreund",
+        "repo": "nixarchy-hyprsettngs",
+        "rev": "2392ad66af37cc9747130bf00d93b0ef86bf1a58",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixarchy-hyprsettngs",
+        "rev": "2392ad66af37cc9747130bf00d93b0ef86bf1a58",
+        "type": "github"
+      }
+    },
     "nixarchy-menu": {
       "inputs": {
         "nixpkgs": [
@@ -1156,6 +1173,7 @@
         "nixarchy-ghtui": "nixarchy-ghtui",
         "nixarchy-gltui": "nixarchy-gltui",
         "nixarchy-herdr": "nixarchy-herdr",
+        "nixarchy-hyprsettngs": "nixarchy-hyprsettngs",
         "nixarchy-menu": "nixarchy-menu",
         "nixarchy-microvm": "nixarchy-microvm",
         "nixarchy-omatheme": "nixarchy-omatheme",

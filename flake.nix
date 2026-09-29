@@ -312,6 +312,14 @@
       flake = false;
     };
 
+    # Why: docs/internals/flake.md#hyprforge-on-by-default-1059
+    # Third-party (Aziz, MIT) via olafkfreund's fork, no flake upstream; a
+    # reviewed commit, bumped the way that page says.
+    nixarchy-hyprsettngs = {
+      url = "github:olafkfreund/nixarchy-hyprsettngs/2392ad66af37cc9747130bf00d93b0ef86bf1a58";
+      flake = false;
+    };
+
     # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-distrobox = {

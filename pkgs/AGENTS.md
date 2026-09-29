@@ -115,6 +115,32 @@ CI additionally asserts that no skill code block contains a `pacman`, `yay`,
 `/usr/share/omarchy` or Arch-debuginfod line. Prose may contrast with Arch on
 purpose; a fenced block is what an agent copies.
 
+<a id="hyprforge-s-hook-lives-in-the-store-hyprland-lua"></a>
+
+### Hyprforge's hook lives in the store hyprland.lua (#1059)
+
+Hyprforge saves to `~/.config/hypr/hyprforge.lua` and expects
+`~/.config/hypr/hyprland.lua` to load it. Its Connect button adds one optional
+`require` there. nixarchy's session never reads that file: `modules/nixos.nix`
+starts Hyprland with `--config` on the store's `config/hypr/hyprland.lua`. So
+on nixarchy, Connect alone saves settings that vanish at the next login.
+
+The same line therefore goes into the store file, after
+`require("hypr.autostart")`, the place Hyprforge itself picks:
+
+- **It is optional.** `require_optional.module` is Omarchy's own helper, and a
+  machine that never opened Hyprforge has no file, so nothing changes.
+- **It is Hyprforge's exact text**, so a new home's seeded copy reads as
+  connected and the banner never shows. An existing home keeps its older
+  seeded copy (the seed never overwrites). There Connect still offers itself,
+  and clicking it edits a file the session ignores, which is harmless.
+- **It is per-system, not per-plugin.** Turning Hyprforge off leaves a saved
+  `hyprforge.lua` applied until it is deleted, as upstream's Connect line
+  would.
+
+`checks.session` writes the file and reads the option back through
+`hyprctl`. That is the only layer that can see "saved but never loaded" (§2).
+
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)
 

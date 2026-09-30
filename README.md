@@ -54,7 +54,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `hypr-rdp`, the running session over RDP |
 | **[Ask the machine](https://olafkfreund.github.io/nixarchy/manual/ai)** | agent skills written for NixOS, even against a [local model](https://olafkfreund.github.io/nixarchy/manual/ai#running-the-model-locally) |
 
-| the menu | Install |
+| the menu (Super+Space) | Install |
 |---|---|
 | ![menu](docs/screenshots/01-menu-root.jpg) | ![install](docs/screenshots/02-install.jpg) |
 | **Remove** | **Update** |
@@ -488,6 +488,10 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Apps ▸ GitHub Actions** | repository workflow runs, jobs and steps in a panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)), with `gh`. **On by default**, Super+Alt+A on a new install; `programs.nixarchy.defaultPlugins.github = false` removes it |
 | **Apps ▸ Herdr** | your herdr sessions and their agents in the bar ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)), with `herdr`. **On by default**, Super+Alt+H on a new install; `programs.nixarchy.defaultPlugins.herdr = false` removes it |
 | **Install ▸ Apply changes** | the rebuild itself in a panel (`pkgs/rebuild-panel/`, shipped with nixarchy): it asks before it starts, then shows the elapsed time and the log tail while `nixarchy-rebuild` runs, and keeps the exit code and the log if it fails. Closing it does not stop the rebuild. **On by default**; its bar icon shows only while one is running — `programs.nixarchy.defaultPlugins.rebuild = false` removes it |
+| **Super+Space** | a palette over the whole menu ([nixarchy-menu](https://github.com/olafkfreund/nixarchy-menu)): apps, Omarchy's rows, sums, conversions, files, hotkeys, a hand-off to your agent. **On by default**; `defaultPlugins.menu = false` brings the stock menu back |
+| **Hyprforge** | every Hyprland setting, previewed live on your real windows ([Hyprforge](https://github.com/AbdulazizAlwabel/omarchy-hyprforge), by Aziz). **On by default**, and what it saves is what the session loads |
+| **Setup ▸ Plugins ▸ Add Plugin** | the plugin marketplace, audited in a sandbox before anything installs ([nixarchy-plugin-browser](https://github.com/olafkfreund/nixarchy-plugin-browser)). **On by default**, Super+Alt+U |
+| **Runtime themes** | the active palette across supported apps without a rebuild ([omatheme](https://github.com/olafkfreund/nixarchy-omatheme)). **On by default** |
 | **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **Coming**, and it asks a human before it takes control — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
 | **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |

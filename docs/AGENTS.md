@@ -113,8 +113,16 @@ Learned in six takes for nixarchy-voice#163 on razer; each cost a whole take.
   `toggle()` starts Voxtype dictation when `secondTap` is `"voice"`
   (`NixarchyMenu.qml:57`). The search box then transcribes the room, and Return
   means *Finish*, not *Open*. Close it with `wtype -k Escape`, and only when
-  `hyprctl layers` shows `omarchy-menu`. `omarchy menu close` addresses
-  Omarchy's own menu and does nothing to this one.
+  `hyprctl layers` shows `omarchy-menu`. **`omarchy menu close` does not
+  spare you this** — it becomes `omarchy-shell shell hide omarchy.menu`,
+  which resolves to the enabled clone and calls nixarchy-menu's own
+  `close()`, the same one a second toggle would have reached. That `close()`
+  cancels when voice is off, and **starts dictation** when Voxtype is
+  detected, `voice.enabled` is true (the default) and `secondTap` is
+  `"voice"` (also the default). `checks.session` closes the menu this way in
+  a VM with voice off, which is why it stays green; on a machine with voice
+  on, close with Escape while the layer has keyboard focus, never with a
+  second toggle or `omarchy menu close`.
 - **A submenu's row order is not stable.** Rows are ranked by use
   (`~/.local/state/nixarchy-menu/usage.json`, keyed `md5("<provider>/<row id>")`).
   The same submenu comes up differently after every take, so "Down ×3" hits

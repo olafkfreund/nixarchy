@@ -148,6 +148,10 @@
     reason = "It tests for the LSP limiter at a fixed path under /usr/lib/lv2. NixOS keeps LV2 plugins in the store and points hosts at them with LV2_PATH, so the search is over LV2_PATH and the system profile.";
     allow = "systemctl-user";
   };
+  "omarchy-bluetooth-device" = {
+    class = "patch";
+    reason = "Upstream pairs without an agent lifecycle. For #1085, the pair action starts a temporary NoInputNoOutput bt-agent, waits until the adapter is pairable, then stops that agent after pairing and trust but before connect; the other actions keep upstream behavior.";
+  };
   "omarchy-bluetooth-power" = {
     class = "vendor";
     reason = "Vendored unchanged. `rfkill block/unblock bluetooth` sets the radio's soft block, which is runtime kernel state rather than configuration, so it behaves here as it does upstream and is meant not to survive a reboot.";

@@ -25,6 +25,10 @@ The approved design removes Nixarchy's permanent `bt-agent` user service. Pinned
 10. `tests/bluetooth-pairing.sh` and `tests/bluetooth-pairing.nix`: run the built command with `PATH=$TEST_ROOT/bin:${lib.makeBinPath pkgs.omarchy.passthru.runtimeDeps}`, add a `TEST_PAIRABLE=0` refusal case, and test the legacy-link cleanup → verify by the locked check, and deliberate red proofs made by temporarily deleting the pairable loop and the cleanup call from copied-aside sources. Stage each break, restore by `cp`, then show green. Do not build `checks.options` locally.
 11. `pkgs/verify.sh`: fail on loaded/active `bt-agent.service` or a user unit file/symlink at `~/.config/systemd/user/bt-agent.service`; report a standalone `bt-agent` process as temporary activity → verify by `bash -n` and the owner hardware check. The old agent from the previous generation can remain live until logout or PID-scoped stop.
 
+## Deviation (implementation)
+
+12. `data/bin-ledger.nix`: classify `omarchy-bluetooth-device` as a patched command and explain the #1085 pair-only agent lifecycle. The approved steps changed the shipped script but omitted the ledger row; `checks.bin-ledger` compares shipped commands with upstream and requires a row for every patch. Its `--seed` output is only a skeleton, so the reason records the actual divergence → verify by `flock /mnt/data/vmtest/codex-build.lock nix build .#checks.x86_64-linux.bin-ledger --no-link --print-build-logs`. Traps: no changes to polkit or session authorization code to address the unrelated `pkexec` timeout.
+
 ## Tests
 
 - Before any build longer than seconds, run `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`; wait if an install job is active. Serialize **every** Nix build with `flock /mnt/data/vmtest/codex-build.lock`. No builds or VM runs occur at this plan gate.

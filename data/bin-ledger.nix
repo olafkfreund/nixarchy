@@ -256,7 +256,7 @@
   };
   "omarchy-install-gaming-retroarch" = {
     class = "patch";
-    reason = "Nine /usr/share/libretro paths it writes into retroarch.cfg: core info, shaders and joypad autoconfig now point at nixpkgs packages, and the rest, which have none, at ~/.local/share/retroarch.";
+    reason = "Nine /usr/share/libretro paths it writes into retroarch.cfg: core info, shaders and joypad autoconfig now point at the system profile, and the rest, which have none, at ~/.local/share/retroarch.";
   };
   "omarchy-install-gaming-xbox-controllers" = {
     class = "vendor";

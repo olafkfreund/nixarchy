@@ -1885,6 +1885,7 @@
             # note that reads calm because a grep stopped matching. See
             # tests/release-notes.nix.
             "release-notes"
+            "retroarch-paths"
             # `nix run .#review` watches the pinned packages; this watches that
             # it can still see them. See tests/review-pins.nix.
             "review-pins"

@@ -185,6 +185,14 @@ pkgs.runCommand "nixarchy-apply-staging"
     fi
 
     fresh
+    XDG_STATE_HOME=$PWD/custom-state NIXARCHY_FLAKE=$PWD/root $apply --detach --yes </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && grep -F -- "--setenv=XDG_STATE_HOME=$PWD/custom-state" "$sdcalls" >/dev/null; then
+      ok "a detached rebuild keeps the caller's state home"
+    else
+      bad "a detached rebuild dropped XDG_STATE_HOME: $(cat "$sdcalls" 2>/dev/null)"
+    fi
+
+    fresh
     NIXARCHY_FLAKE=$PWD/root UNIT_STATE=running $apply --detach --yes </dev/null >"$PWD/busy.out" 2>&1 || rc=$?
     if [ "$rc" -eq 3 ] && grep -q "already running" "$PWD/busy.out" && [ ! -s "$sdcalls" ]; then
       ok "a detached start refuses while a rebuild is running"

@@ -3522,6 +3522,7 @@ in
                     --setenv=NIXARCHY_FLAKE="$flake" \
                     --setenv=ALLOW_BRANCH_DEPLOY="''${ALLOW_BRANCH_DEPLOY:-}" \
                     --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
+                    --setenv=XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
                     --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
                     -- "$(readlink -f "$0")" --yes --no-preview \
                     ''${expect+"''${expect[@]/#/--expect-sha256=}"}

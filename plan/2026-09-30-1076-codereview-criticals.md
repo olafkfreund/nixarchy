@@ -1373,8 +1373,11 @@ Then `nix build .#install`, which is shellcheck. Everything must be green.
 - Commit with the subject
   `Close the code review's criticals: guests cannot write what the host runs, and installs format only their own disk (wip)`
   and the Sonnet trailers.
-- Push, so CI starts on the head. This is the known-good tree that break
-  proofs restore to (§5).
+- This is the known-good tree that break proofs restore to (§5).
+- *Deviation (implementation):* the push is deferred until after V5. Pushing
+  here starts CI, and every break proof and local VM run waits for
+  `gh run list` = 0, so an early push would hold them behind the install jobs.
+  Each section was committed as it landed, so the baseline is `HEAD` after K2.
 
 **Break proofs [C].** Each follows the same procedure:
 

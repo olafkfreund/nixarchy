@@ -1,6 +1,6 @@
 { inputs, pkgs }:
 let
-  system = pkgs.stdenv.hostPlatform.system;
+  inherit (pkgs.stdenv.hostPlatform) system;
   machine =
     enabled:
     (inputs.nixpkgs.lib.nixosSystem {

@@ -211,13 +211,35 @@ in
 
       # Why: modules/microvm/guest.nix -- the guest's /mnt/host is <state>/share,
       # never <state> itself (#1076). kvm, so the user can drop allow-hosts.
-      systemd.tmpfiles.settings."10-nixarchy-microvm" = lib.mapAttrs' (
+      #
+      # Both levels, not just share/: tmpfiles runs at sysinit, before
+      # upstream's install-microvm-<name>.service (which only starts at
+      # microvms.target) has created <state>/<name>. Without our own entry for
+      # that directory, tmpfiles has to invent the missing intermediate itself
+      # while walking down to share/, creates it root:root, and then refuses
+      # to go further -- "Detected unsafe path transition <state> (owned by
+      # microvm) -> <state>/<name> (owned by root)" -- so share/ never exists
+      # and every microvm@<name>.service start fails on its 9p fsdev. Owning
+      # <state>/<name> ourselves keeps every step of the walk microvm:kvm.
+      systemd.tmpfiles.settings."10-nixarchy-microvm" = lib.concatMapAttrs (
         name: _:
-        lib.nameValuePair "${config.microvm.stateDir}/${name}/share" {
-          d = {
-            user = "microvm";
-            group = "kvm";
-            mode = "0770";
+        let
+          vmDir = "${config.microvm.stateDir}/${name}";
+        in
+        {
+          ${vmDir} = {
+            d = {
+              user = "microvm";
+              group = "kvm";
+              mode = "0750";
+            };
+          };
+          "${vmDir}/share" = {
+            d = {
+              user = "microvm";
+              group = "kvm";
+              mode = "0770";
+            };
           };
         }
       ) svc.machines;

@@ -1424,6 +1424,11 @@ X13 and X14 (options) and X15 and X16 (VMs) run in V3-V5.
 - **X11** was blind as written: `create_vm` had already written the file, so
   dropping `exec_vm`'s write stayed green. It is re-proven against R2's
   `canary` case.
+- **A2, found by X15's green baseline:** `microvm-boot` did not boot. tmpfiles
+  runs at sysinit, before upstream's `install-microvm-<name>` creates
+  `<state>/<name>`, so it made that directory root-owned and then refused
+  `share/` ("unsafe path transition"). The tmpfiles rule now owns both levels,
+  `microvm:kvm`, which matches upstream's own `chown`.
 
 ### Local VM and heavy verification (each alone, with CI idle)
 

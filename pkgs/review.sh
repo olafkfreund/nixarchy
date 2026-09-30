@@ -594,6 +594,7 @@ else
         ok "main install" "${vsha:0:7}" "installed, success"
       fi
       ;;
+    unreadable) finding "main install" "${vsha:0:7}" "could not read" "gh could not read install-check jobs" ;;
     running) ok "main install" "${vsha:0:7}" "still running" ;;
     none) finding "main install" "${vsha:0:7}" "no install check ran" "gh workflow run install-check.yml --ref main" ;;
     unverified) finding "main install" "${vsha:0:7}" "never installed: $vdetail" "gh workflow run install-check.yml --ref main" ;;

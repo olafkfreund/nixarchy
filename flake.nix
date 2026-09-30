@@ -2291,6 +2291,11 @@
             script = ./pkgs/omarchy/nix-bin/nixarchy-rollback;
           };
 
+          config-repo-ownership = import ./tests/config-repo-ownership.nix {
+            pkgs = pkgsFor.${system};
+            script = ./pkgs/omarchy/nix-bin/nixarchy-config-repo;
+          };
+
           # #963, and it was registered by NOTHING until #982 went looking --
           # the file shipped and `checks` never named it, so it had never run.
           # The coverage gate asserts every entry in `checks` is built by a

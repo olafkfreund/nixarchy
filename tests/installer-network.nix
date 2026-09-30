@@ -150,11 +150,18 @@ pkgs.runCommand "nixarchy-installer-network"
     # And the sentence that misled the tester: it may only be said when there is
     # genuinely no wireless interface. Asserted on the source, because the branch
     # lives inside connect_wifi's scan path and reaching it needs a whole nmcli.
-    grep -q 'phy80211' ${installScript} || {
-      echo "connect_wifi no longer tests for a wireless interface before" >&2
-      echo "blaming the image for a missing driver" >&2
+    sed -n '/^connect_wifi()/,/^}/p' ${installScript} > connect_wifi.txt
+    test -s connect_wifi.txt || {
+      echo "connect_wifi could not be extracted from install.sh" >&2
       exit 1
     }
+    sed -n '/^  if \[ -z "\$list" \]; then/,/^  fi/p' connect_wifi.txt > no_networks.txt
+    if ! grep -Fq 'if ! ls -d /sys/class/net/*/phy80211 >/dev/null 2>&1; then' no_networks.txt; then
+      echo "connect_wifi no longer tests for a wireless interface before" >&2
+      echo "blaming the image for a missing driver" >&2
+      sed 's/^/  | /' no_networks.txt >&2
+      exit 1
+    fi
     echo "  ok      the missing-driver line is gated on there being no interface"
 
     echo "the installer can tell three network failures apart, and a blocked radio from a missing one"

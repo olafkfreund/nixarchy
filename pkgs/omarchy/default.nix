@@ -2019,6 +2019,15 @@ stdenvNoCC.mkDerivation {
                       'while (( SECONDS < ready_deadline )); do')
                     substituteInPlace "$restartBin" --replace-fail "$readyOld" "$readyNew"
 
+                    # Why: pkgs/AGENTS.md#omarchy-menu-close-never-starts-dictation-1070
+                    menuBin=$out/share/omarchy/bin/omarchy-menu
+                    menuCloseNew=$(printf '%s\n' \
+                      '# nixarchy CARRIED patch (#1070): a scripted close must not start dictation.' \
+                      '    # `call` answers "unknown" with exit 0 when the menu has no dismiss(), so match the reply.' \
+                      '    if [[ $(omarchy-shell shell call omarchy.menu dismiss "{}" 2>/dev/null) == ok ]]; then exit 0; fi' \
+                      '    exec omarchy-shell shell hide omarchy.menu')
+                    substituteInPlace "$menuBin" --replace-fail 'exec omarchy-shell shell hide omarchy.menu' "$menuCloseNew"
+
                     shellBin=$out/share/omarchy/bin/omarchy-shell
                     ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
                     ipcNew=$(printf '%s\n' \

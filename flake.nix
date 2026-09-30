@@ -210,9 +210,24 @@
     # fallback picks the first agent whose adapter RESOLVES rather than the
     # literal name "claude". That still matters from #731 on and is carried
     # forward here; see that issue for the reasoning.
+    #
+    # The previous pin, 4e6c1b5, was nixi-nixarchy#37/#43 (summon action
+    # "ask").
+    # This one is nixi-nixarchy#84: MenuSearch imports MenuModel.js from a
+    # build-time store copy of our Omarchy (#1070), which is why `omarchy`
+    # follows ours.
+    # It also carries nixi-nixarchy#36-#83:
+    # - adapters pin their commands and read project config (#73, #76/#78, #80, #83)
+    # - permission prompts: allow-always, fidelity, the trust-pending wedge (#46, #58, #65)
+    # - safe I/O in one module, the markdown boundary and the guide read gate (#47, #48, #64)
+    # - the enable card follows the display and grows with content (#49, #57, #69)
+    # - dead code, migrations, MotionTuner and fff removed (#36, #67, #68, #70, #81)
+    # - menu writes escalate safely, learned visibility, and drift fixes (#54, #59, #61, #72)
+    # - one ack event, a tour file-watch reload, agent settings sources (#45, #66, #71), plus a flake.lock update (#82)
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/4e6c1b578224677592ae4fa02fef4701d62bf4f1";
+      url = "github:olafkfreund/nixi-nixarchy/d99e335b541d5d71611fff74b49acbe60d7a2e6b";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.omarchy.follows = "omarchy";
     };
 
     # Speech into desktop actions (#774). An input on every machine while the
@@ -299,7 +314,7 @@
     # A commit on main (no tags); bump it the way that page says. Its only
     # inputs are these two, so it adds nothing to the lock but itself.
     nixarchy-menu = {
-      url = "github:olafkfreund/nixarchy-menu/2cce175c6ffd4747dc42f571760071dc2650282f";
+      url = "github:olafkfreund/nixarchy-menu/f3e6bce7501d29659b0a6170fddb2472c4dde215";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.omarchy.follows = "omarchy";
     };
@@ -2247,6 +2262,13 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
+          };
+
+          # #1070: `omarchy-menu close` asks the menu to dismiss before hiding it, so a
+          # scripted close never starts dictation; stubs stand in for omarchy-shell.
+          menu-close = import ./tests/menu-close.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
           };
 
           # #963, and it was registered by NOTHING until #982 went looking --

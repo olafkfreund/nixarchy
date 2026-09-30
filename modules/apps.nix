@@ -3353,9 +3353,9 @@ in
                 # --status --json, which is the CONTRACT half of that output
                 # and so must be valid JSON rather than a printf that happens
                 # to look like it (#986). Declared because this is a
-                # writeShellApplication with a strict PATH: an undeclared
-                # command reads as a wrong answer rather than a missing one,
-                # which is the whole reason section 7 makes a point of it.
+                # writeShellApplication inherits the caller's PATH after its
+                # runtimeInputs: an undeclared jq could work on one machine
+                # and produce a wrong answer on another.
                 pkgs.jq
               ];
               text = ''
@@ -3530,10 +3530,9 @@ in
 
                 # Why: modules/AGENTS.md#where-the-selection-lands
                 base="$flake"
-                # uname -n, not hostname(1): writeShellApplication builds a
-                # strict PATH from runtimeInputs, and hostname lives in a package
-                # this script does not depend on. uname is coreutils, already
-                # here, and reports the same name.
+                # uname -n, not hostname(1): the latter would depend on the
+                # caller's PATH. uname is already supplied by coreutils and
+                # reports the same name.
                 host=$(uname -n)
                 if [ -d "$flake/hosts/$host" ]; then
                   base="$flake/hosts/$host"

@@ -622,11 +622,10 @@ fi
 # machine that predates it has a user-owned flake and no entry, so this looks
 # for the entry rather than for the ownership.
 #
-# Read with grep rather than `git config --system`: writeShellApplication
-# builds a strict PATH and git is not among this script's runtimeInputs, so
-# calling it would fail as "command not found" and be reported as a missing
-# entry on a machine that has one. Adding git just to read one line is the
-# worse trade -- see the vainfo note on runtimeInputs for the same trap.
+# Read with grep rather than `git config --system`: git is not among this
+# script's runtimeInputs, so it would depend on the caller's PATH. On a machine
+# without git, the missing command would be reported as a missing safe.directory
+# entry. Adding git just to read one line is the worse trade.
 if [ -d "$flake_dir/.git" ] && [ -O "$flake_dir" ] && [ "$(id -u)" -ne 0 ]; then
   if grep -qs "directory *= *\"\?$flake_dir\"\?\$" /etc/gitconfig; then
     finding "root can read $flake_dir" "$ok" "safe.directory is set system-wide"

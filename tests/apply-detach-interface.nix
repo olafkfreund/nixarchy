@@ -46,8 +46,8 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
 
     # --status and --log are NOT tested here, and that is a limitation rather
     # than an omission. nixarchy-apply is a writeShellApplication with
-    # pkgs.systemd in runtimeInputs (modules/apps.nix), so the strict PATH it
-    # builds beats a stub `systemctl` -- the script always gets the real one.
+    # pkgs.systemd in runtimeInputs (modules/apps.nix), so its PATH entry
+    # precedes a stub `systemctl` -- the script gets the declared one.
     # A first version of this file stubbed it anyway; the never-ran case
     # "passed" because the real systemctl reports nothing in the sandbox, which
     # is the same answer for the wrong reason. tests/apply-confirm.nix lost to
@@ -80,7 +80,7 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     # STATIC, and that is a limitation rather than a choice. The obvious
     # behavioural test stubs systemd-run and reads the unit's command line;
     # that cannot work, because nixarchy-apply is a writeShellApplication with
-    # pkgs.systemd in runtimeInputs and the strict PATH beats any stub. The
+    # pkgs.systemd in runtimeInputs and that PATH entry beats a stub. The
     # first version of this case did it anyway and failed for that reason, not
     # for the bug -- the fourth time in this repository a PATH stub has lost to
     # runtimeInputs (see tests/AGENTS.md).
@@ -118,8 +118,8 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     # 7. The three #986 item-3 gaps, asserted on the shipped script.
     #
     # Static for the reason case 5 gives: nixarchy-apply declares pkgs.systemd
-    # in runtimeInputs, so a stub systemctl loses to the strict PATH and a
-    # behavioural test of --status cannot be written here at all.
+    # in runtimeInputs, so a PATH stub of systemctl loses and this harness
+    # cannot test --status that way.
     #
     # (a) A stale DEAD unit must read as `none`, not as a result. One left over
     #     from an earlier session keeps its InvocationID, so requiring an empty

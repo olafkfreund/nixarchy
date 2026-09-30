@@ -18,7 +18,7 @@
 #
 # A PATH stub works here and does not in tests/apply-confirm.nix:
 # omarchy-restart-shell is upstream's and unwrapped, while nixarchy-apply is a
-# writeShellApplication whose strict PATH beats any stub. tests/AGENTS.md
+# writeShellApplication whose declared runtimeInputs beat PATH stubs. tests/AGENTS.md
 # records that distinction after four failures.
 pkgs.runCommand "nixarchy-shell-restart-tree"
   {

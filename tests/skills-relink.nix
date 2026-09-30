@@ -128,6 +128,20 @@ pkgs.runCommand "nixarchy-skills-relink" { nativeBuildInputs = [ pkgs.coreutils 
     bad "the user's own link was removed"
   fi
 
+  # An owned skill name can also be a user's real directory. ln -sfn without
+  # a guard descends into it and leaves a nested link behind.
+  rm -f "$HOME/.agents/skills/nixos"
+  mkdir -p "$HOME/.agents/skills/nixos"
+  echo mine > "$HOME/.agents/skills/nixos/SKILL.md"
+  got=$(run --own "$own" 2>&1)
+  if [ -d "$HOME/.agents/skills/nixos" ] && [ ! -L "$HOME/.agents/skills/nixos" ] &&
+     [ "$(cat "$HOME/.agents/skills/nixos/SKILL.md")" = mine ] &&
+     [ ! -e "$HOME/.agents/skills/nixos/nixos" ]; then
+    ok "an owned skill leaves a real same-name directory intact"
+  else
+    bad "an owned skill nested a link in the user's real directory: $got"
+  fi
+
   [ "$fails" -eq 0 ] || exit 1
   touch $out
 ''

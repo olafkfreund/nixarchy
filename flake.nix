@@ -1754,6 +1754,7 @@
             # pacman allowlist that used to live inline in build.yml. See
             # tests/bin-ledger.nix and #447.
             "bin-ledger"
+            "bluetooth-pairing"
             "branch-guard"
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.

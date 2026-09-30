@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1100
 author: olafkfreund
 ---
@@ -57,15 +57,11 @@ writable `/mnt/host` behavior.
 
 ## Open questions
 
-- **Policy transport:** Recommend a separate read-only 9p share backed by a
-  host-managed `policy/` sibling of `share/`. The pinned microvm.nix share
-  option supports `readOnly`, and its QEMU runner passes `readonly=true` to
-  `-fsdev`; this preserves the current file and per-VM model with the fewest
-  moving parts. Alternatives are QEMU `-fw_cfg` or kernel-command-line
-  injection, which need new argument plumbing and parsing. Does the owner
-  approve the separate share?
-- **Existing files:** Recommend ignoring `share/allow-hosts` after the change
-  and asking the host user to inspect and copy wanted entries to the new
-  host-side policy location. Automatically copying a guest-writable file
-  would carry any attacker-added hostname into the protected policy. Is that
-  fail-closed migration acceptable?
+- **Policy transport — approved:** Use a separate read-only 9p share backed
+  by a host-managed `policy/` sibling of `share/`. The pinned microvm.nix
+  share option supports `readOnly`, and its QEMU runner passes
+  `readonly=true` to `-fsdev`; this preserves the current per-VM file model.
+- **Existing files — approved:** Ignore `share/allow-hosts` after the change.
+  Tell the host user to inspect it and copy only wanted entries to the new
+  host-side policy location. Never copy it automatically: the old file was
+  guest-writable and may contain attacker-added hosts.

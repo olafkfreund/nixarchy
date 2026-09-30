@@ -507,9 +507,10 @@ bet here than on a distribution where the change is not reversible.
 
 **And it can be given a machine instead of yours.** `nixarchy vm create
 review-bot --template agent` boots a MicroVM whose only view of this machine
-is the read-only `/nix/store` and one shared directory — and whose network
-reaches nothing but the hosts you list, one per line, in the VM's own
-`allow-hosts` file. Your model endpoint and your git remote, and nothing
+is the read-only `/nix/store`, a writable work directory and a separate
+read-only policy directory — and whose network reaches nothing but the hosts
+you list, one per line, in the host-side `policy/allow-hosts` file. Your model
+endpoint and your git remote, and nothing
 else; not even DNS for anything else.
 
 [Sandboxes ▸ Running an agent that cannot phone home](sandboxes#running-an-agent-that-cannot-phone-home)

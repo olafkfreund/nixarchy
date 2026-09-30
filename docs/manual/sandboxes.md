@@ -127,12 +127,12 @@ nothing in", which is no constraint at all on a process you are running
 everything outbound except the local proxy's traffic, and the proxy refuses
 any host you did not name.
 
-You name them one per line, in the VM's `share/` directory -- what the guest
-sees at `/mnt/host` -- before you start it:
+You name them one per line in the VM's host-side `policy/` directory before
+you start it. The guest sees this directory read-only at `/mnt/agent-policy`:
 
 ```sh
 nixarchy vm create review-bot --template agent
-cat > ~/.local/state/nixarchy/microvm/review-bot/share/allow-hosts <<'EOF'
+cat > ~/.local/state/nixarchy/microvm/review-bot/policy/allow-hosts <<'EOF'
 api.anthropic.com
 github.com
 EOF
@@ -145,10 +145,9 @@ guest, `http_proxy` and `https_proxy` are already set, so `curl`, `git`,
 `pip`, `uv`, `npm` and every model SDK route through the proxy without being
 told.
 
-**No file, or an empty one, means nothing is allowed.** That is the only safe
-way for this to fail, and it is the failure you will meet first: an agent
-that reports it cannot reach its own API is telling you the allowlist is not
-where it expected.
+**No file, or an empty one, adds no hosts.** The `agent` template then denies
+all destinations. `agent-claude` still allows its built-in model and GitHub
+hosts. If your agent cannot reach its own API, check the policy path first.
 
 ### What this does and does not contain
 
@@ -176,12 +175,12 @@ It **does not**:
   other way -- a kernel bug, for instance -- can still flush the ruleset. It
   still cannot leave the VM, which is the boundary that matters, but treat
   the allowlist as a policy for an agent doing what agents do, not as a cage
-  for an attacker: `dev` can still append to `/mnt/host/allow-hosts` without
-  root, and a name added there is allowed from the next boot. Restricting who
-  may edit that file from inside the guest is tracked separately; don't read
-  more isolation into the allowlist than it provides.
-- **Restrict the shared directory.** `/mnt/host` is read-write, as it is for
-  every template. Put the checkout there and nothing else.
+  for an attacker with guest root: root can flush the guest's nftables
+  ruleset. The ordinary `dev` user cannot edit the host policy through the
+  read-only share.
+- **Restrict the work directory.** `/mnt/host` remains read-write. Put the
+  checkout there and nothing else; keep policy files in `policy/`, outside
+  that writable share.
 
 ### And when it does get out and break something
 
@@ -242,8 +241,9 @@ removed: the nixarchy.microvm panel reads these.
 
 Everything a VM has lives at
 `~/.local/state/nixarchy/microvm/<name>/`: the template it was created from,
-`share/` (the only part the guest sees, at `/mnt/host`: its runtime hostname,
-`allow-hosts`, anything you put there), and — after the first `run` —
+`share/` (guest-writable at `/mnt/host`: its runtime hostname and work files),
+`policy/` (read-only to agent guests at `/mnt/agent-policy`, holding
+`allow-hosts`), and — after the first `run` —
 `current`, a symlink into the store that is also this VM's
 garbage-collection root. `nix build --out-link` is what writes it,
 deliberately never `nix run`, which registers no root at all: a
@@ -253,11 +253,13 @@ deliberately never `nix run`, which registers no root at all: a
 **Upgrading from before #1076.** Guests used to see this whole directory,
 `current` included. That was a way from a guest to your host, as you or as
 root. They now see `share/` only. Nothing was moved or deleted: files a
-guest wrote before, and an `allow-hosts` you wrote, are still one level
-up, and the guest no longer sees them. Move what it should see into
-`share/`. An `agent` VM with no allowlist there reaches nothing, which is
-the safe way to fail. Declarative machines: the same, under
-`/var/lib/microvms/<name>/share`. Recreate any VM that ran untrusted code
+guest wrote before are still one level up, and the guest no longer sees
+them. Move work files into `share/`. An `agent` VM with no policy file
+reaches nothing beyond any closure-side defaults. Declarative machines use
+`/var/lib/microvms/<name>/policy/allow-hosts`; ordinary host users need root
+to maintain it. An old `share/allow-hosts` is ignored: inspect it and copy
+only the entries you still want into `policy/allow-hosts`. It is never copied
+automatically because the guest could have edited it. Recreate any VM that ran untrusted code
 before this change: it could already have replaced `current` or planted a
 symlink somewhere in its directory, and neither is undone by upgrading.
 

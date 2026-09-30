@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1090
 spec: spec/2026-09-30-1090-home-manager-writers.md
 ---

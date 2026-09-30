@@ -672,7 +672,7 @@ stdenvNoCC.mkDerivation {
                     # write "No such file or directory" to stderr on every new terminal --
                     # answering correctly while looking broken.
                     substituteInPlace $out/share/omarchy/bin/omarchy-version-channel \
-                      --replace-fail 'if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then' 'nixos-version 2>/dev/null | cut -d" " -f1 || exit 1; exit 0; if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then'
+                      --replace-fail 'if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then' 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then'
 
                     # Vulkan was never detected.
                     #

@@ -32,8 +32,37 @@ pkgs.runCommand "nixarchy-channel"
     ch=${omarchy}/share/omarchy/bin/nixarchy-channel
 
     mk() { mkdir -p "$1"; cat > "$1/flake.nix" < ${pkgs.writeText "flake.nix" filled}; }
-
     fails=0
+
+    # The patched upstream command must report a real version or fail, so a
+    # missing nixos-version cannot become an empty but successful About line.
+    version_channel=${omarchy}/share/omarchy/bin/omarchy-version-channel
+    nixos-version() {
+      case "''${VERSION_CASE:-good}" in
+        fail) return 42 ;;
+        empty) return 0 ;;
+        good) printf '%s\n' '26.05 (Nixarchy)' ;;
+      esac
+    }
+    export -f nixos-version
+    for case_name in fail empty; do
+      rc=0
+      got=$(VERSION_CASE=$case_name "$version_channel" 2>&1) || rc=$?
+      if [ "$rc" -ne 0 ] && [ -z "$got" ]; then
+        echo "  ok      version-channel refuses $case_name nixos-version"
+      else
+        echo "  FAILED  version-channel accepted $case_name nixos-version (exit $rc, output: $got)"
+        fails=$((fails + 1))
+      fi
+    done
+    got=$(VERSION_CASE=good "$version_channel" 2>&1)
+    if [ "$got" = 26.05 ]; then
+      echo '  ok      version-channel prints the version without probing pacman'
+    else
+      echo "  FAILED  version-channel printed '$got' instead of 26.05"
+      fails=$((fails + 1))
+    fi
+
     want() {
       if <<<"$2" grep -q -- "$3"; then echo "  ok      $1"
       else

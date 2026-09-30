@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1100
 intent: intent/2026-09-30-1100-agent-microvm-egress-policy.md
 ---

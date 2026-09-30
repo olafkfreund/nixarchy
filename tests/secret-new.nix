@@ -49,8 +49,10 @@ pkgs.runCommand "nixarchy-secret-new"
     NIXARCHY_FLAKE="$TMPDIR/flat" SOPS_EDITOR="$TMPDIR/user-editor" "$cli" new --user demo > user-output 2>&1 || {
       echo 'FAIL: user secret creation was blocked'; cat user-output; exit 1; }
     cd "$TMPDIR"
-    SOPS_AGE_KEY_FILE="$XDG_DATA_HOME/nixarchy/secrets/identity.txt" \
-      sops -d "$XDG_DATA_HOME/nixarchy/secrets/user.yaml" | grep -q '^demo: value$' || {
+    decrypted=$(SOPS_AGE_KEY_FILE="$XDG_DATA_HOME/nixarchy/secrets/identity.txt" \
+      sops -d "$XDG_DATA_HOME/nixarchy/secrets/user.yaml") || {
+        echo 'FAIL: user secret did not decrypt'; exit 1; }
+    grep -q '^demo: value$' <<< "$decrypted" || {
         echo 'FAIL: user secret did not decrypt'; exit 1; }
     echo '  ok: user secret encrypted and read back'
 
@@ -122,7 +124,9 @@ pkgs.runCommand "nixarchy-secret-new"
     sops -e -i hosts/alpha/secrets.yaml
     key=$(ssh-to-age -private-key -i "$TMPDIR/host_key")
     check_edit() {
-      SOPS_AGE_KEY="$key" sops -d hosts/alpha/secrets.yaml | grep -q "^edited: $1$" || {
+      decrypted=$(SOPS_AGE_KEY="$key" sops -d hosts/alpha/secrets.yaml) || {
+        echo "FAIL: built wrapper could not decrypt editor case $1"; exit 1; }
+      grep -q "^edited: $1$" <<< "$decrypted" || {
         echo "FAIL: built wrapper did not save editor case $1"; exit 1; }
     }
     env -u EDITOR CASE=1 SOPS_EDITOR="$TMPDIR/editor --flag" \

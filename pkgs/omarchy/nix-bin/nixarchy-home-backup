@@ -239,24 +239,25 @@ has_remote()  { [[ -n $(git remote 2>/dev/null) ]]; }
 # ---------------------------------------------------------------------------
 
 allowlisted_files() {
-  local entry ex rel keep
+  local entry ex rel keep root=${1:-$HOME}
   local -a exs=()
   while IFS= read -r ex; do exs+=("${ex%/}"); done < <(excludes)
 
   while IFS= read -r entry; do
     entry=${entry#/}
-    [[ -e $HOME/$entry ]] || continue
+    [[ -e $root/$entry ]] || continue
     # -xtype f rather than -type l: a symlink whose target is gone would break
     # the copy, and ~/.config is full of them (btop's current.theme dangles
     # until the first theme is set).
     while IFS= read -r rel; do
-      rel=${rel#"$HOME/"}
+      rel=${rel#"$root/"}
+      [[ $root != "$HOME" && -L $root/$rel ]] && continue
       keep=true
       for ex in "${exs[@]}"; do
         [[ $rel == "$ex" || $rel == "$ex"/* ]] && { keep=false; break; }
       done
       [[ $keep == true ]] && echo "$rel"
-    done < <(find "$HOME/$entry" \( -type f -o -xtype f \) 2>/dev/null)
+    done < <(find "$root/$entry" \( -type f -o -xtype f \) 2>/dev/null)
   done < <(includes) | sort -u
 }
 
@@ -303,6 +304,14 @@ credential_hits() {
 if [[ $mode == restore ]]; then
   say "\033[1mRestoring your desktop configuration\033[0m"
 
+  while IFS= read -r entry; do
+    entry=${entry#!}
+    if [[ $entry == /* || $entry == .. || $entry == ../* || $entry == */../* || $entry == */.. ]]; then
+      fail "Unsafe path in your local backup.list: $entry"
+      exit 1
+    fi
+  done < <(resolved_list)
+
   if [[ ! -d $REPO/.git ]]; then
     step "Where is the backup?"
     say "  Paste the URL of the repository this machine (or an earlier one)"
@@ -326,19 +335,38 @@ if [[ $mode == restore ]]; then
   # swap. A swap would delete files the user has since made that the backup
   # has never heard of, which is a restore that loses data.
   step "Copying files into place"
-  restored=0 kept=0 same=0
-  while IFS= read -r rel; do
+  mapfile -t files < <(allowlisted_files "$REPO")
+  restored=0 kept=0 same=0 list_restored=false
+  for rel in "${files[@]}"; do
     src=$REPO/$rel
     dest=$HOME/$rel
+    if [[ -L $dest ]]; then
+      fail "Refusing symlink: $rel"
+      exit 1
+    fi
+    parent=$(dirname "$dest")
+    while [[ $parent != "$HOME" && $parent != / ]]; do
+      if [[ -L $parent ]]; then
+        fail "Refusing symlinked directory for $rel: $parent"
+        exit 1
+      fi
+      parent=$(dirname "$parent")
+    done
     if [[ -e $dest ]] && cmp -s "$src" "$dest"; then
       same=$((same + 1))
       continue
     fi
-    mkdir -p "$(dirname "$dest")"
+    if ! mkdir -p "$(dirname "$dest")"; then
+      fail "Could not create parent directory for $rel"
+      exit 1
+    fi
     if [[ -e $dest ]]; then
       if [[ $force == false ]]; then
         bak=$dest.bak.$(date +%s)
-        cp -f "$dest" "$bak"
+        if [[ -e $bak || -L $bak ]] || ! cp "$dest" "$bak"; then
+          fail "Could not save your existing $rel"
+          exit 1
+        fi
         say "  $rel  (yours saved as $(basename "$bak"))"
         kept=$((kept + 1))
       fi
@@ -347,11 +375,18 @@ if [[ $mode == restore ]]; then
     # source is a git checkout, not a store path: git records the executable
     # bit and nothing else, so this restores a hook script as executable and
     # leaves everything else at the umask default.
-    cp -f "$src" "$dest"
+    if ! cp -f --preserve=mode "$src" "$dest"; then
+      fail "Could not restore $rel"
+      exit 1
+    fi
     restored=$((restored + 1))
-  done < <(cd "$REPO" && find . -type f -not -path './.git/*' | sed 's|^\./||' | sort)
+    [[ $rel == .config/omarchy/backup.list ]] && list_restored=true
+  done
 
   ok "$restored restored, $same already matched, $kept of yours saved alongside"
+  if [[ $list_restored == true ]]; then
+    say "  Rerun \033[1mnixarchy home backup restore\033[0m to restore custom paths from backup.list."
+  fi
   say "\n\033[1mDone.\033[0m Log out and back in, or run \033[1momarchy-restart-shell\033[0m,"
   say "for the bar and the keybindings to pick the files up."
   exit 0

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1085
 author: olafkfreund
 ---
@@ -8,7 +8,7 @@ author: olafkfreund
 
 ## Problem
 
-`modules/nixos.nix` starts a `NoInputNoOutput` Bluetooth agent for the whole graphical session. That agent can accept pairing without user confirmation. The adjacent comment assumes the adapter is pairable only while the Bluetooth panel scans, but this repository does not establish that boundary or set a pairing timeout. The owner's `Pairable: yes` observation shows a possible exposure, although it may have been made during a scan. A successful unwanted pairing or HID injection has not been reproduced.
+`modules/nixos.nix` starts a `NoInputNoOutput` Bluetooth agent for the whole graphical session. That agent can accept pairing without user confirmation. The adjacent comment assumes the adapter is pairable only while the Bluetooth panel scans, but the pinned panel starts discovery without changing pairability and this repository sets no pairing timeout. The owner's `Pairable: yes` observation shows a possible exposure, although it may have been made during a scan. A successful unwanted pairing or HID injection has not been reproduced.
 
 ## Proposed outcome
 
@@ -27,5 +27,4 @@ Nixarchy desktop sessions with a Bluetooth adapter, especially users who leave t
 
 ## Open questions
 
-- Should deliberate pairing require an explicit confirmation, or is a short, visible pairing window acceptable for devices that use Just Works?
-- What does the pinned panel actually do to adapter pairability when scanning starts and stops? The repository's comment is not proof of that behavior.
+None. The owner chose a visible pairing window of about two minutes without per-pairing confirmation: the adapter is not pairable by default and becomes pairable only while the user pairs from the panel. The pinned panel currently controls discovery, not pairability.

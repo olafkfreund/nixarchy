@@ -84,7 +84,12 @@ intent: intent/2026-09-30-1089-installer-disk-safety.md
    target disk a serial on each raw QEMU
    `-drive`/`virtio-blk-pci` path in `tests/install-iso.nix:382,480`,
    `tests/install-iso-net.nix:355,419`, `tests/reinstall-vm.nix:307,384`,
-   and `installer/try.sh:537-545`. Do not assign the target's serial to the
+   `installer/try.sh:537-545`, and the user-facing no-Nix launcher
+   `installer/try-nixarchy.sh:161`. The virtio branch in the manual published
+   ISO matrix (`tests/install-matrix.py:357`) also needs a target serial;
+   its NVMe branch already supplies `serial=nixarchytest` (`:354-355`).
+   Use an explicit target `virtio-blk-pci` device where a raw `-drive
+   if=virtio` cannot set the device's serial. Do not assign the target's serial to the
    answers-file drive. The current VM suite has **no deliberate no-serial
    disk refusal case**; the new cheap identity check below supplies that
    negative case. The positive install checks must still reach their original
@@ -181,10 +186,11 @@ intent: intent/2026-09-30-1089-installer-disk-safety.md
 - CI must also keep `checks.install`, `checks.free-space`,
   `checks.installer-refusal`, `checks.install-encrypted`,
   `checks.install-iso`, `checks.install-iso-net`, and
-  `checks.reinstall-vm` and `checks.installer-wizard` green with their original
-  assertions reached; launch
-  `installer/vm.nix` and `#try` in their supported manual paths when hardware
-  permits. Do not run those VMs locally at the spec gate.
+  `checks.reinstall-vm`, and `checks.installer-wizard` green with their
+  original assertions reached; launch `installer/vm.nix`, `#try`, the no-Nix
+  `try-nixarchy.sh`, and both virtio and NVMe install-matrix paths in their
+  supported manual modes when hardware permits. Do not run those VMs locally
+  at the spec gate.
 - Build only cheap checks under the shared lock after plan approval. Run
   `nix fmt -- --ci`, statix, deadnix, and scan the diff for added
   `producer | grep -q` and `omarchy/shell.json` writes. CI runs the VM install

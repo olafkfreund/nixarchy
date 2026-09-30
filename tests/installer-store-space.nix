@@ -536,6 +536,72 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   echo "format_disk fails when disko does, and the backstop checks the ESP"
 
   # ------------------------------------------------------------------------
+  # #1084: nothing in the phase chain may `exit`. install_attempts only draws
+  # the failure screen (and its Retry) for a function that RETURNS.
+  # ------------------------------------------------------------------------
+  for fn in format_disk partition_free_space verify_subvolume_mounts \
+    generate_hardware_config reuse_baked_initrd write_hardware_modules \
+    install_flake_dir write_password_hash write_hostname run_install \
+    rescue_build check_store_space chown_flake_dir carry_network_profiles \
+    take_factory_snapshot; do
+    sed -n "/^$fn()/,/^}/p" ${installScript} > lint-fn.sh
+    [ -s lint-fn.sh ] || { echo "$fn is not in install.sh any more" >&2; exit 1; }
+    if grep -nE '^[[:space:]]*exit([[:space:]]|$)|[;&|{][[:space:]]*exit([[:space:]]|$)' lint-fn.sh > lint-hits; then
+      echo "$fn calls exit inside the install phases, so no failure screen and no retry (#1084):" >&2
+      cat lint-hits >&2
+      exit 1
+    fi
+  done
+  echo "no install phase exits past the failure screen"
+
+  # A failed partition_free_space stops format_disk before the disko script.
+  rm -f disko-built
+  (
+    NIX_FLAGS=()
+    work=/nonexistent hostname=h disk_mode=free luks_passphrase=pw
+    . ./fd.sh
+    findmnt() { return 1; }
+    partition_free_space() { return 1; }
+    nix() { touch disko-built; echo /nonexistent; }
+    format_disk
+  ) > fdfree.out 2>&1 && { echo "format_disk succeeded after partition_free_space failed (#1084)" >&2; exit 1; }
+  [ ! -e disko-built ] || { echo "format_disk built the disko script after partition_free_space failed (#1084)" >&2; exit 1; }
+  echo "a failed free-space partitioning stops format_disk before disko"
+
+  # A failed nixos-generate-config stops generate_hardware_config.
+  sed -n '/^generate_hardware_config()/,/^}/p' ${installScript} > ghc.sh
+  test -s ghc.sh || { echo "generate_hardware_config is not in install.sh any more" >&2; exit 1; }
+  rm -f rbi-called
+  mkdir -p ghc-host
+  (
+    . ./ghc.sh
+    hostdir=$PWD/ghc-host
+    nixos-generate-config() { return 1; }
+    reuse_baked_initrd() { touch rbi-called; }
+    write_hardware_modules() { :; }
+    generate_hardware_config
+  ) > ghc.out 2>&1 && { echo "generate_hardware_config succeeded after nixos-generate-config failed (#1084)" >&2; exit 1; }
+  [ ! -e rbi-called ] || { echo "generate_hardware_config went on after nixos-generate-config failed (#1084)" >&2; exit 1; }
+  echo "a failed nixos-generate-config stops the hardware phase"
+
+  # install_flake_dir twice: the retry needs $work, and must not nest the copy.
+  sed -n '/^install_flake_dir()/,/^}/p' ${installScript} > ifd-orig.sh
+  sed "s|/mnt/|$PWD/mnt/|g" ifd-orig.sh > ifd.sh
+  grep -q "$PWD/mnt/etc/nixos" ifd.sh || { echo "install_flake_dir no longer writes /mnt/etc/nixos" >&2; exit 1; }
+  mkdir -p flake-work/hosts/h
+  printf '%s\n' '{ }' > flake-work/flake.nix
+  (
+    . ./ifd.sh
+    git() { :; }
+    work=$PWD/flake-work
+    install_flake_dir && install_flake_dir
+  ) > ifd.out 2>&1 || { echo "install_flake_dir failed on a retry (#1084)" >&2; cat ifd.out >&2; exit 1; }
+  [ -f flake-work/flake.nix ] || { echo "install_flake_dir consumed the work tree; a retry cannot format again (#1084)" >&2; exit 1; }
+  [ -f mnt/etc/nixos/flake.nix ] && [ ! -e mnt/etc/nixos/flake-work ] || {
+    echo "install_flake_dir did not put the flake at /mnt/etc/nixos, or nested it on the retry" >&2; exit 1; }
+  echo "install_flake_dir copies, so a retry still has its flake"
+
+  # ------------------------------------------------------------------------
   # boot_medium must resolve the parent disk for every naming convention.
   #
   # The old sed 's/[0-9]*$//' turned /dev/nvme0n1p1 into "/dev/nvme0n1p",

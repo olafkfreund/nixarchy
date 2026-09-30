@@ -993,7 +993,14 @@ add the following. There are no new heredocs; the subshells run inline.
         answers_file=$ANSWERS
         nix() { printf '%s\n' /dev/disk/by-id/fake-a; }
         boot_medium() { printf '%s\n' "$BOOT"; }
-        readlink() { printf '%s\n' "$DISK"; }
+        # Deviation (implementation): argument-aware, or `boot` and `real`
+        # both resolve to $DISK and every case is refused as the boot medium.
+        readlink() {
+          case "$2" in
+            /dev/disk/by-id/fake-a) printf '%s\n' "$DISK" ;;
+            *) printf '%s\n' "$2" ;;
+          esac
+        }
         lsblk() { [ "$DISK" = /dev/gone ] || printf '%s\n' "vdb 64G QEMU_HARDDISK SERIAL-1076"; }
         ui_interactive() { [ -z "$answers_file" ]; }
         ui_gum_pad() { echo 0; }

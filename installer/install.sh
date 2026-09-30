@@ -1402,6 +1402,43 @@ finish_clone() {
   git -C "$work" add -A
 }
 
+# --from a machine the repository already describes: its disk-config.nix picks
+# the disk, so name it before anything erases it (#1084). The boot medium and a
+# disk this machine does not have are refused; an answers file is the consent,
+# as --from's own warning in main() already treats it.
+confirm_repo_disks() {
+  [ "$from_host_exists" = true ] || return 0
+  local devs dev real boot line
+  devs=$(nix "${NIX_FLAGS[@]}" eval --raw \
+    "$work#nixosConfigurations.$hostname.config.disko.devices.disk" \
+    --apply 'd: builtins.concatStringsSep "\n" (map (x: x.device) (builtins.attrValues d))') || {
+    echo "nixarchy-install: could not read which disks $hostname's disk-config.nix formats." >&2
+    echo "  Nothing was written." >&2
+    return 1
+  }
+  [ -n "$devs" ] || {
+    echo "nixarchy-install: $hostname's disk-config.nix names no disk. Nothing was written." >&2
+    return 1
+  }
+  boot=$(boot_medium)
+  [ -z "$boot" ] || boot=$(readlink -f "$boot")
+  echo "$from_repo's $hostname will ERASE:"
+  while IFS= read -r dev; do
+    real=$(readlink -f "$dev")
+    if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
+      echo "nixarchy-install: $dev is the medium this installer booted from. Nothing was written." >&2
+      return 1
+    fi
+    line=$(lsblk -dno NAME,SIZE,MODEL,SERIAL "$real" 2>/dev/null) && [ -n "$line" ] || {
+      echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
+      return 1
+    }
+    echo "  $dev  $line"
+  done <<<"$devs"
+  ui_interactive || return 0
+  gum confirm --padding "$(ui_gum_pad)" "Erase these disks and install $hostname?" || return 1
+}
+
 write_flake() {
   work=$(mktemp -d)
   cp -r "$TEMPLATE"/. "$work"
@@ -1460,13 +1497,13 @@ partition_free_space() {
   before="$free_start $free_end"
   free_space_possible "$dev" || {
     echo "nixarchy-install: $dev can no longer take a free-space install: $free_why" >&2
-    exit 1
+    return 1
   }
   after="$free_start $free_end"
   if [ "$before" != "$after" ]; then
     echo "nixarchy-install: the free region on $dev moved between the question" >&2
     echo "  and now ($before -> $after). Nothing was written. Start again." >&2
-    exit 1
+    return 1
   fi
 
   sector_bytes=$(blockdev --getss "$dev" 2>/dev/null || echo 512)
@@ -1478,7 +1515,7 @@ partition_free_space() {
   # aligned too and sgdisk does not quietly move it somewhere else.
   if [ "$root_start" -ge "$free_end" ]; then
     echo "nixarchy-install: the free region is not big enough for an ESP and a root." >&2
-    exit 1
+    return 1
   fi
 
   # 8309 is Linux LUKS, 8300 is a Linux filesystem. Cosmetic to the kernel and
@@ -1495,14 +1532,14 @@ partition_free_space() {
     --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev" || {
     echo "nixarchy-install: sgdisk could not create the ESP on $dev (exit $?)." >&2
     echo "  Nothing was formatted. Check the partition table before retrying." >&2
-    exit 1
+    return 1
   }
   sgdisk --new=0:"$root_start":"$free_end" \
     --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev" || {
     echo "nixarchy-install: sgdisk could not create the root partition on $dev (exit $?)." >&2
     echo "  The ESP entry was created; nothing was formatted. Check the" >&2
     echo "  partition table before retrying." >&2
-    exit 1
+    return 1
   }
 
   # sgdisk asks the kernel to re-read the table itself; partx is the fallback
@@ -1520,7 +1557,7 @@ partition_free_space() {
     if [ "$waited" -gt 30 ]; then
       echo "nixarchy-install: $esp_dev and $root_dev never appeared." >&2
       echo "  The partitions were created; nothing was formatted. Reboot and look." >&2
-      exit 1
+      return 1
     fi
     sleep 0.5
   done
@@ -1562,14 +1599,14 @@ format_disk() {
     umount -R /mnt || {
       echo "nixarchy-install: something is mounted at /mnt and will not unmount." >&2
       echo "  Formatting now would install into the wrong subvolumes. Reboot and retry." >&2
-      exit 1
+      return 1
     }
   fi
 
   # Before the passphrase file and before the disko script: in free-space mode
   # the layout the script evaluates addresses partitions that do not exist yet.
   if [ "$disk_mode" = free ]; then
-    partition_free_space
+    partition_free_space || return 1
   fi
 
   # The passphrase file disko's passwordFile points at. Written with umask 077,
@@ -1644,9 +1681,9 @@ generate_hardware_config() {
   # fails the build. --show-hardware-config prints to stdout, where the plain
   # --root form would also write a configuration.nix over the template's.
   nixos-generate-config --root /mnt --no-filesystems --show-hardware-config \
-    >"$hostdir/hardware-configuration.nix"
+    >"$hostdir/hardware-configuration.nix" || return 1
 
-  reuse_baked_initrd "$hostdir/hardware-configuration.nix"
+  reuse_baked_initrd "$hostdir/hardware-configuration.nix" || return 1
   write_hardware_modules "$hostdir/nixarchy-hardware.nix"
 
   # Both files, into the log, before anything uses them.
@@ -1759,7 +1796,7 @@ reuse_baked_initrd() {
   if [ ! -f "$file" ]; then
     echo "hardware: no $file to pin -- refusing to install a machine whose" >&2
     echo "hardware: initrd would have to be built. This is a bug in the installer." >&2
-    exit 1
+    return 1
   fi
 
   # The list depends on the answer to the encryption question: LUKS pulls a
@@ -1951,8 +1988,10 @@ write_password_hash() {
 }
 
 install_flake_dir() {
-  mkdir -p /mnt/etc
-  mv "$work" /mnt/etc/nixos
+  # Copied, not moved: $work is what format_disk builds the disko script from,
+  # and a retry from the failure screen formats again from it (#1084).
+  mkdir -p /mnt/etc/nixos
+  cp -a "$work/." /mnt/etc/nixos/ || return 1
 
   # A flake inside a git worktree sees only tracked or staged files, so without
   # the add, nixos-install fails on the first import. No commit: git needs an
@@ -2914,6 +2953,8 @@ main() {
     echo "$work"
     exit 0
   fi
+
+  confirm_repo_disks || exit 1
 
   # Refusal is free until format_disk runs; after it there is no OS to go
   # back to. So what can prove the install would die says so here, on the

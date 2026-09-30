@@ -38,17 +38,29 @@ observed during this run, not an earlier one.
    `tests/reinstall-vm.nix:307,384`, `installer/try.sh:537-545`,
    `installer/try-nixarchy.sh:161`, and the virtio branch of
    `tests/install-matrix.py:357`: attach a serial to the **target** disk's
-   virtio device; use an explicit `-drive if=none,id=...` plus
-   `-device virtio-blk-pci,drive=...,serial=...` where `if=virtio` cannot set
-   the device property. Leave answer-file disks separate and retain the NVMe
+   virtio device. In `install-iso`, `install-iso-net`, and `reinstall-vm`, turn
+   **both** the installer target and the answers drive into `-drive if=none`
+   with separate IDs and explicit `-device virtio-blk-pci,drive=...` entries:
+   attach the target first with its serial and the answers drive second
+   without that serial, preserving target `/dev/vda` and answers `/dev/vdb`.
+   Their subsequent installed-target boot also gets the explicit target
+   device and serial. For other raw launchers, use an explicit
+   `-drive if=none,id=...` plus `-device virtio-blk-pci,drive=...,serial=...`
+   where `if=virtio` cannot set the device property. Retain the NVMe
    branch's `serial=nixarchytest` at `tests/install-matrix.py:354-355`.
-   `tests/try-nixarchy.nix` and `tests/try-preflight.nix`: assert the launcher
-   QEMU arguments carry the target serial -> verify by
+   `tests/try-nixarchy.nix`: capture the no-Nix launcher's QEMU argv with its
+   existing stub. `tests/try-preflight.nix`: source `installer/try.sh` with
+   `NIXARCHY_TRY_SOURCED=1`, set `QEMU` to an argv-logging executable, stub
+   `detect_kvm`, `check_ram`, and `check_disk`, provide a fixture disk and
+   OVMF vars file, then run `main --boot --vnc` in a subshell (it `exec`s
+   QEMU); assert the logged target device argument contains the serial. A
+   source grep or a probe that exits before `main` cannot see those args
+   -> verify by
    `flock /mnt/data/vmtest/codex-build.lock nix build
    .#checks.x86_64-linux.try-nixarchy --print-build-logs` and then the same
    command for `try-preflight`, one invocation at a time, and by the listed
-   install VM checks in CI after Step 2. Break proof: copy each launcher aside under
-   `/mnt/data/vmtest/`, remove its target serial, show the corresponding
+   install VM checks in CI after all installer steps. Break proof: copy each launcher aside
+   under `/mnt/data/vmtest/`, remove its target serial, show the corresponding
    cheap assertion red, restore with `cp`, then show it green. The matrix's
    virtio/NVMe paths and installer VM launch are manual/CI checks, not local
    VM runs. After the `.nix` edits run `nix fmt`, inspect `git diff --stat`,
@@ -72,9 +84,12 @@ observed during this run, not an earlier one.
    `flock /mnt/data/vmtest/codex-build.lock nix build
    .#checks.x86_64-linux.installer-disk-identity --print-build-logs`.
    Break proofs: copy `installer/install.sh` aside outside the worktree,
-   remove the pre-write and pre-disko comparisons in turn, confirm each edit
-   landed with `git diff`, capture the check's distinct red line, restore with
-   `cp`, and capture green. Add the new test to git before Nix evaluates the
+   then independently (a) allow an identity with neither WWN nor serial,
+   (b) remove the pre-write comparison, (c) remove the post-build comparison,
+   (d) reset the saved fingerprint on retry, and (e) validate only the first
+   repo disk while a second changes. Confirm each edit landed with `git diff`,
+   capture that case's distinct red line, restore with `cp`, and capture
+   green before the next break. Add the new test to git before Nix evaluates the
    flake. Run `nix fmt`, inspect `git diff --stat`, and run `nix fmt -- --ci`.
 
 3. `installer/install.sh:1519-1609,1640-1673` and
@@ -92,13 +107,15 @@ observed during this run, not an earlier one.
    `|| true` to `wipefs`, show the store-space case red, then restore and show
    green. Never use `git checkout` for restoration.
 
-4. `installer/install.sh:1643-1673,3055-3058` and
+4. `installer/install.sh:1639-1641,1643-1673,3055-3058` and
    `tests/installer-store-space.nix`: before partition writes, evaluate the
    chosen host's `config.disko.devices`; inspect LUKS nodes' `passwordFile`
    values for `/tmp/nixarchy-luks.key`. Do not use the `encrypt` answer as the
    decision: an existing `--from` host skips `ask_encrypt`, and its layout can
-   differ. Refuse with `return 1` before writes if the evaluated layout needs
-   the key but no passphrase is available. Build disko first, then write the
+   differ. Put this evaluation and any missing-passphrase refusal **before**
+   the `disk_mode=free` call to `partition_free_space` at `:1639-1641`, not
+   just before writing the key. Refuse with `return 1` before writes if the
+   evaluated layout needs the key but no passphrase is available. Build disko first, then write the
    key with `umask 077` immediately before executing disko only when the
    layout needs it. Remove it on all normal and error paths, retaining the
    interrupt trap; a failed layout evaluation also refuses before writes.
@@ -142,7 +159,11 @@ observed during this run, not an earlier one.
 
 - At this draft gate: documentation diff only, no builds or VM runs. During
   implementation, stage new files before building because the flake cannot
-  see untracked paths. Each `nix build` above takes the shared
+  see untracked paths. **Before every local Nix build, including every red
+  proof, run exactly**
+  `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`
+  **and build only if it prints `0`**; wait otherwise, and stop on a query
+  error. Each `nix build` above then takes the shared
   `/mnt/data/vmtest/codex-build.lock` and runs one at a time. Use
   `--print-build-logs` without a pipeline that could hide exit status. Save
   break-proof logs outside the worktree and paste their key red lines into
@@ -152,10 +173,14 @@ observed during this run, not an earlier one.
   `try-nixarchy`, and `installer-answers` if its answer flow changes. Each
   new assertion must be shown red by breaking the product, then green after
   restoration; verify the break landed in `git diff` before trusting a green.
-- CI only: `install`, `free-space`, `installer-refusal`,
-  `install-encrypted`, `install-iso`, `install-iso-net`, `reinstall-vm`, and
+- PR CI: `install`, `free-space`, `installer-refusal`, and
   `installer-wizard`. They must reach their original assertions, not simply
-  fail at the new identity guard. Manual when hardware permits: `installer/vm.nix`,
+  fail at the new identity guard. `installer-refusal` already asserts at
+  `tests/installer-refusal.nix:178-184` that the refusal names the unreachable
+  Cachix substituter; an early identity refusal cannot satisfy it.
+- Nightly only: `install-encrypted`, `install-iso`, `install-iso-net`, and
+  `reinstall-vm`. Their target-serial changes cannot be proven by PR CI;
+  verify those results after merge. Manual when hardware permits: `installer/vm.nix`,
   `#try`, no-Nix `try-nixarchy.sh`, and both virtio/NVMe
   `tests/install-matrix.py` paths. No local VM or `checks.options` run.
 - After any `.nix` edit run `nix fmt` and inspect `git diff --stat`; final

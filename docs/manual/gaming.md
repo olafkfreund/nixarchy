@@ -88,6 +88,10 @@ first step is a package install that stops here — so set your ROM and BIOS
 directories in RetroArch's own settings after the first launch. The _RetroArch
 Game Launcher_ row, which gives one game its own launcher entry, works.
 
+If you installed RetroArch before the stable-path fix, update Nixarchy and
+rerun _Install > Gaming > RetroArch_ (or `omarchy-install-gaming-retroarch`)
+to replace stale core, shader and controller paths in your existing config.
+
 ## Xbox controllers
 
 Bluetooth Xbox controllers need the `xpadneo` kernel driver. On Arch that is a

@@ -71,6 +71,23 @@ let
         echo "  the machine's own SSH host key and with nothing else." >&2
         exit 1
       fi
+      if [ "''${1:-}" = edit ]; then
+        editor=''${SOPS_EDITOR:-''${EDITOR:-}}
+        if [ -z "$editor" ]; then
+          for candidate in vim nano vi; do
+            if command -v "$candidate" >/dev/null; then
+              editor="$candidate"
+              break
+            fi
+          done
+        fi
+        if [ -z "$editor" ]; then
+          echo "nixarchy secret: no editor found (set SOPS_EDITOR or EDITOR)." >&2
+          exit 1
+        fi
+        SOPS_EDITOR="env -u SOPS_AGE_KEY $editor"
+        export SOPS_EDITOR
+      fi
       # Command substitution inside a process that is already root. The value
       # is exported to the one child and to nothing else.
       SOPS_AGE_KEY=$(ssh-to-age -private-key -i "$key")
@@ -518,7 +535,7 @@ writeShellApplication {
       say  ""
       say  "    ''${bold}$name: your-value''${off}"
       say  ""
-      sudo --preserve-env=EDITOR "$HOST_SOPS" edit "$SYS_STORE"
+      sudo --preserve-env=EDITOR,SOPS_EDITOR "$HOST_SOPS" edit "$SYS_STORE"
 
       # The one step this command deliberately does not take for you, and
       # exactly where it has to go. See rule 1 in this file's header.
@@ -555,7 +572,7 @@ writeShellApplication {
         fail "no system secrets yet. Make one: nixarchy secret new <name>"
         return 1
       }
-      sudo --preserve-env=EDITOR "$HOST_SOPS" edit "$SYS_STORE"
+      sudo --preserve-env=EDITOR,SOPS_EDITOR "$HOST_SOPS" edit "$SYS_STORE"
     }
 
     do_remove() {

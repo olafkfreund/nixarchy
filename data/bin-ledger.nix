@@ -551,7 +551,7 @@
   };
   "omarchy-snapshot" = {
     class = "replace";
-    reason = "Upstream drives snapper through limine, which is neither the bootloader here nor packaged, and `@` holds almost no system anyway. Snapshots /home and /var/lib, and restores from the running system.";
+    reason = "Upstream drives snapper through limine, which is neither the bootloader here nor packaged, and `@` holds almost no system anyway. Manual create snapshots /home; restore points to its files. A separate root snapshot at boot covers /var/lib, which this command can list but neither creates nor restores.";
   };
   "omarchy-sudo-passwordless" = {
     class = "replace";

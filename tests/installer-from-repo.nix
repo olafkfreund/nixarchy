@@ -189,6 +189,88 @@ pkgs.runCommand "nixarchy-installer-from-repo"
       exit 1
     }
 
+    # ---- #1077: --from owns the hostname --------------------------------
+    {
+      sed -n '/^validate_username()/,/^}/p' ${installScript}
+      sed -n '/^validate_hostname()/,/^}/p' ${installScript}
+      sed -n '/^ask_identity()/,/^}/p' ${installScript}
+    } > ai.sh
+    grep -q '^ask_identity()' ai.sh || { echo "ask_identity is not in install.sh any more" >&2; exit 1; }
+    mkdir -p zi/Europe
+    : > zi/Europe/London
+    for mode in from wizard; do
+      (
+        . ./ai.sh
+        ui_screen() { :; }
+        ui_gum_pad() { echo 0; }
+        ui_widget_height() { echo 10; }
+        ui_abort() { exit 130; }
+        ask_password() { :; }
+        ask_recovery() { :; }
+        TZDIR=$HOME/zi
+        gum() {
+          printf '%s\n' "$*" >> "$HOME/gum-$mode.log"
+          case "$*" in
+            *Username*) echo alice ;;
+            *Hostname*) echo someone-else ;;
+            *filter*) cat > /dev/null; echo Europe/London ;;
+          esac
+        }
+        from_repo="" from_host=alpha
+        if [ "$mode" = from ]; then from_repo=file:///r; fi
+        ask_identity
+        printf '%s\n' "$hostname" > "$HOME/hostname-$mode"
+      ) || failed "ask_identity ($mode) did not return"
+    done
+    [ "$(cat hostname-from)" = alpha ] || failed "--from: the typed hostname replaced --host alpha (#1077)"
+    if grep -q Hostname gum-from.log; then failed "--from: a hostname was asked for, and disko would ignore it (#1077)"; fi
+    [ "$(cat hostname-wizard)" = someone-else ] || failed "without --from the typed hostname is no longer used"
+    sed -n '/^main()/,/^}/p' ${installScript} > main.sh
+    grep -q 'validate_hostname "$from_host"' main.sh || failed "main does not validate --host (#1098)"
+
+    # ---- #1084: --from names the disk before erasing it -----------------
+    sed -n '/^confirm_repo_disks()/,/^}/p' ${installScript} > crd.sh
+    grep -q '^confirm_repo_disks()' crd.sh || { echo "confirm_repo_disks is not in install.sh" >&2; exit 1; }
+    crd() { # crd <name> <want: ok|refuse> ; env: ANSWERS, GUM_RC, DISK, BOOT
+      rm -f "$HOME/gum-called"
+      if (
+        . ./crd.sh
+        NIX_FLAGS=()
+        work=/w hostname=alpha from_repo=file:///r from_host_exists=true
+        answers_file=$ANSWERS
+        nix() { printf '%s\n' /dev/disk/by-id/fake-a; }
+        boot_medium() { printf '%s\n' "$BOOT"; }
+        # #1084 deviation: the by-id path resolves to $DISK; anything else
+        # (the boot medium's own path) is already canonical and echoes back
+        # unchanged -- an argument-blind stub made boot always equal the
+        # device under test, refusing every case as "the boot medium".
+        readlink() {
+          case "$2" in
+            /dev/disk/by-id/fake-a) printf '%s\n' "$DISK" ;;
+            *) printf '%s\n' "$2" ;;
+          esac
+        }
+        lsblk() { [ "$DISK" = /dev/gone ] || printf '%s\n' "vdb 64G QEMU_HARDDISK SERIAL-1076"; }
+        ui_interactive() { [ -z "$answers_file" ]; }
+        ui_gum_pad() { echo 0; }
+        gum() { touch "$HOME/gum-called"; return "$GUM_RC"; }
+        confirm_repo_disks
+      ) > "crd-$1.out" 2>&1; then got=ok; else got=refuse; fi
+      [ "$got" = "$2" ] || failed "confirm_repo_disks $1: wanted $2, got $got"
+    }
+    ANSWERS="" GUM_RC=1 DISK=/dev/vdb BOOT=/dev/sdz crd said-no refuse
+    grep -q SERIAL-1076 crd-said-no.out || failed "confirm_repo_disks does not print the disk's serial"
+    ANSWERS="" GUM_RC=0 DISK=/dev/vdb BOOT=/dev/sdz crd said-yes ok
+    ANSWERS=/a GUM_RC=1 DISK=/dev/vdb BOOT=/dev/sdz crd unattended ok
+    [ ! -e gum-called ] || failed "confirm_repo_disks prompted under an answers file"
+    ANSWERS=/a GUM_RC=0 DISK=/dev/gone BOOT=/dev/sdz crd missing refuse
+    ANSWERS=/a GUM_RC=0 DISK=/dev/sdz BOOT=/dev/sdz crd boot-medium refuse
+    fc=$(grep -n '^    finish_clone$' main.sh | cut -d: -f1 | head -1 || true)
+    cr=$(grep -n '^  confirm_repo_disks || exit 1$' main.sh | cut -d: -f1 | head -1 || true)
+    pb=$(grep -n '^  preflight_build || exit 1$' main.sh | cut -d: -f1 | head -1 || true)
+    [ -n "$fc" ] && [ -n "$cr" ] && [ -n "$pb" ] && [ "$fc" -lt "$cr" ] && [ "$cr" -lt "$pb" ] ||
+      failed "main does not run confirm_repo_disks between finish_clone and preflight_build"
+
     [ "$fails" = 0 ] || exit "$fails"
     echo "clone_repo takes both branches, refuses both bad repositories, and pushes nothing back"
     touch $out

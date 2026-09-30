@@ -14,19 +14,28 @@ malformed key is named in one pass instead of one per attempt:
 
 ```ini
 device=/dev/vda
-disk_mode=whole             # or `free`; default `whole`
+# or `free`; default `whole`
+disk_mode=whole
 encrypt=yes
 luks_passphrase=correct horse
 hostname=nixarchy
 username=alice
-password_hash=$6$...        # from `mkpasswd -m sha-512`; or
-password=hunter2            # plaintext, hashed by the installer
+# from `mkpasswd -m sha-512`; or
+password_hash=$6$...
+# plaintext, hashed by the installer
+password=hunter2
 timezone=Europe/London
 keymap=us
 ```
 
 It holds a password in clear. That is inherent to installing without being
 asked, and nothing copies it onto the installed machine.
+
+`#` starts a comment at the start of a line, or after a value. `password`,
+`luks_passphrase` and `recovery_passphrase` are the exception: they are taken
+exactly as written, `#` and trailing spaces included, and one containing a
+space followed by `#` is refused as a probable trailing comment, so a comment
+never becomes part of a password.
 
 `disk_mode=free` installs into the largest free region on the disk and leaves
 every existing partition alone — see

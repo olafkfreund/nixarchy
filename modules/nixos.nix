@@ -231,7 +231,6 @@ in
 {
   imports = [
     inputs.home-manager.nixosModules.home-manager
-    inputs.hyprland.nixosModules.default
     inputs.nixarchy-omatheme.nixosModules.default
     (import ./apps.nix inputs)
     ./local-ai.nix
@@ -971,14 +970,13 @@ in
       };
 
       hyprland = {
-        # This block is deliberately NOT mkDefault, unlike everything else
-        # here. Omarchy *is* Hyprland, so enabling nixarchy while disabling it
-        # is a contradiction rather than a preference -- and NixOS' own
-        # hyprland module already defines `package` at mkDefault priority, so
-        # matching that priority does not yield to the user, it ties with
-        # nixpkgs and fails with "defined multiple times". Overriding these
-        # means lib.mkForce, which is the honest signal for replacing the
-        # compositor an entire desktop is written against.
+        # Plain priority, deliberately NOT mkDefault like everything else
+        # here: Omarchy *is* Hyprland, so nixarchy on with Hyprland off is a
+        # contradiction rather than a preference, and replacing the
+        # compositor a whole desktop is written against is what lib.mkForce
+        # is for. These are nixpkgs' options. hyprwm's NixOS module, which
+        # set `package` at mkDefault on every machine importing nixarchy,
+        # is not imported (#1083); only its packages are.
         enable = true;
         package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
         portalPackage =
@@ -1182,7 +1180,12 @@ in
       # nixarchy-menu and nixi import MenuModel.js from a build-time store path
       # since #1070. This link is belt and braces for anything else that
       # assumes /run/current-system/sw/share/omarchy (#1069).
-      pathsToLink = [ "/share/omarchy" ];
+      # /share/hypr is what hyprwm's module linked under
+      # programs.hyprland.enable (its lua stubs); kept when that import went (#1083).
+      pathsToLink = [
+        "/share/omarchy"
+        "/share/hypr"
+      ];
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's
       # metadata scan), so their dependencies have to be on the session PATH.

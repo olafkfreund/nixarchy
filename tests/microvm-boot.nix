@@ -111,6 +111,14 @@ pkgs.testers.runNixOSTest {
     machine.succeed("install -m 600 ${keys.snakeOilEd25519PrivateKey} /root/snakeoil")
     machine.wait_until_succeeds("${ssh} true", timeout=1200)
 
+    # #1076: the guest's /mnt/host is <state>/share, never the state directory
+    # holding `current`. sudo, because the 9p root is microvm's, not dev's.
+    machine.succeed("${ssh} sudo touch /mnt/host/probe-1076")
+    machine.succeed("test -f /var/lib/microvms/sandbox/share/probe-1076")
+    machine.fail("test -e /var/lib/microvms/sandbox/probe-1076")
+    owner = machine.succeed("stat -c '%U:%G %a' /var/lib/microvms/sandbox/share").strip()
+    assert owner == "microvm:kvm 770", f"#1076: the share is {owner!r}, not microvm:kvm 770"
+
     # The store is shared, not imaged -- asserted from inside the guest.
     mounts = machine.succeed("${ssh} mount")
     assert "ro-store on /nix/.ro-store type 9p" in mounts, (

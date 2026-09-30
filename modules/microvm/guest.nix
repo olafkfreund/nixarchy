@@ -32,21 +32,18 @@
         proto = "9p";
       }
 
-      # The second half of "the name is a directory, never a Nix argument".
-      # `source = "."` is a RELATIVE path, and microvm.nix's qemu runner
-      # writes it into the `-fsdev local,...,path=${source}` argument
-      # verbatim (lib/runners/qemu.nix in the pinned commit) -- no
-      # resolution against the flake, only against whatever directory the
-      # runner is `exec`'d from. That directory IS the VM: one runner per
-      # template, and `~/.local/state/nixarchy/microvm/<name>/` is what makes
-      # a given VM the one with that name, entirely outside the closure.
-      #
-      # Read-write, unlike ro-store: a template that wants to persist
-      # anything (the `persistent` template, #225) writes into /mnt/host
-      # rather than needing its own share.
+      # The per-VM share, and NOT the VM's own directory (#1076). That
+      # directory holds `current`, the runner the host executes -- as root in
+      # upstream's ExecStopPost for a declarative machine, as the user in
+      # `nixarchy vm stop` -- so a guest able to write it could replace what
+      # the host runs. `share` is relative: lib/runners/qemu.nix writes it into
+      # `-fsdev ...,path=` verbatim, so each runner resolves it against its own
+      # working directory. modules/services/microvm.nix (tmpfiles) and
+      # pkgs/microvm.nix (mkdir) create it. The `persistent` template keeps its
+      # /home in `home.img` beside this directory, not in it.
       {
         tag = "hostdir";
-        source = ".";
+        source = "share";
         mountPoint = "/mnt/host";
         proto = "9p";
       }
@@ -89,7 +86,7 @@
   # The name is never a Nix argument (#221), so it cannot be
   # `networking.hostName` -- that option is baked into the closure at build
   # time, and one closure serves every VM of a template. Instead the runner's
-  # own working directory -- already shared at /mnt/host above -- carries a
+  # per-VM share at /mnt/host (`<vm dir>/share` on the host) carries a
   # plain-text `hostname` file the caller drops there before launch, and this
   # unit is what turns it into the running hostname.
   #

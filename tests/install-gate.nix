@@ -39,8 +39,10 @@ pkgs.runCommand "nixarchy-install-gate"
     t "tests/install.nix does"                 --install "tests/install.nix" true
     t "tests/free-space.nix does"              --install "tests/free-space.nix" true
     t "tests/installer-refusal.nix does"       --install "tests/installer-refusal.nix" true
-    t "the shared hardware fixture does"       --install "tests/hardware-configuration.nix" true
-    t "the shared instrumentation does"        --install "tests/test-instrumentation.nix" true
+    # #1082: the helpers the install checks really import. The two names that
+    # stood here named files that do not exist, and asserted that they did.
+    t "the VM cleanup wrapper does"            --install "tests/with-vm-cleanup.nix" true
+    t "the VM cleanup script does"             --install "tests/vm-cleanup.py" true
     # #123's lesson: relevance is not a directory name.
     t "a module does"                          --install "modules/nixos.nix" true
     t "installer code does"                    --install "installer/install.sh" true

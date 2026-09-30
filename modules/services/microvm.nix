@@ -28,9 +28,8 @@
 # closure) lives inside upstream's own
 # `config = lib.mkIf config.microvm.host.enable { ... }`
 # (nixos-modules/host/default.nix in the pinned commit) -- so one line, set
-# OUTSIDE this module's own `mkIf`, is the entire gate. `machines != { }` on
-# top of the service being wanted: a user who turns the service on but
-# declares no machine gets nothing running, same as never having asked.
+# OUTSIDE this module's own `mkIf`, is the entire gate. `microvm.vms != { }`,
+# whoever declared them (#1083): no machine, nothing running.
 inputs:
 {
   config,
@@ -60,7 +59,9 @@ in
       user, no tap/vhost_net kernel modules, no qemu-bridge-helper wrapper,
       no `microvm` CLI in the closure. Every one of those is upstream's own
       `microvm.host.enable`, which this module turns on for you only once you
-      declare a machine below.
+      declare a machine below (or any `microvm.vms` of your own). Running only
+      imperative `microvm -c` machines, with none declared? Set
+      `microvm.host.enable = true` yourself.
 
       For a throwaway machine you create and destroy on a whim, `nixarchy-vm`
       needs none of this -- it never touches the host at all. This option is
@@ -197,14 +198,51 @@ in
     {
       # See the module header: everything upstream's host module adds lives
       # inside ITS OWN `mkIf config.microvm.host.enable`, so this is the
-      # entire gate and it has to sit outside ours.
-      microvm.host.enable = lib.mkDefault (wanted && svc.machines != { });
+      # entire gate and it has to sit outside ours. Your own `microvm.vms`
+      # count too (#1083): a Mode A user's machines keep their host whether or
+      # not nixarchy's service is on.
+      microvm.host.enable = lib.mkDefault (config.microvm.vms != { });
     }
 
     (lib.mkIf wanted {
       users.users = lib.optionalAttrs (svc.user != null) {
         ${svc.user}.extraGroups = [ "kvm" ];
       };
+
+      # Why: modules/microvm/guest.nix -- the guest's /mnt/host is <state>/share,
+      # never <state> itself (#1076). kvm, so the user can drop allow-hosts.
+      #
+      # Both levels, not just share/: tmpfiles runs at sysinit, before
+      # upstream's install-microvm-<name>.service (which only starts at
+      # microvms.target) has created <state>/<name>. Without our own entry for
+      # that directory, tmpfiles has to invent the missing intermediate itself
+      # while walking down to share/, creates it root:root, and then refuses
+      # to go further -- "Detected unsafe path transition <state> (owned by
+      # microvm) -> <state>/<name> (owned by root)" -- so share/ never exists
+      # and every microvm@<name>.service start fails on its 9p fsdev. Owning
+      # <state>/<name> ourselves keeps every step of the walk microvm:kvm.
+      systemd.tmpfiles.settings."10-nixarchy-microvm" = lib.concatMapAttrs (
+        name: _:
+        let
+          vmDir = "${config.microvm.stateDir}/${name}";
+        in
+        {
+          ${vmDir} = {
+            d = {
+              user = "microvm";
+              group = "kvm";
+              mode = "0750";
+            };
+          };
+          "${vmDir}/share" = {
+            d = {
+              user = "microvm";
+              group = "kvm";
+              mode = "0770";
+            };
+          };
+        }
+      ) svc.machines;
 
       microvm.vms = lib.mapAttrs (_: m: {
         inherit (m) autostart;
@@ -239,7 +277,9 @@ in
           # Only worth anything with a port to reach it on -- modules/
           # microvm/guest.nix's `dev` user has a blank password and no other
           # way in, so this is scoped to sshPort rather than always on.
-          services.openssh.enable = m.sshPort != null;
+          # mkDefault, so a machine's own `modules` can turn sshd on without a
+          # port (#1083).
+          services.openssh.enable = lib.mkDefault (m.sshPort != null);
         };
       }) svc.machines;
     })

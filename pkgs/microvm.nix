@@ -26,8 +26,8 @@
 # template (from this flake, at the revision this system was built from) and
 # `exec`s it from inside `~/.local/state/nixarchy/microvm/<name>/` -- that
 # directory, not a Nix parameter, is what makes it "alice's shell" instead of
-# "bob's". modules/microvm/guest.nix reads the runtime hostname from a file
-# dropped there for exactly this reason.
+# "bob's". modules/microvm/guest.nix reads the runtime hostname from
+# `share/hostname`, the only part of that directory the guest can see (#1076).
 {
   lib,
   writeShellApplication,
@@ -254,8 +254,13 @@ writeShellApplication {
           fi
 
           mkdir -p "$dir"
+          mkdir -p "$dir/share"
           echo "$template" > "$dir/template"
-          echo "$name" > "$dir/hostname"
+          # #1076: the 9p share has no security_model, so a guest can plant
+          # share/hostname as a symlink; rm first so the host never opens
+          # through it and overwrites whatever it points at.
+          rm -f "$dir/share/hostname"
+          echo "$name" > "$dir/share/hostname"
 
           echo "Created '$name' from the '$template' template."
           echo "  nixarchy vm run $name"
@@ -329,7 +334,13 @@ writeShellApplication {
         }
 
         exec_vm() {
-          echo "$name" > "$dir/hostname"
+          # The guest sees share/ only (#1076); made here too, for VMs created before it.
+          mkdir -p "$dir/share"
+          # #1076: rm first -- a previous guest could have planted
+          # share/hostname as a symlink (no security_model on the 9p share),
+          # and we hold the flock here, so there is no race to overwrite it.
+          rm -f "$dir/share/hostname"
+          echo "$name" > "$dir/share/hostname"
           cd "$dir"
           exec ./current/bin/microvm-run
         }

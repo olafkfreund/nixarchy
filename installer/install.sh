@@ -175,7 +175,10 @@ configuration becomes a starting point for yours.
   disk. This is the same trust as `nix run github:...`, and worth saying out
   loud rather than leaving implied.
 
-The answers file is one key=value per line, # for comments, no quoting:
+The answers file is one key=value per line, no quoting. A line starting with
+# is a comment; a trailing # comment is allowed except on password,
+luks_passphrase and recovery_passphrase, which are taken exactly as
+written, spaces included:
 
   device=/dev/vda           whole disk, not a partition
   disk_mode=whole           whole or free; default whole. `free` installs into
@@ -426,7 +429,9 @@ connect_wifi() {
     if [ -z "$pw" ]; then
       nmcli device wifi connect "$ssid" || rc=$?
     else
-      nmcli device wifi connect "$ssid" password "$pw" || rc=$?
+      # stdin, not argv (#1079): a password on nmcli's command line is in
+      # /proc/<pid>/cmdline for every user on the live system.
+      printf '%s\n' "$pw" | nmcli --ask device wifi connect "$ssid" || rc=$?
     fi
     [ "$rc" -eq 0 ] && return 0
 
@@ -647,7 +652,9 @@ ask_password() {
     fi
     # One password for the user, root and the disk, as upstream does: the
     # passphrase you type at boot is the one that logs you in.
-    password_hash=$(mkpasswd -m sha-512 "$pw")
+    # stdin, not argv (#1079): a password on mkpasswd's command line is in
+    # /proc/<pid>/cmdline for every user on the live system.
+    password_hash=$(printf '%s' "$pw" | mkpasswd -m sha-512 -s)
     luks_passphrase=$pw
     unset pw pw2
     break
@@ -699,7 +706,9 @@ ask_recovery() {
       ui_left "\e[31mThat is your login password. Use a different one.\e[0m"
       continue
     fi
-    recovery_hash=$(mkpasswd -m sha-512 "$pw")
+    # stdin, not argv (#1079): a password on mkpasswd's command line is in
+    # /proc/<pid>/cmdline for every user on the live system.
+    recovery_hash=$(printf '%s' "$pw" | mkpasswd -m sha-512 -s)
     unset pw pw2
     break
   done
@@ -717,12 +726,18 @@ ask_identity() {
   ask_password
   ask_recovery
 
-  while :; do
-    hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ") || ui_abort
-    hostname=${hostname:-nixarchy}
-    why=$(validate_hostname "$hostname") && break
-    gum style --foreground 1 "$why"
-  done
+  if [ -n "${from_repo:-}" ]; then
+    # --host names the machine, and clone_repo has already built $hostdir from
+    # it. Asking again would ask a question whose answer disko ignores (#1077).
+    hostname=$from_host
+  else
+    while :; do
+      hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ") || ui_abort
+      hostname=${hostname:-nixarchy}
+      why=$(validate_hostname "$hostname") && break
+      gum style --foreground 1 "$why"
+    done
+  fi
 
   timezone=$(
     find "$TZDIR" -type f -not -path '*/posix/*' -not -path '*/right/*' |
@@ -1096,8 +1111,15 @@ resolve_answers() {
   # umask, not chmod after the fact: between creation and the chmod the file
   # would be readable, and the whole point of it is that it is not.
   tmp=$(umask 077 && mktemp)
+  # Gone on ANY exit, including read_answers refusing the file (#1079).
+  # answers_fetched, not $tmp: the trap runs after this function's locals are
+  # gone. ui_dashboard_start replaces it later; main() has removed the file by then.
+  answers_fetched=$tmp
+  trap 'rm -f "$answers_fetched"' EXIT
   echo "fetching answers from $url"
-  curl --fail --silent --show-error --location --max-time 60 -o "$tmp" "$url" || {
+  # Redirects too: https that redirects to http would send the password in
+  # clear (#1079).
+  curl --fail --silent --show-error --location --proto =https --proto-redir =https --max-time 60 -o "$tmp" "$url" || {
     echo "nixarchy-install: could not fetch $url" >&2
     rm -f "$tmp"
     exit 1
@@ -1107,7 +1129,6 @@ resolve_answers() {
   # it needs. The file's whole content is secrets -- a password and a LUKS
   # passphrase in clear -- and it used to sit in /tmp for the rest of the
   # session, including inside the shell the failure screen offers.
-  answers_fetched=$tmp
 }
 
 read_answers() {
@@ -1119,10 +1140,12 @@ read_answers() {
 
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
-    line=${line%%#*}
+    line=${line%$'\r'}
     line=${line#"${line%%[![:space:]]*}"}
-    line=${line%"${line##*[![:space:]]}"}
-    [ -n "$line" ] || continue
+    # A comment is a line that STARTS with # (#1079). The secrets below are
+    # taken exactly as written, `#` and trailing spaces included; every other
+    # key still drops a trailing `# ...`, since no such value can contain one.
+    case $line in "" | \#*) continue ;; esac
 
     case $line in
       *=*) ;;
@@ -1133,6 +1156,20 @@ read_answers() {
     esac
     key=${line%%=*}
     value=${line#*=}
+    case $key in
+      password | luks_passphrase | recovery_passphrase)
+        case $value in
+          *[[:space:]]\#*)
+            echo "nixarchy-install: answers: line $lineno: $key looks like it has a trailing comment -- move it to its own line (a secret is taken exactly as written)" >&2
+            exit 2
+            ;;
+        esac
+        ;;
+      *)
+        value=${value%%#*}
+        value=${value%"${value##*[![:space:]]}"}
+        ;;
+    esac
 
     # A fixed case rather than a dynamic assignment, which is the whole reason
     # an unknown key can be caught at all. A silently ignored `hostnme=` is a
@@ -1148,7 +1185,7 @@ read_answers() {
       password_hash) password_hash=$value ;;
       build_store) build_store_choice=$value ;;
       recovery_hash) recovery_hash=$value ;;
-      recovery_passphrase) recovery_hash=$(mkpasswd -m sha-512 "$value") ;;
+      recovery_passphrase) recovery_hash=$(printf '%s' "$value" | mkpasswd -m sha-512 -s) ;;
       timezone) timezone=$value ;;
       keymap) keymap=$value ;;
       *)
@@ -1164,7 +1201,7 @@ read_answers() {
       echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
       exit 2
     fi
-    password_hash=$(mkpasswd -m sha-512 "$password")
+    password_hash=$(printf '%s' "$password" | mkpasswd -m sha-512 -s)
     # One password for user, root and disk, as the interactive path does.
     [ -n "$luks_passphrase" ] || luks_passphrase=$password
     unset password
@@ -1396,6 +1433,43 @@ finish_clone() {
   git -C "$work" add -A
 }
 
+# --from a machine the repository already describes: its disk-config.nix picks
+# the disk, so name it before anything erases it (#1084). The boot medium and a
+# disk this machine does not have are refused; an answers file is the consent,
+# as --from's own warning in main() already treats it.
+confirm_repo_disks() {
+  [ "$from_host_exists" = true ] || return 0
+  local devs dev real boot line
+  devs=$(nix "${NIX_FLAGS[@]}" eval --raw \
+    "$work#nixosConfigurations.$hostname.config.disko.devices.disk" \
+    --apply 'd: builtins.concatStringsSep "\n" (map (x: x.device) (builtins.attrValues d))') || {
+    echo "nixarchy-install: could not read which disks $hostname's disk-config.nix formats." >&2
+    echo "  Nothing was written." >&2
+    return 1
+  }
+  [ -n "$devs" ] || {
+    echo "nixarchy-install: $hostname's disk-config.nix names no disk. Nothing was written." >&2
+    return 1
+  }
+  boot=$(boot_medium)
+  [ -z "$boot" ] || boot=$(readlink -f "$boot")
+  echo "$from_repo's $hostname will ERASE:"
+  while IFS= read -r dev; do
+    real=$(readlink -f "$dev")
+    if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
+      echo "nixarchy-install: $dev is the medium this installer booted from. Nothing was written." >&2
+      return 1
+    fi
+    line=$(lsblk -dno NAME,SIZE,MODEL,SERIAL "$real" 2>/dev/null) && [ -n "$line" ] || {
+      echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
+      return 1
+    }
+    echo "  $dev  $line"
+  done <<<"$devs"
+  ui_interactive || return 0
+  gum confirm --padding "$(ui_gum_pad)" "Erase these disks and install $hostname?" || return 1
+}
+
 write_flake() {
   work=$(mktemp -d)
   cp -r "$TEMPLATE"/. "$work"
@@ -1454,13 +1528,13 @@ partition_free_space() {
   before="$free_start $free_end"
   free_space_possible "$dev" || {
     echo "nixarchy-install: $dev can no longer take a free-space install: $free_why" >&2
-    exit 1
+    return 1
   }
   after="$free_start $free_end"
   if [ "$before" != "$after" ]; then
     echo "nixarchy-install: the free region on $dev moved between the question" >&2
     echo "  and now ($before -> $after). Nothing was written. Start again." >&2
-    exit 1
+    return 1
   fi
 
   sector_bytes=$(blockdev --getss "$dev" 2>/dev/null || echo 512)
@@ -1472,7 +1546,7 @@ partition_free_space() {
   # aligned too and sgdisk does not quietly move it somewhere else.
   if [ "$root_start" -ge "$free_end" ]; then
     echo "nixarchy-install: the free region is not big enough for an ESP and a root." >&2
-    exit 1
+    return 1
   fi
 
   # 8309 is Linux LUKS, 8300 is a Linux filesystem. Cosmetic to the kernel and
@@ -1489,14 +1563,14 @@ partition_free_space() {
     --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev" || {
     echo "nixarchy-install: sgdisk could not create the ESP on $dev (exit $?)." >&2
     echo "  Nothing was formatted. Check the partition table before retrying." >&2
-    exit 1
+    return 1
   }
   sgdisk --new=0:"$root_start":"$free_end" \
     --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev" || {
     echo "nixarchy-install: sgdisk could not create the root partition on $dev (exit $?)." >&2
     echo "  The ESP entry was created; nothing was formatted. Check the" >&2
     echo "  partition table before retrying." >&2
-    exit 1
+    return 1
   }
 
   # sgdisk asks the kernel to re-read the table itself; partx is the fallback
@@ -1514,7 +1588,7 @@ partition_free_space() {
     if [ "$waited" -gt 30 ]; then
       echo "nixarchy-install: $esp_dev and $root_dev never appeared." >&2
       echo "  The partitions were created; nothing was formatted. Reboot and look." >&2
-      exit 1
+      return 1
     fi
     sleep 0.5
   done
@@ -1556,14 +1630,14 @@ format_disk() {
     umount -R /mnt || {
       echo "nixarchy-install: something is mounted at /mnt and will not unmount." >&2
       echo "  Formatting now would install into the wrong subvolumes. Reboot and retry." >&2
-      exit 1
+      return 1
     }
   fi
 
   # Before the passphrase file and before the disko script: in free-space mode
   # the layout the script evaluates addresses partitions that do not exist yet.
   if [ "$disk_mode" = free ]; then
-    partition_free_space
+    partition_free_space || return 1
   fi
 
   # The passphrase file disko's passwordFile points at. Written with umask 077,
@@ -1638,9 +1712,9 @@ generate_hardware_config() {
   # fails the build. --show-hardware-config prints to stdout, where the plain
   # --root form would also write a configuration.nix over the template's.
   nixos-generate-config --root /mnt --no-filesystems --show-hardware-config \
-    >"$hostdir/hardware-configuration.nix"
+    >"$hostdir/hardware-configuration.nix" || return 1
 
-  reuse_baked_initrd "$hostdir/hardware-configuration.nix"
+  reuse_baked_initrd "$hostdir/hardware-configuration.nix" || return 1
   write_hardware_modules "$hostdir/nixarchy-hardware.nix"
 
   # Both files, into the log, before anything uses them.
@@ -1753,7 +1827,7 @@ reuse_baked_initrd() {
   if [ ! -f "$file" ]; then
     echo "hardware: no $file to pin -- refusing to install a machine whose" >&2
     echo "hardware: initrd would have to be built. This is a bug in the installer." >&2
-    exit 1
+    return 1
   fi
 
   # The list depends on the answer to the encryption question: LUKS pulls a
@@ -1945,8 +2019,10 @@ write_password_hash() {
 }
 
 install_flake_dir() {
-  mkdir -p /mnt/etc
-  mv "$work" /mnt/etc/nixos
+  # Copied, not moved: $work is what format_disk builds the disko script from,
+  # and a retry from the failure screen formats again from it (#1084).
+  mkdir -p /mnt/etc/nixos
+  cp -a "$work/." /mnt/etc/nixos/ || return 1
 
   # A flake inside a git worktree sees only tracked or staged files, so without
   # the add, nixos-install fails on the first import. No commit: git needs an
@@ -2545,6 +2621,7 @@ run_install() {
   #                  by-partlabel, so a toplevel built against /dev/vda is
   #                  byte-identical to one built against /dev/nvme0n1 --
   #                  measured, same drvPath.
+  #   the layout     whole-disk only; see why_not_baked below.
   #
   # What is DELIBERATELY not the same is the username and the detected
   # hardware-configuration.nix. Both are written to /mnt/etc/nixos and arrive
@@ -2555,8 +2632,17 @@ run_install() {
   # network marker": checks.install runs with neither marker in a seeded
   # sandbox where building is free and correct.
   local baked="/etc/nixarchy-reference-$encrypt"
-  local baked_system=""
-  if [ -r "$baked" ]; then
+  local baked_system="" why_not_baked=""
+  # The baked system is the REFERENCE machine: whole-disk partition labels and
+  # the template's host. A free-space install cuts other partitions, and one
+  # that mounts labels it never created does not boot (#1078); --from installs
+  # the repository's machine, not the reference.
+  [ "$disk_mode" = whole ] || why_not_baked="a free-space install mounts partitions the image's system does not name (#1078)"
+  [ -z "$from_repo" ] || why_not_baked="--from installs $from_repo's $hostname, not the image's reference machine"
+  if [ -r "$baked" ] && [ -n "$why_not_baked" ]; then
+    echo "nixarchy-install: building rather than copying the system this image carries: $why_not_baked."
+    echo "nixarchy-install: on the offline image that is expected; if the image lacks something, the rescue below says so."
+  elif [ -r "$baked" ]; then
     local candidate
     candidate=$(tr -d '[:space:]' <"$baked")
     # Valid in THIS store, not merely a plausible path. An image that lost the
@@ -2800,6 +2886,15 @@ main() {
     exit 2
   fi
 
+  # A directory name under hosts/ and a hostName both; the wizard's own rule (#1098).
+  if [ -n "$from_host" ]; then
+    local why
+    why=$(validate_hostname "$from_host") || {
+      echo "nixarchy-install: --host $from_host: $why" >&2
+      exit 2
+    }
+  fi
+
   if [ "$dry_run" = false ]; then
     require_root_and_uefi
   fi
@@ -2889,6 +2984,8 @@ main() {
     echo "$work"
     exit 0
   fi
+
+  confirm_repo_disks || exit 1
 
   # Refusal is free until format_disk runs; after it there is no OS to go
   # back to. So what can prove the install would die says so here, on the

@@ -1983,6 +1983,18 @@
             installScript = ./installer/install.sh;
           };
 
+          # Why: tests/installer-baked-guard.nix
+          installer-baked-guard = import ./tests/installer-baked-guard.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
+          # Why: tests/installer-answers.nix
+          installer-answers = import ./tests/installer-answers.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # The doctor's GPU rules, against fixture machines. checks.install's
           # VM runs llvmpipe and has no PCI display controller, so this is the
           # only place these branches are ever exercised -- and one of them was

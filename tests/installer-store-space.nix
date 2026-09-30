@@ -273,10 +273,13 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   echo "  ok      the fetched copy is marked for cleanup"
   EOF
   bash rat.sh
-  # The rm has to come after the read. Same line-order doctrine as the
-  # preflight/format_disk assertion above.
-  read_line=$(grep -n 'read_answers "$answers_file"' ${installScript} | cut -d: -f1 | head -1 || true)
-  rm_line=$(grep -n 'rm -f "$answers_fetched"' ${installScript} | cut -d: -f1 | head -1 || true)
+  # The rm has to come after the read, in main() -- resolve_answers's own EXIT
+  # trap (#1079) also removes the fetched file, so main() is extracted first;
+  # otherwise the trap's earlier "rm -f \"\$answers_fetched\"" would match instead.
+  sed -n '/^main()/,/^}/p' ${installScript} > ss-main.sh
+  test -s ss-main.sh || { echo "main is not in install.sh any more" >&2; exit 1; }
+  read_line=$(grep -n 'read_answers "$answers_file"' ss-main.sh | cut -d: -f1 | head -1 || true)
+  rm_line=$(grep -n 'rm -f "$answers_fetched"' ss-main.sh | cut -d: -f1 | head -1 || true)
   [ -n "$rm_line" ] || { echo "main() never removes the fetched answers file" >&2; exit 1; }
   [ -n "$read_line" ] && [ "$read_line" -lt "$rm_line" ] || {
     echo "the fetched answers file is removed before read_answers reads it" >&2; exit 1;
@@ -534,6 +537,72 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   bash vst.sh
 
   echo "format_disk fails when disko does, and the backstop checks the ESP"
+
+  # ------------------------------------------------------------------------
+  # #1084: nothing in the phase chain may `exit`. install_attempts only draws
+  # the failure screen (and its Retry) for a function that RETURNS.
+  # ------------------------------------------------------------------------
+  for fn in format_disk partition_free_space verify_subvolume_mounts \
+    generate_hardware_config reuse_baked_initrd write_hardware_modules \
+    install_flake_dir write_password_hash write_hostname run_install \
+    rescue_build check_store_space chown_flake_dir carry_network_profiles \
+    take_factory_snapshot; do
+    sed -n "/^$fn()/,/^}/p" ${installScript} > lint-fn.sh
+    [ -s lint-fn.sh ] || { echo "$fn is not in install.sh any more" >&2; exit 1; }
+    if grep -nE '^[[:space:]]*exit([[:space:]]|$)|[;&|{][[:space:]]*exit([[:space:]]|$)' lint-fn.sh > lint-hits; then
+      echo "$fn calls exit inside the install phases, so no failure screen and no retry (#1084):" >&2
+      cat lint-hits >&2
+      exit 1
+    fi
+  done
+  echo "no install phase exits past the failure screen"
+
+  # A failed partition_free_space stops format_disk before the disko script.
+  rm -f disko-built
+  (
+    NIX_FLAGS=()
+    work=/nonexistent hostname=h disk_mode=free luks_passphrase=pw
+    . ./fd.sh
+    findmnt() { return 1; }
+    partition_free_space() { return 1; }
+    nix() { touch disko-built; echo /nonexistent; }
+    format_disk
+  ) > fdfree.out 2>&1 && { echo "format_disk succeeded after partition_free_space failed (#1084)" >&2; exit 1; }
+  [ ! -e disko-built ] || { echo "format_disk built the disko script after partition_free_space failed (#1084)" >&2; exit 1; }
+  echo "a failed free-space partitioning stops format_disk before disko"
+
+  # A failed nixos-generate-config stops generate_hardware_config.
+  sed -n '/^generate_hardware_config()/,/^}/p' ${installScript} > ghc.sh
+  test -s ghc.sh || { echo "generate_hardware_config is not in install.sh any more" >&2; exit 1; }
+  rm -f rbi-called
+  mkdir -p ghc-host
+  (
+    . ./ghc.sh
+    hostdir=$PWD/ghc-host
+    nixos-generate-config() { return 1; }
+    reuse_baked_initrd() { touch rbi-called; }
+    write_hardware_modules() { :; }
+    generate_hardware_config
+  ) > ghc.out 2>&1 && { echo "generate_hardware_config succeeded after nixos-generate-config failed (#1084)" >&2; exit 1; }
+  [ ! -e rbi-called ] || { echo "generate_hardware_config went on after nixos-generate-config failed (#1084)" >&2; exit 1; }
+  echo "a failed nixos-generate-config stops the hardware phase"
+
+  # install_flake_dir twice: the retry needs $work, and must not nest the copy.
+  sed -n '/^install_flake_dir()/,/^}/p' ${installScript} > ifd-orig.sh
+  sed "s|/mnt/|$PWD/mnt/|g" ifd-orig.sh > ifd.sh
+  grep -q "$PWD/mnt/etc/nixos" ifd.sh || { echo "install_flake_dir no longer writes /mnt/etc/nixos" >&2; exit 1; }
+  mkdir -p flake-work/hosts/h
+  printf '%s\n' '{ }' > flake-work/flake.nix
+  (
+    . ./ifd.sh
+    git() { :; }
+    work=$PWD/flake-work
+    install_flake_dir && install_flake_dir
+  ) > ifd.out 2>&1 || { echo "install_flake_dir failed on a retry (#1084)" >&2; cat ifd.out >&2; exit 1; }
+  [ -f flake-work/flake.nix ] || { echo "install_flake_dir consumed the work tree; a retry cannot format again (#1084)" >&2; exit 1; }
+  [ -f mnt/etc/nixos/flake.nix ] && [ ! -e mnt/etc/nixos/flake-work ] || {
+    echo "install_flake_dir did not put the flake at /mnt/etc/nixos, or nested it on the retry" >&2; exit 1; }
+  echo "install_flake_dir copies, so a retry still has its flake"
 
   # ------------------------------------------------------------------------
   # boot_medium must resolve the parent disk for every naming convention.

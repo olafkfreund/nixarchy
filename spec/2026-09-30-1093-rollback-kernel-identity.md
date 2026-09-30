@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1093
 intent: intent/2026-09-30-1093-rollback-kernel-identity.md
 ---

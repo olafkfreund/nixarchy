@@ -2165,6 +2165,11 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          home-manager-writers = import ./tests/home-manager-writers.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
+
           # Why: tests/mise-launchers.nix
           mise-launchers = import ./tests/mise-launchers.nix {
             pkgs = pkgsFor.${system};

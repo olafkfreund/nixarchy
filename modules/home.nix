@@ -216,14 +216,17 @@ let
         echo "nixarchy: would merge ${what} into $conf"
       else
         run mkdir -p "$(dirname "$conf")"
-        [ -s "$conf" ] || echo '{}' > "$conf"
-
-        tmp=$(${pkgs.coreutils}/bin/mktemp)
-        if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
-          run mv "$tmp" "$conf"
+        if [ -L "$conf" ]; then
+          echo "nixarchy: $conf is a symlink; declare ${what} in Home Manager or make the file user-owned" >&2
         else
-          rm -f "$tmp"
-          echo "nixarchy: could not merge ${what} into $conf" >&2
+          [ -s "$conf" ] || echo '{}' > "$conf"
+          tmp=$(${pkgs.coreutils}/bin/mktemp)
+          if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
+            run mv "$tmp" "$conf"
+          else
+            rm -f "$tmp"
+            echo "nixarchy: $conf is not plain JSON; add ${what} manually or use valid JSON" >&2
+          fi
         fi
       fi
     '';
@@ -250,17 +253,20 @@ let
         echo "nixarchy: would add [${table}] to $conf"
       else
         run mkdir -p "$(dirname "$conf")"
-        [ -e "$conf" ] || : > "$conf"
-
-        if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
-          echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+        if [ -L "$conf" ]; then
+          echo "nixarchy: $conf is a symlink; declare ${what} in Home Manager or make the file user-owned" >&2
         else
-          {
-            echo ""
-            echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
-            echo "# programs.nixarchy in your configuration decides whether it comes back."
-            ${pkgs.coreutils}/bin/cat ${toml}
-          } >> "$conf"
+          [ -e "$conf" ] || : > "$conf"
+          if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
+            echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+          else
+            {
+              echo ""
+              echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
+              echo "# programs.nixarchy in your configuration decides whether it comes back."
+              ${pkgs.coreutils}/bin/cat ${toml}
+            } >> "$conf"
+          fi
         fi
       fi
     '';
@@ -1703,91 +1709,57 @@ in
     # Why: modules/AGENTS.md#provider-files-for-the-local-model-when-the-system
     home.activation.nixarchyOpencodeProvider =
       lib.mkIf (localAi.enable && builtins.elem "opencode" localAi.agents)
-        (
-          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-            conf="''${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
-            if [[ -v DRY_RUN ]]; then
-              echo "nixarchy: would merge the local model into $conf"
-            else
-            run mkdir -p "$(dirname "$conf")"
-            [ -s "$conf" ] || echo '{}' > "$conf"
-
-            # Written to a temp file and moved, so an interrupted activation
-            # cannot leave the user with half a config and no working agent.
-            tmp=$(${pkgs.coreutils}/bin/mktemp)
-            if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${
-              pkgs.writeText "opencode-provider.json" (
-                builtins.toJSON {
-                  "$schema" = "https://opencode.ai/config.json";
-                  provider.ollama = {
-                    npm = "@ai-sdk/openai-compatible";
-                    name = "Ollama (local)";
-                    options.baseURL = localAi.resolved.endpoint or "";
-                    models.${localAi.model} = {
-                      name = localAi.model;
-                      limit = {
-                        context = if localAi.contextWindow != null then localAi.contextWindow else 32768;
-                        output = 8192;
-                      };
-                    };
+        (mergeJson {
+          what = "the local model";
+          file = "\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json";
+          json = pkgs.writeText "opencode-provider.json" (
+            builtins.toJSON {
+              "$schema" = "https://opencode.ai/config.json";
+              provider.ollama = {
+                npm = "@ai-sdk/openai-compatible";
+                name = "Ollama (local)";
+                options.baseURL = localAi.resolved.endpoint or "";
+                models.${localAi.model} = {
+                  name = localAi.model;
+                  limit = {
+                    context = if localAi.contextWindow != null then localAi.contextWindow else 32768;
+                    output = 8192;
                   };
-                }
-              )
-            } > "$tmp"; then
-              run mv "$tmp" "$conf"
-            else
-              rm -f "$tmp"
-              echo "nixarchy: could not merge the local model into $conf" >&2
-            fi
-            fi
-          ''
-        );
+                };
+              };
+            }
+          );
+        });
 
     # Why: modules/AGENTS.md#pi-keeps-its-configuration-in-pi-agent-not-under-x
     home.activation.nixarchyPiProvider =
       lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
-        (
-          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-            conf="$HOME/.pi/agent/models.json"
-            if [[ -v DRY_RUN ]]; then
-              echo "nixarchy: would merge the local model into $conf"
-            else
-            run mkdir -p "$(dirname "$conf")"
-            [ -s "$conf" ] || echo '{}' > "$conf"
-
-            tmp=$(${pkgs.coreutils}/bin/mktemp)
-            if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${
-              pkgs.writeText "pi-provider.json" (
-                builtins.toJSON {
-                  providers.ollama = {
-                    baseUrl = localAi.resolved.endpoint or "";
-                    api = "openai-completions";
-                    # Ignored by Ollama, but pi requires the field to be present.
-                    apiKey = "ollama";
-                    # pi sends system instructions in the `developer` role to
-                    # reasoning-capable models. Ollama -- like vLLM and SGLang --
-                    # rejects a role it does not know, and every request then fails
-                    # with an error that does not name the cause.
-                    compat.supportsDeveloperRole = false;
-                    models = [
-                      {
-                        id = localAi.model;
-                        contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
-                        maxTokens = 8192;
-                      }
-                    ];
-                  };
-                }
-              )
-            } > "$tmp"; then
-              run mv "$tmp" "$conf"
-            else
-              rm -f "$tmp"
-              echo "nixarchy: could not merge the local model into $conf" >&2
-            fi
-            fi
-          ''
-        );
+        (mergeJson {
+          what = "the local model";
+          file = "$HOME/.pi/agent/models.json";
+          json = pkgs.writeText "pi-provider.json" (
+            builtins.toJSON {
+              providers.ollama = {
+                baseUrl = localAi.resolved.endpoint or "";
+                api = "openai-completions";
+                # Ignored by Ollama, but pi requires the field to be present.
+                apiKey = "ollama";
+                # pi sends system instructions in the `developer` role to
+                # reasoning-capable models. Ollama -- like vLLM and SGLang --
+                # rejects a role it does not know, and every request then fails
+                # with an error that does not name the cause.
+                compat.supportsDeveloperRole = false;
+                models = [
+                  {
+                    id = localAi.model;
+                    contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
+                    maxTokens = 8192;
+                  }
+                ];
+              };
+            }
+          );
+        });
 
     # settings.json is where pi reads defaultProvider/defaultModel, and it is
     # also where omarchy-theme-set-pi writes the theme -- with

@@ -199,7 +199,9 @@ EOF
 # jq does not. So a file jq cannot parse is left ALONE and reported, rather than
 # being replaced with something jq could produce: a user who has commented their
 # settings should not lose them to a theme change.
-if [ -s "$ZED_SETTINGS" ]; then
+if [ -L "$ZED_SETTINGS" ]; then
+  echo "omarchy-theme-set-zed: $ZED_SETTINGS is a symlink; declare the theme in Home Manager or make the file user-owned" >&2
+elif [ -s "$ZED_SETTINGS" ]; then
   if tmp=$(jq --arg t "$THEME_NAME" '.theme = $t' "$ZED_SETTINGS" 2>/dev/null); then
     printf '%s\n' "$tmp" >"$ZED_SETTINGS"
   else

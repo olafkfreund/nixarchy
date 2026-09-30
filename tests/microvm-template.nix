@@ -106,6 +106,11 @@ pkgs.runCommand "nixarchy-microvm-template"
         echo "${name}: bin/microvm-run has no ro-store 9p share -- the host store is not shared" >&2
         fail=1
       fi
+      # #1076: the read-write share is share/, never the VM directory holding current.
+      if ! grep -qF 'path=share,' "$run"; then
+        echo "${name}: bin/microvm-run's hostdir share is not path=share -- the guest could write current" >&2
+        fail=1
+      fi
 
       # -netdev user, is present (SLiRP -- no root needed), and nothing here
       # asks for a tap interface, which does.
@@ -410,6 +415,11 @@ pkgs.runCommand "nixarchy-microvm-template"
     if [ ! -f "$HOME/.local/state/nixarchy/microvm/sandbox/run.marker" ]; then
       echo "the first 'run' never reached the stub guest -- see run1.log:" >&2
       cat run1.log >&2
+      fail=1
+    fi
+
+    if [ "$(cat "$HOME/.local/state/nixarchy/microvm/sandbox/share/hostname" 2>/dev/null)" != sandbox ]; then
+      echo "run did not write share/hostname -- the guest's /mnt/host has no name to read (#1076)" >&2
       fail=1
     fi
 

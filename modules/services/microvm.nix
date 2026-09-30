@@ -206,6 +206,19 @@ in
         ${svc.user}.extraGroups = [ "kvm" ];
       };
 
+      # Why: modules/microvm/guest.nix -- the guest's /mnt/host is <state>/share,
+      # never <state> itself (#1076). kvm, so the user can drop allow-hosts.
+      systemd.tmpfiles.settings."10-nixarchy-microvm" = lib.mapAttrs' (
+        name: _:
+        lib.nameValuePair "${config.microvm.stateDir}/${name}/share" {
+          d = {
+            user = "microvm";
+            group = "kvm";
+            mode = "0770";
+          };
+        }
+      ) svc.machines;
+
       microvm.vms = lib.mapAttrs (_: m: {
         inherit (m) autostart;
         config = {

@@ -2498,7 +2498,12 @@ let
         sd = mvOn.microvm.stateDir;
         plain = mvVm mvOn "plain";
         agent = mvVm mvOn "agent";
-        rules = pkgs.lib.splitString "\n" agent.networking.nftables.ruleset;
+        # nft comments start with # too, and one explains this very rule in
+        # the words it forbids ("a bare `dport 67`") -- so a comment line has
+        # to be dropped before the scan below reads prose as a rule.
+        rules = builtins.filter (l: builtins.match "[ \t]*#.*" l == null) (
+          pkgs.lib.splitString "\n" agent.networking.nftables.ruleset
+        );
         rule = mvOn.systemd.tmpfiles.settings."10-nixarchy-microvm"."${sd}/plain/share".d or null;
       in
       pkgs.lib.optional (builtins.any

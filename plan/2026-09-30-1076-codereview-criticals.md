@@ -1429,6 +1429,14 @@ X13 and X14 (options) and X15 and X16 (VMs) run in V3-V5.
   `<state>/<name>`, so it made that directory root-owned and then refused
   `share/` ("unsafe path transition"). The tmpfiles rule now owns both levels,
   `microvm:kvm`, which matches upstream's own `chown`.
+- **`microvmProblems` read its own comment:** the `dport 67` rule scanned every
+  line of the nftables ruleset, including the `# DHCP ... a bare dport 67`
+  comment above the fixed rule, so `checks.options` was red on the untouched
+  branch. Comment lines are now skipped. Proven three ways: green with the fix;
+  red naming `hyprlandModeAUntouched microvmModeAKeepsHost` with X13 plus the
+  Hyprland half of X14; red on the comment with the fix reverted. The combined
+  X13/X14 run had also shown that a `microvmProblems` failure exits before the
+  `cases` section, so the two are proven in separate runs.
 
 ### Local VM and heavy verification (each alone, with CI idle)
 

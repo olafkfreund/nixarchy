@@ -271,7 +271,7 @@ general capability. #121 deliberately did not take a secrets mechanism
 got away without one because `hashedPasswordFile` is consumed by NixOS
 itself, so the cleartext could live outside git and be pointed at.
 
-hypr-rdp removed that dodge. When #154 adopted sops-nix, v0.1.5 took a
+hypr-rdp removed that dodge. When #155 / PR #184 adopted sops-nix, v0.1.5 took a
 password only inline in config.toml or via `-p`; a command-line secret
 was readable in /proc/*/cmdline. That historical need to render TOML
 selected sops-nix over agenix's raw secret files.

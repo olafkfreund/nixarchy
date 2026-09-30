@@ -32,5 +32,5 @@ Maintainers and reviewers reading `modules/secrets.md`, `docs/internals/flake.md
 
 ## Open questions
 
-1. **Owner decision:** Retain the original v0.1.5 explanation briefly as explicitly dated history, because it explains why sops-nix and TOML templating were chosen in #154. Immediately distinguish pinned v0.1.6 behavior and today's runtime guard.
+1. **Owner decision:** Retain the original v0.1.5 explanation briefly as explicitly dated history, because it explains why sops-nix and TOML templating were chosen in #155 / PR #184. Immediately distinguish pinned v0.1.6 behavior and today's runtime guard.
 2. **Owner decision:** Do not migrate the module to upstream `password_file` in this cleanup. The previous #1098 stale-docs decision deferred that runtime change, which needs its own design and tests.

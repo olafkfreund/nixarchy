@@ -14,7 +14,7 @@ sentence is replaced rather than left standing.** The reasoning for the change
 is worth as much as the reasoning for the original position:
 
 - The mechanism has now proved itself on a real service. hypr-rdp consumes a
-  secret through `sops.templates` and has done since #154, which is the
+  secret through `sops.templates` and has done since #155 / PR #184, which is the
   evidence the original scope cut was waiting for.
 - The cost of using it was five manual steps in
   `docs/manual/remote-desktop.md`, of which two -- `ssh-keyscan | ssh-to-age`
@@ -37,8 +37,8 @@ story attached". #122 then got away without one because
 `users.users.<name>.hashedPasswordFile` is consumed by NixOS itself, so the
 cleartext could sit outside git and be pointed at.
 
-hypr-rdp (#154) removed that dodge. At the time, v0.1.5 accepted passwords
-only inline or on the command line, which is why the service chose sops-nix:
+hypr-rdp removed that dodge. When #155 / PR #184 adopted sops-nix, v0.1.5
+accepted passwords only inline or on the command line:
 
 - `-p/--password` is therefore a command-line argument, which is readable by
   every process on the machine via `/proc/*/cmdline`.

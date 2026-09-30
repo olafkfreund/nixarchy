@@ -55,7 +55,10 @@ subject must contain the actionable instruction to rerun Install > Gaming >
 RetroArch after updating; the manual must carry the same instruction. The
 paths exist only while RetroArch is selected. A system profile may have
 collisions because `buildEnv` ignores them, so the check must prove the named
-paths and representative files actually resolve.
+paths and representative files actually resolve. **The check must derive its
+package list and `pathsToLink` from an evaluated NixOS module configuration
+with `apps.retroarch.enable = true`, then check the off state.** A hardcoded
+copy of step 1 would stay green if step 1 were deleted.
 
 ## Steps
 
@@ -76,8 +79,13 @@ paths and representative files actually resolve.
    budget, so avoid adding a long explanation there. Run `nix fmt` after this
    `.nix` edit and inspect `git diff --stat` for formatter noise.
 3. `tests/retroarch-paths.nix` and `flake.nix:1750-1900,2414-2423`: add one
-   `runCommand` check of the built installer and a `buildEnv` containing the
-   selected RetroArch package plus three resources. Assert exact stable values
+   `runCommand` check of the built installer. Evaluate the real nixarchy
+   NixOS module with `apps.retroarch.enable = true` and again with it off;
+   take the RetroArch package, three resources, and `pathsToLink` from those
+   evaluated configurations. Require the resources and two share links only
+   in the on state, then build a focused profile from the evaluated on-state
+   packages and links. Do not rebuild that list from hardcoded `pkgs` names.
+   Assert exact stable values
    for the four keys and preset, no store path in those writes, and existence
    of core `.so`, core `.info`, shader preset, and joypad profile through the
    declared profile paths. Run the installer with a fixture home containing
@@ -86,18 +94,25 @@ paths and representative files actually resolve.
    `nix build .#checks.x86_64-linux.retroarch-paths --print-build-logs`.
    Traps: stage the new test before evaluating the flake; use bash in the
    derivation, do not hide a failing command in a pipeline, and ensure each
-   assertion can fail on the old behavior. Add the check to the existing
+   assertion can fail on the old behavior. A removed module package or link
+   must make this check red. Avoid the full `checks.options` locally: it
+   needs about 13 GB. Add the check to the existing
    flake check mechanism; CI's generated-checks step picks up new checks
    without a workflow edit. No local VM check.
-4. `tests/retroarch-paths.nix`, `pkgs/omarchy/default.nix:623-626`: prove the
-   new check fails. First copy the fixed file aside **inside this worktree**
+4. `tests/retroarch-paths.nix`, `pkgs/omarchy/default.nix:623-626`, and
+   `modules/apps.nix:1199-1205,3907-3908`: prove the new check fails twice.
+   First copy the fixed file aside **inside this worktree**
    (`cp pkgs/omarchy/default.nix .retroarch-default.nix.good`); reintroduce
    the old installer core substitution, confirm the break landed with
    `git diff`, run the named check, and capture its specific failing output.
    Restore with `cp .retroarch-default.nix.good pkgs/omarchy/default.nix` and
-   remove the copy; **never use `git checkout` for this restore**. Run the
-   same check again and require green → verify by the red and green logs and
-   `git diff` showing only the intended fix.
+   remove the copy; **never use `git checkout` for this restore**. Then copy
+   `modules/apps.nix` aside in the worktree, remove step 1's three packages
+   and two profile links, confirm the diff contains that removal, rerun the
+   same check and capture the second specific failing output. Restore with
+   `cp`, remove the copy, and require the check green on the restored fix →
+   verify by two red logs, one green log, and `git diff` showing only the
+   intended fix.
    Traps: the flake sees staged/tracked changes; a no-op break or a stale
    evaluation is not evidence. Never let a temporary copy enter a commit.
 5. `docs/manual/gaming.md:81-89`: add one recovery line telling affected
@@ -114,8 +129,8 @@ paths and representative files actually resolve.
   `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
   If it is positive and an install job is running, wait. Never run VM checks
   locally.
-- Run the negative control in step 4 and keep its failing output for the PR.
-  Then require the same `retroarch-paths` check to pass on the restored fix.
+- Run both negative controls in step 4 and keep their failing output for the
+  PR. Then require the same `retroarch-paths` check to pass on the restored fix.
 - Build `.#packages.x86_64-linux.omarchy` and the new check. Evaluate the
   module with RetroArch on and off; the three resources and two profile links
   should appear only in the on state. Check that a user's overridden RetroArch

@@ -1906,7 +1906,10 @@ generate_hardware_config() {
     >"$hostdir/hardware-configuration.nix" || return 1
 
   reuse_baked_initrd "$hostdir/hardware-configuration.nix" || return 1
-  write_hardware_modules "$hostdir/nixarchy-hardware.nix"
+  if ! write_hardware_modules "$hostdir/nixarchy-hardware.nix"; then
+    echo "nixarchy-install: could not write $hostdir/nixarchy-hardware.nix" >&2
+    return 1
+  fi
 
   # Both files, into the log, before anything uses them.
   #

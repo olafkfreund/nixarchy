@@ -50,22 +50,22 @@ against the password below and has nothing to do with your Linux account.
 Enabling this from the menu and rebuilding **fails**, on purpose, with an
 assertion naming the steps below. That is not a missing feature.
 
-hypr-rdp fails open. Given no password it logs a warning and then serves your
-session with no authentication at all — verified in v0.1.5, `src/config.rs`,
-where the credentials are resolved with `unwrap_or_default()` and nothing
-returns. So this module is the only thing between an unset secret and an open
-desktop, and it refuses twice: an assertion at evaluation when no secret is
-named, and an `ExecStartPre` at runtime that reads the rendered config back
-and exits non-zero unless both the username and the password are non-empty. A
-secret that exists but renders empty gets past the first and not the second.
+Pinned hypr-rdp v0.1.6 supports `password_file`: a named `password_file`
+that is missing or empty fails startup. But with no credentials named it only
+warns and serves your session without authentication. A username with an
+empty inline password gets only a `HalfCredentials` warning and continues.
+So this module still refuses twice: an assertion at evaluation when no secret
+is named, and an `ExecStartPre` guard at runtime that requires non-empty
+username and password. A secret that renders empty gets past the first and
+not the second.
 
-It also cannot take the password from your configuration, because hypr-rdp
-reads it from exactly two places: an inline string in its TOML config, or
-`-p` on the command line. `/proc/*/cmdline` is world-readable, so the flag is
-out; the Nix store is world-readable, so committing the string is out. What
-happens instead is that [sops-nix](https://github.com/Mic92/sops-nix) renders
-the config file at activation from an encrypted secret, mode 0400, owned by
-you, under `/run` — never in the store and never in git.
+The password is never placed in your Nix configuration: the Nix store and
+`/proc/*/cmdline` are readable by other users. Instead,
+[sops-nix](https://github.com/Mic92/sops-nix) renders a private `0400`
+password staging file from the encrypted secret. At service start, the guard
+reads that file and atomically writes the final `0400` TOML under the user
+service's runtime directory, outside the store and git. The daemon reads
+that file only after the guard succeeds.
 
 ### From the menu, if you would rather not read the rest
 

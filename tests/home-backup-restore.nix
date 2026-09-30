@@ -33,7 +33,7 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     case_name=allowlist
     setup "$case_name"
     mkdir -p "$repo/.config/omarchy" "$repo/.local/state/omarchy" "$repo/.notes" "$repo/.ssh" "$repo/.config/hypr" "$home/.config/omarchy" "$home/.config/hypr"
-    printf 'shell\n' > "$repo/.config/omarchy/shell.json"
+    printf 'theme\n' > "$repo/.local/state/omarchy/theme.name"
     printf '.ssh/\n.notes/custom.txt\n' > "$repo/.config/omarchy/backup.list"
     printf 'evil\033]52;c;AAAA\a\n' >> "$repo/.config/omarchy/backup.list"
     printf '# local only\n.config/omarchy/\n' > "$home/.config/omarchy/backup.list"
@@ -46,7 +46,7 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     printf 'old hook\n' > "$home/.config/hypr/hook.sh"
     chmod -x "$home/.config/hypr/hook.sh"
     restore || fail "first restore failed: $(cat "$log")"
-    test -f "$home/.config/omarchy/shell.json" || fail "shipped file missing"
+    test -f "$home/.local/state/omarchy/theme.name" || fail "shipped file missing"
     test -x "$home/.config/hypr/hook.sh" || fail "executable mode lost"
     test ! -e "$home/.notes/custom.txt" || fail "repo backup.list authorized a custom file"
     test ! -e "$home/.ssh/authorized_keys" || fail "extra repo file restored"
@@ -67,10 +67,10 @@ pkgs.runCommand "nixarchy-home-backup-restore"
 
     case_name=destination-symlink
     setup "$case_name"
-    mkdir -p "$repo/.config/omarchy" "$home/.config/omarchy"
-    printf 'replacement\n' > "$repo/.config/omarchy/shell.json"
+    mkdir -p "$repo/.local/state/omarchy" "$home/.local/state/omarchy"
+    printf 'replacement\n' > "$repo/.local/state/omarchy/theme.name"
     printf 'original\n' > "$TMPDIR/outside-file"
-    ln -s "$TMPDIR/outside-file" "$home/.config/omarchy/shell.json"
+    ln -s "$TMPDIR/outside-file" "$home/.local/state/omarchy/theme.name"
     red --force
     grep -q 'Refusing symlink' "$log" || fail "destination symlink lacked a diagnosis: $(cat "$log")"
     grep -qx original "$TMPDIR/outside-file" || fail "destination symlink target changed"
@@ -136,29 +136,29 @@ pkgs.runCommand "nixarchy-home-backup-restore"
 
     case_name=save-failure
     setup "$case_name"
-    mkdir -p "$repo/.config/omarchy" "$home/.config/omarchy" "$TMPDIR/stubs"
-    printf 'replacement\n' > "$repo/.config/omarchy/shell.json"
-    printf 'original\n' > "$home/.config/omarchy/shell.json"
+    mkdir -p "$repo/.local/state/omarchy" "$home/.local/state/omarchy" "$TMPDIR/stubs"
+    printf 'replacement\n' > "$repo/.local/state/omarchy/theme.name"
+    printf 'original\n' > "$home/.local/state/omarchy/theme.name"
     printf '#!%s\necho 123\n' ${pkgs.bash}/bin/bash > "$TMPDIR/stubs/date"
     chmod +x "$TMPDIR/stubs/date"
-    printf 'occupied\n' > "$home/.config/omarchy/shell.json.bak.123"
+    printf 'occupied\n' > "$home/.local/state/omarchy/theme.name.bak.123"
     export PATH=$TMPDIR/stubs:$PATH
     red
     export PATH=$old_path
     grep -q 'Could not save your existing' "$log" || fail "failed save lacked a diagnosis"
-    grep -qx original "$home/.config/omarchy/shell.json" || fail "failed save overwrote existing file"
+    grep -qx original "$home/.local/state/omarchy/theme.name" || fail "failed save overwrote existing file"
 
     case_name=copy-failure
     setup "$case_name"
-    mkdir -p "$repo/.config/omarchy"
-    printf 'replacement\n' > "$repo/.config/omarchy/shell.json"
+    mkdir -p "$repo/.local/state/omarchy"
+    printf 'replacement\n' > "$repo/.local/state/omarchy/theme.name"
     printf '#!%s\nexit 23\n' ${pkgs.bash}/bin/bash > "$TMPDIR/stubs/cp"
     chmod +x "$TMPDIR/stubs/cp"
     export PATH=$TMPDIR/stubs:$PATH
     red
     export PATH=$old_path
     grep -q 'Could not restore' "$log" || fail "failed copy lacked a diagnosis"
-    test ! -e "$home/.config/omarchy/shell.json" || fail "failed copy left an unexpected destination"
+    test ! -e "$home/.local/state/omarchy/theme.name" || fail "failed copy left an unexpected destination"
 
     echo "home backup restore limits paths and reports failed copies (#1080)"
     touch "$out"

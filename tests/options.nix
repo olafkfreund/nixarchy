@@ -2546,6 +2546,23 @@ let
     # What the user already had, at ordinary priority.
     services.syncthing.dataDir = "/srv/sync";
   };
+  syncthingCustomHome = configBeside {
+    programs.nixarchy = {
+      user = "someone";
+      services.syncthing.enable = true;
+    };
+    users.users.someone.home = pkgs.lib.mkForce "/srv/someone";
+  };
+  syncthingOff = defaultMachine.services.syncthing.enable;
+  syncthingGenerated = configBeside {
+    programs.nixarchy.services.syncthing = {
+      enable = true;
+      user = "syncthing";
+    };
+  };
+  syncthingGeneratedRejected = pkgs.lib.any (
+    a: !a.assertion && pkgs.lib.hasInfix "must name a user with a home directory" a.message
+  ) syncthingGenerated.assertions;
 
   # The same hazard for the module that bundles Ollama (#96). Worth its own
   # case rather than trusting the syncthing one: local-ai sets four upstream
@@ -2642,6 +2659,20 @@ let
     services.ollama.port = 21434;
   };
   webuiOff = defaultMachine;
+  webuiIpv6 = configBeside {
+    programs.nixarchy.services.open-webui.enable = true;
+    services.ollama = {
+      enable = true;
+      host = "::1";
+    };
+  };
+  localAiIpv6 = configBeside {
+    programs.nixarchy.localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+    services.ollama.host = "::1";
+  };
 
   # And the group the desktop user gets. This check used to assert the user WAS
   # in `docker`, which was right while the rooted daemon was the default: the
@@ -2719,6 +2750,10 @@ let
       c = configWith { flatpaks.apps.geforce-now.enable = true; };
     in
     map (r: r.name) c.services.flatpak.remotes;
+  flatpakDisabled = configBeside {
+    programs.nixarchy.flatpaks.apps.geforce-now.enable = true;
+    services.flatpak.enable = false;
+  };
 
   # ---- the flatpak catalogue, same discipline ----
   flatpaks = import ../data/flatpaks.nix;
@@ -2912,6 +2947,7 @@ pkgs.runCommand "nixarchy-options"
     microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
+    flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
     pkgAddUnfreeOff = pkgs.lib.boolToString pkgAddUnfreeOffBaked;
     inherit otherChannelConfigKeys;
     fleetOff = pkgs.lib.boolToString fleet.offByDefault;
@@ -2961,6 +2997,10 @@ pkgs.runCommand "nixarchy-options"
     editorFormatter = builtins.head defaultMachine.programs.nixarchy.nixdSettings.formatting.command;
     flakeFormatter = pkgs.lib.getExe inputs.self.formatter.${system};
     syncthingDataDir = syncthingBeside.services.syncthing.dataDir;
+    syncthingCustomDataDir = syncthingCustomHome.services.syncthing.dataDir;
+    syncthingCustomConfigDir = syncthingCustomHome.services.syncthing.configDir;
+    syncthingDefaultOff = pkgs.lib.boolToString syncthingOff;
+    syncthingSystemUserRejected = pkgs.lib.boolToString syncthingGeneratedRejected;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     # The two halves of trusting a cache, counted rather than spot-checked: a
@@ -2982,6 +3022,9 @@ pkgs.runCommand "nixarchy-options"
     modelsRule = pkgs.lib.concatStringsSep " | " aiModels.systemd.tmpfiles.rules;
     modelsOwner = aiModels.services.ollama.user;
     webuiBaseUrl = webuiOn.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
+    webuiIpv6BaseUrl = webuiIpv6.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
+    localAiIpv6Endpoint = localAiIpv6.programs.nixarchy.localAi.resolved.endpoint;
+    webuiDefaultOff = pkgs.lib.boolToString webuiOff.services.open-webui.enable;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     dockerRootedGroups = pkgs.lib.concatStringsSep " " dockerRootedGroups;
     dockerRootlessDefault = pkgs.lib.boolToString dockerRootlessDefault;
@@ -3116,6 +3159,11 @@ pkgs.runCommand "nixarchy-options"
                exit 1 ;;
           esac
           echo "a flatpak from another remote keeps flathub ($flatpakRemotes)"
+          [ "$flatpakExplicitDisable" = false ] || {
+            echo "an explicit services.flatpak.enable = false did not win" >&2
+            exit 1
+          }
+          echo "an explicitly disabled Flatpak service stays disabled"
 
           # ---- flatpaks are not removed unless asked ---------------------
           if [ "$flatpakOurs" != "false" ] || [ "$flatpakTheirs" != "false" ]; then
@@ -3251,6 +3299,14 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "a bundled service yields to configuration the user already had"
+          [ "$syncthingCustomDataDir" = /srv/someone ] &&
+            [ "$syncthingCustomConfigDir" = /srv/someone/.config/syncthing ] &&
+            [ "$syncthingDefaultOff" = false ] &&
+            [ "$syncthingSystemUserRejected" = true ] || {
+            echo "Syncthing did not follow a normal user's home, reject its generated system user, or stay off by default" >&2
+            exit 1
+          }
+          echo "Syncthing follows a nonstandard user home and stays off by default"
 
           [ "$ollamaPort" = "21434" ] || {
             echo "local-ai overrode a port the user had already set:" >&2
@@ -3322,6 +3378,13 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "Open WebUI follows the Ollama port the machine actually uses"
+          [ "$webuiIpv6BaseUrl" = 'http://[::1]:11434' ] &&
+            [ "$localAiIpv6Endpoint" = 'http://[::1]:11434/v1' ] &&
+            [ "$webuiDefaultOff" = false ] || {
+            echo "Open WebUI or local AI did not bracket bare IPv6, or WebUI did not stay off by default: $webuiIpv6BaseUrl / $localAiIpv6Endpoint" >&2
+            exit 1
+          }
+          echo "Open WebUI brackets IPv6 and stays off by default"
 
           case " $dockerGroups " in
             *" docker "*)

@@ -33,6 +33,7 @@ pkgs.runCommand "nixarchy-apply-staging"
     nativeBuildInputs = [
       pkgs.git
       pkgs.nix
+      pkgs.jq
     ];
   }
   ''
@@ -185,6 +186,14 @@ pkgs.runCommand "nixarchy-apply-staging"
     fi
 
     fresh
+    XDG_STATE_HOME=$PWD/custom-state NIXARCHY_FLAKE=$PWD/root $apply --detach --yes </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && grep -F -- "--setenv=XDG_STATE_HOME=$PWD/custom-state" "$sdcalls" >/dev/null; then
+      ok "a detached rebuild keeps the caller's state home"
+    else
+      bad "a detached rebuild dropped XDG_STATE_HOME: $(cat "$sdcalls" 2>/dev/null)"
+    fi
+
+    fresh
     NIXARCHY_FLAKE=$PWD/root UNIT_STATE=running $apply --detach --yes </dev/null >"$PWD/busy.out" 2>&1 || rc=$?
     if [ "$rc" -eq 3 ] && grep -q "already running" "$PWD/busy.out" && [ ! -s "$sdcalls" ]; then
       ok "a detached start refuses while a rebuild is running"
@@ -228,14 +237,26 @@ pkgs.runCommand "nixarchy-apply-staging"
         *" -p SubState "*)
           printf 'SubState=%s\n' "''${UNIT_STATE:-}"
           printf 'Result=%s\n' "''${UNIT_RESULT:-}"
-          printf 'ExecMainStatus=%s\n' "''${UNIT_CODE:-0}"
+          printf 'ExecMainStatus=%s\n' "''${UNIT_CODE-0}"
           printf 'ExecMainExitTimestampMonotonic=%s\n' "''${UNIT_FINISHED:-0}"
+          case " $* " in *" -p InvocationID "*) printf 'InvocationID=%s\n' "''${UNIT_INVOCATION:-}" ;; esac
           ;;
         *" show "*) echo "''${UNIT_STATE:-}" ;;
         *) echo "$*" >> "$sccalls" ;;
       esac
     }
     export -f systemctl
+
+    rm -f "$PWD/property-pwned"
+    hostile='$(touch property-pwned)'
+    hostile_json=$(UNIT_STATE=exited UNIT_RESULT="$hostile" UNIT_CODE=3 $apply --status --json)
+    if [ ! -e "$PWD/property-pwned" ] &&
+       [ "$(printf '%s' "$hostile_json" | jq -r '.result')" = "$hostile" ] &&
+       [ "$(printf '%s' "$hostile_json" | jq -r '.state')" = failed ]; then
+      ok "systemd properties remain data and cannot run shell commands"
+    else
+      bad "systemd property executed shell syntax or changed status: $hostile_json"
+    fi
 
     # One field out of the JSON, by name. The panel reads it with JSON.parse;
     # this only has to be able to tell the fields apart.
@@ -260,6 +281,29 @@ pkgs.runCommand "nixarchy-apply-staging"
     says '{"state":"failed","exit":3}'    exited  exit-code 3 "a unit that failed AFTER activating keeps nh's exit code"
     says '{"state":"failed","exit":1}'    failed  exit-code 1 "a failed unit reads as failed"
     says '{"state":"idle","exit":0}'      ""      ""        0 "no unit at all reads as idle"
+
+    numeric_exit() {
+      local got=$1 state=$2 exit_code=$3 label=$4
+      if jq -e --arg st "$state" --argjson code "$exit_code" \
+        '.state == $st and .exit == $code and (.exit | type) == "number"' <<< "$got" >/dev/null; then
+        ok "$label"
+      else
+        bad "$label: $got"
+      fi
+    }
+    for malformed in "" abc true 03; do
+      for unit_state in running exited; do
+        result=exit-code expected_state=failed expected_exit=1
+        if [ "$unit_state" = running ]; then result=success expected_state=running expected_exit=0; fi
+        if [ "$unit_state" = exited ] && [ "$malformed" = 03 ]; then expected_exit=3; fi
+        apply_json=$(UNIT_STATE="$unit_state" UNIT_RESULT="$result" UNIT_CODE="$malformed" $apply --status --json 2>/dev/null) || apply_json=invalid
+        panel_json=$(UNIT_STATE="$unit_state" UNIT_RESULT="$result" UNIT_CODE="$malformed" $state) || panel_json=invalid
+        numeric_exit "$apply_json" "$expected_state" "$expected_exit" "apply JSON normalises '$malformed' in $unit_state"
+        numeric_exit "$panel_json" "$expected_state" "$expected_exit" "panel JSON normalises '$malformed' in $unit_state"
+      done
+    done
+    numeric_exit "$(UNIT_STATE=exited UNIT_RESULT=exit-code UNIT_CODE=3 $apply --status --json)" failed 3 "apply JSON keeps valid exit 3"
+    numeric_exit "$(UNIT_STATE=exited UNIT_RESULT=exit-code UNIT_CODE=3 $state)" failed 3 "panel JSON keeps valid exit 3"
 
     # ---- which run a settled result describes (#919) -----------------------
     # The bar keeps a successful rebuild visible until it is acknowledged, and
@@ -288,6 +332,29 @@ pkgs.runCommand "nixarchy-apply-staging"
     [ "$(field "$never" finishedAgoSec)" = "-1" ] &&
       ok "a zero timestamp reads as 'cannot say', not as a finish at boot" ||
       bad "a zero timestamp said finishedAgoSec=$(field "$never" finishedAgoSec), wanted -1"
+
+    journalctl() { printf '%s\n' "$*" > "$PWD/journal.calls"; }
+    exec() { "$@"; exit "$?"; }
+    export -f journalctl exec
+    log_rc=0
+    UNIT_STATE=exited UNIT_RESULT=success UNIT_CODE=0 UNIT_INVOCATION=abcd $apply --log > "$PWD/log.out" 2>&1 || log_rc=$?
+    if [ "$log_rc" -eq 0 ] && grep -F -- '--invocation=abcd' "$PWD/journal.calls" >/dev/null; then
+      ok "apply --log scopes the panel's log to the current invocation"
+    else
+      bad "apply --log exited $log_rc or read more than the current invocation: $(cat "$PWD/log.out"); $(cat "$PWD/journal.calls" 2>/dev/null)"
+    fi
+
+    panel=${../pkgs/rebuild-panel/RebuildState.qml}
+    follow_block=$(sed -n '/id: followProcess/,/^  }/p' "$panel")
+    copy_block=$(sed -n '/id: copyProcess/,/^  }/p' "$panel")
+    terminal_block=$(sed -n '/id: terminalProcess/,/^  }/p' "$panel")
+    if [[ $follow_block == *'command: ["nixarchy-apply", "--log", "--follow"]'* ]] &&
+       [[ $copy_block == *'command: ["sh", "-c", "nixarchy-apply --log | wl-copy"]'* ]] &&
+       [[ $terminal_block == *'"nixarchy-apply", "--log", "--follow"]'* ]]; then
+      ok "all three panel log actions use invocation-scoped apply --log"
+    else
+      bad "a panel log action still reads unscoped unit history"
+    fi
 
     [ "$fails" -eq 0 ] || exit 1
     touch $out

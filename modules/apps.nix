@@ -3418,9 +3418,16 @@ in
                 # answers "succeeded" for a rebuild that never happened, which
                 # is the one wrong answer that matters.
                 rebuild_state() {
-                  local sub res code inv
-                  eval "$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null |
-                    sed -n 's/^SubState=/sub=/p; s/^Result=/res=/p; s/^ExecMainStatus=/code=/p; s/^InvocationID=/inv=/p')"
+                  local sub res code inv key value props
+                  props=$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null) || true
+                  while IFS='=' read -r key value; do
+                    case "$key" in
+                      SubState) sub=$value ;;
+                      Result) res=$value ;;
+                      ExecMainStatus) code=$value ;;
+                      InvocationID) inv=$value ;;
+                    esac
+                  done <<< "$props"
                   sub=''${sub:-} res=''${res:-} code=''${code:-} inv=''${inv:-}
                   # `dead` is NONE whether or not an InvocationID survives it
                   # (#986 item 3). A unit left over from an earlier session --
@@ -3449,6 +3456,14 @@ in
                 # Queries act and exit: they are not an apply.
                 if [ -n "$status" ]; then
                   IFS=$'\t' read -r st res code inv < <(rebuild_state)
+                  if [ "$st" != failed ]; then
+                    code=0
+                  else
+                    case "$code" in
+                      "" | *[!0-9]*) code=1 ;;
+                      *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
+                    esac
+                  fi
                   if [ -n "$json" ]; then
                     # jq, not printf: --json is the CONTRACT half of this
                     # output (nixarchy-flatsnap parses it), and a contract that
@@ -3456,7 +3471,7 @@ in
                     # with a quote in it is not one. `exit` stays a number and
                     # `invocation` stays null-or-string.
                     jq -cn --arg state "$st" --arg result "$res" \
-                      --argjson exit "''${code:-0}" \
+                      --argjson exit "$code" \
                       --arg inv "$inv" \
                       '{state: $state, result: $result, exit: $exit,
                         invocation: (if $inv == "" then null else $inv end)}'
@@ -3522,6 +3537,7 @@ in
                     --setenv=NIXARCHY_FLAKE="$flake" \
                     --setenv=ALLOW_BRANCH_DEPLOY="''${ALLOW_BRANCH_DEPLOY:-}" \
                     --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
+                    --setenv=XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
                     --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
                     -- "$(readlink -f "$0")" --yes --no-preview \
                     ''${expect+"''${expect[@]/#/--expect-sha256=}"}
@@ -3833,6 +3849,7 @@ in
                 sub=$(get SubState)
                 result=$(get Result)
                 code=$(get ExecMainStatus)
+                raw_code=$code
                 [ -n "$code" ] || code=0
 
                 # SubState, not ActiveState, for the reason nixarchy-apply gives
@@ -3854,7 +3871,14 @@ in
 
                 # exit is meaningless unless it failed; say 0 rather than leave
                 # the key out, so the panel never has to test for absence.
-                [ "$state" = failed ] || code=0
+                if [ "$state" = failed ]; then
+                  case "$raw_code" in
+                    "" | *[!0-9]*) code=1 ;;
+                    *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
+                  esac
+                else
+                  code=0
+                fi
 
                 # When it finished, so a settled result can say WHICH run it is
                 # describing (#919). The unit stays loaded across a reboot --

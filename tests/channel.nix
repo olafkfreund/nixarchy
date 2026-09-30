@@ -32,8 +32,37 @@ pkgs.runCommand "nixarchy-channel"
     ch=${omarchy}/share/omarchy/bin/nixarchy-channel
 
     mk() { mkdir -p "$1"; cat > "$1/flake.nix" < ${pkgs.writeText "flake.nix" filled}; }
-
     fails=0
+
+    # The patched upstream command must report a real version or fail, so a
+    # missing nixos-version cannot become an empty but successful About line.
+    version_channel=${omarchy}/share/omarchy/bin/omarchy-version-channel
+    nixos-version() {
+      case "''${VERSION_CASE:-good}" in
+        fail) return 42 ;;
+        empty) return 0 ;;
+        good) printf '%s\n' '26.05 (Nixarchy)' ;;
+      esac
+    }
+    export -f nixos-version
+    for case_name in fail empty; do
+      rc=0
+      got=$(VERSION_CASE=$case_name "$version_channel" 2>&1) || rc=$?
+      if [ "$rc" -ne 0 ] && [ -z "$got" ]; then
+        echo "  ok      version-channel refuses $case_name nixos-version"
+      else
+        echo "  FAILED  version-channel accepted $case_name nixos-version (exit $rc, output: $got)"
+        fails=$((fails + 1))
+      fi
+    done
+    got=$(VERSION_CASE=good "$version_channel" 2>&1)
+    if [ "$got" = 26.05 ]; then
+      echo '  ok      version-channel prints the version without probing pacman'
+    else
+      echo "  FAILED  version-channel printed '$got' instead of 26.05"
+      fails=$((fails + 1))
+    fi
+
     want() {
       if <<<"$2" grep -q -- "$3"; then echo "  ok      $1"
       else
@@ -105,6 +134,51 @@ pkgs.runCommand "nixarchy-channel"
       "$f" 'inputs.nixpkgs.follows = "nixpkgs";'
     if [ -f rewrite/flake.nix.pre-channel ]; then echo "  ok      the previous file is kept"
     else echo "  FAILED  no .pre-channel backup"; fails=$((fails + 1)); fi
+
+    # The shipped template has one follows. Add another input on BOTH sides
+    # so neither a first-match nor a last-match rewrite can pass by accident.
+    inject_other() {
+      awk -v position="$2" '
+        function extra() {
+          print "    other = {"
+          print "      url = \"github:someone/other\";"
+          print "      inputs.nixpkgs.follows = \"nixpkgs\";"
+          print "    };"
+        }
+        position == "before" && /^    nixarchy = [{]$/ { extra() }
+        { print }
+        position == "after" && /^    nixarchy = [{]$/ { inside = 1 }
+        position == "after" && inside && /^    [}];$/ { extra(); inside = 0 }
+      ' "$1" > "$1.new"
+      mv "$1.new" "$1"
+    }
+    for position in before after; do
+      mk "$position"
+      inject_other "$position/flake.nix" "$position"
+      other_before=$(sed -n '/^    other = [{]$/,/^    [}];$/p' "$position/flake.nix")
+      echo y | NIXARCHY_FLAKE=$PWD/$position $ch stable 25.11 >/dev/null 2>&1 || true
+      other_after=$(sed -n '/^    other = [{]$/,/^    [}];$/p' "$position/flake.nix")
+      nixarchy_block=$(sed -n '/^    nixarchy = [{]$/,/^    [}];$/p' "$position/flake.nix")
+      if [ "$other_before" = "$other_after" ] &&
+         <<<"$nixarchy_block" grep -F 'inputs.home-manager.url = "github:nix-community/home-manager/release-25.11";' >/dev/null; then
+        echo "  ok      $position: only nixarchy gets the Home Manager override"
+      else
+        echo "  FAILED  $position: another input changed or nixarchy got no override"
+        fails=$((fails + 1))
+      fi
+    done
+
+    mk missing-follows
+    sed -i '/^[[:space:]]*inputs.nixpkgs.follows = /d' missing-follows/flake.nix
+    before=$(cksum < missing-follows/flake.nix)
+    r=$(echo y | NIXARCHY_FLAKE=$PWD/missing-follows $ch stable 25.11 2>&1 || true)
+    if [ "$before" = "$(cksum < missing-follows/flake.nix)" ] &&
+       <<<"$r" grep -F 'Cannot find one nixarchy input' >/dev/null; then
+      echo "  ok      a reshaped nixarchy input is refused without a write"
+    else
+      echo "  FAILED  a missing nixarchy follows was rewritten or not diagnosed"
+      fails=$((fails + 1))
+    fi
 
     # Back again, and the override must GO -- not be left pointing at a release
     # while nixpkgs follows unstable, which is the same broken pairing mirrored.

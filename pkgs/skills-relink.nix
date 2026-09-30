@@ -58,9 +58,14 @@ writeShellApplication {
       dest="$home/$agentdir"
       mkdir -p "$dest"
 
-      # Ours win, as they always have: ln -sfn replaces whatever is there.
+      # Ours replace older links, but leave real user files and directories.
       find "$own" -mindepth 1 -maxdepth 1 -type d | while read -r skill; do
-        ln -sfn "$skill" "$dest/$(basename "$skill")"
+        name=$(basename "$skill")
+        if [ -e "$dest/$name" ] && [ ! -L "$dest/$name" ]; then
+          echo "nixarchy: ~/$agentdir/$name is a real file or directory; leaving it"
+          continue
+        fi
+        ln -sfn "$skill" "$dest/$name"
       done
 
       # The input's are guarded. A name already taken -- by one of ours, or by

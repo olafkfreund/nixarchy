@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1081
 intent: intent/2026-09-30-1081-retroarch-stable-paths.md
 ---

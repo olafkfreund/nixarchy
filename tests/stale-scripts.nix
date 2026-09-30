@@ -33,5 +33,21 @@ pkgs.runCommand "nixarchy-stale-scripts"
       }
     done
     echo "stale-script installers launch PATH commands"
+
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > stub/agy
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\n" launched > "$AGENT_LOG"' > stub/omarchy-agent
+    chmod +x stub/agy stub/omarchy-agent
+    mkdir -p agent-home
+    export HOME="$PWD/agent-home" AGENT_LOG="$PWD/agent.log"
+    if ! bash ${omarchy}/share/omarchy/bin/omarchy-default-agent antigravity >/dev/null 2>&1; then
+      echo "FAIL: Antigravity did not recognize agy" >&2
+      exit 1
+    fi
+    [ "$(cat agent.log)" = launched ] || { echo "FAIL: Antigravity did not launch its agent" >&2; exit 1; }
+    [ "$(cat agent-home/.config/omarchy/defaults/agent)" = antigravity ] || {
+      echo "FAIL: Antigravity did not keep its menu id" >&2
+      exit 1
+    }
+    echo "stale-script Antigravity recognizes agy"
     touch "$out"
   ''

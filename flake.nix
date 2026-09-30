@@ -2009,6 +2009,11 @@
             installScript = ./installer/install.sh;
           };
 
+          installer-input-validation = import ./tests/installer-input-validation.nix {
+            pkgs = pkgsFor.${system};
+            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
+          };
+
           # The doctor's GPU rules, against fixture machines. checks.install's
           # VM runs llvmpipe and has no PCI display controller, so this is the
           # only place these branches are ever exercised -- and one of them was

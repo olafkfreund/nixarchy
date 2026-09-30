@@ -344,10 +344,18 @@ writeShellApplication {
         return 0
       fi
 
-      if grep -q "hosts/$HOST/secrets" "$POLICY"; then
-        ok "$POLICY already covers this host"
-        return 0
-      fi
+      local rc=0
+      "$POLICY_ADD" --check "$POLICY" "$HOST" "$recipient" || rc=$?
+      case "$rc" in
+        2) ok "$POLICY already covers this host"; return 0 ;;
+        3)
+          fail "$POLICY has a different recipient for hosts/$HOST/secrets.yaml."
+          say "  Correct that rule and rekey any existing secrets.yaml before retrying."
+          return 1
+          ;;
+        4) ;;
+        *) fail "could not check $POLICY."; return 1 ;;
+      esac
 
       fail "$POLICY exists and has no rule for hosts/$HOST/secrets.yaml."
       say  ""
@@ -526,8 +534,12 @@ writeShellApplication {
         return 0
       fi
 
+      if [ ! -d "$FLAKE/hosts/$HOST" ]; then
+        fail "this flake uses the older flat layout; system secrets need hosts/$HOST."
+        say "  Migrate the flake to a per-host layout before using nixarchy secret new."
+        return 1
+      fi
       require_host_key || return 1
-      sudo mkdir -p "$FLAKE/hosts/$HOST"
       ensure_policy || return 1
 
       step "Opening $SYS_STORE"

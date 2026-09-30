@@ -84,7 +84,7 @@ writeShellApplication {
 
     if "$check"; then
       echo "missing: $policy has no rule for $host" >&2
-      exit 1
+      exit 4
     fi
 
     RECIPIENT="$recipient" RULE="$rule" yq -i \

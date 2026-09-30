@@ -38,8 +38,9 @@ working:
 
 - An option added without a `checks.options` assertion in both states is not
   finished.
-- `writeShellApplication` builds a strict PATH from `runtimeInputs`. A command
-  a script calls and does not declare is a runtime failure no build catches.
+- `writeShellApplication` prepends `runtimeInputs` to the caller's PATH. A
+  declared command beats a PATH stub; an undeclared one depends on the caller's
+  installed tools, and a build does not catch its absence.
 - **`lib.mkIf false` does not hide a definition from the option tree.** Setting
   an option nixpkgs-unstable has and nixos-26.05 does not — `services.ollama
   .modelsDir`, renamed from `models` — fails `checks.stable-eval` with "The

@@ -43,11 +43,13 @@ networking.firewall.allowedTCPPorts = [ 8080 ];
 `sudo ufw allow 8080` does not exist here, and a port opened by hand with
 `iptables` or `nft` is gone on the next rebuild, which is the point.
 
-Docker is enabled by default (`virtualisation.docker.enable = mkDefault true`)
-but upstream's `ufw-docker` lockdown is not ported, because it is a ufw script.
-A container published with `-p` is reachable through the firewall the way
-Docker's own iptables rules make it. If that matters to you, bind published
-ports to `127.0.0.1`.
+Nixarchy defaults to `virtualisation.docker.enable = false` and
+`virtualisation.docker.rootless.enable = true`: Docker runs as a rootless user
+daemon. Upstream's `ufw-docker` lockdown is not ported because it is a ufw
+script. Check the bind address and network reachability of each published
+container service. See
+[Docker, rootless](development-tools.md#docker-rootless) for the default and how
+to opt into the root-owned daemon.
 
 ## SSH
 

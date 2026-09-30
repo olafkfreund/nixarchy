@@ -6,8 +6,8 @@
 # misses, and a plugin keybind silently does nothing.
 #
 # A stub `qs` on PATH, which works here and did NOT in tests/apply-confirm.nix:
-# nixarchy-apply is a writeShellApplication with a strict PATH built from
-# runtimeInputs, so the real binary always won. omarchy-shell is upstream's and
+# nixarchy-apply prepends its runtimeInputs to PATH, so its declared binary
+# won over the stub. omarchy-shell is upstream's and
 # unwrapped, so PATH is the whole mechanism.
 #
 # `res`, `out_*` -- never a bare `out`: $out is nix's output path and is in

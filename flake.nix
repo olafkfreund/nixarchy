@@ -588,6 +588,7 @@
             gnugrep
             gawk
             coreutils
+            xdg-utils
             # Why: docs/internals/flake.md#vainfo-for-the-graphics-section
             libva-utils
             # For reading the machine's flake.lock, which is JSON. Reaching for
@@ -921,11 +922,9 @@
               findutils
               util-linux # lsblk, findmnt, blkid, blockdev, partx, wipefs
               # `btrfs subvolume snapshot -r`, for the @factory baseline taken
-              # at the end of the install. writeShellApplication builds a strict
-              # PATH from this list, so a command that is not named here is a
-              # runtime failure no build catches -- and this one would fail on
-              # the last step of a completed install, which is the worst place
-              # to discover it.
+              # at the end of the install. writeShellApplication prepends these
+              # inputs to the caller's PATH; an undeclared command might work
+              # on one machine and fail at this final step on another.
               btrfs-progs
               # sgdisk, and only sgdisk: the free-space mode's whole safety
               # argument rests on `--new=0:` picking the next free partition
@@ -2016,6 +2015,11 @@
           # No CI machine keeps a wheel missing libGL in ~/.local/bin, so
           # these branches exist nowhere else -- see tests/doctor-ldd.nix.
           doctor-ldd = import ./tests/doctor-ldd.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+          };
+          shell-runtime-inputs = import ./tests/shell-runtime-inputs.nix {
+            inherit inputs;
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) doctor;
           };

@@ -39,15 +39,15 @@ something here; take a flake input otherwise.
 
 ## The trap that has cost the most here
 
-**`writeShellApplication` builds a strict PATH from `runtimeInputs`.** A command
-a script calls and does not declare is a runtime failure no build catches — and
-it does not read as "missing command", it reads as whatever the script concludes
-from the failure.
+**`writeShellApplication` prepends `runtimeInputs` to the caller's PATH.** A
+declared command beats a PATH stub. An undeclared one can work on the developer's
+machine and fail elsewhere; no build catches that, and the script may report
+whatever it concludes from the failure instead of "missing command".
 
 `doctor.sh` carries the canonical example in a comment on its `runtimeInputs`:
-an undeclared `vainfo` does not report "vainfo is missing", it reports "no VAAPI
-driver answered", which is a different and much worse answer to hand someone. It
-ran anyway during development, from the author's own PATH.
+without a declared `vainfo`, a machine without it on PATH reports "no VAAPI
+driver answered" rather than "vainfo is missing". It ran during development
+because the author's PATH happened to supply it.
 
 Before adding a command to any script here, add it to that derivation's
 `runtimeInputs`. If the script parses JSON, that means `jq` — reaching for `sed`

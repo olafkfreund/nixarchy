@@ -475,9 +475,10 @@ on a journal line nobody reads and it is not the same as being told.
 `checks.apply-confirm` drives the real `nixarchy-apply` against fixture files
 (#967). Three things about it are worth knowing before trusting or editing it.
 
-**A stubbed `nh` on PATH does not work.** `writeShellApplication` builds a
-strict PATH from `runtimeInputs` and prepends it, so the real `nh` always wins.
-That is the property making the script hermetic, and it defeats the usual trick.
+**A stubbed `nh` on PATH does not work.** `writeShellApplication` prepends
+`runtimeInputs` to the caller's PATH, so the declared `nh` wins over the stub.
+That precedence defeats the usual trick; undeclared commands can still come
+from the caller's PATH.
 "Did it reach the rebuild?" is therefore read from apply's own log -- it prints
 "The rebuild failed" only after invoking `nh` -- which is a proxy, not a
 process observation.
@@ -543,8 +544,8 @@ the three were already recorded somewhere in this repo:
   it again four hours later, so the note was not enough on its own.
 
 **A PATH stub works here and does not in `apply-confirm`.** `nixarchy-apply` is
-a `writeShellApplication` with a strict PATH built from `runtimeInputs`, so the
-real binary always wins; `omarchy-shell` is upstream's and unwrapped, so PATH is
+a `writeShellApplication` that prepends its `runtimeInputs`, so its declared
+binary wins; `omarchy-shell` is upstream's and unwrapped, so PATH is
 the whole mechanism. Same trick, opposite result, and the difference is which
 side of the port the script is on.
 
@@ -554,10 +555,10 @@ Checked by hand on p620.
 
 ## A PATH stub loses to runtimeInputs, and it has now cost three attempts
 
-`writeShellApplication` builds a **strict PATH from `runtimeInputs`** and
-prepends it, so a stub of one of that script's own dependencies is never
-reached. The real binary always wins. This is the property that makes those
-scripts hermetic and it defeats the obvious way to test them.
+`writeShellApplication` **prepends `runtimeInputs` to the caller's PATH**, so a
+stub of a declared dependency is never reached. The declared binary wins, but
+an undeclared command may still come from the caller's PATH. This precedence
+defeats the obvious way to stub declared tools.
 
 It has been hit three times in one day, each time with a different symptom:
 

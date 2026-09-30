@@ -155,10 +155,9 @@ let
   # that runs it now and the one that writes it down -- `, foo` and
   # `nixarchy pkg add <attr>`.
   #
-  # runtimeInputs, not a PATH assumption: writeShellApplication builds a
-  # strict PATH from it, and nix-locate missing at runtime would read as
-  # "nothing provides that command" -- a wrong answer rather than a missing
-  # one, which is the failure this whole feature exists to end.
+  # Declare nix-locate: writeShellApplication prepends runtimeInputs but also
+  # inherits the caller's PATH. Without it, one machine may work while another
+  # reports "nothing provides that command" for a missing tool.
   commandNotFound = pkgs.writeShellApplication {
     name = "nixarchy-command-not-found";
     runtimeInputs = [

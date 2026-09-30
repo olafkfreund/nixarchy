@@ -3748,17 +3748,22 @@ pkgs.runCommand "nixarchy-options"
         }
         echo "printing is on and cups-browsed is not"
 
-        # ---- the user units exist and name store paths --------------------
+        # ---- the remaining user units exist and name store paths ----------
         # Upstream ships these under default/systemd/user, which is not a
         # systemd search path, so nothing ever loaded them: no lock before
-        # suspend, no Bluetooth pairing agent, no crash watcher. Their
+        # suspend, no crash watcher. Their
         # ExecStart lines are all /usr/bin/..., so declaring them is only half
         # the job -- the paths have to be real too.
-        for unit in bt-agent omarchy-sleep-lock omarchy-crash-watch \
+        for unit in omarchy-sleep-lock omarchy-crash-watch \
           omarchy-recover-internal-monitor; do
           test -e "$vm/etc/systemd/user/$unit.service" || {
             echo "$unit.service is not installed where systemd looks" >&2; exit 1; }
         done
+        if test -e "$vm/etc/systemd/user/bt-agent.service" || \
+          test -L "$vm/etc/systemd/user/bt-agent.service"; then
+          echo "bt-agent.service must not be installed permanently" >&2
+          exit 1
+        fi
         if grep -rl '/usr/bin/' "$vm/etc/systemd/user/"*.service >/dev/null 2>&1; then
           echo "a user unit still points at /usr/bin, which does not exist here:" >&2
           grep -rl '/usr/bin/' "$vm/etc/systemd/user/"*.service >&2
@@ -3766,7 +3771,7 @@ pkgs.runCommand "nixarchy-options"
         fi
         test -e "$vm/etc/systemd/user/graphical-session.target.wants/omarchy-sleep-lock.service" || {
           echo "omarchy-sleep-lock is installed but never started" >&2; exit 1; }
-        echo "the user units are installed, wanted, and name store paths"
+        echo "the remaining user units are installed, wanted, and name store paths"
 
         # ---- logind gives sleep-lock time to work -------------------------
         grep -q 'HandlePowerKey=ignore' "$vm/etc/systemd/logind.conf" || {

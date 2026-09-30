@@ -16,11 +16,11 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
     sed "s|MANAGED_MARKER=/etc/nixarchy/managed|MANAGED_MARKER=$TMPDIR/managed|" ${script} > "$TMPDIR/config-repo"
     chmod +x "$TMPDIR/config-repo"
     touch "$TMPDIR/managed"
-    printf '%s\n' '#!/usr/bin/env bash' \
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       '[[ $1 == confirm ]]' > "$bin/gum"
-    printf '%s\n' '#!/usr/bin/env bash' \
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       '[[ $1 == mark ]]' > "$bin/omarchy-done"
-    printf '%s\n' '#!/usr/bin/env bash' \
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       'printf "%s\n" "$*" >> "$SUDO_LOG"' \
       '[[ $SUDO_MODE == allow ]] || exit 99' \
       'chmod u+w "$NIXARCHY_FLAKE"' \

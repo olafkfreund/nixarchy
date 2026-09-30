@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1113
 author: olafkfreund
 ---
@@ -35,6 +35,6 @@ New installs using the ISO wizard or an answers file; Wi-Fi users whose SSID con
 
 ## Open questions
 
-1. What name limits should be enforced? **Recommendation:** cap a hostname label at 63 characters and a username at 32 characters in the shared validators; count bytes in the ASCII-only accepted alphabet.
-2. Which system names should be reserved? **Recommendation:** reject names already used by the target's standard system accounts, including `daemon`, in one shared validator. Define a stable explicit set rather than relying on the live ISO's `/etc/passwd`, which may differ from the installed system.
-3. Should an invalid timezone or keymap in an answers file fall back to a default? **Recommendation:** refuse with a specific error; silent replacement would make an unattended install differ from its answers.
+1. **Approved:** cap a hostname label at 63 characters and a username at 32 characters in the shared validators; count bytes in the ASCII-only accepted alphabet.
+2. **Approved:** reject names already used by the target's standard system accounts, including `daemon`, in one shared validator. Define a stable explicit set rather than relying on the live ISO's `/etc/passwd`, which may differ from the installed system.
+3. **Approved:** refuse an invalid timezone or keymap in an answers file with a specific error; do not silently replace it with a default.

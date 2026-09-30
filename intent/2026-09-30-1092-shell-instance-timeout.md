@@ -29,5 +29,5 @@ Nixarchy desktop users whose keybinds, panels, or scripts call `omarchy-shell`, 
 
 ## Open questions
 
-- Should `qs list --all`, which runs only after a failed probe, also receive a deadline? **Recommendation:** keep this issue focused on the reported blocking probe; add a listing deadline only if a separate hang is demonstrated or the spec's verification shows it can block.
-- Should the probe use a new duration? **Recommendation:** no; use the existing `OMARCHY_SHELL_IPC_TIMEOUT` value (default two seconds), matching the real call.
+- **Owner decision:** use the existing `OMARCHY_SHELL_IPC_TIMEOUT` value (default two seconds) for the probe; do not introduce another duration.
+- **Owner decision:** leave `qs list --all` without a new deadline unless evidence shows that listing can block. This issue covers the reported probe hang.

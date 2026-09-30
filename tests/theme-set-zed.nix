@@ -111,6 +111,25 @@ pkgs.runCommand "nixarchy-theme-set-zed"
       bad "a settings.json with comments is left untouched -- it was rewritten"
     fi
 
+    # A Home Manager-managed settings file is a symlink, often into the
+    # read-only store. Leave both the link and its target alone.
+    rm -rf "$zed"; mkdir -p "$zed"
+    printf '{"theme":"original"}\n' > "$HOME/zed-managed-settings"
+    ln -s "$HOME/zed-managed-settings" "$zed/settings.json"
+    link_inode=$(stat -c %i "$zed/settings.json")
+    target_inode=$(stat -c %i "$HOME/zed-managed-settings")
+    if $run > "$PWD/zed-link.log" 2>&1 &&
+       [ -L "$zed/settings.json" ] &&
+       [ "$(stat -c %i "$zed/settings.json")" = "$link_inode" ] &&
+       [ "$(stat -c %i "$HOME/zed-managed-settings")" = "$target_inode" ] &&
+       grep -Fxq '{"theme":"original"}' "$HOME/zed-managed-settings" &&
+       grep -Fq 'Home Manager' "$PWD/zed-link.log" &&
+       [ -s "$zed/themes/omarchy.json" ]; then
+      ok "a managed settings symlink and target are left untouched while the palette is generated"
+    else
+      bad "a managed settings symlink and target are left untouched while the palette is generated"
+    fi
+
     # And no Zed at all is a silent no-op, not an error: every per-app setter
     # upstream ships runs on every theme change whether or not that app is
     # installed, so failing here would fail the whole theme switch for anyone

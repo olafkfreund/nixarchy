@@ -165,9 +165,9 @@ while IFS= read -r f; do
     # doc files named above: any page can change that derivation's output.
     #
     # Still excluded from `--install`: the three checks the install job builds
-    # reach `./hardware-configuration.nix` and `./test-instrumentation.nix`
-    # and nothing else, so none of this can change an install. The expensive
-    # saving is kept; only the cheap hosted build comes back.
+    # reach nothing under tests/ but `with-vm-cleanup.nix` and the
+    # `vm-cleanup.py` it reads, so none of this can change an install. The
+    # expensive saving is kept; only the cheap hosted build comes back.
     .github/scripts/*|docs/*)
       if [ "$install_only" = true ]; then continue; fi
       relevant=true; break ;;
@@ -177,10 +177,11 @@ while IFS= read -r f; do
 
     # Only for the install question, and only files the install job cannot
     # reach. install-check.yml builds exactly three checks -- install,
-    # free-space and installer-refusal -- and those three import only
-    # ./hardware-configuration.nix and ./test-instrumentation.nix from this
-    # directory. Verified by reading them, not assumed; the five names below
-    # are re-included above this arm so they keep triggering it.
+    # free-space and installer-refusal -- and install and free-space import
+    # only with-vm-cleanup.nix, which reads vm-cleanup.py (#1082: the two
+    # names this arm used to carry do not exist). Verified by reading them,
+    # not assumed; the five names below are re-included above this arm so
+    # they keep triggering it.
     #
     # Everything else under tests/ is a SEPARATE derivation that build.yml
     # builds and this job never touches. tests/substitutable.nix cost a
@@ -188,7 +189,7 @@ while IFS= read -r f; do
     # changed one byte of an install.
     tests/install.nix|tests/free-space.nix|tests/installer-refusal.nix)
       relevant=true; break ;;
-    tests/hardware-configuration.nix|tests/test-instrumentation.nix)
+    tests/with-vm-cleanup.nix|tests/vm-cleanup.py)
       relevant=true; break ;;
     tests/*)
       if [ "$install_only" = true ]; then continue; fi
@@ -207,8 +208,8 @@ while IFS= read -r f; do
     #
     # What a README edit cannot do is change an install. The three checks the
     # install job builds -- install, free-space, installer-refusal -- reach
-    # ./hardware-configuration.nix and ./test-instrumentation.nix and nothing
-    # else; no derivation reads README.md. Measured cost of not saying so: a
+    # nothing under tests/ but with-vm-cleanup.nix and the vm-cleanup.py it
+    # reads; no derivation reads README.md. Measured cost of not saying so: a
     # one-line Roadmap row took a 55-minute VM install, serialised behind the
     # single slot every other pull request is also waiting for.
     README.md)

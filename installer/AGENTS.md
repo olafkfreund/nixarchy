@@ -107,8 +107,14 @@ so two machines with different passwords are still the same closure.
 | `installer-refusal` | that it refuses, in sentences, rather than crashing |
 | `installer-store-space` | the live store's ceiling, which `install` cannot see |
 | `installer-lock` | the generated lock has the fields nix would have written |
+| `installer-answers` | the answers file's secrets: parsing, argv, cleanup (#1079) |
+| `installer-baked-guard` | which system an offline install copies (#1078) |
 | `dashboard-clock` | a clock that goes backwards mid-install |
 | `try-preflight` | every refusal path of the `#try` front door |
+
+**Not covered:** an offline free-space or offline `--from` install that builds
+(#1078). That is the `off-free` cell of `tests/install-matrix.py`, run by
+hand; no PR boots it.
 
 <a id="try-nixarchy-sh"></a>
 ## `try-nixarchy.sh` — the front door with no nix behind it

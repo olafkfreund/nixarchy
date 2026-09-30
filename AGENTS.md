@@ -503,6 +503,11 @@ Two other ways a check stops checking, both found in one week:
   `nix fmt -- --ci` failing once and then passing: that is `nixfmt` reverting
   the hook, not a flaky formatter. After any edit to a `.nix` file, run
   `nix fmt` and read `git diff --stat` before committing.
+- **An EXIT trap reads its variables when the shell exits, not when the trap
+  is set.** `trap 'rm -f "$tmp"' EXIT` inside a function whose `tmp` is
+  `local` removes nothing: by exit the local is gone, and `rm -f ""` succeeds
+  silently. The planned fix for #1079 was written that way. Point the trap at
+  a global, or expand the path when the trap is set.
 
 ## 6. How to run the checks, and what each one costs
 

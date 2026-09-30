@@ -31,9 +31,9 @@ sequence, a module that wants `CAP_SYS_ADMIN` — none of that is answerable
 inside a container, on this machine or anywhere else.
 
 **Not a security boundary you should design a threat model around.** The
-shared folder is your own home directory's worth of state — a per-VM
-directory under it, but the guest can write everything under `/mnt/host` —
-and KVM escapes exist. Isolation from a package you do not trust yet; not
+shared folder is your own home directory's worth of state — a `share/`
+directory inside each VM's own, and the guest can write everything under
+`/mnt/host` — and KVM escapes exist. Isolation from a package you do not trust yet; not
 isolation from an attacker who already has a foothold in the guest.
 
 **Not nixarchy's own test VM.** `nix run .#vm` boots the desktop itself, to
@@ -92,9 +92,9 @@ own options reference from there.
 Every guest, regardless of template, gets the same four things from
 `modules/microvm/guest.nix`:
 
-- **A `dev` user**, autologin on the serial console, in `wheel`, with no
-  password — there is no other way in (no SSH, no host network surgery), so
-  a password would gain nothing.
+- **A `dev` user**, autologin on the serial console, in `wheel` (not in the
+  `agent` templates; see below), with no password — there is no other way in
+  (no SSH, no host network surgery), so a password would gain nothing.
 - **The host's `/nix/store`**, read-only, mounted over 9p. This is the whole
   reason a sandbox is cheap: no disk image is ever built for it.
 - **The network is NAT out, nothing in.** User-mode (SLiRP) networking:
@@ -127,11 +127,12 @@ nothing in", which is no constraint at all on a process you are running
 everything outbound except the local proxy's traffic, and the proxy refuses
 any host you did not name.
 
-You name them one per line, in the VM's own directory, before you start it:
+You name them one per line, in the VM's `share/` directory -- what the guest
+sees at `/mnt/host` -- before you start it:
 
 ```sh
 nixarchy vm create review-bot --template agent
-cat > ~/.local/state/nixarchy/microvm/review-bot/allow-hosts <<'EOF'
+cat > ~/.local/state/nixarchy/microvm/review-bot/share/allow-hosts <<'EOF'
 api.anthropic.com
 github.com
 EOF
@@ -169,10 +170,12 @@ It **does not**:
   matches the hostname the client asks for; TLS is end to end, so nothing
   here inspects or re-signs it. That is the right trade — a sandbox that
   terminated your TLS would be a sandbox that could read your model traffic.
-- **Survive root inside the guest.** A process that becomes root there can
-  flush the ruleset. It still cannot leave the VM, which is the boundary that
-  matters, but treat the allowlist as a policy for an agent doing what agents
-  do, not as a cage for an attacker.
+- **Survive root inside the guest.** `dev` is not in `wheel` here (#1083), and
+  DHCP goes only to SLiRP's server. A process that gains root some other way
+  -- a kernel bug, for instance -- can still flush the ruleset. It still
+  cannot leave the VM, which is the boundary that matters, but treat the
+  allowlist as a policy for an agent doing what agents do, not as a cage for
+  an attacker.
 - **Restrict the shared directory.** `/mnt/host` is read-write, as it is for
   every template. Put the checkout there and nothing else.
 
@@ -235,11 +238,22 @@ removed: the nixarchy.microvm panel reads these.
 
 Everything a VM has lives at
 `~/.local/state/nixarchy/microvm/<name>/`: the template it was created from,
-its runtime hostname, and — after the first `run` — `current`, a symlink
-into the store that is also this VM's garbage-collection root. `nix build
---out-link` is what writes it, deliberately never `nix run`, which registers
-no root at all: a `nix-collect-garbage` while a guest is running would take
-the store it is 9p-mounted on out from under it.
+`share/` (the only part the guest sees, at `/mnt/host`: its runtime hostname,
+`allow-hosts`, anything you put there), and — after the first `run` —
+`current`, a symlink into the store that is also this VM's
+garbage-collection root. `nix build --out-link` is what writes it,
+deliberately never `nix run`, which registers no root at all: a
+`nix-collect-garbage` while a guest is running would take the store it is
+9p-mounted on out from under it.
+
+**Upgrading from before #1076.** Guests used to see this whole directory,
+`current` included. That was a way from a guest to your host, as you or as
+root. They now see `share/` only. Nothing was moved or deleted: files a
+guest wrote before, and an `allow-hosts` you wrote, are still one level
+up, and the guest no longer sees them. Move what it should see into
+`share/`. An `agent` VM with no allowlist there reaches nothing, which is
+the safe way to fail. Declarative machines: the same, under
+`/var/lib/microvms/<name>/share`.
 
 The consequence worth knowing: a template dropped from a later release of
 this flake keeps running here, for any VM that already built its `current`
@@ -274,8 +288,9 @@ root's to manage, and the machine comes up under systemd the moment you
 rebuild. Turning this on for the first time also grants the `kvm` group to
 `programs.nixarchy.user` (or whoever `programs.nixarchy.services.microvm.user`
 names) and switches on `microvm.host.enable` upstream — both stay off, and
-nothing about a machine you have not declared runs, until `machines` is
-non-empty.
+nothing about a machine you have not declared runs, until `machines`, or a
+`microvm.vms` of your own, is non-empty. If you run only imperative
+`microvm -c` machines, set `microvm.host.enable = true` yourself.
 
 See also: [Per-project environments](per-project-environments) for the
 other "an environment vs. a machine" tool on this desktop — devenv answers

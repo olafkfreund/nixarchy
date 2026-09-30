@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1080
 author: olafkfreund
 ---
@@ -23,10 +23,11 @@ Users restoring a desktop backup on a new or existing nixarchy installation. The
 ## Constraints
 
 - Keep backup creation's user-extensible allowlist and the existing ownership gate.
+- Authorize restore only from the shipped allowlist plus the installed machine's local `backup.list`. The repository's copy cannot authorize its own contents. On a fresh machine, custom paths require restoring `backup.list` and rerunning; explain this in the command.
 - Preserve the current behavior of saving a user's differing file before overwriting it unless `--force` is set. A failed save must not be treated as permission to overwrite.
 - Do not delete other home files to make a restore fit.
 - Verify the safety properties with a check that fails when each regression is reintroduced.
 
 ## Open questions
 
-- On a fresh installation, should the restore allowlist come only from the installed machine's shipped list and local `backup.list`, so custom entries require restoring that list and rerunning, or may the repository's `backup.list` authorize its other files on the first run? The latter would let a wrong repository expand the restore scope.
+None. The owner chose the local allowlist and a second run for custom paths.

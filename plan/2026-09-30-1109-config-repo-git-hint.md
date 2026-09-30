@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1109
 spec: spec/2026-09-30-1109-config-repo-git-hint.md
 ---

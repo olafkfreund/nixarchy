@@ -2034,7 +2034,7 @@ stdenvNoCC.mkDerivation {
                     ipcNew=$(printf '%s\n' \
                       '# nixarchy patch (#963): resolve the instance before calling.' \
                       'qs_sel=(-p "$OMARCHY_PATH/shell")' \
-                      'if ! qs ipc -n -p "$OMARCHY_PATH/shell" call __nixarchy_probe __nixarchy_probe >/dev/null 2>&1; then' \
+                      'if ! timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call __nixarchy_probe __nixarchy_probe >/dev/null 2>&1; then' \
                       '  qs_listing=$(qs list --all 2>/dev/null) || qs_listing=""' \
                       '  qs_ids=()' \
                       '  qs_id=""' \

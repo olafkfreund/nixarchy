@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1096
 intent: intent/2026-09-30-1096-nonfailing-checks.md
 ---

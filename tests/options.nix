@@ -2554,6 +2554,15 @@ let
     users.users.someone.home = pkgs.lib.mkForce "/srv/someone";
   };
   syncthingOff = defaultMachine.services.syncthing.enable;
+  syncthingGenerated = configBeside {
+    programs.nixarchy.services.syncthing = {
+      enable = true;
+      user = "syncthing";
+    };
+  };
+  syncthingGeneratedRejected = pkgs.lib.any (
+    a: !a.assertion && pkgs.lib.hasInfix "must name a user with a home directory" a.message
+  ) syncthingGenerated.assertions;
 
   # The same hazard for the module that bundles Ollama (#96). Worth its own
   # case rather than trusting the syncthing one: local-ai sets four upstream
@@ -2656,6 +2665,13 @@ let
       enable = true;
       host = "::1";
     };
+  };
+  localAiIpv6 = configBeside {
+    programs.nixarchy.localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+    services.ollama.host = "::1";
   };
 
   # And the group the desktop user gets. This check used to assert the user WAS
@@ -2984,6 +3000,7 @@ pkgs.runCommand "nixarchy-options"
     syncthingCustomDataDir = syncthingCustomHome.services.syncthing.dataDir;
     syncthingCustomConfigDir = syncthingCustomHome.services.syncthing.configDir;
     syncthingDefaultOff = pkgs.lib.boolToString syncthingOff;
+    syncthingSystemUserRejected = pkgs.lib.boolToString syncthingGeneratedRejected;
     ollamaPort = builtins.toString ollamaBeside.services.ollama.port;
     ollamaEndpoint = ollamaBeside.programs.nixarchy.localAi.resolved.endpoint;
     # The two halves of trusting a cache, counted rather than spot-checked: a
@@ -3006,6 +3023,7 @@ pkgs.runCommand "nixarchy-options"
     modelsOwner = aiModels.services.ollama.user;
     webuiBaseUrl = webuiOn.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
     webuiIpv6BaseUrl = webuiIpv6.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
+    localAiIpv6Endpoint = localAiIpv6.programs.nixarchy.localAi.resolved.endpoint;
     webuiDefaultOff = pkgs.lib.boolToString webuiOff.services.open-webui.enable;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     dockerRootedGroups = pkgs.lib.concatStringsSep " " dockerRootedGroups;
@@ -3283,8 +3301,9 @@ pkgs.runCommand "nixarchy-options"
           echo "a bundled service yields to configuration the user already had"
           [ "$syncthingCustomDataDir" = /srv/someone ] &&
             [ "$syncthingCustomConfigDir" = /srv/someone/.config/syncthing ] &&
-            [ "$syncthingDefaultOff" = false ] || {
-            echo "Syncthing did not follow the selected user's nonstandard home or stay off by default" >&2
+            [ "$syncthingDefaultOff" = false ] &&
+            [ "$syncthingSystemUserRejected" = true ] || {
+            echo "Syncthing did not follow a normal user's home, reject its generated system user, or stay off by default" >&2
             exit 1
           }
           echo "Syncthing follows a nonstandard user home and stays off by default"
@@ -3360,8 +3379,9 @@ pkgs.runCommand "nixarchy-options"
           }
           echo "Open WebUI follows the Ollama port the machine actually uses"
           [ "$webuiIpv6BaseUrl" = 'http://[::1]:11434' ] &&
+            [ "$localAiIpv6Endpoint" = 'http://[::1]:11434/v1' ] &&
             [ "$webuiDefaultOff" = false ] || {
-            echo "Open WebUI did not bracket bare IPv6 or stay off by default: $webuiIpv6BaseUrl" >&2
+            echo "Open WebUI or local AI did not bracket bare IPv6, or WebUI did not stay off by default: $webuiIpv6BaseUrl / $localAiIpv6Endpoint" >&2
             exit 1
           }
           echo "Open WebUI brackets IPv6 and stays off by default"

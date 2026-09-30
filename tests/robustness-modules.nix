@@ -21,9 +21,15 @@ let
             users.users = lib.mkOption {
               type = lib.types.attrsOf (
                 lib.types.submodule {
-                  options.home = lib.mkOption {
-                    type = lib.types.str;
-                    default = "/var/empty";
+                  options = {
+                    home = lib.mkOption {
+                      type = lib.types.str;
+                      default = "/var/empty";
+                    };
+                    isNormalUser = lib.mkOption {
+                      type = lib.types.bool;
+                      default = false;
+                    };
                   };
                 }
               );
@@ -138,10 +144,28 @@ let
     };
   hasFailedAssertion =
     c: phrase: lib.any (a: !a.assertion && lib.hasInfix phrase a.message) c.assertions;
-  syncCustom = sync "alice" { alice.home = "/srv/alice"; };
+  syncCustom = sync "alice" {
+    alice = {
+      home = "/srv/alice";
+      isNormalUser = true;
+    };
+  };
   syncNull = sync null { };
   syncMissing = sync "missing" { };
   syncEmpty = sync "empty" { empty = { }; };
+  syncGenerated = eval (
+    { config, ... }:
+    {
+      programs.nixarchy.services.syncthing = {
+        enable = true;
+        user = "syncthing";
+      };
+      # Nixpkgs defines this user's home from services.syncthing.dataDir.
+      users.users.syncthing.home = config.services.syncthing.dataDir;
+    }
+  );
+  urlHost = import ../modules/ollama-url-host.nix { inherit lib; };
+  localAiSource = builtins.readFile ../modules/local-ai.nix;
   web =
     host:
     (eval {
@@ -177,6 +201,19 @@ let
     {
       name = "Syncthing var-empty home fails an assertion";
       ok = hasFailedAssertion syncEmpty "must name a user with a home directory";
+    }
+    {
+      name = "Syncthing's generated system user fails without a home recursion";
+      ok = hasFailedAssertion syncGenerated "must name a user with a home directory";
+    }
+    {
+      name = "Local AI uses the shared IPv6 URL host";
+      ok =
+        urlHost "::1" == "[::1]"
+        && urlHost "[::1]" == "[::1]"
+        && urlHost "::" == "127.0.0.1"
+        && lib.hasInfix "urlHost = import ./ollama-url-host.nix" localAiSource
+        && lib.hasInfix "endpoint = \"http://\${urlHost}" localAiSource;
     }
     {
       name = "Open WebUI brackets bare IPv6";

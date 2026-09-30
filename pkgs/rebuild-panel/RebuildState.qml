@@ -40,8 +40,6 @@ Singleton {
   // icon can appear without anyone having opened anything.
   property int viewers: 0
 
-  readonly property string unit: "nixarchy-rebuild"
-
   // The last line the build printed, which is the closest thing to a step
   // nh gives us without parsing its progress view.
   readonly property string lastLine: lines.length > 0 ? lines[lines.length - 1] : ""

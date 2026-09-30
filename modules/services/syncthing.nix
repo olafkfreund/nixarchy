@@ -14,7 +14,9 @@ let
   cfg = config.programs.nixarchy;
   svc = cfg.services.syncthing;
   home =
-    if svc.user != null && config.users.users ? ${svc.user} then
+    if
+      svc.user != null && config.users.users ? ${svc.user} && config.users.users.${svc.user}.isNormalUser
+    then
       config.users.users.${svc.user}.home
     else
       "/var/empty";

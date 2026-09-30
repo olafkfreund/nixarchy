@@ -1827,10 +1827,9 @@ in
         rebuild = {
           id = "nixarchy.rebuild";
           src = ../pkgs/rebuild-panel;
-          # journalctl for the log, wl-copy for Copy log. nixarchy-apply and
-          # nixarchy-rebuild-state are already on the session PATH from apps.nix.
+          # wl-copy handles Copy log; nixarchy-apply and nixarchy-rebuild-state
+          # are already on the session PATH from apps.nix.
           packages = [
-            pkgs.systemd
             pkgs.wl-clipboard
           ];
         };

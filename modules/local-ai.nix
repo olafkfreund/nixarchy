@@ -62,7 +62,8 @@ let
   # its port, and the agents have to follow the server to wherever it actually
   # listens.
   ollamaCfg = config.services.ollama;
-  endpoint = "http://${ollamaCfg.host}:${toString ollamaCfg.port}/v1";
+  urlHost = import ./ollama-url-host.nix { inherit lib; } ollamaCfg.host;
+  endpoint = "http://${urlHost}:${toString ollamaCfg.port}/v1";
 
 in
 {

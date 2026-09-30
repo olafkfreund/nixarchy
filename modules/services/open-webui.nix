@@ -34,25 +34,9 @@ let
   # host that already set services.ollama.port keeps it, and the client has to
   # follow the server to wherever it actually listens.
   #
-  # A wildcard bind is not an address to connect TO. Ollama listening on
-  # 0.0.0.0 or [::] is reachable at loopback, and a URL containing 0.0.0.0
-  # fails in some HTTP clients and resolves to something unintended in others.
-  ollamaHost =
-    if
-      builtins.elem ollama.host [
-        "0.0.0.0"
-        "[::]"
-        "::"
-      ]
-    then
-      "127.0.0.1"
-    else
-      ollama.host;
-  urlHost =
-    if lib.hasInfix ":" ollamaHost && !(lib.hasPrefix "[" ollamaHost) then
-      "[${ollamaHost}]"
-    else
-      ollamaHost;
+  # A wildcard bind is reachable at loopback; a specific IPv6 address needs
+  # brackets. The agents use the same conversion.
+  urlHost = import ../ollama-url-host.nix { inherit lib; } ollama.host;
   ollamaUrl = "http://${urlHost}:${toString ollama.port}";
 in
 {

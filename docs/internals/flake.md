@@ -832,12 +832,11 @@ libva-utils
 ```
 
 vainfo, for the Graphics section. Declared because
-writeShellApplication builds a strict PATH, and an undeclared
-vainfo does not read as "vainfo is missing" -- it reads as "no
-VAAPI driver answered", which is a different and much worse
-answer to hand someone. It ran anyway while this was being
-written, from the developer's own PATH, which is exactly how
-that goes unnoticed.
+writeShellApplication prepends runtimeInputs to the caller's PATH.
+Without a declared vainfo, a machine without it on PATH reports
+"no VAAPI driver answered" rather than "vainfo is missing".
+It ran while this was being written because the developer's PATH
+supplied it, which is exactly how that goes unnoticed.
 
 No pciutils: the GPUs come from /sys/bus/pci, the same way the
 Bluetooth check reads /sys/class/bluetooth, and sysfs hands over

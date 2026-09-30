@@ -745,9 +745,9 @@ files carry the full reasoning and the failure history.
   is still the most valuable thing to write down — it just belongs where it can
   be read without scrolling through it to reach the code.
 - **A comment that narrates what the next line does is noise**, wherever it is.
-- **`writeShellApplication` builds a strict PATH from `runtimeInputs`.** A
-  command your script calls and does not declare is a runtime failure that no
-  build catches.
+- **`writeShellApplication` prepends `runtimeInputs` to the caller's PATH.** A
+  declared command beats a PATH stub; an undeclared one depends on what the
+  caller has installed, and a build does not catch its absence.
 
 ## 8. Commits and pull requests
 

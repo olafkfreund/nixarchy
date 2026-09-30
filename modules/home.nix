@@ -253,17 +253,20 @@ let
         echo "nixarchy: would add [${table}] to $conf"
       else
         run mkdir -p "$(dirname "$conf")"
-        [ -e "$conf" ] || : > "$conf"
-
-        if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
-          echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+        if [ -L "$conf" ]; then
+          echo "nixarchy: $conf is a symlink; declare ${what} in Home Manager or make the file user-owned" >&2
         else
-          {
-            echo ""
-            echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
-            echo "# programs.nixarchy in your configuration decides whether it comes back."
-            ${pkgs.coreutils}/bin/cat ${toml}
-          } >> "$conf"
+          [ -e "$conf" ] || : > "$conf"
+          if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
+            echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+          else
+            {
+              echo ""
+              echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
+              echo "# programs.nixarchy in your configuration decides whether it comes back."
+              ${pkgs.coreutils}/bin/cat ${toml}
+            } >> "$conf"
+          fi
         fi
       fi
     '';

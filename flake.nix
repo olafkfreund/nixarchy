@@ -2214,6 +2214,10 @@
           ai-mirror-mcp-remove = import ./tests/ai-mirror-mcp-remove.nix { pkgs = pkgsFor.${system}; };
           skills-relink = import ./tests/skills-relink.nix { pkgs = pkgsFor.${system}; };
           robustness-modules = import ./tests/robustness-modules.nix { pkgs = pkgsFor.${system}; };
+          home-writers-dry-run = import ./tests/home-writers-dry-run.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
 
           bar-keyed-sync = import ./tests/bar-keyed-sync.nix {
             pkgs = pkgsFor.${system};

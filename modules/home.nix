@@ -212,15 +212,19 @@ let
     }:
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       conf="${file}"
-      run mkdir -p "$(dirname "$conf")"
-      [ -s "$conf" ] || echo '{}' > "$conf"
-
-      tmp=$(${pkgs.coreutils}/bin/mktemp)
-      if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
-        run mv "$tmp" "$conf"
+      if [[ -v DRY_RUN ]]; then
+        echo "nixarchy: would merge ${what} into $conf"
       else
-        rm -f "$tmp"
-        echo "nixarchy: could not merge ${what} into $conf" >&2
+        run mkdir -p "$(dirname "$conf")"
+        [ -s "$conf" ] || echo '{}' > "$conf"
+
+        tmp=$(${pkgs.coreutils}/bin/mktemp)
+        if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
+          run mv "$tmp" "$conf"
+        else
+          rm -f "$tmp"
+          echo "nixarchy: could not merge ${what} into $conf" >&2
+        fi
       fi
     '';
 
@@ -242,18 +246,22 @@ let
     }:
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       conf="${file}"
-      run mkdir -p "$(dirname "$conf")"
-      [ -e "$conf" ] || : > "$conf"
-
-      if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
-        echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+      if [[ -v DRY_RUN ]]; then
+        echo "nixarchy: would add [${table}] to $conf"
       else
-        {
-          echo ""
-          echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
-          echo "# programs.nixarchy in your configuration decides whether it comes back."
-          ${pkgs.coreutils}/bin/cat ${toml}
-        } >> "$conf"
+        run mkdir -p "$(dirname "$conf")"
+        [ -e "$conf" ] || : > "$conf"
+
+        if ${pkgs.gnugrep}/bin/grep -qF '[${table}]' "$conf"; then
+          echo "nixarchy: $conf already declares [${table}]; leaving it alone"
+        else
+          {
+            echo ""
+            echo "# ${what} -- added by nixarchy. Delete this block to be rid of it;"
+            echo "# programs.nixarchy in your configuration decides whether it comes back."
+            ${pkgs.coreutils}/bin/cat ${toml}
+          } >> "$conf"
+        fi
       fi
     '';
 
@@ -1698,6 +1706,9 @@ in
         (
           lib.hm.dag.entryAfter [ "writeBoundary" ] ''
             conf="''${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
+            if [[ -v DRY_RUN ]]; then
+              echo "nixarchy: would merge the local model into $conf"
+            else
             run mkdir -p "$(dirname "$conf")"
             [ -s "$conf" ] || echo '{}' > "$conf"
 
@@ -1728,6 +1739,7 @@ in
               rm -f "$tmp"
               echo "nixarchy: could not merge the local model into $conf" >&2
             fi
+            fi
           ''
         );
 
@@ -1737,6 +1749,9 @@ in
         (
           lib.hm.dag.entryAfter [ "writeBoundary" ] ''
             conf="$HOME/.pi/agent/models.json"
+            if [[ -v DRY_RUN ]]; then
+              echo "nixarchy: would merge the local model into $conf"
+            else
             run mkdir -p "$(dirname "$conf")"
             [ -s "$conf" ] || echo '{}' > "$conf"
 
@@ -1769,6 +1784,7 @@ in
             else
               rm -f "$tmp"
               echo "nixarchy: could not merge the local model into $conf" >&2
+            fi
             fi
           ''
         );

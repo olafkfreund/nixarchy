@@ -133,6 +133,18 @@
     class = "patch";
     reason = "The prompt is retargeted from `this Omarchy machine` and `reporting upstream to Omarchy` to Nixarchy or Omarchy, so the agent does not reach reporting.md already pointed at Basecamp.";
   };
+  "omarchy-install-ai-chatgpt" = {
+    class = "patch";
+    reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";
+  };
+  "omarchy-install-service-signal" = {
+    class = "patch";
+    reason = "The install command launches /usr/bin/signal-desktop, which is absent on NixOS; launch the installed command from PATH.";
+  };
+  "omarchy-install-service-spotify" = {
+    class = "patch";
+    reason = "The install command launches /usr/bin/spotify, which is absent on NixOS; launch the installed command from PATH.";
+  };
   "omarchy-apply-lock" = {
     class = "patch";
     reason = "Its root PATH reset points at /usr/bin, which holds nothing here, so it lost tee and getent while writing lock-screen PAM files; and its `-x /usr/bin/fprintd-list` probe was never true.";

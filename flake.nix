@@ -2061,6 +2061,11 @@
             previewScript = ./pkgs/omarchy/nix-bin/nixarchy-preview;
           };
 
+          stale-scripts = import ./tests/stale-scripts.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # nixarchy-reinstall-iso's preflights, with a df, git and eval that
           # lie -- plus the #478 honesty strings. See tests/reinstall-iso.nix.
           reinstall-iso = import ./tests/reinstall-iso.nix {

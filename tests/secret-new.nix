@@ -33,8 +33,11 @@ pkgs.runCommand "nixarchy-secret-new"
     echo '== user secrets remain independent of the flat guard'
     printf '%s\n' '#!/bin/sh' 'printf "%s\\n" "demo: value" > "$1"' > user-editor
     chmod +x user-editor
+    mkdir -p "$XDG_DATA_HOME/nixarchy/secrets"
+    cd "$XDG_DATA_HOME/nixarchy/secrets"
     NIXARCHY_FLAKE="$TMPDIR/flat" SOPS_EDITOR="$TMPDIR/user-editor" "$cli" new --user demo > user-output 2>&1 || {
       echo 'FAIL: user secret creation was blocked'; cat user-output; exit 1; }
+    cd "$TMPDIR"
     SOPS_AGE_KEY_FILE="$XDG_DATA_HOME/nixarchy/secrets/identity.txt" \
       sops -d "$XDG_DATA_HOME/nixarchy/secrets/user.yaml" | grep -q '^demo: value$' || {
         echo 'FAIL: user secret did not decrypt'; exit 1; }
@@ -92,7 +95,11 @@ pkgs.runCommand "nixarchy-secret-new"
     printf '%s\n' '#!/bin/sh' \
       '[ "$1" = --flag ] || exit 2' \
       '[ -z "''${SOPS_AGE_KEY+x}" ] || { echo "FAIL: editor inherited host key" >&2; exit 3; }' \
-      'printf "%s\\n" "edited: yes" >> "$2"' > editor
+      'if grep -q "^edited:" "$2"; then' \
+      '  sed -i "s/^edited:.*/edited: 2/" "$2"' \
+      'else' \
+      '  printf "%s\\n" "edited: 1" >> "$2"' \
+      'fi' > editor
     chmod +x editor
     mkdir -p hosts/alpha
     policy "$A"
@@ -101,12 +108,12 @@ pkgs.runCommand "nixarchy-secret-new"
     key=$(grep '^AGE-SECRET-KEY-' alpha.key)
     SOPS_AGE_KEY="$key" SOPS_EDITOR="env -u SOPS_AGE_KEY $TMPDIR/editor --flag" \
       sops edit hosts/alpha/secrets.yaml
-    SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml | grep -q '^edited: yes$' || {
+    SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml | grep -q '^edited: 1$' || {
       echo 'FAIL: SOPS could not decrypt and save through SOPS_EDITOR'; exit 1; }
     SOPS_AGE_KEY="$key" EDITOR="$TMPDIR/editor --flag" \
       SOPS_EDITOR="env -u SOPS_AGE_KEY $TMPDIR/editor --flag" \
       sops edit hosts/alpha/secrets.yaml
-    SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml | grep -q '^edited: yes$' || {
+    SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml | grep -q '^edited: 2$' || {
       echo 'FAIL: SOPS could not decrypt and save through EDITOR'; exit 1; }
     echo '  ok: SOPS saved, editor received no key'
 

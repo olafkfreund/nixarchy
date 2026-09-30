@@ -18,8 +18,8 @@
 # that pair is left exactly as it is -- rewriting it would be churn in a file
 # whose parse decides whether anything on any machine decrypts. Anchors are
 # the part of YAML that round-trips worst, so hosts added here do not gain
-# one. yq resolves an alias when reading, so the already-present check below
-# sees the first host's real recipient either way.
+# one. `explode(.)` resolves aliases in the query below, so it sees the first
+# host's real recipient rather than the literal `*host` text.
 #
 # Exit codes, because the caller prints the prose:
 #
@@ -68,7 +68,7 @@ writeShellApplication {
     # Read the file rather than remember having run. A second run has to know
     # it is a second run from the policy itself.
     existing=$(RULE="$rule" yq -r \
-      '([.creation_rules[]? | select(.path_regex == strenv(RULE))] | .[0].key_groups[0].age[0]) // "__NO_RULE__"' \
+      '(explode(.) | [.creation_rules[]? | select(.path_regex == strenv(RULE))] | .[0].key_groups[0].age[0]) // "__NO_RULE__"' \
       "$policy")
 
     if [ "$existing" != __NO_RULE__ ]; then

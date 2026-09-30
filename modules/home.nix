@@ -216,14 +216,17 @@ let
         echo "nixarchy: would merge ${what} into $conf"
       else
         run mkdir -p "$(dirname "$conf")"
-        [ -s "$conf" ] || echo '{}' > "$conf"
-
-        tmp=$(${pkgs.coreutils}/bin/mktemp)
-        if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
-          run mv "$tmp" "$conf"
+        if [ -L "$conf" ]; then
+          echo "nixarchy: $conf is a symlink; declare ${what} in Home Manager or make the file user-owned" >&2
         else
-          rm -f "$tmp"
-          echo "nixarchy: could not merge ${what} into $conf" >&2
+          [ -s "$conf" ] || echo '{}' > "$conf"
+          tmp=$(${pkgs.coreutils}/bin/mktemp)
+          if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
+            run mv "$tmp" "$conf"
+          else
+            rm -f "$tmp"
+            echo "nixarchy: $conf is not plain JSON; add ${what} manually or use valid JSON" >&2
+          fi
         fi
       fi
     '';

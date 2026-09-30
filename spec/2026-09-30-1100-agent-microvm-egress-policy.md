@@ -32,8 +32,11 @@ intent: intent/2026-09-30-1100-agent-microvm-egress-policy.md
    first step, hostname validation, and tinyproxy ordering. An absent or
    empty host file therefore adds no hosts; `agent-claude` keeps its
    closure-side defaults (`modules/microvm/templates/agent-claude.nix:24-45`).
-   If the host policy file exists but cannot be read, log the path and error
-   instead of silently skipping it; leave the filter fail-closed.
+   If the host policy file exists but its open or read fails, catch that
+   operation's status, log the path, and fail the oneshot so tinyproxy cannot
+   start with an incomplete filter. Do not use `[ -r "$src" ]` as a preflight
+   proof: guest root may pass that test for a host-owned 9p file that QEMU
+   cannot actually open.
 3. Ensure `policy/` exists next to `share/` for new and previously created
    disposable VMs, before QEMU starts (`pkgs/microvm.nix:250-257,336-345`).
    `nixarchy vm run` can create an empty directory but must never read or
@@ -43,8 +46,10 @@ intent: intent/2026-09-30-1100-agent-microvm-egress-policy.md
    sibling policy directory before the service starts, owned by
    `microvm:kvm` with mode `0750`; the host administrator writes
    `policy/allow-hosts` as `root:root 0644`, so the QEMU `microvm` user can
-   traverse and read it, but only root can change it. The guest sees this
-   directory only through its read-only export. Update the stale
+   traverse and read it. Since `microvm` owns the directory, that host user
+   can replace the file even though root owns the file itself; the security
+   boundary is that the guest cannot write through the read-only export.
+   Update the stale
    `modules/services/microvm.nix:212-213` comment: a `kvm` group member can
    write to `share/` but cannot write to `policy/` at mode `0750`.
 4. Update the user contract in `docs/manual/sandboxes.md:130-150,173-184,241-262`,
@@ -56,9 +61,9 @@ intent: intent/2026-09-30-1100-agent-microvm-egress-policy.md
    `share/allow-hosts` is ignored, and users must inspect it and copy only
    wanted entries to the new host-side location. Never migrate it
    automatically. State the declarative location under
-   `/var/lib/microvms/<name>/policy/allow-hosts`, say editing it requires
-   root, and retain the existing caveat that an allowed host remains an
-   egress route.
+   `/var/lib/microvms/<name>/policy/allow-hosts`, say an ordinary host user
+   needs root privileges to maintain it, and retain the existing caveat
+   that an allowed host remains an egress route.
 
 ## Alternatives rejected
 
@@ -84,10 +89,11 @@ intent: intent/2026-09-30-1100-agent-microvm-egress-policy.md
   allowlist file is intended. Create it in both runner paths and cover an
   existing disposable VM, not just `nixarchy vm create`.
 - A declarative machine's `microvm:kvm 0750` policy directory is host-managed;
-  its documented `root:root 0644` allowlist requires root to edit. If host
-  permissions make the file unreadable to QEMU's `microvm` user, the guest
-  must log the error and retain deny-by-default rather than silently losing
-  allowed destinations.
+  the `microvm` host user can replace a `root:root 0644` file in the directory
+  it owns. Ordinary host users need root privileges to maintain the file.
+  If host permissions make it unreadable to QEMU, the guest must log the
+  actual open/read failure and leave tinyproxy stopped rather than silently
+  losing allowed destinations.
 - The read-only guarantee relies on QEMU's 9p export implementation. A guest
   with a QEMU or kernel escape is outside this egress-policy boundary; a
   runtime guest attempt must accompany the structural check.

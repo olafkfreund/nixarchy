@@ -20,7 +20,7 @@ Do not edit `tests/options.nix` while the criticals PR owns it, and do not run `
 
 ## Tests
 
-After `.nix` edits, run `nix fmt`, inspect `git diff --stat`, then run `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .`, and `nix run nixpkgs#deadnix -- --fail .`. Use `flock /mnt/data/vmtest/codex-build.lock nix build ...` for each local build, one at a time. Never run VM checks locally.
+After `.nix` edits, run `nix fmt`, inspect `git diff --stat`, then run `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .`, and `nix run nixpkgs#deadnix -- --fail .`. Use `flock /mnt/data/vmtest/codex-build.lock nix build ...` for each local build, one at a time. Never run VM checks locally. No check may use `producer | grep -q` under `pipefail`: capture the producer's output first, then match it, so a successful match cannot turn the producer's SIGPIPE into a false failure.
 
 Prove each new assertion can fail before accepting green, using copies outside the repository under `/mnt/data/vmtest` and restoring with `cp`; never use `git checkout` to restore a break:
 

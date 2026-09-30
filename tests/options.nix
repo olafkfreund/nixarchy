@@ -2935,9 +2935,9 @@ pkgs.runCommand "nixarchy-options"
     rdpGuard = (rdpUnitOf rdpOn).ExecStartPre or "";
     rdpExecStart = (rdpUnitOf rdpOn).ExecStart;
     rdpConditionUser = rdpOn.systemd.user.services.hypr-rdp.unitConfig.ConditionUser;
-    # The template as it exists in the store -- the file a `grep -r password`
-    # over everything nixarchy generated would find.
+    # The raw secret template as it exists in the store: only a placeholder.
     rdpTemplateFile = rdpOn.sops.templates."hypr-rdp.toml".file;
+    rdpStagingPath = rdpOn.sops.templates."hypr-rdp.toml".path;
     # #623 and #630, as the activation scripts that would run on a real home.
     # Both carry store-path context -- the generated MCP configs and the
     # editor settings are derivations named inside them -- so naming them
@@ -3158,18 +3158,14 @@ pkgs.runCommand "nixarchy-options"
           esac
           echo "hypr-rdp is given a config file and never a password argument"
 
-          # 2. No cleartext in the store. The template is a store file; what
-          #    belongs in it is sops-nix's placeholder, which is replaced at
-          #    activation into /run.
-          grep -q '^password = "<SOPS:' "$rdpTemplateFile" || {
-            echo "the rendered template does not carry a sops placeholder:" >&2
-            sed 's/^password = .*/password = <REDACTED BY THIS CHECK>/' \
-              "$rdpTemplateFile" >&2
-            echo "Whatever is in the password field is in the world-readable" >&2
-            echo "Nix store." >&2
+          # 2. Only a placeholder is in the store; the raw secret is staged
+          #    under /run, then encoded into private TOML by ExecStartPre.
+          grep -Eq '^<SOPS:[^>]+>$' "$rdpTemplateFile" || {
+            echo "the RDP staging template is not a sops placeholder." >&2
+            echo "A password in that store file would be world-readable." >&2
             exit 1
           }
-          echo "the config template holds a sops placeholder, not a password"
+          echo "the secret staging template holds a placeholder, not a password"
 
           # 3. The unit belongs to one user. systemd.user.services is declared
           #    for everybody; the rendered file is 0400 to one account.
@@ -3183,47 +3179,69 @@ pkgs.runCommand "nixarchy-options"
           #    assertion cannot reach: a secret that exists and renders empty,
           #    or a template sops-nix failed to write, both evaluate fine and
           #    would otherwise start a daemon that answers.
-          guard=''${rdpGuard%% *}
+          read -r guard staged public runtime <<< "$rdpGuard"
           test -n "$guard" || {
             echo "the RDP unit has no ExecStartPre." >&2
-            echo "Nothing checks the rendered config before hypr-rdp reads it," >&2
+            echo "Nothing writes the private config before hypr-rdp reads it," >&2
             echo "and hypr-rdp itself does not check: an empty password gets a" >&2
             echo "warning in the journal and a desktop on the network." >&2
             exit 1
           }
           test -x "$guard" || { echo "no guard at $guard" >&2; exit 1; }
+          [ "$staged" = "$rdpStagingPath" ] || {
+            echo "the RDP guard does not read the rendered secret" >&2
+            exit 1
+          }
+          test -r "$public" || { echo "no public RDP config at $public" >&2; exit 1; }
+          [ "$runtime" = "%t/hypr-rdp/hypr-rdp.toml" ] || {
+            echo "the RDP guard writes an unexpected runtime path: $runtime" >&2
+            exit 1
+          }
+          case "$rdpExecStart" in
+            *"--config $runtime") ;;
+            *) echo "hypr-rdp does not read the guard's runtime config" >&2; exit 1 ;;
+          esac
 
-          good=$PWD/good.toml
-          printf 'bind = "127.0.0.1:3389"\nusername = "nixarchy"\npassword = "s3cret"\n' > "$good"
-          "$guard" "$good" || {
-            echo "the guard rejected a config that has a password." >&2
+          rendered=$PWD/rdp-rendered.toml
+          good=$PWD/good-password
+          printf 's3cret' > "$good"
+          "$guard" "$good" "$public" "$rendered" || {
+            echo "the guard rejected a nonempty password." >&2
             echo "A guard that refuses everything is a service nobody can run." >&2
             exit 1
           }
+          grep -qx 'password = "s3cret"' "$rendered" || {
+            echo "the guard did not write the password into its private config" >&2
+            exit 1
+          }
 
-          empty=$PWD/empty-password.toml
-          printf 'bind = "127.0.0.1:3389"\nusername = "nixarchy"\npassword = ""\n' > "$empty"
-          if "$guard" "$empty" 2>/dev/null; then
+          empty=$PWD/empty-password
+          : > "$empty"
+          rm -f "$rendered"
+          if "$guard" "$empty" "$public" "$rendered" 2>/dev/null; then
             echo "the guard accepted an EMPTY password." >&2
             echo "That is the exact state upstream turns into an" >&2
             echo "unauthenticated remote desktop: config.rs unwrap_or_default()" >&2
             echo "warns and serves." >&2
             exit 1
           fi
+          test ! -e "$rendered" || { echo "empty password left a runtime config" >&2; exit 1; }
 
-          nouser=$PWD/no-username.toml
-          printf 'bind = "127.0.0.1:3389"\npassword = "s3cret"\n' > "$nouser"
-          if "$guard" "$nouser" 2>/dev/null; then
+          nouser=$PWD/no-username-public.toml
+          printf 'bind = "127.0.0.1:3389"\n' > "$nouser"
+          if "$guard" "$good" "$nouser" "$rendered" 2>/dev/null; then
             echo "the guard accepted a config with no username." >&2
             exit 1
           fi
+          test ! -e "$rendered" || { echo "no username left a runtime config" >&2; exit 1; }
 
-          if "$guard" "$PWD/not-here.toml" 2>/dev/null; then
-            echo "the guard accepted a config file that does not exist." >&2
+          if "$guard" "$PWD/not-here" "$public" "$rendered" 2>/dev/null; then
+            echo "the guard accepted a password file that does not exist." >&2
             echo "An unrendered template must fail the unit, not start it." >&2
             exit 1
           fi
-          echo "the RDP unit refuses to start without a password in its config"
+          test ! -e "$rendered" || { echo "missing password left a runtime config" >&2; exit 1; }
+          echo "the RDP unit refuses missing or empty passwords and usernames"
 
           # ---- composition: the user's definition wins -------------------
           [ "$syncthingDataDir" = "/srv/sync" ] || {

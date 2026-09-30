@@ -96,10 +96,10 @@ editor. The file is plain YAML while you edit it and encrypted when you save:
 hypr-rdp-password: something-long
 ```
 
-Avoid a double quote, a backslash or a newline in the value. It is written into
-a TOML string, and one that breaks the quoting makes hypr-rdp fail to parse its
-config -- a safe failure, since it exits rather than starting, but a confusing
-way to find out.
+Double quotes and backslashes keep their literal meaning: nixarchy escapes
+them when it writes the private TOML config. Control characters, including
+newlines, are refused with a clear error before hypr-rdp starts. Non-ASCII
+control characters and invalid UTF-8 fail closed when hypr-rdp parses TOML.
 
 You need sshd enabled first, and one rebuild after it. The secret is encrypted
 to the machine's own SSH host key, and that key is generated on first boot --

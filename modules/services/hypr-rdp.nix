@@ -40,7 +40,7 @@
 #   1. bump inputs.hypr-rdp to that tag
 #   2. replace the sops.templates."hypr-rdp.toml" render with a plain config
 #      file in the store plus `password_file = <the sops secret's path>`
-#   3. delete `secretUsable`, `configPath` and the whole ExecStartPre guard
+#   3. delete `secretUsable`, `passwordPath` and the whole ExecStartPre guard
 #      below -- upstream now refuses on an empty password itself, which is what
 #      that guard exists to do
 #   4. KEEP the evaluation-time assertion. It catches "no secret named at all",
@@ -59,18 +59,18 @@
 #   at evaluation   an assertion, when no secret is named or the named secret
 #                   is not declared. Nothing builds.
 #
-#   at runtime      an ExecStartPre that reads the rendered TOML back and exits
-#                   non-zero unless it carries a non-empty username AND a
-#                   non-empty password. An assertion cannot see a secret that
-#                   exists and renders empty, or a template sops-nix failed to
-#                   write. A unit that fails loudly is the correct outcome; a
-#                   daemon that starts and answers is not.
+#   at runtime      an ExecStartPre that reads the rendered secret, refuses an
+#                   empty value, and writes a private TOML with non-empty
+#                   username and password. An assertion cannot see a secret
+#                   that exists and renders empty, or a template sops-nix
+#                   failed to write. A unit that fails loudly is the correct
+#                   outcome; a daemon that starts and answers is not.
 #
 # ## What was checked against the binary rather than assumed
 #
 #   --config <path>   EXISTS in v0.1.5 (`hypr-rdp --help`), defaulting to
 #                     ~/.config/hypr-rdp/config.toml. So the unit points at the
-#                     rendered path directly and there is no symlink to manage.
+#                     private runtime path directly; no symlink to manage.
 #                     Better still, config.rs:129-137 distinguishes the two:
 #                     a MISSING file is tolerated silently when the path is
 #                     implicit and is `bail!`ed when it was given explicitly.
@@ -108,43 +108,83 @@ let
   # gates the template so they are what the user actually sees.
   secretUsable = svc.passwordSecret != null && config.sops.secrets ? ${svc.passwordSecret};
 
-  configPath = config.sops.templates."hypr-rdp.toml".path;
+  passwordPath = config.sops.templates."hypr-rdp.toml".path;
+  runtimeConfigPath = "%t/hypr-rdp/hypr-rdp.toml";
+  publicConfig = pkgs.writeText "hypr-rdp-public.toml" (
+    lib.concatStringsSep "\n" (
+      [
+        "bind = ${builtins.toJSON svc.bind}"
+        "username = ${builtins.toJSON svc.username}"
+      ]
+      ++ lib.optional (svc.output != null) "output = ${builtins.toJSON svc.output}"
+      ++ lib.optional (svc.certFile != null) "cert = ${builtins.toJSON svc.certFile}"
+      ++ lib.optional (svc.keyFile != null) "key = ${builtins.toJSON svc.keyFile}"
+      ++ [ "" ]
+    )
+  );
 
   # The port to open, taken from `bind` rather than declared twice. Both
   # "0.0.0.0:3389" and "[::]:3389" end in the port, so the last colon-separated
   # field is the answer for either.
   port = lib.toInt (lib.last (lib.splitString ":" svc.bind));
 
-  # The runtime half of the refusal. Reads the rendered file back and requires
-  # both fields to be present and non-empty; prints nothing from the file, so a
-  # failure never puts the password in the journal.
+  # Read the raw sops-rendered password and write private TOML at runtime.
+  # Nothing prints the secret, including failures.
   guard = pkgs.writeShellApplication {
     name = "nixarchy-hypr-rdp-guard";
-    runtimeInputs = [ pkgs.gnugrep ];
+    inheritPath = false;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.diffutils
+      pkgs.gnugrep
+      pkgs.gnused
+    ];
     text = ''
-      conf="$1"
+      password_file="$1"
+      public_config="$2"
+      conf="$3"
 
-      if [ ! -r "$conf" ]; then
-        echo "hypr-rdp: $conf is missing or unreadable." >&2
+      if [ ! -r "$password_file" ]; then
+        echo "hypr-rdp: password is missing or unreadable." >&2
         echo "  The sops template did not render. Refusing to start, because" >&2
         echo "  hypr-rdp with no config serves this session unauthenticated." >&2
         exit 1
       fi
 
-      # .+ rather than .* on purpose: `password = ""` is exactly the state
-      # upstream turns into an open desktop, and it is what an empty or
-      # half-rendered secret produces.
-      if ! grep -qE '^username = ".+"$' "$conf"; then
-        echo "hypr-rdp: no username in $conf. Refusing to start." >&2
+      if [ ! -s "$password_file" ]; then
+        echo "hypr-rdp: the password is empty. Refusing to start." >&2
         exit 1
       fi
 
-      if ! grep -qE '^password = ".+"$' "$conf"; then
-        echo "hypr-rdp: the password in $conf is empty. Refusing to start." >&2
-        echo "  Check that the sops secret named by" >&2
-        echo "  programs.nixarchy.services.hypr-rdp.passwordSecret has a value." >&2
+      if ! LC_ALL=C tr -cd '[:cntrl:]' < "$password_file" | cmp -s - /dev/null; then
+        echo "hypr-rdp: the password contains a control character. Refusing to start." >&2
         exit 1
       fi
+
+      if [ ! -r "$public_config" ]; then
+        echo "hypr-rdp: the public config is missing or unreadable. Refusing to start." >&2
+        exit 1
+      fi
+
+      umask 077
+      temporary=$(mktemp "$(dirname "$conf")/.hypr-rdp.XXXXXXXX")
+      trap 'rm -f "$temporary"' EXIT
+      cat "$public_config" > "$temporary"
+      escaped=$(sed 's/[\\"]/\\&/g' "$password_file")
+      printf 'password = "%s"\n' "$escaped" >> "$temporary"
+      chmod 0400 "$temporary"
+
+      if ! grep -qE '^username = ".+"$' "$temporary"; then
+        echo "hypr-rdp: no username in the config. Refusing to start." >&2
+        exit 1
+      fi
+      if ! grep -qE '^password = ".+"$' "$temporary"; then
+        echo "hypr-rdp: no password in the config. Refusing to start." >&2
+        exit 1
+      fi
+
+      mv -f "$temporary" "$conf"
+      trap - EXIT
     '';
   };
 in
@@ -219,11 +259,9 @@ in
         session with no authentication at all. So this module renders the file
         with the secret in it, and refuses to build or to start without one.
 
-        The value must not contain a double quote, a backslash or a newline:
-        it is written into a TOML string, and a password that breaks the
-        quoting makes hypr-rdp fail to parse its config. That failure is safe
-        -- it exits rather than starting -- but it is a confusing way to find
-        out.
+        Double quotes and backslashes are escaped at runtime and keep their
+        literal meaning. Control characters, including newlines, are refused
+        with an error before hypr-rdp starts.
       '';
     };
 
@@ -373,28 +411,22 @@ in
       }
 
       (lib.mkIf secretUsable {
-        # The password goes INSIDE this file, because that is the only place
-        # hypr-rdp will read it from that is not a command line -- and
-        # /proc/*/cmdline is world-readable, so `-p` would publish it to every
-        # process on the machine. 0400 and owned by the user whose session it
-        # is; the rendered path is under /run, never the store and never git.
+        # The raw password goes into this private staging file. ExecStartPre
+        # escapes it into a private TOML file; neither path is in the store.
         #
         # WHAT TO DELETE WHEN UPSTREAM GAINS A PASSWORD FILE (#157). Asked for
         # in MuNeNiCK/hypr-rdp#80; the maintainer answered on 2026-09-02 with
         # the shape they want, so the semantics below are theirs, not a guess:
         # `--password-file` plus a `password_file` config key, conflicting with
         # the inline `password` rather than overriding it, and a hard startup
-        # failure when the named file is missing, unreadable or empty. Nothing
-        # is merged and no PR is open; the check is whether a release past
-        # v0.1.5 (the input's pin in flake.nix) has `password_file` in
-        # src/config.rs.
+        # failure when the named file is missing, unreadable or empty. Once a
+        # tagged release carries it, verify `password_file` in src/config.rs.
         #
         # When it lands: this template becomes a plain `sops.secrets.<name>`
-        # file (no rendering, no placeholder, no restart-on-change caveat), the
-        # config file becomes store-safe and can be a `writeText`, and the
-        # `password = ".+"` arm of the guard below moves to checking the secret
-        # file is non-empty. The username arm and the assertions stay -- an
-        # upstream hard failure still leaves the "no credentials at all serves
+        # file (no rendering or placeholder), and the store-safe public config
+        # gains `password_file`. The guard can go once the tagged upstream
+        # binary refuses an empty or absent password file. The assertions stay --
+        # an upstream hard failure still leaves the "no credentials at all serves
         # the desktop unauthenticated" default in place for anyone who
         # configures neither.
         sops.templates."hypr-rdp.toml" = {
@@ -409,17 +441,7 @@ in
           # units and this is a user unit, so it could only name something that
           # does not exist. After changing the password in the encrypted file,
           # `systemctl --user restart hypr-rdp` is the step.
-          content = lib.concatStringsSep "\n" (
-            [
-              ''bind = "${svc.bind}"''
-              ''username = "${svc.username}"''
-              ''password = "${config.sops.placeholder.${svc.passwordSecret}}"''
-            ]
-            ++ lib.optional (svc.output != null) ''output = "${svc.output}"''
-            ++ lib.optional (svc.certFile != null) ''cert = "${svc.certFile}"''
-            ++ lib.optional (svc.keyFile != null) ''key = "${svc.keyFile}"''
-            ++ [ "" ]
-          );
+          content = config.sops.placeholder.${svc.passwordSecret};
         };
 
         systemd.user.services.hypr-rdp = {
@@ -452,11 +474,13 @@ in
 
           serviceConfig = {
             Type = "simple";
+            RuntimeDirectory = "hypr-rdp";
+            RuntimeDirectoryMode = "0700";
 
             # The runtime refusal. Upstream will not do it: given an empty
             # password it warns and serves. This exits non-zero and systemd
             # never reaches ExecStart.
-            ExecStartPre = "${guard}/bin/nixarchy-hypr-rdp-guard ${configPath}";
+            ExecStartPre = "${guard}/bin/nixarchy-hypr-rdp-guard ${passwordPath} ${publicConfig} ${runtimeConfigPath}";
 
             # --config, not a symlink into ~/.config/hypr-rdp: the flag exists
             # in v0.1.5, and naming the path explicitly also turns a missing
@@ -464,7 +488,7 @@ in
             # distinguishes the implicit and explicit cases). The certificates
             # still land in ~/.config/hypr-rdp, which is upstream's and stays
             # writable.
-            ExecStart = "${svc.package}/bin/hypr-rdp --config ${configPath}";
+            ExecStart = "${svc.package}/bin/hypr-rdp --config ${runtimeConfigPath}";
 
             Restart = "on-failure";
             # If the guard is the thing failing, nothing here will fix itself,

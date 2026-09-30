@@ -1800,6 +1800,9 @@
             # own comment. This forces the drvPath, which is where the throw
             # lives, so it costs an evaluation rather than a VM.
             "hypr-rdp-builds"
+            # The module's guard renders a private TOML file from the sops
+            # secret. Parse that file, not the template's source (#1087).
+            "hypr-rdp-toml"
             "initrd-pin-guard"
             "install"
             # The same question with encrypt=yes -- the DEFAULT interactive

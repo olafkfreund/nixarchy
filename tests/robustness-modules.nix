@@ -1,6 +1,6 @@
 { pkgs }:
 let
-  lib = pkgs.lib;
+  inherit (pkgs) lib;
   eval =
     settings:
     (lib.evalModules {
@@ -29,85 +29,89 @@ let
               );
               default = { };
             };
-            services.syncthing = {
-              enable = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
+            services = {
+              syncthing = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                };
+                user = lib.mkOption {
+                  type = lib.types.str;
+                  default = "syncthing";
+                };
+                dataDir = lib.mkOption {
+                  type = lib.types.str;
+                  default = "/var/lib/syncthing";
+                };
+                configDir = lib.mkOption {
+                  type = lib.types.str;
+                  default = "/var/lib/syncthing/.config";
+                };
+                overrideFolders = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
+                };
+                overrideDevices = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
+                };
               };
-              user = lib.mkOption {
-                type = lib.types.str;
-                default = "syncthing";
+              ollama = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                };
+                host = lib.mkOption {
+                  type = lib.types.str;
+                  default = "127.0.0.1";
+                };
+                port = lib.mkOption {
+                  type = lib.types.int;
+                  default = 11434;
+                };
               };
-              dataDir = lib.mkOption {
-                type = lib.types.str;
-                default = "/var/lib/syncthing";
+              open-webui = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                };
+                openFirewall = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                };
+                port = lib.mkOption {
+                  type = lib.types.int;
+                  default = 8080;
+                };
+                environment = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.str;
+                  default = { };
+                };
               };
-              configDir = lib.mkOption {
-                type = lib.types.str;
-                default = "/var/lib/syncthing/.config";
-              };
-              overrideFolders = lib.mkOption {
-                type = lib.types.bool;
-                default = true;
-              };
-              overrideDevices = lib.mkOption {
-                type = lib.types.bool;
-                default = true;
+              flatpak = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                };
+                remotes = lib.mkOption {
+                  type = lib.types.listOf lib.types.anything;
+                  default = [ ];
+                };
+                packages = lib.mkOption {
+                  type = lib.types.listOf lib.types.anything;
+                  default = [ ];
+                };
               };
             };
-            services.ollama = {
-              enable = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
-              };
-              host = lib.mkOption {
-                type = lib.types.str;
-                default = "127.0.0.1";
-              };
-              port = lib.mkOption {
-                type = lib.types.int;
-                default = 11434;
-              };
-            };
-            services.open-webui = {
-              enable = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
-              };
-              openFirewall = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
-              };
-              port = lib.mkOption {
-                type = lib.types.int;
-                default = 8080;
-              };
-              environment = lib.mkOption {
-                type = lib.types.attrsOf lib.types.str;
-                default = { };
-              };
-            };
-            services.flatpak = {
-              enable = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
-              };
-              remotes = lib.mkOption {
-                type = lib.types.listOf lib.types.anything;
+            networking.firewall = {
+              allowedTCPPorts = lib.mkOption {
+                type = lib.types.listOf lib.types.int;
                 default = [ ];
               };
-              packages = lib.mkOption {
-                type = lib.types.listOf lib.types.anything;
+              allowedUDPPorts = lib.mkOption {
+                type = lib.types.listOf lib.types.int;
                 default = [ ];
               };
-            };
-            networking.firewall.allowedTCPPorts = lib.mkOption {
-              type = lib.types.listOf lib.types.int;
-              default = [ ];
-            };
-            networking.firewall.allowedUDPPorts = lib.mkOption {
-              type = lib.types.listOf lib.types.int;
-              default = [ ];
             };
             assertions = lib.mkOption {
               type = lib.types.listOf lib.types.anything;

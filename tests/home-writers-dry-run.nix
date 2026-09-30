@@ -1,6 +1,5 @@
 { inputs, pkgs }:
 let
-  lib = pkgs.lib;
   home =
     (inputs.home-manager.lib.homeManagerConfiguration {
       inherit pkgs;
@@ -20,9 +19,11 @@ let
       modules = [
         inputs.self.homeManagerModules.nixarchy
         {
-          home.username = "tester";
-          home.homeDirectory = "/build/home";
-          home.stateVersion = "25.05";
+          home = {
+            username = "tester";
+            homeDirectory = "/build/home";
+            stateVersion = "25.05";
+          };
           programs.nixarchy.enable = true;
         }
       ];

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1089
 author: olafkfreund
 ---
@@ -70,13 +70,11 @@ The installer may refuse hardware whose disks do not expose a stable identity.
 
 ## Open questions
 
-1. Should the remaining #1098 validation findings be a separate installer
-   follow-up? **Recommend yes:** they concern network and answer parsing or
-   hardware generation, rather than the disk-identity and format boundary.
-   Keep the LUKS-file finding here because it is in `format_disk`.
-2. What if a chosen disk exposes neither serial nor WWN? **Recommend fail
-   closed** before writing, with a message to choose a disk whose identity can
-   be checked. A size or `/dev` path cannot prove it is the same device.
-3. When re-verifying a corrupt cached ISO, should `#try` delete it and
-   download it again automatically? **Recommend delete and redownload**, then
-   verify the replacement; refuse if the checksum or download is unavailable.
+1. The owner put the remaining #1098 validation findings in a separate
+   follow-up. Only its LUKS-key finding belongs in this issue, because it is
+   in `format_disk`.
+2. The owner decided that a disk with neither serial nor WWN must be refused
+   before any write, with a message to choose a disk whose identity can be
+   checked. A size or `/dev` path is not a substitute.
+3. The owner decided that a corrupt cached ISO is deleted, downloaded again,
+   and re-verified. If the checksum or download is unavailable, refuse to boot.

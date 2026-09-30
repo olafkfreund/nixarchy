@@ -48,6 +48,20 @@ QEMU `readOnly` and the guest `ro` option were removed, and green after
 restoration. The one timed run checks the guest's write refusal with
 permissive host file modes.
 
+*Deviation (implementation, Step 1):* Refuse either allowlist source when
+the source file itself is a symlink before opening it; a symlink inside the
+real `policy/` could otherwise resolve into the writable share. The
+built-unit check asserts this guard and is break-proven by removing it.
+
+*Deviation (implementation, Steps 1, 2, and 4):* The guest oneshot only
+tests the existence of old `/mnt/host/allow-hosts` and warns that it is
+ignored; `exec_vm` prints the same review-and-copy guidance to the caller
+without reading or migrating that file. Give the migration an explicit
+“Upgrading from before #1100” section in the manual.
+
+*Deviation (implementation, Step 1):* Update the allowlist unit description
+to name the policy share. It still described the old host-directory share.
+
 ## Steps
 
 1. `modules/microvm/templates/agent.nix:39-54,108-163` and

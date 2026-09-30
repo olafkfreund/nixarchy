@@ -122,7 +122,7 @@ in
   users.users.dev.extraGroups = lib.mkForce [ ];
 
   systemd.services.nixarchy-agent-allowlist = {
-    description = "Build this guest's egress allowlist from the host directory share";
+    description = "Build this guest's egress allowlist from the host policy share";
     wantedBy = [ "multi-user.target" ];
     # Ordered and required, both: tinyproxy reads its filter file once, at
     # start, so a tinyproxy that came up first would be running an allowlist
@@ -149,6 +149,10 @@ in
       # /mnt/agent-policy/allow-hosts only ever adds. This template writes no such
       # file, so for `agent` the behaviour is unchanged.
       for src in /etc/nixarchy-agent/allow-hosts /mnt/agent-policy/allow-hosts; do
+        if [ -L "$src" ]; then
+          echo "allow-hosts: refusing symlink $src" >&2
+          exit 1
+        fi
         [ -e "$src" ] || continue
         content=$(${pkgs.coreutils}/bin/cat "$src") || {
           echo "allow-hosts: cannot read $src" >&2
@@ -175,6 +179,9 @@ in
           printf '^(.*\.)?%s$\n' "$(printf '%s' "$host" | sed 's/\./\\./g')" >> ${filterFile}
         done <<< "$content"
       done
+      if [ -e /mnt/host/allow-hosts ]; then
+        echo "allow-hosts: ignoring legacy /mnt/host/allow-hosts; copy reviewed entries to <vm dir>/policy/allow-hosts on the host" >&2
+      fi
       chmod 0444 ${filterFile}
     '';
   };

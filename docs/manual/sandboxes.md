@@ -250,18 +250,25 @@ deliberately never `nix run`, which registers no root at all: a
 `nix-collect-garbage` while a guest is running would take the store it is
 9p-mounted on out from under it.
 
-**Upgrading from before #1076.** Guests used to see this whole directory,
+### Upgrading from before #1076
+
+Guests used to see this whole directory,
 `current` included. That was a way from a guest to your host, as you or as
 root. They now see `share/` only. Nothing was moved or deleted: files a
 guest wrote before are still one level up, and the guest no longer sees
-them. Move work files into `share/`. An `agent` VM with no policy file
-reaches nothing beyond any closure-side defaults. Declarative machines use
-`/var/lib/microvms/<name>/policy/allow-hosts`; ordinary host users need root
-to maintain it. An old `share/allow-hosts` is ignored: inspect it and copy
-only the entries you still want into `policy/allow-hosts`. It is never copied
-automatically because the guest could have edited it. Recreate any VM that ran untrusted code
+them. Move work files into `share/`. Recreate any VM that ran untrusted code
 before this change: it could already have replaced `current` or planted a
 symlink somewhere in its directory, and neither is undone by upgrading.
+
+### Upgrading from before #1100
+
+An old `share/allow-hosts` is ignored. Inspect it and copy only the entries
+you still want into `policy/allow-hosts` on the host; the command and guest
+journal warn if the old file exists. It is never copied automatically because
+the guest could have edited it. An `agent` VM with no policy file reaches
+nothing beyond any closure-side defaults. Declarative machines use
+`/var/lib/microvms/<name>/policy/allow-hosts`; ordinary host users need root
+to maintain it.
 
 The consequence worth knowing: a template dropped from a later release of
 this flake keeps running here, for any VM that already built its `current`

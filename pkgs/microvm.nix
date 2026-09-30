@@ -341,6 +341,9 @@ writeShellApplication {
             exit 1
           fi
           mkdir -p "$dir/policy"
+          if [ -e "$dir/share/allow-hosts" ]; then
+            echo "nixarchy-vm: ignoring legacy '$dir/share/allow-hosts'; copy reviewed entries to '$dir/policy/allow-hosts' on the host." >&2
+          fi
           # #1076: rm first -- a previous guest could have planted
           # share/hostname as a symlink (no security_model on the 9p share),
           # and we hold the flock here, so there is no race to overwrite it.

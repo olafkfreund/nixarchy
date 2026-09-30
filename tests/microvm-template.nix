@@ -259,7 +259,15 @@ pkgs.runCommand "nixarchy-microvm-template"
             echo "${name}: allowlist does not read the protected policy path" >&2
             fail=1
           fi
-          if grep -qF '/mnt/host/allow-hosts' "$policyScript"; then
+          if ! grep -qF 'if [ -L "$src" ]; then' "$policyScript" || ! grep -qF 'allow-hosts: refusing symlink $src' "$policyScript"; then
+            echo "${name}: allowlist does not refuse symlinked source files" >&2
+            fail=1
+          fi
+          if ! grep -qF 'if [ -e /mnt/host/allow-hosts ]; then' "$policyScript" || ! grep -qF 'ignoring legacy /mnt/host/allow-hosts' "$policyScript"; then
+            echo "${name}: allowlist does not warn that the legacy list is ignored" >&2
+            fail=1
+          fi
+          if grep -qF 'cat /mnt/host/allow-hosts' "$policyScript" || grep -qF 'for src in /etc/nixarchy-agent/allow-hosts /mnt/host/allow-hosts' "$policyScript"; then
             echo "${name}: allowlist still reads the guest-writable path" >&2
             fail=1
           fi
@@ -468,6 +476,10 @@ pkgs.runCommand "nixarchy-microvm-template"
     fi
     if ! cmp -s legacy-allow-hosts.copy "$sandbox_dir/share/allow-hosts"; then
       echo "run changed the legacy guest-writable allow-hosts" >&2
+      fail=1
+    fi
+    if ! grep -qF "ignoring legacy '$sandbox_dir/share/allow-hosts'" run1.log; then
+      echo "run did not tell the user to review the ignored legacy allow-hosts" >&2
       fail=1
     fi
 

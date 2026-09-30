@@ -3340,6 +3340,8 @@ in
                 pkgs.coreutils
                 pkgs.diffutils
                 pkgs.gnugrep
+                pkgs.git
+                pkgs.gnused
                 # nh rather than nixos-rebuild: a progress view that says what is
                 # building and how far along it is, and a package diff against the
                 # running generation once it lands. Both matter more here than

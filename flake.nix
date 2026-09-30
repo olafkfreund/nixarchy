@@ -588,6 +588,7 @@
             gnugrep
             gawk
             coreutils
+            xdg-utils
             # Why: docs/internals/flake.md#vainfo-for-the-graphics-section
             libva-utils
             # For reading the machine's flake.lock, which is JSON. Reaching for

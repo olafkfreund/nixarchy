@@ -828,8 +828,10 @@ say "\n\033[1mDone.\033[0m Your configuration has a history and a copy that is n
 say "on this disk."
 say "\nFrom here on, after you change something:"
 say "\n    \033[1mcd $FLAKE\033[0m"
-say "    \033[1msudo git add -A && sudo git commit -m 'what changed'\033[0m"
-say "    \033[1msudo git push\033[0m"
+git_hint=git
+[[ -w $FLAKE/.git ]] || git_hint='sudo git'
+say "    \033[1m$git_hint add -A && $git_hint commit -m 'what changed'\033[0m"
+say "    \033[1m$git_hint push\033[0m"
 say "\nOr run \033[1mSystem > Back up configuration\033[0m from the menu, which does"
 say "the same three and scans for secrets on the way past. Nixarchy will also"
 say "offer once the changes here have been sitting unpushed for a while."

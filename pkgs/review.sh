@@ -559,7 +559,7 @@ ci release.yml 8760 ok
 # by commit rather than by run, because a commit that started no run at all --
 # a merge pushed by GITHUB_TOKEN, #671 -- is the case a run list cannot show.
 main_install_runs() {
-  local commits runs sha id status
+  local commits runs sha id status jobs
   commits=$(gh api "repos/{owner}/{repo}/commits?sha=main&per_page=30" --jq '.[].sha') || return 1
   runs=$(gh run list --workflow install-check.yml --branch main --limit 100 \
     --json databaseId,headSha,status --jq '.[] | "\(.headSha)\t\(.databaseId)\t\(.status)"') || return 1
@@ -570,11 +570,14 @@ main_install_runs() {
     fi
     grep "^$sha	" <<<"$runs" | while IFS=$'\t' read -r _ id status; do
       # shellcheck disable=SC2016  # jq, not shell: nothing in it expands
-      gh api "repos/{owner}/{repo}/actions/runs/$id/jobs" --jq '
+      jobs=$(gh api "repos/{owner}/{repo}/actions/runs/$id/jobs" --jq '
         [.jobs[] | select(.name == "install")][0] as $j
         | [ ($j.steps // [])[] | select(.name == "Nothing here can affect an install") ][0].conclusion as $g
-        | "\($g // "null")\t\($j.conclusion // "null")"' |
-        sed "s/^/$sha	$status	/"
+        | "\($g // "null")\t\($j.conclusion // "null")"') || {
+        printf '%s\terror\terror\terror\n' "$sha"
+        continue
+      }
+      printf '%s\t%s\t%s\n' "$sha" "$status" "$jobs"
     done
   done
 }

@@ -237,7 +237,7 @@ pkgs.runCommand "nixarchy-apply-staging"
         *" -p SubState "*)
           printf 'SubState=%s\n' "''${UNIT_STATE:-}"
           printf 'Result=%s\n' "''${UNIT_RESULT:-}"
-          printf 'ExecMainStatus=%s\n' "''${UNIT_CODE:-0}"
+          printf 'ExecMainStatus=%s\n' "''${UNIT_CODE-0}"
           printf 'ExecMainExitTimestampMonotonic=%s\n' "''${UNIT_FINISHED:-0}"
           case " $* " in *" -p InvocationID "*) printf 'InvocationID=%s\n' "''${UNIT_INVOCATION:-}" ;; esac
           ;;
@@ -281,6 +281,29 @@ pkgs.runCommand "nixarchy-apply-staging"
     says '{"state":"failed","exit":3}'    exited  exit-code 3 "a unit that failed AFTER activating keeps nh's exit code"
     says '{"state":"failed","exit":1}'    failed  exit-code 1 "a failed unit reads as failed"
     says '{"state":"idle","exit":0}'      ""      ""        0 "no unit at all reads as idle"
+
+    numeric_exit() {
+      local got=$1 state=$2 exit_code=$3 label=$4
+      if jq -e --arg st "$state" --argjson code "$exit_code" \
+        '.state == $st and .exit == $code and (.exit | type) == "number"' <<< "$got" >/dev/null; then
+        ok "$label"
+      else
+        bad "$label: $got"
+      fi
+    }
+    for malformed in "" abc true 03; do
+      for unit_state in running exited; do
+        result=exit-code expected_state=failed expected_exit=1
+        if [ "$unit_state" = running ]; then result=success expected_state=running expected_exit=0; fi
+        if [ "$unit_state" = exited ] && [ "$malformed" = 03 ]; then expected_exit=3; fi
+        apply_json=$(UNIT_STATE="$unit_state" UNIT_RESULT="$result" UNIT_CODE="$malformed" $apply --status --json 2>/dev/null) || apply_json=invalid
+        panel_json=$(UNIT_STATE="$unit_state" UNIT_RESULT="$result" UNIT_CODE="$malformed" $state) || panel_json=invalid
+        numeric_exit "$apply_json" "$expected_state" "$expected_exit" "apply JSON normalises '$malformed' in $unit_state"
+        numeric_exit "$panel_json" "$expected_state" "$expected_exit" "panel JSON normalises '$malformed' in $unit_state"
+      done
+    done
+    numeric_exit "$(UNIT_STATE=exited UNIT_RESULT=exit-code UNIT_CODE=3 $apply --status --json)" failed 3 "apply JSON keeps valid exit 3"
+    numeric_exit "$(UNIT_STATE=exited UNIT_RESULT=exit-code UNIT_CODE=3 $state)" failed 3 "panel JSON keeps valid exit 3"
 
     # ---- which run a settled result describes (#919) -----------------------
     # The bar keeps a successful rebuild visible until it is acknowledged, and

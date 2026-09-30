@@ -3456,6 +3456,14 @@ in
                 # Queries act and exit: they are not an apply.
                 if [ -n "$status" ]; then
                   IFS=$'\t' read -r st res code inv < <(rebuild_state)
+                  if [ "$st" != failed ]; then
+                    code=0
+                  else
+                    case "$code" in
+                      "" | *[!0-9]*) code=1 ;;
+                      *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
+                    esac
+                  fi
                   if [ -n "$json" ]; then
                     # jq, not printf: --json is the CONTRACT half of this
                     # output (nixarchy-flatsnap parses it), and a contract that
@@ -3463,7 +3471,7 @@ in
                     # with a quote in it is not one. `exit` stays a number and
                     # `invocation` stays null-or-string.
                     jq -cn --arg state "$st" --arg result "$res" \
-                      --argjson exit "''${code:-0}" \
+                      --argjson exit "$code" \
                       --arg inv "$inv" \
                       '{state: $state, result: $result, exit: $exit,
                         invocation: (if $inv == "" then null else $inv end)}'
@@ -3841,6 +3849,7 @@ in
                 sub=$(get SubState)
                 result=$(get Result)
                 code=$(get ExecMainStatus)
+                raw_code=$code
                 [ -n "$code" ] || code=0
 
                 # SubState, not ActiveState, for the reason nixarchy-apply gives
@@ -3862,7 +3871,14 @@ in
 
                 # exit is meaningless unless it failed; say 0 rather than leave
                 # the key out, so the panel never has to test for absence.
-                [ "$state" = failed ] || code=0
+                if [ "$state" = failed ]; then
+                  case "$raw_code" in
+                    "" | *[!0-9]*) code=1 ;;
+                    *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
+                  esac
+                else
+                  code=0
+                fi
 
                 # When it finished, so a settled result can say WHICH run it is
                 # describing (#919). The unit stays loaded across a reboot --

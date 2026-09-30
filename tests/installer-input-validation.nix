@@ -23,6 +23,7 @@ pkgs.runCommand "nixarchy-installer-input-validation"
 
     cat > exercise.sh <<'EOF'
     set -uo pipefail
+    script=${renderedInstallScript}
     . ./functions.sh
     failures=0
     ok() { echo "ok $1"; }

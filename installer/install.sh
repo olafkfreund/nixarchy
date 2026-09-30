@@ -357,6 +357,16 @@ wifi_block() {
   esac
 }
 
+wifi_networks() {
+  nmcli -t -e no -f SIGNAL,SECURITY,SSID device wifi list --rescan yes 2>/dev/null |
+    awk -F: 'NF >= 3 {
+      ssid = substr($0, length($1) + length($2) + 3)
+      if (ssid != "" && !seen[ssid]++)
+        printf "%s\t%s%%\t%s\n", ssid, $1, ($2 == "" ? "open" : $2)
+    }' |
+    sort -t"$(printf '\t')" -k2 -rn
+}
+
 connect_wifi() {
   ui_screen "Let's get you on Wi-Fi..."
   nmcli radio wifi on >/dev/null 2>&1 || true
@@ -387,9 +397,7 @@ connect_wifi() {
   # one network on three access points is three rows otherwise, and picking
   # the wrong row of an identical three is a confusing way to fail.
   local list ssid pw
-  list=$(nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan yes 2>/dev/null |
-    awk -F: 'NF && $1 != "" && !seen[$1]++ { printf "%s\t%s%%\t%s\n", $1, $2, ($3 == "" ? "open" : $3) }' |
-    sort -t"$(printf '\t')" -k2 -rn)
+  list=$(wifi_networks)
 
   if [ -z "$list" ]; then
     ui_left "\e[31mNo networks found.\e[0m"

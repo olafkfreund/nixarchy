@@ -101,7 +101,12 @@ pkgs.testers.runNixOSTest {
         useEFIBoot = true;
         # 32 GiB: a smaller disk is refused by the size floor (#708) before the
         # substituter probe this node exists to reach.
-        emptyDiskImages = [ 32768 ];
+        emptyDiskImages = [
+          {
+            size = 32768;
+            driveConfig.deviceExtraOpts.serial = "nixarchy-refusal-target";
+          }
+        ];
       };
     };
 
@@ -131,7 +136,12 @@ pkgs.testers.runNixOSTest {
           keymap=us
         '';
       };
-      virtualisation.emptyDiskImages = [ 32768 ];
+      virtualisation.emptyDiskImages = [
+        {
+          size = 32768;
+          driveConfig.deviceExtraOpts.serial = "nixarchy-bios-refusal-target";
+        }
+      ];
     };
 
   testScript = ''

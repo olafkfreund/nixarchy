@@ -461,7 +461,12 @@ pkgs.testers.runNixOSTest {
         useEFIBoot = true;
         # The blank target, which appears as /dev/vdb.
         # 32 GiB, the smallest disk nixarchy supports (#708): test what is promised.
-        emptyDiskImages = [ 32768 ];
+        emptyDiskImages = [
+          {
+            size = 32768;
+            driveConfig.deviceExtraOpts.serial = "nixarchy-install-target";
+          }
+        ];
         # nixos-install copies the whole closure into the target, and the
         # default 1 GB store overlay is nowhere near enough.
         diskSize = 32768;

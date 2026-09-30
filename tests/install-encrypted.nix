@@ -349,7 +349,12 @@ pkgs.testers.runNixOSTest {
         cores = 4;
         useEFIBoot = true;
         # 32 GiB, the smallest disk nixarchy supports (#708): test what is promised.
-        emptyDiskImages = [ 32768 ];
+        emptyDiskImages = [
+          {
+            size = 32768;
+            driveConfig.deviceExtraOpts.serial = "nixarchy-encrypted-target";
+          }
+        ];
         diskSize = 32768;
       };
     };

@@ -354,7 +354,8 @@ def main():
         "-drive", f"file={disk},if=none,format=qcow2,id=target",
         "-device", "nvme,drive=target,serial=nixarchytest",
     ] if NVME else [
-        "-drive", f"file={disk},if=virtio,format=qcow2",
+        "-drive", f"file={disk},if=none,format=qcow2,id=target",
+        "-device", "virtio-blk-pci,drive=target,serial=nixarchytest",
     ]) + [
     ] + ([] if answers is None else [
         "-drive", f"file={answers},if=virtio,format=raw",

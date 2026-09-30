@@ -158,7 +158,8 @@ run_vm() {
     -m "$MEM_MB" -smp "$CPUS"
     -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE"
     -drive "if=pflash,format=raw,file=$WORK/OVMF_VARS.fd"
-    -drive "file=$DISK,if=virtio,format=qcow2"
+    -drive "file=$DISK,if=none,id=target,format=qcow2"
+    -device "virtio-blk-pci,drive=target,serial=nixarchy-try-no-nix"
     -netdev "user,id=n0" -device "virtio-net-pci,netdev=n0"
     -device virtio-vga -device qemu-xhci -device usb-tablet
     -name "nixarchy"

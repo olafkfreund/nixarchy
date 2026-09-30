@@ -179,6 +179,35 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   [ "$(plan_unpacked_mb '(1.87 GiB download, 5.61 GiB unpacked)')" -ge 5744 ] \
     && ok "unpacked GiB parses into MB" || no "unpacked GiB parses into MB"
 
+  # The real main path, ending at a QEMU argv stub rather than a VM.
+  printf '#!/bin/sh\nprintf "%%s\\n" "$@" > qemu-args\n' > qemu-stub
+  chmod +x qemu-stub
+  QEMU=$PWD/qemu-stub QEMU_IMG=$(command -v true)
+  OVMF_VARS=$PWD/ovmf-vars
+  : > "$OVMF_VARS"
+  : > "$DISK"
+  detect_kvm() { echo none; }
+  check_ram() { :; }
+  check_disk() { :; }
+  ( main --boot --vnc ) >main.out 2>&1
+  grep -Fx 'virtio-blk-pci,drive=hd0,serial=nixarchy-try-target,bootindex=0' qemu-args >/dev/null \
+    && ok "--boot passes the target serial to QEMU" || no "--boot lost the target serial"
+
+  rm -f "$DISK" "$VARS"
+  mkdir -p fixture/iso
+  : > fixture/iso/test.iso
+  resolve_ref() { echo fixture; }
+  classify_plan() { echo ready; }
+  nix() {
+    case " $* " in
+      *' --dry-run '*) : ;;
+      *) echo "$PWD/fixture" ;;
+    esac
+  }
+  ( main --vnc ) >main.out 2>&1
+  grep -Fx 'virtio-blk-pci,drive=hd0,serial=nixarchy-try-target,bootindex=1' qemu-args >/dev/null \
+    && ok "install passes the target serial to QEMU" || no "install lost the target serial"
+
   exit $fails
   EOF
   echo "--- probe functions, against a stubbed environment"

@@ -536,12 +536,13 @@ main() {
     -drive "if=pflash,format=raw,file=$VARS"
     -drive "id=hd0,if=none,format=qcow2,file=$DISK"
   )
+  local target_device="virtio-blk-pci,drive=hd0,serial=nixarchy-try-target"
   if [ "$boot" = 1 ]; then
-    drive_args+=(-device "virtio-blk-pci,drive=hd0,bootindex=0")
+    drive_args+=(-device "$target_device,bootindex=0")
     say "booting the system installed on $DISK"
   else
     drive_args+=(
-      -device "virtio-blk-pci,drive=hd0,bootindex=1"
+      -device "$target_device,bootindex=1"
       -device "virtio-scsi-pci,id=scsi0"
       -drive "id=cd0,if=none,media=cdrom,readonly=on,format=raw,file=$iso"
       -device "scsi-cd,bus=scsi0.0,drive=cd0,bootindex=0"

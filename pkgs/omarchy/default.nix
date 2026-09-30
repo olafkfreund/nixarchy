@@ -55,6 +55,7 @@
   # provides `wpctl`
   playerctl,
   bluez,
+  bluez-tools,
   # provides `bluetoothctl`
   networkmanager,
   # provides `nmcli`
@@ -229,6 +230,7 @@ let
     wireplumber
     playerctl
     bluez
+    bluez-tools
     networkmanager
     fastfetch
     nh
@@ -721,6 +723,11 @@ stdenvNoCC.mkDerivation {
                 substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
                   --replace-fail '/usr/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp' \
                   '/run/current-system/sw/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp'
+
+                pairCommand=$out/share/omarchy/bin/omarchy-bluetooth-device
+                pairLine='    timeout 20s bluetoothctl pair "$address" >/dev/null 2>&1 || true'
+                pairBranch=$(cat ${./bluetooth-pair-branch.sh})
+                substituteInPlace "$pairCommand" --replace-fail "$pairLine" "$pairBranch"
 
                 # "Restart to finish the update" was going to be the answer every time.
                 #

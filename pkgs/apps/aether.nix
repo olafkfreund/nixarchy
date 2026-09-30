@@ -17,13 +17,13 @@
 }:
 let
   pname = "aether";
-  version = "4.30.0";
+  version = "4.31.1";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "aether";
     tag = "v${version}";
-    hash = "sha256-GUtcotwMc5ZZnw+ky5BfSWsIQZFJfZovFG15OFGqqXM=";
+    hash = "sha256-ZOFHeAUJrohcTtqaBNXnuqA19Cx+i6+k6clM+Cpx9X0=";
   };
 
   # The Svelte frontend, built on its own and handed to the Go build finished.
@@ -46,7 +46,7 @@ let
     inherit version;
     src = "${src}/frontend";
 
-    npmDepsHash = "sha256-5c4xSQaZQX/KQV28jKo2MnCRze10IEAnfr1Sg+o3V0s=";
+    npmDepsHash = "sha256-pKMbskfU6w1PO9eQvffoBk8HMmvrpkLZ3l6p6Y/czgU=";
 
     # `npm run build` writes dist/, which is what wails embeds.
     installPhase = ''
@@ -188,6 +188,11 @@ buildGoModule {
     })
   ];
 
+  # nix-update only rewrites hashes it can reach as attributes: without this,
+  # the frontend's npmDepsHash stayed at the old version's and the bump failed
+  # the moment upstream's lockfile moved (4.31.1).
+  passthru.frontend = frontend;
+
   passthru.updateScript = writeShellApplication {
     name = "update-aether";
     runtimeInputs = [ nix-update ];
@@ -206,7 +211,7 @@ buildGoModule {
     # missing file rather than about where it was started.
     text = ''
       [ -f flake.nix ] || { echo "aether: run from the repo root" >&2; exit 1; }
-      nix-update --flake aether
+      nix-update --flake aether --subpackage frontend
     '';
   };
 

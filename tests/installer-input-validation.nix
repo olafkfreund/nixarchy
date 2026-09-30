@@ -33,6 +33,7 @@ pkgs.runCommand "nixarchy-installer-input-validation"
 
     RESERVED_USERS=''${RESERVED_USERS:-}
     accept 'normal reference username' validate_username omarchy
+    accept 'hyphen and digit username' validate_username dev-1
     refuse 'evaluated messagebus account' validate_username messagebus
     refuse 'extra daemon account' validate_username daemon
     accept '32-byte username' validate_username "$(printf 'a%.0s' {1..32})"

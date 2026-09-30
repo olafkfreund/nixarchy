@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1087
 spec: spec/2026-09-30-1087-hypr-rdp-password-toml.md
 ---

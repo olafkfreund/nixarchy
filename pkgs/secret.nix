@@ -71,6 +71,23 @@ let
         echo "  the machine's own SSH host key and with nothing else." >&2
         exit 1
       fi
+      if [ "''${1:-}" = edit ]; then
+        editor=''${SOPS_EDITOR:-''${EDITOR:-}}
+        if [ -z "$editor" ]; then
+          for candidate in vim nano vi; do
+            if command -v "$candidate" >/dev/null; then
+              editor="$candidate"
+              break
+            fi
+          done
+        fi
+        if [ -z "$editor" ]; then
+          echo "nixarchy secret: no editor found (set SOPS_EDITOR or EDITOR)." >&2
+          exit 1
+        fi
+        SOPS_EDITOR="env -u SOPS_AGE_KEY $editor"
+        export SOPS_EDITOR
+      fi
       # Command substitution inside a process that is already root. The value
       # is exported to the one child and to nothing else.
       SOPS_AGE_KEY=$(ssh-to-age -private-key -i "$key")
@@ -327,10 +344,18 @@ writeShellApplication {
         return 0
       fi
 
-      if grep -q "hosts/$HOST/secrets" "$POLICY"; then
-        ok "$POLICY already covers this host"
-        return 0
-      fi
+      local rc=0
+      "$POLICY_ADD" --check "$POLICY" "$HOST" "$recipient" || rc=$?
+      case "$rc" in
+        2) ok "$POLICY already covers this host"; return 0 ;;
+        3)
+          fail "$POLICY has a different recipient for hosts/$HOST/secrets.yaml."
+          say "  Correct that rule and rekey any existing secrets.yaml before retrying."
+          return 1
+          ;;
+        4) ;;
+        *) fail "could not check $POLICY."; return 1 ;;
+      esac
 
       fail "$POLICY exists and has no rule for hosts/$HOST/secrets.yaml."
       say  ""
@@ -509,8 +534,12 @@ writeShellApplication {
         return 0
       fi
 
+      if [ ! -d "$FLAKE/hosts/$HOST" ]; then
+        fail "$FLAKE has no hosts/$HOST directory for system secrets."
+        say "  Migrate a flat flake, or add this host to its per-host layout first."
+        return 1
+      fi
       require_host_key || return 1
-      sudo mkdir -p "$FLAKE/hosts/$HOST"
       ensure_policy || return 1
 
       step "Opening $SYS_STORE"
@@ -518,7 +547,7 @@ writeShellApplication {
       say  ""
       say  "    ''${bold}$name: your-value''${off}"
       say  ""
-      sudo --preserve-env=EDITOR "$HOST_SOPS" edit "$SYS_STORE"
+      sudo --preserve-env=EDITOR,SOPS_EDITOR "$HOST_SOPS" edit "$SYS_STORE"
 
       # The one step this command deliberately does not take for you, and
       # exactly where it has to go. See rule 1 in this file's header.
@@ -555,7 +584,7 @@ writeShellApplication {
         fail "no system secrets yet. Make one: nixarchy secret new <name>"
         return 1
       }
-      sudo --preserve-env=EDITOR "$HOST_SOPS" edit "$SYS_STORE"
+      sudo --preserve-env=EDITOR,SOPS_EDITOR "$HOST_SOPS" edit "$SYS_STORE"
     }
 
     do_remove() {

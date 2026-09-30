@@ -2168,6 +2168,11 @@
             pkgs = pkgsFor.${system};
             policyAdd = self.packages.${system}.nixarchy-sops-policy-add;
           };
+          secret-new = import ./tests/secret-new.nix {
+            pkgs = pkgsFor.${system};
+            secret = self.packages.${system}.nixarchy-secret;
+            policyAdd = self.packages.${system}.nixarchy-sops-policy-add;
+          };
 
           # The QML injected into upstream's Quickshell tree is copied, never
           # compiled, so a syntax error ships as a bar element that silently is

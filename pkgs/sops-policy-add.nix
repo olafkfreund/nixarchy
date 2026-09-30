@@ -1,4 +1,4 @@
-# Adds one host's creation rule to an existing .sops.yaml, and nothing else.
+# Checks or adds one host's creation rule in an existing .sops.yaml.
 #
 # Its own package for the reason pkgs/ai-mirror-mcp-remove.nix is: the check
 # has to run THIS code against fixtures rather than a copy of it. `nixarchy
@@ -18,8 +18,8 @@
 # that pair is left exactly as it is -- rewriting it would be churn in a file
 # whose parse decides whether anything on any machine decrypts. Anchors are
 # the part of YAML that round-trips worst, so hosts added here do not gain
-# one. yq resolves an alias when reading, so the already-present check below
-# sees the first host's real recipient either way.
+# one. `explode(.)` resolves aliases in the query below, so it sees the first
+# host's real recipient rather than the literal `*host` text.
 #
 # Exit codes, because the caller prints the prose:
 #
@@ -29,7 +29,9 @@
 #       leave two rules claiming one path, and sops takes the first -- so the
 #       machine would encrypt to a key it cannot read back. Reported, never
 #       guessed at. The realistic cause is a reinstall that kept the hostname.
+#   4   --check found no exact rule for this host; no policy write
 #   1   anything else
+# `--check` is read-only; without it, a missing rule is appended.
 {
   writeShellApplication,
   yq-go,
@@ -42,8 +44,13 @@ writeShellApplication {
     coreutils
   ];
   text = ''
+    check=false
+    if [ "''${1:-}" = --check ]; then
+      check=true
+      shift
+    fi
     if [ "$#" -ne 3 ]; then
-      echo "usage: nixarchy-sops-policy-add <policy> <host> <recipient>" >&2
+      echo "usage: nixarchy-sops-policy-add [--check] <policy> <host> <recipient>" >&2
       exit 1
     fi
 
@@ -63,10 +70,10 @@ writeShellApplication {
     # Read the file rather than remember having run. A second run has to know
     # it is a second run from the policy itself.
     existing=$(RULE="$rule" yq -r \
-      '.creation_rules[]? | select(.path_regex == strenv(RULE)) | .key_groups[0].age[0] // ""' \
-      "$policy" 2>/dev/null | head -1)
+      '(explode(.) | [.creation_rules[]? | select(.path_regex == strenv(RULE))] | .[0].key_groups[0].age[0]) // "__NO_RULE__"' \
+      "$policy")
 
-    if [ -n "$existing" ]; then
+    if [ "$existing" != __NO_RULE__ ]; then
       if [ "$existing" = "$recipient" ]; then
         echo "already: $host is in $policy with this recipient"
         exit 2
@@ -75,6 +82,11 @@ writeShellApplication {
       echo "  in the policy  $existing" >&2
       echo "  this machine   $recipient" >&2
       exit 3
+    fi
+
+    if "$check"; then
+      echo "missing: $policy has no rule for $host" >&2
+      exit 4
     fi
 
     RECIPIENT="$recipient" RULE="$rule" yq -i \

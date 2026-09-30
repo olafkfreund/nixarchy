@@ -11,6 +11,8 @@ pkgs.runCommand "nixarchy-secret-new"
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.gnused
+      pkgs.openssh
+      pkgs.ssh-to-age
     ];
     inherit secret policyAdd;
   }
@@ -18,16 +20,25 @@ pkgs.runCommand "nixarchy-secret-new"
     set -o pipefail
     export HOME="$TMPDIR/home" XDG_DATA_HOME="$TMPDIR/data"
     mkdir -p "$HOME" "$XDG_DATA_HOME" "$TMPDIR/flat"
-    cli="$secret/bin/nixarchy-secret"
+    ssh-keygen -q -t ed25519 -N "" -f "$TMPDIR/host_key"
+    cp "$secret/bin/nixarchy-secret" "$TMPDIR/cli"
+    sed -i "s|HOST_KEY=/etc/ssh/ssh_host_ed25519_key|HOST_KEY=$TMPDIR/host_key|" "$TMPDIR/cli"
+    cli="$TMPDIR/cli"
     add="$policyAdd/bin/nixarchy-sops-policy-add"
+    mkdir -p "$TMPDIR/stub"
+    printf '%s\n' '#!/bin/sh' \
+      '[ "$1" = mkdir ] || exit 1' \
+      'shift' 'exec mkdir "$@"' > "$TMPDIR/stub/sudo"
+    chmod +x "$TMPDIR/stub/sudo"
+    export PATH="$TMPDIR/stub:$PATH"
 
     echo '== flat layout: refuse before any write'
     rc=0
     NIXARCHY_FLAKE="$TMPDIR/flat" "$cli" new demo > flat-output 2>&1 || rc=$?
     [ "$rc" -ne 0 ] || { echo 'FAIL: new accepted a flat flake'; exit 1; }
-    grep -q 'Migrate the flake' flat-output || { echo 'FAIL: migration guidance missing'; exit 1; }
     [ ! -e "$TMPDIR/flat/hosts" ] && [ ! -e "$TMPDIR/flat/.sops.yaml" ] || {
       echo 'FAIL: new modified a flat flake'; exit 1; }
+    grep -q 'Migrate a flat flake' flat-output || { echo 'FAIL: migration guidance missing'; exit 1; }
     echo '  ok: no host directory or policy created'
 
     echo '== user secrets remain independent of the flat guard'
@@ -88,34 +99,45 @@ pkgs.runCommand "nixarchy-secret-new"
     host_sops=$(sed -n 's/^HOST_SOPS=//p' "$cli")
     [ -n "$host_sops" ] && [ -f "$host_sops" ] || {
       echo 'FAIL: built CLI has no root-side SOPS wrapper'; exit 1; }
-    grep -Fq 'SOPS_EDITOR="env -u SOPS_AGE_KEY $editor"' "$host_sops" || {
-      echo 'FAIL: root-side SOPS wrapper does not scrub the editor'; exit 1; }
-    grep -Fq 'SOPS_EDITOR:-' "$host_sops" && grep -Fq 'EDITOR:-' "$host_sops" || {
-      echo 'FAIL: SOPS_EDITOR/EDITOR preference is missing'; exit 1; }
+    cp "$host_sops" "$TMPDIR/host-wrapper"
+    sed -i "s|key=/etc/ssh/ssh_host_ed25519_key|key=$TMPDIR/host_key|" "$TMPDIR/host-wrapper"
+    grep -Fq "key=$TMPDIR/host_key" "$TMPDIR/host-wrapper" || {
+      echo 'FAIL: fixture did not replace the root key path'; exit 1; }
     printf '%s\n' '#!/bin/sh' \
       '[ "$1" = --flag ] || exit 2' \
       '[ -z "''${SOPS_AGE_KEY+x}" ] || { echo "FAIL: editor inherited host key" >&2; exit 3; }' \
       'if grep -q "^edited:" "$2"; then' \
-      '  sed -i "s/^edited:.*/edited: 2/" "$2"' \
+      '  sed -i "s/^edited:.*/edited: $CASE/" "$2"' \
       'else' \
-      '  printf "%s\\n" "edited: 1" >> "$2"' \
+      '  printf "edited: %s\\n" "$CASE" >> "$2"' \
       'fi' > editor
     chmod +x editor
+    printf '%s\n' '#!/bin/sh' 'exit 9' > wrong-editor
+    chmod +x wrong-editor
+    printf '%s\n' '#!/bin/sh' 'exec "$TMPDIR/editor" --flag "$1"' > "$TMPDIR/stub/vi"
+    chmod +x "$TMPDIR/stub/vi"
     mkdir -p hosts/alpha
-    policy "$A"
+    policy "$(ssh-to-age -i "$TMPDIR/host_key.pub")"
     printf '%s\n' 'entry: old' > hosts/alpha/secrets.yaml
-    SOPS_AGE_KEY_FILE=alpha.key sops -e -i hosts/alpha/secrets.yaml
-    key=$(grep '^AGE-SECRET-KEY-' alpha.key)
-    SOPS_AGE_KEY="$key" SOPS_EDITOR="env -u SOPS_AGE_KEY $TMPDIR/editor --flag" \
-      sops edit hosts/alpha/secrets.yaml
-    SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml | grep -q '^edited: 1$' || {
-      echo 'FAIL: SOPS could not decrypt and save through SOPS_EDITOR'; exit 1; }
-    SOPS_AGE_KEY="$key" EDITOR="$TMPDIR/editor --flag" \
-      SOPS_EDITOR="env -u SOPS_AGE_KEY $TMPDIR/editor --flag" \
-      sops edit hosts/alpha/secrets.yaml
-    SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml | grep -q '^edited: 2$' || {
-      echo 'FAIL: SOPS could not decrypt and save through EDITOR'; exit 1; }
-    echo '  ok: SOPS saved, editor received no key'
+    sops -e -i hosts/alpha/secrets.yaml
+    key=$(ssh-to-age -private-key -i "$TMPDIR/host_key")
+    check_edit() {
+      SOPS_AGE_KEY="$key" sops -d hosts/alpha/secrets.yaml | grep -q "^edited: $1$" || {
+        echo "FAIL: built wrapper did not save editor case $1"; exit 1; }
+    }
+    env -u EDITOR CASE=1 SOPS_EDITOR="$TMPDIR/editor --flag" \
+      timeout 20s "$TMPDIR/host-wrapper" edit hosts/alpha/secrets.yaml
+    check_edit 1
+    env -u SOPS_EDITOR CASE=2 EDITOR="$TMPDIR/editor --flag" \
+      timeout 20s "$TMPDIR/host-wrapper" edit hosts/alpha/secrets.yaml
+    check_edit 2
+    CASE=3 SOPS_EDITOR="$TMPDIR/editor --flag" EDITOR="$TMPDIR/wrong-editor" \
+      timeout 20s "$TMPDIR/host-wrapper" edit hosts/alpha/secrets.yaml
+    check_edit 3
+    env -u SOPS_EDITOR -u EDITOR CASE=4 \
+      timeout 20s "$TMPDIR/host-wrapper" edit hosts/alpha/secrets.yaml
+    check_edit 4
+    echo '  ok: SOPS_EDITOR, EDITOR, precedence, and vi fallback; no editor received the key'
 
     touch "$out"
   ''

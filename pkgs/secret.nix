@@ -535,8 +535,8 @@ writeShellApplication {
       fi
 
       if [ ! -d "$FLAKE/hosts/$HOST" ]; then
-        fail "this flake uses the older flat layout; system secrets need hosts/$HOST."
-        say "  Migrate the flake to a per-host layout before using nixarchy secret new."
+        fail "$FLAKE has no hosts/$HOST directory for system secrets."
+        say "  Migrate a flat flake, or add this host to its per-host layout first."
         return 1
       fi
       require_host_key || return 1

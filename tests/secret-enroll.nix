@@ -60,6 +60,11 @@ pkgs.runCommand "nixarchy-secret-enroll"
     printf '%s\n' 'hypr-rdp-password: alpha-only' > hosts/alpha/secrets.yaml
     SOPS_AGE_KEY_FILE=alpha.key sops -e -i hosts/alpha/secrets.yaml
 
+    echo "== an anchored first-host rule is already enrolled"
+    rc=0; "$add" .sops.yaml alpha "$A" || rc=$?
+    [ "$rc" = 2 ] || {
+      echo "FAIL: the anchored first host returned $rc instead of already (2)"; exit 1; }
+
     echo "== self-test: with no rule, beta must NOT be able to encrypt"
     printf '%s\n' 'hypr-rdp-password: beta-only' > hosts/beta/secrets.yaml
     if SOPS_AGE_KEY_FILE=beta.key sops -e -i hosts/beta/secrets.yaml 2>/dev/null; then

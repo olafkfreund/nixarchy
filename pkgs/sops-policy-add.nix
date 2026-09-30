@@ -1,4 +1,4 @@
-# Adds one host's creation rule to an existing .sops.yaml, and nothing else.
+# Checks or adds one host's creation rule in an existing .sops.yaml.
 #
 # Its own package for the reason pkgs/ai-mirror-mcp-remove.nix is: the check
 # has to run THIS code against fixtures rather than a copy of it. `nixarchy
@@ -29,7 +29,9 @@
 #       leave two rules claiming one path, and sops takes the first -- so the
 #       machine would encrypt to a key it cannot read back. Reported, never
 #       guessed at. The realistic cause is a reinstall that kept the hostname.
+#   4   --check found no exact rule for this host; no policy write
 #   1   anything else
+# `--check` is read-only; without it, a missing rule is appended.
 {
   writeShellApplication,
   yq-go,

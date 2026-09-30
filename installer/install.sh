@@ -1671,7 +1671,8 @@ check_free_partitions() {
     real=$(readlink -f "$part") || return 1
     parent=$(lsblk -nro PKNAME "$real" 2>/dev/null) || return 1
     if [ -z "$parent" ] || [ "$(readlink -f "/dev/$parent")" != "$selected" ]; then
-      echo "nixarchy-install: $part does not belong to the selected disk. Nothing further was formatted." >&2
+      echo "nixarchy-install: $part does not belong to the selected disk." >&2
+      echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
       return 1
     fi
   done

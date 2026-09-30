@@ -33,6 +33,7 @@ pkgs.runCommand "nixarchy-apply-staging"
     nativeBuildInputs = [
       pkgs.git
       pkgs.nix
+      pkgs.jq
     ];
   }
   ''
@@ -245,6 +246,17 @@ pkgs.runCommand "nixarchy-apply-staging"
       esac
     }
     export -f systemctl
+
+    rm -f "$PWD/property-pwned"
+    hostile='$(touch property-pwned)'
+    hostile_json=$(UNIT_STATE=exited UNIT_RESULT="$hostile" UNIT_CODE=3 $apply --status --json)
+    if [ ! -e "$PWD/property-pwned" ] &&
+       [ "$(printf '%s' "$hostile_json" | jq -r '.result')" = "$hostile" ] &&
+       [ "$(printf '%s' "$hostile_json" | jq -r '.state')" = failed ]; then
+      ok "systemd properties remain data and cannot run shell commands"
+    else
+      bad "systemd property executed shell syntax or changed status: $hostile_json"
+    fi
 
     # One field out of the JSON, by name. The panel reads it with JSON.parse;
     # this only has to be able to tell the fields apart.

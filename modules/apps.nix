@@ -3418,9 +3418,16 @@ in
                 # answers "succeeded" for a rebuild that never happened, which
                 # is the one wrong answer that matters.
                 rebuild_state() {
-                  local sub res code inv
-                  eval "$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null |
-                    sed -n 's/^SubState=/sub=/p; s/^Result=/res=/p; s/^ExecMainStatus=/code=/p; s/^InvocationID=/inv=/p')"
+                  local sub res code inv key value props
+                  props=$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null) || true
+                  while IFS='=' read -r key value; do
+                    case "$key" in
+                      SubState) sub=$value ;;
+                      Result) res=$value ;;
+                      ExecMainStatus) code=$value ;;
+                      InvocationID) inv=$value ;;
+                    esac
+                  done <<< "$props"
                   sub=''${sub:-} res=''${res:-} code=''${code:-} inv=''${inv:-}
                   # `dead` is NONE whether or not an InvocationID survives it
                   # (#986 item 3). A unit left over from an earlier session --

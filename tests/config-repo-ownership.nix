@@ -49,7 +49,10 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
 
     setup github github.com
     export SUDO_MODE=deny
-    run_case || fail "writable GitHub fixture failed: $(cat "$root/output")"
+    if ! run_case; then
+      test ! -s "$SUDO_LOG" || fail "sudo used for writable flake: $(cat "$SUDO_LOG")"
+      fail "writable GitHub fixture failed: $(cat "$root/output")"
+    fi
     test ! -s "$SUDO_LOG" || fail "sudo used for writable flake: $(cat "$SUDO_LOG")"
     test -f "$NIXARCHY_FLAKE/.gitignore" || fail "GitHub .gitignore missing"
     test -f "$NIXARCHY_FLAKE/.github/workflows/check.yml" || fail "GitHub CI file missing"

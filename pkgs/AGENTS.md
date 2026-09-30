@@ -205,9 +205,10 @@ guessed):** `shell call` exits 0 far more often than it fails. It answers the
 string `"unknown"`, still exit 0, when the target plugin has no such method --
 which is the stock menu's state, since only nixarchy-menu defines `dismiss()` --
 and `"error"`, also exit 0, when the method throws.
-It exits 1 (or times out) only on an IPC-level failure: no connection, no
-reply, or qs's own `Target not found.` / `Function not found.` literals for
-the **IPC handler's** functions, never the plugin's. So the patch matches the
+Raw `qs ipc` exits 0 for its `Target not found.` / `Function not found.`
+literals for the **IPC handler's** functions, never the plugin's; the
+`omarchy-shell` wrapper turns those replies into exit 1. A connection failure
+or timeout is nonzero from `qs` itself. So the patch matches the
 **reply**, not the exit status: a `call … || hide` fallback would never fire
 for the cases it needs to catch (`unknown` from the stock menu, `error` from a
 throwing `dismiss()`, both with a perfectly good exit 0).
@@ -786,4 +787,3 @@ The guard is a FILE, not an inline block: this phase was
 1,910 bytes from MAX_ARG_STRLEN when #948 first tried it
 inline, and the build failed with "Argument list too
 long" naming nothing (#997). A path costs ~60 bytes.
-

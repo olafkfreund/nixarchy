@@ -23,9 +23,9 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       'printf "%s\n" "$*" >> "$SUDO_LOG"' \
       '[[ $SUDO_MODE == allow ]] || exit 99' \
-      'chmod u+w "$NIXARCHY_FLAKE"' \
+      'chmod u+w "$NIXARCHY_FLAKE" "$NIXARCHY_FLAKE/.git"' \
       '"$@"; status=$?' \
-      'chmod a-w "$NIXARCHY_FLAKE"' \
+      'chmod a-w "$NIXARCHY_FLAKE" "$NIXARCHY_FLAKE/.git"' \
       'exit "$status"' > "$bin/sudo"
     chmod +x "$bin"/*
     export PATH="$bin:$PATH"
@@ -60,6 +60,11 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
     test "$(stat -c %u "$NIXARCHY_FLAKE/.github/workflows")" = "$(id -u)" || fail "GitHub CI parent has wrong owner"
     test "$(stat -c %u "$NIXARCHY_FLAKE/.github/workflows/check.yml")" = "$(id -u)" || fail "GitHub CI file has wrong owner"
     grep -qF 'nix flake check --all-systems --no-build' "$NIXARCHY_FLAKE/.github/workflows/check.yml" || fail "GitHub CI content changed"
+    sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g' "$root/output" > "$root/plain"
+    grep -Fxq "    git add -A && git commit -m 'what changed'" "$root/plain" || fail "writable hint did not show plain git add/commit"
+    grep -Fxq '    git push' "$root/plain" || fail "writable hint did not show plain git push"
+    if grep -Fq 'sudo git' "$root/plain"; then fail "writable hint suggested sudo git"; fi
+    echo "config repo suggests plain git for writable metadata"
     echo "config repo writes GitHub files without sudo"
 
     setup gitlab gitlab.com
@@ -82,11 +87,15 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
 
     setup legacy gitlab.com
     export SUDO_MODE=allow
-    chmod a-w "$NIXARCHY_FLAKE"
+    chmod a-w "$NIXARCHY_FLAKE" "$NIXARCHY_FLAKE/.git"
     run_case || fail "unwritable legacy fixture failed: $(cat "$root/output")"
     test -s "$SUDO_LOG" || fail "legacy flake did not request sudo"
     test -f "$NIXARCHY_FLAKE/.gitignore" || fail "legacy .gitignore missing"
     test -f "$NIXARCHY_FLAKE/.gitlab-ci.yml" || fail "legacy CI file missing"
+    sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g' "$root/output" > "$root/plain"
+    grep -Fxq "    sudo git add -A && sudo git commit -m 'what changed'" "$root/plain" || fail "legacy hint did not show sudo git add/commit"
+    grep -Fxq '    sudo git push' "$root/plain" || fail "legacy hint did not show sudo git push"
+    echo "config repo suggests sudo git for legacy metadata"
     echo "config repo elevates only for an unwritable legacy flake"
 
     setup mixed github.com

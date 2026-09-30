@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1076
 spec: spec/2026-09-30-1076-codereview-criticals.md
 ---

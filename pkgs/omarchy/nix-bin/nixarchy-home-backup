@@ -435,7 +435,7 @@ if [[ $mode == restore ]]; then
       [[ -n $entry ]] || continue
       if ! grep -qxF -- "$entry" <<< "$local_list"; then
         [[ $extra == true ]] || say "  The backup lists additional paths:"
-        say "    $entry"
+        printf '    %s\n' "$(printf '%s' "$entry" | LC_ALL=C tr -d '[:cntrl:]')"
         extra=true
       fi
     done <<< "$repo_entries"

@@ -18,6 +18,8 @@ The approved design limits restore to the shipped allowlist plus the installed u
 
 *Deviation (implementation)* — Review E: normalize a trailing slash on `$HOME` before the destination parent walk. Expand the check with the review's source-path, unsafe-entry, count, existing-mode, and local-list cases; prove source-path and list-restoration breaks red.
 
+*Deviation (implementation)* — Re-review: repository-only list entries are untrusted terminal output; strip control bytes with `tr` and print through `printf`, with an ESC/OSC 52 negative control in the restore check.
+
 ## Steps
 
 1. `pkgs/omarchy/nix-bin/nixarchy-home-backup:111-119,241-261`: let the existing allowlist walker inspect a chosen root while always reading the installed user's local list; reject absolute and `..` entries for restore, preserve prefix exclusions, and snapshot the repository's eligible regular files before writes -> verify by the new restore check's extra-file, excluded-file, and two-run custom-list cases. Traps: a repo-supplied `backup.list` must never broaden the first run; do not turn backup creation into a whole-home walk.

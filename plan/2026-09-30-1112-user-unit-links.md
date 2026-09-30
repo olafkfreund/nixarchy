@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1112
 spec: spec/2026-09-30-1112-user-unit-links.md
 ---

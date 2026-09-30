@@ -56,7 +56,7 @@ pkgs.runCommand "nixarchy-shell-ipc-resolve"
       'printf "%s\\n" "$*" >> "$QS_ARGV"' \
       'if [ "$1" = list ]; then printf "%s" "$QS_LISTING"; exit 0; fi' \
       'case "$*" in' \
-      '  *__nixarchy_probe*) exit "''${QS_PROBE:-1}" ;;' \
+      '  *__nixarchy_probe*) [[ -z ''${QS_PROBE_SLEEP:-} ]] || sleep "$QS_PROBE_SLEEP"; exit "''${QS_PROBE:-1}" ;;' \
       'esac' \
       'echo ok' \
       'exit "''${QS_CALL_RC:-0}"' > stub/qs
@@ -104,6 +104,13 @@ pkgs.runCommand "nixarchy-shell-ipc-resolve"
     out_bad=$(QS_ARGV=$PWD/argv.bad QS_PROBE=1 QS_LISTING="something else entirely" bash "$shell" shell toggle x '{}' 2>&1 || true)
     grep -qi "cannot read qs list" <<<"$out_bad" || fail "an unreadable qs listing was not refused"
 
+    # 6. A stalled probe must time out before the outer guard and try -i.
+    export QS_ARGV=$PWD/argv.slow QS_PROBE=1 QS_LISTING=$listing_one QS_PROBE_SLEEP=10
+    : > "$QS_ARGV"
+    timeout --kill-after=1s 5s env OMARCHY_SHELL_IPC_TIMEOUT=0.2s \
+      bash "$shell" shell toggle some.plugin '{}' > slow.out 2>&1 || fail "slow probe exceeded the outer timeout"
+    grep -q -- '-i aaa111' "$QS_ARGV" || fail "slow probe did not fall back to the running instance"
+
     mkdir -p $out
-    echo "shell ipc resolve: 5 cases, all asserted"
+    echo "shell ipc resolve: 6 cases, including bounded slow probe"
   ''

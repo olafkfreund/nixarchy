@@ -1166,6 +1166,12 @@ in
     (lib.mkIf cfg.enable (
       lib.mkMerge [
         appModuleConfig
+        (lib.mkIf cfg.apps.retroarch.enable {
+          environment.pathsToLink = [
+            "/share/retroarch/cores"
+            "/share/libretro"
+          ];
+        })
         {
           # What OMARCHY_PATH resolves to on this machine. modules/home.nix reads
           # it across from here for the same reason it reads localAi.resolved:
@@ -3905,7 +3911,15 @@ in
             })
 
           ]
-          ++ appPackages;
+          ++ appPackages
+          ++ lib.optionals cfg.apps.retroarch.enable (
+            with pkgs;
+            [
+              libretro-core-info
+              libretro-shaders-slang
+              retroarch-joypad-autoconfig
+            ]
+          );
         }
       ]
     ))

@@ -546,6 +546,11 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   nix() { [ "$1" = eval ] && { echo true; return; }; echo "$PWD/fake-disko-bad"; }
   t refuse "keyed disko failure removes the key"
   [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED disko failure left a key'; fails=$((fails+1)); }
+  nix() { [ "$1" = eval ] && { echo true; return; }; echo "$PWD/fake-disko-key"; }
+  printf() { command printf half; return 1; }
+  t refuse "partial key write fails closed"
+  unset -f printf
+  [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED partial key write left a file'; fails=$((fails+1)); }
   exit $fails
   EOF
   bash fdt.sh
@@ -690,15 +695,12 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   # ------------------------------------------------------------------------
   sed -n '/^partition_free_space()/,/^}/p' ${installScript} > pfs.sh
   test -s pfs.sh || { echo "partition_free_space is not in install.sh any more" >&2; exit 1; }
-  grep -Fxq '  wipefs -a "$esp_dev" "$root_dev"' pfs.sh || {
-    echo "FAILED wipefs must be the checked final partition command" >&2
-    exit 1
-  }
   cat > pfst.sh <<'EOF'
   device=/dev/vdz free_start=2048 free_end=20000000 free_why=""
   encrypt=false FREE_ESP_MIB=2048
   . ./pfs.sh
   free_space_possible() { return 0; }
+  check_disks() { return 0; }
   blockdev() { echo 512; }
   partx() { :; }
   udevadm() { :; }

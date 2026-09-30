@@ -1985,6 +1985,11 @@
             installScript = ./installer/install.sh;
           };
 
+          installer-layout-eval = import ./tests/installer-layout-eval.nix {
+            pkgs = pkgsFor.${system};
+            inherit self;
+          };
+
           # Why: tests/installer-offline-rescue.nix
           installer-offline-rescue = import ./tests/installer-offline-rescue.nix {
             pkgs = pkgsFor.${system};

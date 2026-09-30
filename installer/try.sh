@@ -241,7 +241,7 @@ fetch_release() {
   iso_name=${base%.part-*}
   mkdir -p "$CACHE_DIR"
   sums=$(mktemp)
-  if ! curl -fsSL "$sums_url" -o "$sums"; then
+  if ! curl --proto '=https' --proto-redir '=https' -fsSL "$sums_url" -o "$sums"; then
     rm -f "$sums"
     say "could not download fresh SHA256SUMS; no image can be trusted."
     return 1
@@ -278,7 +278,7 @@ fetch_release() {
   rm -f "$tmp"
   while IFS= read -r u; do
     say "  fetching $(basename "$u") ..."
-    if ! curl -fL --progress-bar "$u" >>"$tmp"; then
+    if ! curl --proto '=https' --proto-redir '=https' -fL --progress-bar "$u" >>"$tmp"; then
       rm -f "$tmp"
       say "download failed partway; the partial file was deleted. Check the"
       say "  connection and run it again."

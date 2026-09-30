@@ -158,6 +158,7 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   check_disk() { :; }
   curl() {
     local url= out= next=false arg
+    printf '%s\n' "$*" >> curl-args
     for arg in "$@"; do
       if [ "$next" = true ]; then out=$arg; next=false; continue; fi
       case "$arg" in -o) next=true ;; https://*) url=$arg ;; esac
@@ -178,6 +179,11 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   if path=$(fetch_release iso 2>msg) && cmp -s complete.iso "$path"; then
     ok "corrupt cache is deleted and replaced with verified bytes"
   else no "corrupt cache is deleted and replaced with verified bytes"; fi
+  grep -F 'SHA256SUMS' curl-args > checksum-curl
+  grep -F '.part-aa' curl-args > iso-curl
+  grep -Fq -- "--proto =https --proto-redir =https" checksum-curl \
+    && grep -Fq -- "--proto =https --proto-redir =https" iso-curl \
+    && ok "checksum and ISO redirects stay on HTTPS" || no "checksum or ISO fetch permits HTTP"
   printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
   cp fresh-sums "$CACHE_DIR/SHA256SUMS"
   FAIL_SUMS=true

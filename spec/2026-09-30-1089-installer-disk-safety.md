@@ -6,14 +6,24 @@ intent: intent/2026-09-30-1089-installer-disk-safety.md
 
 # Spec: Verify disk identity and cached images at use
 
+**Owner revision at implementation review.** A disk lacking both WWN and
+serial is refused by default. `--allow-unidentified-disk` or
+`allow_unidentified_disk=yes` in answers permits it with a visible warning;
+the installer pins its resolved path, byte size, and model, and checks all
+three at each destructive boundary. The refusal explains that virt-manager,
+GNOME Boxes, and Proxmox virtio disks may need a serial configured or this
+explicit override. This fallback cannot detect same-path replacements with
+the same size and model. The recursive disko scan skips `_` keys and
+derivations, and is checked against both evaluated reference systems.
+
 ## Design
 
 1. **Disk identity.** `installer/install.sh:774-808` retains the physical
    identity of the disk chosen by the wizard; `:1215-1284` does so for an
    answers-file disk immediately after validation. Read both WWN and serial
    from `lsblk` for the resolved whole device. Keep every nonempty identifier
-   and require at least one. If both are absent, refuse with a message to
-   choose a disk whose identity can be checked. For a repository-defined
+   and require at least one by default. If both are absent, refuse with a
+   message that names the explicit fallback override. For a repository-defined
    machine, `confirm_repo_disks` (`:1440-1471`) records the same identity for
    every disk it evaluates, while still showing the disks to the user and
    refusing the boot medium. An answers file remains its existing consent.
@@ -111,9 +121,9 @@ intent: intent/2026-09-30-1089-installer-disk-safety.md
 - Trusting `/dev/sdX`, matching disk size, or only repeating the free-space
   measurement: each can still describe a different physical disk after a
   device change.
-- Proceeding when both WWN and serial are absent: the owner chose to fail
-  closed before writes; the installer cannot establish the chosen disk's
-  identity.
+- Proceeding automatically when both WWN and serial are absent: the owner
+  requires an explicit override because path/size/model is weaker than a
+  hardware identifier.
 - Checking identity only before preflight: a long preflight or disko build
   leaves a window in which the target can change.
 - Trusting the by-partlabel symlinks without checking their parent disk: a
@@ -132,8 +142,9 @@ intent: intent/2026-09-30-1089-installer-disk-safety.md
 
 ## Risks
 
-- Some USB devices may expose neither WWN nor serial. The deliberate refusal
-  needs a clear message. All positive VM installer targets must carry the
+- Some USB devices may expose neither WWN nor serial. The default refusal
+  needs a clear override message. The fallback can miss a same-size/model
+  replacement at the same path. All positive VM installer targets carry the
   fixed serials above; otherwise they fail at this new guard before their
   intended assertions.
 - A serial or WWN check narrows the device-swap window but cannot make a

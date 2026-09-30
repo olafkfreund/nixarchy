@@ -6,9 +6,25 @@ spec: spec/2026-09-30-1089-installer-disk-safety.md
 
 # Plan: Verify installer disks and cached images at use
 
+**Owner revision at implementation review.** Refuse disks without WWN and
+serial by default; accept only `--allow-unidentified-disk` or answers
+`allow_unidentified_disk=yes` with a clear warning and frozen resolved path,
+byte size, and model. Explain how virt-manager, GNOME Boxes, and Proxmox
+virtio users can add a serial or use the override. The fallback has weaker
+same-size/model replacement detection. Prove the default refusal, override,
+and path/size/model changes red and green.
+
+*Deviation (implementation):* Review fixes add behavioral checks for the
+wizard, answers, retry, free-space writes, and repository disks; the former
+source-only assertions were insufficient. The free-space disk check moves
+directly before the first `sgdisk`; the LUKS scan avoids derived/internal
+nodes and receives real flake evaluation proofs. A failed key write removes
+the partial file, and release asset downloads require HTTPS redirects.
+
 The installer must preserve the identity of every disk the user chose or
 accepted, then compare it just before each destructive stage. A disk with
-neither WWN nor serial is refused. Free-space partition labels must resolve
+neither WWN nor serial is refused unless the explicit weaker fallback is
+chosen. Free-space partition labels must resolve
 back to that disk before `wipefs` and disko. A retry never resets the original
 fingerprint. Phase guards return failure to the installer's existing failure
 screen. The passphrase file exists only if the **evaluated disko layout** has
@@ -77,7 +93,8 @@ observed during this run, not an earlier one.
    record both nonempty WWN and serial for the resolved whole disk at wizard
    selection or after answers validation, and for **every** evaluated
    repository-defined disk during `confirm_repo_disks`. Refuse when neither
-   exists, with an actionable message. Keep the recorded identities fixed
+   exists by default, with an actionable override message; explicit fallback
+   records path/size/model. Keep the recorded identities fixed
    through `install_attempts` retries. Compare resolved paths and the recorded
    identifiers before the first destructive action and again after the disko
    build, immediately before disko execution. A missing, unreadable, or

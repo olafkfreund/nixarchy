@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1070
 spec: spec/2026-09-29-1070-menumodel-path.md
 ---

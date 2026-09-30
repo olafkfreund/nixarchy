@@ -8,6 +8,16 @@ spec: spec/2026-09-30-1080-home-backup-restore.md
 
 The approved design limits restore to the shipped allowlist plus the installed user's local `backup.list`. The repository cannot authorize its own files. Snapshot eligible files before copying: a newly restored `backup.list` takes effect only on a second run, which the command explains. Refuse unsafe relative paths, destination symlinks and symlinked parent directories; `--force` does not bypass that refusal. Preserve existing files before replacing them, preserve executable mode, leave unrelated home files alone, and report any failed copy as an error with accurate counts.
 
+*Deviation (implementation)* — Owner review supersedes the two-run design: never restore the repository's `backup.list`; keep the local list byte-identical, list repository-only entries, and require the user to add wanted entries locally before rerunning.
+
+*Deviation (implementation)* — Review A: walk with NUL-delimited `find` output, reject newline names and noncanonical local entries that could alias `backup.list`, and verify every emitted path remains below its allowlist entry.
+
+*Deviation (implementation)* — Review B: refuse symlink components from the backup repository to each source, including an explicitly listed directory with a trailing slash; use `find -P`.
+
+*Deviation (implementation)* — Review D: capture the allowlist walk before copying and abort on its error; make `find` failures observable rather than hiding them in process substitution.
+
+*Deviation (implementation)* — Review E: normalize a trailing slash on `$HOME` before the destination parent walk. Expand the check with the review's source-path, unsafe-entry, count, existing-mode, and local-list cases; prove source-path and list-restoration breaks red.
+
 ## Steps
 
 1. `pkgs/omarchy/nix-bin/nixarchy-home-backup:111-119,241-261`: let the existing allowlist walker inspect a chosen root while always reading the installed user's local list; reject absolute and `..` entries for restore, preserve prefix exclusions, and snapshot the repository's eligible regular files before writes -> verify by the new restore check's extra-file, excluded-file, and two-run custom-list cases. Traps: a repo-supplied `backup.list` must never broaden the first run; do not turn backup creation into a whole-home walk.

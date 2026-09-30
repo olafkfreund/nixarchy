@@ -8,6 +8,8 @@ intent: intent/2026-09-30-1080-home-backup-restore.md
 
 ## Design
 
+**Owner review decision (supersedes the two-run design below):** Never restore the repository's `backup.list`; keep the local list byte-identical, print repository-only entries, and tell the user to add wanted paths to local `~/.config/omarchy/backup.list` before rerunning.
+
 In `pkgs/omarchy/nix-bin/nixarchy-home-backup:111-119`, `resolved_list` already combines the shipped list with the installed user's local `backup.list`; it never needs to read the repository's copy. Reuse that same include and exclude policy for restore, walking regular files under the backup repository instead of the live home. Snapshot the resulting file list before copying anything, so restoring `backup.list` cannot authorize more files midway through the first run. On a fresh machine its new entries authorize custom files only on a second run. Tell the user to rerun when the list was restored. Reject absolute and `..` paths before a restore can use them.
 
 Replace the unrestricted repository walk at `pkgs/omarchy/nix-bin/nixarchy-home-backup:352`. A repository file outside the local allowlist must never reach the copy loop. Preserve exclusions, including clipboard history, and the current per-file behavior that leaves unrelated home files alone. The ownership gate at `:193` still applies before restore.

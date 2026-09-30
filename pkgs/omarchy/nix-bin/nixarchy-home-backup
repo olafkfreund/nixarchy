@@ -32,6 +32,8 @@ set -uo pipefail
 FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
 REPO=${NIXARCHY_HOME_BACKUP_REPO:-$HOME/.local/share/nixarchy/home-backup}
 USER_LIST=$HOME/.config/omarchy/backup.list
+home_root=${HOME%/}
+[[ -n $home_root ]] || home_root=/
 
 # ---------------------------------------------------------------------------
 # The allowlist, as data.
@@ -111,7 +113,7 @@ LIST
 resolved_list() {
   {
     shipped_list
-    [[ -f $USER_LIST ]] && cat "$USER_LIST"
+    if [[ -f $USER_LIST ]]; then cat "$USER_LIST"; fi
   } | sed 's/#.*//' | sed 's/[[:space:]]*$//' | grep -v '^$'
 }
 
@@ -239,26 +241,64 @@ has_remote()  { [[ -n $(git remote 2>/dev/null) ]]; }
 # ---------------------------------------------------------------------------
 
 allowlisted_files() {
-  local entry ex rel keep root=${1:-$HOME}
+  local entry ex rel path root=${1:-$home_root} parts current matches entries exclusions
+  root=${root%/}
+  [[ -n $root ]] || root=/
+  entries=$(includes) || return 1
+  exclusions=$(excludes) || return 1
+  matches=$(mktemp) || return 1
   local -a exs=()
-  while IFS= read -r ex; do exs+=("${ex%/}"); done < <(excludes)
+  local -A selected=()
+  while IFS= read -r ex; do [[ -n $ex ]] && exs+=("${ex%/}"); done <<< "$exclusions"
 
   while IFS= read -r entry; do
+    [[ -n $entry ]] || continue
     entry=${entry#/}
+    entry=${entry%/}
+    [[ $root != "$home_root" && $entry == .config/omarchy/backup.list ]] && continue
+    if [[ $root != "$home_root" ]]; then
+      current=$root
+      IFS=/ read -r -a parts <<< "$entry"
+      for part in "${parts[@]}"; do
+        [[ -n $part && $part != . ]] || continue
+        current=$current/$part
+        if [[ -L $current ]]; then
+          echo "Refusing symlinked backup path: $current" >&2
+          rm -f "$matches"
+          return 1
+        fi
+      done
+    fi
     [[ -e $root/$entry ]] || continue
     # -xtype f rather than -type l: a symlink whose target is gone would break
     # the copy, and ~/.config is full of them (btop's current.theme dangles
     # until the first theme is set).
-    while IFS= read -r rel; do
-      rel=${rel#"$root/"}
-      [[ $root != "$HOME" && -L $root/$rel ]] && continue
-      keep=true
+    if ! find -P "$root/$entry" \( -type f -o -xtype f \) -print0 > "$matches"; then
+      rm -f "$matches"
+      return 1
+    fi
+    while IFS= read -r -d '' path; do
+      rel=${path#"$root/"}
+      if [[ $rel == *$'\n'* || ( $rel != "$entry" && $rel != "$entry/"* ) ]]; then
+        echo "Unsafe backup path: $rel" >&2
+        rm -f "$matches"
+        return 1
+      fi
+      if [[ $root != "$home_root" && -L $path ]]; then
+        echo "Refusing symlinked backup file: $rel" >&2
+        rm -f "$matches"
+        return 1
+      fi
+      [[ $root != "$home_root" && $rel == .config/omarchy/backup.list ]] && continue
+      local keep=true
       for ex in "${exs[@]}"; do
         [[ $rel == "$ex" || $rel == "$ex"/* ]] && { keep=false; break; }
       done
-      [[ $keep == true ]] && echo "$rel"
-    done < <(find "$root/$entry" \( -type f -o -xtype f \) 2>/dev/null)
-  done < <(includes) | sort -u
+      [[ $keep == true ]] && selected["$rel"]=1
+    done < "$matches"
+  done <<< "$entries"
+  rm -f "$matches"
+  if ((${#selected[@]})); then printf '%s\n' "${!selected[@]}" | sort; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -275,7 +315,7 @@ allowlisted_files() {
 
 credential_hits() {
   local rel
-  while IFS= read -r rel; do
+  for rel in "${files[@]}"; do
     case "${rel##*/}" in
       # gh/glab, the agent credential files, ssh and TLS key material, dotenv.
       hosts.yml | auth.json | credentials.json | .credentials.json | \
@@ -294,7 +334,7 @@ credential_hits() {
       "$HOME/$rel" 2>/dev/null; then
       echo "$rel  (contains something shaped like a key or a password)"
     fi
-  done < <(allowlisted_files)
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -304,13 +344,15 @@ credential_hits() {
 if [[ $mode == restore ]]; then
   say "\033[1mRestoring your desktop configuration\033[0m"
 
+  local_list=$(resolved_list) || { fail "Could not read the local allowlist"; exit 1; }
   while IFS= read -r entry; do
     entry=${entry#!}
-    if [[ $entry == /* || $entry == .. || $entry == ../* || $entry == */../* || $entry == */.. ]]; then
+    if [[ $entry == /* || $entry == .. || $entry == ../* || $entry == */../* || $entry == */.. ||
+          $entry == . || $entry == ./* || $entry == */./* || $entry == */. || $entry == *//* ]]; then
       fail "Unsafe path in your local backup.list: $entry"
       exit 1
     fi
-  done < <(resolved_list)
+  done <<< "$local_list"
 
   if [[ ! -d $REPO/.git ]]; then
     step "Where is the backup?"
@@ -335,8 +377,10 @@ if [[ $mode == restore ]]; then
   # swap. A swap would delete files the user has since made that the backup
   # has never heard of, which is a restore that loses data.
   step "Copying files into place"
-  mapfile -t files < <(allowlisted_files "$REPO")
-  restored=0 kept=0 same=0 list_restored=false
+  file_list=$(allowlisted_files "$REPO") || { fail "Could not walk the backup allowlist"; exit 1; }
+  files=()
+  [[ -n $file_list ]] && mapfile -t files <<< "$file_list"
+  restored=0 kept=0 same=0
   for rel in "${files[@]}"; do
     src=$REPO/$rel
     dest=$HOME/$rel
@@ -345,7 +389,7 @@ if [[ $mode == restore ]]; then
       exit 1
     fi
     parent=$(dirname "$dest")
-    while [[ $parent != "$HOME" && $parent != / ]]; do
+    while [[ $parent != "$home_root" && $parent != / ]]; do
       if [[ -L $parent ]]; then
         fail "Refusing symlinked directory for $rel: $parent"
         exit 1
@@ -380,12 +424,24 @@ if [[ $mode == restore ]]; then
       exit 1
     fi
     restored=$((restored + 1))
-    [[ $rel == .config/omarchy/backup.list ]] && list_restored=true
   done
 
   ok "$restored restored, $same already matched, $kept of yours saved alongside"
-  if [[ $list_restored == true ]]; then
-    say "  Rerun \033[1mnixarchy home backup restore\033[0m to restore custom paths from backup.list."
+  repo_list=$REPO/.config/omarchy/backup.list
+  if [[ -f $repo_list && ! -L $repo_list ]]; then
+    repo_entries=$(sed 's/#.*//; s/[[:space:]]*$//; /^$/d' "$repo_list") || { fail "Could not read the repository backup.list"; exit 1; }
+    extra=false
+    while IFS= read -r entry; do
+      [[ -n $entry ]] || continue
+      if ! grep -qxF -- "$entry" <<< "$local_list"; then
+        [[ $extra == true ]] || say "  The backup lists additional paths:"
+        say "    $entry"
+        extra=true
+      fi
+    done <<< "$repo_entries"
+    if [[ $extra == true ]]; then
+      say "  Add wanted paths to ~/.config/omarchy/backup.list, then rerun this command."
+    fi
   fi
   say "\n\033[1mDone.\033[0m Log out and back in, or run \033[1momarchy-restart-shell\033[0m,"
   say "for the bar and the keybindings to pick the files up."
@@ -404,7 +460,9 @@ say "your bar, break it, and there is nothing to go back to."
 
 step "What would be backed up"
 
-mapfile -t files < <(allowlisted_files)
+file_list=$(allowlisted_files) || { fail "Could not walk the home allowlist"; exit 1; }
+files=()
+[[ -n $file_list ]] && mapfile -t files <<< "$file_list"
 if ((${#files[@]} == 0)); then
   warn "Nothing on the allowlist exists yet on this machine."
   say  "  That usually means a very fresh install. Come back once you have"

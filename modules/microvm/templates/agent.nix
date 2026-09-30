@@ -4,7 +4,8 @@
 #
 # The filesystem half of sandboxing an AI agent was already done and is the
 # strong half: modules/microvm/guest.nix boots a guest whose only view of the
-# host is the read-only /nix/store and one directory at /mnt/host. That is a
+# host is the read-only /nix/store and one directory at /mnt/host (the VM's
+# `share/`, never the directory holding its runner, #1076). That is a
 # kernel boundary, and it is why a MicroVM beats the bubblewrap wrappers
 # (`agent-sandbox.nix`, `nixwrap`) that map the host user into the sandbox and
 # so leave ~/.ssh one escape away.
@@ -42,8 +43,8 @@
 # depend on a per-VM value -- one closure serves every VM of a template. So
 # the allowlist arrives exactly the way the hostname does in
 # modules/microvm/guest.nix: a plain-text file the caller drops in the VM's
-# own directory, read at boot from the /mnt/host share, by a oneshot that
-# runs inside the VM that actually has it mounted.
+# `share/` directory, read at boot from the /mnt/host share, by a oneshot
+# that runs inside the VM that actually has it mounted.
 #
 # `/mnt/host/allow-hosts`, one hostname per line, `#` comments allowed. No
 # file, or an empty one, means an empty filter -- which under
@@ -103,6 +104,10 @@ in
   };
 
   users.users.tinyproxy.uid = proxyUid;
+
+  # No wheel (#1083): `sudo nft flush ruleset` would undo the whole filter.
+  # mkForce because guest.nix's list merges; agent-claude imports this file.
+  users.users.dev.extraGroups = lib.mkForce [ ];
 
   systemd.services.nixarchy-agent-allowlist = {
     description = "Build this guest's egress allowlist from the host directory share";
@@ -202,10 +207,10 @@ in
           ct state established,related accept
           oifname "lo" accept
 
-          # DHCP, from whatever uid the guest's dhcp client runs as: SLiRP
-          # hands out the lease this guest's only interface needs, and
-          # without it there is no network for the proxy to use either.
-          udp dport 67 accept
+          # DHCP, to SLiRP's server only (#1083): a bare `dport 67` let any uid
+          # send to any address on 67. 255.255.255.255 for the renewals that
+          # broadcast; the first DISCOVER leaves on a packet socket nft never sees.
+          udp sport 68 udp dport 67 ip daddr { 10.0.2.2, 255.255.255.255 } accept
 
           # The proxy, and nothing else on this machine, may resolve a name
           # or open a connection. Dropping DNS for every other uid is not

@@ -1715,6 +1715,32 @@ let
       off = mvTemplateBad.success;
     };
 
+    # #1083: a Mode A user's own microvm.vms keep upstream's host on, whatever
+    # nixarchy's service says; with no vms at all it stays off.
+    microvmModeAKeepsHost = {
+      on =
+        (modeAOff.extendModules { modules = [ { microvm.vms.mine = { }; } ]; }).config.microvm.host.enable;
+      off = modeAOff.config.microvm.host.enable;
+    };
+
+    # #1083: nixarchy off defines no programs.hyprland.package, so it sits at
+    # nixpkgs' option default (priority 1500), not hyprwm's mkDefault (1000).
+    hyprlandModeAUntouched = {
+      on = modeAOff.options.programs.hyprland.package.highestPrio >= 1500;
+      off = adopter.options.programs.hyprland.package.highestPrio >= 1500;
+    };
+
+    # #1083: a machine's own services.openssh.enable evaluates and wins; plain
+    # assignment used to make it a conflicting-definition error.
+    microvmSshYields =
+      let
+        r = builtins.tryEval (mvVm mvOn "ownssh").services.openssh.enable;
+      in
+      {
+        on = r.success && r.value;
+        off = (mvVm mvOn "plain").services.openssh.enable;
+      };
+
     # preinstallsExclude is the per-application half of preinstalls, and the
     # only removal path for an app the selection does not carry. Both ways:
     # Pinta is there by default and gone when named.
@@ -1932,6 +1958,23 @@ let
       inputs.self.nixosModules.nixarchy
       {
         programs.nixarchy.enable = true;
+        boot.loader.grub.enable = false;
+        fileSystems."/" = {
+          device = "/dev/null";
+          fsType = "ext4";
+        };
+        system.stateVersion = "25.05";
+      }
+    ];
+  };
+
+  # Mode A with nixarchy switched OFF: the module imported into somebody's own
+  # configuration and nothing enabled. What that must leave alone (#1083).
+  modeAOff = inputs.nixpkgs.lib.nixosSystem {
+    system = "x86_64-linux";
+    modules = [
+      inputs.self.nixosModules.nixarchy
+      {
         boot.loader.grub.enable = false;
         fileSystems."/" = {
           device = "/dev/null";
@@ -2360,6 +2403,15 @@ let
         plain = {
           template = "shell";
         };
+        # #1083: the agent template's rules and groups, from a real guest eval.
+        agent = {
+          template = "agent";
+        };
+        # #1083: a machine's own sshd wins over the sshPort-derived default.
+        ownssh = {
+          template = "shell";
+          modules = [ { services.openssh.enable = true; } ];
+        };
       };
     };
   };
@@ -2440,7 +2492,34 @@ let
           big (8192MiB, 8 cores): ${mvInvariantBig.system.build.toplevel.outPath}
         the cache promise ("the first launch is a download") does not hold.''
     ++ pkgs.lib.optional mvInvariantSmall.microvm.storeOnDisk "microvm.vms.vm.config.microvm.storeOnDisk is true at 512MiB; the host's /nix/store share should make an image build unnecessary."
-    ++ pkgs.lib.optional mvInvariantBig.microvm.storeOnDisk "microvm.vms.vm.config.microvm.storeOnDisk is true at 8192MiB; the host's /nix/store share should make an image build unnecessary.";
+    ++ pkgs.lib.optional mvInvariantBig.microvm.storeOnDisk "microvm.vms.vm.config.microvm.storeOnDisk is true at 8192MiB; the host's /nix/store share should make an image build unnecessary."
+    ++ (
+      let
+        sd = mvOn.microvm.stateDir;
+        plain = mvVm mvOn "plain";
+        agent = mvVm mvOn "agent";
+        rules = pkgs.lib.splitString "\n" agent.networking.nftables.ruleset;
+        rule = mvOn.systemd.tmpfiles.settings."10-nixarchy-microvm"."${sd}/plain/share".d or null;
+      in
+      pkgs.lib.optional (builtins.any
+        (
+          s:
+          builtins.elem s.source [
+            "."
+            "${sd}/plain"
+          ]
+        )
+        plain.microvm.shares
+      ) "#1076: a guest share is the VM's own directory, which holds the `current` the host executes."
+      ++
+        pkgs.lib.optional
+          (rule == null || rule.user != "microvm" || rule.group != "kvm" || rule.mode != "0770")
+          "#1076: no tmpfiles rule makes ${sd}/plain/share microvm:kvm 0770, so /mnt/host has nothing to mount."
+      ++ pkgs.lib.optional (builtins.elem "wheel" agent.users.users.dev.extraGroups) "#1083: the agent template's dev is in wheel, so sudo can flush the egress ruleset."
+      ++ pkgs.lib.optional (builtins.any (
+        l: pkgs.lib.hasInfix "dport 67" l && !(pkgs.lib.hasInfix "daddr" l)
+      ) rules) "#1083: the agent template accepts udp dport 67 to any address."
+    );
 
   # ---- a bundled service yields to a user who already configured it ----
   #
@@ -3008,7 +3087,7 @@ pkgs.runCommand "nixarchy-options"
       ''
     else if microvmProblems != [ ] then
       ''
-        echo "the microvm closure invariant does not hold:" >&2
+        echo "a microvm invariant does not hold:" >&2
         echo "$microvmProblems" >&2
         exit 1
       ''

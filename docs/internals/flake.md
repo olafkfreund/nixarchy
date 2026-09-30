@@ -133,6 +133,14 @@ Omarchy itself pins nothing: `install/omarchy-base.packages` names `hyprland`
 with no version, so upstream gets whatever Arch shipped that day. Tracking
 hyprwm's branch is the closest a flake gets to that, and usually ahead of it.
 
+**Its packages, not its NixOS module (#1083).** The module set
+`programs.hyprland.package` at `mkDefault` on every machine that imported
+nixarchy, including one with nixarchy off. nixarchy sets `package` and
+`portalPackage` itself under `programs.nixarchy.enable`, and links
+`/share/hypr` as the module did. A configuration that uses the module's
+own options (`plugins`, `settings`, `extraConfig`, `topPrefixes`,
+`bottomPrefixes`) imports `inputs.hyprland.nixosModules.default` itself.
+
 The `>= 0.55` assertion in modules/nixos.nix stays regardless. Omarchy 4.x
 configures Hyprland through the Lua API that landed in 0.55, and that is a
 requirement rather than a preference.

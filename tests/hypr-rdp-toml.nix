@@ -101,7 +101,7 @@ pkgs.runCommand "nixarchy-hypr-rdp-toml"
             ("carriage return", b"bad\rline"), ("NUL", b"bad\x00line"),
             ("DEL", b"bad\x7fline"),
         ]:
-            output.unlink()
+            output.unlink(missing_ok=True)
             result = run(raw)
             need(result.returncode != 0, label + " password was accepted")
             need(not output.exists(), label + " left a final config")

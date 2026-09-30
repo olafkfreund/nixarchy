@@ -5,6 +5,7 @@ pkgs.runCommand "nixarchy-stale-scripts"
     nativeBuildInputs = [
       pkgs.bash
       pkgs.coreutils
+      pkgs.gawk
     ];
   }
   ''
@@ -61,5 +62,22 @@ pkgs.runCommand "nixarchy-stale-scripts"
       *) echo "FAIL: cursor did not update XCURSOR_THEME through Lua IPC" >&2; exit 1 ;;
     esac
     echo "stale-script cursor uses Lua IPC"
+
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' \
+      "printf '%s\\n' '# | Date | Description' '---+------+---' '0 | today | current' '12 | 2026-09-30 | saved'" \
+      > stub/snapper
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'cat > "$GUM_LOG"; exit 1' > stub/gum
+    chmod +x stub/snapper stub/gum
+    export GUM_LOG="$PWD/gum.log"
+    bash ${omarchy}/share/omarchy/bin/omarchy-snapshot restore >/dev/null
+    rows=$(cat gum.log)
+    case "$rows" in
+      *'0 | today'*) echo "FAIL: snapshot 0 was offered for restore" >&2; exit 1 ;;
+    esac
+    case "$rows" in
+      *'12 | 2026-09-30'*) ;;
+      *) echo "FAIL: real snapshot was not offered for restore" >&2; exit 1 ;;
+    esac
+    echo "stale-script restore omits snapshot 0"
     touch "$out"
   ''

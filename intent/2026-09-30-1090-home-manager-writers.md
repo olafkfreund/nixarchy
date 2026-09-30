@@ -30,6 +30,6 @@ Home Manager users enabling nixd in Zed, VS Code, Cursor, or Helix; users enabli
 
 ## Open questions
 
-1. Should the JSONC case be parsed and merged, or skipped with guidance? **Recommended:** skip with an explicit, actionable message. A safe JSONC rewrite must preserve comments and formatting; this issue does not warrant a new parser or a lossy rewrite.
-2. Should a managed symlink be materialized as a writable copy? **Recommended:** no. Skip it with a message that tells the user to declare the setting in Home Manager or make the file user-owned.
-3. Should a failed JSONC merge abort the whole Home Manager activation? **Recommended:** retain the current nonfatal behavior, but make the reason and manual remedy clear so unrelated configuration can activate.
+1. **Decided:** skip JSONC with specific guidance. A safe rewrite must preserve comments and formatting; do not add a parser or perform a lossy rewrite.
+2. **Decided:** skip Home Manager-managed symlinks with guidance to declare the setting in Home Manager or make the file user-owned. Do not materialize a writable copy.
+3. **Decided:** a failed JSONC merge stays nonfatal to activation; print the reason and manual remedy so unrelated configuration can activate.

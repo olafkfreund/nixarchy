@@ -48,11 +48,14 @@ let
   keys = import "${pkgs.path}/nixos/tests/ssh-keys.nix" pkgs;
 
   sshPort = 2222;
+  agentSshPort = 2223;
   # -n matters: without it ssh reads the test driver's own stdin, and the
   # second ssh call in the script deadlocks the backdoor shell (observed --
   # the first call exited before it could eat anything, the second hung for
   # twelve minutes on `mount`).
   ssh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${toString sshPort} dev@localhost";
+  agentDevSsh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p ${toString agentSshPort} dev@localhost";
+  agentRootSsh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p ${toString agentSshPort} root@localhost";
 in
 pkgs.testers.runNixOSTest {
   name = "nixarchy-microvm-boot";
@@ -81,6 +84,19 @@ pkgs.testers.runNixOSTest {
               # and CI is such a host (no nested virtualisation).
               microvm.cpu = "max";
               users.users.dev.openssh.authorizedKeys.keys = [ keys.snakeOilEd25519PublicKey ];
+            }
+          ];
+        };
+        machines.agent-sandbox = {
+          template = "agent";
+          autostart = false;
+          sshPort = agentSshPort;
+          modules = [
+            {
+              microvm.cpu = "max";
+              users.users.dev.openssh.authorizedKeys.keys = [ keys.snakeOilEd25519PublicKey ];
+              # Root only reads the guest journal; mutation attempts use dev.
+              users.users.root.openssh.authorizedKeys.keys = [ keys.snakeOilEd25519PublicKey ];
             }
           ];
         };
@@ -124,5 +140,46 @@ pkgs.testers.runNixOSTest {
     assert "ro-store on /nix/.ro-store type 9p" in mounts, (
         "the guest's store is not the host's 9p share:\n" + mounts
     )
+
+    # Run one TCG guest at a time on the 4096 MiB host.
+    machine.succeed("systemctl stop microvm@sandbox.service")
+
+    policy = "/var/lib/microvms/agent-sandbox/policy/allow-hosts"
+    share = "/var/lib/microvms/agent-sandbox/share"
+    machine.succeed(f"echo allowed.example > {policy}")
+    machine.succeed(f"chown root:root {policy} && chmod 0644 {policy}")
+    machine.succeed(f"echo legacy.example > {share}/allow-hosts")
+    machine.succeed("systemctl start microvm@agent-sandbox.service")
+    machine.wait_until_succeeds("${agentRootSsh} true", timeout=1200)
+    filt = machine.succeed("${agentRootSsh} cat /run/nixarchy-agent/allow.filter")
+    assert "allowed\\.example" in filt and "legacy" not in filt, filt
+
+    # Make Unix permissions permissive for this subcase. Both read-only
+    # barriers must be real; without either, dev would be able to write.
+    machine.succeed(f"chmod 0777 {policy.rsplit('/', 1)[0]} && chmod 0666 {policy}")
+    machine.succeed("${agentDevSsh} true")
+    modes = machine.succeed("${agentDevSsh} stat -c %a /mnt/agent-policy /mnt/agent-policy/allow-hosts").split()
+    assert modes == ["777", "666"], modes
+    before = machine.succeed(f"sha256sum {policy}").split()[0]
+    machine.fail("${agentDevSsh} 'echo evil.example >> /mnt/agent-policy/allow-hosts'")
+    machine.fail("${agentDevSsh} mv /mnt/agent-policy/allow-hosts /mnt/agent-policy/renamed")
+    machine.succeed(f"ln -s /mnt/agent-policy/allow-hosts {share}/policy-link")
+    machine.fail("${agentDevSsh} 'echo evil.example >> /mnt/host/policy-link'")
+    assert machine.succeed(f"sha256sum {policy}").split()[0] == before
+    machine.succeed(f"chmod 0750 {policy.rsplit('/', 1)[0]} && chmod 0644 {policy}")
+
+    machine.succeed(f"echo changed.example > {policy}")
+    machine.succeed("systemctl restart microvm@agent-sandbox.service")
+    machine.wait_until_succeeds("${agentRootSsh} true", timeout=1200)
+    filt = machine.succeed("${agentRootSsh} cat /run/nixarchy-agent/allow.filter")
+    assert "changed\\.example" in filt and "allowed" not in filt, filt
+
+    machine.succeed(f"chmod 000 {policy}")
+    machine.succeed("systemctl restart microvm@agent-sandbox.service")
+    machine.wait_until_succeeds("${agentRootSsh} true", timeout=1200)
+    journal = machine.succeed("${agentRootSsh} journalctl -u nixarchy-agent-allowlist -b --no-pager")
+    assert "allow-hosts: cannot read /mnt/agent-policy/allow-hosts" in journal, journal
+    machine.fail("${agentRootSsh} systemctl is-active --quiet tinyproxy")
+    machine.succeed(f"chmod 0644 {policy}")
   '';
 }

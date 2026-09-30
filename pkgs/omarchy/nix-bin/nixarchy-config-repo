@@ -92,6 +92,32 @@ wgit() {
   fi
 }
 
+wtee() {
+  local target=$1 parent=${1%/*}
+  if { [[ -e $target || -L $target ]] && [[ -w $target ]]; } ||
+     { [[ ! -e $target && ! -L $target ]] && [[ -w $parent ]]; }; then
+    tee "$target"
+  elif [[ ! -w $FLAKE ]]; then
+    sudo tee "$target"
+  else
+    fail "Cannot write $target; fix its ownership and re-run."
+    return 1
+  fi
+}
+
+wmkdir() {
+  local target=$1 parent=$1
+  while [[ ! -e $parent ]]; do parent=${parent%/*}; done
+  if [[ -w $parent ]]; then
+    mkdir -p "$target"
+  elif [[ ! -w $FLAKE ]]; then
+    sudo mkdir -p "$target"
+  else
+    fail "Cannot create $target; fix its parent directory ownership and re-run."
+    return 1
+  fi
+}
+
 # Root has no user.name/user.email of its own, so the identity is passed in
 # from the user's global config on each commit -- kept where the user can see
 # and change it rather than written into a root identity. Harmless on the
@@ -572,7 +598,7 @@ if [[ ! -f $FLAKE/.gitignore ]]; then
   say "  Build outputs and plaintext secrets should not be committed. Encrypted"
   say "  secrets (.age, sops files) should be -- that is the point of them.\n"
 
-  sudo tee "$FLAKE/.gitignore" >/dev/null <<'GITIGNORE'
+  wtee "$FLAKE/.gitignore" >/dev/null <<'GITIGNORE' || exit 1
 # Build outputs. `nix build` drops these symlinks into the flake directory;
 # they point into the store and mean nothing on another machine.
 result
@@ -722,9 +748,9 @@ if [[ -n $ci_file && ! -f $FLAKE/$ci_file ]]; then
   say "  the overwhelming majority of what actually breaks.\n"
 
   if gum confirm "Add it?"; then
-    sudo mkdir -p "$FLAKE/$(dirname "$ci_file")"
+    wmkdir "$FLAKE/$(dirname "$ci_file")" || exit 1
     if [[ $ci_file == .github* ]]; then
-      sudo tee "$FLAKE/$ci_file" >/dev/null <<'GHA'
+      wtee "$FLAKE/$ci_file" >/dev/null <<'GHA' || exit 1
 name: check
 
 on:
@@ -763,7 +789,7 @@ jobs:
           done
 GHA
     else
-      sudo tee "$FLAKE/$ci_file" >/dev/null <<'GLCI'
+      wtee "$FLAKE/$ci_file" >/dev/null <<'GLCI' || exit 1
 # Evaluation only: `nix flake check --no-build` catches renamed options, type
 # errors and typos without building the system, which needs hours and more
 # disk than a shared runner has.

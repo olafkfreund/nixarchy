@@ -254,7 +254,7 @@ writeShellApplication {
           fi
 
           mkdir -p "$dir"
-          mkdir -p "$dir/share"
+          mkdir -p "$dir/share" "$dir/policy"
           echo "$template" > "$dir/template"
           # #1076: the 9p share has no security_model, so a guest can plant
           # share/hostname as a symlink; rm first so the host never opens
@@ -336,6 +336,11 @@ writeShellApplication {
         exec_vm() {
           # The guest sees share/ only (#1076); made here too, for VMs created before it.
           mkdir -p "$dir/share"
+          if [ -L "$dir/policy" ]; then
+            echo "nixarchy-vm: '$dir/policy' is a symlink; refusing to share it." >&2
+            exit 1
+          fi
+          mkdir -p "$dir/policy"
           # #1076: rm first -- a previous guest could have planted
           # share/hostname as a symlink (no security_model on the 9p share),
           # and we hold the flock here, so there is no race to overwrite it.

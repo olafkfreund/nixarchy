@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1092
 intent: intent/2026-09-30-1092-shell-instance-timeout.md
 ---

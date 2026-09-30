@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1089
 spec: spec/2026-09-30-1089-installer-disk-safety.md
 ---

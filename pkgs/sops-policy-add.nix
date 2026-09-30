@@ -42,8 +42,13 @@ writeShellApplication {
     coreutils
   ];
   text = ''
+    check=false
+    if [ "''${1:-}" = --check ]; then
+      check=true
+      shift
+    fi
     if [ "$#" -ne 3 ]; then
-      echo "usage: nixarchy-sops-policy-add <policy> <host> <recipient>" >&2
+      echo "usage: nixarchy-sops-policy-add [--check] <policy> <host> <recipient>" >&2
       exit 1
     fi
 
@@ -63,10 +68,10 @@ writeShellApplication {
     # Read the file rather than remember having run. A second run has to know
     # it is a second run from the policy itself.
     existing=$(RULE="$rule" yq -r \
-      '.creation_rules[]? | select(.path_regex == strenv(RULE)) | .key_groups[0].age[0] // ""' \
-      "$policy" 2>/dev/null | head -1)
+      '[.creation_rules[]? | select(.path_regex == strenv(RULE))] | if length == 0 then "__NO_RULE__" else .[0].key_groups[0].age[0] // "" end' \
+      "$policy")
 
-    if [ -n "$existing" ]; then
+    if [ "$existing" != __NO_RULE__ ]; then
       if [ "$existing" = "$recipient" ]; then
         echo "already: $host is in $policy with this recipient"
         exit 2
@@ -75,6 +80,11 @@ writeShellApplication {
       echo "  in the policy  $existing" >&2
       echo "  this machine   $recipient" >&2
       exit 3
+    fi
+
+    if "$check"; then
+      echo "missing: $policy has no rule for $host" >&2
+      exit 1
     fi
 
     RECIPIENT="$recipient" RULE="$rule" yq -i \

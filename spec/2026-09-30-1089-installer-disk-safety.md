@@ -9,11 +9,14 @@ intent: intent/2026-09-30-1089-installer-disk-safety.md
 **Owner revision at implementation review.** A disk lacking both WWN and
 serial is refused by default. `--allow-unidentified-disk` or
 `allow_unidentified_disk=yes` in answers permits it with a visible warning;
-the installer pins its resolved path, byte size, and model, and checks all
-three at each destructive boundary. The refusal explains that virt-manager,
+the installer pins its resolved path, byte size, available model, and
+`/dev/disk/by-path` link when one exists, and checks them at each destructive
+boundary. An empty virtio model does not block the override; path and size
+remain mandatory. The refusal explains that virt-manager,
 GNOME Boxes, and Proxmox virtio disks may need a serial configured or this
 explicit override. This fallback cannot detect same-path replacements with
-the same size and model. The recursive disko scan skips `_` keys and
+the same size and model at the same by-path link, or when no link exists.
+The recursive disko scan skips `_` keys and
 derivations, and is checked against both evaluated reference systems.
 
 ## Design
@@ -122,7 +125,7 @@ derivations, and is checked against both evaluated reference systems.
   measurement: each can still describe a different physical disk after a
   device change.
 - Proceeding automatically when both WWN and serial are absent: the owner
-  requires an explicit override because path/size/model is weaker than a
+  requires an explicit override because path/size/available-model/by-path is weaker than a
   hardware identifier.
 - Checking identity only before preflight: a long preflight or disko build
   leaves a window in which the target can change.

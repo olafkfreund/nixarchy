@@ -6,7 +6,9 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   done
 
   cat > test.sh <<'EOF'
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
+  disk_by_path_dir=$PWD/by-path
+  mkdir -p "$disk_by_path_dir"
   allow_unidentified_disk=false
   . ./remember_disk.sh
   . ./check_disks.sh
@@ -26,7 +28,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
       WWN) case "$3" in /dev/a | /dev/replaced) cat a-id ;; /dev/b) cat b-id ;; esac ;;
       SERIAL) [ "''${NO_ID_A:-false}" = true ] && [ "$3" = /dev/a -o "$3" = /dev/replaced ] || echo serial-"$3" ;;
       SIZE) echo "''${SIZE_A:-64000000000}" ;;
-      MODEL) echo "''${MODEL_A:-QEMU}" ;;
+      MODEL) echo "''${MODEL_A-QEMU}" ;;
       NAME,TYPE) printf '/dev/a disk\n/dev/b disk\n' ;;
       NAME,SIZE,MODEL,SERIAL) echo "disk 64G test serial-$3" ;;
     esac
@@ -60,7 +62,30 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   readlink() { echo "$2"; }
   check_disks >msg 2>&1 || failed "unchanged fallback identity was refused"
   echo "ok override accepts no-serial disk and pins path size model"
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
+  MODEL_A=
+  remember_disk /dev/a >msg 2>&1 || failed "empty virtio model blocked explicit override"
+  check_disks >msg 2>&1 || failed "empty-model fallback was refused"
+  MODEL_A=QEMU
+  check_disks >msg 2>&1 || failed "model appeared after empty-model baseline"
+  echo "ok explicit override accepts empty virtio model with path and size"
+
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
+  ln -s /dev/a "$disk_by_path_dir/pci-port-a"
+  printf '/dev/a\n' > port-owner
+  readlink() {
+    [ "$2" != "$disk_by_path_dir/pci-port-a" ] || { cat port-owner; return; }
+    echo "$2"
+  }
+  remember_disk /dev/a >msg 2>&1 || failed "by-path disk was not recorded"
+  [ "''${disk_by_paths[0]}" = "$disk_by_path_dir/pci-port-a" ] || failed "available by-path link was not pinned"
+  printf '/dev/b\n' > port-owner
+  if check_disks >msg 2>&1; then failed "same-size same-model moved port was accepted"; fi
+  printf '/dev/a\n' > port-owner
+  check_disks >msg 2>&1 || failed "unchanged by-path link was refused"
+  readlink() { echo "$2"; }
+  echo "ok available by-path link catches same-size same-model port move"
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   allow_unidentified_disk=false
   NO_ID_A=false
   printf 'alpha\n' > a-id
@@ -81,6 +106,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   NO_ID_A=true
   ask_device >msg 2>&1 || failed "wizard could not re-ask after no-ID refusal"
   [ "$(cat picks)" = 2 ] && [ "''${disk_paths[0]}" = /dev/b ] || failed "wizard did not record the second disk"
+  grep -Fq 'nixarchy-install --allow-unidentified-disk' msg || failed "wizard omitted exact ISO relaunch command"
   NO_ID_A=false
   printf 'alpha\n' > a-id
   echo "ok wizard re-asks and records accepted disk"
@@ -122,7 +148,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   NO_ID_A=false
   echo "ok command-line override accepts no-ID disk"
 
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   allow_unidentified_disk=false
 
   remember_disk /dev/a || failed "valid disk could not be recorded"
@@ -145,7 +171,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   [ "$(wc -l < attempt-results)" -eq 2 ] && [ "$(tr -d '\n' < attempt-results)" = 11 ] || failed "retry did not preserve both refusals"
   echo "ok replacement and retry refused against original identity"
 
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   printf 'alpha\n' > a-id
   printf 'bravo\n' > b-id
   NIX_FLAGS=() work=/fixture hostname=host from_host_exists=true from_repo=fixture
@@ -156,7 +182,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   if check_disks >msg 2>&1; then failed "second repo disk was not checked"; fi
   echo "ok every repo disk is checked"
 
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   printf 'alpha\n' > a-id
   printf 'bravo\n' > b-id
   remember_disk /dev/a || failed "format target was not recorded"
@@ -177,7 +203,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   test ! -e touched-before-build || failed "format phase began before identity check"
   echo "ok pre-write disk swap refused"
 
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   printf 'alpha\n' > a-id
   remember_disk /dev/a || failed "free-space target was not recorded"
   device=/dev/a

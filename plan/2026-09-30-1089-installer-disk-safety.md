@@ -9,12 +9,18 @@ spec: spec/2026-09-30-1089-installer-disk-safety.md
 **Owner revision at implementation review.** Refuse disks without WWN and
 serial by default; accept only `--allow-unidentified-disk` or answers
 `allow_unidentified_disk=yes` with a clear warning and frozen resolved path,
-byte size, and model. Explain how virt-manager, GNOME Boxes, and Proxmox
+byte size, available model, and by-path link when one exists. An empty model
+does not prevent the override; path and size remain required. Explain how
+virt-manager, GNOME Boxes, and Proxmox
 virtio users can add a serial or use the override. The fallback has weaker
-same-size/model replacement detection. Prove the default refusal, override,
-and path/size/model changes red and green.
+same-size/available-model replacement detection when no by-path link exists.
+Prove the default refusal, override, empty model, and path/size/model/by-path
+changes red and green.
 
-*Deviation (implementation):* Review fixes add behavioral checks for the
+*Deviation (implementation):* Re-review accepts empty virtio model under the
+explicit override, records a by-path link when available, and documents the
+exact ISO root-console relaunch command. The new tests break-prove the empty
+model and changed-port cases. Review fixes add behavioral checks for the
 wizard, answers, retry, free-space writes, and repository disks; the former
 source-only assertions were insufficient. The free-space disk check moves
 directly before the first `sgdisk`; the LUKS scan avoids derived/internal
@@ -94,7 +100,7 @@ observed during this run, not an earlier one.
    selection or after answers validation, and for **every** evaluated
    repository-defined disk during `confirm_repo_disks`. Refuse when neither
    exists by default, with an actionable override message; explicit fallback
-   records path/size/model. Keep the recorded identities fixed
+   records path/size/available-model/by-path. Keep the recorded identities fixed
    through `install_attempts` retries. Compare resolved paths and the recorded
    identifiers before the first destructive action and again after the disko
    build, immediately before disko execution. A missing, unreadable, or

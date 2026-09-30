@@ -129,6 +129,8 @@ disk_wwns=()
 disk_serials=()
 disk_sizes=()
 disk_models=()
+disk_by_paths=()
+disk_by_path_dir=/dev/disk/by-path
 allow_unidentified_disk=false
 encrypt=""
 # "whole" (the disk is ours) or "free" (installed beside an existing OS, #47).
@@ -190,7 +192,7 @@ luks_passphrase and recovery_passphrase, which are taken exactly as
 written, spaces included:
 
   device=/dev/vda           whole disk, not a partition
-  allow_unidentified_disk=yes  permit fallback path/size/model identity check
+  allow_unidentified_disk=yes  permit weaker path/size/available-model check
   disk_mode=whole           whole or free; default whole. `free` installs into
                             the largest free region on the disk and leaves
                             every existing partition alone
@@ -817,16 +819,17 @@ ask_device() {
   while :; do
     device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}') || ui_abort
     [ -n "$device" ] || ui_abort
-    disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=()
+    disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
     remember_disk "$device" && return 0
-    echo "Choose another disk, or restart with --allow-unidentified-disk." >&2
+    echo "Choose another disk. To retry from the ISO, stop this wizard with Ctrl+C," >&2
+    echo "  then at a root console run: nixarchy-install --allow-unidentified-disk" >&2
   done
 }
 
 # Remember the physical disk once; a retry must never accept a replacement
 # merely because it appeared at the same /dev path.
 remember_disk() {
-  local path=$1 real wwn serial size model
+  local path=$1 real wwn serial size model bypath="" link
   real=$(readlink -f "$path") || return 1
   if [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" != disk ]; then
     echo "nixarchy-install: $path is no longer a whole disk. Choose another disk." >&2
@@ -836,21 +839,29 @@ remember_disk() {
   serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) || return 1
   size=$(lsblk -bdnro SIZE "$real" 2>/dev/null) || return 1
   model=$(lsblk -dnro MODEL "$real" 2>/dev/null) || return 1
+  for link in "$disk_by_path_dir"/*; do
+    [ -L "$link" ] || continue
+    if [ "$(readlink -f "$link")" = "$real" ]; then
+      bypath=$link
+      break
+    fi
+  done
   if [ -z "$wwn" ] && [ -z "$serial" ]; then
-    if [ "$allow_unidentified_disk" != true ] || [ -z "$size" ] || [ -z "$model" ]; then
+    if [ "$allow_unidentified_disk" != true ] || [ -z "$size" ]; then
       echo "nixarchy-install: $path has no WWN or serial. Choose a disk whose identity can be checked." >&2
       echo "  virt-manager, GNOME Boxes and Proxmox virtio disks may need a serial; otherwise use --allow-unidentified-disk or allow_unidentified_disk=yes." >&2
       return 1
     fi
-    echo "nixarchy-install: WARNING: $path has no WWN/serial; checking path, size and model only." >&2
+    echo "nixarchy-install: WARNING: $path has no WWN/serial; checking path, size, available model and by-path link." >&2
   fi
   disk_paths+=("$path") disk_reals+=("$real")
   disk_wwns+=("$wwn") disk_serials+=("$serial")
   disk_sizes+=("$size") disk_models+=("$model")
+  disk_by_paths+=("$bypath")
 }
 
 check_disks() {
-  local i path real wwn serial size model
+  local i path real wwn serial size model bypath
   if [ "${#disk_paths[@]}" -eq 0 ]; then
     echo "nixarchy-install: no disk identity was recorded. Nothing was formatted." >&2
     return 1
@@ -871,10 +882,14 @@ check_disks() {
       echo "nixarchy-install: $path has a different WWN or serial. Nothing further was formatted; start again." >&2
       return 1
     fi
-    if [ -z "${disk_wwns[$i]}" ] && [ -z "${disk_serials[$i]}" ] &&
-      { [ "$size" != "${disk_sizes[$i]}" ] || [ "$model" != "${disk_models[$i]}" ]; }; then
-      echo "nixarchy-install: $path changed size or model. Nothing further was formatted; start again." >&2
-      return 1
+    if [ -z "${disk_wwns[$i]}" ] && [ -z "${disk_serials[$i]}" ]; then
+      bypath=${disk_by_paths[$i]}
+      if [ "$size" != "${disk_sizes[$i]}" ] ||
+        { [ -n "${disk_models[$i]}" ] && [ "$model" != "${disk_models[$i]}" ]; } ||
+        { [ -n "$bypath" ] && [ "$(readlink -f "$bypath")" != "$real" ]; }; then
+        echo "nixarchy-install: $path changed size, model or by-path link. Nothing further was formatted; start again." >&2
+        return 1
+      fi
     fi
   done
 }
@@ -1532,7 +1547,7 @@ confirm_repo_disks() {
   boot=$(boot_medium)
   [ -z "$boot" ] || boot=$(readlink -f "$boot")
   echo "$from_repo's $hostname will ERASE:"
-  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=()
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   while IFS= read -r dev; do
     real=$(readlink -f "$dev")
     if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
@@ -3066,7 +3081,7 @@ main() {
     [ -n "$from_repo" ] && hostname=$from_host
     validate_answers
     if [ "$from_host_exists" != true ]; then
-      disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=()
+      disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
       remember_disk "$device" || exit 1
     fi
     ask_network

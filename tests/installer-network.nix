@@ -156,7 +156,7 @@ pkgs.runCommand "nixarchy-installer-network"
       exit 1
     }
     sed -n '/^  if \[ -z "\$list" \]; then/,/^  fi/p' connect_wifi.txt > no_networks.txt
-    if ! grep -Fq 'if ! ls -d /sys/class/net/*/phy80211 >/dev/null 2>&1; then' no_networks.txt; then
+    if ! grep -Eq '^[[:space:]]*if ! ls -d /sys/class/net/\*/phy80211 >/dev/null 2>&1; then$' no_networks.txt; then
       echo "connect_wifi no longer tests for a wireless interface before" >&2
       echo "blaming the image for a missing driver" >&2
       sed 's/^/  | /' no_networks.txt >&2

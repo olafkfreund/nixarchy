@@ -175,7 +175,10 @@ configuration becomes a starting point for yours.
   disk. This is the same trust as `nix run github:...`, and worth saying out
   loud rather than leaving implied.
 
-The answers file is one key=value per line, # for comments, no quoting:
+The answers file is one key=value per line, no quoting. A line starting with
+# is a comment; a trailing # comment is allowed except on password,
+luks_passphrase and recovery_passphrase, which are taken exactly as
+written, spaces included:
 
   device=/dev/vda           whole disk, not a partition
   disk_mode=whole           whole or free; default whole. `free` installs into
@@ -426,7 +429,9 @@ connect_wifi() {
     if [ -z "$pw" ]; then
       nmcli device wifi connect "$ssid" || rc=$?
     else
-      nmcli device wifi connect "$ssid" password "$pw" || rc=$?
+      # stdin, not argv (#1079): a password on nmcli's command line is in
+      # /proc/<pid>/cmdline for every user on the live system.
+      printf '%s\n' "$pw" | nmcli --ask device wifi connect "$ssid" || rc=$?
     fi
     [ "$rc" -eq 0 ] && return 0
 
@@ -647,7 +652,9 @@ ask_password() {
     fi
     # One password for the user, root and the disk, as upstream does: the
     # passphrase you type at boot is the one that logs you in.
-    password_hash=$(mkpasswd -m sha-512 "$pw")
+    # stdin, not argv (#1079): a password on mkpasswd's command line is in
+    # /proc/<pid>/cmdline for every user on the live system.
+    password_hash=$(printf '%s' "$pw" | mkpasswd -m sha-512 -s)
     luks_passphrase=$pw
     unset pw pw2
     break
@@ -699,7 +706,9 @@ ask_recovery() {
       ui_left "\e[31mThat is your login password. Use a different one.\e[0m"
       continue
     fi
-    recovery_hash=$(mkpasswd -m sha-512 "$pw")
+    # stdin, not argv (#1079): a password on mkpasswd's command line is in
+    # /proc/<pid>/cmdline for every user on the live system.
+    recovery_hash=$(printf '%s' "$pw" | mkpasswd -m sha-512 -s)
     unset pw pw2
     break
   done
@@ -1102,8 +1111,15 @@ resolve_answers() {
   # umask, not chmod after the fact: between creation and the chmod the file
   # would be readable, and the whole point of it is that it is not.
   tmp=$(umask 077 && mktemp)
+  # Gone on ANY exit, including read_answers refusing the file (#1079).
+  # answers_fetched, not $tmp: the trap runs after this function's locals are
+  # gone. ui_dashboard_start replaces it later; main() has removed the file by then.
+  answers_fetched=$tmp
+  trap 'rm -f "$answers_fetched"' EXIT
   echo "fetching answers from $url"
-  curl --fail --silent --show-error --location --max-time 60 -o "$tmp" "$url" || {
+  # Redirects too: https that redirects to http would send the password in
+  # clear (#1079).
+  curl --fail --silent --show-error --location --proto =https --proto-redir =https --max-time 60 -o "$tmp" "$url" || {
     echo "nixarchy-install: could not fetch $url" >&2
     rm -f "$tmp"
     exit 1
@@ -1113,7 +1129,6 @@ resolve_answers() {
   # it needs. The file's whole content is secrets -- a password and a LUKS
   # passphrase in clear -- and it used to sit in /tmp for the rest of the
   # session, including inside the shell the failure screen offers.
-  answers_fetched=$tmp
 }
 
 read_answers() {
@@ -1125,10 +1140,12 @@ read_answers() {
 
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
-    line=${line%%#*}
+    line=${line%$'\r'}
     line=${line#"${line%%[![:space:]]*}"}
-    line=${line%"${line##*[![:space:]]}"}
-    [ -n "$line" ] || continue
+    # A comment is a line that STARTS with # (#1079). The secrets below are
+    # taken exactly as written, `#` and trailing spaces included; every other
+    # key still drops a trailing `# ...`, since no such value can contain one.
+    case $line in "" | \#*) continue ;; esac
 
     case $line in
       *=*) ;;
@@ -1139,6 +1156,20 @@ read_answers() {
     esac
     key=${line%%=*}
     value=${line#*=}
+    case $key in
+      password | luks_passphrase | recovery_passphrase)
+        case $value in
+          *[[:space:]]\#*)
+            echo "nixarchy-install: answers: line $lineno: $key looks like it has a trailing comment -- move it to its own line (a secret is taken exactly as written)" >&2
+            exit 2
+            ;;
+        esac
+        ;;
+      *)
+        value=${value%%#*}
+        value=${value%"${value##*[![:space:]]}"}
+        ;;
+    esac
 
     # A fixed case rather than a dynamic assignment, which is the whole reason
     # an unknown key can be caught at all. A silently ignored `hostnme=` is a
@@ -1154,7 +1185,7 @@ read_answers() {
       password_hash) password_hash=$value ;;
       build_store) build_store_choice=$value ;;
       recovery_hash) recovery_hash=$value ;;
-      recovery_passphrase) recovery_hash=$(mkpasswd -m sha-512 "$value") ;;
+      recovery_passphrase) recovery_hash=$(printf '%s' "$value" | mkpasswd -m sha-512 -s) ;;
       timezone) timezone=$value ;;
       keymap) keymap=$value ;;
       *)
@@ -1170,7 +1201,7 @@ read_answers() {
       echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
       exit 2
     fi
-    password_hash=$(mkpasswd -m sha-512 "$password")
+    password_hash=$(printf '%s' "$password" | mkpasswd -m sha-512 -s)
     # One password for user, root and disk, as the interactive path does.
     [ -n "$luks_passphrase" ] || luks_passphrase=$password
     unset password

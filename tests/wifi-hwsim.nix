@@ -168,6 +168,17 @@ pkgs.testers.runNixOSTest {
     machine.succeed("out=$(journalctl -u hostapd); grep -q AP-STA-CONNECTED <<<\"$out\"")
     machine.succeed("out=$(journalctl -u hostapd); grep -q EAPOL-4WAY-HS-COMPLETED <<<\"$out\"")
 
+    # #1079: the installer pipes the password to `nmcli --ask` so it never sits
+    # in argv. Whether nmcli reads a piped password is nmcli's behaviour, so it
+    # is proven here, on a real handshake. nmcli's own status is not the
+    # signal: with no DHCP behind this AP it exits 4 after the handshake (above).
+    machine.succeed("nmcli connection down test && nmcli connection delete test")
+    before = int(machine.succeed("out=$(journalctl -u hostapd); grep -c EAPOL-4WAY-HS-COMPLETED <<<\"$out\" || true").strip() or 0)
+    machine.execute("printf '%s\\n' supersecret | nmcli -w 20 --ask device wifi connect nixarchy-test")
+    machine.wait_until_succeeds(
+        f"out=$(journalctl -u hostapd); [ \"$(grep -c EAPOL-4WAY-HS-COMPLETED <<<\"$out\")\" -gt {before} ]",
+        timeout=60)
+
     print(machine.succeed("nmcli device status"))
 
     print(machine.succeed("nmcli device status"))

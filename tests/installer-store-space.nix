@@ -273,10 +273,13 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   echo "  ok      the fetched copy is marked for cleanup"
   EOF
   bash rat.sh
-  # The rm has to come after the read. Same line-order doctrine as the
-  # preflight/format_disk assertion above.
-  read_line=$(grep -n 'read_answers "$answers_file"' ${installScript} | cut -d: -f1 | head -1 || true)
-  rm_line=$(grep -n 'rm -f "$answers_fetched"' ${installScript} | cut -d: -f1 | head -1 || true)
+  # The rm has to come after the read, in main() -- resolve_answers's own EXIT
+  # trap (#1079) also removes the fetched file, so main() is extracted first;
+  # otherwise the trap's earlier "rm -f \"\$answers_fetched\"" would match instead.
+  sed -n '/^main()/,/^}/p' ${installScript} > ss-main.sh
+  test -s ss-main.sh || { echo "main is not in install.sh any more" >&2; exit 1; }
+  read_line=$(grep -n 'read_answers "$answers_file"' ss-main.sh | cut -d: -f1 | head -1 || true)
+  rm_line=$(grep -n 'rm -f "$answers_fetched"' ss-main.sh | cut -d: -f1 | head -1 || true)
   [ -n "$rm_line" ] || { echo "main() never removes the fetched answers file" >&2; exit 1; }
   [ -n "$read_line" ] && [ "$read_line" -lt "$rm_line" ] || {
     echo "the fetched answers file is removed before read_answers reads it" >&2; exit 1;

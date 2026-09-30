@@ -1102,6 +1102,8 @@ The pipe's status is nmcli's, because `printf` cannot fail here.
 Add one comment line above it: "Redirects too: https that redirects to http
 would send the password in clear (#1079)."
 
+*Deviation (implementation):* the trap adds a second `rm -f "$answers_fetched"`, so `installer-store-space.nix`'s line-order assertion now greps only inside `main()` (extracted with `sed -n '/^main()/,/^}/p'`), not the whole script.
+
 **F5 [C]: the EXIT trap (P2).** In `resolve_answers`, directly after
 `tmp=$(umask 077 && mktemp)` (`:1098`):
 
@@ -1549,7 +1551,7 @@ with links to the docs changed in H1 and B2.
 
 | Check | Layer | Green | Red when |
 |---|---|---|---|
-| `installer-answers` (new) | runCommand | 7 ok lines | X7, X8, X9, X17 |
+| `installer-answers` (new) | runCommand | 6 ok lines | X7, X8, X9, X17 |
 | `installer-baked-guard` (new) | runCommand | 3 ok lines | X1 |
 | `installer-from-repo` | runCommand | + #1077, #1084 cases | X2, X3 |
 | `installer-store-space` | runCommand | + lint, format_disk, generate_hardware_config, install_flake_dir | X4, X5, X6 |

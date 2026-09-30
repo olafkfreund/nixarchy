@@ -1995,6 +1995,7 @@
           installer-baked-guard = import ./tests/installer-baked-guard.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
+            dashboardScript = ./installer/lib/dashboard.sh;
           };
 
           # Why: tests/installer-answers.nix

@@ -2611,6 +2611,7 @@ preflight_build() {
 }
 
 run_install() {
+  installed_baked=false
   # What would have to be built, printed before doing it. On a machine with no
   # network an unseeded build input is the difference between an install and a
   # confusing cascade of source downloads, and this names it once rather than
@@ -2811,7 +2812,8 @@ run_install() {
     --option extra-substituters "$SUBSTITUTERS" \
     --option extra-trusted-public-keys "$TRUSTED_KEYS" \
     "${no_build[@]}" \
-    "${SUBSTITUTE_FLAGS[@]}"
+    "${SUBSTITUTE_FLAGS[@]}" || return 1
+  [ -z "$baked_system" ] || installed_baked=true
 }
 
 # The baseline a factory reset returns to (#172).
@@ -3102,7 +3104,7 @@ main() {
   local target_log=""
   local started rc=0 elapsed
   install_attempts
-  ui_finished "$elapsed" "$username"
+  ui_finished "$elapsed" "$username" "${installed_baked:-false}"
 }
 
 # The phases, then the failure screen, again for as long as the person at it

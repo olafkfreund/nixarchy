@@ -12,8 +12,8 @@
 # run, which needs the network (see tests/AGENTS.md).
 #
 # Stubs shadow the real commands because this runs the RAW pkgs/pkg-new.sh,
-# not the writeShellApplication -- the installed command's PATH is strict and
-# cannot be stubbed, which is exactly why the body lives in its own file.
+# not the writeShellApplication -- its runtimeInputs are prepended to PATH, so
+# declared tools beat PATH stubs. That is why the body lives in its own file.
 pkgs.runCommand "nixarchy-pkg-new"
   {
     nativeBuildInputs = [

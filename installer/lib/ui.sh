@@ -17,8 +17,8 @@
 # clear(1), without needing a terminfo database to look itself up in.
 #
 # `clear` is ncurses, and ncurses refuses to emit anything until it has found
-# an entry for $TERM -- so with the strict PATH writeShellApplication builds,
-# it exits 1 and set -e ends the install. The bytes it would have written are
+# a terminfo entry for $TERM. Without that entry it exits 1 and set -e ends
+# the install. The bytes it would have written are
 # these three: home, erase screen, erase scrollback. Every terminal that can
 # display this installer understands them, and a terminal that does not is one
 # where a failed clear was never the interesting problem.

@@ -7,12 +7,15 @@ let
   testLib = import ./lib.nix { inherit inputs; };
   apply = testLib.vmPackage "nixarchy-apply";
 in
-pkgs.runCommand "nixarchy-shell-runtime-inputs" { nativeBuildInputs = [ pkgs.gnugrep ]; } ''
+pkgs.runCommand "nixarchy-shell-runtime-inputs" { } ''
   require_path() {
-    if ! grep -Fq "$2/bin" "$1"; then
-      echo "missing $3 from $4 wrapper PATH" >&2
-      exit 1
-    fi
+    while IFS= read -r line; do
+      if [[ $line == 'export PATH='* && $line == *"$2/bin"* ]]; then
+        return 0
+      fi
+    done < "$1"
+    echo "missing $3 from $4 wrapper PATH" >&2
+    exit 1
   }
 
   require_path "${doctor}/bin/nixarchy-doctor" "${pkgs.xdg-utils}" xdg-utils doctor

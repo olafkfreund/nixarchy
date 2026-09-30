@@ -61,7 +61,7 @@ esac
 # commit how many irrelevant ones sit above it.
 main_install_verdict() {
   local sha status gate install cur="" above=0
-  local irrelevant=0 verified=0 running=0 runs=0 conclusions=""
+  local irrelevant=0 verified=0 unreadable=0 running=0 runs=0 conclusions=""
   decide() {
     [ -n "$cur" ] || return 1
     if [ "$irrelevant" -eq 1 ]; then
@@ -69,6 +69,8 @@ main_install_verdict() {
       return 1
     elif [ "$verified" -eq 1 ]; then
       printf 'verified\t%s\t%s\n' "$cur" "$above"
+    elif [ "$unreadable" -eq 1 ]; then
+      printf 'unreadable\t%s\t%s\n' "$cur" "$above"
     elif [ "$running" -eq 1 ]; then
       printf 'running\t%s\t%s\n' "$cur" "$above"
     elif [ "$runs" -eq 0 ]; then
@@ -81,12 +83,14 @@ main_install_verdict() {
     [ -n "$sha" ] || continue
     if [ "$sha" != "$cur" ]; then
       decide && return 0
-      cur=$sha irrelevant=0 verified=0 running=0 runs=0 conclusions=""
+      cur=$sha irrelevant=0 verified=0 unreadable=0 running=0 runs=0 conclusions=""
     fi
     [ "$status" = "-" ] && continue
     runs=$((runs + 1))
     if [ "$gate" = success ]; then
       irrelevant=1
+    elif [ "$status" = error ]; then
+      unreadable=1
     elif [ "$status" != completed ]; then
       running=1
     elif [ "$install" = success ]; then
@@ -555,7 +559,7 @@ ci release.yml 8760 ok
 # by commit rather than by run, because a commit that started no run at all --
 # a merge pushed by GITHUB_TOKEN, #671 -- is the case a run list cannot show.
 main_install_runs() {
-  local commits runs sha id status
+  local commits runs sha id status jobs
   commits=$(gh api "repos/{owner}/{repo}/commits?sha=main&per_page=30" --jq '.[].sha') || return 1
   runs=$(gh run list --workflow install-check.yml --branch main --limit 100 \
     --json databaseId,headSha,status --jq '.[] | "\(.headSha)\t\(.databaseId)\t\(.status)"') || return 1
@@ -566,11 +570,14 @@ main_install_runs() {
     fi
     grep "^$sha	" <<<"$runs" | while IFS=$'\t' read -r _ id status; do
       # shellcheck disable=SC2016  # jq, not shell: nothing in it expands
-      gh api "repos/{owner}/{repo}/actions/runs/$id/jobs" --jq '
+      jobs=$(gh api "repos/{owner}/{repo}/actions/runs/$id/jobs" --jq '
         [.jobs[] | select(.name == "install")][0] as $j
         | [ ($j.steps // [])[] | select(.name == "Nothing here can affect an install") ][0].conclusion as $g
-        | "\($g // "null")\t\($j.conclusion // "null")"' |
-        sed "s/^/$sha	$status	/"
+        | "\($g // "null")\t\($j.conclusion // "null")"') || {
+        printf '%s\terror\terror\terror\n' "$sha"
+        continue
+      }
+      printf '%s\t%s\t%s\n' "$sha" "$status" "$jobs"
     done
   done
 }
@@ -587,6 +594,7 @@ else
         ok "main install" "${vsha:0:7}" "installed, success"
       fi
       ;;
+    unreadable) finding "main install" "${vsha:0:7}" "could not read" "gh could not read install-check jobs" ;;
     running) ok "main install" "${vsha:0:7}" "still running" ;;
     none) finding "main install" "${vsha:0:7}" "no install check ran" "gh workflow run install-check.yml --ref main" ;;
     unverified) finding "main install" "${vsha:0:7}" "never installed: $vdetail" "gh workflow run install-check.yml --ref main" ;;

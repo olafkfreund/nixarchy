@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1095
 intent: intent/2026-09-30-1095-review-commit-verification.md
 ---

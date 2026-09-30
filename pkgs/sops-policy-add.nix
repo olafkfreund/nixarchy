@@ -68,7 +68,7 @@ writeShellApplication {
     # Read the file rather than remember having run. A second run has to know
     # it is a second run from the policy itself.
     existing=$(RULE="$rule" yq -r \
-      '[.creation_rules[]? | select(.path_regex == strenv(RULE))] | if length == 0 then "__NO_RULE__" else .[0].key_groups[0].age[0] // "" end' \
+      '([.creation_rules[]? | select(.path_regex == strenv(RULE))] | .[0].key_groups[0].age[0]) // "__NO_RULE__"' \
       "$policy")
 
     if [ "$existing" != __NO_RULE__ ]; then

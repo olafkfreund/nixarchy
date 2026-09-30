@@ -61,7 +61,7 @@ esac
 # commit how many irrelevant ones sit above it.
 main_install_verdict() {
   local sha status gate install cur="" above=0
-  local irrelevant=0 verified=0 running=0 runs=0 conclusions=""
+  local irrelevant=0 verified=0 unreadable=0 running=0 runs=0 conclusions=""
   decide() {
     [ -n "$cur" ] || return 1
     if [ "$irrelevant" -eq 1 ]; then
@@ -69,6 +69,8 @@ main_install_verdict() {
       return 1
     elif [ "$verified" -eq 1 ]; then
       printf 'verified\t%s\t%s\n' "$cur" "$above"
+    elif [ "$unreadable" -eq 1 ]; then
+      printf 'unreadable\t%s\t%s\n' "$cur" "$above"
     elif [ "$running" -eq 1 ]; then
       printf 'running\t%s\t%s\n' "$cur" "$above"
     elif [ "$runs" -eq 0 ]; then
@@ -81,12 +83,14 @@ main_install_verdict() {
     [ -n "$sha" ] || continue
     if [ "$sha" != "$cur" ]; then
       decide && return 0
-      cur=$sha irrelevant=0 verified=0 running=0 runs=0 conclusions=""
+      cur=$sha irrelevant=0 verified=0 unreadable=0 running=0 runs=0 conclusions=""
     fi
     [ "$status" = "-" ] && continue
     runs=$((runs + 1))
     if [ "$gate" = success ]; then
       irrelevant=1
+    elif [ "$status" = error ]; then
+      unreadable=1
     elif [ "$status" != completed ]; then
       running=1
     elif [ "$install" = success ]; then

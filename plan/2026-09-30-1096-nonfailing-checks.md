@@ -1,0 +1,29 @@
+---
+status: draft
+issue: 1096
+spec: spec/2026-09-30-1096-nonfailing-checks.md
+---
+
+# Plan: Make four checks fail when their protected behavior breaks
+
+Amend four existing, registered checks only. No product behavior, new check, or workflow registration changes. #1111 has merged; `connect_wifi()` still has the missing-interface guard, and #1092's new slow-probe case in `shell-ipc-resolve` must remain. These checks are static or stubbed: they do not prove a real Wi-Fi card, terminal, or shell session works. Any CI workflow change remains a human decision under root `AGENTS.md` §11.
+
+## Steps
+
+1. `tests/installer-network.nix:150-158`: extract `connect_wifi()` from `installer/install.sh:347-469`, refuse an empty extraction, then inspect the no-networks branch (`installer/install.sh:381-399`) for the executable `if ! ls -d /sys/class/net/*/phy80211` conditional. Replace the whole-script `phy80211` grep. Do not accept a bare token: `ask_network()` and a comment within `connect_wifi()` already contain it. Show the extracted branch on failure. → Verify by `nix build .#checks.x86_64-linux.installer-network --print-build-logs --no-link`. Break proof: copy `installer/install.sh` aside outside the repo, replace only that conditional with `if true; then` while leaving `ask_network()` and the `connect_wifi()` comment intact, verify the extraction still exists and the check fails on this assertion, restore with `cp`, then show the check passing. Trap: the installer source requires a committed tree for checks that reach `installer/mkFlake.nix`; stage any new file before flake evaluation.
+2. `tests/dashboard-clock.nix:55-107`: preserve all clock skews and the empty-tips case, but capture the exit status of each `script -qec` call instead of `|| true`. Require both success and the `Installing nixarchy` frame from `installer/lib/dashboard.sh:90`; keep the existing sed and arithmetic error messages. → Verify by `nix build .#checks.x86_64-linux.dashboard-clock --print-build-logs --no-link`. Break proof: copy `installer/lib/dashboard.sh` aside, rename `ui_dashboard_tick()` so the test's call fails, prove the check fails rather than reporting clean draws, restore with `cp`, then show it passing. Trap: do not shadow runCommand's `$out` with a capture variable; use `res` or `got`.
+3. `tests/shell-ipc-resolve.nix:86-93`: remove the no-op line, initialize `argv.two2` before case 3, and assert that its two-instance refusal made no `-i` call or other non-probe IPC call. Retain the refusal text and instance-name assertions, all existing cases, and #1092's slow-probe case at lines 107-113. The product refuses multiple instances in `pkgs/omarchy/default.nix:2055-2060`. → Verify by `nix build .#checks.x86_64-linux.shell-ipc-resolve --print-build-logs --no-link`. Break proof: copy `pkgs/omarchy/default.nix` aside, insert a wrong `qs ipc -n -i aaa111` call immediately before its multi-instance `fail` while keeping the refusal text, prove the new argv assertion fails, restore with `cp`, then show the check passing. Trap: assert on the stub's recorded argv, not the refusal message alone; retain the carried patch's successful `substituteInPlace` match.
+4. `tests/installer-failure-hints.nix:114-125`: after extracting uncommented executable `ui_left` lines into `printed.sh`, require `[ -s printed.sh ]` before the negative password-wording assertion. Keep the existing exit-code mapping assertions and comment stripping; `installer/install.sh:440-443` puts prohibited wording in a comment but not the displayed line. → Verify by `nix build .#checks.x86_64-linux.installer-failure-hints --print-build-logs --no-link`. Break proof: copy `installer/install.sh` aside, remove executable `ui_left` lines from `connect_wifi()` but keep its status arms and comments, prove `printed.sh` is empty and the check fails, restore with `cp`, then show it passing. Trap: do not replace the negative wording check with an assertion about comments.
+5. The four edited `tests/*.nix` files: after every `.nix` edit, run `nix fmt` and inspect `git diff --stat`; finish with `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .`, `nix run nixpkgs#deadnix -- --fail .`, and `git diff --check`. → Verify each command exits zero and the final diff contains only the planned test and artifact files. Trap: never add a producer pipe into `grep -q` under `pipefail`, and do not write `omarchy/shell.json` in fixtures. Do not edit `.github/workflows`.
+
+For every red proof, save the good source with `cp` to a path outside the worktree, verify the deliberate break actually landed with `git diff`, run only the affected check, capture the failing line for the PR, restore by `cp`, and verify a green run. Never use `git checkout` to restore a staged file. Build one check at a time; no VM checks or `checks.options` are needed. Name the plan step in each implementation commit. If implementation must deviate, update this plan in that same commit.
+
+## Tests
+
+- Four red builds: each corresponding check must exit nonzero for the deliberate break in its step; record the assertion's failing output.
+- Four green builds: `installer-network`, `dashboard-clock`, `shell-ipc-resolve`, and `installer-failure-hints` all succeed after restoration. Run one build at a time and preserve the real `nix build` status; do not pipe it to `tail` without `pipefail`.
+- Formatter, statix, deadnix, and diff checks from step 5 succeed. The PR template links the approved intent, spec, and plan and includes the four red outputs. No workflow or product file remains changed by the break proofs.
+
+## Rollback
+
+Revert the implementation commits on this branch, restoring the previous four test assertions. The break-proof source edits are temporary and must be restored before any commit; check `git status` and the final diff for accidental installer, dashboard, or package changes.

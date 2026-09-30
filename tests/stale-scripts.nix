@@ -49,5 +49,17 @@ pkgs.runCommand "nixarchy-stale-scripts"
       exit 1
     }
     echo "stale-script Antigravity recognizes agy"
+
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'printf "%s\n" "$*" >> "$HYPR_LOG"' > stub/hyprctl
+    printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 0' > stub/gsettings
+    chmod +x stub/hyprctl stub/gsettings
+    export HYPR_LOG="$PWD/hypr.log" DBUS_SESSION_BUS_ADDRESS=stub
+    bash ${omarchy}/share/omarchy/bin/omarchy-cursor-set >/dev/null
+    hypr_calls=$(cat hypr.log)
+    case "$hypr_calls" in
+      *'eval hl.env("XCURSOR_THEME", "Bibata-Modern-Ice")'*) ;;
+      *) echo "FAIL: cursor did not update XCURSOR_THEME through Lua IPC" >&2; exit 1 ;;
+    esac
+    echo "stale-script cursor uses Lua IPC"
     touch "$out"
   ''

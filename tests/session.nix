@@ -1027,6 +1027,27 @@ pkgs.testers.runNixOSTest {
     assert "Ice" in cursor, f"a dark theme should use Bibata-Modern-Ice, got {cursor}"
     machine.succeed(f"test -d /run/current-system/sw/share/icons/{cursor.strip(chr(39))}/cursors")
 
+    # Change from Ice to Classic after login. Reading the login-time value
+    # would pass a check that never updates a newly launched client.
+    machine.succeed("install -d -o omarchy -g users /home/omarchy/cursor-probe-bin")
+    machine.succeed(
+        "printf '%s\\n' '#!/run/current-system/sw/bin/bash' 'echo light'"
+        " > /home/omarchy/cursor-probe-bin/omarchy-theme-color; "
+        "chmod 755 /home/omarchy/cursor-probe-bin/omarchy-theme-color")
+    machine.succeed(on_desktop(
+        "PATH=/home/omarchy/cursor-probe-bin:$PATH omarchy-cursor-set >/dev/null"))
+    machine.succeed(
+        "printf '%s\\n' 'hl.exec_cmd(\"printenv XCURSOR_THEME > "
+        "/home/omarchy/cursor-theme-from-compositor\")'"
+        " > /home/omarchy/cursor-probe.lua")
+    machine.succeed(on_desktop(
+        "hyprctl eval \"$(cat /home/omarchy/cursor-probe.lua)\""))
+    machine.wait_until_succeeds("test -s /home/omarchy/cursor-theme-from-compositor")
+    new_cursor = machine.succeed("cat /home/omarchy/cursor-theme-from-compositor").strip()
+    assert new_cursor == "Bibata-Modern-Classic", (
+        f"new compositor-launched client inherited {new_cursor!r}, not Classic")
+    print("new compositor-launched client receives changed XCURSOR_THEME")
+
     # config/ was seeded in full, not just hypr and omarchy. These are the
     # three the manual points users at, and each was missing.
     machine.succeed("test -s /home/omarchy/.config/starship.toml")

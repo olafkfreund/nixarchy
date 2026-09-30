@@ -33,7 +33,7 @@ fi
 # Hyprland's own pointer, and the environment XWayland clients inherit.
 if command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1; then
   hyprctl setcursor "$theme" "$size" >/dev/null || true
-  hyprctl keyword env XCURSOR_THEME,"$theme" >/dev/null || true
+  hyprctl eval "hl.env(\"XCURSOR_THEME\", \"$theme\")" >/dev/null
 fi
 
 echo "$theme"

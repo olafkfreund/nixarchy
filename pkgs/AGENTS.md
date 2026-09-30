@@ -203,13 +203,14 @@ exec omarchy-shell shell hide omarchy.menu
 **The `call` reply rule (read from `omarchy-shell`/`shell.qml`, not
 guessed):** `shell call` exits 0 far more often than it fails. It answers the
 string `"unknown"`, still exit 0, when the target plugin has no such method --
-which is the stock menu's state, since only nixarchy-menu defines `dismiss()`.
+which is the stock menu's state, since only nixarchy-menu defines `dismiss()` --
+and `"error"`, also exit 0, when the method throws.
 It exits 1 (or times out) only on an IPC-level failure: no connection, no
 reply, or qs's own `Target not found.` / `Function not found.` literals for
 the **IPC handler's** functions, never the plugin's. So the patch matches the
-**reply**, not the exit status -- `|| falls back` on a failing `omarchy-shell`
-would never trigger for the one case it needs to catch (the stock menu
-answering `unknown` with a perfectly good exit 0).
+**reply**, not the exit status: a `call … || hide` fallback would never fire
+for the cases it needs to catch (`unknown` from the stock menu, `error` from a
+throwing `dismiss()`, both with a perfectly good exit 0).
 
 `tests/menu-close.nix` stubs `omarchy-shell` to prove the call-before-hide
 order and the reply match, for both an enabled and a stock menu.

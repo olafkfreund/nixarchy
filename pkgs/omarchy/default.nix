@@ -96,8 +96,6 @@
   imv,
   evince,
   libretro-core-info,
-  libretro-shaders-slang,
-  retroarch-joypad-autoconfig,
   localsend,
   runCommand,
   writeShellScriptBin,
@@ -615,15 +613,15 @@ stdenvNoCC.mkDerivation {
                     done
 
                     # RetroArch loads its cores from /usr/lib/libretro upstream. nixpkgs puts
-                    # them inside the wrapper's own store path -- and which cores exist depends
-                    # on how the package was built -- so the directory has to be resolved at
-                    # runtime. Without this, RetroArch installs and then reports
+                    # them inside the wrapper's own store path. The menu resolves that path
+                    # now; the installer saves the stable system-profile path. Without either,
+                    # RetroArch installs and then reports
                     #
                     #   No RetroArch cores found   /usr/lib/libretro
-                    for f in omarchy-games-retro-install omarchy-install-gaming-retroarch; do
-                      substituteInPlace $out/share/omarchy/bin/$f \
-                        --replace-fail '/usr/lib/libretro' '$(omarchy-retroarch-cores)'
-                    done
+                    substituteInPlace $out/share/omarchy/bin/omarchy-games-retro-install \
+                      --replace-fail '/usr/lib/libretro' '$(omarchy-retroarch-cores)'
+                    substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
+                      --replace-fail '/usr/lib/libretro' '/run/current-system/sw/lib/retroarch/cores'
 
                     # `omarchy version` said "dev".
                     #
@@ -686,12 +684,12 @@ stdenvNoCC.mkDerivation {
                     # RetroArch was configured to look in /usr/share/libretro for everything
                 # except its cores.
                 #
-                # The cores path was fixed long ago; the other eight settings this script
+                # The cores path is patched above; the other eight settings this script
                 # writes into retroarch.cfg were not, so a RetroArch installed through the
                 # selection came up with no core descriptions, no shaders and no controller
                 # profiles -- each one a silent absence rather than an error.
                 #
-                # Three have real packages in nixpkgs and now point at them. The rest --
+                # Three have real packages in the system profile. The rest --
                 # overlays, the on-screen-keyboard overlays, and the three databases --
                 # have none, so they point into the user's own data directory instead of a
                 # directory that cannot exist. That is where RetroArch's own online updater
@@ -699,11 +697,11 @@ stdenvNoCC.mkDerivation {
                 # fetch them".
                 substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
                   --replace-fail '"/usr/share/libretro/info"' \
-                  '"${libretro-core-info}/share/retroarch/cores"' \
+                  '"/run/current-system/sw/share/retroarch/cores"' \
                   --replace-fail '"/usr/share/libretro/shaders/shaders_slang"' \
-                  '"${libretro-shaders-slang}/share/libretro/shaders/shaders_slang"' \
+                  '"/run/current-system/sw/share/libretro/shaders/shaders_slang"' \
                   --replace-fail '"/usr/share/libretro/autoconfig"' \
-                  '"${retroarch-joypad-autoconfig}/share/libretro/autoconfig"' \
+                  '"/run/current-system/sw/share/libretro/autoconfig"' \
                   --replace-fail '"/usr/share/libretro/overlays/keyboards"' \
                   '"$HOME/.local/share/retroarch/overlays/keyboards"' \
                   --replace-fail '"/usr/share/libretro/overlays"' \
@@ -719,7 +717,7 @@ stdenvNoCC.mkDerivation {
                 # the directory it lives in.
                 substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
                   --replace-fail '/usr/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp' \
-                  '${libretro-shaders-slang}/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp'
+                  '/run/current-system/sw/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp'
 
                 # "Restart to finish the update" was going to be the answer every time.
                 #

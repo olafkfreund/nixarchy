@@ -195,6 +195,37 @@ pkgs.runCommand "nixarchy-review-pins"
     aaa''${T}in_progress''${T}skipped''${T}null
     EOF
 
+    # Exercise the collector itself: a failed jobs request must not erase a
+    # newer SHA and make an older successful install look current.
+    source <(sed -n '/^main_install_runs() {/,/^}/p' ${../pkgs/review.sh})
+    declare -F main_install_runs >/dev/null || {
+      echo "review: could not load main_install_runs for the fixture" >&2
+      exit 1
+    }
+    gh() {
+      case "$1:$2" in
+        'api:repos/{owner}/{repo}/commits?sha=main&per_page=30') printf 'aaa\nbbb\n' ;;
+        'run:list')
+          printf 'aaa\t101\tcompleted\n'
+          [ "$GH_CASE" != mixed ] || printf 'aaa\t102\tcompleted\n'
+          printf 'bbb\t201\tcompleted\n'
+          ;;
+        'api:repos/{owner}/{repo}/actions/runs/101/jobs') return 1 ;;
+        'api:repos/{owner}/{repo}/actions/runs/102/jobs' | 'api:repos/{owner}/{repo}/actions/runs/201/jobs') printf 'skipped\tsuccess\n' ;;
+        *) echo "review: unexpected gh request: $*" >&2; return 1 ;;
+      esac
+    }
+    GH_CASE=failed
+    collected=$(main_install_runs)
+    if [[ "$collected" != *"aaa''${T}error''${T}error''${T}error"* ]]; then
+      echo "review: failed jobs request lost newer aaa row" >&2
+      fail=1
+    fi
+    verdict "unreadable''${T}aaa" <<<"$collected"
+    GH_CASE=mixed
+    collected=$(main_install_runs)
+    verdict "verified''${T}aaa" <<<"$collected"
+
     # One workflow's row, from fixture gh output (#690). The case that broke:
     # a workflow with no runs, which a jq filter over an empty list turns into
     # "null<TAB>null" -- date refused it and the row vanished from the table.

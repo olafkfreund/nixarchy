@@ -123,6 +123,15 @@ from_host_exists=false
 # answers file omits fails validation rather than aborting on an unbound
 # variable three functions later.
 device=""
+disk_paths=()
+disk_reals=()
+disk_wwns=()
+disk_serials=()
+disk_sizes=()
+disk_models=()
+disk_by_paths=()
+disk_by_path_dir=/dev/disk/by-path
+allow_unidentified_disk=false
 encrypt=""
 # "whole" (the disk is ours) or "free" (installed beside an existing OS, #47).
 # Set by ask_disk_mode or the answers file; the free-space region it applies to
@@ -159,6 +168,8 @@ nixarchy-install -- install nixarchy onto a disk.
                                 touch no disk, print the directory and stop
   nixarchy-install --answers F  take every answer from F and ask nothing;
                                 F may be an https:// URL
+  nixarchy-install --allow-unidentified-disk
+                                explicitly permit a disk without WWN/serial
   nixarchy-install --from URL --host NAME
                                 install from a configuration repository that
                                 already exists, rather than generating a flake
@@ -181,6 +192,7 @@ luks_passphrase and recovery_passphrase, which are taken exactly as
 written, spaces included:
 
   device=/dev/vda           whole disk, not a partition
+  allow_unidentified_disk=yes  permit weaker path/size/available-model check
   disk_mode=whole           whole or free; default whole. `free` installs into
                             the largest free region on the disk and leaves
                             every existing partition alone
@@ -804,8 +816,82 @@ ask_device() {
     echo "nixarchy needs at least ${MIN_DISK_GIB} GiB; nothing attached qualifies." >&2
     exit 1
   fi
-  device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}') || ui_abort
-  [ -n "$device" ] || ui_abort
+  while :; do
+    device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}') || ui_abort
+    [ -n "$device" ] || ui_abort
+    disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
+    remember_disk "$device" && return 0
+    echo "Choose another disk. To retry from the ISO, stop this wizard with Ctrl+C," >&2
+    echo "  then at a root console run: nixarchy-install --allow-unidentified-disk" >&2
+  done
+}
+
+# Remember the physical disk once; a retry must never accept a replacement
+# merely because it appeared at the same /dev path.
+remember_disk() {
+  local path=$1 real wwn serial size model bypath="" link
+  real=$(readlink -f "$path") || return 1
+  if [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" != disk ]; then
+    echo "nixarchy-install: $path is no longer a whole disk. Choose another disk." >&2
+    return 1
+  fi
+  wwn=$(lsblk -dnro WWN "$real" 2>/dev/null) || return 1
+  serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) || return 1
+  size=$(lsblk -bdnro SIZE "$real" 2>/dev/null) || return 1
+  model=$(lsblk -dnro MODEL "$real" 2>/dev/null) || return 1
+  for link in "$disk_by_path_dir"/*; do
+    [ -L "$link" ] || continue
+    if [ "$(readlink -f "$link")" = "$real" ]; then
+      bypath=$link
+      break
+    fi
+  done
+  if [ -z "$wwn" ] && [ -z "$serial" ]; then
+    if [ "$allow_unidentified_disk" != true ] || [ -z "$size" ]; then
+      echo "nixarchy-install: $path has no WWN or serial. Choose a disk whose identity can be checked." >&2
+      echo "  virt-manager, GNOME Boxes and Proxmox virtio disks may need a serial; otherwise use --allow-unidentified-disk or allow_unidentified_disk=yes." >&2
+      return 1
+    fi
+    echo "nixarchy-install: WARNING: $path has no WWN/serial; checking path, size, available model and by-path link." >&2
+  fi
+  disk_paths+=("$path") disk_reals+=("$real")
+  disk_wwns+=("$wwn") disk_serials+=("$serial")
+  disk_sizes+=("$size") disk_models+=("$model")
+  disk_by_paths+=("$bypath")
+}
+
+check_disks() {
+  local i path real wwn serial size model bypath
+  if [ "${#disk_paths[@]}" -eq 0 ]; then
+    echo "nixarchy-install: no disk identity was recorded. Nothing was formatted." >&2
+    return 1
+  fi
+  for i in "${!disk_paths[@]}"; do
+    path=${disk_paths[$i]}
+    real=$(readlink -f "$path") || return 1
+    if [ "$real" != "${disk_reals[$i]}" ] ||
+      [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" != disk ]; then
+      echo "nixarchy-install: $path changed or vanished. Nothing further was formatted; start again." >&2
+      return 1
+    fi
+    wwn=$(lsblk -dnro WWN "$real" 2>/dev/null) || return 1
+    serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) || return 1
+    size=$(lsblk -bdnro SIZE "$real" 2>/dev/null) || return 1
+    model=$(lsblk -dnro MODEL "$real" 2>/dev/null) || return 1
+    if [ "$wwn" != "${disk_wwns[$i]}" ] || [ "$serial" != "${disk_serials[$i]}" ]; then
+      echo "nixarchy-install: $path has a different WWN or serial. Nothing further was formatted; start again." >&2
+      return 1
+    fi
+    if [ -z "${disk_wwns[$i]}" ] && [ -z "${disk_serials[$i]}" ]; then
+      bypath=${disk_by_paths[$i]}
+      if [ "$size" != "${disk_sizes[$i]}" ] ||
+        { [ -n "${disk_models[$i]}" ] && [ "$model" != "${disk_models[$i]}" ]; } ||
+        { [ -n "$bypath" ] && [ "$(readlink -f "$bypath")" != "$real" ]; }; then
+        echo "nixarchy-install: $path changed size, model or by-path link. Nothing further was formatted; start again." >&2
+        return 1
+      fi
+    fi
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -1176,6 +1262,7 @@ read_answers() {
     # machine called nixarchy that nobody asked for.
     case $key in
       device) device=$value ;;
+      allow_unidentified_disk) allow_unidentified_answer=$value ;;
       disk_mode) disk_mode=$value ;;
       encrypt) encrypt=$value ;;
       luks_passphrase) luks_passphrase=$value ;;
@@ -1194,6 +1281,12 @@ read_answers() {
         ;;
     esac
   done <"$file"
+
+  case ${allow_unidentified_answer:-} in
+    yes) allow_unidentified_disk=true ;;
+    no | "") ;;
+    *) echo "nixarchy-install: answers: allow_unidentified_disk must be yes or no" >&2; exit 2 ;;
+  esac
 
   # Hashing here rather than in validation keeps the plaintext's life short.
   if [ -n "$password" ]; then
@@ -1454,6 +1547,7 @@ confirm_repo_disks() {
   boot=$(boot_medium)
   [ -z "$boot" ] || boot=$(readlink -f "$boot")
   echo "$from_repo's $hostname will ERASE:"
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   while IFS= read -r dev; do
     real=$(readlink -f "$dev")
     if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
@@ -1464,6 +1558,7 @@ confirm_repo_disks() {
       echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
       return 1
     }
+    remember_disk "$dev" || return 1
     echo "  $dev  $line"
   done <<<"$devs"
   ui_interactive || return 0
@@ -1559,6 +1654,7 @@ partition_free_space() {
   # loop below, which timed out and printed "The partitions were created" --
   # asserting a creation that never happened, in free-space mode, on the one
   # disk that has somebody else's OS on it.
+  check_disks || return 1
   sgdisk --new=0:"$free_start":"$esp_end" \
     --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev" || {
     echo "nixarchy-install: sgdisk could not create the ESP on $dev (exit $?)." >&2
@@ -1593,6 +1689,8 @@ partition_free_space() {
     sleep 0.5
   done
 
+  check_free_partitions || return 1
+
   # The region was free, not blank.
   #
   # Whatever used to live in those sectors is still sitting in them, and blkid
@@ -1609,7 +1707,50 @@ partition_free_space() {
   wipefs -a "$esp_dev" "$root_dev"
 }
 
+# The by-partlabel names are global: a stale or foreign label must not turn
+# this disk's free-space install into a wipe of another disk's partition.
+check_free_partitions() {
+  local part real parent selected
+  check_disks || return 1
+  selected=$(readlink -f "$device") || return 1
+  for part in /dev/disk/by-partlabel/nixarchy-{esp,root}; do
+    real=$(readlink -f "$part") || return 1
+    parent=$(lsblk -nro PKNAME "$real" 2>/dev/null) || return 1
+    if [ -z "$parent" ] || [ "$(readlink -f "/dev/$parent")" != "$selected" ]; then
+      echo "nixarchy-install: $part does not belong to the selected disk." >&2
+      echo "  Partition entries may exist and signatures may have been cleared. Inspect before retrying." >&2
+      return 1
+    fi
+  done
+}
+
 format_disk() {
+  check_disks || return 1
+  # The repository's evaluated layout is authoritative, including --from.
+  # Its encrypt answer may not describe the host's actual disko tree.
+  local needs_key
+  needs_key=$(nix "${NIX_FLAGS[@]}" eval --json \
+    "$work#nixosConfigurations.$hostname.config.disko.devices" \
+    --apply 'd: let walk = x: if builtins.isAttrs x then
+      if (x.type or null) == "derivation" then false else
+      ((x.type or null) == "luks" && (x.passwordFile or null) == "/tmp/nixarchy-luks.key")
+      || builtins.any (name: builtins.match "^_.*" name == null && walk (builtins.getAttr name x)) (builtins.attrNames x)
+      else if builtins.isList x then builtins.any walk x else false;
+      in walk d') || {
+    echo "nixarchy-install: could not inspect the disko layout; nothing was formatted." >&2
+    return 1
+  }
+  case "$needs_key" in
+    true)
+      if [ -z "$luks_passphrase" ]; then
+        echo "nixarchy-install: this disk layout needs a LUKS passphrase; nothing was formatted." >&2
+        return 1
+      fi
+      ;;
+    false) ;;
+    *) echo "nixarchy-install: invalid disko layout result; nothing was formatted." >&2; return 1 ;;
+  esac
+  rm -f /tmp/nixarchy-luks.key
   # Leave /mnt clean, because disko will not.
   #
   # disko's mount phase asks `findmnt` whether each mountpoint is already
@@ -1640,11 +1781,6 @@ format_disk() {
     partition_free_space || return 1
   fi
 
-  # The passphrase file disko's passwordFile points at. Written with umask 077,
-  # removed as soon as the format is done; it never reaches the installed
-  # system, whose initrd prompts instead.
-  ( umask 077 && printf '%s' "$luks_passphrase" >/tmp/nixarchy-luks.key )
-
   # Evaluated from the USER'S flake, not ours: the same disk-config.nix the
   # installed machine imports is the one that formats the disk. That is the
   # whole reason the layout is a file rather than a parted script.
@@ -1667,6 +1803,17 @@ format_disk() {
     echo "nixarchy-install: the disko script did not build (exit $rc)." >&2
     echo "  Nothing was formatted; the error above this is the one to read." >&2
     return 1
+  fi
+  check_disks || { rm -f /tmp/nixarchy-luks.key; return 1; }
+  if [ "$disk_mode" = free ]; then
+    check_free_partitions || { rm -f /tmp/nixarchy-luks.key; return 1; }
+  fi
+  # Only disko reads this file. Its build never needs a secret.
+  if [ "$needs_key" = true ]; then
+    ( umask 077 && printf '%s' "$luks_passphrase" >/tmp/nixarchy-luks.key ) || {
+      rm -f /tmp/nixarchy-luks.key
+      return 1
+    }
   fi
   "$script" || rc=$?
   rm -f /tmp/nixarchy-luks.key
@@ -2515,6 +2662,7 @@ preflight_build() {
 }
 
 run_install() {
+  installed_baked=false
   # What would have to be built, printed before doing it. On a machine with no
   # network an unseeded build input is the difference between an install and a
   # confusing cascade of source downloads, and this names it once rather than
@@ -2715,7 +2863,8 @@ run_install() {
     --option extra-substituters "$SUBSTITUTERS" \
     --option extra-trusted-public-keys "$TRUSTED_KEYS" \
     "${no_build[@]}" \
-    "${SUBSTITUTE_FLAGS[@]}"
+    "${SUBSTITUTE_FLAGS[@]}" || return 1
+  [ -z "$baked_system" ] || installed_baked=true
 }
 
 # The baseline a factory reset returns to (#172).
@@ -2837,6 +2986,7 @@ main() {
   while [ $# -gt 0 ]; do
     case $1 in
       --dry-run) dry_run=true ;;
+      --allow-unidentified-disk) allow_unidentified_disk=true ;;
       --answers)
         shift
         [ $# -gt 0 ] || {
@@ -2930,6 +3080,10 @@ main() {
     # evaluates and boots and is wrong.
     [ -n "$from_repo" ] && hostname=$from_host
     validate_answers
+    if [ "$from_host_exists" != true ]; then
+      disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
+      remember_disk "$device" || exit 1
+    fi
     ask_network
   elif [ "$from_host_exists" = true ]; then
     # The repository decided the username, the disk, the layout and the
@@ -3002,7 +3156,7 @@ main() {
   local target_log=""
   local started rc=0 elapsed
   install_attempts
-  ui_finished "$elapsed" "$username"
+  ui_finished "$elapsed" "$username" "${installed_baked:-false}"
 }
 
 # The phases, then the failure screen, again for as long as the person at it

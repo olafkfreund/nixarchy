@@ -304,8 +304,10 @@ pkgs.testers.runNixOSTest {
             ["${pkgs.qemu_test}/bin/qemu-img", "create", "-f", "qcow2", disk, "32G"])
 
         drives = (
-            f" -drive file={disk},if=virtio,format=qcow2,werror=report"
-            " -drive file=${answersImage},if=virtio,format=raw,readonly=on")
+            f" -drive file={disk},if=none,id=target,format=qcow2,werror=report"
+            " -device virtio-blk-pci,drive=target,serial=nixarchy-reinstall-target"
+            " -drive file=${answersImage},if=none,id=answers,format=raw,readonly=on"
+            " -device virtio-blk-pci,drive=answers")
 
         installer = create_machine("exec ${installerCommand}" + efi + drives, name="installer")
         vms.append(installer)
@@ -381,7 +383,8 @@ pkgs.testers.runNixOSTest {
         target = create_machine(
             "exec ${targetCommand}"
             + efi
-            + f" -drive file={disk},if=virtio,format=qcow2,werror=report",
+            + f" -drive file={disk},if=none,id=target,format=qcow2,werror=report"
+            + " -device virtio-blk-pci,drive=target,serial=nixarchy-reinstall-target",
             name="target")
         vms.append(target)
         target.start()

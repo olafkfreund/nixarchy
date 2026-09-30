@@ -480,6 +480,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   disk_mode=whole luks_passphrase=pw
   . ./fd.sh
   findmnt() { return 1; }   # nothing mounted at /mnt
+  check_disks() { return 0; }
   fails=0
   t() {
     want=$1 name=$2
@@ -493,20 +494,63 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   }
 
   # The build fails: nothing to execute, and the status must say so.
-  nix() { echo "error: builder failed" >&2; return 1; }
+  nix() {
+    [ "$1" = eval ] && { echo false; return; }
+    echo "error: builder failed" >&2; return 1
+  }
   t refuse "diskoScript build fails -> format_disk fails"
   grep -qi disko out || { echo "  FAILED  build refusal does not name disko"; fails=$((fails+1)); }
 
   # The build succeeds and disko itself dies partway.
   printf '#!/bin/sh\nexit 3\n' > fake-disko-bad; chmod +x fake-disko-bad
-  nix() { echo "$PWD/fake-disko-bad"; }
+  nix() { [ "$1" = eval ] && echo false || echo "$PWD/fake-disko-bad"; }
   t refuse "diskoScript exits 3 -> format_disk fails"
   grep -qi disko out || { echo "  FAILED  disko refusal does not name disko"; fails=$((fails+1)); }
 
   # And a run that works still works.
   printf '#!/bin/sh\nexit 0\n' > fake-disko-ok; chmod +x fake-disko-ok
-  nix() { echo "$PWD/fake-disko-ok"; }
+  nix() { [ "$1" = eval ] && echo false || echo "$PWD/fake-disko-ok"; }
   t proceed "diskoScript succeeds -> format_disk succeeds"
+
+  # The evaluated layout, rather than the answers-file encrypt flag, decides
+  # whether a temporary key exists. A build must never receive that key.
+  printf '#!/bin/sh\n[ "$(test -f /tmp/nixarchy-luks.key && echo true || echo false)" = "$WANT_KEY" ]\n' > fake-disko-key
+  chmod +x fake-disko-key
+  nix() {
+    if [ "$1" = eval ]; then echo "$LAYOUT"; return; fi
+    [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED key exists during build' >&2; return 1; }
+    echo "$PWD/fake-disko-key"
+  }
+  LAYOUT=false WANT_KEY=false encrypt=true
+  export WANT_KEY
+  t proceed "plain evaluated layout ignores encrypt=true"
+  [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED plain layout left a key'; fails=$((fails+1)); }
+  LAYOUT=true WANT_KEY=true encrypt=false
+  t proceed "--from keyed layout ignores encrypt=false"
+  [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED keyed layout left a key'; fails=$((fails+1)); }
+  luks_passphrase=
+  t refuse "keyed layout with no passphrase refuses before writes"
+  grep -q 'needs a LUKS passphrase' out || { echo 'FAILED missing passphrase has no explanation'; fails=$((fails+1)); }
+  luks_passphrase=pw
+  LAYOUT=invalid
+  t refuse "failed layout evaluation refuses before writes"
+  [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED bad layout left a key'; fails=$((fails+1)); }
+  disk_mode=free
+  partition_free_space() { touch partition-started; }
+  t refuse "bad free-space layout refuses before partition writes"
+  [ ! -e partition-started ] || { echo 'FAILED free-space writes began before layout evaluation'; fails=$((fails+1)); }
+  disk_mode=whole
+  nix() { [ "$1" = eval ] && return 1; echo "$PWD/fake-disko-key"; }
+  t refuse "layout eval command failure refuses before writes"
+  LAYOUT=true
+  nix() { [ "$1" = eval ] && { echo true; return; }; echo "$PWD/fake-disko-bad"; }
+  t refuse "keyed disko failure removes the key"
+  [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED disko failure left a key'; fails=$((fails+1)); }
+  nix() { [ "$1" = eval ] && { echo true; return; }; echo "$PWD/fake-disko-key"; }
+  printf() { command printf half; return 1; }
+  t refuse "partial key write fails closed"
+  unset -f printf
+  [ ! -e /tmp/nixarchy-luks.key ] || { echo 'FAILED partial key write left a file'; fails=$((fails+1)); }
   exit $fails
   EOF
   bash fdt.sh
@@ -564,8 +608,10 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
     work=/nonexistent hostname=h disk_mode=free luks_passphrase=pw
     . ./fd.sh
     findmnt() { return 1; }
+    check_disks() { return 0; }
+    check_free_partitions() { return 0; }
     partition_free_space() { return 1; }
-    nix() { touch disko-built; echo /nonexistent; }
+    nix() { [ "$1" = eval ] && { echo false; return; }; touch disko-built; echo /nonexistent; }
     format_disk
   ) > fdfree.out 2>&1 && { echo "format_disk succeeded after partition_free_space failed (#1084)" >&2; exit 1; }
   [ ! -e disko-built ] || { echo "format_disk built the disko script after partition_free_space failed (#1084)" >&2; exit 1; }
@@ -654,6 +700,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   encrypt=false FREE_ESP_MIB=2048
   . ./pfs.sh
   free_space_possible() { return 0; }
+  check_disks() { return 0; }
   blockdev() { echo 512; }
   partx() { :; }
   udevadm() { :; }

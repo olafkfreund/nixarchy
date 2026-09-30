@@ -58,6 +58,8 @@ pkgs.runCommand "nixarchy-try-nixarchy"
     for b in qemu-system-x86_64 qemu-img curl; do
       printf '#!/bin/sh\nexit 0\n' > "$stub/$b"; chmod +x "$stub/$b"
     done
+    printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$PWD/qemu-args"\n' > "$stub/qemu-system-x86_64"
+    chmod +x "$stub/qemu-system-x86_64"
     export PATH="$stub:$PATH"
 
     res=$(NIXARCHY_TRY_DIR=$PWD/w1 bash ./try-nixarchy.sh 2>&1 || true)
@@ -141,6 +143,9 @@ pkgs.runCommand "nixarchy-try-nixarchy"
         echo "a MATCHING image was refused; the check tests the wrong thing" >&2; printf %s\\n "$res" | sed "s/^/    | /" >&2; fail=1 ;;
       *) echo "  a matching image passes" ;;
     esac
+    grep -Fx 'virtio-blk-pci,drive=target,serial=nixarchy-try-no-nix' qemu-args >/dev/null || {
+      echo "no-Nix try launched without a target-disk serial" >&2; fail=1;
+    }
 
     [ "$fail" = 0 ] || { echo "try-nixarchy.sh does not refuse the way it claims" >&2; exit 1; }
     echo "the no-nix front door refuses in sentences"

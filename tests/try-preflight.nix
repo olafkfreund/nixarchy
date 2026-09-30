@@ -146,6 +146,60 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
   [ "$(release_urls rel.json sums)" = "https://example.invalid/SHA256SUMS" ] \
     && ok "the checksum file is found" || no "the checksum file is found"
 
+  # A cached image still needs this run's checksum. The network is a stub;
+  # stale cached sums must never be consulted.
+  CACHE_DIR=$PWD/cache GH_API=https://example.invalid/api
+  mkdir -p "$CACHE_DIR"
+  printf aa > part-aa
+  printf bb > part-ab
+  cat part-aa part-ab > complete.iso
+  hash=$(sha256sum complete.iso | awk '{print $1}')
+  printf '%s  nixarchy-v9.9.9-9.iso\n' "$hash" > fresh-sums
+  check_disk() { :; }
+  curl() {
+    local url= out= next=false arg
+    printf '%s\n' "$*" >> curl-args
+    for arg in "$@"; do
+      if [ "$next" = true ]; then out=$arg; next=false; continue; fi
+      case "$arg" in -o) next=true ;; https://*) url=$arg ;; esac
+    done
+    case "$url" in
+      */api) cp rel.json "$out" ;;
+      */SHA256SUMS) [ "''${FAIL_SUMS:-false}" = true ] && return 1; cp fresh-sums "$out" ;;
+      *.part-aa) [ "''${FAIL_PART:-false}" = true ] && return 1; cat part-aa ;;
+      *.part-ab) [ "''${FAIL_PART:-false}" = true ] && return 1; cat part-ab ;;
+      *) return 1 ;;
+    esac
+  }
+  cp complete.iso "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
+  if path=$(fetch_release iso 2>msg) && [ "$path" = "$CACHE_DIR/nixarchy-v9.9.9-9.iso" ]; then
+    ok "valid cache is hashed against fresh sums"
+  else no "valid cache is hashed against fresh sums"; fi
+  printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
+  if path=$(fetch_release iso 2>msg) && cmp -s complete.iso "$path"; then
+    ok "corrupt cache is deleted and replaced with verified bytes"
+  else no "corrupt cache is deleted and replaced with verified bytes"; fi
+  grep -F 'SHA256SUMS' curl-args > checksum-curl
+  grep -F '.part-aa' curl-args > iso-curl
+  grep -Fq -- "--proto =https --proto-redir =https" checksum-curl \
+    && grep -Fq -- "--proto =https --proto-redir =https" iso-curl \
+    && ok "checksum and ISO redirects stay on HTTPS" || no "checksum or ISO fetch permits HTTP"
+  printf stale > "$CACHE_DIR/nixarchy-v9.9.9-9.iso"
+  cp fresh-sums "$CACHE_DIR/SHA256SUMS"
+  FAIL_SUMS=true
+  if fetch_release iso >msg 2>&1; then no "stale sums never authorize a cached ISO"
+  else ok "stale sums never authorize a cached ISO"; fi
+  unset FAIL_SUMS
+  printf '%s  other.iso\n' "$hash" > fresh-sums
+  if fetch_release iso >msg 2>&1; then no "missing checksum entry refuses"
+  else ok "missing checksum entry refuses"; fi
+  printf '%s  nixarchy-v9.9.9-9.iso\n' "$hash" > fresh-sums
+  FAIL_PART=true
+  if fetch_release iso >msg 2>&1; then no "failed replacement refuses"
+  elif [ -e "$CACHE_DIR/nixarchy-v9.9.9-9.iso" ]; then no "failed replacement left corrupt cache"
+  else ok "failed replacement removes corrupt cache"; fi
+  unset FAIL_PART
+
   # ---- the download-or-build decision, on plans nix really prints ---------
   cat > plan.build <<'P'
   these 431 derivations will be built:
@@ -178,6 +232,35 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
 
   [ "$(plan_unpacked_mb '(1.87 GiB download, 5.61 GiB unpacked)')" -ge 5744 ] \
     && ok "unpacked GiB parses into MB" || no "unpacked GiB parses into MB"
+
+  # The real main path, ending at a QEMU argv stub rather than a VM.
+  printf '#!/bin/sh\nprintf "%%s\\n" "$@" > qemu-args\n' > qemu-stub
+  chmod +x qemu-stub
+  QEMU=$PWD/qemu-stub QEMU_IMG=$(command -v true)
+  OVMF_VARS=$PWD/ovmf-vars
+  : > "$OVMF_VARS"
+  : > "$DISK"
+  detect_kvm() { echo none; }
+  check_ram() { :; }
+  check_disk() { :; }
+  ( main --boot --vnc ) >main.out 2>&1
+  grep -Fx 'virtio-blk-pci,drive=hd0,serial=nixarchy-try-target,bootindex=0' qemu-args >/dev/null \
+    && ok "--boot passes the target serial to QEMU" || no "--boot lost the target serial"
+
+  rm -f "$DISK" "$VARS"
+  mkdir -p fixture/iso
+  : > fixture/iso/test.iso
+  resolve_ref() { echo fixture; }
+  classify_plan() { echo ready; }
+  nix() {
+    case " $* " in
+      *' --dry-run '*) : ;;
+      *) echo "$PWD/fixture" ;;
+    esac
+  }
+  ( main --vnc ) >main.out 2>&1
+  grep -Fx 'virtio-blk-pci,drive=hd0,serial=nixarchy-try-target,bootindex=1' qemu-args >/dev/null \
+    && ok "install passes the target serial to QEMU" || no "install lost the target serial"
 
   exit $fails
   EOF

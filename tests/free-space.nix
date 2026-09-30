@@ -469,7 +469,12 @@ pkgs.testers.runNixOSTest {
         # than the 32 GiB free region install.sh insists on -- below that the
         # free-space mode is not offered at all, which would turn this check
         # into a whole-disk install that passes for the wrong reason.
-        emptyDiskImages = [ 36864 ];
+        emptyDiskImages = [
+          {
+            size = 36864;
+            driveConfig.deviceExtraOpts.serial = "nixarchy-free-space-target";
+          }
+        ];
         # nixos-install copies the whole closure into the target, and the
         # default 1 GB store overlay is nowhere near enough.
         diskSize = 32768;

@@ -230,6 +230,7 @@ pkgs.runCommand "nixarchy-installer-from-repo"
 
     # ---- #1084: --from names the disk before erasing it -----------------
     sed -n '/^confirm_repo_disks()/,/^}/p' ${installScript} > crd.sh
+    sed -n '/^remember_disk()/,/^}/p' ${installScript} >> crd.sh
     grep -q '^confirm_repo_disks()' crd.sh || { echo "confirm_repo_disks is not in install.sh" >&2; exit 1; }
     crd() { # crd <name> <want: ok|refuse> ; env: ANSWERS, GUM_RC, DISK, BOOT
       rm -f "$HOME/gum-called"
@@ -250,7 +251,15 @@ pkgs.runCommand "nixarchy-installer-from-repo"
             *) printf '%s\n' "$2" ;;
           esac
         }
-        lsblk() { [ "$DISK" = /dev/gone ] || printf '%s\n' "vdb 64G QEMU_HARDDISK SERIAL-1076"; }
+        lsblk() {
+          [ "$DISK" = /dev/gone ] && return 1
+          case "$2" in
+            TYPE) echo disk ;;
+            WWN) echo wwn-1076 ;;
+            SERIAL) echo SERIAL-1076 ;;
+            NAME,SIZE,MODEL,SERIAL) echo 'vdb 64G QEMU_HARDDISK SERIAL-1076' ;;
+          esac
+        }
         ui_interactive() { [ -z "$answers_file" ]; }
         ui_gum_pad() { echo 0; }
         gum() { touch "$HOME/gum-called"; return "$GUM_RC"; }

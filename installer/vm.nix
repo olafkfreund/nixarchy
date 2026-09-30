@@ -142,7 +142,12 @@
     # into btrfs. The image is sparse, but vm-preflight.sh wants the full size
     # free under TMPDIR, so a 32G tmpfs /tmp no longer fits: point TMPDIR at a
     # real disk (the preflight says so when it refuses).
-    emptyDiskImages = [ 32768 ];
+    emptyDiskImages = [
+      {
+        size = 32768;
+        driveConfig.deviceExtraOpts.serial = "nixarchy-installer-vm-target";
+      }
+    ];
     # nixos-install builds the closure in THIS VM's store before copying it
     # into the target, so this VM's store has to hold it first -- 13.7 GiB of
     # it at the last count.

@@ -220,7 +220,7 @@ release_tag() {
 # corrupt download is deleted, never reused -- the qcow2 rule again, one
 # layer down. All progress goes to stderr; stdout is the path alone.
 fetch_release() {
-  local attr=$1 json tag urls sums_url base iso_name tmp want got u len total_mb
+  local attr=$1 json tag urls sums_url base iso_name tmp sums want got u len total_mb
   json=$(mktemp)
   if ! curl -fsSL "$GH_API" -o "$json"; then
     rm -f "$json"
@@ -240,11 +240,28 @@ fetch_release() {
   base=$(basename "$(head -n1 <<<"$urls")")
   iso_name=${base%.part-*}
   mkdir -p "$CACHE_DIR"
+  sums=$(mktemp)
+  if ! curl --proto '=https' --proto-redir '=https' -fsSL "$sums_url" -o "$sums"; then
+    rm -f "$sums"
+    say "could not download fresh SHA256SUMS; no image can be trusted."
+    return 1
+  fi
+  want=$(awk -v name="$iso_name" '$2 == name || $2 == "*" name { print $1 }' "$sums")
+  rm -f "$sums"
+  if [ -z "$want" ]; then
+    say "the fresh SHA256SUMS does not name $iso_name; refusing the image."
+    return 1
+  fi
   if [ -e "$CACHE_DIR/$iso_name" ]; then
-    say "reusing the release image already downloaded and verified:"
-    say "  $CACHE_DIR/$iso_name"
-    echo "$CACHE_DIR/$iso_name"
-    return 0
+    got=$(sha256sum "$CACHE_DIR/$iso_name" | awk '{ print $1 }')
+    if [ "$got" = "$want" ]; then
+      say "reusing the verified release image:"
+      say "  $CACHE_DIR/$iso_name"
+      echo "$CACHE_DIR/$iso_name"
+      return 0
+    fi
+    rm -f "$CACHE_DIR/$iso_name"
+    say "the cached image is corrupt; downloading a verified replacement."
   fi
 
   total_mb=0
@@ -257,24 +274,17 @@ fetch_release() {
   if [ "$total_mb" -gt 0 ]; then
     check_disk "$CACHE_DIR" $((total_mb + 512)) "the downloaded image" || return 1
   fi
-
-  curl -fsSL "$sums_url" -o "$CACHE_DIR/SHA256SUMS" || {
-    say "could not download the release's SHA256SUMS; not fetching an image"
-    say "  that cannot be verified."
-    return 1
-  }
   tmp="$CACHE_DIR/$iso_name.part"
   rm -f "$tmp"
   while IFS= read -r u; do
     say "  fetching $(basename "$u") ..."
-    if ! curl -fL --progress-bar "$u" >>"$tmp"; then
+    if ! curl --proto '=https' --proto-redir '=https' -fL --progress-bar "$u" >>"$tmp"; then
       rm -f "$tmp"
       say "download failed partway; the partial file was deleted. Check the"
       say "  connection and run it again."
       return 1
     fi
   done <<<"$urls"
-  want=$(grep " ${iso_name}\$" "$CACHE_DIR/SHA256SUMS" | awk '{ print $1 }' || :)
   got=$(sha256sum "$tmp" | awk '{ print $1 }')
   if [ -z "$want" ] || [ "$got" != "$want" ]; then
     rm -f "$tmp"
@@ -536,12 +546,13 @@ main() {
     -drive "if=pflash,format=raw,file=$VARS"
     -drive "id=hd0,if=none,format=qcow2,file=$DISK"
   )
+  local target_device="virtio-blk-pci,drive=hd0,serial=nixarchy-try-target"
   if [ "$boot" = 1 ]; then
-    drive_args+=(-device "virtio-blk-pci,drive=hd0,bootindex=0")
+    drive_args+=(-device "$target_device,bootindex=0")
     say "booting the system installed on $DISK"
   else
     drive_args+=(
-      -device "virtio-blk-pci,drive=hd0,bootindex=1"
+      -device "$target_device,bootindex=1"
       -device "virtio-scsi-pci,id=scsi0"
       -drive "id=cd0,if=none,media=cdrom,readonly=on,format=raw,file=$iso"
       -device "scsi-cd,bus=scsi0.0,drive=cd0,bootindex=0"

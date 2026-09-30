@@ -1980,6 +1980,16 @@
             dashboardScript = ./installer/lib/dashboard.sh;
           };
 
+          installer-disk-identity = import ./tests/installer-disk-identity.nix {
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
+          installer-layout-eval = import ./tests/installer-layout-eval.nix {
+            pkgs = pkgsFor.${system};
+            inherit self;
+          };
+
           # Why: tests/installer-offline-rescue.nix
           installer-offline-rescue = import ./tests/installer-offline-rescue.nix {
             pkgs = pkgsFor.${system};
@@ -1990,6 +2000,7 @@
           installer-baked-guard = import ./tests/installer-baked-guard.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
+            dashboardScript = ./installer/lib/dashboard.sh;
           };
 
           # Why: tests/installer-answers.nix

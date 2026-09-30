@@ -199,14 +199,18 @@ ui_elapsed() {
 # The last screen. Mirrors the greeter deliberately: the same mark in the same
 # place, so finishing looks like arriving rather than like the program ending.
 ui_finished() {
-  local elapsed=$1 username=$2
+  local elapsed=$1 username=$2 baked=${3:-false} login=$2
+  [ "$baked" != true ] || login=omarchy
   ui_init
   ui_clear
   echo
   ui_logo
   ui_centre "\e[1;32mInstalled nixarchy in $(ui_elapsed "$elapsed")\e[0m" $((25 + ${#elapsed}))
   echo
-  ui_centre "Reboot, then log in as \e[1m$username\e[0m." $((23 + ${#username}))
+  ui_centre "Reboot, then log in as \e[1m$login\e[0m." $((23 + ${#login}))
+  if [ "$baked" = true ]; then
+    ui_centre "\e[90m$username appears after the first online rebuild.\e[0m" $((44 + ${#username}))
+  fi
   ui_centre "\e[90mYour configuration is /etc/nixos -- a git repository, yours to edit.\e[0m" 67
   echo
 

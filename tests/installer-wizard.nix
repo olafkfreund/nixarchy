@@ -44,7 +44,10 @@ pkgs.testers.runNixOSTest {
       emptyDiskImages = [
         1024
         16384
-        32768
+        {
+          size = 32768;
+          driveConfig.deviceExtraOpts.serial = "nixarchy-wizard-target";
+        }
       ];
     };
 

@@ -14,6 +14,8 @@ malformed key is named in one pass instead of one per attempt:
 
 ```ini
 device=/dev/vda
+# Only for disks without WWN or serial; the default is to refuse them.
+allow_unidentified_disk=yes
 # or `free`; default `whole`
 disk_mode=whole
 encrypt=yes
@@ -30,6 +32,18 @@ keymap=us
 
 It holds a password in clear. That is inherent to installing without being
 asked, and nothing copies it onto the installed machine.
+
+A disk without a WWN or serial is refused by default. This can happen with
+virt-manager, GNOME Boxes, or Proxmox virtio disks; adding a serial to the VM
+disk is the preferred fix. If that is unavailable, use
+`allow_unidentified_disk=yes` in the answers file or run the interactive
+installer with `nixarchy-install --allow-unidentified-disk`. The override warns
+and checks the disk's resolved path, byte size, model when present, and
+`/dev/disk/by-path` link when present. It cannot distinguish replacements
+that share all available attributes. On the ISO, stop the tty1 wizard with
+Ctrl+C, then run that command at a root console; switch to tty2 with
+Ctrl+Alt+F2 if tty1 has no prompt. The installer binary is in the ISO's
+system profile (`installer/cd.nix`).
 
 `#` starts a comment at the start of a line, or after a value. `password`,
 `luks_passphrase` and `recovery_passphrase` are the exception: they are taken

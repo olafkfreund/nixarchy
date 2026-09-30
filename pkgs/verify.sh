@@ -454,6 +454,23 @@ else
   if [ "$adapters" -gt 0 ]; then
     ok "bluetoothd sees $adapters adapter(s)" ""
     say_dim "$(timeout 5 bluetoothctl list 2>/dev/null | head -1)"
+    agent=inactive
+    if systemctl --user is-active --quiet bt-agent.service; then agent=active; fi
+    if state=$(timeout 5 bluetoothctl show 2>/dev/null); then
+      if grep -Eq '^[[:space:]]*Pairable: no$' <<<"$state"; then
+        ok "adapter is not pairable (agent $agent)" "test outgoing pairing from the panel"
+      elif grep -Eq '^[[:space:]]*Pairable: yes$' <<<"$state"; then
+        if [ "$agent" = active ]; then
+          bad "adapter is pairable while the auto-accept agent is active" "incoming pairing is exposed"
+        else
+          hmm "adapter is pairable (agent inactive)" "check which client enabled pairing"
+        fi
+      else
+        hmm "adapter pairability unknown (agent $agent)" "bluetoothctl gave no Pairable state"
+      fi
+    else
+      hmm "adapter pairability unknown (agent $agent)" "bluetoothctl show did not answer"
+    fi
   else
     bad "bluetoothd running but sees no adapter" ""
   fi

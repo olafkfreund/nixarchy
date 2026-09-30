@@ -28,12 +28,12 @@ Contributors and reviewers rely on `checks.installer-network`, `checks.dashboard
 ## Constraints
 
 - Prove each corrected assertion red against its corresponding broken behavior and green after restoration, per root `AGENTS.md` §1. Capture the red output for the eventual PR.
-- This round permits intent only: no Nix builds, PR, or edits to the test implementations.
+- This round permits the spec only: no Nix builds, PR, or edits to the test implementations. Stay at the spec gate until the criticals PR merges.
 - `tests/installer-network.nix` and `tests/installer-failure-hints.nix` are explicitly reserved for the unpushed criticals PR. Sequence their edits after it lands; do not work around the restriction by changing `installer/install.sh`.
 - Keep observations cheap and scoped to the existing checks. Avoid producer pipes into `grep -q` under `pipefail` and any fixture write to `omarchy/shell.json`.
-- No `.github/workflows` edit is needed for the observed gaps. If design later requires a CI-gate change, root `AGENTS.md` §11 reserves that decision for a human.
+- No `.github/workflows` edit is needed for the observed gaps. Any later CI-gate change remains human-owned under root `AGENTS.md` §11.
 
 ## Open questions
 
-- Should this issue wait for the criticals PR before any implementation, or should the two unrestricted test files advance first? **Recommended:** wait, then change and break-prove all four together so the issue closes with complete coverage and no contested test edits.
+- **Owner decision:** draft the spec now, then stay at the spec gate until the criticals PR merges. Change and break-prove all four checks only after that merge.
 - Should a renamed or missing dashboard tick fail on exit status, a stable frame marker, or both? **Recommended:** require successful `script` exit and the always-drawn `Installing nixarchy` frame marker; preserve the specific arithmetic error checks for diagnosis.

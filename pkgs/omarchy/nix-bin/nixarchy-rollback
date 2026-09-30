@@ -109,23 +109,24 @@ target=${choice%% *}
 
 # The warning this command exists to give.
 #
-# A generation whose kernel differs from the running one activates fine and
-# then does not work properly: the modules loaded in memory came from the old
-# kernel and the userspace now on disk came from the new one. On an NVIDIA
-# machine that means the driver stops matching its module and the GPU goes
-# away until reboot -- measured, on a machine that lost its display stack for
-# an hour this way. switch-to-configuration cannot warn about this; it does
-# not know what you booted.
-target_kernel=$(printf '%s' "$generations" | jq -r --arg g "$target" '.[] | select(.generation == ($g|tonumber)) | .kernelVersion')
-running_kernel=$(uname -r | cut -d- -f1)
+# Switching to a different kernel or module build can leave loaded drivers out
+# of sync with userspace. The booted system, not the current profile, is loaded.
+reboot_warning=0
+for component in kernel kernel-modules; do
+  booted=$(readlink -e "/run/booted-system/$component" 2>/dev/null) || { reboot_warning=1; break; }
+  selected=$(readlink -e "$profile-$target-link/$component" 2>/dev/null) || { reboot_warning=1; break; }
+  if [ "$booted" != "$selected" ]; then
+    reboot_warning=1
+    break
+  fi
+done
 
-if [ "$target_kernel" != "$running_kernel" ]; then
+if [ "$reboot_warning" -eq 1 ]; then
   echo
-  red "Generation $target was built against kernel $target_kernel; you are running $running_kernel."
+  red "Kernel or kernel modules for generation $target differ from the booted system or could not be verified."
   echo
-  echo "  Switching now activates it without rebooting, and anything that"
-  echo "  loaded a kernel module -- graphics drivers above all -- will be"
-  echo "  running userspace from one kernel against modules from another."
+  echo "  Switching now activates it without rebooting. Loaded modules may"
+  echo "  disagree with the new userspace, especially graphics drivers."
   echo
   echo "  Reboot and pick generation $target from the boot menu instead, or"
   echo "  switch now and reboot promptly."

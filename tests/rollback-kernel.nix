@@ -24,7 +24,7 @@ pkgs.runCommand "nixarchy-rollback-kernel"
 
     touch kernel-a kernel-b modules-a modules-b
     root=$PWD
-    warning='Generation 1 has a different kernel or kernel modules from the booted system.'
+    warning='Kernel or kernel modules for generation 1 differ from the booted system or could not be verified.'
 
     run_case() {
       name=$1 target_kernel=$2 target_modules=$3 boot_kernel=$4 boot_modules=$5 expected=$6

@@ -49,9 +49,12 @@ irrelevant result. No workflow or CI-gate changes are required.
 5. `pkgs/review.sh`, `tests/review-pins.nix`: save the fixed script with `cp`
    outside the source tree, temporarily remove the error-row behavior, and
    run `checks.x86_64-linux.review-pins` under the shared build lock. It must
-   fail by selecting the older verified SHA. Restore the fixed script with
-   `cp`, run the check under the lock again, and capture its passing line ->
-   verify by both red and green output in the PR.
+   fail by selecting the older verified SHA. Restore with `cp`, then
+   temporarily put unreadable before verified in the same-SHA verdict
+   precedence and run the check again; it must fail on the witnessed-success
+   fixture. Restore with `cp`, run the check under the lock again, and capture
+   its passing line -> verify by both red outputs and the green output in the
+   PR.
    Traps: never use `git checkout` for a break proof; confirm the break
    changed the intended code before building; do not commit proof logs or
    temporary copies. No VM or `checks.options` run.
@@ -59,10 +62,11 @@ irrelevant result. No workflow or CI-gate changes are required.
 ## Tests
 
 - `flock /mnt/data/vmtest/codex-build.lock nix build
-  .#checks.x86_64-linux.review-pins --print-build-logs --no-link` once red
-  and once green, one build at a time. The red failure must identify the
-  newer unreadable SHA that the broken collector skipped; the green run must
-  cover both the error-only and same-SHA-success cases.
+  .#checks.x86_64-linux.review-pins --print-build-logs --no-link` twice red
+  and once green, one build at a time. The first red must identify the newer
+  unreadable SHA that the broken collector skipped; the second must identify
+  the same SHA's witnessed success that bad precedence rejected. The green
+  run covers both cases.
 - `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .`, and
   `nix run nixpkgs#deadnix -- --fail .` pass after the Nix test edit. Run
   `nix fmt` after editing any `.nix` file, then inspect `git diff --stat`.

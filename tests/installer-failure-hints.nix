@@ -120,8 +120,7 @@ pkgs.runCommand "nixarchy-installer-failure-hints" { nativeBuildInputs = [ pkgs.
   grep -v '^\s*#' c.sh | grep 'ui_left' > printed.sh || true
   if ! [ -s printed.sh ]; then
     echo "  FAILED  connect_wifi prints no diagnostic"; fails=1
-  fi
-  if grep -qiE 'password is (wrong|incorrect)' printed.sh; then
+  elif grep -qiE 'password is (wrong|incorrect)' printed.sh; then
     echo "  FAILED  it claims the password is wrong, which exit 4 does not prove"; fails=1
   else
     echo "  ok      and it says 'usually', because exit 4 does not prove it"

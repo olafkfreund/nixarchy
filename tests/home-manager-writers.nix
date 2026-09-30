@@ -54,14 +54,14 @@ pkgs.runCommand "nixarchy-home-manager-writers"
     grep -Fq 'manually' jsonc.log || fail "JSONC skip lacked manual guidance"
     echo "Home Manager writer left JSONC intact with guidance"
 
-    printf 'target\n' > "$home/zed-target"
+    printf '{"managed":true}\n' > "$home/zed-target"
     rm "$zed_settings"
     ln -s "$home/zed-target" "$zed_settings"
     link_inode=$(stat -c %i "$zed_settings")
     target_inode=$(stat -c %i "$home/zed-target")
     . ${zed} > zed-link.log 2>&1 || fail "Zed symlink stopped activation"
     test -L "$zed_settings" && test "$(stat -c %i "$zed_settings")" = "$link_inode" || fail "Zed settings symlink was replaced"
-    test "$(stat -c %i "$home/zed-target")" = "$target_inode" && grep -Fxq target "$home/zed-target" || fail "Zed symlink target changed"
+    test "$(stat -c %i "$home/zed-target")" = "$target_inode" && grep -Fxq '{"managed":true}' "$home/zed-target" || fail "Zed symlink target changed"
     grep -Fq 'Home Manager' zed-link.log || fail "Zed symlink skip lacked guidance"
     echo "Home Manager writer preserved JSON symlink and target"
 
@@ -72,13 +72,14 @@ pkgs.runCommand "nixarchy-home-manager-writers"
     echo "Home Manager writer appended plain TOML"
 
     printf 'target\n' > "$home/helix-target"
+    cp "$home/helix-target" before-helix-target
     rm "$helix_settings"
     ln -s "$home/helix-target" "$helix_settings"
     link_inode=$(stat -c %i "$helix_settings")
     target_inode=$(stat -c %i "$home/helix-target")
     . ${helix} > helix-link.log 2>&1 || fail "Helix symlink stopped activation"
     test -L "$helix_settings" && test "$(stat -c %i "$helix_settings")" = "$link_inode" || fail "Helix settings symlink was replaced"
-    test "$(stat -c %i "$home/helix-target")" = "$target_inode" && grep -Fxq target "$home/helix-target" || fail "Helix symlink target changed"
+    test "$(stat -c %i "$home/helix-target")" = "$target_inode" && cmp -s before-helix-target "$home/helix-target" || fail "Helix symlink target changed"
     grep -Fq 'Home Manager' helix-link.log || fail "Helix symlink skip lacked guidance"
     echo "Home Manager writer preserved TOML symlink and target"
     touch "$out"

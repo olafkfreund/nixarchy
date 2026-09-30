@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1112
 author: olafkfreund
 ---
@@ -30,6 +30,6 @@ Mode B machines with `programs.nixarchy.enable` and users who completed first-ru
 
 ## Open questions
 
-1. **What should first-run enable?** Recommend stopping imperative enabling for the whole NixOS-managed list. These units already have `wantedBy` and a target; first-run may reload the user manager but should not pin a store unit in the user's home. A newly installed unit can start at the next graphical login.
-2. **Which links should cleanup remove?** Recommend only the exact unit and `.wants` symlinks for this first-run list when `readlink` points at that unit's generated Nix store path. Preserve all other links and regular files, including user-authored units.
-3. **How should verification report this?** Recommend a failure for any declared Nixarchy user unit that is `not-found` or shadowed by an obsolete generated-unit link in `~/.config`, with a clear cleanup hint. An intentional user-authored override should be reported distinctly rather than deleted.
+1. **What should first-run enable?** Owner approved stopping imperative enabling for the whole NixOS-managed list. These units already have `wantedBy`. If first-run needs one immediately, it uses `systemctl --user start`, never `enable --now`, so it creates no user-level link. Otherwise it starts at the next graphical login.
+2. **Which links should cleanup remove?** Owner approved removing only the exact unit and `.wants` symlinks for this first-run list when `readlink` points at that unit's generated Nix store path. Preserve all other links and regular files, including user-authored units.
+3. **How should verification report this?** Owner approved failure for any declared Nixarchy user unit that is `not-found` or shadowed by an obsolete generated-unit link in `~/.config`, with a clear cleanup hint. Report an intentional user-authored override distinctly rather than deleting it.

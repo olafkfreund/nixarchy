@@ -29,5 +29,5 @@ Users who enable `programs.nixarchy.services.hypr-rdp`, especially those choosin
 
 ## Open questions
 
-1. Should arbitrary password punctuation be supported, or should unsupported characters be rejected before startup? **Recommended:** support literal passwords through runtime TOML encoding if a small, secret-safe path is available; otherwise reject them explicitly. Either choice must be proved against the rendered file and daemon's parser, not by inspecting the template source alone.
-2. Should nonsecret string options be escaped rather than rejected? **Recommended:** escape them during evaluation and test that the parsed value is unchanged. This avoids narrowing documented option types.
+1. **Resolved by the owner:** escape password backslashes and double quotes at runtime, where the rendered secret is read, using one `sed` expression. Reject control characters with a clear error. Prove both the rendered file and the TOML parser's value.
+2. **Resolved by the owner:** escape nonsecret string fields at evaluation, preserving their option types and literal parsed values.

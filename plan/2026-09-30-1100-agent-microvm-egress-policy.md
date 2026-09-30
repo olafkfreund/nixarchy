@@ -40,6 +40,14 @@ is part of Step 2. The owner also requested one later local timing run of
 the new agent guest when CI is idle; the approved spec otherwise puts VM
 checks in CI. No VM runs at this plan gate.
 
+*Deviation (implementation):* The owner authorized exactly one local timed
+`checks.microvm-boot` run. The separate guest runtime red proof below would
+require a second VM build/run, so it remains unrun unless the owner later
+authorizes it. The cheap built-template check has gone red separately when
+QEMU `readOnly` and the guest `ro` option were removed, and green after
+restoration. The one timed run checks the guest's write refusal with
+permissive host file modes.
+
 ## Steps
 
 1. `modules/microvm/templates/agent.nix:39-54,108-163` and
@@ -170,8 +178,9 @@ checks in CI. No VM runs at this plan gate.
   read-only barriers gone, and the test would pass falsely. Confirm the
   guest test goes red because `dev` changes the host file. Restore
   `agent.nix` with `cp` and normal `0750`/`0644` fixture modes; confirm
-  green. This VM proof is deferred to a separately authorized local timing
-  run with CI idle or the post-merge nightly, not an ordinary PR check.
+  green. This runtime red proof needs a separately authorized second VM run;
+  the single authorized local timed run is green only. The post-merge
+  nightly also runs the normal green case, not this broken variant.
 - Before EVERY local Nix build (including a red or green rebuild), run
   exactly `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`;
   build only if it prints `0`. The shared `flock` serializes local agents,

@@ -1180,8 +1180,9 @@ in
         NIXARCHY_FLAKE = cfg.flake;
       };
 
-      # nixarchy-menu and nixi import MenuModel.js from
-      # /run/current-system/sw/share/omarchy; without this the menu cannot load (#1069).
+      # nixarchy-menu and nixi import MenuModel.js from a build-time store path
+      # since #1070. This link is belt and braces for anything else that
+      # assumes /run/current-system/sw/share/omarchy (#1069).
       pathsToLink = [ "/share/omarchy" ];
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's

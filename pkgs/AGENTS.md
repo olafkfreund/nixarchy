@@ -180,6 +180,46 @@ Two `--replace-fail` edits fix it:
 control, and goes red when that script stops ending with zero shells. That red
 is the signal, not a regression.
 
+<a id="omarchy-menu-close-never-starts-dictation-1070"></a>
+
+### omarchy-menu close never starts dictation (#1070)
+
+A CARRIED patch. Upstream's `omarchy menu close` is
+`exec omarchy-shell shell hide omarchy.menu`, which reaches the enabled
+clone's `close()`. nixarchy-menu (on by default) turns `close()` into the
+hotkey's second tap: with voice on, that starts dictation rather than
+closing. A script that closed the menu -- `checks.session`'s own #1069 probe,
+and any user script calling `omarchy menu close` -- started a recording. p620
+was measured in exactly that state (voice on) on 2026-09-29.
+
+The fix asks the menu to dismiss itself first, over IPC, and only falls back
+to upstream's `hide` when there is no `dismiss()` to answer:
+
+```sh
+if [[ $(omarchy-shell shell call omarchy.menu dismiss "{}" 2>/dev/null) == ok ]]; then exit 0; fi
+exec omarchy-shell shell hide omarchy.menu
+```
+
+**The `call` reply rule (read from `omarchy-shell`/`shell.qml`, not
+guessed):** `shell call` exits 0 far more often than it fails. It answers the
+string `"unknown"`, still exit 0, when the target plugin has no such method --
+which is the stock menu's state, since only nixarchy-menu defines `dismiss()` --
+and `"error"`, also exit 0, when the method throws.
+It exits 1 (or times out) only on an IPC-level failure: no connection, no
+reply, or qs's own `Target not found.` / `Function not found.` literals for
+the **IPC handler's** functions, never the plugin's. So the patch matches the
+**reply**, not the exit status: a `call … || hide` fallback would never fire
+for the cases it needs to catch (`unknown` from the stock menu, `error` from a
+throwing `dismiss()`, both with a perfectly good exit 0).
+
+`tests/menu-close.nix` stubs `omarchy-shell` to prove the call-before-hide
+order and the reply match, for both an enabled and a stock menu.
+`tests/session.nix`'s #1069 probe is the only layer that pins the real `qs`
+reply format this depends on.
+
+**When to drop it:** never, unless upstream grows an explicit close verb of
+its own, distinct from hide.
+
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)
 

@@ -610,8 +610,8 @@ pkgs.testers.runNixOSTest {
         "#1069: omarchy-menu summon install did not open a menu -- no "
         "omarchy-menu layer after 30 s. Check the journal for "
         "'MenuModel.js unavailable'.")
-    # Closed over IPC: omarchy-menu close -> shell hide omarchy.menu -> the
-    # enabled clone's close(), which cancels when voice is off (it is, here).
+    # Closed over IPC: omarchy-menu close -> shell call omarchy.menu dismiss
+    # (#1070), falling back to hide.
     # Not wtype (on_desktop sets no WAYLAND_DISPLAY) and not a qemu Escape:
     # a menu summoned over IPC did not hold keyboard focus for it.
     machine.succeed(on_desktop("omarchy-menu close"))
@@ -621,6 +621,8 @@ pkgs.testers.runNixOSTest {
         time.sleep(1)
     else:
         raise AssertionError("#1069: the menu did not close on Escape, and would sit over every later section")
+    reply = machine.succeed(on_desktop("omarchy-shell shell call omarchy.menu dismiss '{}'")).strip()
+    assert reply == "ok", f"#1070: dismiss answered {reply!r}; omarchy-menu close would fall back to hide, and to voice"
     print("summoning the menu opens one (#1069)")
 
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------

@@ -534,14 +534,20 @@ rm -rf ~/.config/omarchy/plugins/nixarchy.menu   # then log in again
 ```
 
 **The inputs follow.** Its only inputs are `nixpkgs` and `omarchy`
-(`flake = false`, used by its checks), so both follow nixarchy's and the lock
-gains one node.
+(`flake = false`), so both follow nixarchy's and the lock gains one node. Since
+#1070 `omarchy` is also a build input of the `plugin` output, not checks
+alone: one file (`MenuModel.js`, about 18 KB) is copied into the store and
+imported by absolute path. The 128 MiB tree itself is not referenced.
+
+nixi does the same since nixi-nixarchy#84, which is why
+`inputs.nixi.inputs.omarchy` follows ours.
 
 Measured at 8775661 (2026-09-24): the closure is **84.7 MiB**, of which the
 Smart Match engine and both models are most. Since #1052 that reaches every
 installed machine, and the offline ISO's reference closure.
 
-**Bumping the pin:** move `url` to a newer commit on nixarchy-menu `main`, then
+**Bumping the pin:** move `url` to a newer commit on nixarchy-menu `main` --
+now a release commit, pinned at v1.0.1 -- then
 `nix flake lock --update-input nixarchy-menu`. `checks.options` builds it
 through the plugin validator, which fails if the manifest id stops being
 `nixarchy.menu`.

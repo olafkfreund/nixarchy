@@ -1233,6 +1233,18 @@ Two branches only these can reach, as illustration:
 - `dashboard-clock` — a clock that goes backwards mid-install. Every VM's clock
   is stable, so no install check can produce a negative duration.
 
+## menu-close runs the real omarchy-menu against a stub omarchy-shell
+
+`checks.menu-close` (#1070) runs upstream's unwrapped `omarchy-menu` unchanged;
+a PATH stub stands in for `omarchy-shell`. It pins two things: the
+call-before-hide order (`shell call omarchy.menu dismiss` is always tried
+first) and the reply match (a reply of exactly `ok` short-circuits before
+`shell hide` runs at all; anything else, or no answer, falls back to hide).
+It does not pin an `ok` reply that arrives with a non-zero exit, since
+`omarchy-shell` never produces one. What it does NOT
+pin is `qs`'s real reply format -- only `checks.session`'s #1069 probe, against
+a live shell, sees that.
+
 ## Working here
 
 - **Dynamic VMs need bounded cleanup on failure (#714).** The pinned driver's

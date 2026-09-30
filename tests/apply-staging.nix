@@ -238,6 +238,7 @@ pkgs.runCommand "nixarchy-apply-staging"
           printf 'Result=%s\n' "''${UNIT_RESULT:-}"
           printf 'ExecMainStatus=%s\n' "''${UNIT_CODE:-0}"
           printf 'ExecMainExitTimestampMonotonic=%s\n' "''${UNIT_FINISHED:-0}"
+          case " $* " in *" -p InvocationID "*) printf 'InvocationID=%s\n' "''${UNIT_INVOCATION:-}" ;; esac
           ;;
         *" show "*) echo "''${UNIT_STATE:-}" ;;
         *) echo "$*" >> "$sccalls" ;;
@@ -296,6 +297,29 @@ pkgs.runCommand "nixarchy-apply-staging"
     [ "$(field "$never" finishedAgoSec)" = "-1" ] &&
       ok "a zero timestamp reads as 'cannot say', not as a finish at boot" ||
       bad "a zero timestamp said finishedAgoSec=$(field "$never" finishedAgoSec), wanted -1"
+
+    journalctl() { printf '%s\n' "$*" > "$PWD/journal.calls"; }
+    exec() { "$@"; exit "$?"; }
+    export -f journalctl exec
+    log_rc=0
+    UNIT_STATE=exited UNIT_RESULT=success UNIT_CODE=0 UNIT_INVOCATION=abcd $apply --log > "$PWD/log.out" 2>&1 || log_rc=$?
+    if [ "$log_rc" -eq 0 ] && grep -F -- '--invocation=abcd' "$PWD/journal.calls" >/dev/null; then
+      ok "apply --log scopes the panel's log to the current invocation"
+    else
+      bad "apply --log exited $log_rc or read more than the current invocation: $(cat "$PWD/log.out"); $(cat "$PWD/journal.calls" 2>/dev/null)"
+    fi
+
+    panel=${../pkgs/rebuild-panel/RebuildState.qml}
+    follow_block=$(sed -n '/id: followProcess/,/^  }/p' "$panel")
+    copy_block=$(sed -n '/id: copyProcess/,/^  }/p' "$panel")
+    terminal_block=$(sed -n '/id: terminalProcess/,/^  }/p' "$panel")
+    if [[ $follow_block == *'command: ["nixarchy-apply", "--log", "--follow"]'* ]] &&
+       [[ $copy_block == *'command: ["sh", "-c", "nixarchy-apply --log | wl-copy"]'* ]] &&
+       [[ $terminal_block == *'"nixarchy-apply", "--log", "--follow"]'* ]]; then
+      ok "all three panel log actions use invocation-scoped apply --log"
+    else
+      bad "a panel log action still reads unscoped unit history"
+    fi
 
     [ "$fails" -eq 0 ] || exit 1
     touch $out

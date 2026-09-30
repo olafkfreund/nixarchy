@@ -119,25 +119,23 @@ Singleton {
     onExited: function () { root.poll() }
   }
 
-  // -o cat: the journal's own prefixes are noise next to a build log, and the
-  // identifier is already known. -n seeds the view on a rebuild that was
-  // already running when the panel opened.
+  // nixarchy-apply scopes the log to this invocation, with a bounded fallback.
   Process {
     id: followProcess
-    command: ["journalctl", "--user", "-u", root.unit, "-o", "cat", "-n", "500", "-f"]
+    command: ["nixarchy-apply", "--log", "--follow"]
     stdout: SplitParser { onRead: function (line) { root.appendLog(line) } }
     stderr: SplitParser { onRead: function (line) { root.appendLog(line) } }
   }
 
   Process {
     id: copyProcess
-    command: ["sh", "-c", "journalctl --user -u " + root.unit + " -o cat | wl-copy"]
+    command: ["sh", "-c", "nixarchy-apply --log | wl-copy"]
   }
 
   Process {
     id: terminalProcess
     command: ["omarchy-launch-floating-terminal-with-presentation",
-              "journalctl", "--user", "-u", root.unit, "-o", "cat", "-f"]
+              "nixarchy-apply", "--log", "--follow"]
   }
 
   // Polls while anything is looking, and keeps a slow beat otherwise so the

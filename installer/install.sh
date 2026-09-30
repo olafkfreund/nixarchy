@@ -658,6 +658,25 @@ validate_hostname() {
   fi
 }
 
+validate_timezone() {
+  case $1 in
+    "" | /* | .. | ../* | */../* | */..) return 1 ;;
+  esac
+  local root zone
+  root=$(realpath -e "$TZDIR") || return 1
+  zone=$(realpath -e "$TZDIR/$1") || return 1
+  [[ $zone == "$root/"* && -f $zone && $(head -c4 "$zone") == TZif ]]
+}
+
+validate_keymap() {
+  local files file
+  files=$(find "$KEYMAPS" -type f -name '*.map.gz' -print) || return 1
+  while IFS= read -r file; do
+    [ "${file##*/}" = "$1.map.gz" ] && return 0
+  done <<< "$files"
+  return 1
+}
+
 # The password, on its own.
 #
 # Split out of ask_identity because --from with a machine the repository
@@ -1413,8 +1432,10 @@ validate_answers() {
     problems+=("recovery_hash: must differ from password_hash -- it is stored unencrypted on the ESP")
   fi
 
-  [ -z "$timezone" ] || [ -e "$TZDIR/$timezone" ] || problems+=("timezone: no such zone: $timezone")
-  if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then
+  if [ -n "$timezone" ] && ! validate_timezone "$timezone"; then
+    problems+=("timezone: not a timezone file: $timezone")
+  fi
+  if [ -n "$keymap" ] && ! validate_keymap "$keymap"; then
     problems+=("keymap: no such keymap: $keymap")
   fi
 

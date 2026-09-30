@@ -31,3 +31,7 @@ Prove each new assertion can fail before accepting green, using copies outside t
 ## Rollback
 
 Revert the implementation commits on the issue branch and rerun the two cheap checks. A revert restores the previous runtime writers and tests without changing users' existing settings. If a user previously lost a Home Manager link, this change cannot repair that file automatically; they must restore the declaration through their normal NixOS rebuild.
+
+## *Deviation (implementation)*
+
+Review found two local-model provider activations in `modules/home.nix` that repeated the JSON merge instead of calling `mergeJson`: `nixarchyOpencodeProvider` and `nixarchyPiProvider`. Route both through the existing helper with their original runtime file paths and generated JSON. This extends the approved symlink rule and also inherits the helper's dry-run handling after #1114 merges. Extend `tests/home-manager-writers.nix` with ordinary and symlinked provider cases; break-proof the opencode guard by temporarily restoring its old writer from a copy, then restore with `cp`. The #1114 rebase must keep dry-run output outside the write branch, then the symlink skip, then the write. No `tests/options.nix` edit is needed.

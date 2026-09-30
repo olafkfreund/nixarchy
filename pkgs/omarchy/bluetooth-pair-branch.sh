@@ -38,4 +38,7 @@
       exit 1
     fi
 
-    timeout 20s bluetoothctl pair "$address" >/dev/null 2>&1 || true
+    timeout -k 5s 20s bluetoothctl pair "$address" >/dev/null 2>&1 || true
+    trust_device
+    stop_agent
+    trap - EXIT INT TERM

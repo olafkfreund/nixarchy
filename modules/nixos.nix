@@ -1154,6 +1154,13 @@ in
       mv -f ${safeDirInclude}.tmp ${safeDirInclude}
     '';
 
+    # Remove only symlinks left by our former permanent agent on existing homes.
+    # A user's own bt-agent.service remains theirs; a running old agent needs a
+    # logout or an explicit PID-scoped stop before BlueZ returns to idle.
+    system.activationScripts.nixarchyRemoveOldBtAgent = ''
+      ${pkgs.bash}/bin/bash ${../pkgs/omarchy/cleanup-bt-agent.sh} /home
+    '';
+
     environment = {
       # The single indirection point. bin/, shell/, themes/, the Hyprland Lua
       # defaults and the menu's defaults file are all resolved relative to

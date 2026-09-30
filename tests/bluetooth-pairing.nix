@@ -22,6 +22,7 @@ let
   off = machine false;
   agentAbsent = c: !(c.systemd.user.services ? bt-agent);
   timeoutAbsent = c: (c.hardware.bluetooth.settings.General.PairableTimeout or null) == null;
+  cleanupEnabled = c: c.system.activationScripts ? nixarchyRemoveOldBtAgent;
   hasAgentPackage = pkgs.lib.any (
     p: (p.pname or "") == "bluez-tools"
   ) pkgs.omarchy.passthru.runtimeDeps;
@@ -33,6 +34,9 @@ assert pkgs.lib.assertMsg (
   timeoutAbsent on && timeoutAbsent off
 ) "Nixarchy still sets a Bluetooth pairable timeout";
 assert pkgs.lib.assertMsg hasAgentPackage "temporary Bluetooth agent is missing from runtimeDeps";
+assert pkgs.lib.assertMsg (
+  cleanupEnabled on && !cleanupEnabled off
+) "old Bluetooth unit cleanup is not enable-gated";
 pkgs.runCommand "bluetooth-pairing"
   {
     nativeBuildInputs = [
@@ -42,6 +46,7 @@ pkgs.runCommand "bluetooth-pairing"
     ];
   }
   ''
-    bash ${./bluetooth-pairing.sh} ${pkgs.omarchy}/share/omarchy/bin/omarchy-bluetooth-device ${pkgs.bash}/bin/bash
+    bash ${./bluetooth-pairing.sh} ${pkgs.omarchy}/share/omarchy/bin/omarchy-bluetooth-device ${pkgs.bash}/bin/bash ${pkgs.lib.makeBinPath pkgs.omarchy.passthru.runtimeDeps}
+    bash ${./bluetooth-cleanup.sh} ${../pkgs/omarchy/cleanup-bt-agent.sh}
     touch "$out"
   ''

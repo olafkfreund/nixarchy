@@ -29,5 +29,5 @@ People who run `nixarchy config repo` on either current user-owned flake reposit
 
 ## Open questions
 
-- Should the hint use `$FLAKE/.git` writability, as `wgit` does, even if `$FLAKE` itself is writable? **Recommended:** yes; Git updates metadata there, and matching the existing helper avoids conflicting advice.
-- Should this change replace the manual commands with `--drift` guidance? **Recommended:** no; keep the current manual workflow and menu text, changing only the privilege prefix.
+- **Owner answer:** use `$FLAKE/.git` writability, exactly as `wgit` does, even if `$FLAKE` itself is writable. Git updates metadata there, and the guidance must agree with the helper.
+- **Owner answer:** preserve the manual Git workflow and menu text; change only the privilege prefix, without replacing the commands with `--drift` guidance.

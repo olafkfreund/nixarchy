@@ -57,14 +57,20 @@ pkgs.runCommand "nixarchy-dashboard-clock"
         script -qec "
           . ${ui}
           . ${dashboard}
-          ui_dashboard_start
-          # Rewind the clock under the running dashboard: start was read at a
-          # wall time this now precedes, which is what NTP does to it.
+          # The dashboard start time precedes this wall time, as after NTP
+          # rewinds a clock during an install.
           UI_DASH_START=\$(( \$(date +%s) - ($skew) ))
           UI_DASH_CHANGED=\$UI_DASH_START
+          UI_DASH_SIZE=
+          UI_DASH_LOG=""
           ui_dashboard_tick
         " /dev/null 2>&1
-      ) || true
+      ) || { echo "skew=$skew: dashboard tick failed" >&2; fail=1; }
+
+      case "$res" in
+        *"Installing nixarchy"*) ;;
+        *) echo "skew=$skew: dashboard drew no frame" >&2; fail=1 ;;
+      esac
 
       case "$res" in
         *"invalid option"*)
@@ -94,10 +100,17 @@ pkgs.runCommand "nixarchy-dashboard-clock"
         . ${ui}
         . ${dashboard}
         UI_TIPS=$empty
-        ui_dashboard_start
+        UI_DASH_START=\$(date +%s)
+        UI_DASH_CHANGED=\$UI_DASH_START
+        UI_DASH_SIZE=
+        UI_DASH_LOG=""
         ui_dashboard_tick
       " /dev/null 2>&1
-    ) || true
+    ) || { echo "an empty tips file made the dashboard tick fail" >&2; fail=1; }
+    case "$res" in
+      *"Installing nixarchy"*) ;;
+      *) echo "an empty tips file drew no frame" >&2; fail=1 ;;
+    esac
     case "$res" in
       *"division by zero"*|*"invalid option"*)
         echo "an empty tips file takes the drawer down" >&2

@@ -86,10 +86,12 @@ pkgs.runCommand "nixarchy-shell-ipc-resolve"
     # 3. Two instances: refuse, and name them. Guessing sends a keybind to the
     #    wrong screen.
     run two 1 "$listing_two"
-    grep -qi "more than one" <<<"$(cat argv.two; true)" >/dev/null 2>&1 || true
+    : > argv.two2
     out_two=$(QS_ARGV=$PWD/argv.two2 QS_PROBE=1 QS_LISTING="$listing_two" bash "$shell" shell toggle x '{}' 2>&1 || true)
     grep -qi "more than one" <<<"$out_two" || fail "two instances were not refused"
     grep -q "aaa111" <<<"$out_two" || fail "the refusal did not name the instances"
+    grep -q -- '-i ' argv.two2 && fail "two instances selected an instance id"
+    grep -Fq 'call --' argv.two2 && fail "two instances sent a non-probe IPC call"
 
     # 4. No instance at all: says the shell is not running.
     # QS_CALL_RC=1: with no instance anywhere, the real call fails too. Without

@@ -118,7 +118,9 @@ pkgs.runCommand "nixarchy-installer-failure-hints" { nativeBuildInputs = [ pkgs.
   # and this walked into it anyway. Deleting that comment to make the check
   # pass would have removed the explanation and kept the behaviour.
   grep -v '^\s*#' c.sh | grep 'ui_left' > printed.sh || true
-  if grep -qiE 'password is (wrong|incorrect)' printed.sh; then
+  if ! [ -s printed.sh ]; then
+    echo "  FAILED  connect_wifi prints no diagnostic"; fails=1
+  elif grep -qiE 'password is (wrong|incorrect)' printed.sh; then
     echo "  FAILED  it claims the password is wrong, which exit 4 does not prove"; fails=1
   else
     echo "  ok      and it says 'usually', because exit 4 does not prove it"

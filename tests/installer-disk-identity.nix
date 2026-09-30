@@ -67,7 +67,11 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   disk_mode=whole luks_passphrase=secret NIX_FLAGS=() work=/fixture hostname=host
   findmnt() { touch touched-before-build; return 1; }
   printf '#!/bin/sh\ntouch disko-ran\n' > disko; chmod +x disko
-  nix() { printf 'replacement\n' > a-id; echo "$PWD/disko"; }
+  nix() {
+    if [ "$1" = eval ]; then echo false
+    else printf 'replacement\n' > a-id; echo "$PWD/disko"
+    fi
+  }
   if format_disk >msg 2>&1; then failed "disk swapped during build was formatted"; fi
   test ! -e disko-ran || failed "disko ran on the replacement"
   echo "ok build-time disk swap refused before disko"

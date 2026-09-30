@@ -1679,6 +1679,30 @@ check_free_partitions() {
 
 format_disk() {
   check_disks || return 1
+  # The repository's evaluated layout is authoritative, including --from.
+  # Its encrypt answer may not describe the host's actual disko tree.
+  local needs_key
+  needs_key=$(nix "${NIX_FLAGS[@]}" eval --json \
+    "$work#nixosConfigurations.$hostname.config.disko.devices" \
+    --apply 'd: let walk = x: if builtins.isAttrs x then
+      (x.type or null == "luks" && x.passwordFile or null == "/tmp/nixarchy-luks.key")
+      || builtins.any walk (builtins.attrValues x)
+      else if builtins.isList x then builtins.any walk x else false;
+      in walk d') || {
+    echo "nixarchy-install: could not inspect the disko layout; nothing was formatted." >&2
+    return 1
+  }
+  case "$needs_key" in
+    true)
+      if [ -z "$luks_passphrase" ]; then
+        echo "nixarchy-install: this disk layout needs a LUKS passphrase; nothing was formatted." >&2
+        return 1
+      fi
+      ;;
+    false) ;;
+    *) echo "nixarchy-install: invalid disko layout result; nothing was formatted." >&2; return 1 ;;
+  esac
+  rm -f /tmp/nixarchy-luks.key
   # Leave /mnt clean, because disko will not.
   #
   # disko's mount phase asks `findmnt` whether each mountpoint is already
@@ -1709,11 +1733,6 @@ format_disk() {
     partition_free_space || return 1
   fi
 
-  # The passphrase file disko's passwordFile points at. Written with umask 077,
-  # removed as soon as the format is done; it never reaches the installed
-  # system, whose initrd prompts instead.
-  ( umask 077 && printf '%s' "$luks_passphrase" >/tmp/nixarchy-luks.key )
-
   # Evaluated from the USER'S flake, not ours: the same disk-config.nix the
   # installed machine imports is the one that formats the disk. That is the
   # whole reason the layout is a file rather than a parted script.
@@ -1740,6 +1759,10 @@ format_disk() {
   check_disks || { rm -f /tmp/nixarchy-luks.key; return 1; }
   if [ "$disk_mode" = free ]; then
     check_free_partitions || { rm -f /tmp/nixarchy-luks.key; return 1; }
+  fi
+  # Only disko reads this file. Its build never needs a secret.
+  if [ "$needs_key" = true ]; then
+    ( umask 077 && printf '%s' "$luks_passphrase" >/tmp/nixarchy-luks.key ) || return 1
   fi
   "$script" || rc=$?
   rm -f /tmp/nixarchy-luks.key

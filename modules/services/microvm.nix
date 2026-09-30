@@ -210,7 +210,8 @@ in
       };
 
       # Why: modules/microvm/guest.nix -- the guest's /mnt/host is <state>/share,
-      # never <state> itself (#1076). kvm, so the user can drop allow-hosts.
+      # never <state> itself (#1076). kvm can write share/, but not policy/:
+      # agent egress policy is supplied by the host, outside the guest share.
       #
       # Both levels, not just share/: tmpfiles runs at sysinit, before
       # upstream's install-microvm-<name>.service (which only starts at
@@ -239,6 +240,13 @@ in
               user = "microvm";
               group = "kvm";
               mode = "0770";
+            };
+          };
+          "${vmDir}/policy" = {
+            d = {
+              user = "microvm";
+              group = "kvm";
+              mode = "0750";
             };
           };
         }

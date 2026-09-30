@@ -2506,6 +2506,7 @@ let
           pkgs.lib.splitString "\n" agent.networking.nftables.ruleset
         );
         rule = mvOn.systemd.tmpfiles.settings."10-nixarchy-microvm"."${sd}/plain/share".d or null;
+        policyRule = mvOn.systemd.tmpfiles.settings."10-nixarchy-microvm"."${sd}/agent/policy".d or null;
       in
       pkgs.lib.optional (builtins.any
         (
@@ -2521,6 +2522,12 @@ let
         pkgs.lib.optional
           (rule == null || rule.user != "microvm" || rule.group != "kvm" || rule.mode != "0770")
           "#1076: no tmpfiles rule makes ${sd}/plain/share microvm:kvm 0770, so /mnt/host has nothing to mount."
+      ++ pkgs.lib.optional (
+        policyRule == null
+        || policyRule.user != "microvm"
+        || policyRule.group != "kvm"
+        || policyRule.mode != "0750"
+      ) "#1100: no tmpfiles rule makes ${sd}/agent/policy microvm:kvm 0750 for the read-only agent share."
       ++ pkgs.lib.optional (builtins.elem "wheel" agent.users.users.dev.extraGroups) "#1083: the agent template's dev is in wheel, so sudo can flush the egress ruleset."
       ++ pkgs.lib.optional (builtins.any (
         l: pkgs.lib.hasInfix "dport 67" l && !(pkgs.lib.hasInfix "daddr" l)

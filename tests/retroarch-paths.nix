@@ -89,7 +89,19 @@ pkgs.runCommand "nixarchy-retroarch-paths"
     cp stubs/omarchy-pkg-add stubs/setsid
     chmod +x stubs/*
     export PATH=$PWD/stubs:$PATH
-    "$installer" >/dev/null
+    cp "$CFG" before.cfg
+    cp "$HOME/.config/retroarch/config/global.slangp" before.slangp
+    if refusal=$("$installer" 2>&1); then
+      fail "installer accepted missing system-profile cores"
+    fi
+    [[ $refusal == *"RetroArch resources are not in the system profile"* ]] || fail "installer refused without the recovery instruction"
+    cmp before.cfg "$CFG" || fail "installer changed retroarch.cfg without system-profile cores"
+    cmp before.slangp "$HOME/.config/retroarch/config/global.slangp" || fail "installer changed the shader preset without system-profile cores"
+    echo "RetroArch installer refuses missing profile without changing config"
+
+    sed "s|test -d /run/current-system/sw/lib/retroarch/cores|test -d $profile/lib/retroarch/cores|" "$installer" > installer-with-profile
+    chmod +x installer-with-profile
+    ./installer-with-profile >/dev/null
 
     expect_key() {
       key=$1 value=$2

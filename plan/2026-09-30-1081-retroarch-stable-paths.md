@@ -60,6 +60,21 @@ package list and `pathsToLink` from an evaluated NixOS module configuration
 with `apps.retroarch.enable = true`, then check the off state.** A hardcoded
 copy of step 1 would stay green if step 1 were deleted.
 
+## *Deviation (implementation)*
+
+Review found that `omarchy-pkg-add` lets the installer continue if a
+`retroarch` command exists outside `apps.retroarch`. In that case the stable
+system-profile paths can be absent. Before touching `retroarch.cfg`, the
+patched installer must refuse when
+`/run/current-system/sw/lib/retroarch/cores` is not a directory and tell the
+user to enable RetroArch through nixarchy and rebuild. Extend
+`tests/retroarch-paths.nix` with a missing-profile fixture that requires a
+nonzero exit and byte-identical existing config. Prove this new assertion red
+by removing the guard from `pkgs/omarchy/default.nix`, using a copy aside and
+`cp` restore, then require green. Update `data/bin-ledger.nix` to describe
+system-profile paths. This deviation changes steps 2-4 only; it does not
+rewrite user config at activation.
+
 ## Steps
 
 1. `modules/apps.nix:116-121,1199-1205,3907-3908`: add the three resource

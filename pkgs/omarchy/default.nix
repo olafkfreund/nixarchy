@@ -622,6 +622,9 @@ stdenvNoCC.mkDerivation {
                       --replace-fail '/usr/lib/libretro' '$(omarchy-retroarch-cores)'
                     substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
                       --replace-fail '/usr/lib/libretro' '/run/current-system/sw/lib/retroarch/cores'
+                    substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
+                      --replace-fail 'touch "$CFG"' \
+                      'test -d /run/current-system/sw/lib/retroarch/cores || { echo "RetroArch resources are not in the system profile; enable it with nixarchy-app-enable retroarch and rebuild" >&2; exit 1; }; touch "$CFG"'
 
                     # `omarchy version` said "dev".
                     #

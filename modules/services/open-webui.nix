@@ -48,7 +48,12 @@ let
       "127.0.0.1"
     else
       ollama.host;
-  ollamaUrl = "http://${ollamaHost}:${toString ollama.port}";
+  urlHost =
+    if lib.hasInfix ":" ollamaHost && !(lib.hasPrefix "[" ollamaHost) then
+      "[${ollamaHost}]"
+    else
+      ollamaHost;
+  ollamaUrl = "http://${urlHost}:${toString ollama.port}";
 in
 {
   options.programs.nixarchy.services.open-webui = {

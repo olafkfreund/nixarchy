@@ -2213,6 +2213,7 @@
           # (#773). The real package against fixtures, both cases.
           ai-mirror-mcp-remove = import ./tests/ai-mirror-mcp-remove.nix { pkgs = pkgsFor.${system}; };
           skills-relink = import ./tests/skills-relink.nix { pkgs = pkgsFor.${system}; };
+          robustness-modules = import ./tests/robustness-modules.nix { pkgs = pkgsFor.${system}; };
 
           bar-keyed-sync = import ./tests/bar-keyed-sync.nix {
             pkgs = pkgsFor.${system};

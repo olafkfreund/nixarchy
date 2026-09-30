@@ -13,6 +13,11 @@
 let
   cfg = config.programs.nixarchy;
   svc = cfg.services.syncthing;
+  home =
+    if svc.user != null && config.users.users ? ${svc.user} then
+      config.users.users.${svc.user}.home
+    else
+      "/var/empty";
 in
 {
   options.programs.nixarchy.services.syncthing = {
@@ -66,15 +71,19 @@ in
               programs.nixarchy.services.syncthing.user directly.
             '';
           }
+          {
+            assertion = svc.user == null || (config.users.users ? ${svc.user} && home != "/var/empty");
+            message = "programs.nixarchy.services.syncthing.user must name a user with a home directory";
+          }
         ];
 
         # Scalars, so mkDefault: someone who already runs Syncthing their way
         # keeps their configuration and this yields to it silently.
         services.syncthing = {
           enable = lib.mkDefault true;
-          user = lib.mkDefault svc.user;
-          dataDir = lib.mkDefault "/home/${svc.user}";
-          configDir = lib.mkDefault "/home/${svc.user}/.config/syncthing";
+          user = lib.mkDefault (if svc.user == null then "syncthing" else svc.user);
+          dataDir = lib.mkDefault home;
+          configDir = lib.mkDefault "${home}/.config/syncthing";
 
           # The VALUE is the decision here: upstream defaults these to true,
           # and true means "delete any folder or device the Nix configuration

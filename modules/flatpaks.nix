@@ -51,7 +51,7 @@ in
     # machine that has picked nothing would add a service, a set of portals
     # and a system user to every install, for nothing.
     services.flatpak = {
-      enable = true;
+      enable = lib.mkDefault true;
       remotes = [ flathub ] ++ extraRemotes;
       packages = lib.mapAttrsToList (_: fp: {
         inherit (fp) appId;

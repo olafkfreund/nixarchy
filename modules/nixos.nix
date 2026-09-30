@@ -1686,14 +1686,18 @@ in
             # Skips cleanly on a machine with no usable adapter instead of
             # entering a restart loop.
             ExecCondition = "${config.systemd.package}/bin/systemctl is-active --quiet bluetooth.service";
+            # Pairable defaults to yes in BlueZ; refuse to register the
+            # auto-accept agent unless the adapter is confirmed closed.
+            ExecStartPre = "${pkgs.writeShellScript "nixarchy-bt-pairable-off" ''
+              set -euo pipefail
+              ${pkgs.coreutils}/bin/timeout 5 ${pkgs.bluez}/bin/bluetoothctl pairable off >/dev/null
+              ${pkgs.coreutils}/bin/timeout 5 ${pkgs.bluez}/bin/bluetoothctl show |
+                ${pkgs.gnugrep}/bin/grep -Eq '^[[:space:]]*Pairable: no$'
+            ''}";
             # bt-agent is in bluez-tools, not bluez -- upstream gets it from
             # base.packages, and the package's runtimeDeps carry only bluez
             # because no script in bin/ calls it. Named by store path so it does
             # not need to be on anyone's PATH.
-            #
-            # NoInputNoOutput auto-accepts pairing requests, which is safe only
-            # because bluez is `pairable: true` for as long as the Bluetooth
-            # panel is scanning and refuses inbound attempts outside that window.
             ExecStart = "${pkgs.bluez-tools}/bin/bt-agent -c NoInputNoOutput";
             Restart = "on-failure";
             RestartSec = 2;
@@ -1842,6 +1846,7 @@ in
 
       # Why: modules/AGENTS.md#bluez-bluez-tools-and-bluez-utils-are-all-in
       bluetooth.enable = lib.mkDefault true;
+      bluetooth.settings.General.PairableTimeout = 120;
 
       # The CPU microcode, for whichever vendor this machine has.
       #

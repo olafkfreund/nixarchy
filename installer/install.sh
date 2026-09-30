@@ -123,6 +123,10 @@ from_host_exists=false
 # answers file omits fails validation rather than aborting on an unbound
 # variable three functions later.
 device=""
+disk_paths=()
+disk_reals=()
+disk_wwns=()
+disk_serials=()
 encrypt=""
 # "whole" (the disk is ours) or "free" (installed beside an existing OS, #47).
 # Set by ask_disk_mode or the answers file; the free-space region it applies to
@@ -806,6 +810,50 @@ ask_device() {
   fi
   device=$(printf '%s\n' "$list" | gum choose --height "$(ui_widget_height)" --padding "$(ui_gum_pad)" --header "Select install disk" | awk '{print $1}') || ui_abort
   [ -n "$device" ] || ui_abort
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
+  remember_disk "$device" || ui_abort
+}
+
+# Remember the physical disk once; a retry must never accept a replacement
+# merely because it appeared at the same /dev path.
+remember_disk() {
+  local path=$1 real wwn serial
+  real=$(readlink -f "$path") || return 1
+  if [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" != disk ]; then
+    echo "nixarchy-install: $path is no longer a whole disk. Choose another disk." >&2
+    return 1
+  fi
+  wwn=$(lsblk -dnro WWN "$real" 2>/dev/null) || return 1
+  serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) || return 1
+  if [ -z "$wwn" ] && [ -z "$serial" ]; then
+    echo "nixarchy-install: $path has no WWN or serial. Choose a disk whose identity can be checked." >&2
+    return 1
+  fi
+  disk_paths+=("$path") disk_reals+=("$real")
+  disk_wwns+=("$wwn") disk_serials+=("$serial")
+}
+
+check_disks() {
+  local i path real wwn serial
+  if [ "${#disk_paths[@]}" -eq 0 ]; then
+    echo "nixarchy-install: no disk identity was recorded. Nothing was formatted." >&2
+    return 1
+  fi
+  for i in "${!disk_paths[@]}"; do
+    path=${disk_paths[$i]}
+    real=$(readlink -f "$path") || return 1
+    if [ "$real" != "${disk_reals[$i]}" ] ||
+      [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" != disk ]; then
+      echo "nixarchy-install: $path changed or vanished. Nothing further was formatted; start again." >&2
+      return 1
+    fi
+    wwn=$(lsblk -dnro WWN "$real" 2>/dev/null) || return 1
+    serial=$(lsblk -dnro SERIAL "$real" 2>/dev/null) || return 1
+    if [ "$wwn" != "${disk_wwns[$i]}" ] || [ "$serial" != "${disk_serials[$i]}" ]; then
+      echo "nixarchy-install: $path has a different WWN or serial. Nothing further was formatted; start again." >&2
+      return 1
+    fi
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -1454,12 +1502,14 @@ confirm_repo_disks() {
   boot=$(boot_medium)
   [ -z "$boot" ] || boot=$(readlink -f "$boot")
   echo "$from_repo's $hostname will ERASE:"
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
   while IFS= read -r dev; do
     real=$(readlink -f "$dev")
     if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
       echo "nixarchy-install: $dev is the medium this installer booted from. Nothing was written." >&2
       return 1
     fi
+    remember_disk "$dev" || return 1
     line=$(lsblk -dno NAME,SIZE,MODEL,SERIAL "$real" 2>/dev/null) && [ -n "$line" ] || {
       echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
       return 1
@@ -1610,6 +1660,7 @@ partition_free_space() {
 }
 
 format_disk() {
+  check_disks || return 1
   # Leave /mnt clean, because disko will not.
   #
   # disko's mount phase asks `findmnt` whether each mountpoint is already
@@ -1668,6 +1719,7 @@ format_disk() {
     echo "  Nothing was formatted; the error above this is the one to read." >&2
     return 1
   fi
+  check_disks || { rm -f /tmp/nixarchy-luks.key; return 1; }
   "$script" || rc=$?
   rm -f /tmp/nixarchy-luks.key
   if [ "$rc" -ne 0 ]; then
@@ -2930,6 +2982,10 @@ main() {
     # evaluates and boots and is wrong.
     [ -n "$from_repo" ] && hostname=$from_host
     validate_answers
+    if [ "$from_host_exists" != true ]; then
+      disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
+      remember_disk "$device" || exit 1
+    fi
     ask_network
   elif [ "$from_host_exists" = true ]; then
     # The repository decided the username, the disk, the layout and the

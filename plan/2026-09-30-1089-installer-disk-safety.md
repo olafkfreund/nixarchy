@@ -84,7 +84,7 @@ observed during this run, not an earlier one.
    changed identity returns 1 from the phase without refreshing the baseline;
    preserve the confirmation, boot-medium refusal, and existing free-region
    remeasurement. `tests/installer-disk-identity.nix` and `flake.nix`: add a
-   cheap check against the built installer with stubs for `lsblk`, `readlink`,
+   cheap check against the installer functions with stubs for `lsblk`, `readlink`,
    `nix`, and disko. Cover wizard, answers, multiple repo disks, no identifiers,
    same-sized replacement, swap during build, unchanged retry baseline, and
    no destructive command after refusal -> verify by
@@ -163,6 +163,13 @@ observed during this run, not an earlier one.
    with `cp`, and show green.
 
 ## Tests
+
+*Deviation (implementation):* `installer-disk-identity` reads the tracked
+`installer/install.sh` source, as the existing cheap installer checks do.
+Depending on the built `packages.install` requires a committed source tree
+through `installer/mkFlake.nix`, which makes the mandated cp-aside red proofs
+unevaluable. The separate installer package build runs after the Step 2
+commit; the function check still varies with every source edit.
 
 - At this draft gate: documentation diff only, no builds or VM runs. During
   implementation, stage new files before building because the flake cannot

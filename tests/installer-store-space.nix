@@ -480,6 +480,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   disk_mode=whole luks_passphrase=pw
   . ./fd.sh
   findmnt() { return 1; }   # nothing mounted at /mnt
+  check_disks() { return 0; }
   fails=0
   t() {
     want=$1 name=$2
@@ -564,6 +565,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
     work=/nonexistent hostname=h disk_mode=free luks_passphrase=pw
     . ./fd.sh
     findmnt() { return 1; }
+    check_disks() { return 0; }
     partition_free_space() { return 1; }
     nix() { touch disko-built; echo /nonexistent; }
     format_disk

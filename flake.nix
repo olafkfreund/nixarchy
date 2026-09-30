@@ -2018,6 +2018,11 @@
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) doctor;
           };
+          shell-runtime-inputs = import ./tests/shell-runtime-inputs.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+          };
 
           # The error explainer, against errors produced in the check rather
           # than pasted into it -- nixpkgs has reworded two of these families

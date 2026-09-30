@@ -12,7 +12,7 @@ author: olafkfreund
 
 ## Proposed outcome
 
-An untrusted nearby device cannot pair through the desktop's unattended agent outside a deliberate, bounded pairing action. Normal user-initiated Bluetooth pairing still works.
+An untrusted nearby device cannot pair through the desktop's unattended agent. User-initiated outgoing Bluetooth pairing from the panel still works.
 
 ## Affected users and systems
 
@@ -23,8 +23,8 @@ Nixarchy desktop sessions with a Bluetooth adapter, especially users who leave t
 - Keep an existing NixOS user's Bluetooth choices intact when Nixarchy is disabled.
 - Verify the actual panel and BlueZ pairing flow before choosing a timeout or agent lifecycle.
 - Add a check that fails when the exposure is reintroduced; live pairing behavior needs a hardware check because the session VM has no radio.
-- Do not make pairing silently unavailable to users who explicitly open the Bluetooth panel.
+- Do not make outgoing pairing silently unavailable to users who explicitly open the Bluetooth panel.
 
 ## Open questions
 
-None. The owner chose a visible pairing window of about two minutes without per-pairing confirmation: the adapter is not pairable by default and becomes pairable only while the user pairs from the panel. The pinned panel currently controls discovery, not pairability.
+None. The owner chose no incoming pairing window and accepted the loss of device-initiated pairing. The adapter stays non-pairable; user-initiated outgoing pairing from the panel must still work. The pinned panel controls discovery, not pairability.

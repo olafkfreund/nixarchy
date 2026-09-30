@@ -27,5 +27,5 @@ Installer-built Nixarchy machines using `nixarchy config repo`, and users with o
 
 ## Open questions
 
-1. Should older root-owned flakes retain conditional sudo support? **Recommended: yes.** This preserves the script's existing support without making user-owned flakes root-owned again.
-2. Should the change alter ownership of existing root-owned files in an otherwise user-owned flake? **Recommended: no.** Avoid implicit recursive chown; choose the privilege needed for each new write and leave existing ownership for the user to resolve explicitly.
+1. **Owner decision:** Use sudo only for legacy flakes that are already root-owned. A normal user-owned flake must not prompt for sudo to create these files.
+2. **Owner decision:** Do not implicitly chown existing root-owned files. Preserve existing ownership and keep the fix limited to the generated writes.

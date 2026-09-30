@@ -164,6 +164,12 @@ and `password=hunter2  # plaintext…`. Under the spec's literal rule,
 - The manual moves its comments onto their own lines. Its `password=`
   example is exactly the line that would now carry a comment into the
   password.
+- **Guard (added at plan approval by the owner):** a secret value containing
+  whitespace followed by `#` is refused with exit 2 and "looks like a trailing
+  comment -- move it to its own line". An answers file copied from the old
+  manual would otherwise install with the comment inside the password and lock
+  the user out. Ceiling: a real secret containing ` #` is refused too; accepted
+  as rare.
 
 **P2: the spec's `trap 'rm -f "$tmp"' EXIT` would remove nothing.**
 `tmp` is `local` to `resolve_answers`, and the single-quoted trap expands it at
@@ -1042,7 +1048,14 @@ head, from `lineno=$((lineno + 1))` through `value=${line#*=}`, with:
     key=${line%%=*}
     value=${line#*=}
     case $key in
-      password | luks_passphrase | recovery_passphrase) ;;
+      password | luks_passphrase | recovery_passphrase)
+        case $value in
+          *[[:space:]]\#*)
+            echo "nixarchy-install: answers: line $lineno: $key looks like it has a trailing comment -- move it to its own line (a secret is taken exactly as written)" >&2
+            exit 2
+            ;;
+        esac
+        ;;
       *)
         value=${value%%#*}
         value=${value%"${value##*[![:space:]]}"}
@@ -1149,6 +1162,17 @@ pkgs.runCommand "nixarchy-installer-answers"
     printf '%s' 'r#cover ' > want-rc
     if cmp -s want-rc stdin.log; then ok "the recovery passphrase reaches mkpasswd on stdin, verbatim"; else failed "recovery stdin was: $(cat stdin.log)"; fi
     if grep -qF 'r#cover' argv.log; then failed "the recovery passphrase is in mkpasswd's argv"; fi
+
+    # The P1 guard: the old manual's `password=hunter2   # plaintext` must be
+    # refused, not installed with the comment inside the password.
+    printf '%s\n' 'password=hunter2   # plaintext' > a3
+    if ( . ./ra.sh; mkpasswd() { echo HASHED; }; read_answers a3 ) > a3.out 2>&1; then
+      failed "a secret with a trailing comment was accepted (P1 guard)"
+    elif grep -q 'trailing comment' a3.out; then
+      ok "a secret with a trailing comment is refused"
+    else
+      failed "a3 refused for the wrong reason: $(cat a3.out)"
+    fi
 
     # A read that refuses the file must not leave the fetched copy behind.
     rm -f fetched-path
@@ -1287,7 +1311,8 @@ Verify: `checks.install-gate` is green.
 - Below the block, add: "`#` starts a comment at the start of a line, or
   after a value. `password`, `luks_passphrase` and `recovery_passphrase` are
   the exception: they are taken exactly as written, `#` and trailing spaces
-  included, so a comment never becomes part of a password."
+  included, and one containing a space followed by `#` is refused as a
+  probable trailing comment, so a comment never becomes part of a password."
 
 **H3: `installer/AGENTS.md`.**
 
@@ -1368,6 +1393,7 @@ Check `gh run list` = 0 before each build.
 | X7 | `installer/install.sh` | F1's secret arm deleted (every value gets `%%#*`) | `installer-answers` | `a1 parsed as: …p` and `mkpasswd stdin was: p` |
 | X8 | `installer/install.sh` | `:1167` back to `mkpasswd -m sha-512 "$password"` | `installer-answers` | `the password is in mkpasswd's argv` |
 | X9 | `installer/install.sh` | the trap line removed | `installer-answers` | `the fetched answers file survives an exit…` |
+| X17 | `installer/install.sh` | F1's `*[[:space:]]\#*` refusal arm deleted | `installer-answers` | `a secret with a trailing comment was accepted (P1 guard)` |
 | X10 | `.github/scripts/pr-touches-build.sh` | line 191 back to the old names | `install-gate` | `FAILED  the VM cleanup wrapper does: got 'false', wanted 'true'` |
 | X11 | `pkgs/microvm.nix` | `exec_vm` without the `share/` lines | `microvm-template` | `run did not write share/hostname…` |
 | X12 | `modules/microvm/guest.nix` | `source = "."` | `microvm-template` | `…hostdir share is not path=share…` |
@@ -1470,7 +1496,7 @@ the status, check `git merge-base origin/main HEAD`, and check that
       only imperative `microvm -c` machines, set it yourself."
     - "In an answers file, `password`, `luks_passphrase` and
       `recovery_passphrase` are taken exactly as written, `#` included."
-  - **How I proved the check fails:** X1-X16 red outputs (X13 and X13b
+  - **How I proved the check fails:** X1-X17 red outputs (X13 and X13b
     together), then the greens.
   - **Checks run locally:** the K2 list, `microvm-template`, `microvm-boot`,
     `wifi-hwsim` and `options`.
@@ -1483,7 +1509,7 @@ the status, check `git merge-base origin/main HEAD`, and check that
       the owner has authorised merging when green;
     - the retargeted `install-gate` cases (P4);
     - the model split: steps A1-A5, B1-B5, C1-C2, D1-D2, E1-E5, F1-F7, G1-G2,
-      H1-H4, K1-K2, V2-V5 and X1-X16 by the coder, and everything else by the
+      H1-H4, K1-K2, V2-V5 and X1-X17 by the coder, and everything else by the
       orchestrator.
   - **What this cost:** the §5 EXIT-trap bullet (H4).
   - End the body with the attribution line from the system reminder.
@@ -1516,7 +1542,7 @@ with links to the docs changed in H1 and B2.
 
 | Check | Layer | Green | Red when |
 |---|---|---|---|
-| `installer-answers` (new) | runCommand | 6 ok lines | X7, X8, X9 |
+| `installer-answers` (new) | runCommand | 7 ok lines | X7, X8, X9, X17 |
 | `installer-baked-guard` (new) | runCommand | 3 ok lines | X1 |
 | `installer-from-repo` | runCommand | + #1077, #1084 cases | X2, X3 |
 | `installer-store-space` | runCommand | + lint, format_disk, generate_hardware_config, install_flake_dir | X4, X5, X6 |

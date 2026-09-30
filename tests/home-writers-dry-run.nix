@@ -64,7 +64,7 @@ pkgs.runCommand "home-writers-dry-run" { nativeBuildInputs = [ pkgs.jq ]; } ''
   grep -F '[mcp_servers.nixos]' "$HOME/.codex/config.toml" >/dev/null || { echo 'FAIL: live TOML append missing' >&2; exit 1; }
   printf '%s\n' 'invalid json' > "$HOME/.claude.json"
   source ${merge} > malformed.out 2>&1
-  grep -F 'could not merge' malformed.out >/dev/null || { echo 'FAIL: malformed JSON was not diagnosed' >&2; exit 1; }
+  grep -F 'not plain JSON' malformed.out >/dev/null || { echo 'FAIL: malformed JSON was not diagnosed' >&2; exit 1; }
   [ "$(cat "$HOME/.claude.json")" = 'invalid json' ] || { echo 'FAIL: malformed JSON was changed' >&2; exit 1; }
   echo 'Home Manager live merge and non-fatal malformed input passed'
   touch "$out"

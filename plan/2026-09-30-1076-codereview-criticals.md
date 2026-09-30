@@ -1412,6 +1412,19 @@ Check `gh run list` = 0 before each build.
 
 X13 and X14 (options) and X15 and X16 (VMs) run in V3-V5.
 
+*Deviation (implementation), from the fresh review:*
+- **R1:** `pkgs/microvm.nix` removes `share/hostname` before both writes. A guest
+  can plant it as a symlink (the 9p share uses `security_model=none`), and
+  the host would write through it.
+- **R2:** `microvm-template` gains a `canary` case that plants that symlink
+  before `run`. Its proof is **X18** (drop `exec_vm`'s `rm`), which went red.
+- **R3, R4:** `sandboxes.md` stops overstating the isolation: DHCP also reaches
+  the broadcast, `dev` can append to `allow-hosts` (#1100), and a VM that ran
+  untrusted code before this change should be recreated.
+- **X11** was blind as written: `create_vm` had already written the file, so
+  dropping `exec_vm`'s write stayed green. It is re-proven against R2's
+  `canary` case.
+
 ### Local VM and heavy verification (each alone, with CI idle)
 
 **V1 [O]:** check `gh run list` = 0 and that no local VM is running. Tell [C]

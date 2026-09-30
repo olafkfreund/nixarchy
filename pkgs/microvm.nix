@@ -256,6 +256,10 @@ writeShellApplication {
           mkdir -p "$dir"
           mkdir -p "$dir/share"
           echo "$template" > "$dir/template"
+          # #1076: the 9p share has no security_model, so a guest can plant
+          # share/hostname as a symlink; rm first so the host never opens
+          # through it and overwrites whatever it points at.
+          rm -f "$dir/share/hostname"
           echo "$name" > "$dir/share/hostname"
 
           echo "Created '$name' from the '$template' template."
@@ -332,6 +336,10 @@ writeShellApplication {
         exec_vm() {
           # The guest sees share/ only (#1076); made here too, for VMs created before it.
           mkdir -p "$dir/share"
+          # #1076: rm first -- a previous guest could have planted
+          # share/hostname as a symlink (no security_model on the 9p share),
+          # and we hold the flock here, so there is no race to overwrite it.
+          rm -f "$dir/share/hostname"
           echo "$name" > "$dir/share/hostname"
           cd "$dir"
           exec ./current/bin/microvm-run

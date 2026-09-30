@@ -170,12 +170,16 @@ It **does not**:
   matches the hostname the client asks for; TLS is end to end, so nothing
   here inspects or re-signs it. That is the right trade — a sandbox that
   terminated your TLS would be a sandbox that could read your model traffic.
-- **Survive root inside the guest.** `dev` is not in `wheel` here (#1083), and
-  DHCP goes only to SLiRP's server. A process that gains root some other way
-  -- a kernel bug, for instance -- can still flush the ruleset. It still
-  cannot leave the VM, which is the boundary that matters, but treat the
-  allowlist as a policy for an agent doing what agents do, not as a cage for
-  an attacker.
+- **Survive root inside the guest, mostly.** `dev` is not in `wheel` here
+  (#1083), and DHCP is allowed only to SLiRP's own server and its broadcast
+  renewals, not to any address on port 67. A process that gains root some
+  other way -- a kernel bug, for instance -- can still flush the ruleset. It
+  still cannot leave the VM, which is the boundary that matters, but treat
+  the allowlist as a policy for an agent doing what agents do, not as a cage
+  for an attacker: `dev` can still append to `/mnt/host/allow-hosts` without
+  root, and a name added there is allowed from the next boot. Restricting who
+  may edit that file from inside the guest is tracked separately; don't read
+  more isolation into the allowlist than it provides.
 - **Restrict the shared directory.** `/mnt/host` is read-write, as it is for
   every template. Put the checkout there and nothing else.
 
@@ -253,7 +257,9 @@ guest wrote before, and an `allow-hosts` you wrote, are still one level
 up, and the guest no longer sees them. Move what it should see into
 `share/`. An `agent` VM with no allowlist there reaches nothing, which is
 the safe way to fail. Declarative machines: the same, under
-`/var/lib/microvms/<name>/share`.
+`/var/lib/microvms/<name>/share`. Recreate any VM that ran untrusted code
+before this change: it could already have replaced `current` or planted a
+symlink somewhere in its directory, and neither is undone by upgrading.
 
 The consequence worth knowing: a template dropped from a later release of
 this flake keeps running here, for any VM that already built its `current`

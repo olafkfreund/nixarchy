@@ -453,6 +453,42 @@ pkgs.runCommand "nixarchy-microvm-template"
     kill "$first" 2>/dev/null || true
     wait "$first" 2>/dev/null || true
 
+    # #1076: the 9p share has no security_model, so a guest can replace
+    # share/hostname with a symlink pointing anywhere on the host. `run` must
+    # not follow it when it writes the next hostname.
+    ${nixarchyVm}/bin/nixarchy-vm create canary
+    canary_dir="$HOME/.local/state/nixarchy/microvm/canary"
+    canary_target="$HOME/canary-outside-share"
+    printf 'do-not-touch' > "$canary_target"
+    ln -sf "$canary_target" "$canary_dir/share/hostname"
+
+    ( ${nixarchyVm}/bin/nixarchy-vm run canary > canary-run.log 2>&1; echo $? > canary-run.status ) &
+    canary_pid=$!
+    for _ in $(seq 1 50); do
+      [ -f "$canary_dir/run.marker" ] && break
+      sleep 0.2
+    done
+    if [ ! -f "$canary_dir/run.marker" ]; then
+      echo "'run canary' never reached the stub guest -- see canary-run.log:" >&2
+      cat canary-run.log >&2
+      fail=1
+    fi
+    kill "$canary_pid" 2>/dev/null || true
+    wait "$canary_pid" 2>/dev/null || true
+
+    if [ "$(cat "$canary_target")" != "do-not-touch" ]; then
+      echo "run followed a symlink at share/hostname and overwrote a file outside share/ (#1076)" >&2
+      fail=1
+    fi
+    if [ -L "$canary_dir/share/hostname" ]; then
+      echo "share/hostname is still a symlink after run -- the symlink was not replaced (#1076)" >&2
+      fail=1
+    fi
+    if [ "$(cat "$canary_dir/share/hostname" 2>/dev/null)" != canary ]; then
+      echo "share/hostname does not hold the VM's name after a symlink attack (#1076)" >&2
+      fail=1
+    fi
+
     echo "== nixarchy vm: a machine built from a dirty or unpushed commit =="
 
     # The URL baked into the dirty-checkout CLI. "<rev>-dirty" is what

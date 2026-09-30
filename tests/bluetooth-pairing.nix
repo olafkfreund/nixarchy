@@ -20,21 +20,28 @@ let
     }).config;
   on = machine true;
   off = machine false;
-  guard = on.systemd.user.services.bt-agent.serviceConfig.ExecStartPre or null;
+  agentAbsent = c: !(c.systemd.user.services ? bt-agent);
+  timeoutAbsent = c: (c.hardware.bluetooth.settings.General.PairableTimeout or null) == null;
+  hasAgentPackage = pkgs.lib.any (
+    p: (p.pname or "") == "bluez-tools"
+  ) pkgs.omarchy.passthru.runtimeDeps;
 in
 assert pkgs.lib.assertMsg (
-  (on.hardware.bluetooth.settings.General.PairableTimeout or null) == 120
-) "Bluetooth pairing timeout is not 120 seconds";
-assert pkgs.lib.assertMsg (guard != null) "Bluetooth agent has no startup pairing guard";
+  agentAbsent on && agentAbsent off
+) "Nixarchy still installs a permanent Bluetooth auto-accept agent";
 assert pkgs.lib.assertMsg (
-  !(off.systemd.user.services ? bt-agent)
-) "disabled Nixarchy still installs the Bluetooth agent";
-assert pkgs.lib.assertMsg (
-  (off.hardware.bluetooth.settings.General.PairableTimeout or null) == null
-) "disabled Nixarchy still sets a Bluetooth pairing timeout";
-pkgs.runCommand "bluetooth-pairing" { } ''
-  grep -Fq 'set -euo pipefail' ${guard} || { echo 'Bluetooth guard does not fail closed' >&2; exit 1; }
-  grep -Fq 'pairable off' ${guard} || { echo 'Bluetooth guard does not disable incoming pairing' >&2; exit 1; }
-  grep -Fq 'Pairable: no' ${guard} || { echo 'Bluetooth guard does not verify adapter state' >&2; exit 1; }
-  touch "$out"
-''
+  timeoutAbsent on && timeoutAbsent off
+) "Nixarchy still sets a Bluetooth pairable timeout";
+assert pkgs.lib.assertMsg hasAgentPackage "temporary Bluetooth agent is missing from runtimeDeps";
+pkgs.runCommand "bluetooth-pairing"
+  {
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+  }
+  ''
+    bash ${./bluetooth-pairing.sh} ${pkgs.omarchy}/share/omarchy/bin/omarchy-bluetooth-device ${pkgs.bash}/bin/bash
+    touch "$out"
+  ''

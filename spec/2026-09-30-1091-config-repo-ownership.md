@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1091
 intent: intent/2026-09-30-1091-config-repo-ownership.md
 ---

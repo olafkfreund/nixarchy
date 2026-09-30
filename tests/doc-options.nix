@@ -86,5 +86,6 @@ let
 in
 pkgs.runCommand "doc-options" { nativeBuildInputs = [ pkgs.python3 ]; } ''
   python3 ${./doc-option-paths.py} ${known} ${../README.md} ${../docs}
+  bash ${./rdp-docs.sh} ${../modules/secrets.md} ${../docs/internals/flake.md} ${../docs/manual/remote-desktop.md} ${./options.nix}
   touch $out
 ''

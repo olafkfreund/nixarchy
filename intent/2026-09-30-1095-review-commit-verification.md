@@ -50,10 +50,8 @@ main-install portion of `pkgs/review.sh` and its cheap fixture check.
 
 ## Open questions
 
-1. On a failed per-run jobs request, should the main-install row say
-   **could not read** or **unverified** for that SHA? Recommend **could not
-   read**: an API failure does not tell us whether installation happened,
-   and the existing row already uses that wording for list failures.
-2. Should one unreadable run prevent a verdict if another run for the same
-   SHA shows a successful install? Recommend allowing the successful run to
-   verify that SHA; a separate failed rerun cannot undo a witnessed success.
+1. **Resolved by owner:** a failed per-run jobs request says **could not
+   read**, never verified. An API failure does not tell us whether the install
+   happened.
+2. **Resolved by owner:** a witnessed successful install for the same SHA
+   still verifies it; an unreadable rerun cannot undo that evidence.

@@ -36,6 +36,7 @@ ui_palette
 TEMPLATE=@template@
 TZDIR=@tzdata@/share/zoneinfo
 KEYMAPS=@kbd@/share/keymaps
+RESERVED_USERS="@reservedusers@"
 
 # Flakes are not guaranteed enabled on the live medium, and every nix call here
 # needs them. Stock ISOs have enabled them for a few releases; relying on that
@@ -626,10 +627,20 @@ validate_username() {
     echo "not a usable Linux username"
     return 1
   }
-  # root exists; nixbld* belong to the daemon. Creating either produces an
-  # install that fails late and confusingly.
+  if [ "${#1}" -gt 32 ]; then
+    echo "username must be at most 32 characters"
+    return 1
+  fi
+  # The target's system users are spliced from the evaluated reference host.
+  # nixbld names stay reserved even if the reference changes its build-user count.
   case $1 in
-    root | nixbld*)
+    nixbld*)
+      echo "that name is taken by the system"
+      return 1
+      ;;
+  esac
+  case " $RESERVED_USERS " in
+    *" $1 "*)
       echo "that name is taken by the system"
       return 1
       ;;
@@ -641,6 +652,10 @@ validate_hostname() {
     echo "letters, digits and hyphens; not starting or ending with one"
     return 1
   }
+  if [ "${#1}" -gt 63 ]; then
+    echo "hostname must be at most 63 characters"
+    return 1
+  fi
 }
 
 # The password, on its own.

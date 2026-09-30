@@ -966,6 +966,7 @@
                   "@dashboard@"
                   "@tzdata@"
                   "@kbd@"
+                  "@reservedusers@"
                   "@initrdmodules@"
                   "@initrdforced@"
                   "@initrdmodulesplain@"
@@ -984,6 +985,15 @@
                   "${./installer/lib/dashboard.sh}"
                   "${pkgsFor.${system}.tzdata}"
                   "${pkgsFor.${system}.kbd}"
+                  (
+                    let
+                      users = builtins.attrValues self.nixosConfigurations.reference.config.users.users;
+                    in
+                    nixpkgs.lib.concatStringsSep " " (
+                      builtins.map (user: user.name) (builtins.filter (user: !(user.isNormalUser or false)) users)
+                      ++ [ "daemon" ]
+                    )
+                  )
                   # The initrd modules the reference host carries, and therefore
                   # the ones already baked into any image built from this commit.
                   # install.sh compares what it detected against this list to

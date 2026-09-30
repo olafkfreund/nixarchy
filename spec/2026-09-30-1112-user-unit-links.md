@@ -6,6 +6,8 @@ intent: intent/2026-09-30-1112-user-unit-links.md
 
 # Spec: Keep Nixarchy user units on the current generation
 
+The owner approved the revised first-run design on 2026-10-01; its no-start decision supersedes the earlier answer in the intent.
+
 ## Design
 
 1. **Stop creating user links.** `pkgs/omarchy/enable-user-units.sh:27-43` currently checks which units exist and calls `systemctl --user enable --now`. First-run runs inside the graphical session, where the NixOS `wantedBy` links (`modules/nixos.nix:1703-1774` on current main) have already started the declared units. Make this step succeed without enabling, starting, or reloading any user unit; absent optional units remain nonfatal. `switch-to-configuration` already reloads user managers. Once #1101 merges, `bt-agent` is absent from the first-run list and the permanent unit is gone; do not restore either. Update the patch drift check at `pkgs/omarchy/default.nix:1541-1551` and the stale first-run rationale in `pkgs/AGENTS.md:619-645` to match the new behavior.

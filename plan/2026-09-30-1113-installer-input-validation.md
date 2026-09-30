@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1113
 spec: spec/2026-09-30-1113-installer-input-validation.md
 ---

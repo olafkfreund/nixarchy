@@ -61,7 +61,7 @@ pkgs.runCommand "nixarchy-dashboard-clock"
           # rewinds a clock during an install.
           UI_DASH_START=\$(( \$(date +%s) - ($skew) ))
           UI_DASH_CHANGED=\$UI_DASH_START
-          UI_DASH_SIZE=""
+          UI_DASH_SIZE=
           UI_DASH_LOG=""
           ui_dashboard_tick
         " /dev/null 2>&1
@@ -102,7 +102,7 @@ pkgs.runCommand "nixarchy-dashboard-clock"
         UI_TIPS=$empty
         UI_DASH_START=\$(date +%s)
         UI_DASH_CHANGED=\$UI_DASH_START
-        UI_DASH_SIZE=""
+        UI_DASH_SIZE=
         UI_DASH_LOG=""
         ui_dashboard_tick
       " /dev/null 2>&1

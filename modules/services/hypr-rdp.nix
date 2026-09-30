@@ -3,55 +3,19 @@
 # Bundled rather than plain for a reason the catalogue's bar does not usually
 # meet all at once: nixpkgs has no package (it comes from our overlay), upstream
 # ships no systemd unit, the daemon is a client of a compositor that is already
-# running, and its password can only be read from inside a config file -- so a
-# file has to be rendered at runtime from something safe to commit.
+# running, and this module renders its password into a private config file at
+# runtime rather than putting it in the store or on the command line.
 #
 # ## The part that decides the shape of this module
 #
-# hypr-rdp FAILS OPEN. Verified in v0.1.5, src/config.rs:187-197:
-#
-#     let username = args.username.or(config.username).unwrap_or_default();
-#     let password = args.password.or(config.password).unwrap_or_default();
-#     if username.is_empty() || password.is_empty() {
-#         tracing::warn!("No credentials set (-u/-p). ...");
-#         if bind.starts_with("0.0.0.0") { tracing::warn!("... security risk."); }
-#     }
-#
-# `unwrap_or_default()` yields an empty string, not an error. There is no
-# `return`, no `bail!`, no exit: it logs two warnings and then serves the
-# session. src/server/mod.rs:123 confirms the other end -- credentials are
-# built only `if !(username.is_empty() && password.is_empty())`, so with
-# neither set there is no authentication at all.
-#
-# UPSTREAM HAS SINCE FIXED THE CAUSE, and this module can shed most of the
-# machinery below once that reaches a tag. MuNeNICK/hypr-rdp#84 is MERGED
-# (2026-09-04), adding `--password-file` and a `password_file` config key: the
-# secret no longer has to live inside the config file, which is the single fact
-# that forced the sops.templates shim. Upstream also made the empty case fail
-# startup rather than fall through to unauthenticated.
-#
-# NOT YET USABLE HERE: it is on upstream main and in no tag -- v0.1.5 is still
-# the newest, and the input above pins a tag deliberately ("a bad rebuild here
-# breaks the machine you are remote to"). So this stays exactly as it is until
-# a release carries it.
-#
-# WHEN A TAG SHIPS IT, the deletion is:
-#
-#   1. bump inputs.hypr-rdp to that tag
-#   2. replace the sops.templates."hypr-rdp.toml" render with a plain config
-#      file in the store plus `password_file = <the sops secret's path>`
-#   3. delete `secretUsable`, `passwordPath` and the whole ExecStartPre guard
-#      below -- upstream now refuses on an empty password itself, which is what
-#      that guard exists to do
-#   4. KEEP the evaluation-time assertion. It catches "no secret named at all",
-#      which upstream cannot see and which is a configuration mistake rather
-#      than a runtime one.
-#
-# Verify before deleting step 3, do not assume: confirm against the tagged
-# binary that an empty password_file exits non-zero. The guard exists because
-# this daemon FAILED OPEN once; removing it on the strength of a merged PR
-# rather than an observed refusal would be trading a checked property for a
-# trusted one.
+# hypr-rdp v0.1.6 has `password_file`. Its read_password_file rejects a
+# missing or empty named file, but that does not make credentials mandatory:
+# with no credentials, RuntimeConfig::load warns and serves unauthenticated.
+# With a username and an empty inline password, it only warns
+# `HalfCredentials` and continues. These are separate fail-open cases in the
+# pinned src/config.rs; the guard below refuses both before the daemon starts.
+# Keep it even if a later change uses `password_file`, unless the pinned daemon
+# itself is verified to refuse absent credentials and an empty inline password.
 #
 # So this module is the only thing between an unrendered secret and an open
 # remote desktop, and it refuses in two places rather than one:
@@ -68,10 +32,10 @@
 #
 # ## What was checked against the binary rather than assumed
 #
-#   --config <path>   EXISTS in v0.1.5 (`hypr-rdp --help`), defaulting to
+#   --config <path>   EXISTS in the pinned v0.1.6, defaulting to
 #                     ~/.config/hypr-rdp/config.toml. So the unit points at the
 #                     private runtime path directly; no symlink to manage.
-#                     Better still, config.rs:129-137 distinguishes the two:
+#                     Better still, config.rs:208-233 distinguishes the two:
 #                     a MISSING file is tolerated silently when the path is
 #                     implicit and is `bail!`ed when it was given explicitly.
 #
@@ -414,21 +378,10 @@ in
         # The raw password goes into this private staging file. ExecStartPre
         # escapes it into a private TOML file; neither path is in the store.
         #
-        # WHAT TO DELETE WHEN UPSTREAM GAINS A PASSWORD FILE (#157). Asked for
-        # in MuNeNiCK/hypr-rdp#80; the maintainer answered on 2026-09-02 with
-        # the shape they want, so the semantics below are theirs, not a guess:
-        # `--password-file` plus a `password_file` config key, conflicting with
-        # the inline `password` rather than overriding it, and a hard startup
-        # failure when the named file is missing, unreadable or empty. Once a
-        # tagged release carries it, verify `password_file` in src/config.rs.
-        #
-        # When it lands: this template becomes a plain `sops.secrets.<name>`
-        # file (no rendering or placeholder), and the store-safe public config
-        # gains `password_file`. The guard can go once the tagged upstream
-        # binary refuses an empty or absent password file. The assertions stay --
-        # an upstream hard failure still leaves the "no credentials at all serves
-        # the desktop unauthenticated" default in place for anyone who
-        # configures neither.
+        # The pinned v0.1.6 supports `password_file`, but migration to it is
+        # separate work. Keep the startup guard: absent credentials serve
+        # unauthenticated, and a username with an empty inline password gets
+        # only a `HalfCredentials` warning and continues.
         sops.templates."hypr-rdp.toml" = {
           owner = svc.user;
           mode = "0400";
@@ -483,8 +436,8 @@ in
             ExecStartPre = "${guard}/bin/nixarchy-hypr-rdp-guard ${passwordPath} ${publicConfig} ${runtimeConfigPath}";
 
             # --config, not a symlink into ~/.config/hypr-rdp: the flag exists
-            # in v0.1.5, and naming the path explicitly also turns a missing
-            # file from "silently use defaults" into a hard error (config.rs
+            # in the pinned v0.1.6, and naming the path explicitly also turns a
+            # missing file from "silently use defaults" into a hard error (config.rs
             # distinguishes the implicit and explicit cases). The certificates
             # still land in ~/.config/hypr-rdp, which is upstream's and stays
             # writable.

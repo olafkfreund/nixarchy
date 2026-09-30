@@ -43,10 +43,11 @@
 # depend on a per-VM value -- one closure serves every VM of a template. So
 # the allowlist arrives exactly the way the hostname does in
 # modules/microvm/guest.nix: a plain-text file the caller drops in the VM's
-# `share/` directory, read at boot from the /mnt/host share, by a oneshot
+# host-managed `policy/` sibling of `share/`, read at boot from a read-only
+# /mnt/agent-policy share by a oneshot
 # that runs inside the VM that actually has it mounted.
 #
-# `/mnt/host/allow-hosts`, one hostname per line, `#` comments allowed. No
+# `/mnt/agent-policy/allow-hosts`, one hostname per line, `#` comments allowed. No
 # file, or an empty one, means an empty filter -- which under
 # `FilterDefaultDeny` is deny-everything, the only safe way for this to fail.
 # A template that imports this one may also ship a closure-side list at
@@ -67,6 +68,17 @@ let
   filterFile = "/run/nixarchy-agent/allow.filter";
 in
 {
+  microvm.shares = [
+    {
+      tag = "agent-policy";
+      source = "policy";
+      mountPoint = "/mnt/agent-policy";
+      proto = "9p";
+      readOnly = true;
+    }
+  ];
+  fileSystems."/mnt/agent-policy".options = [ "ro" ];
+
   environment.systemPackages = [
     pkgs.git
     pkgs.curl
@@ -117,7 +129,7 @@ in
     # that no longer describes this VM.
     before = [ "tinyproxy.service" ];
     requiredBy = [ "tinyproxy.service" ];
-    unitConfig.RequiresMountsFor = [ "/mnt/host" ];
+    unitConfig.RequiresMountsFor = [ "/mnt/agent-policy" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -134,11 +146,15 @@ in
       # written by a template that imports this one (agent-claude) and so
       # cannot be edited, emptied or deleted from the VM's directory:
       # whatever it names is allowed on every VM of that template, and
-      # /mnt/host/allow-hosts only ever adds. This template writes no such
+      # /mnt/agent-policy/allow-hosts only ever adds. This template writes no such
       # file, so for `agent` the behaviour is unchanged.
-      for src in /etc/nixarchy-agent/allow-hosts /mnt/host/allow-hosts; do
-        [ -r "$src" ] || continue
-        while read -r host; do
+      for src in /etc/nixarchy-agent/allow-hosts /mnt/agent-policy/allow-hosts; do
+        [ -e "$src" ] || continue
+        content=$(${pkgs.coreutils}/bin/cat "$src") || {
+          echo "allow-hosts: cannot read $src" >&2
+          exit 1
+        }
+        while IFS= read -r host; do
           case "$host" in
             "" | \#*) continue ;;
             # Not a hostname, not a filter line. tinyproxy compiles every
@@ -157,7 +173,7 @@ in
           # character, which is how an allowlist silently becomes wider than
           # it reads.
           printf '^(.*\.)?%s$\n' "$(printf '%s' "$host" | sed 's/\./\\./g')" >> ${filterFile}
-        done < "$src"
+        done <<< "$content"
       done
       chmod 0444 ${filterFile}
     '';

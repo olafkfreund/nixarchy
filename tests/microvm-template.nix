@@ -225,12 +225,48 @@ pkgs.runCommand "nixarchy-microvm-template"
       lib.optionalString (lib.hasPrefix "agent" name) ''
         echo "== ${name}: cannot reach what it was not allowed =="
 
+        for variant in ${templates.${name}.kvm} ${templates.${name}.tcg}; do
+          runner=$variant/bin/microvm-run
+          if ! grep -qF 'path=policy,security_model=none,readonly=true' "$runner"; then
+            echo "${name}: policy/ is not a read-only 9p export" >&2
+            fail=1
+          fi
+          if ! grep -qF 'path=share,security_model=none,readonly=false' "$runner"; then
+            echo "${name}: work share/ is not distinct and writable" >&2
+            fail=1
+          fi
+        done
+
         # Everything below reads the guest CLOSURE rather than the qemu command
         # line: an egress policy lives inside the guest, so the assertions the
         # rest of this file makes against bin/microvm-run cannot see any of it.
         # Nothing here boots -- see the header for why that matters.
         sys=$(readlink -f ${templates.${name}.kvm}/share/microvm/system)
         units=$sys/etc/systemd/system
+
+        policyUnit=$units/nixarchy-agent-allowlist.service
+        if ! grep -qF 'RequiresMountsFor=/mnt/agent-policy' "$policyUnit"; then
+          echo "${name}: allowlist service does not wait for the policy mount" >&2
+          fail=1
+        fi
+        policyScript=$(sed -n 's/^ExecStart=//p' "$policyUnit")
+        if [ ! -f "$policyScript" ]; then
+          echo "${name}: cannot inspect the built allowlist script" >&2
+          fail=1
+        else
+          if ! grep -qF 'for src in /etc/nixarchy-agent/allow-hosts /mnt/agent-policy/allow-hosts' "$policyScript"; then
+            echo "${name}: allowlist does not read the protected policy path" >&2
+            fail=1
+          fi
+          if grep -qF '/mnt/host/allow-hosts' "$policyScript"; then
+            echo "${name}: allowlist still reads the guest-writable path" >&2
+            fail=1
+          fi
+        fi
+        if ! grep -E '/mnt/agent-policy.*[[:space:]]ro([,[:space:]]|$)' "$sys/etc/fstab" >/dev/null; then
+          echo "${name}: guest policy mount is not read-only" >&2
+          fail=1
+        fi
 
         for unit in nftables.service tinyproxy.service nixarchy-agent-allowlist.service; do
           if [ ! -e "$units/$unit" ]; then

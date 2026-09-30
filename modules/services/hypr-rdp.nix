@@ -132,8 +132,10 @@ let
   # Nothing prints the secret, including failures.
   guard = pkgs.writeShellApplication {
     name = "nixarchy-hypr-rdp-guard";
+    inheritPath = false;
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.diffutils
       pkgs.gnugrep
       pkgs.gnused
     ];

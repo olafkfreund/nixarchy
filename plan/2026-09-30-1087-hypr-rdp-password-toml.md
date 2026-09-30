@@ -30,6 +30,10 @@ Implementation is blocked on plan approval. `tests/options.nix` is additionally 
 - Run `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .`, `nix run nixpkgs#deadnix -- --fail .`, and `git diff --check`. All local `nix build` calls use the shared `flock` lock, one at a time. Do not run VM checks or `checks.options` locally; CI owns the latter.
 - Before opening the PR, ensure the criticals PR has merged, the branch has been rebased, and the Step 5 update is present. Include links to intent, spec, and plan, plus red and green outputs.
 
+## *Deviation (implementation)*
+
+Review found that Step 2's `cmp` is supplied by `pkgs.diffutils`, which the first implementation omitted. `writeShellApplication` inherited the caller's PATH by default, so the check passed on a machine with `cmp` elsewhere on PATH. Declare `pkgs.diffutils` and set `inheritPath = false` on the guard. Step 3's existing happy-path fixture now must fail when `pkgs.diffutils` is removed; prove it with a copy-aside break and restore, then show green. Keep `cmp` so the control-byte check sees NUL. The manual also explains that non-ASCII control characters and invalid UTF-8 fail closed at TOML parsing.
+
 ## Rollback
 
 Revert the implementation commits on this branch or revert the merged PR. The old user service then reads the sops-rendered TOML directly, and its original password-character limitation returns; warn affected users to avoid quotes, backslashes, and controls until a replacement fix lands. No persisted user configuration or secret is migrated by this change; the private runtime file disappears with the user session.

@@ -83,6 +83,7 @@ pkgs.runCommand "nixarchy-hypr-rdp-toml"
             return subprocess.run(
                 [os.environ["guard"], str(stage), os.environ["publicConfig"], str(output)],
                 capture_output=True, text=True,
+                env={**os.environ, "PATH": "/nonexistent"},
             )
 
         result = run(password.encode())

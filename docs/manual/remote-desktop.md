@@ -98,7 +98,8 @@ hypr-rdp-password: something-long
 
 Double quotes and backslashes keep their literal meaning: nixarchy escapes
 them when it writes the private TOML config. Control characters, including
-newlines, are refused with a clear error before hypr-rdp starts.
+newlines, are refused with a clear error before hypr-rdp starts. Non-ASCII
+control characters and invalid UTF-8 fail closed when hypr-rdp parses TOML.
 
 You need sshd enabled first, and one rebuild after it. The secret is encrypted
 to the machine's own SSH host key, and that key is generated on first boot --

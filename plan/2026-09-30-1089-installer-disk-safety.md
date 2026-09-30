@@ -55,6 +55,13 @@ observed during this run, not an earlier one.
    OVMF vars file, then run `main --boot --vnc` in a subshell (it `exec`s
    QEMU); assert the logged target device argument contains the serial. A
    source grep or a probe that exits before `main` cannot see those args
+   `installer/try.sh:537-545` has separate `--boot` and install launches;
+   construct one target-drive device string with the serial and use it in
+   both branches. Extend the stub to run the install branch with a fixture
+   ISO and capture that QEMU argv too. Break-proof the shared construction
+   by copying `installer/try.sh` aside, removing the serial from the install
+   launch alone, and showing the install-argv assertion red; restore with
+   `cp` and show both branches green.
    -> verify by
    `flock /mnt/data/vmtest/codex-build.lock nix build
    .#checks.x86_64-linux.try-nixarchy --print-build-logs` and then the same

@@ -106,6 +106,51 @@ pkgs.runCommand "nixarchy-channel"
     if [ -f rewrite/flake.nix.pre-channel ]; then echo "  ok      the previous file is kept"
     else echo "  FAILED  no .pre-channel backup"; fails=$((fails + 1)); fi
 
+    # The shipped template has one follows. Add another input on BOTH sides
+    # so neither a first-match nor a last-match rewrite can pass by accident.
+    inject_other() {
+      awk -v position="$2" '
+        function extra() {
+          print "    other = {"
+          print "      url = \"github:someone/other\";"
+          print "      inputs.nixpkgs.follows = \"nixpkgs\";"
+          print "    };"
+        }
+        position == "before" && /^    nixarchy = [{]$/ { extra() }
+        { print }
+        position == "after" && /^    nixarchy = [{]$/ { inside = 1 }
+        position == "after" && inside && /^    [}];$/ { extra(); inside = 0 }
+      ' "$1" > "$1.new"
+      mv "$1.new" "$1"
+    }
+    for position in before after; do
+      mk "$position"
+      inject_other "$position/flake.nix" "$position"
+      other_before=$(sed -n '/^    other = [{]$/,/^    [}];$/p' "$position/flake.nix")
+      echo y | NIXARCHY_FLAKE=$PWD/$position $ch stable 25.11 >/dev/null 2>&1 || true
+      other_after=$(sed -n '/^    other = [{]$/,/^    [}];$/p' "$position/flake.nix")
+      nixarchy_block=$(sed -n '/^    nixarchy = [{]$/,/^    [}];$/p' "$position/flake.nix")
+      if [ "$other_before" = "$other_after" ] &&
+         <<<"$nixarchy_block" grep -F 'inputs.home-manager.url = "github:nix-community/home-manager/release-25.11";' >/dev/null; then
+        echo "  ok      $position: only nixarchy gets the Home Manager override"
+      else
+        echo "  FAILED  $position: another input changed or nixarchy got no override"
+        fails=$((fails + 1))
+      fi
+    done
+
+    mk missing-follows
+    sed -i '/^[[:space:]]*inputs.nixpkgs.follows = /d' missing-follows/flake.nix
+    before=$(cksum < missing-follows/flake.nix)
+    r=$(echo y | NIXARCHY_FLAKE=$PWD/missing-follows $ch stable 25.11 2>&1 || true)
+    if [ "$before" = "$(cksum < missing-follows/flake.nix)" ] &&
+       <<<"$r" grep -F 'Cannot find one nixarchy input' >/dev/null; then
+      echo "  ok      a reshaped nixarchy input is refused without a write"
+    else
+      echo "  FAILED  a missing nixarchy follows was rewritten or not diagnosed"
+      fails=$((fails + 1))
+    fi
+
     # Back again, and the override must GO -- not be left pointing at a release
     # while nixpkgs follows unstable, which is the same broken pairing mirrored.
     echo y | NIXARCHY_FLAKE=$PWD/rewrite $ch unstable >/dev/null 2>&1 || true

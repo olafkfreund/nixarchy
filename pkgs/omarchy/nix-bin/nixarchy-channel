@@ -197,9 +197,19 @@ if [ -n "$new_hm" ]; then
   if [ -n "$hm_line" ]; then
     sed -i -E "s|^([[:space:]]*inputs\.home-manager\.url[[:space:]]*=[[:space:]]*\")[^\"]+(\".*)|\1$new_hm\2|" "$nixfile"
   else
-    # Beside the follows, which is where the template prose says to put it --
-    # so a file edited by this and one edited by hand come out the same shape.
-    sed -i -E "s|^([[:space:]]*)(inputs\.nixpkgs\.follows[[:space:]]*=[[:space:]]*\"nixpkgs\";)|\1\2\n\1inputs.home-manager.url = \"$new_hm\";|" "$nixfile"
+    # A different input may also follow nixpkgs; only nixarchy's block owns
+    # the Home Manager override. Refuse a reshaped or ambiguous block.
+    if ! awk '
+      /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { blocks++; inside=1 }
+      inside && /^[[:space:]]*inputs[.]nixpkgs[.]follows[[:space:]]*=[[:space:]]*"nixpkgs";[[:space:]]*$/ { follows++ }
+      inside && /^[[:space:]]*[}];[[:space:]]*$/ { inside=0 }
+      END { exit (blocks != 1 || follows != 1) }
+    ' "$nixfile"; then
+      red "Cannot find one nixarchy input and its nixpkgs follows in $nixfile."
+      mv "$nixfile.pre-channel" "$nixfile"
+      exit 1
+    fi
+    sed -i -E '/^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*\{[[:space:]]*$/,/^[[:space:]]*\};[[:space:]]*$/ s|^([[:space:]]*)(inputs\.nixpkgs\.follows[[:space:]]*=[[:space:]]*"nixpkgs";)|\1\2\n\1inputs.home-manager.url = "'"$new_hm"'";|' "$nixfile"
   fi
 elif [ -n "$hm_line" ]; then
   sed -i -E "/^[[:space:]]*inputs\.home-manager\.url[[:space:]]*=/d" "$nixfile"

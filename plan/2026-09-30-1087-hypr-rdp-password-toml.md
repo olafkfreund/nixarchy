@@ -1,0 +1,35 @@
+---
+status: draft
+issue: 1087
+spec: spec/2026-09-30-1087-hypr-rdp-password-toml.md
+---
+
+# Plan: Preserve hypr-rdp credentials in TOML
+
+The sops template currently puts an unescaped secret inside a quoted TOML value. hypr-rdp fails open without credentials, so its startup guard must continue to refuse missing and empty secrets. Stage only the raw password in the existing user-owned, `0400` sops template; at runtime the guard rejects control bytes and escapes backslashes and double quotes with one `sed` expression. It writes a complete private TOML file before the daemon starts. Nonsecret strings are encoded at evaluation. The daemon receives only a `--config` path, never a password argument. Preserve `ConditionUser`, explicit `--config`, existing assertions, and the restart-on-manual-command behavior.
+
+Implementation is blocked on plan approval. `tests/options.nix` is additionally reserved by the criticals PR: make its edit in Step 5 **only after that PR merges and this branch is rebased**. Do not edit any other criticals-owned file. Name the plan step in each implementation commit; record any deviation in this plan in the same commit.
+
+## Steps
+
+1. `modules/services/hypr-rdp.nix:100-116,400-423`: make the sops template a raw password staging file containing only its placeholder, retaining `owner = svc.user` and `mode = "0400"`; construct the nonsecret TOML fields (`bind`, `username`, optional `output`, `certFile`, `keyFile`) with `builtins.toJSON` and preserve their literal parsed values. Keep the named-secret assertion and avoid putting any cleartext secret in a Nix string. → Verify by inspecting the evaluated module's template source for a placeholder and by parsing a generated nonsecret fixture with Python `tomllib`. After editing Nix, run `nix fmt`, inspect `git diff --stat`, and run `nix fmt -- --ci`. Trap: a static source check alone cannot prove the substituted result.
+
+2. `modules/services/hypr-rdp.nix:118-149,440-467`: extend the built `ExecStartPre` guard to read the staging file, refuse missing or empty input and **any** control byte including NUL, newline, tab, and carriage return without printing the secret, then escape `\` and `"` with one `sed` expression. Write full TOML to a temporary file in the user service's `0700` runtime directory with `umask 077`; set `0400`, rename atomically, and refuse before `ExecStart` on any failure. Validate nonempty username and password in the final config. Point `ExecStart --config` at that final path; keep `ConditionUser`, the secret off the command line, and explicit config-path failure behavior. → Verify by running the **built** guard with fake staging files, checking success and refusal statuses, final mode, and no partial first-render output. After editing Nix, run `nix fmt`, inspect `git diff --stat`, and run `nix fmt -- --ci`. Trap: `writeShellApplication` needs every invoked external command in `runtimeInputs`; do not rely on the interactive PATH.
+
+3. `tests/hypr-rdp-toml.nix` and `flake.nix` checks: add a cheap `runCommand` check derived from an evaluated hypr-rdp-enabled module's actual template, guard, and unit command. Substitute fake secrets into the staging fixture, run the built guard, parse the **final rendered TOML** with Python `tomllib`, and assert exact parsed password and nonsecret values for quotes and backslashes. Assert the store template contains only a placeholder, that the runtime config is private, and that missing, empty, and control-byte inputs fail without printing a secret or leaving a partial first render. → Verify by `flock /mnt/data/vmtest/codex-build.lock nix build .#checks.x86_64-linux.hypr-rdp-toml --print-build-logs --no-link`; after each Nix edit run `nix fmt`, inspect `git diff --stat`, then run `nix fmt -- --ci`, statix, and deadnix. Trap: the check must run the evaluated module's guard, not a copy of its shell code; do not add a VM or `checks.options` run locally.
+
+4. `modules/services/hypr-rdp.nix:208-227` and `docs/manual/remote-desktop.md:99-102`: update the password description and manual to say literal quote and backslash values work, while control characters are rejected with a clear error. Keep the documented manual `systemctl --user restart hypr-rdp` after a secret change. → Verify by checking the affected text against the runtime behavior and running `git diff --check`; after the Nix edit run `nix fmt`, inspect `git diff --stat`, and run `nix fmt -- --ci`.
+
+5. **LAST, after the criticals PR merges and branch rebase:** `tests/options.nix:3077-3134`: update its old quoted-placeholder assertion and direct guard fixtures for the raw staging template, new guard invocation, private final config, and existing empty/missing credential refusals. Preserve the enabled and disabled module assertions elsewhere in that file. → Verify by review of the updated assertions against the evaluated module and the passing cheap `hypr-rdp-toml` check; leave the memory-heavy `checks.options` run to CI. After editing Nix run `nix fmt`, inspect `git diff --stat`, and run `nix fmt -- --ci`. Trap: do not edit this file before criticals releases it, and do not infer it passed from a different check's green result.
+
+## Tests
+
+- **Break proof for escaping:** `cp modules/services/hypr-rdp.nix` to an untracked worktree-local save file, remove the runtime `sed` escape, confirm the diff contains the break, run `flock /mnt/data/vmtest/codex-build.lock nix build .#checks.x86_64-linux.hypr-rdp-toml --print-build-logs --no-link` and capture the parsed-value mismatch or parse failure. Restore with `cp`, never `git checkout`, and prove the check passes.
+- **Break proof for refusal:** repeat the copy-aside procedure, remove the control-byte rejection, confirm the diff, run the same check expecting its control fixture to fail, restore with `cp`, and show a green run. Keep proof logs outside committed files and paste the red lines into the PR.
+- Check a quote, a backslash, a valid TOML-looking backslash sequence, and each control case; compare parser output with the original fixture bytes. Check `0400` final permissions, `0700` runtime directory, and refusal before daemon execution. The rendered final file, not the Nix source text, is the subject of the check.
+- Run `nix fmt -- --ci`, `nix run nixpkgs#statix -- check .`, `nix run nixpkgs#deadnix -- --fail .`, and `git diff --check`. All local `nix build` calls use the shared `flock` lock, one at a time. Do not run VM checks or `checks.options` locally; CI owns the latter.
+- Before opening the PR, ensure the criticals PR has merged, the branch has been rebased, and the Step 5 update is present. Include links to intent, spec, and plan, plus red and green outputs.
+
+## Rollback
+
+Revert the implementation commits on this branch or revert the merged PR. The old user service then reads the sops-rendered TOML directly, and its original password-character limitation returns; warn affected users to avoid quotes, backslashes, and controls until a replacement fix lands. No persisted user configuration or secret is migrated by this change; the private runtime file disappears with the user session.

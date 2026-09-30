@@ -442,8 +442,8 @@ else
 fi
 
 # ---- bluetooth -----------------------------------------------------------
-# The checks assert the service is enabled and that the VM has no radio. This
-# is the other half.
+# The checks cover the service configuration; only hardware can show whether
+# BlueZ returns to non-pairable after the temporary pair agent exits.
 head_ "Bluetooth"
 if [ ! -d /sys/class/bluetooth ] || [ -z "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]; then
   hmm "no adapter on this machine" "nothing to test"
@@ -455,15 +455,15 @@ else
     ok "bluetoothd sees $adapters adapter(s)" ""
     say_dim "$(timeout 5 bluetoothctl list 2>/dev/null | head -1)"
     agent=inactive
-    if systemctl --user is-active --quiet bt-agent.service; then agent=active; fi
+    if pgrep -x bt-agent >/dev/null 2>&1; then agent=active; fi
     if state=$(timeout 5 bluetoothctl show 2>/dev/null); then
       if grep -Eq '^[[:space:]]*Pairable: no$' <<<"$state"; then
         ok "adapter is not pairable (agent $agent)" "test outgoing pairing from the panel"
       elif grep -Eq '^[[:space:]]*Pairable: yes$' <<<"$state"; then
         if [ "$agent" = active ]; then
-          bad "adapter is pairable while the auto-accept agent is active" "incoming pairing is exposed"
+          hmm "adapter is pairable during temporary pairing" "check it returns to no when pairing ends"
         else
-          hmm "adapter is pairable (agent inactive)" "check which client enabled pairing"
+          bad "adapter is pairable with no temporary agent" "check which client enabled pairing"
         fi
       else
         hmm "adapter pairability unknown (agent $agent)" "bluetoothctl gave no Pairable state"

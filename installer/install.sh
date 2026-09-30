@@ -1643,6 +1643,8 @@ partition_free_space() {
     sleep 0.5
   done
 
+  check_free_partitions || return 1
+
   # The region was free, not blank.
   #
   # Whatever used to live in those sectors is still sitting in them, and blkid
@@ -1657,6 +1659,22 @@ partition_free_space() {
   # arguments it gets here are the only two devices in this script that are
   # ours by construction.
   wipefs -a "$esp_dev" "$root_dev"
+}
+
+# The by-partlabel names are global: a stale or foreign label must not turn
+# this disk's free-space install into a wipe of another disk's partition.
+check_free_partitions() {
+  local part real parent selected
+  check_disks || return 1
+  selected=$(readlink -f "$device") || return 1
+  for part in /dev/disk/by-partlabel/nixarchy-{esp,root}; do
+    real=$(readlink -f "$part") || return 1
+    parent=$(lsblk -nro PKNAME "$real" 2>/dev/null) || return 1
+    if [ -z "$parent" ] || [ "$(readlink -f "/dev/$parent")" != "$selected" ]; then
+      echo "nixarchy-install: $part does not belong to the selected disk. Nothing further was formatted." >&2
+      return 1
+    fi
+  done
 }
 
 format_disk() {
@@ -1720,6 +1738,9 @@ format_disk() {
     return 1
   fi
   check_disks || { rm -f /tmp/nixarchy-luks.key; return 1; }
+  if [ "$disk_mode" = free ]; then
+    check_free_partitions || { rm -f /tmp/nixarchy-luks.key; return 1; }
+  fi
   "$script" || rc=$?
   rm -f /tmp/nixarchy-luks.key
   if [ "$rc" -ne 0 ]; then

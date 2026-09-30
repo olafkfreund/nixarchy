@@ -1,6 +1,6 @@
 { pkgs, installScript }:
 pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
-  for fn in ask_device remember_disk check_disks confirm_repo_disks format_disk main; do
+  for fn in ask_device remember_disk check_disks confirm_repo_disks check_free_partitions partition_free_space format_disk main; do
     sed -n "/^$fn()/,/^}/p" ${installScript} > "$fn.sh"
     test -s "$fn.sh" || { echo "missing installer function: $fn" >&2; exit 1; }
   done
@@ -11,6 +11,7 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   . ./check_disks.sh
   . ./confirm_repo_disks.sh
   . ./format_disk.sh
+  . ./check_free_partitions.sh
   fails=0
   failed() { echo "FAILED $1"; fails=$((fails + 1)); }
   grep -Fq 'remember_disk "$device" || ui_abort' ask_device.sh || failed "wizard selection does not record disk identity"
@@ -75,6 +76,34 @@ pkgs.runCommand "nixarchy-installer-disk-identity" { } ''
   if format_disk >msg 2>&1; then failed "pre-write disk swap was accepted"; fi
   test ! -e touched-before-build || failed "format phase began before identity check"
   echo "ok pre-write disk swap refused"
+
+  disk_paths=() disk_reals=() disk_wwns=() disk_serials=()
+  printf 'alpha\n' > a-id
+  remember_disk /dev/a || failed "free-space target was not recorded"
+  device=/dev/a
+  readlink() {
+    case "$2" in
+      /dev/disk/by-partlabel/nixarchy-esp) echo /dev/esp ;;
+      /dev/disk/by-partlabel/nixarchy-root) echo /dev/root ;;
+      *) echo "$2" ;;
+    esac
+  }
+  old_lsblk=$(declare -f lsblk)
+  lsblk() {
+    if [ "$2" = PKNAME ]; then
+      case "$3" in /dev/esp) echo a ;; /dev/root) cat root-parent ;; esac
+    else
+      (eval "$old_lsblk"; lsblk "$@")
+    fi
+  }
+  printf 'b\n' > root-parent
+  if check_free_partitions >msg 2>&1; then failed "foreign root partition was accepted"; fi
+  grep -q 'does not belong to the selected disk' msg || failed "foreign-partition refusal has no explanation"
+  printf 'a\n' > root-parent
+  check_free_partitions >msg 2>&1 || failed "selected disk partitions were refused"
+  grep -Fq 'check_free_partitions || return 1' partition_free_space.sh || failed "partition ownership is not checked before wipefs"
+  grep -Fq 'check_free_partitions || { rm -f /tmp/nixarchy-luks.key; return 1; }' format_disk.sh || failed "partition ownership is not rechecked after build"
+  echo "ok both free-space partitions belong to selected disk at both boundaries"
 
   test "$fails" -eq 0 || exit 1
   EOF

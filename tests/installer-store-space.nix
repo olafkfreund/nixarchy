@@ -566,6 +566,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
     . ./fd.sh
     findmnt() { return 1; }
     check_disks() { return 0; }
+    check_free_partitions() { return 0; }
     partition_free_space() { return 1; }
     nix() { touch disko-built; echo /nonexistent; }
     format_disk
@@ -651,6 +652,10 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   # ------------------------------------------------------------------------
   sed -n '/^partition_free_space()/,/^}/p' ${installScript} > pfs.sh
   test -s pfs.sh || { echo "partition_free_space is not in install.sh any more" >&2; exit 1; }
+  grep -Fxq '  wipefs -a "$esp_dev" "$root_dev"' pfs.sh || {
+    echo "FAILED wipefs must be the checked final partition command" >&2
+    exit 1
+  }
   cat > pfst.sh <<'EOF'
   device=/dev/vdz free_start=2048 free_end=20000000 free_why=""
   encrypt=false FREE_ESP_MIB=2048

@@ -250,6 +250,7 @@ pkgs.runCommand "nixarchy-microvm-template"
           fail=1
         fi
         policyScript=$(sed -n 's/^ExecStart=//p' "$policyUnit")
+        policyScript=''${policyScript%% *}
         if [ ! -f "$policyScript" ]; then
           echo "${name}: cannot inspect the built allowlist script" >&2
           fail=1
@@ -263,7 +264,7 @@ pkgs.runCommand "nixarchy-microvm-template"
             fail=1
           fi
         fi
-        if ! grep -E '/mnt/agent-policy.*[[:space:]]ro([,[:space:]]|$)' "$sys/etc/fstab" >/dev/null; then
+        if ! grep -E '/mnt/agent-policy[[:space:]]+9p[[:space:]]+([^[:space:]]+,)?ro(,|[[:space:]])' "$sys/etc/fstab" >/dev/null; then
           echo "${name}: guest policy mount is not read-only" >&2
           fail=1
         fi

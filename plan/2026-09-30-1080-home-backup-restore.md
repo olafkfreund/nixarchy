@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1080
 spec: spec/2026-09-30-1080-home-backup-restore.md
 ---

@@ -189,6 +189,45 @@ pkgs.runCommand "nixarchy-installer-from-repo"
       exit 1
     }
 
+    # ---- #1077: --from owns the hostname --------------------------------
+    {
+      sed -n '/^validate_username()/,/^}/p' ${installScript}
+      sed -n '/^validate_hostname()/,/^}/p' ${installScript}
+      sed -n '/^ask_identity()/,/^}/p' ${installScript}
+    } > ai.sh
+    grep -q '^ask_identity()' ai.sh || { echo "ask_identity is not in install.sh any more" >&2; exit 1; }
+    mkdir -p zi/Europe
+    : > zi/Europe/London
+    for mode in from wizard; do
+      (
+        . ./ai.sh
+        ui_screen() { :; }
+        ui_gum_pad() { echo 0; }
+        ui_widget_height() { echo 10; }
+        ui_abort() { exit 130; }
+        ask_password() { :; }
+        ask_recovery() { :; }
+        TZDIR=$HOME/zi
+        gum() {
+          printf '%s\n' "$*" >> "$HOME/gum-$mode.log"
+          case "$*" in
+            *Username*) echo alice ;;
+            *Hostname*) echo someone-else ;;
+            *filter*) cat > /dev/null; echo Europe/London ;;
+          esac
+        }
+        from_repo="" from_host=alpha
+        if [ "$mode" = from ]; then from_repo=file:///r; fi
+        ask_identity
+        printf '%s\n' "$hostname" > "$HOME/hostname-$mode"
+      ) || failed "ask_identity ($mode) did not return"
+    done
+    [ "$(cat hostname-from)" = alpha ] || failed "--from: the typed hostname replaced --host alpha (#1077)"
+    if grep -q Hostname gum-from.log; then failed "--from: a hostname was asked for, and disko would ignore it (#1077)"; fi
+    [ "$(cat hostname-wizard)" = someone-else ] || failed "without --from the typed hostname is no longer used"
+    sed -n '/^main()/,/^}/p' ${installScript} > main.sh
+    grep -q 'validate_hostname "$from_host"' main.sh || failed "main does not validate --host (#1098)"
+
     [ "$fails" = 0 ] || exit "$fails"
     echo "clone_repo takes both branches, refuses both bad repositories, and pushes nothing back"
     touch $out

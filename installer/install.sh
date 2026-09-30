@@ -717,12 +717,18 @@ ask_identity() {
   ask_password
   ask_recovery
 
-  while :; do
-    hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ") || ui_abort
-    hostname=${hostname:-nixarchy}
-    why=$(validate_hostname "$hostname") && break
-    gum style --foreground 1 "$why"
-  done
+  if [ -n "${from_repo:-}" ]; then
+    # --host names the machine, and clone_repo has already built $hostdir from
+    # it. Asking again would ask a question whose answer disko ignores (#1077).
+    hostname=$from_host
+  else
+    while :; do
+      hostname=$(gum input --padding "$(ui_gum_pad)" --placeholder "nixarchy" --prompt "Hostname> ") || ui_abort
+      hostname=${hostname:-nixarchy}
+      why=$(validate_hostname "$hostname") && break
+      gum style --foreground 1 "$why"
+    done
+  fi
 
   timezone=$(
     find "$TZDIR" -type f -not -path '*/posix/*' -not -path '*/right/*' |
@@ -2545,6 +2551,7 @@ run_install() {
   #                  by-partlabel, so a toplevel built against /dev/vda is
   #                  byte-identical to one built against /dev/nvme0n1 --
   #                  measured, same drvPath.
+  #   the layout     whole-disk only; see why_not_baked below.
   #
   # What is DELIBERATELY not the same is the username and the detected
   # hardware-configuration.nix. Both are written to /mnt/etc/nixos and arrive
@@ -2555,8 +2562,17 @@ run_install() {
   # network marker": checks.install runs with neither marker in a seeded
   # sandbox where building is free and correct.
   local baked="/etc/nixarchy-reference-$encrypt"
-  local baked_system=""
-  if [ -r "$baked" ]; then
+  local baked_system="" why_not_baked=""
+  # The baked system is the REFERENCE machine: whole-disk partition labels and
+  # the template's host. A free-space install cuts other partitions, and one
+  # that mounts labels it never created does not boot (#1078); --from installs
+  # the repository's machine, not the reference.
+  [ "$disk_mode" = whole ] || why_not_baked="a free-space install mounts partitions the image's system does not name (#1078)"
+  [ -z "$from_repo" ] || why_not_baked="--from installs $from_repo's $hostname, not the image's reference machine"
+  if [ -r "$baked" ] && [ -n "$why_not_baked" ]; then
+    echo "nixarchy-install: building rather than copying the system this image carries: $why_not_baked."
+    echo "nixarchy-install: on the offline image that is expected; if the image lacks something, the rescue below says so."
+  elif [ -r "$baked" ]; then
     local candidate
     candidate=$(tr -d '[:space:]' <"$baked")
     # Valid in THIS store, not merely a plausible path. An image that lost the
@@ -2798,6 +2814,15 @@ main() {
   if [ -n "$from_host" ] && [ -z "$from_repo" ]; then
     echo "nixarchy-install: --host only means something with --from" >&2
     exit 2
+  fi
+
+  # A directory name under hosts/ and a hostName both; the wizard's own rule (#1098).
+  if [ -n "$from_host" ]; then
+    local why
+    why=$(validate_hostname "$from_host") || {
+      echo "nixarchy-install: --host $from_host: $why" >&2
+      exit 2
+    }
   fi
 
   if [ "$dry_run" = false ]; then

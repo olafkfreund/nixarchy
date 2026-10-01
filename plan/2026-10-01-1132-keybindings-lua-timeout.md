@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1132
 spec: spec/2026-10-01-1132-keybindings-lua-timeout.md
 ---

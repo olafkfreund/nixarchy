@@ -1125,13 +1125,31 @@ else
     bad "podman info failed" "rootless podman is not usable by this user right now"
   fi
 
-  # Every box podman actually knows about -- declared or ad hoc, this script
-  # cannot and does not try to tell them apart, and neither does the panel's
-  # own list.
-  boxes=$(podman ps -a --format '{{.Names}}' 2>/dev/null || true)
-  if [ -z "$boxes" ]; then
-    hmm "no boxes exist yet" "open the Distrobox panel with Super+Alt+D"
+  # Distrobox labels its containers; entering a stopped one starts it.
+  if ! ps_error=$(mktemp); then
+    bad "could not create Podman error log" "temporary storage is unavailable"
+  elif ! all_boxes=$(podman ps -a --filter label=manager=distrobox --format '{{.Names}}' 2>"$ps_error"); then
+    bad "could not list Distrobox containers" "$(tail -n 1 "$ps_error")"
+  elif ! boxes=$(podman ps --filter label=manager=distrobox --format '{{.Names}}' 2>"$ps_error"); then
+    bad "could not list running Distrobox containers" "$(tail -n 1 "$ps_error")"
   else
+    skipped=0
+    while IFS= read -r box; do
+      [ -n "$box" ] || continue
+      if ! grep -Fxq "$box" <<<"$boxes"; then
+        skipped=$((skipped + 1))
+      fi
+    done <<<"$all_boxes"
+    if [ "$skipped" -gt 0 ]; then
+      say_dim "$skipped stopped Distrobox container(s) skipped"
+    fi
+    if [ -z "$boxes" ]; then
+      if [ -n "$all_boxes" ]; then
+        hmm "no running boxes to check" "start one to check it"
+      else
+        hmm "no running boxes to check" "open the Distrobox panel with Super+Alt+D"
+      fi
+    fi
     while IFS= read -r box; do
       [ -n "$box" ] || continue
 
@@ -1200,6 +1218,7 @@ else
       esac
     done <<<"$boxes"
   fi
+  if [ -n "${ps_error:-}" ]; then rm -f "$ps_error"; fi
 fi
 
 # ---- summary -------------------------------------------------------------

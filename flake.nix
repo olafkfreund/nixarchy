@@ -1908,6 +1908,7 @@
             "swap-guard"
             "try-nixarchy"
             "user-unit-links"
+            "verify-boxes"
           ];
         in
         {

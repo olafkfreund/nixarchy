@@ -8,6 +8,7 @@ pkgs.runCommand "nixarchy-installer-input-validation"
       pkgs.gawk
       pkgs.gnugrep
       pkgs.gnused
+      pkgs.glibcLocales
     ];
   }
   ''
@@ -25,6 +26,8 @@ pkgs.runCommand "nixarchy-installer-input-validation"
     set -uo pipefail
     script=${renderedInstallScript}
     . ./functions.sh
+    export LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive
+    export LC_ALL=en_US.UTF-8
     failures=0
     ok() { echo "ok $1"; }
     fail() { echo "FAILED $1"; failures=$((failures + 1)); }
@@ -36,21 +39,29 @@ pkgs.runCommand "nixarchy-installer-input-validation"
     accept 'hyphen and digit username' validate_username dev-1
     refuse 'evaluated messagebus account' validate_username messagebus
     refuse 'extra daemon account' validate_username daemon
-    accept '32-byte username' validate_username "$(printf 'a%.0s' {1..32})"
-    refuse '33-byte username' validate_username "$(printf 'a%.0s' {1..33})"
+    accept '31-byte username' validate_username "$(printf 'a%.0s' {1..31})"
+    refuse '32-byte username' validate_username "$(printf 'a%.0s' {1..32})"
+    refuse 'non-ASCII username under UTF-8 locale' validate_username 'é'
     accept '63-byte hostname' validate_hostname "$(printf 'a%.0s' {1..63})"
     refuse '64-byte hostname' validate_hostname "$(printf 'a%.0s' {1..64})"
+    refuse 'non-ASCII hostname under UTF-8 locale' validate_hostname 'é'
 
     TZDIR=$PWD/zones KEYMAPS=$PWD/keymaps
-    mkdir -p "$TZDIR/Europe" "$KEYMAPS/i386/qwerty"
+    mkdir -p "$TZDIR/Europe" "$TZDIR/posix" "$TZDIR/right" "$KEYMAPS/i386/qwerty"
     printf 'TZif fixture' > "$TZDIR/UTC"
     printf 'Zone table\n' > "$TZDIR/zone.tab"
     : > "$KEYMAPS/i386/qwerty/us.map.gz"
+    ln -s ../UTC "$TZDIR/posix/UTC"
+    ln -s ../UTC "$TZDIR/right/UTC"
+    ln -s us.map.gz "$KEYMAPS/i386/qwerty/sr-latin.map.gz"
     accept 'TZif zone file' validate_timezone UTC
+    accept 'posix timezone alias' validate_timezone posix/UTC
+    refuse 'right leap-second timezone' validate_timezone right/UTC
     refuse 'timezone directory' validate_timezone Europe
     refuse 'zone.tab is not TZif' validate_timezone zone.tab
     refuse 'timezone traversal' validate_timezone ../outside
     accept 'literal keymap' validate_keymap us
+    accept 'symlinked keymap' validate_keymap sr-latin
     refuse 'wildcard keymap' validate_keymap 'u*'
     grep -Fq 'validate_timezone "$timezone"' "$script" || fail 'answers do not call timezone validator'
     grep -Fq 'validate_keymap "$keymap"' "$script" || fail 'answers do not call keymap validator'

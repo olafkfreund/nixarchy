@@ -631,12 +631,13 @@ ask_keymap() {
 # diverge, and the divergence surfaces as an install that works interactively
 # and fails unattended, or worse the reverse.
 validate_username() {
+  local LC_ALL=C
   [[ $1 =~ ^[a-z_][a-z0-9_-]*$ ]] || {
     echo "not a usable Linux username"
     return 1
   }
-  if [ "${#1}" -gt 32 ]; then
-    echo "username must be at most 32 characters"
+  if [ "${#1}" -gt 31 ]; then
+    echo "username must be at most 31 characters"
     return 1
   fi
   # The target's system users are spliced from the evaluated reference host.
@@ -656,6 +657,7 @@ validate_username() {
 }
 
 validate_hostname() {
+  local LC_ALL=C
   [[ $1 =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || {
     echo "letters, digits and hyphens; not starting or ending with one"
     return 1
@@ -668,19 +670,19 @@ validate_hostname() {
 
 validate_timezone() {
   case $1 in
-    "" | /* | .. | ../* | */../* | */..) return 1 ;;
+    "" | /* | .. | ../* | */../* | */.. | right/*) return 1 ;;
   esac
   local root zone
-  root=$(realpath -e "$TZDIR") || return 1
-  zone=$(realpath -e "$TZDIR/$1") || return 1
+  root=$(realpath -e "$TZDIR" 2>/dev/null) || return 1
+  zone=$(realpath -e "$TZDIR/$1" 2>/dev/null) || return 1
   [[ $zone == "$root/"* && -f $zone && $(head -c4 "$zone") == TZif ]]
 }
 
 validate_keymap() {
   local files file
-  files=$(find "$KEYMAPS" -type f -name '*.map.gz' -print) || return 1
+  files=$(find "$KEYMAPS" \( -type f -o -type l \) -name '*.map.gz' -print) || return 1
   while IFS= read -r file; do
-    [ "${file##*/}" = "$1.map.gz" ] && return 0
+    [ "${file##*/}" = "$1.map.gz" ] && [ -f "$file" ] && return 0
   done <<< "$files"
   return 1
 }

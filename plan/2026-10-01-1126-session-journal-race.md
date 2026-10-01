@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1126
 spec: spec/2026-10-01-1126-session-journal-race.md
 ---

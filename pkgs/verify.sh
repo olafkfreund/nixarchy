@@ -304,7 +304,7 @@ case "$lock" in
 esac
 
 check_nixarchy_user_unit() {
-  local unit=$1 link=$HOME/.config/systemd/user/$1.service target= state= load= fragment=
+  local unit=$1 link=$HOME/.config/systemd/user/$1.service target='' state='' load='' fragment=''
   if [ -L "$link" ]; then
     target=$(readlink -- "$link" 2>/dev/null) || target=
     if [[ $target =~ ^/nix/store/[a-z0-9]{32}-unit-${unit}\.service/${unit}\.service$ ]]; then

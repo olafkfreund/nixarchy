@@ -22,6 +22,8 @@ Implementation begins **only after #1101 merges**: fetch and rebase this branch 
 
 *Deviation (implementation):* Step 2's `pkgs/AGENTS.md` wording now states the patch drift scan catches removal or rename of known names but cannot detect a newly added upstream unit.
 
+*Deviation (implementation):* Step 4 spells empty local values as `=''` because the packaged `nixarchy-verify` is built with `writeShellApplication` and ShellCheck rejects the bare `target= state= load= fragment=` form (SC1007). Step 5's extracted-function check does not run package-time ShellCheck, so `tests/AGENTS.md` records that both the package and the function check must be built.
+
 ## Steps
 
 1. `git` / `pkgs/omarchy/cleanup-bt-agent.sh:1-14` / `modules/nixos.nix:1157-1162` on #1101: wait for #1101 to merge, `git fetch origin && git rebase origin/main`, inspect `git status`, and read the merged cleanup and tests -> verify by a clean rebase and by confirming the pending Bluetooth behavior still exists. Do not implement against the pre-#1101 module or push at this gate.

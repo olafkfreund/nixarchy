@@ -82,6 +82,9 @@ jobs:
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
     steps:
+      - name: PROBE (#1134) -- the gate fails on purpose; never merge
+        run: exit 1
+
       - uses: actions/checkout@v5
         with:
           sparse-checkout: .github/scripts

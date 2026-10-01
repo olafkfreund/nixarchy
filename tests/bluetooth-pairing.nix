@@ -22,7 +22,7 @@ let
   off = machine false;
   agentAbsent = c: !(c.systemd.user.services ? bt-agent);
   timeoutAbsent = c: (c.hardware.bluetooth.settings.General.PairableTimeout or null) == null;
-  cleanupEnabled = c: c.system.activationScripts ? nixarchyRemoveOldBtAgent;
+  cleanupEnabled = c: c.system.activationScripts ? nixarchyRemoveOldUserUnitLinks;
   hasAgentPackage = pkgs.lib.any (
     p: (p.pname or "") == "bluez-tools"
   ) pkgs.omarchy.passthru.runtimeDeps;
@@ -46,7 +46,15 @@ pkgs.runCommand "bluetooth-pairing"
     ];
   }
   ''
-    bash ${./bluetooth-pairing.sh} ${pkgs.omarchy}/share/omarchy/bin/omarchy-bluetooth-device ${pkgs.bash}/bin/bash ${pkgs.lib.makeBinPath pkgs.omarchy.passthru.runtimeDeps}
-    bash ${./bluetooth-cleanup.sh} ${../pkgs/omarchy/cleanup-bt-agent.sh}
+    bash ${./bluetooth-pairing.sh} ${pkgs.omarchy}/share/omarchy/bin/omarchy-bluetooth-device ${pkgs.bash}/bin/bash ${
+      pkgs.lib.makeBinPath [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.bluez
+        pkgs.bluez-tools
+      ]
+    }
+    bash ${./bluetooth-cleanup.sh} ${../pkgs/omarchy/cleanup-user-unit-links.sh}
     touch "$out"
   ''

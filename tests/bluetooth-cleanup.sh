@@ -15,7 +15,7 @@ printf '%s\n' 'user unit' >"$bob/bt-agent.service"
 ln -s /nix/store/abc-unit-other.service/bt-agent.service \
   "$bob/graphical-session.target.wants/bt-agent.service"
 
-bash "$cleanup" "$root"
+bash "$cleanup" "$root/alice" "$root/bob"
 test ! -e "$alice/bt-agent.service" && test ! -L "$alice/bt-agent.service" || {
   echo 'old bt-agent unit symlink survived cleanup' >&2; exit 1;
 }

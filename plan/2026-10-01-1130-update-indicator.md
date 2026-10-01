@@ -56,8 +56,11 @@ releases. The check's network budget is one timeout-bound Git invocation.
    not a spinner or shell error code.
 
 3. **The same script:** for an eligible lock, invoke
-   `GIT_TERMINAL_PROMPT=0 timeout <short deadline> git ls-remote --heads
-   --tags <fixed Nixarchy HTTPS repository>` exactly once. Parse the
+   `git -c credential.helper= ls-remote --heads --tags` against the fixed
+   Nixarchy HTTPS repository exactly once under `timeout 10`. Set
+   `GIT_TERMINAL_PROMPT=0`, `GIT_CONFIG_GLOBAL=/dev/null`,
+   `GIT_CONFIG_NOSYSTEM=1`, `GIT_ASKPASS=false`, and `SSH_ASKPASS=` so neither
+   terminal nor desktop credentials can interrupt the bar. Parse the
    `release` branch tip and only `v<major>.<minor>.<patch>-<revision>` tags.
    Use peeled `^{}` commits for annotated tags and direct commits for
    lightweight tags. Require both the branch tip and installed `locked.rev`
@@ -79,6 +82,11 @@ releases. The check's network budget is one timeout-bound Git invocation.
    lock, missing input, and tag/rev/path/other-branch pins. Assert exact exit
    codes and fake-Git call counts, including no call before a valid release
    lock. Ensure the green newer case actually reached the fixture and fake.
+   Assert the fake Git sees the prompt-blocking environment and cleared
+   credential helper. Feed valid newer refs before the Git-failure and timeout
+   cases, so removing `|| exit 1` or `timeout 10` makes each check red. For
+   the timeout negative control, copy the script aside, remove `timeout 10`
+   temporarily, run and capture red, then restore with `cp` and rerun green.
    Keep the explicit `shellcheck` invocation: Omarchy's replacements are
    copied as **unwrapped** scripts by `pkgs/omarchy/default.nix:1013-1034`,
    so its package build does not run `writeShellApplication`'s ShellCheck.
@@ -102,25 +110,30 @@ releases. The check's network budget is one timeout-bound Git invocation.
    closure alone does not prove runtime tools reach PATH; they enter via the
    module's `systemPackages` and `passthru.runtimeDeps`.
 
-6. **`docs/manual/updates.md:43-44`:** say the icon tracks newer Nixarchy
-   releases only for the moving `release` pin and stays hidden offline or for
-   custom/fixed pins. Keep the existing page; no new navigation entry is
+6. **`docs/manual/updates.md:43-44` and `data/bin-ledger.nix:608-611`:** say
+   the icon tracks newer Nixarchy releases only for the moving `release` pin
+   and stays hidden offline or for custom/fixed pins. Update the ledger's
+   replacement reason to describe the bounded release check. Keep the
+   existing manual page; no new navigation entry is
    needed (`docs/AGENTS.md`). Run `nix fmt -- --ci`, the repository's statix
    and deadnix commands, and `git diff --check`. Read `git diff --stat` after
    any formatting; `nix fmt` can rewrite unrelated lines if a Nix string is
    misindented (§5). The generated-checks workflow discovers the registered
    check automatically (`AGENTS.md` §4), so leave `.github/` unchanged.
    → verify: static gates pass and the diff contains only the script, focused
-   check, `flake.nix` registration, and this manual sentence.
+   check, `flake.nix` registration, ledger reason, and manual sentence.
 
 ## Tests
 
-The orchestrator clarified the local build gate after plan approval: run
-cheap `runCommand`, static, and evaluation checks under the shared
+An orchestrator-directed local build gate change, pending owner confirmation:
+run cheap `runCommand`, static, and evaluation checks under the shared
 `/mnt/data/vmtest/codex-build.lock` even while CI runs. Run non-cheap package
-builds under that lock only when no p620 system build is active and load1 is
-below 12. VM and `checks.options` stay CI-only unless separately authorized.
-This replaces the earlier CI-zero requirement for this task. Do not run broad
+builds under that lock only when
+`pgrep -fc '^(nix build|nh os build|nixos-rebuild).*p620'` returns 0 and
+load1 is below 12 immediately before the build. VM and `checks.options`
+stay CI-only unless separately authorized.
+This directed gate replaces the earlier CI-zero requirement for this task;
+it is recorded as an implementation deviation, not owner approval. Do not run broad
 VM or installer checks for this shell command. Stage newly added files before Nix
 evaluation. `installer/mkFlake.nix` needs a committed `self.rev`; this plan's
 focused check and package builds must not pull in installer derivations while

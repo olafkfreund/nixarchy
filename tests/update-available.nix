@@ -17,12 +17,15 @@ pkgs.runCommand "nixarchy-update-available"
     mkdir -p fake-bin flake
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       'printf "call\n" >> "$GIT_CALLS"' \
-      '[ "$#" -eq 4 ] && [ "$1" = ls-remote ] && [ "$2" = --heads ] && [ "$3" = --tags ] || exit 99' \
-      '[ "$4" = https://github.com/olafkfreund/nixarchy.git ] || exit 97' \
+      '[ "$#" -eq 6 ] && [ "$1" = -c ] && [ "$2" = credential.helper= ] && [ "$3" = ls-remote ] && [ "$4" = --heads ] && [ "$5" = --tags ] || exit 99' \
+      '[ "$6" = https://github.com/olafkfreund/nixarchy.git ] || exit 97' \
       '[ "$GIT_TERMINAL_PROMPT" = 0 ] || exit 98' \
+      '[ "$GIT_CONFIG_GLOBAL" = /dev/null ] && [ "$GIT_CONFIG_NOSYSTEM" = 1 ] || exit 96' \
+      '[ "$GIT_ASKPASS" = false ] && [[ -v SSH_ASKPASS && -z $SSH_ASKPASS ]] || exit 95' \
+      'cat "$GIT_REFS"' \
       '[ "$GIT_FAIL" != 1 ] || exit 42' \
       '[ "$GIT_SLEEP" != 1 ] || sleep 20' \
-      'cat "$GIT_REFS"' > fake-bin/git
+      > fake-bin/git
     chmod +x fake-bin/git
     export PATH="$PWD/fake-bin:$PATH"
     export GIT_CALLS=$PWD/calls GIT_REFS=$PWD/refs GIT_FAIL=0 GIT_SLEEP=0
@@ -87,10 +90,11 @@ pkgs.runCommand "nixarchy-update-available"
     printf '%s\n' 'malformed ref line' > refs
     check 'malformed remote response' 1 1
 
+    printf '%s\t%s\n' "$old" refs/tags/v4.0.3-1 "$new" refs/tags/v4.0.4-1 "$new" refs/heads/release > refs
     GIT_FAIL=1
-    check 'offline Git failure' 1 1
+    check 'Git failure after valid refs' 1 1
     GIT_FAIL=0 GIT_SLEEP=1
-    check 'bounded Git timeout' 1 1
+    check 'bounded Git timeout after valid refs' 1 1
     GIT_SLEEP=0
 
     printf '%s\t%s\n' "$old" refs/tags/v4.0.3-1 "$new" refs/tags/v4.0.4-1 "$new" refs/heads/release > refs

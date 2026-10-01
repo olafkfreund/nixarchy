@@ -20,7 +20,8 @@ rev=$(jq -er '
   | select(type == "string" and test("^[0-9a-f]{40}$"))
 ' "$lock" 2>/dev/null) || exit 1
 
-refs=$(GIT_TERMINAL_PROMPT=0 timeout 10 git ls-remote --heads --tags \
+refs=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+  GIT_ASKPASS=false SSH_ASKPASS='' timeout 10 git -c credential.helper= ls-remote --heads --tags \
   https://github.com/olafkfreund/nixarchy.git 2>/dev/null) || exit 1
 [[ -n $refs ]] || exit 1
 

@@ -127,3 +127,25 @@ myself, because they need the owner-approved probe and the PR.
 
 Revert the squash commit. Both workflows return to skip-on-gate-failure,
 and the measured hole with them.
+
+## Deviations recorded during implementation
+
+- **Step 3: the escape.** A literal `${{ !cancelled() }}` inside the guard's
+  `run:` script is evaluated by GitHub, and `cancelled()` is not allowed
+  there; actionlint flagged it. The allowlist line is written as
+  `${{ '${{' }} !cancelled() }}`, GitHub's documented literal escape. It
+  renders to the text the guard extracts. If it rendered any other way, the
+  guard would go red, not green.
+- **actionlint deadlocks on `build.yml` locally** when shellcheck is
+  enabled. Every lint here ran as `timeout 120 actionlint -shellcheck=`.
+  The new `run:` scripts are two trivial lines.
+- **Review (fresh Opus) corrections, comments only:**
+  - The `install` comment no longer claims `needs:` is the only skip path.
+  - The four `build.yml` copies are cut to three lines each.
+  - The guard's description of its allowlist names the #1134 pair.
+- **Step 6 measures one more case.** A run cancelled while `gate` is still
+  running never starts the gated jobs under `!cancelled()`, just as before.
+  The probe cancels one run mid-gate and records what `install` reports,
+  so the PR states whether that path is a hole. If it is, that is a
+  follow-up issue, not this PR, because the plan chose `!cancelled()` over
+  `always()` deliberately.

@@ -239,15 +239,19 @@ jobs:
   # the run stops being a CI job and starts being an afternoon.
   devenv-presets:
     needs: gate
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      # A step-level `if:`, never a job-level one, and the difference was
-      # measured rather than assumed: a job skipped by a job-level `if:`
-      # reports conclusion `skipped`, which is not `success`, so a required
-      # check blocks the merge exactly as a missing context does.
-      # install-check.yml records the probe. So the job always runs and
-      # completes green; its steps are what the gate turns off.
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      # Step-level `if:`s, so a run with nothing to do reports a real `success`.
+      # `needs:` skips this job when the gate fails, and a skip passes the
+      # merge gate (#1144): hence `!cancelled()` and the first step (#1134).
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
@@ -435,8 +439,9 @@ jobs:
           # Rather than parse YAML in shell to work out which job owns which
           # check, this asserts the property that actually matters and is
           # cheap to state: EVERY condition in these two workflows must be one
-          # of a known set. The set is the shared gate, its negation, and the
-          # two deliberate exceptions. A new condition -- `github.actor ==`,
+          # of a known set. The set is the shared gate, its negation, the
+          # two deliberate exceptions, and the #1134 pair that makes a
+          # failed gate fail its jobs rather than skip them. A new condition -- `github.actor ==`,
           # a label check, a hand-written path filter -- fails here and has to
           # be added on purpose, in a diff someone reviews, next to this
           # reasoning.
@@ -451,7 +456,9 @@ jobs:
           github.event_name != 'pull_request'
           needs.gate.outputs.fork == 'true' && needs.gate.outputs.relevant == 'true'
           needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
-          always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'"
+          always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+          ${{ '${{' }} !cancelled() }}
+          needs.gate.result != 'success'"
 
           rogue=""
           # Process substitution, NOT a heredoc. The first version of this
@@ -1207,15 +1214,19 @@ jobs:
   # nothing: they substitute from cache.nixos.org rather than build.
   apps:
     needs: gate
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      # A step-level `if:`, never a job-level one, and the difference was
-      # measured rather than assumed: a job skipped by a job-level `if:`
-      # reports conclusion `skipped`, which is not `success`, so a required
-      # check blocks the merge exactly as a missing context does.
-      # install-check.yml records the probe. So the job always runs and
-      # completes green; its steps are what the gate turns off.
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      # Step-level `if:`s, so a run with nothing to do reports a real `success`.
+      # `needs:` skips this job when the gate fails, and a skip passes the
+      # merge gate (#1144): hence `!cancelled()` and the first step (#1134).
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
@@ -1279,6 +1290,7 @@ jobs:
 
   system:
     needs: gate
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     # 45, not 30. The job's own work is ~20 minutes (see below), so 30 looked
     # like ample headroom until 2026-09-04, when a cache.nixos.org stall of
@@ -1321,12 +1333,15 @@ jobs:
           github.ref == 'refs/heads/main' && github.sha || 'shared' }}
       cancel-in-progress: false
     steps:
-      # A step-level `if:`, never a job-level one, and the difference was
-      # measured rather than assumed: a job skipped by a job-level `if:`
-      # reports conclusion `skipped`, which is not `success`, so a required
-      # check blocks the merge exactly as a missing context does.
-      # install-check.yml records the probe. So the job always runs and
-      # completes green; its steps are what the gate turns off.
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      # Step-level `if:`s, so a run with nothing to do reports a real `success`.
+      # `needs:` skips this job when the gate fails, and a skip passes the
+      # merge gate (#1144): hence `!cancelled()` and the first step (#1134).
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |
@@ -1652,15 +1667,19 @@ jobs:
   # arranged first, which no step there does.
   box:
     needs: gate
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      # A step-level `if:`, never a job-level one, and the difference was
-      # measured rather than assumed: a job skipped by a job-level `if:`
-      # reports conclusion `skipped`, which is not `success`, so a required
-      # check blocks the merge exactly as a missing context does.
-      # install-check.yml records the probe. So the job always runs and
-      # completes green; its steps are what the gate turns off.
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      # Step-level `if:`s, so a run with nothing to do reports a real `success`.
+      # `needs:` skips this job when the gate fails, and a skip passes the
+      # merge gate (#1144): hence `!cancelled()` and the first step (#1134).
       - name: Nothing here can affect a build
         if: needs.gate.outputs.relevant != 'true'
         run: |

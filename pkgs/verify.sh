@@ -1125,13 +1125,23 @@ else
     bad "podman info failed" "rootless podman is not usable by this user right now"
   fi
 
-  # Every box podman actually knows about -- declared or ad hoc, this script
-  # cannot and does not try to tell them apart, and neither does the panel's
-  # own list.
-  boxes=$(podman ps -a --format '{{.Names}}' 2>/dev/null || true)
-  if [ -z "$boxes" ]; then
-    hmm "no boxes exist yet" "open the Distrobox panel with Super+Alt+D"
+  # Distrobox labels its containers; entering a stopped one starts it.
+  if ! all_boxes=$(podman ps -a --filter label=manager=distrobox --format '{{.Names}}' 2>&1); then
+    bad "could not list Distrobox containers" "$all_boxes"
+  elif ! boxes=$(podman ps --filter label=manager=distrobox --format '{{.Names}}' 2>&1); then
+    bad "could not list running Distrobox containers" "$boxes"
   else
+    skipped=0
+    while IFS= read -r box; do
+      [ -n "$box" ] || continue
+      if ! grep -Fxq "$box" <<<"$boxes"; then
+        skipped=$((skipped + 1))
+      fi
+    done <<<"$all_boxes"
+    say_dim "$skipped stopped Distrobox container(s) skipped"
+    if [ -z "$boxes" ]; then
+      hmm "no running boxes to check" "open the Distrobox panel with Super+Alt+D"
+    fi
     while IFS= read -r box; do
       [ -n "$box" ] || continue
 

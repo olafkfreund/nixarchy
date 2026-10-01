@@ -553,7 +553,7 @@ user.services = {
 $OMARCHY_PATH/default/systemd/user/, which upstream installs into
 /usr/lib/systemd/user and nothing here installed anywhere -- that
 directory is not a systemd search path. `systemctl --user status
-bt-agent.service` answered "could not be found" on a live session, and
+bt-agent.service` once answered "could not be found" on a live session, and
 with it went the pairing agent, the crash watcher, the input method, the
 internal-monitor recovery, and -- the one that matters -- the sleep lock,
 so suspend did not lock even once the PAM stack above exists.
@@ -563,6 +563,13 @@ shipped ExecStart is a /usr/bin path that resolves to nothing on NixOS
 and the package is not this module's to patch. The bodies are upstream's:
 same conditions, same ordering, same restart policy, binaries named by
 store path.
+
+`bt-agent` is now deliberately absent from the permanent user units. BlueZ
+turns the adapter bondable when a default agent registers, so a session-wide
+`NoInputNoOutput` agent leaves an unattended pairing window open. The
+`omarchy-bluetooth-device pair` command starts it only for the user's outgoing
+pair and stops that process afterward. BlueZ's last-agent cleanup should
+return the adapter to non-bondable; that still needs confirmation on hardware.
 
 omarchy-migrate-notify and omarchy-tailscale-receive are deliberately
 absent. Their conditions (ConditionPathIsDirectory=/usr/share/omarchy/

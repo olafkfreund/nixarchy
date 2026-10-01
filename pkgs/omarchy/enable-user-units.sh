@@ -28,7 +28,6 @@ systemctl --user daemon-reload
 
 want=()
 for u in \
-  bt-agent.service \
   omarchy-recover-internal-monitor.service \
   omarchy-sleep-lock.service \
   omarchy-migrate-notify.service \

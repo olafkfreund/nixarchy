@@ -442,9 +442,29 @@ else
 fi
 
 # ---- bluetooth -----------------------------------------------------------
-# The checks assert the service is enabled and that the VM has no radio. This
-# is the other half.
+# The checks cover the service configuration; only hardware can show whether
+# BlueZ returns to non-pairable after the temporary pair agent exits.
 head_ "Bluetooth"
+agent=inactive
+permanent_unit=false
+unit_file=$HOME/.config/systemd/user/bt-agent.service
+if [ -e "$unit_file" ] || [ -L "$unit_file" ]; then
+  bad "bt-agent.service exists in the user unit directory" "remove only the old Nixarchy store-unit link"
+fi
+if unit_state=$(systemctl --user show -p LoadState -p ActiveState bt-agent.service 2>/dev/null); then
+  if grep -Eq '^(LoadState=loaded|ActiveState=active)$' <<<"$unit_state"; then
+    permanent_unit=true
+    bad "permanent bt-agent.service is loaded or active" "logout or stop that service"
+  fi
+else
+  hmm "bt-agent.service state is unknown" "the user service manager did not answer"
+fi
+if pgrep -x bt-agent >/dev/null 2>&1; then
+  agent=active
+  if [ "$permanent_unit" = false ]; then
+    hmm "bt-agent is running without a service" "temporary pairing may be in progress"
+  fi
+fi
 if [ ! -d /sys/class/bluetooth ] || [ -z "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]; then
   hmm "no adapter on this machine" "nothing to test"
 elif ! systemctl is-active bluetooth.service >/dev/null 2>&1; then
@@ -454,6 +474,21 @@ else
   if [ "$adapters" -gt 0 ]; then
     ok "bluetoothd sees $adapters adapter(s)" ""
     say_dim "$(timeout 5 bluetoothctl list 2>/dev/null | head -1)"
+    if state=$(timeout 5 bluetoothctl show 2>/dev/null); then
+      if grep -Eq '^[[:space:]]*Pairable: no$' <<<"$state"; then
+        ok "adapter is not pairable (agent $agent)" "test outgoing pairing from the panel"
+      elif grep -Eq '^[[:space:]]*Pairable: yes$' <<<"$state"; then
+        if [ "$agent" = active ]; then
+          hmm "adapter is pairable during temporary pairing" "check it returns to no when pairing ends"
+        else
+          bad "adapter is pairable with no temporary agent" "check which client enabled pairing"
+        fi
+      else
+        hmm "adapter pairability unknown (agent $agent)" "bluetoothctl gave no Pairable state"
+      fi
+    else
+      hmm "adapter pairability unknown (agent $agent)" "bluetoothctl show did not answer"
+    fi
   else
     bad "bluetoothd running but sees no adapter" ""
   fi

@@ -1154,6 +1154,13 @@ in
       mv -f ${safeDirInclude}.tmp ${safeDirInclude}
     '';
 
+    # Remove only symlinks left by our former permanent agent on existing homes.
+    # A user's own bt-agent.service remains theirs; a running old agent needs a
+    # logout or an explicit PID-scoped stop before BlueZ returns to idle.
+    system.activationScripts.nixarchyRemoveOldBtAgent = ''
+      ${pkgs.bash}/bin/bash ${../pkgs/omarchy/cleanup-bt-agent.sh} /home
+    '';
+
     environment = {
       # The single indirection point. bin/, shell/, themes/, the Hyprland Lua
       # defaults and the menu's defaults file are all resolved relative to
@@ -1673,32 +1680,6 @@ in
         docker.unitConfig.ConditionUser = lib.mkIf config.virtualisation.docker.rootless.enable (
           lib.mkForce "!@system"
         );
-
-        bt-agent = {
-          description = "Bluetooth pairing agent (auto-accept)";
-          documentation = [ "man:bt-agent(1)" ];
-          unitConfig.ConditionPathIsDirectory = "/sys/class/bluetooth";
-          after = [ "dbus.socket" ];
-          requires = [ "dbus.socket" ];
-          wantedBy = [ "graphical-session.target" ];
-          serviceConfig = {
-            Type = "simple";
-            # Skips cleanly on a machine with no usable adapter instead of
-            # entering a restart loop.
-            ExecCondition = "${config.systemd.package}/bin/systemctl is-active --quiet bluetooth.service";
-            # bt-agent is in bluez-tools, not bluez -- upstream gets it from
-            # base.packages, and the package's runtimeDeps carry only bluez
-            # because no script in bin/ calls it. Named by store path so it does
-            # not need to be on anyone's PATH.
-            #
-            # NoInputNoOutput auto-accepts pairing requests, which is safe only
-            # because bluez is `pairable: true` for as long as the Bluetooth
-            # panel is scanning and refuses inbound attempts outside that window.
-            ExecStart = "${pkgs.bluez-tools}/bin/bt-agent -c NoInputNoOutput";
-            Restart = "on-failure";
-            RestartSec = 2;
-          };
-        };
 
         omarchy-sleep-lock = {
           description = "Lock Omarchy before suspend";

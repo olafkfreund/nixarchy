@@ -55,6 +55,7 @@
   # provides `wpctl`
   playerctl,
   bluez,
+  bluez-tools,
   # provides `bluetoothctl`
   networkmanager,
   # provides `nmcli`
@@ -229,6 +230,7 @@ let
     wireplumber
     playerctl
     bluez
+    bluez-tools
     networkmanager
     fastfetch
     nh
@@ -721,6 +723,12 @@ stdenvNoCC.mkDerivation {
                 substituteInPlace $out/share/omarchy/bin/omarchy-install-gaming-retroarch \
                   --replace-fail '/usr/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp' \
                   '/run/current-system/sw/share/libretro/shaders/shaders_slang/crt/crt-royale.slangp'
+
+                pairCommand=$out/share/omarchy/bin/omarchy-bluetooth-device
+                pairLine=$(printf '    timeout 20s bluetoothctl pair "$address" >/dev/null 2>&1 || true\n    trust_device')
+                # Why: spec/2026-09-30-1085-bluetooth-pairing.md#design
+                pairBranch=$(cat ${./bluetooth-pair-branch.sh})
+                substituteInPlace "$pairCommand" --replace-fail "$pairLine" "$pairBranch"
 
                 # "Restart to finish the update" was going to be the answer every time.
                 #
@@ -1539,7 +1547,7 @@ stdenvNoCC.mkDerivation {
                     # See the file for what is sourced as-is and what had to be rewritten.
 
                     # Why: pkgs/AGENTS.md#enable-user-unitssh-enables-six-units-in-one-call-so-one-absent-unit-loses-all-six
-                    for u in bt-agent omarchy-recover-internal-monitor omarchy-sleep-lock \
+                    for u in omarchy-recover-internal-monitor omarchy-sleep-lock \
                       omarchy-migrate-notify omarchy-fcitx5 omarchy-crash-watch; do
                       grep -q "$u.service" install/user/first-run/enable-user-units.sh || {
                         echo "enable-user-units.sh no longer names $u.service -- upstream changed" >&2

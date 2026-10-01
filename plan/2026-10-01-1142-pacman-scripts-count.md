@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1142
 spec: spec/2026-10-01-1142-pacman-scripts-count.md
 ---

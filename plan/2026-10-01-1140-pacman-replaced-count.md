@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1140
 spec: spec/2026-10-01-1140-pacman-replaced-count.md
 ---

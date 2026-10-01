@@ -1797,7 +1797,6 @@
             "generate-config-surface"
             # Every pipe into grep -q is rewritten or allowlisted with a reason (#1060).
             "grep-q-pipefail"
-            "verify-boxes"
             "hardware-modules"
             # The profile a user with their own interpreter actually gets, built
             # rather than inspected: #809's collision only exists once something
@@ -1909,6 +1908,7 @@
             "swap-guard"
             "try-nixarchy"
             "user-unit-links"
+            "verify-boxes"
           ];
         in
         {

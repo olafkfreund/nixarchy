@@ -1126,10 +1126,12 @@ else
   fi
 
   # Distrobox labels its containers; entering a stopped one starts it.
-  if ! all_boxes=$(podman ps -a --filter label=manager=distrobox --format '{{.Names}}' 2>&1); then
-    bad "could not list Distrobox containers" "$all_boxes"
-  elif ! boxes=$(podman ps --filter label=manager=distrobox --format '{{.Names}}' 2>&1); then
-    bad "could not list running Distrobox containers" "$boxes"
+  if ! ps_error=$(mktemp); then
+    bad "could not create Podman error log" "temporary storage is unavailable"
+  elif ! all_boxes=$(podman ps -a --filter label=manager=distrobox --format '{{.Names}}' 2>"$ps_error"); then
+    bad "could not list Distrobox containers" "$(tail -n 1 "$ps_error")"
+  elif ! boxes=$(podman ps --filter label=manager=distrobox --format '{{.Names}}' 2>"$ps_error"); then
+    bad "could not list running Distrobox containers" "$(tail -n 1 "$ps_error")"
   else
     skipped=0
     while IFS= read -r box; do
@@ -1138,9 +1140,15 @@ else
         skipped=$((skipped + 1))
       fi
     done <<<"$all_boxes"
-    say_dim "$skipped stopped Distrobox container(s) skipped"
+    if [ "$skipped" -gt 0 ]; then
+      say_dim "$skipped stopped Distrobox container(s) skipped"
+    fi
     if [ -z "$boxes" ]; then
-      hmm "no running boxes to check" "open the Distrobox panel with Super+Alt+D"
+      if [ -n "$all_boxes" ]; then
+        hmm "no running boxes to check" "start one to check it"
+      else
+        hmm "no running boxes to check" "open the Distrobox panel with Super+Alt+D"
+      fi
     fi
     while IFS= read -r box; do
       [ -n "$box" ] || continue
@@ -1210,6 +1218,7 @@ else
       esac
     done <<<"$boxes"
   fi
+  if [ -n "${ps_error:-}" ]; then rm -f "$ps_error"; fi
 fi
 
 # ---- summary -------------------------------------------------------------

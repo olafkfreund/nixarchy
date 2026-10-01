@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1131
 intent: intent/2026-10-01-1131-automatic-store-optimise.md
 ---

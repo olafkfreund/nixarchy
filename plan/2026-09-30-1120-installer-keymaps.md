@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1120
 spec: spec/2026-09-30-1120-installer-keymaps.md
 ---

@@ -57,3 +57,7 @@ Use **cp-aside** before every deliberate break: copy each file being mutated to 
 ## Rollback
 
 Before owner merge, discard the proposed workflow patch branch and leave `main` unchanged. After merge, revert the workflow and docs commit as one owner-reviewed change, restoring the previous gate semantics. The owner separately controls the repository fork approval setting and must assess any rollback of it against the runner exposure; reverting this branch does not restore that setting.
+
+## Owner security review amendment
+
+The owner added `.github/workflows/copilot-setup-steps.yml` to the explicit token-permissions gate after the first ready-to-apply patch: it checks out this repository and needs `contents: read` only. `build.yml`'s rogue-condition error must also name the approved fork flag beside the shared relevance gate, so its diagnostic matches the allowlist. These are the only deviations from steps 2 and 4; validate both with `actionlint` and include them in the same code commit as this amendment.

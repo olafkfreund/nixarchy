@@ -11,6 +11,9 @@
 # sees a single tool.
 name: "Copilot Setup Steps"
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
   push:

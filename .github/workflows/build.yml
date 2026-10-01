@@ -484,10 +484,10 @@ jobs:
           fi
 
           if [ -n "$rogue" ]; then
-            echo "::error::a workflow condition is not the shared gate:" \
+            echo "::error::a workflow condition is not the shared gate or approved fork flag:" \
                  "$(printf '%s' "$rogue" | tr '|' ' ')"
-            echo "::error::every skip must be decided by .github/scripts/pr-touches-build.sh," \
-                 "so there is one denylist to audit rather than one per job."
+            echo "::error::every skip must use .github/scripts/pr-touches-build.sh" \
+                 "or the gate's fork flag, so there is one denylist to audit."
             exit 1
           fi
 

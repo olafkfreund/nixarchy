@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1142
 intent: intent/2026-10-01-1142-pacman-scripts-count.md
 ---

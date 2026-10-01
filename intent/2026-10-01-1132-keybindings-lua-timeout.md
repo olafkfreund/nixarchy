@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1132
 author: olafkfreund
 ---
@@ -54,14 +54,14 @@ the fixed run ends without a surviving scan process.
 
 ## Open questions
 
-1. **Deadline:** Recommend `timeout 3 lua` at the single process substitution.
-   Three seconds bounds a menu interaction while allowing an ordinary config
-   scan to finish. Measure a normal scan in the later check before changing it.
-2. **Timeout behavior:** Recommend treating an expired Lua scan like absent
-   Lua: omit Lua-only bind metadata for that invocation and continue with the
-   other binding sources. Keep any diagnostic to stderr so menu output remains
+1. **Deadline — approved:** Use `timeout 3 lua` at the single process
+   substitution. Three seconds bounds a menu interaction while allowing an
+   ordinary config scan to finish.
+2. **Timeout behavior — approved:** Treat an expired Lua scan like absent Lua:
+   omit Lua-only bind metadata for that invocation and continue with the other
+   binding sources. Keep any diagnostic to stderr so menu output remains
    parseable.
-3. **Proof:** Recommend a cheap check that invokes the built script with a
+3. **Proof — approved:** A cheap check invokes the built script with a
    `while true do end` user config, verifies a bounded return and no surviving
    Lua process, and first goes red when the deadline patch is removed. The
-   harness must terminate only its own test processes on the red run.
+   harness terminates only its own test processes on the red run.

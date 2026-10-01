@@ -694,7 +694,27 @@ the largest weight" is a judgement made *after* starting, which is exactly the
 reasoning the rule exists to stop. The check is `gh run list`, not an estimate
 of your own footprint.
 
-Check first: `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`.
+**The owner has since set the rule by tier (2026-10-01), and it replaces the
+blanket check above.** Waiting for a fully idle CI before *any* local build
+stalled every task for hours that day. The installs that did starve were
+starved by full p620 system builds from a desktop session, not by
+seconds-long checks. So:
+
+| local build | when it may run |
+|---|---|
+| cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
+| a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12. In-flight CI does not block it |
+| a VM check, or `checks.options` | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
+
+"Is a p620 build running" has a trap of its own. `pgrep -f
+'nixosConfigurations.p620'` also matches every `nixd` language server (its
+`--nixos-options-expr` names the same attribute) and the script doing the
+waiting, so it never reaches zero. Anchor it:
+`pgrep -fc '^(nix build|nh os build|nixos-rebuild).*p620'`. Print what a gate
+matches (`pgrep -af`) once before trusting it.
+
+A p620 *switch* still kills every install in flight (see above). The tiers
+govern builds, not deploys.
 
 **Two ways a local VM outlives your attention, both from 2026-09-22.**
 

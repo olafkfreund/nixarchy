@@ -449,7 +449,7 @@ terminal session, never typed into yours, and a command that fails is reported
 as a failure.
 
 **Why it's opt-in.** It needs a model account, and it sends what you ask about
-(including screen and clipboard content) to that model. It is 6.7 GiB with the
+(including screen and clipboard content) to that model. It is 7.2 GiB with the
 whisper and Piper models, which are in the package. Every step goes through a
 policy gate: anything risky waits for your yes, a step can be approved once for
 good, and a deny rule can never be approved. Notification logging, the wake word

@@ -266,10 +266,11 @@ in
     # exactly what the first attempt did.
     #
     # Off by default and deliberately not a default plugin: the closure is
-    # 6.7 GiB measured, most of it whisper and the Piper models, and the models
-    # are IN the package so an off switch would not shrink the machine.
+    # 7.2 GiB measured at 2.4.0 (#1147), most of it whisper and the Piper
+    # models, and the models are IN the package so an off switch would not
+    # shrink the machine.
     voice.enable = lib.mkEnableOption ''
-      nixarchy-voice: speech into desktop actions. 6.7 GiB installed. Desktop
+      nixarchy-voice: speech into desktop actions. 7.2 GiB installed. Desktop
       control, the wake word and notification logging each stay off until you
       turn them on in `programs.omarchy-voice`
     '';

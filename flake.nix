@@ -234,8 +234,9 @@
     # app is on none, which is not a contradiction: data/apps.nix is data, and
     # this module only does anything once somebody sets
     # programs.nixarchy.voice.enable (programs.omarchy-voice upstream). It is
-    # not in defaultPluginSet and must not be -- 6.7 GiB with whisper and the
-    # Piper models, measured at this pin and the last (#1022), and the models
+    # not in defaultPluginSet and must not be -- 7.2 GiB with whisper and the
+    # Piper models, measured at this pin (#1147; 6.7 GiB before v2.4.0 shipped
+    # a second whisper model), and the models
     # are IN the package, so an off switch would not shrink the machine or the
     # ISO.
     #
@@ -249,7 +250,7 @@
     # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
     # a branch is not a version.
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/37ceb43ca66c1c7dca97e4dba1f6be35fcef1766";
+      url = "github:olafkfreund/nixarchy-voice/0e260f0553bfbd240e42031d411d2d3bfdeb53f2";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";

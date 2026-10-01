@@ -2408,6 +2408,10 @@ let
         agent = {
           template = "agent";
         };
+        agentCustom = {
+          template = "agent";
+          memory = 4096;
+        };
         # #1083: a machine's own sshd wins over the sshPort-derived default.
         ownssh = {
           template = "shell";
@@ -2499,6 +2503,7 @@ let
         sd = mvOn.microvm.stateDir;
         plain = mvVm mvOn "plain";
         agent = mvVm mvOn "agent";
+        agentCustom = mvVm mvOn "agentCustom";
         # nft comments start with # too, and one explains this very rule in
         # the words it forbids ("a bare `dport 67`") -- so a comment line has
         # to be dropped before the scan below reads prose as a rule.
@@ -2528,6 +2533,15 @@ let
         || policyRule.group != "kvm"
         || policyRule.mode != "0750"
       ) "#1100: no tmpfiles rule makes ${sd}/agent/policy microvm:kvm 0750 for the read-only agent share."
+      ++ pkgs.lib.optional (
+        agent.microvm.mem != 2560
+      ) "#1100: the declarative agent default is not 2560 MiB."
+      ++ pkgs.lib.optional (
+        agentCustom.microvm.mem != 4096
+      ) "#1100: explicit agent memory did not override the template."
+      ++ pkgs.lib.optional (
+        plain.microvm.mem != 1024
+      ) "#1100: the declarative shell default is not 1024 MiB."
       ++ pkgs.lib.optional (builtins.elem "wheel" agent.users.users.dev.extraGroups) "#1083: the agent template's dev is in wheel, so sudo can flush the egress ruleset."
       ++ pkgs.lib.optional (builtins.any (
         l: pkgs.lib.hasInfix "dport 67" l && !(pkgs.lib.hasInfix "daddr" l)

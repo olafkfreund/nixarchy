@@ -295,6 +295,10 @@ programs.nixarchy.services.microvm = {
 };
 ```
 
+For a declarative machine, leave `memory` unset to use its template's RAM
+setting (`agent` uses 2560 MiB); templates without one use the 1024 MiB base
+guest setting. An explicit `machines.<name>.memory` overrides the template.
+
 A declarative machine gets a forwarded SSH port compiled into its own
 closure — the one door the disposable half deliberately does not have,
 since every disposable VM of a template shares one closure and so cannot

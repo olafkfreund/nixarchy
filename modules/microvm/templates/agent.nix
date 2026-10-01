@@ -251,5 +251,5 @@ in
   # microvm.nix default for the same reason modules/microvm/templates/python.nix
   # raises it, and below that template's 3072 because nothing here resolves a
   # dependency-heavy lockfile.
-  microvm.mem = 2560;
+  microvm.mem = lib.mkOverride 900 2560;
 }

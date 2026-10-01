@@ -62,6 +62,26 @@ without reading or migrating that file. Give the migration an explicit
 *Deviation (implementation, Step 1):* Update the allowlist unit description
 to name the policy share. It still described the old host-directory share.
 
+*Deviation (implementation, Steps 1, 3, and 5):* The first authorized
+`checks.microvm-boot` command failed during evaluation after five seconds,
+before any VM phase, because the declarative service assigned its 1024 MiB
+default at the same priority as the agent template's 2560 MiB. The owner
+authorized fixing that pre-existing conflict. The pinned microvm.nix
+default is 512 MiB. Make `machines.<name>.memory` nullable with default
+`null`; a non-null explicit value is forced into `microvm.mem`, so it wins
+over every template. Put nixarchy's 1024 MiB base default in `guest.nix`
+with `mkDefault`, and the agent's 2560 MiB choice at override priority 900.
+Thus explicit machine memory wins, then the template, then the base guest
+default. Assert three evaluated declarative memory values in
+`tests/options.nix`: agent default 2560, explicit agent 4096, shell default
+1024. Break each source value separately with a saved copy and restore with
+`cp`; use targeted `nix eval` for local red/green proofs, then evaluate the
+final boot check's `drvPath` without building it before a second, separately
+authorized timed VM run. The attempted local `checks.microvm-template` run
+pulled in 248 guest derivations after the base memory change; it was stopped
+by exact PID. The full options and template checks are left to CI.
+
+
 ## Steps
 
 1. `modules/microvm/templates/agent.nix:39-54,108-163` and
@@ -184,6 +204,16 @@ to name the policy share. It still described the old host-directory share.
   Green returns an object with `user = microvm`, `group = kvm`, and
   `mode = 0750`; removing the entry must make evaluation fail. Stop if this
   single eval takes minutes or GBs of RSS.
+- Break the three evaluated memory cases separately: remove the agent
+  template's `microvm.mem`, remove the explicit machine memory override in
+  `modules/services/microvm.nix`, and remove the base guest's 1024 MiB
+  `mkDefault`. Save each source outside the worktree with `cp`, make the
+  real edit, inspect `git diff --stat`, run targeted declarative `nix eval`
+  assertions to capture red output, restore with `cp`, and rerun green.
+  CI runs the durable `tests/options.nix` assertions. Finally run
+  `nix eval --raw .#checks.x86_64-linux.microvm-boot.drvPath` without
+  building a guest; it must succeed before the one additional owner-
+  authorized timed boot run at CI idle.
 - The guest mutation RED proof must vary permissions as well as code: Step
   5's write-refusal subcase uses host modes `0777`/`0666`; remove BOTH QEMU
   `readOnly` and the guest `ro` option.

@@ -313,8 +313,9 @@ jobs:
     # check does NOT block the merge (mergeStateStatus UNSTABLE), and a
     # failed gate skips this job through `needs:`. Hence the job-level `if:`,
     # and the first step below, which fails a gate that did not conclude
-    # `success` (#1134). A run cancelled while `gate` is still running still
-    # never starts this job; the #1134 PR records what that reports.
+    # `success` (#1134). A run cancelled mid-gate reports `cancelled`, not
+    # `skipped` (measured on #1145); GitHub's docs count only success,
+    # neutral and skipped as passing, so that blocks -- documented, not measured.
     #
     # p620: 128 threads, 251 GB, /dev/kvm, and a build-dir with room for the
     # images (measured 2026-09-13).

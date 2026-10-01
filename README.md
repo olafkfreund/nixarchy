@@ -417,8 +417,8 @@ Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
 the Lua defaults all follow. Only **32 of 445 scripts** actually run
 `pacman`/`yay` — that's the entire distro-coupling surface.
 
-Six of those are replaced outright, in `pkgs/omarchy/nix-bin/`: the ones the
-menus drive. The rest manage Arch release channels, keyrings and orphan
+Nine of those are replaced outright, in `pkgs/omarchy/nix-bin/`: package
+management, the update check, migrations and the default agent. The rest manage Arch release channels, keyrings and orphan
 pruning, none of which have a Nix meaning worth reimplementing — your flake
 input *is* the release channel, and the store has no orphans. Those fail either
 way, so a `pacman` shim only changes *how*: instead of `command not found`, you

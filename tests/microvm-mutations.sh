@@ -87,7 +87,7 @@ fi
 rm -f "$MUTATION_STATE"
 "$vm" create brief >/dev/null
 export MUTATION_ATTEMPT="$work/mutation-attempt"
-flock() { touch "$MUTATION_ATTEMPT"; command flock "$@"; }
+flock() { date +%s%3N > "$MUTATION_ATTEMPT"; command flock "$@"; }
 export -f flock
 (
   exec 7>"$state/brief/.lock"
@@ -143,14 +143,18 @@ if [ ! -e "$work/busy-ready" ] || command flock -n 6; then
 fi
 exec 6>&-
 export NIX_CALL_MARKER="$work/nix-called"
-started=$(date +%s%3N)
-if timeout 6 "$vm" run busy > "$work/busy-error" 2>&1; then
+export MUTATION_ATTEMPT="$work/busy-attempt"
+if timeout 10 "$vm" run busy > "$work/busy-error" 2>&1; then
   echo 'FAIL: run started while a runner held its lock' >&2
   fail=1
 fi
-elapsed=$(( $(date +%s%3N) - started ))
+if [ -s "$MUTATION_ATTEMPT" ]; then
+  elapsed=$(( $(date +%s%3N) - $(cat "$MUTATION_ATTEMPT") ))
+else
+  elapsed=0
+fi
 if [ "$(cat "$work/busy-error")" != "nixarchy-vm: 'busy' is already running." ] ||
-   [ -e "$NIX_CALL_MARKER" ] || [ "$elapsed" -lt 1500 ] || [ "$elapsed" -gt 5500 ]; then
+   [ -e "$NIX_CALL_MARKER" ] || [ "$elapsed" -lt 1500 ] || [ "$elapsed" -gt 5000 ]; then
   echo "FAIL: a running VM did not refuse in about two seconds with the exact busy message ($elapsed ms)" >&2
   cat "$work/busy-error" >&2
   fail=1

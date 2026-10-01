@@ -159,9 +159,10 @@ jobs:
           # would read as "skip" and produce a green install that installed
           # nothing, inverting the script's own fail-safe policy (#559).
           # Enforce the contract here instead of making every consumer
-          # defensive: a failed gate makes `install` report `skipped`, which
-          # is not `success`, so the merge is blocked -- the failure is loud,
-          # not a false pass.
+          # defensive: a failed gate now makes `install` FAIL, through its
+          # first step below. A skipped required check passes the merge gate
+          # (#1144 measured it), so skipping on a bad gate would have been
+          # the false pass.
           case "$relevant" in
             true | false) ;;
             *)
@@ -203,6 +204,7 @@ jobs:
   install:
     name: install
     needs: gate
+    if: ${{ !cancelled() }}
 
     # At most TWO install VMs at a time, fleet-wide -- two slot groups, not
     # one, and not three.
@@ -300,13 +302,20 @@ jobs:
       group: ${{ needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true' && format('nixarchy-install-vm-{0}', needs.gate.outputs.slot) || format('install-noop-{0}', github.ref) }}
       cancel-in-progress: false
 
-    # No `if:` on this job, and that is the whole fix -- measured, not assumed.
-    # A probe run with three jobs reported: a job skipped by a job-level `if:`
-    # appears as a check-run with conclusion `skipped`, and `skipped` is not
-    # `success`, so requiring it blocks the merge just as an absent context
-    # does. The same job with the `if:` moved onto its steps reported
-    # `success`. So the steps below carry the condition and the job always
-    # completes green.
+    # `if: ${{ !cancelled() }}` on this job, not `always()`, so a cancelled
+    # run doesn't start it. A probe run with three jobs had already measured
+    # that a job skipped by a job-level `if:` appears as a check-run with
+    # conclusion `skipped`, and the same job with the `if:` moved onto its
+    # steps reported `success` -- so the steps below still carry the
+    # condition, and a run with nothing to do still reports a real
+    # `success`, same as before. What was wrong was the inference that a
+    # skip is safe to require: #1144 measured that a `skipped` required
+    # check does NOT block the merge (mergeStateStatus UNSTABLE), and a
+    # failed gate skips this job through `needs:`. Hence the job-level `if:`,
+    # and the first step below, which fails a gate that did not conclude
+    # `success` (#1134). A run cancelled mid-gate reports `cancelled`, not
+    # `skipped` (measured on #1145); GitHub's docs count only success,
+    # neutral and skipped as passing, so that blocks -- documented, not measured.
     #
     # p620: 128 threads, 251 GB, /dev/kvm, and a build-dir with room for the
     # images (measured 2026-09-13).
@@ -317,7 +326,7 @@ jobs:
     # person actually receives. When there is nothing to do it asks for a
     # hosted runner instead, which is what the fromJSON is for: `runs-on`
     # takes an expression, but a label LIST has to arrive as JSON.
-    runs-on: ${{ fromJSON(needs.gate.outputs.runner) }}
+    runs-on: ${{ needs.gate.result == 'success' && fromJSON(needs.gate.outputs.runner) || 'ubuntu-latest' }}
 
     # 90, not 45: this job does two full installs now. The old number was sized
     # for one, and a timeout is recorded as `cancelled` -- which reads like
@@ -326,6 +335,12 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
       - name: Fork changes need a trusted install run
         if: needs.gate.outputs.fork == 'true' && needs.gate.outputs.relevant == 'true'
         run: |

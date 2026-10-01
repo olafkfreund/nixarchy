@@ -376,6 +376,20 @@ Two other ways a check stops checking, both found in one week:
   check *assert* the real file is untouched (a checksum before and after),
   because that is the only part a passing run can prove (#802).
 
+- **A required check that concluded `skipped` passes the merge gate.**
+  `install` and three `build.yml` checks `needs:` a gate, and the workflow's
+  own comments said a failed gate made them `skipped`, "which is not
+  `success`, so the merge is blocked". #187 had *measured* the `skipped`
+  conclusion and *inferred* the block. #1144 measured the block: with the gate
+  forced to fail, the PR read `MERGEABLE`/`UNSTABLE` and could have merged
+  with no install at all. A run cancelled mid-gate reports `cancelled`
+  instead (#1145), which the docs say blocks; that half is documented, not
+  measured. Those jobs now run under `!cancelled()` and
+  fail first when their gate did not succeed (#1134). **When a guard's safety
+  rests on how GitHub treats a conclusion, measure the merge state, not the
+  conclusion** — `gh pr view --json mergeStateStatus` on a throwaway PR is
+  the whole experiment.
+
 ## 5. Git and flake mechanics that bite
 
 - **A heredoc inside an indented Nix string reindents the whole file.**

@@ -247,7 +247,7 @@ pkgs.testers.runNixOSTest {
   # on a console or in a file that says it is ready for a password.
   enableOCR = true;
 
-  testScript = ''
+  testScript = builtins.readFile ./session-journal.py + ''
     import os
 
     # A note on order, because the config-repo block below cost a CI run to
@@ -636,9 +636,12 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds(
         as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),
         timeout=60)
-    machine.succeed(
-        "out=$(journalctl -b _SYSTEMD_USER_UNIT=nixarchy-rebuild.service --no-pager); "
-        "grep -q 'does not exist' <<<\"$out\"")
+    missing_inv = machine.succeed(
+        as_user("systemctl --user show -p InvocationID --value nixarchy-rebuild")).strip()
+    assert missing_inv, "the missing-flake unit has no InvocationID"
+    invocation_journal(machine, as_user(
+        "journalctl --user -u nixarchy-rebuild --invocation=" + missing_inv + " --no-pager -o cat"),
+        "does not exist", missing_inv)
     print("a detached apply runs as nixarchy-rebuild, keeps its result, and logs to the journal")
     machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
     machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
@@ -654,26 +657,26 @@ pkgs.testers.runNixOSTest {
         " && " + g + " add -A && " + g + " -c user.email=t@t -c user.name=t commit -qm base"
         " && " + g + " push -q origin main && " + g + " remote set-head origin -a"
         " && " + g + " switch -q -c agent/unmerged"))
-    def detached_log(env):
+    def detached_log(env, expected):
         machine.succeed(as_user(env + " NIXARCHY_FLAKE=/tmp/bg nixarchy-apply --detach --yes"))
         machine.wait_until_succeeds(
             as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),
             timeout=60)
         inv = machine.succeed(
             as_user("systemctl --user show -p InvocationID --value nixarchy-rebuild")).strip()
+        assert inv, "the detached unit has no InvocationID"
         # --invocation, as nixarchy-apply's own log mode scopes it: this run only.
-        log = machine.succeed(as_user(
-            "journalctl --user -u nixarchy-rebuild --invocation=" + inv + " --no-pager -o cat"))
-        # An empty log would let the override case below pass by saying nothing.
-        assert log.strip(), "the detached unit's journal for " + inv + " is empty"
+        log = invocation_journal(machine, as_user(
+            "journalctl --user -u nixarchy-rebuild --invocation=" + inv + " --no-pager -o cat"),
+            expected, inv)
         machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
         machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
         return log
-    log = detached_log("")
+    log = detached_log("", "refusing to rebuild from 'agent/unmerged'")
     assert "refusing to rebuild from 'agent/unmerged'" in log, (
         "a detached rebuild of a feature branch did not refuse in the unit:\n" + log)
     print("a detached rebuild of a feature branch fails in the unit, with the refusal in its log")
-    log = detached_log("ALLOW_BRANCH_DEPLOY=1")
+    log = detached_log("ALLOW_BRANCH_DEPLOY=1", "Enabled apps:")
     assert "refusing to rebuild" not in log, (
         "ALLOW_BRANCH_DEPLOY=1 did not reach the detached unit:\n" + log)
     print("ALLOW_BRANCH_DEPLOY=1 reaches the detached unit")

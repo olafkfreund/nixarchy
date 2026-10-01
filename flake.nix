@@ -2026,6 +2026,12 @@
             renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
           };
 
+          installer-keymaps = import ./tests/installer-keymaps.nix {
+            pkgs = pkgsFor.${system};
+            menu = ./installer/brand/keymaps.txt;
+            kbd = pkgsFor.${system}.kbd;
+          };
+
           # The doctor's GPU rules, against fixture machines. checks.install's
           # VM runs llvmpipe and has no PCI display controller, so this is the
           # only place these branches are ever exercised -- and one of them was

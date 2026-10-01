@@ -89,10 +89,10 @@ test, SSH readiness took 88.60 seconds for the shell sandbox, then 93.66,
 94.80, and 93.62 seconds across the agent's initial boot and two restarts.
 Each restart command took about 10.87 seconds. Deleting one restart would
 save only about 105 seconds on this host and is unnecessary for the measured
-30-minute nightly cap. Propose `timeout-minutes: 45` as a conservative new
-nightly limit: L1 uses KVM here, but the nested agent guests use TCG, and
-the other self-hosted runner or a cold cache may be slower. The owner owns
-the workflow decision; no workflow file is changed in this branch.
+30-minute nightly cap. The owner chose to keep `timeout-minutes: 30`: the
+nightly runner's existing sandbox-only check takes about 2.5–3 minutes with
+KVM, and the extended check is projected around 8.5 minutes, consistent
+with this 8m24s run. No workflow file is changed in this branch.
 
 
 ## Steps

@@ -1909,6 +1909,7 @@
             "skill-parity"
             "swap-guard"
             "try-nixarchy"
+            "update-available"
             "user-unit-links"
             "verify-boxes"
           ];

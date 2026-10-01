@@ -611,7 +611,7 @@
   };
   "omarchy-update-available" = {
     class = "replace";
-    reason = "Upstream asks pacman and counts commits behind a git checkout of $OMARCHY_PATH, which here is a store path with no history. Exits 1, because the bar widget lights up on exit 0 alone.";
+    reason = "Upstream asks pacman and counts commits behind a git checkout of $OMARCHY_PATH, which here is a store path with no history. The replacement checks the installed flake lock against Nixarchy's release refs in one bounded Git call; the bar lights only for a proven newer release.";
   };
   "omarchy-update-firmware" = {
     class = "vendor";

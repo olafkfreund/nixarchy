@@ -116,8 +116,8 @@ jobs:
       slot: ${{ steps.filter.outputs.slot }}
       fork: ${{ steps.filter.outputs.fork }}
     steps:
-      - name: PROBE (#1134) -- the gate fails on purpose; never merge
-        run: exit 1
+      - name: PROBE (#1134) -- the gate sleeps so the run can be cancelled mid-gate; never merge
+        run: sleep 900
 
       # This job used to need no checkout at all -- it asked the API for the
       # file list and decided from that. It needs one now only because the

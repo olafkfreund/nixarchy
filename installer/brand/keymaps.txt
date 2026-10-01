@@ -3,7 +3,6 @@ English (US, Dvorak)	dvorak
 English (US, Colemak)	colemak
 English (US, International)	us-acentos
 English (UK)	uk
-Arabic	ara
 Belarusian	by
 Belgian	be-latin1
 Bulgarian	bg_bds-utf8
@@ -40,6 +39,5 @@ Slovenian	slovene
 Spanish	es
 Spanish (Latin America)	la-latin1
 Swedish	se-lat6
-Thai	th-tis
 Turkish	trq
 Ukrainian	ua-utf

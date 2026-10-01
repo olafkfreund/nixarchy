@@ -1903,6 +1903,7 @@
             # `nix run .#review` watches the pinned packages; this watches that
             # it can still see them. See tests/review-pins.nix.
             "review-pins"
+            "session-journal-race"
             # data/skill-parity.nix, held to upstream's own SKILL.md. See
             # tests/skill-parity.nix and #643.
             "skill-parity"

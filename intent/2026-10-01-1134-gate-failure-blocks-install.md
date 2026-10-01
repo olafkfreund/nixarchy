@@ -62,13 +62,17 @@ comments need only a citation.
 
 ## Open questions
 
-1. **How to measure.** Recommended: a throwaway draft PR from a branch whose
+1. **How to measure.** Recommended: a throwaway PR (not a draft, which GitHub reports as
+   `DRAFT` rather than evaluating the checks) from a branch whose
    `install-check.yml` makes `gate`'s first step `exit 1`. Same-repo pull
    requests run the head's workflow file, so `install` reports `skipped`
    under the real ruleset. `gh pr view --json mergeStateStatus` then
    answers it: `BLOCKED` means skipped blocks; `CLEAN` or `UNSTABLE` means
    it would merge. Nothing attempts a merge.
    - The gate fails before slot assignment, so no install VM starts.
+   - The other required checks (`lint`, `omarchy`, `system`, `box`,
+     `devenv-presets`) must be green first, or `BLOCKED` means nothing. They
+     run on hosted runners and take about 35 minutes.
    - The PR is closed and the branch deleted afterwards.
    - This needs your go-ahead, because it pushes a modified workflow, even
      to a branch that is never merged.

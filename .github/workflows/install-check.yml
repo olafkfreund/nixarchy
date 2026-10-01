@@ -1,5 +1,9 @@
 name: install check
 
+permissions:
+  contents: read
+  pull-requests: read
+
 # Its own workflow, and that is the entire point of the file.
 #
 # This lived in build.yml, where a workflow-level `concurrency` with
@@ -110,6 +114,7 @@ jobs:
       relevant: ${{ steps.filter.outputs.relevant }}
       runner: ${{ steps.filter.outputs.runner }}
       slot: ${{ steps.filter.outputs.slot }}
+      fork: ${{ steps.filter.outputs.fork }}
     steps:
       # This job used to need no checkout at all -- it asked the API for the
       # file list and decided from that. It needs one now only because the
@@ -117,6 +122,8 @@ jobs:
       # depth 1: the one file, not the history.
       - uses: actions/checkout@v5
         with:
+          # A fork may edit this script; the hosted gate uses the base copy.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && github.event.pull_request.base.sha || github.sha }}
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false
 
@@ -127,6 +134,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -134,7 +143,15 @@ jobs:
           # build.yml now asks the same question and two copies of a filter is
           # how one of them goes stale while both are still trusted. The
           # reasoning that was here is there, next to the list.
-          relevant=$(.github/scripts/pr-touches-build.sh --install)
+          fork=false
+          if [ "$EVENT_NAME" = pull_request ] && [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            fork=true
+            relevant=$(.github/scripts/pr-touches-build.sh --install) || relevant=true
+            case "$relevant" in true | false) ;; *) relevant=true ;; esac
+          else
+            relevant=$(.github/scripts/pr-touches-build.sh --install)
+          fi
+          echo "fork=$fork" >> "$GITHUB_OUTPUT"
 
           # The script promises exactly `true` or `false`, and every consumer
           # in `install` gates on `== 'true'` -- so any THIRD value (empty
@@ -164,7 +181,7 @@ jobs:
           # is just four times less dire: a docs PR occupying a KVM runner for
           # a check it is not going to run still delays every PR that needs
           # one.
-          if [ "$relevant" = true ]; then
+          if [ "$relevant" = true ] && [ "$fork" = false ]; then
             echo 'runner=["self-hosted","nixos","kvm","big"]' >> "$GITHUB_OUTPUT"
           else
             echo 'runner=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
@@ -280,7 +297,7 @@ jobs:
     # already reads for the runner labels. The two must agree: a run that asks
     # for a hosted runner must not hold the VM group.
     concurrency:
-      group: ${{ needs.gate.outputs.relevant == 'true' && format('nixarchy-install-vm-{0}', needs.gate.outputs.slot) || format('install-noop-{0}', github.ref) }}
+      group: ${{ needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true' && format('nixarchy-install-vm-{0}', needs.gate.outputs.slot) || format('install-noop-{0}', github.ref) }}
       cancel-in-progress: false
 
     # No `if:` on this job, and that is the whole fix -- measured, not assumed.
@@ -309,6 +326,12 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      - name: Fork changes need a trusted install run
+        if: needs.gate.outputs.fork == 'true' && needs.gate.outputs.relevant == 'true'
+        run: |
+          echo '::error::Install-relevant fork changes need a maintainer to run this check from a trusted branch.'
+          exit 1
+
       - name: Nothing here can affect an install
         if: needs.gate.outputs.relevant != 'true'
         run: |
@@ -334,7 +357,7 @@ jobs:
       # is not always the same filesystem as / and the number that matters is
       # the one under the store.
       - name: This host can finish what it is about to start
-        if: needs.gate.outputs.relevant == 'true'
+        if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
         run: |
           # What else is on this host as the install starts (#863). Three
           # installs hit the 90-minute cap on 2026-09-21 and none recorded what
@@ -377,7 +400,7 @@ jobs:
           fi
 
       - uses: actions/checkout@v5
-        if: needs.gate.outputs.relevant == 'true'
+        if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
 
       # No installer action, and cachix to PULL from only. The runner is a
       # NixOS machine with a warm store, which is most of why this is ten
@@ -434,7 +457,7 @@ jobs:
       # installs, and boots the result, and a push to main would cancel it
       # there.
       - name: Install onto a blank disk, and into free space beside a neighbour
-        if: needs.gate.outputs.relevant == 'true'
+        if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
         run: |
           # --extra-substituters rather than the cachix action: the action
           # installs a post-job push step, and this job must not push what it
@@ -469,7 +492,7 @@ jobs:
       # continue-on-error for #235's reason: a cache upload failing must not
       # fail a build that succeeded.
       - name: Push the proof, so nobody has to prove it twice
-        if: needs.gate.outputs.relevant == 'true'
+        if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
         continue-on-error: true
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -540,7 +563,7 @@ jobs:
           done
 
       - name: Report what it cost
-        if: always() && needs.gate.outputs.relevant == 'true'
+        if: always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
         run: |
           # The installer's own figure, not the driver's, and the same one the
           # finish screen shows. checks.install already fails above a budget;

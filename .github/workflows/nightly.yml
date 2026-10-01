@@ -1,5 +1,8 @@
 name: nightly
 
+permissions:
+  contents: read
+
 # The checks that cannot run on a hosted runner.
 #
 # `build.yml` covers everything that fits in fourteen gigabytes and ten

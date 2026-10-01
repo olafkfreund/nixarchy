@@ -311,6 +311,7 @@ jobs:
           # to look in data/services.nix, so it failed the v4.0.2 bump on
           # install.service.tailscale, which services.nix had mapped all
           # along. A security release sat unadopted for three days behind it.
+          set -o pipefail
           python3 .github/scripts/check-menu-mapping.py \
             result/share/omarchy/default/omarchy/omarchy-menu.jsonc \
             data/apps.nix data/services.nix 2>&1 | tee /tmp/mapping.txt
@@ -343,6 +344,9 @@ jobs:
               echo
               grep "does not map" /tmp/mapping.txt | sed 's/::error:://; s/^/- [ ] /'
             } >> /tmp/decisions.md
+          elif [ "${{ steps.mapping.outcome }}" = failure ]; then
+            echo "The mapping check failed without an unmapped-row diagnostic." >> /tmp/decisions.md
+            echo "Inspect its log before adopting this release." >> /tmp/decisions.md
           else
             echo "None: every Install row in this release is mapped or has a" >> /tmp/decisions.md
             echo "recorded exception." >> /tmp/decisions.md

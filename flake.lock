@@ -981,17 +981,17 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1790540406,
-        "narHash": "sha256-Lel3C1xbJRTHKTTcyunPV/4w4eYQHG3GXtM/7s2SSV8=",
+        "lastModified": 1790880929,
+        "narHash": "sha256-4xpkAhaETq3dadU/gEY0w7nBnwx4AkeZsIJ92GJ8oxo=",
         "owner": "olafkfreund",
         "repo": "nixarchy-voice",
-        "rev": "37ceb43ca66c1c7dca97e4dba1f6be35fcef1766",
+        "rev": "0e260f0553bfbd240e42031d411d2d3bfdeb53f2",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-voice",
-        "rev": "37ceb43ca66c1c7dca97e4dba1f6be35fcef1766",
+        "rev": "0e260f0553bfbd240e42031d411d2d3bfdeb53f2",
         "type": "github"
       }
     },

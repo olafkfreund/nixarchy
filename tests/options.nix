@@ -1179,7 +1179,7 @@ let
         off = allLowPrio noDefaultsHome || allLowPrio defaultHome;
       };
     # #774: voice is a row in the catalogue, never a default. The closure is
-    # 6.7 GiB measured -- whisper and the Piper models -- so a machine that did
+    # 7.2 GiB measured -- whisper and the Piper models -- so a machine that did
     # not ask for it must not carry it, and an off switch would not help
     # because the models are IN the package.
     #

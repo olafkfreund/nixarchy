@@ -8,7 +8,6 @@
 .github/workflows/build.yml	printf '%s\n' "$allowed_ifs" | sed 's/^ *//' | grep -qxF "$cond" ||	step shell is bash -e, no pipefail; sed writes once, under 4 KiB
 installer/install.sh	ip -o -4 addr show scope global 2>/dev/null | grep -qv ' lo ' ||	one write: ip -o addr, one line per address
 installer/install.sh	ip -o -6 addr show scope global 2>/dev/null | grep -q . ||	one write: ip -o addr, one line per address
-installer/install.sh	if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then	one write: find -print -quit prints at most one line
 modules/apps.nix	if ! list_drafts | grep -qFx -- "$name"; then	one write: list_drafts, a short list
 modules/apps.nix	sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther' && return 0	one write: sed -n prints one line and quits
 modules/apps.nix	if sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then	one write: sed -n prints one line and quits

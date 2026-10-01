@@ -10,7 +10,7 @@ author: olafkfreund
 
 The installer wizard offers Arabic (`ara`) and Thai (`th-tis`) in
 `installer/brand/keymaps.txt`, but neither name exists under the pinned
-`kbd` 2.9.0 `share/keymaps`. All other 42 entries resolve to a keymap file.
+`kbd` 2.9.0 `share/keymaps`. All other 43 entries resolve to a keymap file.
 `ask_keymap` ignores a failed `loadkeys`, then writes the selected name into
 the generated host's `console.keyMap`. NixOS compiles that keymap with
 `loadkeys` during the system build, so these choices can fail after the user

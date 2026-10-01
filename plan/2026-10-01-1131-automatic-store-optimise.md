@@ -101,6 +101,18 @@ remain unmeasured; the reported nixbook result is not an acceptance target.
   approval, name the plan step being executed; if implementation must deviate,
   update this plan in the same commit as the code.
 
+## Verification deviation (owner gate, 2026-10-01)
+
+The owner kept VM builds and `checks.options` CI-only while shared p620 work
+is in flight. Replace Steps 1-3's local `checks.options` runs with a short,
+locked `nix eval` of
+`.#nixosConfigurations.vm.config.nix.optimise.automatic`: assert `true`
+before the host edit to capture a red result, then assert `true` after it for
+green. The Mode A assertions remain in `tests/options.nix`; their red/green
+proof waits for CI after the owner opens a PR. Do not make the temporary
+`modules/nixos.nix` break locally under this gate. This changes verification,
+not the approved host-only production setting.
+
 ## Rollback
 
 Revert the implementation commit that adds the installer option and its

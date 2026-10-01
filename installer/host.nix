@@ -178,6 +178,9 @@
     max-free = 8 * 1024 * 1024 * 1024;
   };
 
+  # Deduplicate live store files on NixOS's low-priority, AC-only timer.
+  nix.optimise.automatic = true;
+
   # Nix 2.35 for its fix to NixOS/nix#15614: 2.34's automatic collection thread
   # outlived the store that started it and segfaulted during
   # `nixos-rebuild switch` (#701, #708). nixpkgs still defaults to 2.34.8; drop

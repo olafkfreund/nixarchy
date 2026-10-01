@@ -316,6 +316,10 @@
     class = "patch";
     reason = "`close` asks the menu to dismiss() over `shell call` before falling back to upstream's `shell hide`: hide reaches the menu's close(), which nixarchy-menu turns into dictation when voice is on (the hotkey's second tap), so a script that closed the menu started a recording (#1070). `call` exits 0 with \"unknown\" when the enabled menu has no dismiss(), so the reply is matched, not the status.";
   };
+  "omarchy-menu-keybindings" = {
+    class = "patch";
+    reason = "Bound the Lua scan of a user's hyprland.lua to three seconds so a loop cannot leave a CPU pinned when the keybindings menu opens.";
+  };
   "omarchy-menu-timezone" = {
     class = "vendor";
     reason = "Vendored unchanged. `sudo timedatectl set-timezone` rewrites /etc/localtime, which time.timeZone owns on NixOS, so the menu's choice is reverted by the next rebuild.";

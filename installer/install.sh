@@ -36,6 +36,7 @@ ui_palette
 TEMPLATE=@template@
 TZDIR=@tzdata@/share/zoneinfo
 KEYMAPS=@kbd@/share/keymaps
+RESERVED_USERS="@reservedusers@"
 
 # Flakes are not guaranteed enabled on the live medium, and every nix call here
 # needs them. Stock ISOs have enabled them for a few releases; relying on that
@@ -356,6 +357,16 @@ wifi_block() {
   esac
 }
 
+wifi_networks() {
+  nmcli -t -e no -f SIGNAL,SECURITY,SSID device wifi list --rescan yes 2>/dev/null |
+    awk -F: 'NF >= 3 {
+      ssid = substr($0, length($1) + length($2) + 3)
+      if (ssid != "" && !seen[ssid]++)
+        printf "%s\t%s%%\t%s\n", ssid, $1, ($2 == "" ? "open" : $2)
+    }' |
+    sort -t"$(printf '\t')" -k2 -rn
+}
+
 connect_wifi() {
   ui_screen "Let's get you on Wi-Fi..."
   nmcli radio wifi on >/dev/null 2>&1 || true
@@ -386,9 +397,7 @@ connect_wifi() {
   # one network on three access points is three rows otherwise, and picking
   # the wrong row of an identical three is a confusing way to fail.
   local list ssid pw
-  list=$(nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan yes 2>/dev/null |
-    awk -F: 'NF && $1 != "" && !seen[$1]++ { printf "%s\t%s%%\t%s\n", $1, $2, ($3 == "" ? "open" : $3) }' |
-    sort -t"$(printf '\t')" -k2 -rn)
+  list=$(wifi_networks)
 
   if [ -z "$list" ]; then
     ui_left "\e[31mNo networks found.\e[0m"
@@ -622,14 +631,25 @@ ask_keymap() {
 # diverge, and the divergence surfaces as an install that works interactively
 # and fails unattended, or worse the reverse.
 validate_username() {
+  local LC_ALL=C
   [[ $1 =~ ^[a-z_][a-z0-9_-]*$ ]] || {
     echo "not a usable Linux username"
     return 1
   }
-  # root exists; nixbld* belong to the daemon. Creating either produces an
-  # install that fails late and confusingly.
+  if [ "${#1}" -gt 31 ]; then
+    echo "username must be at most 31 characters"
+    return 1
+  fi
+  # The target's system users are spliced from the evaluated reference host.
+  # nixbld names stay reserved even if the reference changes its build-user count.
   case $1 in
-    root | nixbld*)
+    nixbld*)
+      echo "that name is taken by the system"
+      return 1
+      ;;
+  esac
+  case " $RESERVED_USERS " in
+    *" $1 "*)
       echo "that name is taken by the system"
       return 1
       ;;
@@ -637,10 +657,34 @@ validate_username() {
 }
 
 validate_hostname() {
+  local LC_ALL=C
   [[ $1 =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || {
     echo "letters, digits and hyphens; not starting or ending with one"
     return 1
   }
+  if [ "${#1}" -gt 63 ]; then
+    echo "hostname must be at most 63 characters"
+    return 1
+  fi
+}
+
+validate_timezone() {
+  case $1 in
+    "" | /* | .. | ../* | */../* | */.. | right/*) return 1 ;;
+  esac
+  local root zone
+  root=$(realpath -e "$TZDIR" 2>/dev/null) || return 1
+  zone=$(realpath -e "$TZDIR/$1" 2>/dev/null) || return 1
+  [[ $zone == "$root/"* && -f $zone && $(head -c4 "$zone") == TZif ]]
+}
+
+validate_keymap() {
+  local files file
+  files=$(find "$KEYMAPS" \( -type f -o -type l \) -name '*.map.gz' -print) || return 1
+  while IFS= read -r file; do
+    [ "${file##*/}" = "$1.map.gz" ] && [ -f "$file" ] && return 0
+  done <<< "$files"
+  return 1
 }
 
 # The password, on its own.
@@ -1398,8 +1442,10 @@ validate_answers() {
     problems+=("recovery_hash: must differ from password_hash -- it is stored unencrypted on the ESP")
   fi
 
-  [ -z "$timezone" ] || [ -e "$TZDIR/$timezone" ] || problems+=("timezone: no such zone: $timezone")
-  if [ -n "$keymap" ] && ! find "$KEYMAPS" -name "$keymap.map.gz" -print -quit | grep -q .; then
+  if [ -n "$timezone" ] && ! validate_timezone "$timezone"; then
+    problems+=("timezone: not a timezone file: $timezone")
+  fi
+  if [ -n "$keymap" ] && ! validate_keymap "$keymap"; then
     problems+=("keymap: no such keymap: $keymap")
   fi
 
@@ -1862,7 +1908,10 @@ generate_hardware_config() {
     >"$hostdir/hardware-configuration.nix" || return 1
 
   reuse_baked_initrd "$hostdir/hardware-configuration.nix" || return 1
-  write_hardware_modules "$hostdir/nixarchy-hardware.nix"
+  if ! write_hardware_modules "$hostdir/nixarchy-hardware.nix"; then
+    echo "nixarchy-install: could not write $hostdir/nixarchy-hardware.nix" >&2
+    return 1
+  fi
 
   # Both files, into the log, before anything uses them.
   #

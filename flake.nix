@@ -966,6 +966,7 @@
                   "@dashboard@"
                   "@tzdata@"
                   "@kbd@"
+                  "@reservedusers@"
                   "@initrdmodules@"
                   "@initrdforced@"
                   "@initrdmodulesplain@"
@@ -984,6 +985,15 @@
                   "${./installer/lib/dashboard.sh}"
                   "${pkgsFor.${system}.tzdata}"
                   "${pkgsFor.${system}.kbd}"
+                  (
+                    let
+                      users = builtins.attrValues self.nixosConfigurations.reference.config.users.users;
+                    in
+                    nixpkgs.lib.concatStringsSep " " (
+                      builtins.map (user: user.name) (builtins.filter (user: !(user.isNormalUser or false)) users)
+                      ++ [ "daemon" ]
+                    )
+                  )
                   # The initrd modules the reference host carries, and therefore
                   # the ones already baked into any image built from this commit.
                   # install.sh compares what it detected against this list to
@@ -2008,6 +2018,11 @@
           installer-answers = import ./tests/installer-answers.nix {
             pkgs = pkgsFor.${system};
             installScript = ./installer/install.sh;
+          };
+
+          installer-input-validation = import ./tests/installer-input-validation.nix {
+            pkgs = pkgsFor.${system};
+            renderedInstallScript = "${self.packages.${system}.install}/bin/nixarchy-install";
           };
 
           # The doctor's GPU rules, against fixture machines. checks.install's

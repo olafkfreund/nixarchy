@@ -423,6 +423,10 @@ stdenvNoCC.mkDerivation {
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
 
+                    # Bound the Lua source scan so a loop in hyprland.lua cannot pin a CPU when this menu opens.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
+                      --replace-fail "    lua <<'LUA'" "    timeout 3 lua <<'LUA'"
+
                     # bin/ is a symlink farm, NOT wrapProgram'd. `bin/omarchy` discovers its
                     # subcommands by grepping the first 80 lines of each sibling for
                     # `# omarchy:summary=` metadata; a generated wrapper script has no such

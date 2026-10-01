@@ -1850,6 +1850,7 @@
             # other check here starts from a clean machine.
             "integration"
             "iso-wifi"
+            "keybindings-lua-timeout"
             # Two machines differing only by name must build the same parts, or
             # an offline install has to build the difference. See #404.
             "machine-name-free"

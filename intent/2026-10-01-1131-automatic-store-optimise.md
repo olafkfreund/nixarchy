@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1131
 author: olafkfreund
 ---
@@ -52,20 +52,20 @@ acquire the timer.
 
 ## Open questions
 
-1. **Where should the policy live?** Recommend `installer/host.nix`, beside
+1. **Where should the policy live?** Approved: `installer/host.nix`, beside
    its existing disk and cleanup policy. That file is imported only by
    installer-managed hosts. A `mkDefault` in `modules/nixos.nix` would extend
    this disk-wide background policy to Mode A when Nixarchy is enabled and
    requires extra care to leave its disabled state inert.
 2. **When should it run?** NixOS defaults to daily `03:45`, with a persistent
    timer and up to 30 minutes of random delay. A sleeping laptop can catch up
-   when it wakes. Recommend keeping the default schedule initially; measure
+   when it wakes. Approved: keep the default schedule initially; measure
    runtime and contention before adding a custom calendar.
 3. **How should desktop I/O be limited?** `nix-store --optimise` scans and
    hashes store files, so the first pass can compete with interactive work.
    Nixbook gives its background upgrade `CPUWeight = 20` and `IOWeight = 20`.
    The pinned nixpkgs optimiser already uses `Nice = 19`, idle CPU and I/O
-   scheduling, and `ConditionACPower = true`. Recommend retaining those native
-   defaults; add weight settings only if a real installed machine shows
-   contention. The savings and duration need measurement on that machine,
-   rather than extrapolation from nixbook's result.
+   scheduling, and `ConditionACPower = true`. Approved: retain those native
+   defaults, with no extra CPU or I/O weights; add weights only if a real
+   installed machine shows contention. Measure savings and duration on that
+   machine rather than extrapolating from nixbook's result.

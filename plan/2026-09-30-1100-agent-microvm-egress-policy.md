@@ -81,6 +81,19 @@ authorized timed VM run. The attempted local `checks.microvm-template` run
 pulled in 248 guest derivations after the base memory change; it was stopped
 by exact PID. The full options and template checks are left to CI.
 
+*Deviation (implementation, Step 5):* The second and final authorized local
+`checks.microvm-boot` run passed on `ee0bda64` after the exact CI count was
+zero and a post-lock recheck. Wall time was 504 seconds (8m24s), including
+about 73 seconds of build/setup and a 430.52-second test script. Inside the
+test, SSH readiness took 88.60 seconds for the shell sandbox, then 93.66,
+94.80, and 93.62 seconds across the agent's initial boot and two restarts.
+Each restart command took about 10.87 seconds. Deleting one restart would
+save only about 105 seconds on this host and is unnecessary for the measured
+30-minute nightly cap. Propose `timeout-minutes: 45` as a conservative new
+nightly limit: L1 uses KVM here, but the nested agent guests use TCG, and
+the other self-hosted runner or a cold cache may be slower. The owner owns
+the workflow decision; no workflow file is changed in this branch.
+
 
 ## Steps
 

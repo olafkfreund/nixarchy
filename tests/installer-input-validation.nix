@@ -60,6 +60,13 @@ pkgs.runCommand "nixarchy-installer-input-validation"
     refuse 'timezone directory' validate_timezone Europe
     refuse 'zone.tab is not TZif' validate_timezone zone.tab
     refuse 'timezone traversal' validate_timezone ../outside
+    if validate_timezone Missing/Zone >zone.out 2>&1; then
+      fail 'missing timezone accepted'
+    elif [ -s zone.out ]; then
+      fail 'missing timezone printed realpath error'
+    else
+      ok 'missing timezone stays quiet'
+    fi
     accept 'literal keymap' validate_keymap us
     accept 'symlinked keymap' validate_keymap sr-latin
     refuse 'wildcard keymap' validate_keymap 'u*'

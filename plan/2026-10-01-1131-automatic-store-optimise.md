@@ -101,6 +101,12 @@ remain unmeasured; the reported nixbook result is not an acceptance target.
   approval, name the plan step being executed; if implementation must deviate,
   update this plan in the same commit as the code.
 
+## Implementation deviation (CI lint, 2026-10-01)
+
+CI's whole-tree statix check reported W20 because `installer/host.nix` assigned
+`nix.settings`, `nix.optimise.automatic`, and `nix.package` separately. Group
+them under one `nix` attrset without changing any option value.
+
 ## Verification deviation (owner gate, 2026-10-01)
 
 The owner kept VM builds and `checks.options` CI-only while shared p620 work

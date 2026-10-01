@@ -22,7 +22,7 @@
 # ## What is allowed without asking
 #
 # /etc/nixarchy-agent/allow-hosts is the closure-side half of agent.nix's
-# allowlist: read before /mnt/host/allow-hosts, and not deletable from the
+# allowlist: read before /mnt/agent-policy/allow-hosts, and not deletable from the
 # VM's directory. The two model endpoints and GitHub over HTTPS, and nothing
 # a package manager needs -- `allow-hosts` still says what else this VM may
 # reach, exactly as on `agent`. API keys are yours to set in the guest

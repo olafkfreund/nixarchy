@@ -225,12 +225,61 @@ pkgs.runCommand "nixarchy-microvm-template"
       lib.optionalString (lib.hasPrefix "agent" name) ''
         echo "== ${name}: cannot reach what it was not allowed =="
 
+        for variant in ${templates.${name}.kvm} ${templates.${name}.tcg}; do
+          runner=$variant/bin/microvm-run
+          if ! grep -qF 'path=policy,security_model=none,readonly=true' "$runner"; then
+            echo "${name}: policy/ is not a read-only 9p export" >&2
+            fail=1
+          fi
+          if ! grep -qF 'path=share,security_model=none,readonly=false' "$runner"; then
+            echo "${name}: work share/ is not distinct and writable" >&2
+            fail=1
+          fi
+        done
+
         # Everything below reads the guest CLOSURE rather than the qemu command
         # line: an egress policy lives inside the guest, so the assertions the
         # rest of this file makes against bin/microvm-run cannot see any of it.
         # Nothing here boots -- see the header for why that matters.
         sys=$(readlink -f ${templates.${name}.kvm}/share/microvm/system)
         units=$sys/etc/systemd/system
+
+        policyUnit=$units/nixarchy-agent-allowlist.service
+        if ! grep -qF 'RequiresMountsFor=/mnt/agent-policy' "$policyUnit"; then
+          echo "${name}: allowlist service does not wait for the policy mount" >&2
+          fail=1
+        fi
+        policyScript=$(sed -n 's/^ExecStart=//p' "$policyUnit")
+        policyScript=''${policyScript%% *}
+        if [ ! -f "$policyScript" ]; then
+          echo "${name}: cannot inspect the built allowlist script" >&2
+          fail=1
+        else
+          if ! grep -qF 'for src in /etc/nixarchy-agent/allow-hosts /mnt/agent-policy/allow-hosts' "$policyScript"; then
+            echo "${name}: allowlist does not read the protected policy path" >&2
+            fail=1
+          fi
+          if ! grep -qF 'if [ "$src" = /mnt/agent-policy/allow-hosts ] && [ -L "$src" ]; then' "$policyScript" || ! grep -qF 'allow-hosts: refusing symlink $src' "$policyScript"; then
+            echo "${name}: allowlist does not scope symlink refusal to the host policy file" >&2
+            fail=1
+          fi
+          if [ "${name}" = agent-claude ] && grep -qF 'if [ -L "$src" ]; then' "$policyScript"; then
+            echo "agent-claude: built closure allowlist symlink is refused" >&2
+            fail=1
+          fi
+          if ! grep -qF 'if [ -e /mnt/host/allow-hosts ]; then' "$policyScript" || ! grep -qF 'ignoring legacy /mnt/host/allow-hosts' "$policyScript"; then
+            echo "${name}: allowlist does not warn that the legacy list is ignored" >&2
+            fail=1
+          fi
+          if grep -qF 'cat /mnt/host/allow-hosts' "$policyScript" || grep -qF 'for src in /etc/nixarchy-agent/allow-hosts /mnt/host/allow-hosts' "$policyScript"; then
+            echo "${name}: allowlist still reads the guest-writable path" >&2
+            fail=1
+          fi
+        fi
+        if ! grep -E '/mnt/agent-policy[[:space:]]+9p[[:space:]]+([^[:space:]]+,)?ro(,|[[:space:]])' "$sys/etc/fstab" >/dev/null; then
+          echo "${name}: guest policy mount is not read-only" >&2
+          fail=1
+        fi
 
         for unit in nftables.service tinyproxy.service nixarchy-agent-allowlist.service; do
           if [ ! -e "$units/$unit" ]; then
@@ -305,7 +354,7 @@ pkgs.runCommand "nixarchy-microvm-template"
           fi
           # The filter is a runtime path, not a store path: the allowlist is
           # per-VM (data/microvm-templates.nix's rule -- one closure serves every
-          # VM of a template), written at boot from /mnt/host/allow-hosts.
+          # VM of a template), written at boot from /mnt/agent-policy/allow-hosts.
           if ! grep -q '^Filter "/run/nixarchy-agent/allow.filter"' "$conf"; then
             echo "${name}: tinyproxy's Filter is not the per-VM file written at boot:" >&2
             grep '^Filter' "$conf" >&2 || echo "  (no Filter line at all)" >&2
@@ -399,6 +448,13 @@ pkgs.runCommand "nixarchy-microvm-template"
     mkdir -p "$HOME"
 
     ${nixarchyVm}/bin/nixarchy-vm create sandbox
+    sandbox_dir="$HOME/.local/state/nixarchy/microvm/sandbox"
+    if [ ! -d "$sandbox_dir/policy" ]; then
+      echo "create did not make policy/ before the first run" >&2
+      fail=1
+    fi
+    printf 'legacy.example\n' > "$sandbox_dir/share/allow-hosts"
+    cp "$sandbox_dir/share/allow-hosts" legacy-allow-hosts.copy
 
     # First run: builds via the stub, then execs the stub runner, which
     # sleeps -- backgrounded so the check can also try a second run while
@@ -420,6 +476,14 @@ pkgs.runCommand "nixarchy-microvm-template"
 
     if [ "$(cat "$HOME/.local/state/nixarchy/microvm/sandbox/share/hostname" 2>/dev/null)" != sandbox ]; then
       echo "run did not write share/hostname -- the guest's /mnt/host has no name to read (#1076)" >&2
+      fail=1
+    fi
+    if ! cmp -s legacy-allow-hosts.copy "$sandbox_dir/share/allow-hosts"; then
+      echo "run changed the legacy guest-writable allow-hosts" >&2
+      fail=1
+    fi
+    if ! grep -qF "ignoring legacy '$sandbox_dir/share/allow-hosts'" run1.log; then
+      echo "run did not tell the user to review the ignored legacy allow-hosts" >&2
       fail=1
     fi
 
@@ -452,6 +516,43 @@ pkgs.runCommand "nixarchy-microvm-template"
 
     kill "$first" 2>/dev/null || true
     wait "$first" 2>/dev/null || true
+
+    ${nixarchyVm}/bin/nixarchy-vm create oldpolicy
+    old_dir="$HOME/.local/state/nixarchy/microvm/oldpolicy"
+    rmdir "$old_dir/policy"
+    ( ${nixarchyVm}/bin/nixarchy-vm run oldpolicy > oldpolicy-run.log 2>&1; echo $? > oldpolicy-run.status ) &
+    old_pid=$!
+    for _ in $(seq 1 50); do
+      [ -f "$old_dir/run.marker" ] && break
+      sleep 0.2
+    done
+    if [ ! -d "$old_dir/policy" ]; then
+      echo "run did not create policy/ for an old VM" >&2
+      fail=1
+    fi
+    if [ ! -f "$old_dir/run.marker" ]; then
+      echo "old VM never reached its stub runner" >&2
+      cat oldpolicy-run.log >&2
+      fail=1
+    fi
+    kill "$old_pid" 2>/dev/null || true
+    wait "$old_pid" 2>/dev/null || true
+
+    ${nixarchyVm}/bin/nixarchy-vm create policy-link
+    link_dir="$HOME/.local/state/nixarchy/microvm/policy-link"
+    rmdir "$link_dir/policy"
+    mkdir -p outside-policy
+    printf 'sentinel\n' > outside-policy/allow-hosts
+    ln -s "$PWD/outside-policy" "$link_dir/policy"
+    timeout 2s ${nixarchyVm}/bin/nixarchy-vm run policy-link > policy-link.log 2>&1 || true
+    if ! grep -qF 'is a symlink; refusing to share it' policy-link.log; then
+      echo "run accepted a symlinked policy/" >&2
+      fail=1
+    fi
+    if [ ! -L "$link_dir/policy" ] || [ "$(cat outside-policy/allow-hosts)" != sentinel ]; then
+      echo "run changed a policy/ symlink or its external target" >&2
+      fail=1
+    fi
 
     # #1076: the 9p share has no security_model, so a guest can replace
     # share/hostname with a symlink pointing anywhere on the host. `run` must

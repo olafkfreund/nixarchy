@@ -136,9 +136,9 @@ in
             };
 
             memory = lib.mkOption {
-              type = lib.types.ints.positive;
-              default = 1024;
-              description = "Guest RAM in MiB, `microvm.mem` on the guest.";
+              type = lib.types.nullOr lib.types.ints.positive;
+              default = null;
+              description = "Guest RAM in MiB. Null uses the template's size, or the 1024 MiB declarative default.";
             };
 
             cores = lib.mkOption {
@@ -210,7 +210,8 @@ in
       };
 
       # Why: modules/microvm/guest.nix -- the guest's /mnt/host is <state>/share,
-      # never <state> itself (#1076). kvm, so the user can drop allow-hosts.
+      # never <state> itself (#1076). kvm can write share/, but not policy/:
+      # agent egress policy is supplied by the host, outside the guest share.
       #
       # Both levels, not just share/: tmpfiles runs at sysinit, before
       # upstream's install-microvm-<name>.service (which only starts at
@@ -241,6 +242,13 @@ in
               mode = "0770";
             };
           };
+          "${vmDir}/policy" = {
+            d = {
+              user = "microvm";
+              group = "kvm";
+              mode = "0750";
+            };
+          };
         }
       ) svc.machines;
 
@@ -254,7 +262,12 @@ in
           ++ m.modules;
 
           microvm = {
-            mem = m.memory;
+            # An explicit machine size wins over the template and a machine's
+            # modules; otherwise the template or declarative default wins.
+            mem = lib.mkMerge [
+              (lib.mkDefault 1024)
+              (lib.mkIf (m.memory != null) (lib.mkForce m.memory))
+            ];
             vcpu = m.cores;
             # A list on both sides, so plain assignment merges rather than
             # replaces: modules/microvm/guest.nix's ro-store and hostdir

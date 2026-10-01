@@ -85,7 +85,7 @@
   agent = {
     label = "Agent";
     module = ../modules/microvm/templates/agent.nix;
-    note = "Shell plus git and curl, and an egress allowlist: nothing in the guest can reach the network except through a local proxy, which only permits the hosts named one per line in the VM's own 'allow-hosts' file. HTTPS only -- an ssh:// git remote does not pass.";
+    note = "Shell plus git and curl, and an egress allowlist: nothing in the guest can reach the network except through a local proxy, which only permits the hosts named one per line in the host-side policy/allow-hosts file. HTTPS only -- an ssh:// git remote does not pass.";
   };
 
   # Agent, with the agents. The unfree one is the reason the note has a
@@ -94,7 +94,7 @@
   agent-claude = {
     label = "Agent (Claude)";
     module = ../modules/microvm/templates/agent-claude.nix;
-    note = "Agent's egress fence with codex and opencode preinstalled, and api.anthropic.com, api.openai.com, github.com and codeload.github.com allowed without listing them; 'allow-hosts' adds to that. claude-code is included only when unfree is allowed -- NIXPKGS_ALLOW_UNFREE=1 before 'nixarchy vm run', or allowUnfree on a permanent machine -- and is never served by the public cache.";
+    note = "Agent's egress fence with codex and opencode preinstalled, and api.anthropic.com, api.openai.com, github.com and codeload.github.com allowed without listing them; host-side policy/allow-hosts adds to that. claude-code is included only when unfree is allowed -- NIXPKGS_ALLOW_UNFREE=1 before 'nixarchy vm run', or allowUnfree on a permanent machine -- and is never served by the public cache.";
   };
 
   persistent = {

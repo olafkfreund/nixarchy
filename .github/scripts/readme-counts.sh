@@ -188,6 +188,14 @@ else
   a_indexed=""
 fi
 
+# One archive serves every pinned input this script reads: the upstream
+# Omarchy tree below and nix-skills further down.
+archive_json=""
+if [ -z "${OMARCHY_SRC_TREE:-}" ] || [ -z "${NIX_SKILLS_TREE:-}" ]; then
+  archive_json=$(nix flake archive --json --no-write-lock-file "$root" 2>/dev/null)
+fi
+omarchy_src=${OMARCHY_SRC_TREE:-$(jq -r '.inputs.omarchy.path // empty' <<<"$archive_json" 2>/dev/null)}
+
 pac=$(grep -rlE '\b(pacman|yay)\b' "$omarchy/share/omarchy/bin" 2>/dev/null | wc -l)
 # mktemp, not a fixed /tmp name: two of the four self-hosted runners share a
 # machine, so two jobs writing /tmp/rc-pac.txt at once would read each other's
@@ -195,9 +203,17 @@ pac=$(grep -rlE '\b(pacman|yay)\b' "$omarchy/share/omarchy/bin" 2>/dev/null | wc
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 ls "$root/pkgs/omarchy/nix-bin" 2>/dev/null | sort > "$tmp/nixbin"
-grep -rlE '\b(pacman|yay)\b' "$omarchy/share/omarchy/bin" 2>/dev/null |
-  xargs -r -n1 basename | sort > "$tmp/pac"
-repl_n=$(comm -12 "$tmp/pac" "$tmp/nixbin" | wc -l)
+# Upstream's bin, not the built tree: the built tree holds our replacements,
+# and whether their comments say "pacman" is not evidence of anything (#1140).
+if [ -d "$omarchy_src/bin" ]; then
+  grep -rlE '\b(pacman|yay)\b' "$omarchy_src/bin" |
+    xargs -r -n1 basename | sort > "$tmp/pac"
+  repl_n=$(comm -12 "$tmp/pac" "$tmp/nixbin" | wc -l)
+else
+  echo "::error::pacman-replaced: no upstream omarchy tree at '${omarchy_src:-empty}' -- refusing" >&2
+  fail=1
+  repl_n=""
+fi
 
 # The numbers the README spells as words.
 word_for() {
@@ -244,10 +260,7 @@ if [ -z "$nix_skills_tree" ]; then
   # `nix eval "$root#inputs.nix-skills"` does NOT work: a flake ref after `#`
   # selects an OUTPUT, and inputs are not outputs. `flake archive` is the one
   # command that prints an input's realised store path.
-  nix_skills_tree=$(
-    nix flake archive --json --no-write-lock-file "$root" 2>/dev/null |
-      jq -r '.inputs["nix-skills"].path // empty'
-  )
+  nix_skills_tree=$(jq -r '.inputs["nix-skills"].path // empty' <<<"$archive_json" 2>/dev/null)
 fi
 nix_skills=$(
   if [ -n "$nix_skills_tree" ] && [ -f "$nix_skills_tree/skills.json" ]; then

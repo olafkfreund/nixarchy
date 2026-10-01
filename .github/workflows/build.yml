@@ -1,5 +1,10 @@
 name: build
 
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
 on:
   push:
     branches: [main]
@@ -372,8 +377,6 @@ jobs:
           # same ~3h shape as install-iso, and it arrived on main (#512)
           # before it was claimed here, which would have put a multi-hour
           # build in the light job on every pull request.
-          nightly_only="install-iso iso-budget microvm-boot install-iso-net install-encrypted reinstall-vm"
-
           # Ask Nix, do not parse the file -- and the implausible-count floor
           # that goes with it. Both moved into generated-checks.sh with the
           # reasoning; see its header.
@@ -397,13 +400,26 @@ jobs:
 
             # Not \b, which counts `-` as a boundary: `install` would match a
             # line naming `install-iso`.
-            named=$(grep -rlE "checks\.x86_64-linux\.$c([^a-z0-9-]|\$)" .github/workflows/ || true)
+            named=$(grep -rlE "^[[:space:]]*[^#[:space:]].*checks\.x86_64-linux\.$c([^a-z0-9-]|\$)" .github/workflows/ || true)
             if [ -z "$named" ]; then bad="$bad $c:claimed-but-unrun"; continue; fi
             case " $nightly_only " in *" $c "*) continue ;; esac
-            # Top-level `on:` key only. `pull_request` also appears in
-            # install-check.yml as `github.event_name == 'pull_request'`.
-            echo "$named" | xargs grep -lE '^  pull_request:' >/dev/null 2>&1 ||
-              ungated="$ungated $c"
+            # A trigger filtered by paths reports no required check at all.
+            gated=false
+            for workflow in $named; do
+              if awk '
+                /^on:$/ { in_on = 1; next }
+                in_on && /^[^[:space:]#]/ { in_on = 0; pr = 0 }
+                in_on && /^  pull_request:/ {
+                  pr = 1; found = 1
+                  if ($0 ~ /paths(-ignore)?[[:space:]]*:/) filtered = 1
+                  next
+                }
+                pr && /^  [^[:space:]#]/ { pr = 0 }
+                pr && /^    paths(-ignore)?:/ { filtered = 1 }
+                END { exit !(found && !filtered) }
+              ' "$workflow"; then gated=true; break; fi
+            done
+            [ "$gated" = true ] || ungated="$ungated $c"
           done
 
           # ---- and that a conditional job is conditional on the GATE ----
@@ -432,7 +448,10 @@ jobs:
           allowed_ifs="needs.gate.outputs.relevant == 'true'
           needs.gate.outputs.relevant != 'true'
           always() && needs.gate.outputs.relevant == 'true'
-          github.event_name != 'pull_request'"
+          github.event_name != 'pull_request'
+          needs.gate.outputs.fork == 'true' && needs.gate.outputs.relevant == 'true'
+          needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+          always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'"
 
           rogue=""
           # Process substitution, NOT a heredoc. The first version of this
@@ -465,10 +484,10 @@ jobs:
           fi
 
           if [ -n "$rogue" ]; then
-            echo "::error::a workflow condition is not the shared gate:" \
+            echo "::error::a workflow condition is not the shared gate or approved fork flag:" \
                  "$(printf '%s' "$rogue" | tr '|' ' ')"
-            echo "::error::every skip must be decided by .github/scripts/pr-touches-build.sh," \
-                 "so there is one denylist to audit rather than one per job."
+            echo "::error::every skip must use .github/scripts/pr-touches-build.sh" \
+                 "or the gate's fork flag, so there is one denylist to audit."
             exit 1
           fi
 

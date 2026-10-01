@@ -22,8 +22,8 @@ gh run watch                          # follow the newest run
 
 | workflow | trigger | runner | for |
 |---|---|---|---|
-| `build.yml` | push, PR | hosted + self-hosted | the bulk of the checks |
-| `install-check.yml` | push, PR | **self-hosted** | installs into a real VM |
+| `build.yml` | push, PR | hosted | the bulk of the checks |
+| `install-check.yml` | push, PR | hosted gate; self-hosted for trusted relevant installs | installs into a real VM |
 | `nightly.yml` | 03:00 UTC | **self-hosted** | the expensive VM checks |
 | `omarchy.yml` | 04:00 UTC | hosted | is there a new Omarchy? |
 | `update.yml` | 05:00 UTC | hosted | are the vendored tools behind? |
@@ -112,7 +112,18 @@ its first step if the runner does not have it.
 
 **Trigger:** every push and pull request.
 **Runner:** chosen at runtime — `runs-on: ${{ fromJSON(needs.gate.outputs.runner) }}`
-— self-hosted when the change can affect an install, hosted otherwise.
+— self-hosted for a same-repository change that can affect an install, hosted
+otherwise. For a fork, the hosted gate computes relevance using the base
+branch's `pr-touches-build.sh`, not the fork's copy. An irrelevant fork change
+gets the same green no-op as other irrelevant changes. An install-relevant fork
+gets a failing required `install` check on the hosted runner; a maintainer
+must test it from a trusted same-repository branch before merge.
+
+The owner must require approval for **all outside collaborators** before their
+fork workflows run. That repository setting protects the self-hosted pool:
+the `pull_request` workflow file itself can be edited by a fork, including
+its runner labels. The hosted gate above is a second guard within this
+workflow, not a substitute for reviewing fork workflow changes before approval.
 
 **Steps:** gate → *This host can finish what it is about to start* →
 *Install onto a blank disk, and into free space beside a neighbour* → *Push

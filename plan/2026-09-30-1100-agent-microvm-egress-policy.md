@@ -69,17 +69,38 @@ default at the same priority as the agent template's 2560 MiB. The owner
 authorized fixing that pre-existing conflict. The pinned microvm.nix
 default is 512 MiB. Make `machines.<name>.memory` nullable with default
 `null`; a non-null explicit value is forced into `microvm.mem`, so it wins
-over every template. Put nixarchy's 1024 MiB base default in `guest.nix`
+over every template and any `microvm.mem` in `machines.<name>.modules`.
+Put nixarchy's 1024 MiB declarative default in `modules/services/microvm.nix`
 with `mkDefault`, and the agent's 2560 MiB choice at override priority 900.
-Thus explicit machine memory wins, then the template, then the base guest
+The disposable shell retains pinned microvm.nix's 512 MiB default. Thus
+explicit machine memory wins, then the template, then the declarative
 default. Assert three evaluated declarative memory values in
 `tests/options.nix`: agent default 2560, explicit agent 4096, shell default
-1024. Break each source value separately with a saved copy and restore with
+1024, plus disposable shell 512. Break each source value separately with a saved copy and restore with
 `cp`; use targeted `nix eval` for local red/green proofs, then evaluate the
 final boot check's `drvPath` without building it before a second, separately
 authorized timed VM run. The attempted local `checks.microvm-template` run
 pulled in 248 guest derivations after the base memory change; it was stopped
-by exact PID. The full options and template checks are left to CI.
+by exact PID. The full options check is left to CI.
+
+*Deviation (implementation, Step 1):* Scope source-file symlink refusal to
+`/mnt/agent-policy/allow-hosts`. The closure-provided
+`/etc/nixarchy-agent/allow-hosts` in `agent-claude` is itself a Nix store
+symlink and must remain readable. The built `agent-claude` unit script is
+checked for the scoped guard and against the old unconditional guard. The
+owner authorized the needed QEMU build for a cp-aside red proof and green
+`checks.microvm-template` run, each with exact CI idle 0 and shared flock.
+
+*Deviation (implementation, Steps 3 and 5):* The first memory fix raised
+every disposable template through shared `guest.nix`. Move the 1024 MiB
+`mkDefault` into the declarative service only. Add a disposable shell 512
+assertion beside the three declarative option assertions and prove it red
+by temporarily restoring the unwanted guest-wide 1024 default with a
+saved-copy restore. Document that `machines.<name>.memory` defaults to
+`null`; an explicit value uses `mkForce` and overrides `microvm.mem` in
+`machines.<name>.modules`. The explicit-memory fixture also sets
+`microvm.mem = 2048` in `modules`; removing the explicit override makes
+that value win and turns the 4096 assertion red.
 
 *Deviation (implementation, Step 5):* The second and final authorized local
 `checks.microvm-boot` run passed on `ee0bda64` after the exact CI count was
@@ -217,10 +238,12 @@ with this 8m24s run. No workflow file is changed in this branch.
   Green returns an object with `user = microvm`, `group = kvm`, and
   `mode = 0750`; removing the entry must make evaluation fail. Stop if this
   single eval takes minutes or GBs of RSS.
-- Break the three evaluated memory cases separately: remove the agent
+- Break the evaluated memory cases separately: remove the agent
   template's `microvm.mem`, remove the explicit machine memory override in
-  `modules/services/microvm.nix`, and remove the base guest's 1024 MiB
-  `mkDefault`. Save each source outside the worktree with `cp`, make the
+  `modules/services/microvm.nix`, remove its declarative 1024 MiB
+  `mkDefault`, and reintroduce that default in `modules/microvm/guest.nix`
+  to break the disposable shell's 512 MiB value. Save each source outside
+  the worktree with `cp`, make the
   real edit, inspect `git diff --stat`, run targeted declarative `nix eval`
   assertions to capture red output, restore with `cp`, and rerun green.
   CI runs the durable `tests/options.nix` assertions. Finally run

@@ -2411,6 +2411,7 @@ let
         agentCustom = {
           template = "agent";
           memory = 4096;
+          modules = [ { microvm.mem = 2048; } ];
         };
         # #1083: a machine's own sshd wins over the sshPort-derived default.
         ownssh = {
@@ -2422,6 +2423,18 @@ let
   };
 
   mvVm = cfg: name: cfg.microvm.vms.${name}.config.config;
+
+  # The disposable flake path imports these guest modules directly, without
+  # the declarative service's default. The pinned microvm.nix default is 512.
+  mvDisposableShell =
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        inputs.microvm.nixosModules.microvm
+        ../modules/microvm/guest.nix
+        ../modules/microvm/templates/shell.nix
+      ];
+    }).config;
 
   # The enum in modules/services/microvm.nix's `template` option is the
   # whole claim that a typo fails at evaluation rather than at boot. Forcing
@@ -2542,6 +2555,9 @@ let
       ++ pkgs.lib.optional (
         plain.microvm.mem != 1024
       ) "#1100: the declarative shell default is not 1024 MiB."
+      ++ pkgs.lib.optional (
+        mvDisposableShell.microvm.mem != 512
+      ) "#1100: disposable shell lost the pinned 512 MiB default."
       ++ pkgs.lib.optional (builtins.elem "wheel" agent.users.users.dev.extraGroups) "#1083: the agent template's dev is in wheel, so sudo can flush the egress ruleset."
       ++ pkgs.lib.optional (builtins.any (
         l: pkgs.lib.hasInfix "dport 67" l && !(pkgs.lib.hasInfix "daddr" l)

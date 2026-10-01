@@ -138,7 +138,7 @@ in
             memory = lib.mkOption {
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
-              description = "Guest RAM in MiB. Null uses the template's size, or the 1024 MiB base default.";
+              description = "Guest RAM in MiB. Null uses the template's size, or the 1024 MiB declarative default.";
             };
 
             cores = lib.mkOption {
@@ -262,9 +262,12 @@ in
           ++ m.modules;
 
           microvm = {
-            # A caller's explicit machine size wins over the template, while
-            # null leaves the template and guest baseline to choose.
-            mem = lib.mkIf (m.memory != null) (lib.mkForce m.memory);
+            # An explicit machine size wins over the template and a machine's
+            # modules; otherwise the template or declarative default wins.
+            mem = lib.mkMerge [
+              (lib.mkDefault 1024)
+              (lib.mkIf (m.memory != null) (lib.mkForce m.memory))
+            ];
             vcpu = m.cores;
             # A list on both sides, so plain assignment merges rather than
             # replaces: modules/microvm/guest.nix's ro-store and hostdir

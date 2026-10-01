@@ -149,7 +149,9 @@ in
       # /mnt/agent-policy/allow-hosts only ever adds. This template writes no such
       # file, so for `agent` the behaviour is unchanged.
       for src in /etc/nixarchy-agent/allow-hosts /mnt/agent-policy/allow-hosts; do
-        if [ -L "$src" ]; then
+        # The closure's /etc file is itself a Nix store symlink. Only the
+        # host policy file could escape its read-only share through a symlink.
+        if [ "$src" = /mnt/agent-policy/allow-hosts ] && [ -L "$src" ]; then
           echo "allow-hosts: refusing symlink $src" >&2
           exit 1
         fi

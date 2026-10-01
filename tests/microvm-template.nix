@@ -259,8 +259,12 @@ pkgs.runCommand "nixarchy-microvm-template"
             echo "${name}: allowlist does not read the protected policy path" >&2
             fail=1
           fi
-          if ! grep -qF 'if [ -L "$src" ]; then' "$policyScript" || ! grep -qF 'allow-hosts: refusing symlink $src' "$policyScript"; then
-            echo "${name}: allowlist does not refuse symlinked source files" >&2
+          if ! grep -qF 'if [ "$src" = /mnt/agent-policy/allow-hosts ] && [ -L "$src" ]; then' "$policyScript" || ! grep -qF 'allow-hosts: refusing symlink $src' "$policyScript"; then
+            echo "${name}: allowlist does not scope symlink refusal to the host policy file" >&2
+            fail=1
+          fi
+          if [ "${name}" = agent-claude ] && grep -qF 'if [ -L "$src" ]; then' "$policyScript"; then
+            echo "agent-claude: built closure allowlist symlink is refused" >&2
             fail=1
           fi
           if ! grep -qF 'if [ -e /mnt/host/allow-hosts ]; then' "$policyScript" || ! grep -qF 'ignoring legacy /mnt/host/allow-hosts' "$policyScript"; then
@@ -350,7 +354,7 @@ pkgs.runCommand "nixarchy-microvm-template"
           fi
           # The filter is a runtime path, not a store path: the allowlist is
           # per-VM (data/microvm-templates.nix's rule -- one closure serves every
-          # VM of a template), written at boot from /mnt/host/allow-hosts.
+          # VM of a template), written at boot from /mnt/agent-policy/allow-hosts.
           if ! grep -q '^Filter "/run/nixarchy-agent/allow.filter"' "$conf"; then
             echo "${name}: tinyproxy's Filter is not the per-VM file written at boot:" >&2
             grep '^Filter' "$conf" >&2 || echo "  (no Filter line at all)" >&2

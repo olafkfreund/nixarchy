@@ -13,10 +13,6 @@
 { lib, pkgs, ... }:
 {
   microvm = {
-    # The pinned microvm.nix default is 512 MiB. Keep nixarchy's 1024 MiB
-    # baseline for templates that do not choose a size of their own.
-    mem = lib.mkDefault 1024;
-
     # The whole argument from #221 in one field. A share with
     # `source = "/nix/store"` is what sets `microvm.storeOnDisk = false`
     # (nixos-modules/microvm/options.nix computes that default by scanning

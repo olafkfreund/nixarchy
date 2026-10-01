@@ -326,7 +326,7 @@ writeShellApplication {
         # authorize a mutation during that handoff. The prebuilt runner uses
         # take_lock directly: it is the active unit we refuse everywhere else.
         lock_stopped_vm() {
-          take_lock -n
+          take_lock -w 2
           if unit_busy "$dir"; then
             echo "nixarchy-vm: '$name' is already running -- 'nixarchy vm stop $name' first." >&2
             exit 1

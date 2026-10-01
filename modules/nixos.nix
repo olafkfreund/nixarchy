@@ -1154,11 +1154,16 @@ in
       mv -f ${safeDirInclude}.tmp ${safeDirInclude}
     '';
 
-    # Remove only symlinks left by our former permanent agent on existing homes.
-    # A user's own bt-agent.service remains theirs; a running old agent needs a
-    # logout or an explicit PID-scoped stop before BlueZ returns to idle.
-    system.activationScripts.nixarchyRemoveOldBtAgent = ''
-      ${pkgs.bash}/bin/bash ${../pkgs/omarchy/cleanup-bt-agent.sh} /home
+    # Clear generated user links from first-run and the retired bt-agent.
+    # NixOS already installs these units through wantedBy.
+    system.activationScripts.nixarchyRemoveOldUserUnitLinks = ''
+      ${pkgs.bash}/bin/bash ${../pkgs/omarchy/cleanup-user-unit-links.sh} ${
+        lib.concatMapStringsSep " " lib.escapeShellArg (
+          lib.mapAttrsToList (_: user: user.home) (
+            lib.filterAttrs (_: user: user.isNormalUser) config.users.users
+          )
+        )
+      }
     '';
 
     environment = {

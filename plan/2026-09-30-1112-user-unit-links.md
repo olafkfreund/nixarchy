@@ -10,6 +10,8 @@ NixOS already wires the user services through `wantedBy`, and first-run runs ins
 
 Implementation begins **only after #1101 merges**: fetch and rebase this branch onto `origin/main`, inspect the diff and status, then generalise and replace #1101's `cleanup-bt-agent.sh` and its activation. Keep its temporary pairing behavior, retired permanent service, and Bluetooth verification. The current line references below may shift on rebase; locate by the named code before editing. Each implementation commit names its plan step; any deviation is recorded in this file in that same commit.
 
+*Deviation (implementation):* Step 3 renames the Bluetooth-only script to `cleanup-user-unit-links.sh` so its filename describes the general cleanup. The module and Bluetooth check use the new file; the old file is removed.
+
 ## Steps
 
 1. `git` / `pkgs/omarchy/cleanup-bt-agent.sh:1-14` / `modules/nixos.nix:1157-1162` on #1101: wait for #1101 to merge, `git fetch origin && git rebase origin/main`, inspect `git status`, and read the merged cleanup and tests -> verify by a clean rebase and by confirming the pending Bluetooth behavior still exists. Do not implement against the pre-#1101 module or push at this gate.

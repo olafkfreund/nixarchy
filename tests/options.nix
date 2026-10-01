@@ -1491,6 +1491,21 @@ let
           || builtins.compareVersions adopter.config.nix.package.version "2.35" >= 0;
       };
 
+    # #1131: periodic hard-linking is the installer's disk policy. The two
+    # Mode A fixtures must keep nixpkgs' disabled default and no timer.
+    storeOptimiseModeAEnabled = {
+      on =
+        inputs.self.nixosConfigurations.vm.config.nix.optimise.automatic
+        && (inputs.self.nixosConfigurations.vm.config.systemd.timers ? nix-optimise);
+      off = adopter.config.nix.optimise.automatic || (adopter.config.systemd.timers ? nix-optimise);
+    };
+    storeOptimiseModeADisabled = {
+      on =
+        inputs.self.nixosConfigurations.vm.config.nix.optimise.automatic
+        && (inputs.self.nixosConfigurations.vm.config.systemd.timers ? nix-optimise);
+      off = modeAOff.config.nix.optimise.automatic || (modeAOff.config.systemd.timers ? nix-optimise);
+    };
+
     # The boot menu is capped for the installer's machines only. A cap on the
     # MENU, not on the generations -- nh.clean owns those, and
     # `nixos-rebuild --rollback` still reaches the one before this.

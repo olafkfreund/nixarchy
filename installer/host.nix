@@ -142,47 +142,52 @@
   # machine, `nixpkgs#foo` pointed at this flake's UNSTABLE nixpkgs is exactly
   # the "binary built against a different glibc" the paragraph above exists to
   # prevent. The requirement stands; NixOS is now what meets it.
-  nix.settings = {
-    flake-registry = "";
+  nix = {
+    settings = {
+      flake-registry = "";
 
-    # The free-space floor -- #583, and the half `programs.nh.clean` below
-    # does NOT do.
-    #
-    # Two different problems, and conflating them is how a collection policy
-    # eats the thing it was meant to protect:
-    #
-    #   nh.clean collects GENERATIONS (`--keep-since 14d --keep 5`), and
-    #   generations are what rollback is made of. That is why it is
-    #   conservative, and why `nix.gc.automatic` is NOT set here -- nixpkgs
-    #   warns that the two together conflict, and checks.config-warnings
-    #   fails on the warning rather than letting it print for weeks.
-    #
-    #   min-free/max-free collects GARBAGE -- paths nothing references --
-    #   under space pressure rather than on a timer. That is exactly what
-    #   `nixarchy try` leaves behind: a tried package has no GC root, so an
-    #   application the user evaluated and rejected is pure garbage, and
-    #   collecting it can never cost a rollback. The flake's input sources
-    #   would be garbage too -- nothing references them -- and an offline
-    #   machine could not evaluate itself after a collection (#701), so
-    #   system.extraDependencies (beside system.name, below) keeps them.
-    #
-    # 3 GiB floor, 8 GiB target, sized for the smallest disk nixarchy supports,
-    # 32 GiB (#708): a 2 GiB ESP and about 14 GiB of closure leave about 16 GiB
-    # free on a fresh install, so neither number is reached from the start, and
-    # a collection that does run has a target it can reach. The old 5/20 on a
-    # small disk collected constantly toward a target it could never hit, and
-    # Nix 2.34 crashed doing it mid-switch (see nix.package below). The floor
-    # still leaves room for a switch to write a generation. checks.install
-    # asserts a fresh install keeps at least max-free free.
-    min-free = 3 * 1024 * 1024 * 1024;
-    max-free = 8 * 1024 * 1024 * 1024;
+      # The free-space floor -- #583, and the half `programs.nh.clean` below
+      # does NOT do.
+      #
+      # Two different problems, and conflating them is how a collection policy
+      # eats the thing it was meant to protect:
+      #
+      #   nh.clean collects GENERATIONS (`--keep-since 14d --keep 5`), and
+      #   generations are what rollback is made of. That is why it is
+      #   conservative, and why `nix.gc.automatic` is NOT set here -- nixpkgs
+      #   warns that the two together conflict, and checks.config-warnings
+      #   fails on the warning rather than letting it print for weeks.
+      #
+      #   min-free/max-free collects GARBAGE -- paths nothing references --
+      #   under space pressure rather than on a timer. That is exactly what
+      #   `nixarchy try` leaves behind: a tried package has no GC root, so an
+      #   application the user evaluated and rejected is pure garbage, and
+      #   collecting it can never cost a rollback. The flake's input sources
+      #   would be garbage too -- nothing references them -- and an offline
+      #   machine could not evaluate itself after a collection (#701), so
+      #   system.extraDependencies (beside system.name, below) keeps them.
+      #
+      # 3 GiB floor, 8 GiB target, sized for the smallest disk nixarchy supports,
+      # 32 GiB (#708): a 2 GiB ESP and about 14 GiB of closure leave about 16 GiB
+      # free on a fresh install, so neither number is reached from the start, and
+      # a collection that does run has a target it can reach. The old 5/20 on a
+      # small disk collected constantly toward a target it could never hit, and
+      # Nix 2.34 crashed doing it mid-switch (see nix.package below). The floor
+      # still leaves room for a switch to write a generation. checks.install
+      # asserts a fresh install keeps at least max-free free.
+      min-free = 3 * 1024 * 1024 * 1024;
+      max-free = 8 * 1024 * 1024 * 1024;
+    };
+
+    # Deduplicate live store files on NixOS's low-priority, AC-only timer.
+    optimise.automatic = true;
+
+    # Nix 2.35 for its fix to NixOS/nix#15614: 2.34's automatic collection thread
+    # outlived the store that started it and segfaulted during
+    # `nixos-rebuild switch` (#701, #708). nixpkgs still defaults to 2.34.8; drop
+    # this line once `pkgs.nix` is 2.35 or later.
+    package = pkgs.nixVersions.nix_2_35;
   };
-
-  # Nix 2.35 for its fix to NixOS/nix#15614: 2.34's automatic collection thread
-  # outlived the store that started it and segfaulted during
-  # `nixos-rebuild switch` (#701, #708). nixpkgs still defaults to 2.34.8; drop
-  # this line once `pkgs.nix` is 2.35 or later.
-  nix.package = pkgs.nixVersions.nix_2_35;
 
   # `nh os switch` is the loop the user lives in, and it only works with no
   # arguments if nh knows which flake it is switching -- otherwise it fails, or

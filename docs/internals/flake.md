@@ -226,7 +226,7 @@ desktop from a Windows machine with nothing installed on it -- has no
 other implementation at all, at any price. See the alternatives survey
 on #159; every other route is closed, not merely worse.
 
-What this project is taking on: v0.1.5, six months old, one primary
+What this project is taking on: pinned v0.1.6, one primary
 author. The protocol stack is not theirs -- it is IronRDP, Devolutions'
 maintained Rust implementation -- so what this author owns is the
 Hyprland glue: capture, input, audio, clipboard. That is a real
@@ -271,19 +271,18 @@ general capability. #121 deliberately did not take a secrets mechanism
 got away without one because `hashedPasswordFile` is consumed by NixOS
 itself, so the cleartext could live outside git and be pointed at.
 
-hypr-rdp removes that dodge. It reads its password from exactly two
-places -- an inline string in config.toml, or `-p` on the command line,
-which is world-readable in /proc/*/cmdline. Verified against v0.1.5:
-src/config.rs resolves `args.password.or(config.password)` and nothing
-else, there is no `password_file`, and clap reads no environment
-variable for it. So the secret has to end up INSIDE a config file, and
-something has to put it there at runtime from material safe to commit.
+hypr-rdp removed that dodge. When #155 / PR #184 adopted sops-nix, v0.1.5 took a
+password only inline in config.toml or via `-p`; a command-line secret
+was readable in /proc/*/cmdline. That historical need to render TOML
+selected sops-nix over agenix's raw secret files.
 
-That requirement is what picks sops-nix over agenix. agenix delivers
-files of raw secrets and has no templating, so composing one into a TOML
-would mean a hand-rolled per-service ExecStartPre shim -- the exact hack
-this is meant to avoid. `sops.templates` is that shim, upstreamed, with
-the mode and owner declared. Everything else between the two is taste.
+The pinned v0.1.6 supports `password_file` from config or CLI and
+refuses a missing or empty named file. It still warns and serves without
+authentication when no credentials are set, or gives only a
+`HalfCredentials` warning for a username with an empty inline password.
+The current module keeps its guard: sops-nix writes a private password
+staging file, and at service start ExecStartPre checks it and writes
+private TOML. Migrating to upstream `password_file` is separate work.
 
 Pinned to a COMMIT because sops-nix publishes no release tags at all --
 its only tag, `assets`, is from 2021 and is not a release. master is the

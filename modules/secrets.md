@@ -14,7 +14,7 @@ sentence is replaced rather than left standing.** The reasoning for the change
 is worth as much as the reasoning for the original position:
 
 - The mechanism has now proved itself on a real service. hypr-rdp consumes a
-  secret through `sops.templates` and has done since #154, which is the
+  secret through `sops.templates` and has done since #155 / PR #184, which is the
   evidence the original scope cut was waiting for.
 - The cost of using it was five manual steps in
   `docs/manual/remote-desktop.md`, of which two -- `ssh-keyscan | ssh-to-age`
@@ -37,27 +37,26 @@ story attached". #122 then got away without one because
 `users.users.<name>.hashedPasswordFile` is consumed by NixOS itself, so the
 cleartext could sit outside git and be pointed at.
 
-hypr-rdp (#154) removes that dodge, and it is worth being precise about how,
-because the precision is what chooses the tool. Verified against v0.1.5:
+hypr-rdp removed that dodge. When #155 / PR #184 adopted sops-nix, v0.1.5
+accepted passwords only inline or on the command line:
 
-- `src/config.rs` resolves the password as `args.password.or(config.password)`
-  and from nowhere else.
 - `-p/--password` is therefore a command-line argument, which is readable by
   every process on the machine via `/proc/*/cmdline`.
-- The only other source is `password = "..."` inline in `config.toml`.
-- There is no `password_file` option, and clap reads no environment variable
-  for it. (The only environment variables the binary reads at all are VA-API
-  and AVC444 debug knobs, `HOME`, `HYPRLAND_INSTANCE_SIGNATURE` and
-  `XDG_RUNTIME_DIR`.)
+- The other source then was `password = "..."` inline in `config.toml`.
 
-So the secret has to end up **inside a config file**, not beside it, and
-something has to put it there at runtime from material that is safe to commit.
+Pinned v0.1.6 supports `password_file` in TOML and on the command line; a
+missing or empty named file fails startup. That does not make credentials
+mandatory: with none, it serves unauthenticated, and a username with an empty
+inline password gets only a `HalfCredentials` warning. The module therefore
+keeps its guard. sops-nix writes a private raw-password staging file; at
+service start, `ExecStartPre` checks it and writes the private TOML that the
+daemon reads.
 
-That is what picks sops-nix over agenix. agenix delivers files containing raw
-secrets and has no templating, so composing one into a TOML would need a
-hand-rolled `ExecStartPre` shim per service — the exact hack this mechanism
-exists to avoid. `sops.templates` is that shim, upstreamed, with owner and
-mode declared. Everything else between the two is close enough to be taste.
+Historically, that need for TOML templating picked sops-nix over agenix:
+agenix delivered raw files, while `sops.templates` supplied the owner and mode
+for a rendered secret. The current staging-file and guard design remains in
+place; upstream `password_file` support does not by itself remove the two
+warning-only cases.
 
 ## The convention
 

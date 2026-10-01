@@ -2264,10 +2264,11 @@ let
 
   # ---- sops-nix, imported by everyone and doing nothing --------------
   #
-  # #155 adopted a declarative secrets mechanism for one concrete reason:
-  # hypr-rdp reads its password only from an inline string in its TOML or
-  # from `-p`, so something has to render a config file at runtime. That
-  # decision put an upstream module into EVERY nixarchy machine, including
+  # #155 adopted a declarative secrets mechanism because v0.1.5 accepted a
+  # password only inline in TOML or via `-p`. Pinned v0.1.6 also supports
+  # `password_file`; the current module still stages a secret with sops-nix
+  # and renders private TOML at service start. That decision put an upstream
+  # module into EVERY nixarchy machine, including
   # every Mode A machine that will never declare a secret -- so what has to
   # be asserted is that the module is inert, not that it works.
   #
@@ -2299,11 +2300,11 @@ let
 
   # ---- hypr-rdp, whose module is the only thing that refuses ----------
   #
-  # hypr-rdp FAILS OPEN. v0.1.5, src/config.rs:187-197, resolves the password
-  # with `unwrap_or_default()` and then, finding it empty, logs two warnings
-  # and serves the session anyway -- and src/server/mod.rs:123 builds no
-  # credentials at all when username and password are both empty. There is no
-  # `bail!` and no exit anywhere on that path.
+  # hypr-rdp FAILS OPEN. v0.1.6, src/config.rs:301-361 warns and continues
+  # with no credentials, while src/server/mod.rs:200-206 builds none for the
+  # server. A username with an empty inline password gets only a
+  # `HalfCredentials` warning. A missing or empty named password_file DOES
+  # fail in src/config.rs:478-520; that does not protect the other two paths.
   #
   # So every case below is measuring a refusal rather than a feature, and the
   # halves that break quietly are the "off" ones: a unit that appears on a

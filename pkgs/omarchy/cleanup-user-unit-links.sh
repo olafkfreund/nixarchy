@@ -3,6 +3,7 @@ set -euo pipefail
 
 removed=0
 for home in "$@"; do
+  home_uid=$(stat -c %u -- "$home") || continue
   for row in \
     bt-agent:graphical-session \
     omarchy-sleep-lock:graphical-session \
@@ -17,7 +18,12 @@ for home in "$@"; do
       link=$home/$relative
       [[ -L $link ]] || continue
       source=$(readlink -- "$link") || continue
-      [[ $source == /nix/store/*-unit-"$unit".service/"$unit".service ]] || continue
+      [[ $source =~ ^/nix/store/[a-z0-9]{32}-unit-${unit}\.service/${unit}\.service$ ]] || continue
+      link_uid=$(stat -c %u -- "$link") || continue
+      if [[ $link_uid != "$home_uid" ]]; then
+        printf 'nixarchy: refusing link owned by another user %s\n' "$link" >&2
+        continue
+      fi
       if rm -- "$link"; then
         removed=$((removed + 1))
       else

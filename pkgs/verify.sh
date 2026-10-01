@@ -307,8 +307,8 @@ check_nixarchy_user_unit() {
   local unit=$1 link=$HOME/.config/systemd/user/$1.service target= state= load= fragment=
   if [ -L "$link" ]; then
     target=$(readlink -- "$link" 2>/dev/null) || target=
-    if [[ $target == /nix/store/*-unit-"$unit".service/"$unit".service ]]; then
-      bad "$unit is shadowed by an old user link" "rebuild, then log in again or start it manually"
+    if [[ $target =~ ^/nix/store/[a-z0-9]{32}-unit-${unit}\.service/${unit}\.service$ ]]; then
+      maybe_bad "$unit is shadowed by an old user link" "rebuild, then log in again or start it manually"
     else
       hmm "$unit has a user override" "$link (left untouched)"
     fi
@@ -316,7 +316,7 @@ check_nixarchy_user_unit() {
     hmm "$unit has a user override" "$link (left untouched)"
   fi
   if ! state=$(systemctl --user show -p LoadState -p FragmentPath "$unit.service" 2>/dev/null); then
-    bad "$unit state is unavailable" "the user service manager did not answer"
+    maybe_bad "$unit state is unavailable" "the user service manager did not answer"
     return
   fi
   while IFS='=' read -r key value; do
@@ -325,8 +325,8 @@ check_nixarchy_user_unit() {
       FragmentPath) fragment=$value ;;
     esac
   done <<<"$state"
-  if [ "$load" = not-found ] || [ -z "$fragment" ]; then
-    bad "$unit cannot load" "rebuild, then log in again or start it manually"
+  if [ "$load" != loaded ] || [ -z "$fragment" ]; then
+    maybe_bad "$unit cannot load ($load)" "rebuild, then log in again or start it manually"
   elif [[ $fragment == "$HOME/.config/systemd/user/"* && ! -e $link && ! -L $link ]]; then
     hmm "$unit loads from the user directory" "$fragment (left untouched)"
   fi
@@ -342,7 +342,7 @@ fi
 if systemctl --user is-active omarchy-sleep-lock.service >/dev/null 2>&1; then
   ok "locks before suspend" "omarchy-sleep-lock.service"
 else
-  bad "nothing locks before suspend" "the lid closes and the session stays open"
+  maybe_bad "nothing locks before suspend" "the lid closes and the session stays open"
 fi
 
 # A value, not a verdict: idle off is a legitimate choice (stay-awake is a

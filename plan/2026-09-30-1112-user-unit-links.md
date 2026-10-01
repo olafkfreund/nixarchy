@@ -12,6 +12,16 @@ Implementation begins **only after #1101 merges**: fetch and rebase this branch 
 
 *Deviation (implementation):* Step 3 renames the Bluetooth-only script to `cleanup-user-unit-links.sh` so its filename describes the general cleanup. The module and Bluetooth check use the new file; the old file is removed.
 
+*Deviation (implementation):* Step 3 now accepts only a full 32-character Nix store hash followed by the exact generated unit path, and checks that the symlink UID matches its home UID before removal. This also keeps Home Manager-shaped links untouched; the cheap fixture and Bluetooth fixture use full-length hashes.
+
+*Deviation (implementation):* Step 4 routes missing, shadowed, unavailable, and inactive unit findings through the existing `maybe_bad` helper, so a machine without Omarchy receives notes while an Omarchy session still fails. The active sleep-lock check remains in place.
+
+*Deviation (implementation):* Step 4 treats every `LoadState` other than `loaded`, including `masked`, as broken rather than only `not-found`.
+
+*Deviation (implementation):* Step 5 exercises the fcitx5 gate with an installed-unit fixture, a failing `systemctl show` stub, Omarchy-present and absent verdicts, the active-state branch, crash-watch and fcitx5 `.wants` links, Home Manager-shaped links, and ownership mismatch.
+
+*Deviation (implementation):* Step 2's `pkgs/AGENTS.md` wording now states the patch drift scan catches removal or rename of known names but cannot detect a newly added upstream unit.
+
 ## Steps
 
 1. `git` / `pkgs/omarchy/cleanup-bt-agent.sh:1-14` / `modules/nixos.nix:1157-1162` on #1101: wait for #1101 to merge, `git fetch origin && git rebase origin/main`, inspect `git status`, and read the merged cleanup and tests -> verify by a clean rebase and by confirming the pending Bluetooth behavior still exists. Do not implement against the pre-#1101 module or push at this gate.

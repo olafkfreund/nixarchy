@@ -625,10 +625,11 @@ runs after the graphical targets have started them. Enabling a linked unit
 also writes a user-level link to that generation's Nix store path; it shadows
 the current `/etc/systemd/user` unit and eventually dangles after GC.
 
-The replacement script succeeds without calling systemctl. The package still
-checks upstream's list before replacing the script, so an upstream change to
-the first-run step is reviewed rather than silently ignored. Old generated
-links are cleaned during activation by the module; user-authored units remain.
+The replacement script succeeds without calling systemctl. The package checks
+that each known unit name still appears upstream before replacing the script;
+it catches removals and renames, but a newly added upstream unit needs manual
+review. Old generated links are cleaned during activation by the module;
+user-authored units remain.
 
 ## The rest of the lock screen theme: track, bar, passphrase field and dots
 

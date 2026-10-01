@@ -48,7 +48,7 @@ pkgs.runCommand "user-unit-links"
   ''
     bash ${./user-unit-links.sh} ${../pkgs/omarchy/enable-user-units.sh} \
       ${../pkgs/omarchy/cleanup-user-unit-links.sh} ${../pkgs/verify.sh} \
-      ${pkgs.bash}/bin/bash ${pkgs.coreutils}/bin/rm \
+      ${pkgs.bash}/bin/bash ${pkgs.coreutils}/bin/rm ${pkgs.coreutils}/bin/stat \
       ${lib.makeBinPath [
         pkgs.bash
         pkgs.coreutils

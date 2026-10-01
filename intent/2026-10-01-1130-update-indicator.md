@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1130
 author: olafkfreund
 ---
@@ -66,19 +66,21 @@ to launch `omarchy update`.
 
 ## Open questions
 
-1. **What counts as an available release?** Recommend the published tag whose
+Approved answers:
+
+1. **What counts as an available release?** Use the published tag whose
    commit is the `release` branch tip. A single timeout-bound
    `git ls-remote --heads --tags` can fetch both refs; compare peeled tag
    commits with `locked.rev` and their release versions. If the installed
    commit cannot be placed in that release sequence, answer no rather than
    claiming an unrelated or older commit is newer. Avoid GitHub's
    `/releases/latest`, which omits this project's prereleases.
-2. **Should fixed or custom pins light the icon?** Recommend no for tags,
+2. **Should fixed or custom pins light the icon?** No for tags,
    revs, paths, and non-`release` branches. The icon launches an update that
    follows the user's declared input, and those inputs do not follow this
    release stream. A separate informational release notice would be a
    different feature.
-3. **Should the icon also cover nixpkgs updates?** Recommend no. This issue
+3. **Should the icon also cover nixpkgs updates?** No. This issue
    can make a precise statement about the Nixarchy release at low cost;
    comparing arbitrary package-set inputs would change the meaning and cost
    of the six-hour check.

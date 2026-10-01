@@ -107,6 +107,21 @@ let
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
   # distinction this file exists to assert.
   defaultMachine = configWith { };
+  unitLinkNormalHome = "/srv/nixarchy unit's home";
+  unitLinkSystemHome = "/srv/nixarchy-system-probe";
+  unitLinkMachine = configBeside {
+    users.users.unitprobe = {
+      isNormalUser = true;
+      home = unitLinkNormalHome;
+    };
+    users.users.systemprobe = {
+      isSystemUser = true;
+      uid = 899;
+      group = "users";
+      home = unitLinkSystemHome;
+    };
+  };
+  unitLinkActivation = unitLinkMachine.system.activationScripts.nixarchyRemoveOldUserUnitLinks;
   omathemeMachine = configNamed "omatheme" { user = "someone"; };
   defaultHome = homeWith { };
   defaultHomeOn = homeOn { } { };
@@ -2887,6 +2902,11 @@ let
     ) cases
   );
 in
+assert pkgs.lib.assertMsg (
+  pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
+  && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
+  && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy
+) "user unit cleanup missed an escaped normal home, included a system home, or lost wantedBy";
 pkgs.runCommand "nixarchy-options"
   {
     inherit report;

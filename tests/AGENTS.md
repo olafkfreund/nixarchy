@@ -15,6 +15,13 @@ green, a `cachix` step that printed "Nothing to push" at a 404.
 So the bar for adding one is: **run it against the unfixed code first and watch
 it fail.** A check that has never failed is a check nobody knows works.
 
+## A sourced function does not check its package (#1112, #1124)
+
+Extracting or sourcing a function in a `runCommand` exercises its behavior but
+skips `writeShellApplication`'s build-time ShellCheck. A function check passed
+while the packaged `nixarchy-verify` failed SC1007 on `local a= b=`. Build the
+package itself as well as the function check after changing its shell source.
+
 ## The expensive ones, and what only they can prove
 
 | check | proves | where |

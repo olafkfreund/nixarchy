@@ -1546,7 +1546,8 @@ stdenvNoCC.mkDerivation {
                     # so a zsh user got none of the aliases or functions the manual documents.
                     # See the file for what is sourced as-is and what had to be rewritten.
 
-                    # Why: pkgs/AGENTS.md#enable-user-unitssh-enables-six-units-in-one-call-so-one-absent-unit-loses-all-six
+                    # First-run must not enable NixOS's linked user units. Check
+                    # upstream's names before replacing the whole script.
                     for u in omarchy-recover-internal-monitor omarchy-sleep-lock \
                       omarchy-migrate-notify omarchy-fcitx5 omarchy-crash-watch; do
                       grep -q "$u.service" install/user/first-run/enable-user-units.sh || {

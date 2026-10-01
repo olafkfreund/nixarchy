@@ -1907,6 +1907,7 @@
             "skill-parity"
             "swap-guard"
             "try-nixarchy"
+            "user-unit-links"
           ];
         in
         {

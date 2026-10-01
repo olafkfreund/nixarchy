@@ -616,32 +616,20 @@ was the one place that was not branded.
 NixOS collects themes from boot.plymouth.themePackages by looking in
 share/plymouth/themes, so putting it there is the whole of it.
 
-## enable-user-units.sh enables six units in one call, so one absent unit loses all six
+## First-run must not enable NixOS user units
 
-install/user/first-run/enable-user-units.sh enables six user units in ONE
-`systemctl --user enable --now` under `set -euo pipefail`, so one absent
-unit fails the whole command:
+Upstream's first-run enables six units in one `systemctl --user enable --now`.
+Some are absent on NixOS, so the command failed and first-run retried at every
+login. NixOS already installs the units it needs with `wantedBy`, and first-run
+runs after the graphical targets have started them. Enabling a linked unit
+also writes a user-level link to that generation's Nix store path; it shadows
+the current `/etc/systemd/user` unit and eventually dangles after GC.
 
-  Failed to enable unit: Unit omarchy-migrate-notify.service does not exist
-
-Two of them are deliberately absent -- modules/nixos.nix explains that
-omarchy-migrate-notify and omarchy-tailscale-receive can never satisfy their
-ConditionPath* on NixOS. What was missed is that upstream's first-run still
-NAMES them.
-
-omarchy-provision-first-run marks itself done only when EVERY step
-succeeded, so that one failure meant the marker was never written and
-first-run ran again at every login -- re-showing the welcome notification
-for the life of the machine. Reported as "this appears after each reboot";
-the log had been saying so all along:
-
-  Failed: enable user systemd units (exit code: 1)
-  One or more first-run steps failed; first-run will retry next login
-
-Replaced wholesale rather than patched: the unit list is a
-continuation-line command, and a whitespace-exact multi-line
---replace-fail is the kind of patch an upstream reindent breaks. The grep
-is the drift detector --replace-fail would otherwise have given for free.
+The replacement script succeeds without calling systemctl. The package checks
+that each known unit name still appears upstream before replacing the script;
+it catches removals and renames, but a newly added upstream unit needs manual
+review. Old generated links are cleaned during activation by the module;
+user-authored units remain.
 
 ## The rest of the lock screen theme: track, bar, passphrase field and dots
 

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1120
 author: olafkfreund
 ---
@@ -50,13 +50,10 @@ choosing Arabic or Thai; installed hosts whose generated flake sets
 
 ## Open questions
 
-1. Should Arabic and Thai be mapped, dropped, or retained with a fallback?
-   **Recommend dropping both menu rows.** The pinned `kbd` offers neither
-   map, upstream Omarchy omits both, and a hidden Latin fallback would
-   misrepresent the selected layout. Users can select a real console layout
-   and set their desktop XKB layout separately.
-2. Should an automated check cover the whole menu against the pinned `kbd`?
-   **Recommend yes.** Compare every tab-separated map name with the actual
-   pinned package tree (including symlinked `.map.gz` files), and break-prove
-   it with one deliberately missing row. This keeps all 42 remaining names
-   honest as the package changes.
+1. **Owner decision: drop Arabic and Thai from the console-keymap menu.**
+   There is no Latin fallback: it would misrepresent the selected layout.
+   Users can select a real console layout and set their desktop XKB layout
+   separately.
+2. **Owner decision: check every menu entry against the pinned `kbd`.**
+   Include symlinked `.map.gz` files and prove the check fails for a missing
+   entry before accepting a green run.

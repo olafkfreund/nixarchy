@@ -47,8 +47,10 @@ pkgs.runCommand "nixarchy-verify-boxes"
       podman() {
         case "$1" in
           info) return 0 ;;
-          inspect)
-            for arg in "$@"; do name=$arg; done
+      inspect)
+        for arg in "$@"; do
+          case "$arg" in running|stopped|ordinary) name=$arg ;; esac
+        done
             printf 'inspect %s\n' "$name" >> "$calls"
             printf '/run/current-system/sw/bin/distrobox\n'
             ;;

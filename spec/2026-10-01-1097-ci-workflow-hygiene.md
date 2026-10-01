@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1097
 intent: intent/2026-10-01-1097-ci-workflow-hygiene.md
 ---

@@ -303,10 +303,46 @@ case "$lock" in
   *) bad "the lock cannot authenticate" "it would lock this machine and not unlock it" ;;
 esac
 
+check_nixarchy_user_unit() {
+  local unit=$1 link=$HOME/.config/systemd/user/$1.service target= state= load= fragment=
+  if [ -L "$link" ]; then
+    target=$(readlink -- "$link" 2>/dev/null) || target=
+    if [[ $target == /nix/store/*-unit-"$unit".service/"$unit".service ]]; then
+      bad "$unit is shadowed by an old user link" "rebuild, then log in again or start it manually"
+    else
+      hmm "$unit has a user override" "$link (left untouched)"
+    fi
+  elif [ -e "$link" ]; then
+    hmm "$unit has a user override" "$link (left untouched)"
+  fi
+  if ! state=$(systemctl --user show -p LoadState -p FragmentPath "$unit.service" 2>/dev/null); then
+    bad "$unit state is unavailable" "the user service manager did not answer"
+    return
+  fi
+  while IFS='=' read -r key value; do
+    case $key in
+      LoadState) load=$value ;;
+      FragmentPath) fragment=$value ;;
+    esac
+  done <<<"$state"
+  if [ "$load" = not-found ] || [ -z "$fragment" ]; then
+    bad "$unit cannot load" "rebuild, then log in again or start it manually"
+  elif [[ $fragment == "$HOME/.config/systemd/user/"* && ! -e $link && ! -L $link ]]; then
+    hmm "$unit loads from the user directory" "$fragment (left untouched)"
+  fi
+}
+
+for unit in omarchy-sleep-lock omarchy-crash-watch omarchy-recover-internal-monitor; do
+  check_nixarchy_user_unit "$unit"
+done
+if [ -e /etc/systemd/user/omarchy-fcitx5.service ]; then
+  check_nixarchy_user_unit omarchy-fcitx5
+fi
+
 if systemctl --user is-active omarchy-sleep-lock.service >/dev/null 2>&1; then
   ok "locks before suspend" "omarchy-sleep-lock.service"
 else
-  maybe_bad "nothing locks before suspend" "the lid closes and the session stays open"
+  bad "nothing locks before suspend" "the lid closes and the session stays open"
 fi
 
 # A value, not a verdict: idle off is a legitimate choice (stay-awake is a

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1126
 author: olafkfreund
 ---
@@ -60,18 +60,16 @@ and its `nixarchy-rebuild` user unit. This is test behavior, not a change to
 
 ## Open questions
 
-1. Should the missing-flake journal assertion be fixed in the same change?
-   **Recommend yes.** It has the same result-then-single-read pattern and
-   expected stderr line, so leaving it would retain the same intermittent
-   failure one section earlier.
-2. What positive text should the override invocation wait for? **Recommend
-   `Enabled apps:`.** `modules/apps.nix:3560-3568` emits it only after the
-   branch guard and flake-directory check. Waiting for it makes the override
-   case prove progress beyond the guard, while the existing no-refusal
-   assertion still checks the completed invocation's log.
-3. How should the timing proof delay the journal? **Recommend a test-only
-   journal visibility shim or equivalent controlled fixture** that withholds
-   the expected line on the first post-result read and exposes it on a later
-   read. Show the old single read red and the bounded wait green. Merely
-   sleeping before the refusal is printed may not reproduce the race because
-   `Result=exit-code` would also be delayed.
+1. **Owner decision: yes**, fix the missing-flake journal assertion in the
+   same change. It has the same result-then-single-read pattern and expected
+   stderr line, so leaving it would retain the same intermittent failure one
+   section earlier.
+2. **Owner decision:** wait for the positive `Enabled apps:` marker in the
+   `ALLOW_BRANCH_DEPLOY=1` invocation, then assert that the refusal is absent.
+   `modules/apps.nix:3560-3568` emits it only after the branch guard and
+   flake-directory check, proving progress beyond the guard.
+3. **Owner decision:** use a test-only delayed journal-visibility fixture
+   that withholds the expected line on the first post-result read and exposes
+   it later. Show the old single read red and the bounded wait green. A sleep
+   before the refusal is printed would delay `Result=exit-code` too and would
+   not model this race.

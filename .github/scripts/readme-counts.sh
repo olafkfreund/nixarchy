@@ -196,7 +196,6 @@ if [ -z "${OMARCHY_SRC_TREE:-}" ] || [ -z "${NIX_SKILLS_TREE:-}" ]; then
 fi
 omarchy_src=${OMARCHY_SRC_TREE:-$(jq -r '.inputs.omarchy.path // empty' <<<"$archive_json" 2>/dev/null)}
 
-pac=$(grep -rlE '\b(pacman|yay)\b' "$omarchy/share/omarchy/bin" 2>/dev/null | wc -l)
 # mktemp, not a fixed /tmp name: two of the four self-hosted runners share a
 # machine, so two jobs writing /tmp/rc-pac.txt at once would read each other's
 # half-written file and disagree about a number neither computed.
@@ -204,14 +203,18 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 ls "$root/pkgs/omarchy/nix-bin" 2>/dev/null | sort > "$tmp/nixbin"
 # Upstream's bin, not the built tree: the built tree holds our replacements,
-# and whether their comments say "pacman" is not evidence of anything (#1140).
+# and whether their comments say "pacman" is not evidence of anything (#1140, #1142).
 if [ -d "$omarchy_src/bin" ]; then
   grep -rlE '\b(pacman|yay)\b' "$omarchy_src/bin" |
     xargs -r -n1 basename | sort > "$tmp/pac"
+  pac=$(wc -l < "$tmp/pac")
+  up_scripts=$(find "$omarchy_src/bin" -maxdepth 1 -type f | wc -l)
   repl_n=$(comm -12 "$tmp/pac" "$tmp/nixbin" | wc -l)
 else
-  echo "::error::pacman-replaced: no upstream omarchy tree at '${omarchy_src:-empty}' -- refusing" >&2
+  echo "::error::pacman-scripts, pacman-replaced: no upstream omarchy tree at '${omarchy_src:-empty}' -- refusing" >&2
   fail=1
+  pac=""
+  up_scripts=""
   repl_n=""
 fi
 
@@ -317,15 +320,17 @@ quantity "commands-upstream" "$commands" \
   's/Upstream.s [0-9]+ commands/Upstream'"'"'s '"$commands"' commands/'
 quantity "pacman-scripts" "$pac" \
   '.*\*\*([0-9]+) of [0-9]+ scripts\*\*.*' \
-  's/\*\*[0-9]+ of [0-9]+ scripts\*\*/**'"$pac"' of '"$commands"' scripts**/'
+  's/\*\*[0-9]+ of [0-9]+ scripts\*\*/**'"$pac"' of '"$up_scripts"' scripts**/'
 # The SECOND number on that line, which had no entry of its own and so was
 # rewritten by --fix and never compared by --check (#831). README said 445 in
 # four places and 444 here, through every pull request, and nothing could go
 # red: the pattern above captures only the first number. One quantity per
 # number is the rule the rest of this file already follows.
-quantity "pacman-scripts-of" "$commands" \
+# Upstream's script count, deliberately not $commands: 444 here against 445
+# commands we ship elsewhere is two populations, not drift (#1142).
+quantity "pacman-scripts-of" "$up_scripts" \
   '.*\*\*[0-9]+ of ([0-9]+) scripts\*\*.*' \
-  's/\*\*([0-9]+) of [0-9]+ scripts\*\*/**\1 of '"$commands"' scripts**/'
+  's/\*\*([0-9]+) of [0-9]+ scripts\*\*/**\1 of '"$up_scripts"' scripts**/'
 quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'

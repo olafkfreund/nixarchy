@@ -125,15 +125,16 @@ releases. The check's network budget is one timeout-bound Git invocation.
 
 ## Tests
 
-An orchestrator-directed local build gate change, pending owner confirmation:
+The local build gate was owner-confirmed on 2026-10-01:
 run cheap `runCommand`, static, and evaluation checks under the shared
 `/mnt/data/vmtest/codex-build.lock` even while CI runs. Run non-cheap package
 builds under that lock only when
 `pgrep -fc '^(nix build|nh os build|nixos-rebuild).*p620'` returns 0 and
-load1 is below 12 immediately before the build. VM and `checks.options`
-stay CI-only unless separately authorized.
-This directed gate replaces the earlier CI-zero requirement for this task;
-it is recorded as an implementation deviation, not owner approval. Do not run broad
+load1 is below 12 immediately before the build; CI in-flight runs do not
+block these package builds. VM and `checks.options` still require CI idle
+and separate authorization for a local run.
+This owner-confirmed gate replaces the earlier CI-zero requirement for this task.
+Do not run broad
 VM or installer checks for this shell command. Stage newly added files before Nix
 evaluation. `installer/mkFlake.nix` needs a committed `self.rev`; this plan's
 focused check and package builds must not pull in installer derivations while

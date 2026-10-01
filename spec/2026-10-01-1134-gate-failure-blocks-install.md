@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1134
 intent: intent/2026-10-01-1134-gate-failure-blocks-install.md
 ---

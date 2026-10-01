@@ -457,7 +457,7 @@ jobs:
           needs.gate.outputs.fork == 'true' && needs.gate.outputs.relevant == 'true'
           needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
           always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
-          ${{ '${{' }} !cancelled() }}
+          \${{ '${{' }} !cancelled() }}
           needs.gate.result != 'success'"
 
           rogue=""

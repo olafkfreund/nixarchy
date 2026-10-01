@@ -149,3 +149,13 @@ and the measured hole with them.
   so the PR states whether that path is a hole. If it is, that is a
   follow-up issue, not this PR, because the plan chose `!cancelled()` over
   `always()` deliberately.
+- **Step 6 caught a bug in step 3's escape.** The rendered
+  `${{ !cancelled() }}` sits inside the guard's bash double-quoted
+  `allowed_ifs="…"`, and bash reads `${…` as an expansion: probe #1145's
+  `omarchy` job failed with `bad substitution`, so the guard would have
+  failed on every pull request. The line is now `\${{ '${{' }} !cancelled() }}`,
+  so bash sees a literal `$`. It was proven by running the guard's own lines
+  453–500, rendered as GitHub renders them, under bash: clean, checking 60
+  conditions, and rogue with the line removed. `actionlint -shellcheck=` and
+  the review's simulation both missed it, because neither ran the shell's
+  quoting.

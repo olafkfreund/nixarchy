@@ -40,8 +40,9 @@ selection is not touched: it lives in a file you own.
 Nothing is snapshotted before the update because the previous system is still
 on disk as a generation; see [rolling back](#rolling-back-bad-updates).
 
-The update-available icon next to the clock is upstream's, and it is driven by
-`omarchy-update-available`, which has been replaced to fit this model.
+The update-available icon next to the clock shows newer Nixarchy releases when
+your flake follows the `release` branch. It stays hidden offline or with a
+fixed or custom Nixarchy pin, and does not report nixpkgs updates.
 
 ## Channels: two of upstream's four mean something here
 

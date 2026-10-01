@@ -31,8 +31,8 @@ releases. The check's network budget is one timeout-bound Git invocation.
    refs and records each invocation. Begin with a newer-tagged-release case
    that expects exit 0; add explicit ShellCheck of the script. Stage the new
    test file and `flake.nix` with `git add`, because an unstaged new file is
-   invisible to flake evaluation (`AGENTS.md` §5). After checking that no CI
-   run is active (§6), build only this check **before changing the script**.
+   invisible to flake evaluation (`AGENTS.md` §5). Under the shared build
+   lock, build only this check **before changing the script**.
    Save the failing output: the newer-case assertion must report the current
    `exit 1`, rather than an evaluation error or missing fixture. This is the
    red proof required by `AGENTS.md` §1 and `tests/AGENTS.md:10-16`.
@@ -115,10 +115,13 @@ releases. The check's network budget is one timeout-bound Git invocation.
 
 ## Tests
 
-Before **each local build**, run
-`gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`
-and start only if it prints `0` (`AGENTS.md` §6). Do not run broad VM or
-installer checks for this shell command. Stage newly added files before Nix
+The orchestrator clarified the local build gate after plan approval: run
+cheap `runCommand`, static, and evaluation checks under the shared
+`/mnt/data/vmtest/codex-build.lock` even while CI runs. Run non-cheap package
+builds under that lock only when no p620 system build is active and load1 is
+below 12. VM and `checks.options` stay CI-only unless separately authorized.
+This replaces the earlier CI-zero requirement for this task. Do not run broad
+VM or installer checks for this shell command. Stage newly added files before Nix
 evaluation. `installer/mkFlake.nix` needs a committed `self.rev`; this plan's
 focused check and package builds must not pull in installer derivations while
 the implementation tree is dirty.

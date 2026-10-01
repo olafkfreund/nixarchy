@@ -3,16 +3,55 @@
 # omarchy:summary=Check whether Omarchy updates are available.
 # omarchy:hidden=true
 
-# Exit 0 means "updates are available" -- the bar widget lights up on it
-# (shell/plugins/bar/widgets/SystemUpdate.qml reads the exit code alone).
-#
-# Upstream answers this by asking pacman and by counting commits behind a git
-# checkout of $OMARCHY_PATH. Here $OMARCHY_PATH is a read-only store path with
-# no git history and there is no package database to ask, so neither question
-# can be answered.
-#
-# Reporting "an update is available" unconditionally would light the widget
-# permanently; the honest answer is that this cannot be determined without
-# evaluating the flake, which is far too expensive for something the bar polls.
-# A NixOS host updates when its owner runs `omarchy update`.
-exit 1
+# SystemUpdate.qml shows the icon only when this command exits 0.
+set -uo pipefail
+
+lock="${NIXARCHY_FLAKE:-/etc/nixos}/flake.lock"
+[[ -r $lock ]] || exit 1
+rev=$(jq -er '
+  .nodes.root.inputs.nixarchy as $key
+  | select($key | type == "string")
+  | .nodes[$key]
+  | select(.original.type == "github"
+      and .original.owner == "olafkfreund"
+      and .original.repo == "nixarchy"
+      and .original.ref == "release")
+  | .locked.rev
+  | select(type == "string" and test("^[0-9a-f]{40}$"))
+' "$lock" 2>/dev/null) || exit 1
+
+refs=$(GIT_TERMINAL_PROMPT=0 timeout 10 git ls-remote --heads --tags \
+  https://github.com/olafkfreund/nixarchy.git 2>/dev/null) || exit 1
+[[ -n $refs ]] || exit 1
+
+declare -A tags=() peeled=()
+tip=
+while IFS=$'\t' read -r sha ref; do
+  [[ $sha =~ ^[0-9a-f]{40}$ && $ref == refs/* ]] || exit 1
+  if [[ $ref == refs/heads/release ]]; then
+    tip=$sha
+  elif [[ $ref =~ ^refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+)(\^\{\})?$ ]]; then
+    tag=${BASH_REMATCH[1]}
+    if [[ -n ${BASH_REMATCH[2]} ]]; then
+      peeled[$tag]=$sha
+    else
+      tags[$tag]=$sha
+    fi
+  fi
+done <<< "$refs"
+[[ -n $tip ]] || exit 1
+
+export LC_ALL=C
+newer() {
+  [[ -z $2 || ( $1 != "$2" && $(printf '%s\n' "$1" "$2" | sort -V | tail -n 1) == "$1" ) ]]
+}
+
+tip_tag=''
+current_tag=''
+for tag in "${!tags[@]}"; do
+  commit=${peeled[$tag]:-${tags[$tag]}}
+  if [[ $commit == "$tip" ]] && newer "$tag" "$tip_tag"; then tip_tag=$tag; fi
+  if [[ $commit == "$rev" ]] && newer "$tag" "$current_tag"; then current_tag=$tag; fi
+done
+
+[[ -n $tip_tag && -n $current_tag ]] && newer "$tip_tag" "$current_tag"

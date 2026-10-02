@@ -822,10 +822,12 @@ comment -- loops over `displayedBackground oldBackground
 incomingBackground`, and the first of those no longer has a matching
 `Image` to patch. So the loop drops `displayedBackground` and keeps only
 the transition layers it still applies to, and a second, separate
-`substituteInPlace` retargets `BackgroundMedia.qml`'s own cap instead,
-which upstream only widens once a cache-busting `version` is in play
-(`root.version > 0 ? width : 4096`) and otherwise leaves open to decode at
-full size.
+`substituteInPlace` retargets `BackgroundMedia.qml`'s own cap instead.
+Upstream's text is `root.version > 0 ? width : 0` -- it only caps
+`sourceSize` once a cache-busting `version` is in play, and otherwise
+leaves it at 0, which Qt reads as "decode at full size". The substitution
+changes the `0` to `4096`, so the common, unversioned case gets the same
+cap the loop above gives the transition layers.
 
 **Carried as-is:** #6792's battery service polls `powerprofilesctl get`
 every two seconds, forever, so the lock screen can drop its video feed in

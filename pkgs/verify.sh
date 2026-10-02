@@ -780,44 +780,58 @@ head_ "Owe (video backgrounds)"
 if ! command -v owe >/dev/null 2>&1; then
   hmm "owe not on PATH" "enable programs.nixarchy.owe to test this"
 else
-  render_status=$(owe render-status 2>/dev/null || true)
-  if [ -z "$render_status" ]; then
+  engine_status=$(owe status 2>/dev/null || true)
+  if [ -z "$engine_status" ]; then
     hmm "owed is not running" "systemctl --user start owed, or enable programs.nixarchy.owe"
   else
-    # engine distinguishes "no video is set, so hwdec is the synthetic
-    # shell-engine value" from "a video is playing and hwdec is real": owed's
-    # render-status reports hwdec: "no" unconditionally while the shell draws
-    # the background, which is neither a software-decode failure nor
-    # anything this row can judge.
-    read -r engine hwdec <<<"$(
+    # "engine" (shell draws a still itself, or a renderer process is running
+    # one) is on `owe status`, not `owe render-status`: when a renderer is
+    # running, render-status PROXIES that process's own reply (daemon_ipc.c's
+    # render-status handler, when owed_app_renderer_expected() is true) and
+    # that reply has no "engine" field at all -- only the synthetic
+    # shell-engine reply owed builds itself names one. Reading "engine" off
+    # render-status would see it only in the one case that is not a renderer.
+    engine=$(
       python3 -c '
 import json, sys
 try:
     d = json.loads(sys.argv[1])
 except ValueError:
     d = {}
-print(d.get("engine", "?"), d.get("hwdec", "?"))
-' "$render_status" 2>/dev/null || echo '? ?'
-    )"
+print(d.get("engine", "?"))
+' "$engine_status" 2>/dev/null || echo '?'
+    )
     case "$engine" in
       shell)
         hmm "no video background is set" "omarchy theme bg set <file>.mp4, then re-run to see hwdec"
         ;;
       renderer)
+        render_status=$(owe render-status 2>/dev/null || true)
+        hwdec=$(
+          python3 -c '
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+except ValueError:
+    d = {}
+print(d.get("hwdec", "?"))
+' "$render_status" 2>/dev/null || echo '?'
+        )
         case "$hwdec" in
           no) bad "software decode" "owe render-status reports hwdec: no" ;;
           '?') hmm "could not read hwdec" "$render_status" ;;
           *) ok "hardware decode" "$hwdec" ;;
         esac
         ;;
-      *) hmm "owe render-status did not answer as expected" "$render_status" ;;
+      *) hmm "owe status did not answer as expected" "$engine_status" ;;
     esac
   fi
 
   # Printed as information, like the Version section above, because only a
   # person pulling the AC cable can make this transition happen -- the
-  # script can read what owe currently reports and nothing more.
-  status=$(owe status 2>/dev/null || true)
+  # script can read what owe currently reports and nothing more. Reuses
+  # $engine_status rather than calling `owe status` a second time.
+  status=$engine_status
   if [ -n "$status" ]; then
     read -r on_battery paused <<<"$(
       python3 -c '

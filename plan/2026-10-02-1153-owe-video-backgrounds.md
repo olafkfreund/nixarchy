@@ -193,10 +193,28 @@ full-sentence subject and `Refs #1153`.
      Use the attribute path step 1 created. If that block is a plain attrset
      where `mkIf` does not merge, use a separate
      `environment.sessionVariables = lib.mkIf …` definition, as
-     `INPUT_METHOD` does at `:1997`.
+     `INPUT_METHOD` does at `:1997`. **Corrected after review:** the value
+     is a one-element list, not a plain string -- `environment
+     .sessionVariables` merges list-valued entries colon-joined, like
+     `PATH`, so this definition is appended to by anything else that sets
+     `QML_IMPORT_PATH` rather than silently overwriting it. Confirmed by
+     eval that the final `config.environment.sessionVariables
+     .QML_IMPORT_PATH` is still the plain path string either way.
    - **`home.nix`.** Define
      `oweOn = osConfig.programs.nixarchy.owe.enable or false;` near the other
-     `osConfig` reads (`:50-55`). Inside the `cfg.enable` block (`:775`):
+     `osConfig` reads (`:50-55`). **Corrected after review:** this reads only
+     `owe.enable`, which defaults to `true` on its own -- a module's option
+     defaults exist whether or not `programs.nixarchy.enable` turned the
+     feature on, since only the latter's `config = lib.mkIf cfg.enable { … }`
+     is gated, never the option declarations. So a machine with nixarchy's
+     NixOS side off (Mode A) but this Home Manager module on regardless
+     would still get `owed`, the package and the hook. `oweOn` is
+     `(osConfig.programs.nixarchy.enable or false) && (osConfig.programs
+     .nixarchy.owe.enable or false)`, the same two-condition shape
+     `home.packages`'s own ai-mirror gate already uses two lines below.
+     `tests/options.nix` gained `oweServiceModeAInert` (on =
+     `defaultHomeOn`, off = `fixtureNixarchyOff`) to hold this. Inside the
+     `cfg.enable` block (`:775`):
      - `home.packages = lib.optional oweOn owe;`. Add it to the existing list
        the way ai-mirror is at `:998-1000`.
      - `systemd.user.services.owed = lib.mkIf oweOn { … }`, modelled on
@@ -292,6 +310,37 @@ full-sentence subject and `Refs #1153`.
        (`:1864-1898`) may now fail: its message names exactly this. Record
        whether it did. The spec expected that no VM sees this, so a red here
        is a deviation to note in the PR and in this plan.
+   - **Deviations, as actually implemented:**
+     - **The test video is flat colours, not `testsrc`.** `testsrc`'s moving
+       bars barely shift the whole-screen average `avg()` reads, so a single
+       pair of screenshots 1 s apart could pass on a correct build and fail
+       on a flaky one, or the reverse. The video is instead two 1 s segments,
+       plain red then plain blue, concatenated into a 2 s loop
+       (`ffmpeg -f lavfi -i color=c=red:... -f lavfi -i color=c=blue:...
+       -filter_complex concat`), which the screen-filling average cannot
+       miss.
+     - **Five screenshots over 2 s, not two 1 s apart.** A single pair can
+       land on the same half of a 2 s loop by bad luck; a `shot_series()`
+       helper takes five, 0.4 s apart (`time.sleep`, since this samples a
+       fixed span rather than polling a condition), and a `spread()` helper
+       asserts the largest pairwise `avg()` delta among them exceeds 60 --
+       at least one pair must straddle a colour change over that span.
+     - **Step 2 also asserts `engine == "renderer"`** (from `owe status`)
+       and that `omarchy-plugin-list --json` reports `omarchy.background`
+       **disabled** while the video plays -- not just that a video source
+       and a live renderer are reported, which does not by itself prove
+       owed took the layer from the shell.
+     - **Step 4's lock assertion is positive, not only the journal check
+       the plan allowed as a fallback.** The same `shot_series`/`spread`
+       pair, pointed at the locked screen: `owed` starts the LockFeed for
+       every locked session by default (no config needed), so a moving
+       series there is the real assertion, and what makes break (a) go red.
+       The journal check for `Owe.LockFeed" is not installed` is kept, but
+       only as a secondary diagnostic `print()` before the real assertion --
+       it explains *why* when it fires, it does not gate the check. No IPC
+       route for the feed Loader's own state exists (`Service.qml`'s
+       `IpcHandler` names only `lock`/`isLocked`/`status`/`preview`/
+       `hidePreview`), confirming the plan's own fallback was necessary.
    - **Traps:**
      - `checks.session` boots a desktop: CI only (§6 tiers).
      - Evaluate the drvPath first and build `'<drv>^*'`, so a break is not
@@ -310,6 +359,24 @@ full-sentence subject and `Refs #1153`.
      only `verify.sh` covers those.
    - **Verify:** `bash -n pkgs/verify.sh`. If a check covers `verify.sh`'s
      structure, run it (cheap tier).
+   - **Deviation:** `flake.nix`'s `nixarchy-verify` `writeShellApplication`
+     needed `nixarchy-apps.owe` added to its `runtimeInputs`, not named in
+     the plan, because the new row calls `owe` by bare name
+     (`writeShellApplication`'s own trap: an undeclared command depends on
+     whatever the caller's PATH happens to supply). It is declared
+     unconditionally, the same as `podman` for the Boxes section above it,
+     because `programs.nixarchy.owe` can be off on the machine running
+     `nixarchy verify` -- the row's `command -v owe` guard therefore always
+     succeeds, and the real "off" signal is `owe status` coming back empty
+     (owed has no socket to answer on).
+   - **The row also reads `engine` from `owe status`, not from
+     `owe render-status`.** `render-status` PROXIES the renderer process's
+     own reply once one is running (`daemon_ipc.c`'s handler, when
+     `owed_app_renderer_expected()` is true), and that reply has no
+     `engine` field at all -- only owed's own synthetic shell-engine reply
+     names one. `owe status` always carries it. The row reads `engine` from
+     `owe status` first (`shell` → no video set, `hmm`; `renderer` → go on
+     to read `hwdec` from `owe render-status` and judge `ok`/`bad`).
 
 8. **Docs: `docs/manual/`, and the README counts.**
    - Find the manual page that covers backgrounds (start at

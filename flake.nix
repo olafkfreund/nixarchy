@@ -746,8 +746,12 @@
             # owe, for the #1153 section: an undeclared `owe` here would read
             # as "owe not on PATH" on a machine that simply has not rebuilt
             # since this row was added, rather than naming the real cause.
-            # Guarded with `command -v owe` regardless, the same as distrobox
-            # above, because programs.nixarchy.owe can be turned off.
+            # Declared unconditionally, so the row's `command -v owe` guard
+            # always succeeds -- the CLI is always present, with
+            # programs.nixarchy.owe or without it. What actually answers "off"
+            # is `owe status` itself: with no owed socket to connect to, it
+            # comes back empty and the row reports "owed is not running",
+            # pointing at the option, rather than the CLI.
             nixarchy-apps.owe
           ];
           text = builtins.readFile ./pkgs/verify.sh;

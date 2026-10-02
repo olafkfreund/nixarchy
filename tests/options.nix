@@ -730,6 +730,17 @@ let
       off = oweOffHome.systemd.user.services ? owed;
     };
 
+    # Mode A, not just owe.enable = false: owe.enable defaults to true on its
+    # own, so a home reading it without also reading osConfig's
+    # programs.nixarchy.enable would turn owed on for a machine where
+    # nixarchy's NixOS side never ran at all. fixtureNixarchyOff is exactly
+    # that -- osConfig's programs.nixarchy.enable = false, this Home Manager
+    # module still on -- and owe.enable's own default is untouched by it.
+    oweServiceModeAInert = {
+      on = defaultHomeOn.systemd.user.services ? owed;
+      off = fixtureNixarchyOff.systemd.user.services ? owed;
+    };
+
     # The theme-set hook that pokes owed to resync on a theme switch.
     oweHook = {
       on = defaultHomeOn.xdg.configFile ? "omarchy/hooks/theme-set.d/10-owe-sync";

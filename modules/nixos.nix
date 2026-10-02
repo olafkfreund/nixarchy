@@ -2018,8 +2018,14 @@ in
     environment.sessionVariables.INPUT_METHOD = lib.mkIf usingFcitx5 (lib.mkDefault "fcitx");
     environment.sessionVariables.SDL_IM_MODULE = lib.mkIf usingFcitx5 (lib.mkDefault "fcitx");
 
-    # #1153: the lock screen's LockFeedSurface.qml imports Owe.LockFeed from here.
-    environment.sessionVariables.QML_IMPORT_PATH = lib.mkIf cfg.owe.enable "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}";
+    # #1153: the lock screen's LockFeedSurface.qml imports Owe.LockFeed from
+    # here. A one-element LIST, not a plain string: environment.sessionVariables
+    # merges list-valued entries (colon-joined, like PATH), so anything else
+    # that sets QML_IMPORT_PATH -- a user's own module, or a future nixarchy
+    # one -- is appended to rather than overwritten by this one definition.
+    environment.sessionVariables.QML_IMPORT_PATH = lib.mkIf cfg.owe.enable [
+      "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}"
+    ];
 
     xdg.portal = {
       enable = lib.mkDefault true;

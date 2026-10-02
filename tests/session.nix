@@ -2039,7 +2039,26 @@ pkgs.testers.runNixOSTest {
         f"owe status never reported a video/gif source after setting one: {status}")
     assert status.get("render_alive"), (
         f"owe status reports a video source but no live renderer: {status}")
+    assert status.get("engine") == "renderer", (
+        f"owe status reports a video source and a live renderer but engine "
+        f"is {status.get('engine')!r}, not 'renderer' -- owed has not "
+        "actually taken the layer from the shell (main.c's activate_renderer "
+        "sets engine only after disabling the background plugin)")
     print(f"owe: video source accepted and rendering ({status.get('source_kind')})")
+
+    # activate_renderer() disables the background plugin itself (shell.c:
+    # `omarchy-shell shell setPluginEnabled omarchy.background false`),
+    # BEFORE setting engine to "renderer" -- so the assertion above already
+    # guarantees this call happened. isEnabled() in PluginRegistry.qml reads
+    # the toggle off the SAME in-memory config setEnabled() just mutated, not
+    # a stale on-disk shell.json, so omarchy-plugin-list --json (which wraps
+    # `omarchy-shell shell listPlugins`) sees it live.
+    plugins = json.loads(aim("omarchy-plugin-list --json"))
+    background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
+    assert background is not None and not background["enabled"], (
+        f"the background plugin is still enabled while owe's renderer holds "
+        f"the layer: {background}")
+    print("owe: the background plugin is disabled while the renderer holds the layer")
 
     desktop_readings = shot_series("owe-desktop")
     desktop_spread = spread(desktop_readings)
@@ -2050,8 +2069,10 @@ pkgs.testers.runNixOSTest {
         "frozen poster would look exactly like this")
     assert not any(near_black(rgb) for rgb in desktop_readings), (
         f"a video background rendered a near-black frame ({desktop_readings}) "
-        "-- the #1153 patch's own reason for retargeting the 4096 sourceSize "
-        "cap is exactly this failure mode")
+        "-- these come through owe's own compositor layer, not through "
+        "BackgroundMedia's Image (the 4096 sourceSize cap only bounds a "
+        "still), so a near-black frame here points at the renderer itself: "
+        "a decode failure, or a committed buffer nothing is actually in")
     print("owe: the desktop series moves and no frame is near-black")
 
     # 3. Back to the still this theme started with. switch_to_shell() hands

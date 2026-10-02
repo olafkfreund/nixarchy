@@ -53,13 +53,22 @@ let
   mcpEnabled = osConfig.programs.nixarchy.mcp or false;
   # #773: off unless asked for, and taken back out when turned off again.
   aiMirrorMcp = osConfig.programs.nixarchy.aiMirror.mcp or false;
-  # #1153: `or false` for the same reason as the others above -- a standalone
-  # home-manager user has no NixOS module to have set this either.
-  oweOn = osConfig.programs.nixarchy.owe.enable or false;
-  # Through the overlay, like omarchyNvimConfig below and every nixarchy-apps.*
-  # reference in modules/nixos.nix: pkgs here carries no nixarchy overlay of
-  # its own (modules/services/default.nix says why), so a plain `pkgs.owe`
-  # would fail to resolve.
+  # #1153: both halves of `or false`, for two different reasons. A standalone
+  # home-manager user has no NixOS module to have set either option, same as
+  # above. And `owe.enable` defaults to true on its OWN -- a module's option
+  # defaults exist whether or not `programs.nixarchy.enable` turned the
+  # feature on, since only the latter's `config = lib.mkIf cfg.enable { ... }`
+  # is gated, never the option declarations -- so reading `owe.enable` alone
+  # would switch owed, the package and the hook on for a machine where
+  # nixarchy's NixOS side is off (Mode A) but this Home Manager module is on
+  # regardless. ai-mirror's own package gate (`home.packages` below) already
+  # reads `osConfig.programs.nixarchy.enable or false` for the same reason.
+  oweOn =
+    (osConfig.programs.nixarchy.enable or false) && (osConfig.programs.nixarchy.owe.enable or false);
+  # Through the overlay, like omarchyNvimConfig below and nixos.nix's
+  # QML_IMPORT_PATH line: pkgs here carries no nixarchy overlay of its own
+  # (modules/services/default.nix says why), so a plain `pkgs.owe` would fail
+  # to resolve.
   owe = (pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe;
   aiMirrorConfig =
     args:

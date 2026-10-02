@@ -166,3 +166,25 @@ intent: intent/2026-10-02-1155-panel-loaders-kept.md
    way.
 5. The p620 hand count, before (62) and after.
 6. `nix fmt -- --ci`, statix and deadnix are clean.
+
+## Correction (2026-10-02, owner-approved: carry it, corrected)
+
+The p620 evidence quoted above is **bar widgets, not panels**. In nixarchy's
+plugins (`nixarchy.podman`, `.microvm`, `.devenv`), `Panel.qml` is
+`entryPoints.barWidget`. Bar widgets are loaded by `syncPluginWidgets`, not the
+panel `Instantiator`, so this change does not touch them. Counted after the
+08:20 restart, every duplicate on p620 was a bar widget (`Panel.qml` 45,
+`BarWidget.qml` 11, and three others twice each), and none was a panel, menu
+or overlay. They most likely come from one bar per monitor, a separate
+question.
+
+This is carried on upstream's own evidence instead: two OSDs at once in 1 of 5
+busy runs before #13439, and 0 of 10 after. It also retires our #901 part B
+and frees about 2.3 KB of the install phase.
+
+Consequences for the plan:
+- the `checks.session` block watches the panel, menu and overlay entry points
+  read from every installed manifest, never bar widgets, and must include
+  `Osd.qml`;
+- it requires a real line from the restarted shell, not only the marker;
+- the p620 "62 → 0" hand count is dropped, because it measured bar widgets.

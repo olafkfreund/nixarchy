@@ -2158,28 +2158,40 @@ pkgs.testers.runNixOSTest {
     lock_spread = spread(lock_readings)
     print(f"owe: lock screen series spread {lock_spread}")
 
-    # Secondary diagnostic only: gives a better message than "spread too low"
-    # when break (a) is the cause, but a Loader that silently falls back to
-    # the static poster (feedActive false, or a different failure inside the
-    # module) produces no import error at all and must still be caught by
-    # the spread assertion above it.
+    # The mechanism, asserted. Removing QML_IMPORT_PATH (break (a), probe run
+    # on #1156) left the series above MOVING (spread 227): the video stays
+    # visible under the lock by another path, so motion alone cannot prove
+    # Owe.LockFeed loaded. The import error is what moved with the break.
     journal = machine.succeed("journalctl -b -t omarchy-shell --no-pager")
-    if 'Owe.LockFeed" is not installed' in journal:
-        print("owe: the shell's journal has a QML import error for Owe.LockFeed")
+    assert 'Owe.LockFeed" is not installed' not in journal, (
+        "the lock screen cannot import Owe.LockFeed (is QML_IMPORT_PATH set?); "
+        "LockFeedSurface.qml falls back to the cached poster")
 
+    # The outcome a user sees: the locked screen shows the video moving.
     assert lock_spread > 60, (
-        f"five screenshots of the locked screen over 2s do not move (spread "
-        f"{lock_spread}); either the LockFeed plugin fell back to the cached "
-        "poster or never loaded at all -- see the journal line above, if any")
+        f"the locked screen does not move over 2.8s (spread {lock_spread})")
 
-    # Unlock the same way the greeter above is answered: the password field
-    # is given active focus whenever inputEnabled (== lockRequested) is true
-    # (LockView.qml's onInputEnabledChanged), so there is nothing to click.
-    machine.send_chars("omarchy\n")
-    machine.wait_until_succeeds(
+    # Unlock. The lock screen blanks after a few seconds, and a keystroke
+    # that only wakes it is lost, so a single send_chars timed out on one
+    # probe run. Wake, clear the field, type, and retry.
+    unlocked_cmd = (
         'out=$(su omarchy -c \'export XDG_RUNTIME_DIR=/run/user/1000; omarchy-shell lock status\'); '
-        'python3 -c "import json,sys; sys.exit(1 if json.loads(sys.stdin.read())[\'locked\'] else 0)" <<<"$out"',
-        timeout=20)
+        'python3 -c "import json,sys; sys.exit(1 if json.loads(sys.stdin.read())[\'locked\'] else 0)" <<<"$out"')
+    for attempt in range(4):
+        machine.send_key("shift")
+        machine.sleep(1)
+        for _ in range(12):
+            machine.send_key("backspace")
+        machine.send_chars("omarchy\n")
+        for _ in range(10):
+            if machine.execute(unlocked_cmd)[0] == 0:
+                break
+            machine.sleep(1)
+        else:
+            print(f"owe: unlock attempt {attempt} did not take, retrying")
+            continue
+        break
+    machine.succeed(unlocked_cmd)
     print("owe: unlocked")
 
     aim(f"omarchy-theme-bg-set {original_background}")

@@ -449,3 +449,13 @@ full-sentence subject and `Refs #1153`.
   spread of 0. The `PATH` is now the package's `runtimeDeps`. checks.session
   step 2 was the probe that caught it, which is what break (b) existed to
   show; it went red on the real configuration rather than a deliberate break.
+
+## The step 6 breaks, run through CI (2026-10-02)
+
+| break | run | result |
+|---|---|---|
+| (a) no `QML_IMPORT_PATH` | 37002850303 | `checks.options` red (`oweQmlPath`). **The session's lock check stayed green** (spread 227): the video shows under the lock by another path, so motion could not prove `Owe.LockFeed`. Fixed: the import-error line, which did appear, is now a hard assertion. Re-proven on a new probe. |
+| (b) owed cannot reach the shell | 36988903978 (the real config) | red: "spread 0". owed logged "omarchy-shell is not running". Caught on a real bug, not a staged one. |
+| (c) 4096 cap reverted | 37002807182 | **no VM check sees it**: the wallpaper probe passed (delta 2) on the 1280×800 VM display, as the spec expected. The run went red only on an unlock timeout. |
+
+Also from (c): the lock screen blanks after a few seconds, and a single `send_chars` could lose its first keystroke to waking it. The unlock now wakes the screen, clears the field and retries.

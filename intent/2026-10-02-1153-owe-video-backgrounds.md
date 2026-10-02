@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1153
 author: olafkfreund
 ---
@@ -101,3 +101,11 @@ On a nixarchy machine:
    your own risk", v0.2.8). Match upstream exactly, or install it but leave
    `programs.nixarchy.owe.enable` off until it has run on real hardware here?
    GPU (VAAPI) decoding cannot be tested in a VM.
+
+## Owner's answers (2026-10-02)
+
+- **Question 2: backport now.** "Ready to use" on v4.0.4, carried as a patch
+  set until the `quattro` bump deletes it.
+- **Question 4: on by default,** as upstream ships it.
+- **Questions 1 and 3** were not answered at approval. The spec proposes a
+  default for each, and the spec approval settles them.

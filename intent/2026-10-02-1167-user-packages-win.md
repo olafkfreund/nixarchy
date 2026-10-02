@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1167
 author: olafkfreund
 ---
@@ -74,3 +74,8 @@ side never got the same rule.
 2. **The app selection (`apps.nix`):** a package the user picked in the
    installer or the menu. The proposal is normal priority (the user asked
    for it by name), so it behaves as if the user added it themselves.
+
+## Owner's answers (2026-10-03)
+
+1. **All of nixarchy's unasked system packages,** not a list.
+2. **Apps the user picks in the installer or menu keep normal priority.**

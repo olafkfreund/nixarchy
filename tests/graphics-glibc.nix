@@ -1,38 +1,54 @@
 { pkgs, config }:
-# hardware.graphics.package (and package32, when enable32Bit is on) must not
-# carry a newer glibc than programs.hyprland.package: Hyprland loads the
-# drivers into its own process, and a driver built against a newer glibc than
-# the compositor fails to load into it (#1154, #1158).
+# Nothing in hardware.graphics may carry a newer glibc than
+# programs.hyprland.package: Hyprland loads these drivers into its own process,
+# and one built against a newer glibc fails to load (#1154, #1158).
 #
-# The comparison is computed in Nix -- compareVersions on two strings -- so
-# the shell only prints what was found and exits. No negative control on
-# purpose: both sides are moving inputs (our nixpkgs, Hyprland's nixpkgs), and
-# they happen to agree today. §1 of this repo's own rule was proved instead on
-# #1154's lock, by hand, where the two genuinely disagree (2.44 vs 2.42) --
-# see the PR for that output.
+# Checked: package and package32 (always; both are lazy and cheap, so the
+# 32-bit branch runs even with enable32Bit off), and every extraPackages(32)
+# entry that has a C toolchain, which is how a machine's own `mesa` can bring
+# the mismatch back. The comparison is done in Nix; the shell only prints.
+#
+# No permanent negative control: both sides are moving inputs that agree
+# today. §1 was proved on #1154's lock (2.44 against 2.42); see #1162.
 let
-  compositor = config.programs.hyprland.package.stdenv.cc.libc.version;
-  drivers = config.hardware.graphics.package.stdenv.cc.libc.version;
-  drivers32 =
-    if config.hardware.graphics.enable32Bit then
-      config.hardware.graphics.package32.stdenv.cc.libc.version
-    else
-      null;
+  g = config.hardware.graphics;
+  libcOf = p: p.stdenv.cc.libc.version or null;
+  compositor = libcOf config.programs.hyprland.package;
 
-  newer = a: b: builtins.compareVersions a b == 1;
+  drivers = [
+    {
+      name = "package";
+      libc = libcOf g.package;
+    }
+    {
+      name = "package32";
+      libc = libcOf g.package32;
+    }
+  ]
+  ++ map (p: {
+    name = "extraPackages: ${p.name or "?"}";
+    libc = libcOf p;
+  }) g.extraPackages
+  ++ map (p: {
+    name = "extraPackages32: ${p.name or "?"}";
+    libc = libcOf p;
+  }) g.extraPackages32;
 
+  checked = builtins.filter (d: d.libc != null) drivers;
+  newer = builtins.filter (d: builtins.compareVersions d.libc compositor == 1) checked;
+
+  lines = map (d: "${d.name}: glibc ${d.libc}") checked;
   verdict =
-    if newer drivers compositor then
-      "FAIL: hardware.graphics.package glibc ${drivers} is newer than programs.hyprland.package glibc ${compositor} (#1158)"
-    else if drivers32 != null && newer drivers32 compositor then
-      "FAIL: hardware.graphics.package32 glibc ${drivers32} is newer than programs.hyprland.package glibc ${compositor} (#1158)"
+    if newer == [ ] then
+      "ok"
     else
-      "ok";
+      "FAIL: newer glibc than programs.hyprland.package (${compositor}) in: "
+      + pkgs.lib.concatMapStringsSep ", " (d: "${d.name} (${d.libc})") newer
+      + " (#1158)";
 in
 pkgs.runCommand "nixarchy-graphics-glibc" { } ''
   echo "compositor glibc: ${compositor}"
-  echo "drivers glibc:    ${drivers}"
-  echo "drivers32 glibc:  ${if drivers32 == null then "n/a (enable32Bit is off)" else drivers32}"
+  ${pkgs.lib.concatMapStringsSep "\n" (l: "echo ${pkgs.lib.escapeShellArg l}") lines}
 
   verdict=${pkgs.lib.escapeShellArg verdict}
   if [ "$verdict" != "ok" ]; then

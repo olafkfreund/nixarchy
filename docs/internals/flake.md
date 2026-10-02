@@ -180,11 +180,17 @@ The cost is paid in store space rather than eval time: the two pins' Mesa
 builds are only the same derivation while nothing in Mesa's own dependency
 chain has moved between them, which is not guaranteed to stay true. Measured
 2026-10-02, on `main`'s pins: identical store path
-(`mesa-26.2.3`, ~4.05 GB across the 60 paths in its closure, by
-`nix path-info -rS`), so there is no second Mesa on disk today -- but the day
-the two pins diverge there, a machine carries both. The extra cost is then the
-paths the two closures do not share, well under that 4.05 GB, since most of it
-(LLVM, glibc) is shared with the rest of the system or with each other.
+(`mesa-26.2.3`, a closure of 60 paths and about 1.1 GB by `nix path-info -S`),
+so there is no second Mesa on disk today -- but the day the two pins diverge
+there, a machine carries both. The extra cost is then the paths the two
+closures do not share, well under that 1.1 GB.
+
+**An overlay on `mesa` no longer reaches the drivers.** They come from
+Hyprland's nixpkgs, which sees none of the machine's `nixpkgs.overlays`. A
+patched or replaced Mesa now needs a plain `hardware.graphics.package =
+pkgs.mesa;` (and `package32`), and then keeping its glibc in step with
+Hyprland's is that machine's job: `checks.graphics-glibc` only covers the
+reference machine.
 
 <a id="declarative-flatpaks-for-the-software-nixpkgs-genu"></a>
 ### Declarative Flatpaks, for the software nixpkgs genuinely does not carry

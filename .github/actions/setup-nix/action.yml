@@ -22,6 +22,11 @@ runs:
   steps:
     - uses: DeterminateSystems/nix-installer-action@main
       with:
+        # Pinned: the action fetches the newest installer on every run, and
+        # v3.23.0 (2026-10-01) made checks.options collect ~800 times instead
+        # of ~14, 3:42 -> 21:58, timing out `system` and the nightly (#1150).
+        # Bump by hand, and read the options step's wall time when you do.
+        source-tag: v3.22.5
         # extra-conf, not the flake's own nixConfig, and the difference is the
         # whole reason this is written down.
         #

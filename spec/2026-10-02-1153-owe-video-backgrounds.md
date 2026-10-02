@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1153
 intent: intent/2026-10-02-1153-owe-video-backgrounds.md
 ---

@@ -9,6 +9,10 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
+  # Hyprland's own nixpkgs pin, so its GPU drivers share its glibc. See the
+  # hardware.graphics block below.
+  hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+
   # The rows of upstream's /etc overlay that are installed as themselves.
   installedEtc = lib.attrNames (
     lib.filterAttrs (_: row: row.class == "installed") (import ../data/etc-overlay.nix)
@@ -1142,6 +1146,18 @@ in
       # symptom to search for. mkDefault: somebody who has a channel and wants
       # it keeps it by saying so.
       command-not-found.enable = lib.mkIf cfg.commandNotFound (lib.mkDefault false);
+    };
+
+    # Hyprland is built against its own nixpkgs (no follows: the cache) and
+    # loads these drivers into its process, so they must share its glibc.
+    # Why: docs/internals/flake.md#hyprlands-mesa-follows-its-own-nixpkgs (#1158)
+    #
+    # mkOverride 900, not mkDefault: graphics.nix sets these at mkDefault itself,
+    # and a tie fails evaluation. A user's plain assignment still wins; their
+    # own mkDefault does not.
+    hardware.graphics = {
+      package = lib.mkOverride 900 hyprPkgs.mesa;
+      package32 = lib.mkOverride 900 hyprPkgs.pkgsi686Linux.mesa;
     };
 
     # The resolved half of the flake's safe.directory entry -- see the

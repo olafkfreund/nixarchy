@@ -454,6 +454,14 @@ Two other ways a check stops checking, both found in one week:
   it answers about whatever `origin/main` is in your local refs, which is
   exactly the thing that was stale.
 
+- **A `cp -a` of a linked worktree shares its index.** A worktree's `.git` is
+  a one-line pointer file (`gitdir: …/.git/worktrees/<name>`), so a copied
+  directory's `git add` writes into the original's index. #1158's §1 proof
+  did this to stage a foreign `flake.lock` for a scratch build, and the real
+  worktree's index came back carrying it (`MM flake.lock`). For a scratch
+  tree, use `git worktree add --detach <dir>`, which gets its own index. After
+  any scratch work, check that `git diff --cached` is what you staged.
+
 - **`git checkout -- <path>` restores the INDEX, not the commit.** So a
   break-it-and-watch-it-fail loop (§1) that does `git add -A` before running
   the check — which a flake evaluation requires, since it sees only tracked

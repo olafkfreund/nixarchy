@@ -101,6 +101,17 @@ full-sentence subject and `Refs #1153`.
        `nativeCheckInputs`, as the PKGBUILD's `checkdepends`.
      - Get the `hash` from the first failed build. Never guess it.
 
+   - **Done (deviations).** (a) After `mesonBuildPhase` the working directory
+     is `build/` inside the source, so the cmake `-S`, hook and config paths
+     are `../…`. (b) meson defines no suites, so the excluded test (`daemon`,
+     which needs a live Wayland display) is dropped through a positional
+     allowlist in `mesonCheckFlags`. A test a later owe adds does not run until
+     it is named, so the comment there says to diff `test/meson.build` on
+     every bump. `egl-context` and `transition` self-skip (exit 77). The QML
+     `ctest` runs in `postCheck`. Built: `nix build .#owe` →
+     `…n80zj1jm…-owe-0.2.8`. Proof: the install check with `9.9.9` exits 1
+     ("owe --version did not report 9.9.9"), and is green once reverted.
+
 2. **The backport patch: `pkgs/omarchy/1153-owe-video-backgrounds.patch`
    (new); `pkgs/omarchy/default.nix:422-427` and `:510-527`.**
    - **Generate it** from the tested tree at `/mnt/data/vmtest/owe/omarchy`,

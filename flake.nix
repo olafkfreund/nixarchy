@@ -768,6 +768,10 @@
           omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
 
+          # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
+          # and the lock screen's video feed. Not in nixpkgs. #1153.
+          owe = final.callPackage ./pkgs/apps/owe.nix { };
+
           # The fourth, and the only one that is not a small script or a Qt
           # program: a Wails app, so a Go module set AND an npm tree to pin.
           aether = final.callPackage ./pkgs/apps/aether.nix { };
@@ -1214,6 +1218,7 @@
             omawrite
             omacalc
             omacut
+            owe
             aether
             ttfx
             ;

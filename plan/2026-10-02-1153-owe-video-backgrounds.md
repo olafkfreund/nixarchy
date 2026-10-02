@@ -281,7 +281,13 @@ full-sentence subject and `Refs #1153`.
    - **Breaks to record (§1), each shown landed with `grep` before being run:**
      - (a) remove `QML_IMPORT_PATH` from step 4's change → probe 4 fails;
      - (b) remove the service's `PATH` entry → probe 2 fails, because owed
-       cannot hand the layer over;
+       cannot hand the layer over. **Doubt recorded at step 6 (deviation):**
+       owed also finds `omarchy-shell` under `$OMARCHY_PATH/bin`
+       (`src/daemon/shell.c:33`), and `owe-render` next to its own binary, so
+       with `OMARCHY_PATH` still set this break may stay green. If it does,
+       the PR says so, and the break becomes "remove both `PATH` and
+       `OMARCHY_PATH`", which is the property that matters: owed can reach
+       the shell.;
      - (c) revert step 2's 4096 retarget → the **existing** wallpaper probe
        (`:1864-1898`) may now fail: its message names exactly this. Record
        whether it did. The spec expected that no VM sees this, so a red here

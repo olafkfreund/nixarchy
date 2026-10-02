@@ -52,6 +52,8 @@ hardware.graphics.enable32Bit = true;
 ```
 
 Steam still takes 10–20 seconds to start with no feedback, as upstream warns.
+Listing your own `mesa` in `hardware.graphics.extraPackages32` alongside this
+collides with Hyprland's (#1163); nixarchy's own mesa already covers it.
 
 ## RetroArch
 

@@ -308,7 +308,10 @@ failure and why `lib.mkOverride 900`, not `lib.mkDefault`, is the priority:
 nixpkgs' own module sets both options at `mkDefault` itself, so a second
 `mkDefault` here ties with it and evaluation refuses. 900 beats that default
 and still loses to a machine's own plain assignment.
-`checks.graphics-glibc` holds the pairing at evaluation time.
+`checks.graphics-glibc` holds the pairing at evaluation time. A *different*
+Mesa in `extraPackages`/`extraPackages32` while this module's is in effect
+collides with it in `buildEnv` (#1163); an assertion refuses it, naming both
+store paths, and `checks.graphics-mesa-clash` holds that pairing.
 
 <a id="config-hypr-xdph-conf-which-the-package-seeds-into"></a>
 

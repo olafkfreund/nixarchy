@@ -1146,3 +1146,11 @@ thing and meant another. None of them was a bug in this repo.
   column be the optional one. The check that missed it had cases for `""`,
   `"null<TAB>null"`, success, stale, failure and unreadable -- **every one with a
   non-empty first field**, so not one could vary the thing that breaks (§3).
+- **A slowdown that lands with a merge may have landed with a TOOL.** Two
+  runs after #1149 timed out `system`, and the pin it carried was the obvious
+  suspect. It was innocent: `checks.options` had gone from 3:42 to 21:58
+  because `nix-installer-action@main` fetches the newest installer on every
+  run, and v3.23.0 had shipped forty minutes earlier. Same live heap, ~800
+  collections instead of ~14. The tell was a run whose live heap was *larger*
+  and still fast. When a timing changes, diff the toolchain lines of a fast
+  and a slow log (`grep -o 'nix-installer v[0-9.]*'`) before the code (#1150).

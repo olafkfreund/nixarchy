@@ -145,6 +145,53 @@ The `>= 0.55` assertion in modules/nixos.nix stays regardless. Omarchy 4.x
 configures Hyprland through the Lua API that landed in 0.55, and that is a
 requirement rather than a preference.
 
+<a id="hyprlands-mesa-follows-its-own-nixpkgs"></a>
+### Hyprland's Mesa follows its own nixpkgs (#1154, #1158)
+
+Hyprland loads its GPU drivers into its own process, not into a separate one
+it talks to over a socket -- so the driver it opens has to run against the
+glibc Hyprland itself was built with. #1154 bumped our own nixpkgs and left
+Hyprland's untouched, and the result was `GLIBC_2.43 not found (required by
+.../libEGL_mesa.so.0)`: our nixpkgs' Mesa had moved ahead of the compositor
+that `dlopen`s it, and the session never started.
+
+So `hardware.graphics.package` and `package32` are set from Hyprland's own
+nixpkgs pin (`inputs.hyprland.inputs.nixpkgs`), the same one
+`programs.hyprland.package` already comes from, rather than from this
+flake's own. `checks.graphics-glibc` holds the pairing: it fails whenever the
+drivers' glibc is newer than the compositor's.
+
+```nix
+hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+hardware.graphics.package = lib.mkOverride 900 hyprPkgs.mesa;
+```
+
+**Not `lib.mkDefault`.** `nixos/modules/hardware/graphics.nix` sets both
+options at `mkDefault` itself, unconditionally once `hardware.graphics.enable`
+is on -- which Hyprland turns on -- so a second `mkDefault` here ties with
+nixpkgs' own and evaluation refuses with "defined multiple times". `mkOverride
+900` sits between that default (1000) and a plain assignment (100): nixpkgs'
+default loses, and a machine's own plain `hardware.graphics.package = ...;`
+still wins. Its own `lib.mkDefault` does not -- keeping the two nixpkgs pins
+in step is this module's job, not an adopter's, unless they say otherwise with
+something stronger than a default.
+
+The cost is paid in store space rather than eval time: the two pins' Mesa
+builds are only the same derivation while nothing in Mesa's own dependency
+chain has moved between them, which is not guaranteed to stay true. Measured
+2026-10-02, on `main`'s pins: identical store path
+(`mesa-26.2.3`, a closure of 60 paths and about 1.1 GB by `nix path-info -S`),
+so there is no second Mesa on disk today -- but the day the two pins diverge
+there, a machine carries both. The extra cost is then the paths the two
+closures do not share, well under that 1.1 GB.
+
+**An overlay on `mesa` no longer reaches the drivers.** They come from
+Hyprland's nixpkgs, which sees none of the machine's `nixpkgs.overlays`. A
+patched or replaced Mesa now needs a plain `hardware.graphics.package =
+pkgs.mesa;` (and `package32`), and then keeping its glibc in step with
+Hyprland's is that machine's job: `checks.graphics-glibc` only covers the
+reference machine.
+
 <a id="declarative-flatpaks-for-the-software-nixpkgs-genu"></a>
 ### Declarative Flatpaks, for the software nixpkgs genuinely does not carry
 

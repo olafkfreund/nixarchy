@@ -291,6 +291,25 @@ here changes nothing on a clean machine and stops overriding anyone
 else's. omarchy-session still runs the Lua config through
 config.programs.hyprland.package, which is the same binary either way.
 
+<a id="hyprlands-mesa-follows-its-own-nixpkgs-1"></a>
+
+### hardware.graphics.package and package32, from Hyprland's own nixpkgs
+
+```nix
+hardware.graphics.package = lib.mkOverride 900 hyprPkgs.mesa;
+```
+
+hardware.graphics.package and package32, from Hyprland's own nixpkgs.
+
+Hyprland loads its GPU drivers into its own process, so they have to share
+its glibc, not this flake's -- see
+docs/internals/flake.md#hyprlands-mesa-follows-its-own-nixpkgs for the #1154
+failure and why `lib.mkOverride 900`, not `lib.mkDefault`, is the priority:
+nixpkgs' own module sets both options at `mkDefault` itself, so a second
+`mkDefault` here ties with it and evaluation refuses. 900 beats that default
+and still loses to a machine's own plain assignment.
+`checks.graphics-glibc` holds the pairing at evaluation time.
+
 <a id="config-hypr-xdph-conf-which-the-package-seeds-into"></a>
 
 ### config/hypr/xdph.conf, which the package seeds into

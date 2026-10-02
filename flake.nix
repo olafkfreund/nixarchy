@@ -2441,6 +2441,14 @@
           # and vm-toplevel builds, the extraction has not let the two drift.
           reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
 
+          # Hyprland loads its GPU drivers into its own process, so they must
+          # share its glibc -- evaluation only, no boot. See
+          # tests/graphics-glibc.nix and #1154, #1158.
+          graphics-glibc = import ./tests/graphics-glibc.nix {
+            pkgs = pkgsFor.${system};
+            config = self.nixosConfigurations.reference.config;
+          };
+
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
           # for what that can and cannot prove. Costs about what reference-toplevel
           # above does: a runCommand plus a ~1-1.5 GB guest closure from

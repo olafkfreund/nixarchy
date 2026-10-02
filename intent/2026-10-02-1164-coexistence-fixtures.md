@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1164
 author: olafkfreund
 ---
@@ -99,3 +99,13 @@ together.
    when nixarchy's package set is not yet in the cache. Should that build
    wait for the `system` job, which already builds the closure, rather than
    being a separate cheap check?
+
+## Owner's answers (2026-10-02)
+
+All three proposals were accepted:
+1. Start with the graphics fixtures, plus one overlap each for
+   `systemPackages` and `fonts.packages`, and grow the set with every
+   coexistence bug.
+2. The spec rule goes in AGENTS.md, as an appended section.
+3. The spec settles where the `system-path` build runs, after measuring its
+   cost.

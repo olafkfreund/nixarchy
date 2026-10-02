@@ -2183,7 +2183,21 @@ pkgs.testers.runNixOSTest {
     print("owe: unlocked")
 
     aim(f"omarchy-theme-bg-set {original_background}")
-    print("owe: restored the original still")
+    # Wait for the hand-back to finish before anything later reads shell.json:
+    # owed re-enables the background plugin asynchronously, and the shell
+    # saves that to shell.json. The #847 block below copied the file before
+    # that write landed and failed its cmp (#1156 CI).
+    for _ in range(30):
+        status = owe_status()
+        plugins = json.loads(aim("omarchy-plugin-list --json"))
+        background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
+        if not status.get("render_alive") and background and background["enabled"]:
+            break
+        machine.sleep(2)
+    assert not status.get("render_alive") and background and background["enabled"], (
+        f"owe did not hand the still back after the lock test: {status}, {background}")
+    machine.sleep(3)  # the shell's own debounced save of shell.json
+    print("owe: restored the original still, and the shell has it back")
 
     # ---- writing shell.json under a running shell, and getting back (#847) --
     #

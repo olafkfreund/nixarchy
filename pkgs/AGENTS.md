@@ -733,25 +733,39 @@ The Instantiator rebuilt every panel -- not just the changed
 one -- because `#901`'s fix above only stopped the fan-out that
 ANY save caused; a REAL plugin change still handed
 `shell.panelEntries` a fresh JS array, which an Instantiator
-cannot diff from the old one. On p620, 16,356 "another handler
-is registered" warnings over 7 days, and 62 duplicate
-`Panel.qml` loads counted after a single restart at 08:20 on
-2026-10-02 (podman, microvm and devenv each loading `Panel.qml`
-five times over). `#958` describes the same symptom; this fix
-is not claimed against it, only linked, because #958's own
-repro has not been re-run since.
+cannot diff from the old one. Upstream's own measurement
+(#13439): two OSDs running at once in 1 of 5 busy-session runs,
+each registering its own IpcHandler and logging the same
+"another handler is registered" warning #901 fixed for the
+layout-save case.
+
+Not p620's own duplicate-handler counts: those are bar widgets
+(`Panel.qml` 45, `BarWidget.qml` 11, counted after one restart) --
+one instance per monitor legitimately sharing a target, a
+separate matter `checks.session`'s #1155 block excludes by
+design (it never watches `entryPoints.barWidget`). `#958`
+describes a similar symptom; this fix is not claimed against it,
+only linked, because #958's own repro has not been re-run since.
 
 `1155-panel-loaders-kept.patch` carries omacom/omarchy@0066ea216b
 (#13439) verbatim, applied FIRST -- before every substituteInPlace
-in `default.nix`, including the #901 block above -- because it
-rewrites the whole `panelEntries` property and the
-`onPluginsChanged` handler that #901 part A's edits sit beside.
-Applying it after would have #901's `--replace-fail` anchors
-target text that no longer exists. Upstream moved the panel
-list from a plain array into a `ListModel` synced in place
-(`syncPanelEntries`): an entry whose plugin still loads the same
-way keeps its `Loader` across the change; only a genuinely
-different entry set rebuilds.
+in `default.nix`, including the #901 block above. Not because the
+two could not coexist in either order generally: with part B
+retired, part A's anchors (`computePanelEntries`'s signature, the
+`onShellConfigChanged` handler) are text neither patch touches, and
+would survive either order. The real constraint is narrower: part
+A's helper insertion sits immediately before
+`function computePanelEntries() {` -- which is also upstream's own
+patch's trailing context, on the hunk that replaces the
+`panelEntries` property (hunk 2 of 4). Insert part A's helper
+there first and that line is no longer where upstream's hunk
+expects to find it right after the property it replaces, and
+`--fuzz=0` refuses the mismatch. Applying 1155 first keeps that
+context exactly as upstream wrote it, before part A ever touches
+the file. Upstream moved the panel list from a plain array into a
+`ListModel` synced in place (`syncPanelEntries`): an entry whose
+plugin still loads the same way keeps its `Loader` across the
+change; only a genuinely different entry set rebuilds.
 
 Deleted by the quattro bump, which already has it. `--fuzz=0`,
 so a reworded upstream block fails this build and says so.

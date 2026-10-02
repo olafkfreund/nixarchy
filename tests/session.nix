@@ -2004,34 +2004,55 @@ pkgs.testers.runNixOSTest {
     # it goes red; pkgs/AGENTS.md#panel-loaders-survive-a-plugin-change-1155
     # and checks.panel-loaders carry the actual bug/fix proof.
     #
-    # Bar widgets are excluded on purpose: one IpcHandler per monitor is a
-    # legitimate duplicate (one Bar.qml instance per output), not the #1155
-    # bug, which is about panels, menus and overlays re-registering when
-    # nothing about them changed.
+    # Bar widgets are excluded ON PURPOSE, not an oversight: one IpcHandler
+    # per monitor is a legitimate duplicate (one instance per output), and is
+    # a separate matter from #1155 -- see pkgs/AGENTS.md's #1155 section for
+    # why p620's own duplicate-handler counts are bar widgets, not this bug.
+    # So the watched set below is built from entryPoints.panel/.overlay/.menu
+    # only, never entryPoints.barWidget.
     omarchy_path = machine.succeed(
         as_user(". /run/current-system/etc/set-environment 2>/dev/null; echo $OMARCHY_PATH")
     ).strip()
     assert omarchy_path, "OMARCHY_PATH did not resolve for the omarchy user"
 
-    # Every overlay's own entry-point filename, read from the manifests this
-    # session actually ships -- overlays are not called Overlay.qml, each
-    # names its own (Clipboard.qml, Emojis.qml, ReminderFlow.qml, ...).
-    manifest_paths = machine.succeed(
-        "find " + omarchy_path + "/shell/plugins -name manifest.json"
-    ).split()
-    overlay_names = set()
-    for manifest_path in manifest_paths:
-        manifest = json.loads(machine.succeed("cat " + manifest_path))
-        overlay_entry = manifest.get("entryPoints", {}).get("overlay")
-        if overlay_entry:
-            overlay_names.add(overlay_entry)
-    assert overlay_names, "no overlay entry points found in any shipped manifest"
+    # Watched (plugin directory name, entry filename) pairs, from BOTH the
+    # shipped plugins and the user's installed third-party ones
+    # (~/.config/omarchy/plugins, modules/home.nix's
+    # programs.nixarchy.plugins/defaultPlugins symlink target -- podman,
+    # microvm, devenv and friends). The pair, not the bare filename, is what
+    # disambiguates: "Panel.qml" is also the entryPoints.barWidget filename
+    # for several bar-widget plugins (agents, dropbox, bluetooth, power),
+    # and a filename-only match would wrongly watch their bar widgets too.
+    watched = set()
+
+    def collect_watched(find_output):
+        for manifest_path in find_output.split():
+            manifest = json.loads(machine.succeed("cat " + manifest_path))
+            entry_points = manifest.get("entryPoints", {})
+            plugin_dir = manifest_path.rsplit("/", 1)[0].rsplit("/", 1)[-1]
+            for kind in ("panel", "overlay", "menu"):
+                entry_file = entry_points.get(kind)
+                if entry_file:
+                    watched.add((plugin_dir, entry_file))
+
+    collect_watched(machine.succeed(
+        "find " + omarchy_path + "/shell/plugins -name manifest.json"))
+    collect_watched(machine.succeed(as_user(
+        "find ~/.config/omarchy/plugins -maxdepth 2 -name manifest.json 2>/dev/null || true")))
+
+    # Cannot silently end up watching nothing: Osd.qml is the entry point
+    # upstream's own fix (#13439) is about (keepLoaded, so it is the one most
+    # likely to be re-registered on a restart).
+    assert ("osd", "Osd.qml") in watched, (
+        "entryPoints.panel for omarchy.osd (Osd.qml) was not found in any "
+        "manifest -- the watched set would be empty or wrong:\n" + repr(watched))
 
     # The journal point: a timestamp, not a cursor -- `--since @<epoch>` reads
     # the same way `journalctl -b` already does elsewhere in this file. A
-    # marker logged under the same tag right after it is the proof this
-    # window is not silently empty: an empty or mis-scoped read fails on the
-    # marker's absence, not on a false "no duplicates".
+    # marker logged under the same tag right after it proves the WINDOW
+    # opened (an empty or mis-scoped read fails on the marker's absence, not
+    # on a false "no duplicates") -- but not that the restarted shell logged
+    # anything into it, which the non-marker-line check below covers.
     since = machine.succeed(as_user("date +%s")).strip()
     marker = "nixarchy-1155-marker-" + since
     machine.succeed(as_user("logger -t omarchy-shell " + marker))
@@ -2055,11 +2076,15 @@ pkgs.testers.runNixOSTest {
         time.sleep(2)
     journal = machine.succeed(as_user(journal_cmd))
 
-    assert journal.strip(), "the journal window since the restart is empty"
     assert marker in journal, (
         "the marker logged just before the restart is missing from its own "
         "journal window -- the since-timestamp read is not seeing what it "
         "should:\n" + journal)
+    non_marker_lines = [line for line in journal.splitlines() if marker not in line]
+    assert non_marker_lines, (
+        "the restarted shell's journal window contains only the marker -- "
+        "omarchy-restart-shell may not have actually restarted anything:\n"
+        + journal)
 
     offenders = {}
     for line in journal.splitlines():
@@ -2074,8 +2099,9 @@ pkgs.testers.runNixOSTest {
         if start < 0 or end < 0:
             continue
         path = line[start + len("IpcHandler at "):end + len(".qml")]
-        name = path.rsplit("/", 1)[-1]
-        if name in ("Panel.qml", "Menu.qml") or name in overlay_names:
+        parts = path.rsplit("/", 2)
+        pair = (parts[-2], parts[-1]) if len(parts) >= 2 else (None, parts[-1])
+        if pair in watched:
             offenders[path] = offenders.get(path, 0) + 1
 
     for path, count in sorted(offenders.items()):

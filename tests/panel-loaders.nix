@@ -4,11 +4,14 @@
   omarchySrc,
 }:
 # #1155: an Instantiator handed a fresh JS array as its model cannot diff it,
-# so ANY plugin change rebuilt every panel, not just the changed one -- 62
-# duplicate Panel.qml loads counted on p620 after a single restart. Carries
-# omacom/omarchy@0066ea216b (#13439): the panel list lives in a ListModel
-# synced in place, so an entry whose plugin still loads the same way keeps
-# its Loader.
+# so ANY plugin change rebuilt every panel, not just the changed one.
+# Upstream's own measurement (#13439): two OSDs running at once in 1 of 5
+# busy-session runs, each registering its own IpcHandler. p620's own
+# duplicate-handler counts are a separate matter -- bar widgets, one per
+# monitor -- and are not evidence for this bug; see pkgs/AGENTS.md's #1155
+# section. Carries omacom/omarchy@0066ea216b (#13439): the panel list lives
+# in a ListModel synced in place, so an entry whose plugin still loads the
+# same way keeps its Loader.
 #
 # This runs tests/panel-loaders.py against BUILT shell.qml, and carries its
 # own negative control (AGENTS.md section 4, after

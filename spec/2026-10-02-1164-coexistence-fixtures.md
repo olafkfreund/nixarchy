@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1164
 intent: intent/2026-10-02-1164-coexistence-fixtures.md
 ---
@@ -153,3 +153,10 @@ never inserted, because §1–§13 numbers are referenced. It says:
    `§1`–`§13` references in `build.yml`, `omarchy.yml` and `tests/bus-mcp.nix`,
    and confirm they are unchanged.
 5. fmt, statix, deadnix.
+
+## Owner's decisions (2026-10-02)
+
+1. **The fonts fixture is dropped,** as recommended.
+2. **The `build.yml` edit is signed off:** one step in the `system` job, and
+   the `claimed` entry. The step-cost limit still applies: stop and report if
+   it adds more than about 2 minutes.

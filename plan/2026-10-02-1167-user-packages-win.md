@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1167
 spec: spec/2026-10-02-1167-user-packages-win.md
 ---

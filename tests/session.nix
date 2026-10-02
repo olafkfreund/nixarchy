@@ -1986,12 +1986,25 @@ pkgs.testers.runNixOSTest {
     def near_black(rgb):
         return sum(rgb) < 30
 
-    # A single pair of screenshots can land on the same half of the two-
-    # colour loop by bad luck (one period is 2s). Five readings spread over
-    # >2s of wall-clock time cannot: at least one pair must straddle a colour
-    # change. time.sleep rather than machine.sleep -- this is sampling across
-    # a fixed span, not polling for a condition.
-    def shot_series(prefix, n=5, interval=0.4):
+    # The series starts only once a saturated video frame is on screen: the
+    # hand-over from the still passes through a fade and a black frame, which
+    # are not failures (CI on #1156 caught exactly those two, then red).
+    def settle(prefix):
+        for i in range(20):
+            machine.screenshot(f"{prefix}-settle")
+            rgb = avg(os.path.join(os.environ["out"], f"{prefix}-settle.png"))
+            if max(rgb) > 150 and max(rgb) - min(rgb) > 100:
+                print(f"{prefix}: video frame on screen after {i} polls: {rgb}")
+                return
+            time.sleep(0.5)
+        raise AssertionError(f"{prefix}: no saturated video frame within 10s (last {rgb})")
+
+    # Eight readings 0.4s apart span 2.8s, more than one 2s loop, so at
+    # least one pair straddles a colour change even if software decoding
+    # runs slightly slow. time.sleep, not machine.sleep: this samples a fixed
+    # span rather than polling for a condition.
+    def shot_series(prefix, n=8, interval=0.4):
+        settle(prefix)
         readings = []
         for i in range(n):
             name = f"{prefix}-{i}"

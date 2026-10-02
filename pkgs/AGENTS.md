@@ -707,21 +707,70 @@ rebuilt every panel, menu and overlay plugin, froze the bar
 for 28-75 s on a machine with 52 of them, and flooded the
 journal with ~99 IpcHandler re-registrations (#901).
 
-Two causes, one per patch below. onShellConfigChanged fires
-pluginsChanged() -- the "the set of plugins changed" signal --
-for ANY save. And its panel listener assigns
-shell.panelEntries a fresh JS array, which is an
-Instantiator's model: QML does not diff a JS array, so every
-delegate is destroyed and recreated even when the contents
-are identical.
+Two causes. onShellConfigChanged fires pluginsChanged() -- the
+"the set of plugins changed" signal -- for ANY save. And its
+panel listener used to assign shell.panelEntries a fresh JS
+array, which was an Instantiator's model: QML does not diff a
+JS array, so every delegate was destroyed and recreated even
+when the contents were identical.
+
+The first cause is still fixed by the patch below (part A,
+enabledPluginSignature). The second is now fixed by carrying
+upstream's own fix (#1155, below) rather than by a patch here:
+part B -- the samePanelEntries guard around
+shell.panelEntries -- is retired.
 
 CARRIED, and meant to be dropped, like the #749, #877 and
 #893 blocks above: AGENTS.md section 11 puts Omarchy fixes
 upstream, and this is carried at the owner's request until it
-lands there. Delete it the moment upstream diffs the list.
-The whole block is the needle, so a reworded one fails this
-build.
+lands there. Delete it the moment upstream drops the
+pluginsChanged() fan-out on every save.
 printf, not a multi-line literal: pkgs/AGENTS.md#a-long-build-phase-is-one-indented-string-and-it-strips-one-indent
+
+## Panel loaders survive a plugin change (#1155)
+
+The Instantiator rebuilt every panel -- not just the changed
+one -- because `#901`'s fix above only stopped the fan-out that
+ANY save caused; a REAL plugin change still handed
+`shell.panelEntries` a fresh JS array, which an Instantiator
+cannot diff from the old one. Upstream's own measurement
+(#13439): two OSDs running at once in 1 of 5 busy-session runs,
+each registering its own IpcHandler and logging the same
+"another handler is registered" warning #901 fixed for the
+layout-save case.
+
+Not p620's own duplicate-handler counts: those are bar widgets
+(`Panel.qml` 45, `BarWidget.qml` 11, counted after one restart) --
+one instance per monitor legitimately sharing a target, a
+separate matter `checks.session`'s #1155 block excludes by
+design (it never watches `entryPoints.barWidget`). `#958`
+describes a similar symptom; this fix is not claimed against it,
+only linked, because #958's own repro has not been re-run since.
+
+`1155-panel-loaders-kept.patch` carries omacom/omarchy@0066ea216b
+(#13439) verbatim, applied FIRST -- before every substituteInPlace
+in `default.nix`, including the #901 block above. Not because the
+two could not coexist in either order generally: with part B
+retired, part A's anchors (`computePanelEntries`'s signature, the
+`onShellConfigChanged` handler) are text neither patch touches, and
+would survive either order. The real constraint is narrower: part
+A's helper insertion sits immediately before
+`function computePanelEntries() {` -- which is also upstream's own
+patch's trailing context, on the hunk that replaces the
+`panelEntries` property (hunk 2 of 4). Insert part A's helper
+there first and that line is no longer where upstream's hunk
+expects to find it right after the property it replaces, and
+`--fuzz=0` refuses the mismatch. Applying 1155 first keeps that
+context exactly as upstream wrote it, before part A ever touches
+the file. Upstream moved the panel list from a plain array into a
+`ListModel` synced in place (`syncPanelEntries`): an entry whose
+plugin still loads the same way keeps its `Loader` across the
+change; only a genuinely different entry set rebuilds.
+
+Deleted by the quattro bump, which already has it. `--fuzz=0`,
+so a reworded upstream block fails this build and says so.
+`checks.panel-loaders` asserts the patched text and carries its
+own negative control against the unpatched source.
 
 ## A notification its sender closed never left the screen
 

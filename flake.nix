@@ -2272,6 +2272,11 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          panel-loaders = import ./tests/panel-loaders.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            omarchySrc = omarchy;
+          };
 
           # What reaches nixarchy.cachix.org and what it costs: the allowlist
           # budget, proofs pushed alone, closures from main only (#697). Against

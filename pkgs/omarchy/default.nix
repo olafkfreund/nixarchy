@@ -423,6 +423,10 @@ stdenvNoCC.mkDerivation {
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
 
+                    # CARRIED (#1155): upstream's per-entry panel sync. Applied first so the
+                    # #901 part-A edits below target the patched text.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1155-panel-loaders-kept.patch}
+
                     # Bound the Lua source scan so a loop in hyprland.lua cannot pin a CPU when this menu opens.
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail "    lua <<'LUA'" "    timeout 3 lua <<'LUA'"
@@ -1884,7 +1888,7 @@ stdenvNoCC.mkDerivation {
 
                     # Why: pkgs/AGENTS.md#a-layout-only-shelljson-save-rebuilt-every-plugin-and-froze-the-bar
 
-                    # The two helpers, before computePanelEntries -- a single
+                    # The helper, before computePanelEntries -- a single
                     # unique anchor, asserted by --replace-fail itself.
                     helpersAnchor='  function computePanelEntries() {'
                     helpersNew=$(printf '%s\n' \
@@ -1899,19 +1903,6 @@ stdenvNoCC.mkDerivation {
                       '      if (reg.isEnabled(id)) ids.push(id)' \
                       '    ids.sort()' \
                       '    return ids.join(" ") + "|" + shell.selectedBarId' \
-                      '  }' \
-                      "" \
-                      '  // Same manifest OBJECT, not a deep compare: a rescan produces new' \
-                      '  // manifest objects, so a real plugin change still rebuilds.' \
-                      '  function samePanelEntries(a, b) {' \
-                      '    if (!a || !b || a.length !== b.length) return false' \
-                      '    for (var i = 0; i < a.length; i++) {' \
-                      '      if (a[i].id !== b[i].id) return false' \
-                      '      if (a[i].kind !== b[i].kind) return false' \
-                      '      if (a[i].keepLoaded !== b[i].keepLoaded) return false' \
-                      '      if (a[i].manifest !== b[i].manifest) return false' \
-                      '    }' \
-                      '    return true' \
                       '  }' \
                       "" \
                       "$helpersAnchor")
@@ -1946,21 +1937,6 @@ stdenvNoCC.mkDerivation {
                       '    }' \
                       '  }')
                     substituteInPlace "$shellQml" --replace-fail "$cfgOld" "$cfgNew"
-
-                    # B: never replace an identical panel list. This also covers the
-                    # registry's own moveBarWidget/setBarWidget, which emit
-                    # pluginsChanged() before writing shell.json -- so `omarchy bar
-                    # set` paid the fan-out twice.
-                    panelOld='    function onPluginsChanged() { if (!shell.pluginReloading) shell.panelEntries = shell.computePanelEntries() }'
-                    panelNew=$(printf '%s\n' \
-                      '    function onPluginsChanged() {' \
-                      '      if (shell.pluginReloading) return' \
-                      '      // nixarchy CARRIED patch (#901): QML rebuilds every panel when the' \
-                      '      // Instantiator model is reassigned; skip an identical list.' \
-                      '      var next = shell.computePanelEntries()' \
-                      '      if (!shell.samePanelEntries(shell.panelEntries, next)) shell.panelEntries = next' \
-                      '    }')
-                    substituteInPlace "$shellQml" --replace-fail "$panelOld" "$panelNew"
 
                     # After every external shell.json write (omarchy bar, Bar Folder layout.sh)
                     # refresh_shell_config sends reloadConfig, and if the shell misses the 2 s IPC

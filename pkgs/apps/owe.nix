@@ -89,6 +89,14 @@ stdenv.mkDerivation (finalAttrs: {
     "regression"
   ];
 
+  # CARRIED (#1153): owed gave owe-render 1 s to open its socket, then killed
+  # it and retried 30 s later. Under software GL (llvmpipe) start-up takes about
+  # 1.3 s, so a VM, or a slow first start, never got a renderer at all.
+  postPatch = ''
+    substituteInPlace src/daemon/supervisor.c \
+      --replace-fail 'while (waited < 1000) {' 'while (waited < 10000) {'
+  '';
+
   # The qml-plugin/ subtree is a second, separate CMake project (the LockFeed
   # QML module) that meson does not build. Configured and built here, into its
   # own directory, and installed in postInstall below. mesonBuildPhase leaves
@@ -148,7 +156,8 @@ stdenv.mkDerivation (finalAttrs: {
       exit 1
     }
 
-    "$out/bin/owe" --version | grep -q '0.2.8' || {
+    version=$("$out/bin/owe" --version)
+    [[ $version == *0.2.8* ]] || {
       echo "owe: owe --version did not report 0.2.8" >&2
       exit 1
     }

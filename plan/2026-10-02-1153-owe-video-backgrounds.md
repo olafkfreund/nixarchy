@@ -434,3 +434,18 @@ full-sentence subject and `Refs #1153`.
   module are all in it, and nothing persists outside the user's
   `~/.cache/owe`, `~/.cache/omarchy/lock-poster` and an optional
   `~/.config/owe/`. Those are harmless to leave behind.
+
+## Deviations found by CI on #1156 (2026-10-02)
+
+- **Step 1.** The install check's `owe --version | grep -q` tripped
+  `checks.grep-q-pipefail`, so it compares the string directly.
+- **Step 1, a carried owe patch.** `owed` gave `owe-render` 1 s to open its
+  socket (`supervisor.c`, `while (waited < 1000)`). Under llvmpipe, start-up
+  measured about 1.3 s, so the VM never got a renderer: owed killed it and
+  retried every 30 s. A `postPatch` `--replace-fail` raises it to 10 s.
+- **Step 4.** owed's unit `PATH` was the Omarchy package plus coreutils.
+  `omarchy-shell` finds the shell through `qs`, so every handoff logged
+  "omarchy-shell is not running", and the desktop stayed `#111212` with a
+  spread of 0. The `PATH` is now the package's `runtimeDeps`. checks.session
+  step 2 was the probe that caught it, which is what break (b) existed to
+  show; it went red on the real configuration rather than a deliberate break.

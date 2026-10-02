@@ -1313,12 +1313,10 @@ in
           Restart = "on-failure";
           RestartSec = 2;
           Environment = [
-            "PATH=${
-              lib.makeBinPath [
-                cfg.package
-                pkgs.coreutils
-              ]
-            }"
+            # omarchy-shell finds the running shell through `qs`, which only the
+            # package's runtimeDeps carry; without it every handoff reads
+            # "omarchy-shell is not running" (#1153, found by checks.session).
+            "PATH=${lib.makeBinPath ([ cfg.package ] ++ cfg.package.passthru.runtimeDeps)}"
             "OMARCHY_PATH=${omarchyPath}"
           ];
         };

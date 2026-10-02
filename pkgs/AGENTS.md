@@ -795,6 +795,59 @@ AGENTS.md section 11 puts Omarchy fixes upstream, and this is
 carried at the owner's request until `omacom/omarchy` fixes the
 same handler. `--fuzz=0`, so a reworded handler fails this build.
 
+## Video and GIF desktop backgrounds, backported onto v4.0.4 (#1153)
+
+`1153-owe-video-backgrounds.patch` squashes two upstream pull requests --
+omacom/omarchy #6792 ("Add native video wallpaper support") and #12429
+("Replace the shell's desktop video path with OWE") -- onto v4.0.4, so
+nixarchy ships video and GIF desktop backgrounds and a video-aware lock
+poster a full release ahead of carrying them for free. The owe package
+(pkgs/apps/owe.nix) does the actual decoding and rendering; this patch is
+what wires the shell, the background picker and the theme-set scripts to
+hand it a path instead of drawing stills themselves.
+
+Applied FIRST in default.nix's installPhase, right after the tree is
+copied into `$out/share/omarchy` and before any of this file's own
+substituteInPlace edits -- so every one of those edits keeps matching the
+backported text rather than the text it replaces. One of them has to,
+because the patch removes what it would otherwise match:
+
+**The retargeted 4096 cap.** The #1153 patch replaces the background
+plugin's base (still) layer, an `Image` sourced from `displayedBackground`,
+with a `BackgroundMedia` that draws stills itself and stays empty behind a
+video so OWE's own compositor layer shows through. The 4096-wide
+`sourceSize` cap just above it in default.nix -- there so a wallpaper over
+`GL_MAX_TEXTURE_SIZE` does not render a silent black screen, see that
+comment -- loops over `displayedBackground oldBackground
+incomingBackground`, and the first of those no longer has a matching
+`Image` to patch. So the loop drops `displayedBackground` and keeps only
+the transition layers it still applies to, and a second, separate
+`substituteInPlace` retargets `BackgroundMedia.qml`'s own cap instead.
+Upstream's text is `root.version > 0 ? width : 0` -- it only caps
+`sourceSize` once a cache-busting `version` is in play, and otherwise
+leaves it at 0, which Qt reads as "decode at full size". The substitution
+changes the `0` to `4096`, so the common, unversioned case gets the same
+cap the loop above gives the transition layers.
+
+**Carried as-is:** #6792's battery service polls `powerprofilesctl get`
+every two seconds, forever, so the lock screen can drop its video feed in
+power-saver mode (`powerSaverActive` in `LockView.qml`). That is upstream's
+interval and cost, not owe's: owe's own battery policy is in
+`~/.config/owe/config.toml`.
+
+**ffmpegthumbnailer.** `omarchy-menu-images`'s video branch and the lock
+screen's `poster.sh` both call it. It is already in `runtimeDeps`, put there
+for Nautilus's thumbnails. Removing it from that list now breaks video
+thumbnails and the lock-screen still.
+
+**Deleted by the quattro bump.** When nixarchy moves its base release off
+v4.0.4, the target release carries both PRs' work natively and this patch
+stops applying -- which is the point. Delete the patch file, the `patch
+-d` line and its comment, and the retargeted-4096-cap comment and
+substitutions, together. The package (pkgs/apps/owe.nix) and the
+`programs.nixarchy.owe` module stay: nothing about them is specific to
+this one release's shell.
+
 ## omarchy-shell finds its instance by config path, which moves here
 
 #963: omarchy-shell finds the running instance by CONFIG

@@ -423,6 +423,14 @@ stdenvNoCC.mkDerivation {
                     cp -r . $out/share/omarchy/
                     rm -rf $out/share/omarchy/{.git,.github,docs,manual,test,plans,agents}
 
+                    # CARRIED, for #1153: video and GIF desktop backgrounds and a
+                    # video-aware lock poster, backported onto v4.0.4 from
+                    # omacom/omarchy #6792 and #12429. Applied FIRST, so every
+                    # substituteInPlace below targets the backported text rather
+                    # than what this patch replaces. See the patch's own header,
+                    # and pkgs/AGENTS.md, for what it carries and why.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1153-owe-video-backgrounds.patch}
+
                     # CARRIED (#1155): upstream's per-entry panel sync. Applied first so the
                     # #901 part-A edits below target the patched text.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1155-panel-loaders-kept.patch}
@@ -522,13 +530,28 @@ stdenvNoCC.mkDerivation {
                     # constant rather than anything derived from Screen: Screen is an attached
                     # property that does not resolve inside an Image, and a QML error here
                     # would take out the whole background rather than just the size hint.
-                    for prop in displayedBackground oldBackground incomingBackground; do
+                    #
+                    # displayedBackground dropped from this loop (#1153): the 1153 patch above
+                    # replaces that layer's Image with a BackgroundMedia, which draws through
+                    # its own Image with its own sourceSize.width, retargeted just below. The
+                    # transition layers (oldBackground, incomingBackground) are untouched by
+                    # that patch and still match here.
+                    for prop in oldBackground incomingBackground; do
                       substituteInPlace $out/share/omarchy/shell/plugins/background/Background.qml \
                         --replace-fail \
                           "source: root.imageUrl(root.$prop)" \
                           "source: root.imageUrl(root.$prop)
                         sourceSize.width: 4096"
                     done
+
+                    # The base layer's own cap (#1153): BackgroundMedia.qml's still-image
+                    # branch only sets sourceSize once a cache-busting version is in play,
+                    # leaving the common, unversioned case at 0 -- Qt then decodes at full
+                    # size, the black-background failure the loop above exists to avoid.
+                    substituteInPlace $out/share/omarchy/shell/Ui/BackgroundMedia.qml \
+                      --replace-fail \
+                        'sourceSize.width: root.version > 0 ? width : 0' \
+                        'sourceSize.width: root.version > 0 ? width : 4096'
 
                     # Same store-mode problem as omarchy-theme-set, in a different script.
                     # omarchy-plugin-clone copies a first-party plugin out of $OMARCHY_PATH

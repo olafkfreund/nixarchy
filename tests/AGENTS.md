@@ -452,6 +452,33 @@ the warning reads well is checked by a human — enabling
 `programs.nixarchy.dictation` on a stable machine should print it and install
 nothing.
 
+## The owe one: hardware decode and the battery pause are hardware-only
+
+`tests/session.nix`'s #1153 probe sets a real video background and locks
+with one set, and proves the wiring end to end: `owed` starts, `owe status`
+reports a video source with a live renderer, the desktop and the lock
+screen's feed both visibly move, and the background plugin comes back once
+the still returns. **None of that reaches the two questions a VM genuinely
+cannot answer**, for the same reason the Graphics section of `pkgs/verify.sh`
+exists at all:
+
+- **hardware decode.** Every VM here renders on llvmpipe, so `owe
+  render-status`'s `hwdec` field is always `"no"` on this renderer whether
+  the fix works or not — there is no GPU to decode on, so a check that
+  asserted `hwdec != "no"` would be red on every correct build;
+- **the battery pause.** No VM here has a battery, so `on_battery` in `owe
+  status` can never become `true`, and `battery_mode = "pause"` in
+  `~/.config/owe/config.toml` has nothing to react to.
+
+`pkgs/verify.sh`'s "Owe (video backgrounds)" section is the only place
+either is checked: it reads `owe render-status`'s `hwdec` while a video is
+set, and prints `owe status`'s `on_battery`/`paused` fields beside whatever
+`~/.config/owe/config.toml` currently asks for, on a real machine with a
+real GPU and a real battery to pull. The hwdec half is a human's own job to
+set up (set a video, run `nixarchy verify`, read the value); the battery
+half additionally needs the config file written and AC physically pulled,
+which nothing here can do for you.
+
 ## The plugin shadow check: a state no VM can reach, and a limit it admits
 
 `checks.doctor-plugins` fakes six homes because the state it is about cannot be

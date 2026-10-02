@@ -743,6 +743,16 @@
             # not read clocksource" for a reason that has nothing to do with
             # whether the guest has a key configured.
             openssh
+            # owe, for the #1153 section: an undeclared `owe` here would read
+            # as "owe not on PATH" on a machine that simply has not rebuilt
+            # since this row was added, rather than naming the real cause.
+            # Declared unconditionally, so the row's `command -v owe` guard
+            # always succeeds -- the CLI is always present, with
+            # programs.nixarchy.owe or without it. What actually answers "off"
+            # is `owe status` itself: with no owed socket to connect to, it
+            # comes back empty and the row reports "owed is not running",
+            # pointing at the option, rather than the CLI.
+            nixarchy-apps.owe
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };
@@ -767,6 +777,10 @@
           omawrite = final.callPackage ./pkgs/apps/omawrite.nix { };
           omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
+
+          # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
+          # and the lock screen's video feed. Not in nixpkgs. #1153.
+          owe = final.callPackage ./pkgs/apps/owe.nix { };
 
           # The fourth, and the only one that is not a small script or a Qt
           # program: a Wails app, so a Go module set AND an npm tree to pin.
@@ -1214,6 +1228,7 @@
             omawrite
             omacalc
             omacut
+            owe
             aether
             ttfx
             ;

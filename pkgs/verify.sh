@@ -768,6 +768,98 @@ else
   hmm "browser accent not set" "programs.nixarchy.browserThemeUser is off"
 fi
 
+# ---- owe (#1153): video and GIF desktop backgrounds ---------------------
+# Two things no VM check can answer: whether owe's renderer actually gets a
+# hardware decoder (every VM here decodes in software, by construction), and
+# whether the battery-pause policy reacts to AC actually being pulled (no VM
+# here has a battery at all). tests/session.nix's probe proves the wiring --
+# a video plays, the lock feed moves -- with neither of those, so this is the
+# only place either is checked.
+head_ "Owe (video backgrounds)"
+
+if ! command -v owe >/dev/null 2>&1; then
+  hmm "owe not on PATH" "enable programs.nixarchy.owe to test this"
+else
+  engine_status=$(owe status 2>/dev/null || true)
+  if [ -z "$engine_status" ]; then
+    hmm "owed is not running" "systemctl --user start owed, or enable programs.nixarchy.owe"
+  else
+    # "engine" (shell draws a still itself, or a renderer process is running
+    # one) is on `owe status`, not `owe render-status`: when a renderer is
+    # running, render-status PROXIES that process's own reply (daemon_ipc.c's
+    # render-status handler, when owed_app_renderer_expected() is true) and
+    # that reply has no "engine" field at all -- only the synthetic
+    # shell-engine reply owed builds itself names one. Reading "engine" off
+    # render-status would see it only in the one case that is not a renderer.
+    engine=$(
+      python3 -c '
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+except ValueError:
+    d = {}
+print(d.get("engine", "?"))
+' "$engine_status" 2>/dev/null || echo '?'
+    )
+    case "$engine" in
+      shell)
+        hmm "no video background is set" "omarchy theme bg set <file>.mp4, then re-run to see hwdec"
+        ;;
+      renderer)
+        render_status=$(owe render-status 2>/dev/null || true)
+        hwdec=$(
+          python3 -c '
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+except ValueError:
+    d = {}
+print(d.get("hwdec", "?"))
+' "$render_status" 2>/dev/null || echo '?'
+        )
+        case "$hwdec" in
+          no) bad "software decode" "owe render-status reports hwdec: no" ;;
+          '?') hmm "could not read hwdec" "$render_status" ;;
+          *) ok "hardware decode" "$hwdec" ;;
+        esac
+        ;;
+      *) hmm "owe status did not answer as expected" "$engine_status" ;;
+    esac
+  fi
+
+  # Printed as information, like the Version section above, because only a
+  # person pulling the AC cable can make this transition happen -- the
+  # script can read what owe currently reports and nothing more. Reuses
+  # $engine_status rather than calling `owe status` a second time.
+  status=$engine_status
+  if [ -n "$status" ]; then
+    read -r on_battery paused <<<"$(
+      python3 -c '
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+except ValueError:
+    d = {}
+print(d.get("on_battery", "?"), d.get("paused", "?"))
+' "$status" 2>/dev/null || echo '? ?'
+    )"
+    config="$HOME/.config/owe/config.toml"
+    if [ -f "$config" ] && grep -q 'battery_mode[[:space:]]*=[[:space:]]*"pause"' "$config"; then
+      requests_pause="yes"
+    else
+      requests_pause="no"
+    fi
+    say_dim "on_battery=$on_battery paused=$paused battery_mode=pause:$requests_pause"
+    if [ "$requests_pause" = "yes" ] && [ "$on_battery" = "True" ] && [ "$paused" = "True" ]; then
+      ok "battery pause took effect" "unplugged, playback paused"
+    elif [ "$requests_pause" = "yes" ] && [ "$on_battery" = "True" ]; then
+      bad "battery_mode is pause but playback did not pause" "on battery, paused=$paused"
+    else
+      hmm "battery pause not exercised" "set battery_mode = \"pause\" in $config, pull AC, and re-run"
+    fi
+  fi
+fi
+
 # ---- what nixarchy patched, checked on the machine it matters on ---------
 # Every one of these was wrong at some point and none of them is visible in a
 # VM: the version comes from a package query, Plymouth only shows at boot, and

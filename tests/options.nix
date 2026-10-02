@@ -201,6 +201,9 @@ let
     imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
     programs.ai-mirror.enable = true;
   };
+  # #1153: the off state. owe.enable only reads osConfig, so the home side
+  # needs no hmSettings of its own.
+  oweOffHome = homeOn { owe.enable = false; } { };
   hasGh = h: builtins.any (p: (p.pname or "") == "gh") h.home.packages;
   hasHello = h: builtins.any (p: (p.pname or "") == "hello") h.home.packages;
 
@@ -295,6 +298,7 @@ let
     "nixarchyAiMirrorMcpOpencode"
   ];
   hasAiMirrorPackage = home: builtins.any (p: (p.pname or "") == "ai-mirror") home.home.packages;
+  hasOwePackage = home: builtins.any (p: (p.pname or "") == "owe") home.home.packages;
   forcesA11y =
     home:
     home.home.sessionVariables ? GTK_MODULES
@@ -711,6 +715,43 @@ let
     aiMirrorPackage = {
       on = hasAiMirrorPackage defaultHomeOn;
       off = hasAiMirrorPackage defaultHome;
+    };
+
+    # #1153: owed, the renderer and the owe CLI, only when the NixOS module
+    # turned the option on. Mode A (defaultHome, no osConfig) is the other off.
+    owePackage = {
+      on = hasOwePackage defaultHomeOn;
+      off = hasOwePackage oweOffHome;
+    };
+
+    # The user unit that plays video backgrounds and feeds the lock screen.
+    oweService = {
+      on = defaultHomeOn.systemd.user.services ? owed;
+      off = oweOffHome.systemd.user.services ? owed;
+    };
+
+    # Mode A, not just owe.enable = false: owe.enable defaults to true on its
+    # own, so a home reading it without also reading osConfig's
+    # programs.nixarchy.enable would turn owed on for a machine where
+    # nixarchy's NixOS side never ran at all. fixtureNixarchyOff is exactly
+    # that -- osConfig's programs.nixarchy.enable = false, this Home Manager
+    # module still on -- and owe.enable's own default is untouched by it.
+    oweServiceModeAInert = {
+      on = defaultHomeOn.systemd.user.services ? owed;
+      off = fixtureNixarchyOff.systemd.user.services ? owed;
+    };
+
+    # The theme-set hook that pokes owed to resync on a theme switch.
+    oweHook = {
+      on = defaultHomeOn.xdg.configFile ? "omarchy/hooks/theme-set.d/10-owe-sync";
+      off = oweOffHome.xdg.configFile ? "omarchy/hooks/theme-set.d/10-owe-sync";
+    };
+
+    # The NixOS side: the lock screen's LockFeedSurface imports Owe.LockFeed
+    # from this path.
+    oweQmlPath = {
+      on = defaultMachine.environment.sessionVariables ? QML_IMPORT_PATH;
+      off = (configWith { owe.enable = false; }).environment.sessionVariables ? QML_IMPORT_PATH;
     };
 
     # The widget is a default plugin like the others, and turns off the same way.

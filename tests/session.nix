@@ -42,6 +42,20 @@ let
       })
     ]
   );
+  # #1153: a tiny synthetic video background. A flat colour alternating red
+  # then blue, not testsrc -- testsrc's bars barely move the whole-screen
+  # average frame to frame, so the probe below could not tell a decoded
+  # video apart from a frozen poster by that alone. A screen-filling colour
+  # change the probe's avg() cannot miss, and it needs no network, unlike a
+  # real clip would.
+  oweTestVideo = pkgs.runCommand "owe-test-video" { nativeBuildInputs = [ pkgs.ffmpeg ]; } ''
+    mkdir -p $out
+    ffmpeg -f lavfi -i color=c=red:s=640x360:r=25:d=1 \
+      -f lavfi -i color=c=blue:s=640x360:r=25:d=1 \
+      -filter_complex "[0:v][1:v]concat=n=2:v=1[v]" -map "[v]" \
+      -pix_fmt yuv420p $out/loop.mp4
+  '';
+
   # A real published Omarchy theme, pinned. `omarchy theme install` is the
   # sibling of `omarchy plugin add`: it clones a git URL at runtime, past the
   # same omarchy-git-url-check, into ~/.config/omarchy -- so it depends on the
@@ -1959,6 +1973,243 @@ pkgs.testers.runNixOSTest {
     assert aim_owner() == "off", "the kill switch's command did not take control back"
     print("ai-mirror: widget on, MCP cannot self-answer, requests lapse and end "
           "with their server, and the kill switch is bound and works")
+
+    # ---- owe (#1153): video and GIF desktop backgrounds and a lock poster --
+    # Nix-interpolated here, once: a Python f-string brace around the
+    # attribute name would be literal text, not the Nix antiquotation that
+    # resolves the store path.
+    owe_video_path = "${oweTestVideo}/loop.mp4"
+
+    def owe_status():
+        return json.loads(aim("owe status"))
+
+    def near_black(rgb):
+        return sum(rgb) < 30
+
+    # The series starts only once a saturated video frame is on screen: the
+    # hand-over from the still passes through a fade and a black frame, which
+    # are not failures (CI on #1156 caught exactly those two, then red).
+    def settle(prefix):
+        for i in range(20):
+            machine.screenshot(f"{prefix}-settle")
+            rgb = avg(os.path.join(os.environ["out"], f"{prefix}-settle.png"))
+            if max(rgb) > 150 and max(rgb) - min(rgb) > 100:
+                print(f"{prefix}: video frame on screen after {i} polls: {rgb}")
+                return
+            time.sleep(0.5)
+        raise AssertionError(f"{prefix}: no saturated video frame within 10s (last {rgb})")
+
+    # Eight readings 0.4s apart span 2.8s, more than one 2s loop, so at
+    # least one pair straddles a colour change even if software decoding
+    # runs slightly slow. time.sleep, not machine.sleep: this samples a fixed
+    # span rather than polling for a condition.
+    def shot_series(prefix, n=8, interval=0.4):
+        settle(prefix)
+        readings = []
+        for i in range(n):
+            name = f"{prefix}-{i}"
+            machine.screenshot(name)
+            r, g, b = avg(os.path.join(os.environ["out"], f"{name}.png"))
+            readings.append((r, g, b))
+            print(f"{prefix} shot {i}: #{r:02X}{g:02X}{b:02X}")
+            if i < n - 1:
+                time.sleep(interval)
+        return readings
+
+    def spread(readings):
+        return max(
+            sum(abs(a - b) for a, b in zip(readings[i], readings[j]))
+            for i in range(len(readings))
+            for j in range(i + 1, len(readings))
+        )
+
+    # 1. owed is a user unit (modules/home.nix), gated on programs.nixarchy
+    # .owe.enable, which the installer-managed reference turns on by default.
+    machine.wait_until_succeeds(as_user("systemctl --user is-active owed"), timeout=30)
+    print("owe: owed is active")
+
+    # The still this theme booted with, read back before owe touches
+    # anything, so step 3 can prove it actually restores rather than just
+    # "a" still.
+    original_background = aim(
+        "readlink -f ~/.local/state/omarchy/current/background").strip()
+
+    # 2. omarchy-theme-bg-set (patched by #1153, see pkgs/omarchy/
+    # 1153-owe-video-backgrounds.patch) takes any realpath-able file, with no
+    # directory requirement -- the store path works unmodified since /nix/
+    # store is world-readable.
+    aim(f"omarchy-theme-bg-set {owe_video_path}")
+
+    # owed's switch_to_shell/switch_to_renderer path transcodes before the
+    # renderer reports alive, so this is the longer poll in the block.
+    status = None
+    for _ in range(30):
+        status = owe_status()
+        if status.get("source_kind") in ("video", "gif") and status.get("render_alive"):
+            break
+        machine.sleep(2)
+    assert status is not None and status.get("source_kind") in ("video", "gif"), (
+        f"owe status never reported a video/gif source after setting one: {status}")
+    assert status.get("render_alive"), (
+        f"owe status reports a video source but no live renderer: {status}")
+    assert status.get("engine") == "renderer", (
+        f"owe status reports a video source and a live renderer but engine "
+        f"is {status.get('engine')!r}, not 'renderer' -- owed has not "
+        "actually taken the layer from the shell (main.c's activate_renderer "
+        "sets engine only after disabling the background plugin)")
+    print(f"owe: video source accepted and rendering ({status.get('source_kind')})")
+
+    # activate_renderer() disables the background plugin itself (shell.c:
+    # `omarchy-shell shell setPluginEnabled omarchy.background false`),
+    # BEFORE setting engine to "renderer" -- so the assertion above already
+    # guarantees this call happened. isEnabled() in PluginRegistry.qml reads
+    # the toggle off the SAME in-memory config setEnabled() just mutated, not
+    # a stale on-disk shell.json, so omarchy-plugin-list --json (which wraps
+    # `omarchy-shell shell listPlugins`) sees it live.
+    plugins = json.loads(aim("omarchy-plugin-list --json"))
+    background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
+    assert background is not None and not background["enabled"], (
+        f"the background plugin is still enabled while owe's renderer holds "
+        f"the layer: {background}")
+    print("owe: the background plugin is disabled while the renderer holds the layer")
+
+    desktop_readings = shot_series("owe-desktop")
+    desktop_spread = spread(desktop_readings)
+    print(f"owe: desktop series spread {desktop_spread}")
+    assert desktop_spread > 60, (
+        f"five screenshots over 2s of a video alternating red and blue "
+        f"average to nearly the same colour (spread {desktop_spread}); a "
+        "frozen poster would look exactly like this")
+    assert not any(near_black(rgb) for rgb in desktop_readings), (
+        f"a video background rendered a near-black frame ({desktop_readings}) "
+        "-- these come through owe's own compositor layer, not through "
+        "BackgroundMedia's Image (the 4096 sourceSize cap only bounds a "
+        "still), so a near-black frame here points at the renderer itself: "
+        "a decode failure, or a committed buffer nothing is actually in")
+    print("owe: the desktop series moves and no frame is near-black")
+
+    # 3. Back to the still this theme started with. switch_to_shell() hands
+    # the background plugin the layer back and releases the renderer.
+    aim(f"omarchy-theme-bg-set {original_background}")
+    status = None
+    for _ in range(30):
+        status = owe_status()
+        if status.get("source_kind") not in ("video", "gif") and not status.get("render_alive"):
+            break
+        machine.sleep(2)
+    assert status is not None and status.get("source_kind") not in ("video", "gif"), (
+        f"owe status still reports a video/gif source after setting a still back: {status}")
+    assert not status.get("render_alive"), (
+        f"owe's renderer is still alive after switching back to a still: {status}")
+
+    # owed's switch_to_shell() re-enables the background plugin itself
+    # (shell.c: `omarchy-shell shell setPluginEnabled omarchy.background
+    # true`) once the shell has the layer back. omarchy-plugin-list --json
+    # is the CLI the menu and the doctor both already use to read this back.
+    plugins = json.loads(aim("omarchy-plugin-list --json"))
+    background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
+    assert background is not None and background["enabled"], (
+        f"the background plugin is not enabled after owe handed the still "
+        f"back to the shell: {background}")
+    print("owe: back to the original still, renderer released, background "
+          "plugin enabled again")
+
+    # 4. Lock with a video background set, which is what makes LockView load
+    # LockFeedSurface.qml (its Loader is `active: video && loadBackground
+    # && ...`) and therefore `import Owe.LockFeed`.
+    aim(f"omarchy-theme-bg-set {owe_video_path}")
+    for _ in range(30):
+        status = owe_status()
+        if status.get("source_kind") in ("video", "gif") and status.get("render_alive"):
+            break
+        machine.sleep(2)
+    assert status.get("render_alive"), f"video did not re-arm before locking: {status}"
+
+    # No IPC route exists for the lock screen's feed loader: Service.qml's
+    # IpcHandler exposes only lock/isLocked/status/preview/hidePreview, none
+    # of which name the feed Loader or the plugin inside it. So the positive
+    # assertion is the same motion series as the desktop, pointed at the lock
+    # screen instead: owed starts the feed for every locked session by
+    # default (policy.c's owed_policy_allows_feed, applied in main.c's
+    # apply_feed_state -- no config needed), and a live LockFeed moves with
+    # the video while LockView's cached-poster fallback is static. That is
+    # also what makes break (a) -- QML_IMPORT_PATH removed -- go red here:
+    # with the module unresolvable, the Loader falls back to the static
+    # poster and the series stops moving.
+    lock_reply = aim("omarchy-shell lock lock")
+    assert lock_reply.strip() == "ok", f"omarchy-shell lock lock answered {lock_reply!r}"
+    machine.wait_until_succeeds(
+        'out=$(su omarchy -c \'export XDG_RUNTIME_DIR=/run/user/1000; omarchy-shell lock status\'); '
+        'python3 -c "import json,sys; sys.exit(0 if json.loads(sys.stdin.read())[\'locked\'] else 1)" <<<"$out"',
+        timeout=20)
+    print("owe: locked with a video background set")
+
+    # owed's own view of the lock, not just the shell's: handle_status's
+    # "locked" field is OR'd from logind and Hyprland, read independently of
+    # the IPC call just above.
+    for _ in range(15):
+        status = owe_status()
+        if status.get("locked"):
+            break
+        machine.sleep(2)
+    assert status.get("locked"), f"owed does not see the session as locked: {status}"
+
+    lock_readings = shot_series("owe-lock")
+    lock_spread = spread(lock_readings)
+    print(f"owe: lock screen series spread {lock_spread}")
+
+    # The mechanism, asserted. Removing QML_IMPORT_PATH (break (a), probe run
+    # on #1156) left the series above MOVING (spread 227): the video stays
+    # visible under the lock by another path, so motion alone cannot prove
+    # Owe.LockFeed loaded. The import error is what moved with the break.
+    journal = machine.succeed("journalctl -b -t omarchy-shell --no-pager")
+    assert 'Owe.LockFeed" is not installed' not in journal, (
+        "the lock screen cannot import Owe.LockFeed (is QML_IMPORT_PATH set?); "
+        "LockFeedSurface.qml falls back to the cached poster")
+
+    # The outcome a user sees: the locked screen shows the video moving.
+    assert lock_spread > 60, (
+        f"the locked screen does not move over 2.8s (spread {lock_spread})")
+
+    # Unlock. The lock screen blanks after a few seconds, and a keystroke
+    # that only wakes it is lost, so a single send_chars timed out on one
+    # probe run. Wake, clear the field, type, and retry.
+    unlocked_cmd = (
+        'out=$(su omarchy -c \'export XDG_RUNTIME_DIR=/run/user/1000; omarchy-shell lock status\'); '
+        'python3 -c "import json,sys; sys.exit(1 if json.loads(sys.stdin.read())[\'locked\'] else 0)" <<<"$out"')
+    for attempt in range(4):
+        machine.send_key("shift")
+        machine.sleep(1)
+        for _ in range(12):
+            machine.send_key("backspace")
+        machine.send_chars("omarchy\n")
+        for _ in range(10):
+            if machine.execute(unlocked_cmd)[0] == 0:
+                break
+            machine.sleep(1)
+        else:
+            print(f"owe: unlock attempt {attempt} did not take, retrying")
+            continue
+        break
+    machine.succeed(unlocked_cmd)
+    print("owe: unlocked")
+
+    aim(f"omarchy-theme-bg-set {original_background}")
+    # Wait for the hand-back to finish before anything later reads shell.json:
+    # owed re-enables the background plugin asynchronously, and the shell
+    # saves that to shell.json. The #847 block below copied the file before
+    # that write landed and failed its cmp (#1156 CI).
+    for _ in range(30):
+        status = owe_status()
+        plugins = json.loads(aim("omarchy-plugin-list --json"))
+        background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
+        if not status.get("render_alive") and background and background["enabled"]:
+            break
+        machine.sleep(2)
+    assert not status.get("render_alive") and background and background["enabled"], (
+        f"owe did not hand the still back after the lock test: {status}, {background}")
+    machine.sleep(3)  # the shell's own debounced save of shell.json
+    print("owe: restored the original still, and the shell has it back")
 
     # ---- writing shell.json under a running shell, and getting back (#847) --
     #

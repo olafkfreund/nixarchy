@@ -53,6 +53,23 @@ let
   mcpEnabled = osConfig.programs.nixarchy.mcp or false;
   # #773: off unless asked for, and taken back out when turned off again.
   aiMirrorMcp = osConfig.programs.nixarchy.aiMirror.mcp or false;
+  # #1153: both halves of `or false`, for two different reasons. A standalone
+  # home-manager user has no NixOS module to have set either option, same as
+  # above. And `owe.enable` defaults to true on its OWN -- a module's option
+  # defaults exist whether or not `programs.nixarchy.enable` turned the
+  # feature on, since only the latter's `config = lib.mkIf cfg.enable { ... }`
+  # is gated, never the option declarations -- so reading `owe.enable` alone
+  # would switch owed, the package and the hook on for a machine where
+  # nixarchy's NixOS side is off (Mode A) but this Home Manager module is on
+  # regardless. ai-mirror's own package gate (`home.packages` below) already
+  # reads `osConfig.programs.nixarchy.enable or false` for the same reason.
+  oweOn =
+    (osConfig.programs.nixarchy.enable or false) && (osConfig.programs.nixarchy.owe.enable or false);
+  # Through the overlay, like omarchyNvimConfig below and nixos.nix's
+  # QML_IMPORT_PATH line: pkgs here carries no nixarchy overlay of its own
+  # (modules/services/default.nix says why), so a plain `pkgs.owe` would fail
+  # to resolve.
+  owe = (pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe;
   aiMirrorConfig =
     args:
     inputs.mcp-servers-nix.lib.mkConfig pkgs (
@@ -997,7 +1014,11 @@ in
       # user who installs it through its own module keeps theirs.
       ++ lib.optional (osConfig.programs.nixarchy.enable or false) (
         lib.lowPrio inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.ai-mirror
-      );
+      )
+      # #1153: owed, the renderer and the owe CLI, only when the NixOS module
+      # turned the option on. Inert (owe = osConfig... or false) on standalone
+      # home-manager, exactly like ai-mirror above.
+      ++ lib.optional oweOn owe;
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 
@@ -1255,38 +1276,76 @@ in
     };
 
     # Why: modules/AGENTS.md#the-first-run-theme-above-is-applied-headless-whic
-    systemd.user.services.omarchy-theme-gnome = {
-      Unit = {
-        Description = "Apply the current Omarchy theme's light/dark mode to GTK";
-        After = [ "graphical-session.target" ];
-        PartOf = [ "graphical-session.target" ];
+    systemd.user.services = {
+      omarchy-theme-gnome = {
+        Unit = {
+          Description = "Apply the current Omarchy theme's light/dark mode to GTK";
+          After = [ "graphical-session.target" ];
+          PartOf = [ "graphical-session.target" ];
+        };
+        Service = {
+          Type = "oneshot";
+          # omarchy-theme-set-gnome shells out to omarchy-theme-color and
+          # gsettings, and a user unit does not inherit the login PATH.
+          Environment = [
+            "PATH=${cfg.package}/bin:${pkgs.glib}/bin:${pkgs.coreutils}/bin:/run/current-system/sw/bin:%h/.nix-profile/bin"
+            "OMARCHY_PATH=${omarchyPath}"
+          ];
+          ExecStart = [
+            "${cfg.package}/bin/omarchy-theme-set-gnome"
+            "${cfg.package}/bin/omarchy-cursor-set"
+          ];
+        };
+        Install.WantedBy = [ "graphical-session.target" ];
       };
-      Service = {
-        Type = "oneshot";
-        # omarchy-theme-set-gnome shells out to omarchy-theme-color and
-        # gsettings, and a user unit does not inherit the login PATH.
-        Environment = [
-          "PATH=${cfg.package}/bin:${pkgs.glib}/bin:${pkgs.coreutils}/bin:/run/current-system/sw/bin:%h/.nix-profile/bin"
-          "OMARCHY_PATH=${omarchyPath}"
-        ];
-        ExecStart = [
-          "${cfg.package}/bin/omarchy-theme-set-gnome"
-          "${cfg.package}/bin/omarchy-cursor-set"
-        ];
+
+      # #1153, backported onto v4.0.4 from omacom/omarchy #6792 and #12429.
+      # Modelled on omarchy-theme-gnome just above: a user unit, because owed
+      # draws through the graphical session rather than needing one of its own.
+      owed = lib.mkIf oweOn {
+        Unit = {
+          Description = "owe video and GIF desktop backgrounds and lock-screen feed";
+          PartOf = [ "graphical-session.target" ];
+          After = [ "graphical-session.target" ];
+        };
+        Service = {
+          ExecStart = "${owe}/bin/owed";
+          Restart = "on-failure";
+          RestartSec = 2;
+          Environment = [
+            # omarchy-shell finds the running shell through `qs`, which only the
+            # package's runtimeDeps carry; without it every handoff reads
+            # "omarchy-shell is not running" (#1153, found by checks.session).
+            "PATH=${lib.makeBinPath ([ cfg.package ] ++ cfg.package.passthru.runtimeDeps)}"
+            "OMARCHY_PATH=${omarchyPath}"
+          ];
+        };
+        Install.WantedBy = [ "graphical-session.target" ];
       };
-      Install.WantedBy = [ "graphical-session.target" ];
     };
 
     # Omarchy's own extension point -- omarchy-theme-set ends with
     # `omarchy-hook theme-set`, which runs everything in this directory. Going
     # through it rather than replacing omarchy-theme-set-gnome means the cursor
     # follows a theme change without this repo owning a fork of that script.
-    xdg.configFile."omarchy/hooks/theme-set.d/cursor" = {
-      executable = true;
-      text = ''
-        #!/usr/bin/env bash
-        exec ${cfg.package}/bin/omarchy-cursor-set
-      '';
+    xdg.configFile = {
+      "omarchy/hooks/theme-set.d/cursor" = {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          exec ${cfg.package}/bin/omarchy-cursor-set
+        '';
+      };
+
+      # Same extension point as the cursor hook above, so a theme switch pokes
+      # owed to resync without this repo owning a copy of omarchy-theme-set.
+      "omarchy/hooks/theme-set.d/10-owe-sync" = lib.mkIf oweOn {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          exec ${owe}/share/owe/10-owe-sync "$@"
+        '';
+      };
     };
 
     # The default agent, recorded where omarchy-agent and the menu read it.

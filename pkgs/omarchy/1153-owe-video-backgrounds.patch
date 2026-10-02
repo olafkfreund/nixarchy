@@ -1,0 +1,1093 @@
+# CARRIED. Upstream omacom/omarchy #6792 ("Add native video wallpaper
+# support") and #12429 ("Replace the shell's desktop video path with OWE"),
+# squashed as one patch on top of v4.0.4, for #1153: video and GIF desktop
+# backgrounds and a video-aware lock screen poster, routed through the owe
+# package (pkgs/apps/owe.nix) rather than through the shell's own decoder.
+#
+# Applied FIRST, before any of this file's own substituteInPlace edits, so
+# those edits target the backported text rather than the text this patch
+# replaces -- see default.nix's retargeted 4096-cap comment, just below the
+# patch -d line, for the one edit that has to change because of it.
+#
+# Generated with:
+#   git diff v4.0.4 backport -- bin/omarchy-bar-text-color \
+#     bin/omarchy-menu-images bin/omarchy-theme-bg-next bin/omarchy-theme-bg-set \
+#     bin/omarchy-theme-set bin/omarchy-theme-switcher shell/Commons/Util.qml \
+#     shell/Ui/BackgroundMedia.qml shell/Ui/qmldir shell/plugins/background/Background.qml \
+#     shell/plugins/image-picker/list.sh shell/plugins/lock/LockFeedSurface.qml \
+#     shell/plugins/lock/LockView.qml shell/plugins/lock/Service.qml \
+#     shell/plugins/lock/poster.sh shell/plugins/services/battery/Service.qml shell/shell.qml
+#
+# Deleted by the quattro bump: when nixarchy moves off v4.0.4, the base
+# release carries this upstream and the patch no longer applies -- which is
+# the point. Delete this file, the patch -d line in default.nix, and the
+# retargeted-4096-cap comment with it.
+
+diff --git a/bin/omarchy-bar-text-color b/bin/omarchy-bar-text-color
+index a2ce8cde..35cd0ead 100755
+--- a/bin/omarchy-bar-text-color
++++ b/bin/omarchy-bar-text-color
+@@ -109,7 +109,10 @@ right)
+   ;;
+ esac
+ 
+-pixel=$(magick "$background_path" -auto-orient \
++# Sample the first frame only. Without the selector a video background makes
++# ImageMagick decode the whole file and emit one value per frame, and the match
++# below then fails into the fallback colour.
++pixel=$(magick "$background_path[0]" -auto-orient \
+   -resize "${screen_width}x${screen_height}^" \
+   -gravity center -extent "${screen_width}x${screen_height}" \
+   -gravity NorthWest -crop "$crop" +repage \
+diff --git a/bin/omarchy-menu-images b/bin/omarchy-menu-images
+index 8c316462..8305cb0f 100755
+--- a/bin/omarchy-menu-images
++++ b/bin/omarchy-menu-images
+@@ -75,8 +75,9 @@ fi
+ selection_file=$(mktemp)
+ done_file=$(mktemp)
+ pending_file=$(mktemp)
++pending_video_file=$(mktemp)
+ rm -f "$done_file"
+-trap 'rm -f "$selection_file" "$done_file" "$pending_file"' EXIT
++trap 'rm -f "$selection_file" "$done_file" "$pending_file" "$pending_video_file"' EXIT
+ 
+ image_dirs_env=""
+ for dir in "${image_dirs[@]}"; do
+@@ -111,8 +112,8 @@ cache_key=$(printf '%s' "$image_dirs_env" | md5sum | cut -d ' ' -f 1)
+ rows_cache_file="$cache_dir/$cache_key.rows"
+ rows_signature_file="$cache_dir/$cache_key.signature"
+ rows_fast_signature_file="$cache_dir/$cache_key.fast-signature"
+-rows_signature="v3"$'\n'
+-rows_fast_signature="v2"$'\n'
++rows_signature="v4"$'\n'
++rows_fast_signature="v3"$'\n'
+ rows_cacheable=true
+ rows_cache_hit=false
+ image_files=()
+@@ -133,17 +134,25 @@ else
+         image_files+=("$image")
+         image_signature=$(stat -Lc '%s:%Y' "$image") || continue
+         rows_signature+="$image:$image_signature"$'\n'
+-      done < <(find -L "$dir" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print0 2>/dev/null | sort -z)
++      done < <(find -L "$dir" -maxdepth 1 -type f \
++        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
++           -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) \
++        -print0 2>/dev/null | sort -z)
+     fi
+   done
+ fi
+ 
++is_video_path() {
++  [[ ${1,,} =~ \.(mp4|m4v|mov|webm|mkv|avi)$ ]]
++}
++
+ generate_thumbnail() {
+   local image="$1"
+   local thumbnail="$2"
+   local lock="$thumbnail.lock"
+   local lock_fd
+   local tmp="$thumbnail.$$.jpg"
++  local thumbnail_command
+ 
+   # Older releases used directories as locks, which could survive a killed
+   # generator and block this thumbnail forever. Only reap aged ones, so a
+@@ -161,13 +170,29 @@ generate_thumbnail() {
+ 
+   [[ -f $thumbnail ]] && return
+ 
+-  # Callers fan out one generator per image, so keep each vips single-threaded.
+-  # Close the lock fd for vips: an orphaned or hung vips must not keep holding
+-  # the lock after this shell is killed.
+-  if VIPS_CONCURRENCY=1 vipsthumbnail "$image" --size 1536x864 --smartcrop=centre --path "$tmp[Q=82,strip]" {lock_fd}>&-; then
++  # Callers fan out one generator per file, so keep each image conversion
++  # single-threaded. ffmpegthumbnailer provides a still preview for videos.
++  if is_video_path "$image"; then
++    # Videos are generated before the picker opens, so one unreadable or
++    # stalled file must not hold it shut. A failed run drops the row.
++    thumbnail_command=(timeout -k 5 10 ffmpegthumbnailer -i "$image" -o "$tmp" -s 1536 -q 8)
++  else
++    thumbnail_command=(env VIPS_CONCURRENCY=1 vipsthumbnail "$image" --size 1536x864 --smartcrop=centre --path "$tmp[Q=82,strip]")
++  fi
++
++  # Close the lock fd for the converter: an orphaned or hung child must not
++  # keep holding the lock after this shell is killed.
++  if "${thumbnail_command[@]}" {lock_fd}>&-; then
+     mv -f "$tmp" "$thumbnail"
+   else
++    status=$?
+     rm -f "$tmp" "$thumbnail"
++    # Remember a video the converter rejected, so it costs nothing on the next
++    # open. The key covers size and mtime, so a repaired file starts clean. A
++    # timeout is left to retry: the machine may only have been busy.
++    if is_video_path "$image" && (( status != 124 && status != 137 )); then
++      : >"$thumbnail.failed"
++    fi
+   fi
+ }
+ 
+@@ -186,7 +211,17 @@ thumbnail_for() {
+   thumbnail="$cache_dir/$hash.jpg"
+ 
+   if [[ ! -f $thumbnail ]]; then
+-    if [[ $lazy_thumbnails == true && $cache_only != true ]]; then
++    # A video that already failed to convert has no row to offer. Hand the
++    # marker back so the caller can keep the rows uncached over its absence.
++    if is_video_path "$image" && [[ -f $thumbnail.failed ]]; then
++      printf '%s' "$thumbnail.failed"
++      return
++    fi
++
++    # A lazy row stands in with the media file itself, which the picker draws
++    # with an Image -- fine for a picture, blank for a video. Videos take the
++    # queue instead, which also keeps them under its narrower fan out.
++    if [[ $lazy_thumbnails == true && $cache_only != true ]] && ! is_video_path "$image"; then
+       rows_cacheable=false
+ 
+       if [[ $prepare_only != true ]]; then
+@@ -197,19 +232,35 @@ thumbnail_for() {
+       return
+     fi
+ 
+-    printf '%s\0%s\0' "$image" "$thumbnail" >>"$pending_file"
++    if is_video_path "$image"; then
++      printf '%s\0%s\0' "$image" "$thumbnail" >>"$pending_video_file"
++    else
++      printf '%s\0%s\0' "$image" "$thumbnail" >>"$pending_file"
++    fi
+   fi
+ 
+   printf '%s' "$thumbnail"
+ }
+ 
+-# Generate every queued thumbnail at once; each vips run is single-threaded.
++# Each vips run is single-threaded, so still images can fill every core.
++# ffmpegthumbnailer leaves FFmpeg's automatic threading on, so a full-width fan
++# out of those would put a codec thread pool on every core at once.
+ drain_pending_thumbnails() {
+-  [[ -s $pending_file ]] || return 0
++  local video_jobs
++
++  export -f generate_thumbnail is_video_path
++
++  if [[ -s $pending_file ]]; then
++    xargs -a "$pending_file" -0 -n 2 -P "$(nproc)" \
++      bash -c 'generate_thumbnail "$1" "$2"' _ >/dev/null 2>&1 || true
++  fi
+ 
+-  export -f generate_thumbnail
+-  xargs -a "$pending_file" -0 -n 2 -P "$(nproc)" \
+-    bash -c 'generate_thumbnail "$1" "$2"' _ >/dev/null 2>&1 || true
++  if [[ -s $pending_video_file ]]; then
++    video_jobs=$(( $(nproc) / 4 ))
++    (( video_jobs > 0 )) || video_jobs=1
++    xargs -a "$pending_video_file" -0 -n 2 -P "$video_jobs" \
++      bash -c 'generate_thumbnail "$1" "$2"' _ >/dev/null 2>&1 || true
++  fi
+ }
+ 
+ if [[ $rows_cache_hit != true && -f $rows_cache_file && -f $rows_signature_file ]] && cmp -s "$rows_signature_file" <(printf '%s' "$rows_signature"); then
+@@ -219,6 +270,12 @@ elif [[ $rows_cache_hit != true ]]; then
+   for image in "${image_files[@]}"; do
+     thumbnail=$(thumbnail_for "$image")
+     [[ -n $thumbnail ]] || continue
++    # Cached rows are trusted on the directory's mtime alone, which a file
++    # repaired in place never changes. Leave them uncached instead.
++    if [[ $thumbnail == *.failed ]]; then
++      rows_cacheable=false
++      continue
++    fi
+     if [[ $lazy_thumbnails == true && $cache_only != true && $thumbnail == $image ]]; then
+       rows_cacheable=false
+     fi
+@@ -232,7 +289,7 @@ elif [[ $rows_cache_hit != true ]]; then
+ 
+   drain_pending_thumbnails
+ 
+-  if [[ -s $pending_file ]]; then
++  if [[ -s $pending_file || -s $pending_video_file ]]; then
+     pruned=""
+     while IFS=$'\t' read -r row_image row_thumbnail; do
+       if [[ ! -e $row_thumbnail ]]; then
+diff --git a/bin/omarchy-theme-bg-next b/bin/omarchy-theme-bg-next
+index dfb3d3f0..f9907d7a 100755
+--- a/bin/omarchy-theme-bg-next
++++ b/bin/omarchy-theme-bg-next
+@@ -10,7 +10,8 @@ CURRENT_BACKGROUND_LINK="$HOME/.local/state/omarchy/current/background"
+ 
+ mapfile -d '' -t BACKGROUNDS < <(
+   find -L "$USER_BACKGROUNDS_PATH" "$THEME_BACKGROUNDS_PATH" -maxdepth 1 -type f \
+-    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
++    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
++       -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) \
+     -print0 2>/dev/null | sort -z
+ )
+ TOTAL=${#BACKGROUNDS[@]}
+diff --git a/bin/omarchy-theme-bg-set b/bin/omarchy-theme-bg-set
+index 45b420df..835321d7 100755
+--- a/bin/omarchy-theme-bg-set
++++ b/bin/omarchy-theme-bg-set
+@@ -1,11 +1,11 @@
+ #!/bin/bash
+ 
+-# omarchy:summary=Set the current background image
+-# omarchy:args=<path-to-image>
++# omarchy:summary=Set the current background image or video
++# omarchy:args=<path-to-media>
+ # omarchy:examples=omarchy theme bg set ~/Pictures/background.png
+ 
+ if [[ -z $1 ]]; then
+-  echo "Usage: omarchy-theme-bg-set <path-to-image>" >&2
++  echo "Usage: omarchy-theme-bg-set <path-to-media>" >&2
+   exit 1
+ fi
+ 
+@@ -17,7 +17,7 @@ if [[ ! -f $BACKGROUND ]]; then
+   exit 1
+ fi
+ 
+-# Create symlink to the new background
++# Create symlink to the new background media
+ ln -nsf "$BACKGROUND" "$CURRENT_BACKGROUND_LINK"
+ 
+ # Update the live shell background immediately when it is running. The
+diff --git a/bin/omarchy-theme-set b/bin/omarchy-theme-set
+index 016fe67e..782b4ba7 100755
+--- a/bin/omarchy-theme-set
++++ b/bin/omarchy-theme-set
+@@ -48,12 +48,17 @@ shell_ipc() {
+   timeout 2 omarchy-shell "$@" >/dev/null 2>&1
+ }
+ 
++is_video_path() {
++  [[ ${1,,} =~ \.(mp4|m4v|mov|webm|mkv|avi)$ ]]
++}
++
+ snapshot_background_path() {
+   local background="$1"
+   local name="$2"
+   local snapshot extension
+ 
+   [[ -f $background ]] || return
++  is_video_path "$background" && return
+ 
+   mkdir -p "$BACKGROUND_TRANSITION_CACHE"
+   extension=${background##*.}
+@@ -69,20 +74,35 @@ snapshot_current_background() {
+   snapshot_background_path "$current_background" "previous"
+ }
+ 
++background_transition_uses_snapshots() {
++  local next_background="$1"
++  local current_background
++
++  current_background=$(readlink -f "$CURRENT_BACKGROUND_LINK" 2>/dev/null || true)
++  ! is_video_path "$current_background" && ! is_video_path "$next_background"
++}
++
+ choose_theme_background() {
++  local theme_path="${1:-$CURRENT_THEME_PATH}"
++  local current_theme_backgrounds="$CURRENT_THEME_PATH/backgrounds"
+   local backgrounds=()
+   local current_background index next_index i
+ 
+   CHOSEN_THEME_BACKGROUND=""
+   mapfile -d '' -t backgrounds < <(
+-    find -L "$HOME/.config/omarchy/backgrounds/$THEME_NAME/" "$CURRENT_THEME_PATH/backgrounds/" -maxdepth 1 -type f \
+-      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
++    find -L "$HOME/.config/omarchy/backgrounds/$THEME_NAME/" "$theme_path/backgrounds/" -maxdepth 1 -type f \
++      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
++         -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) \
+       -print0 2>/dev/null | sort -z
+   )
+ 
+   (( ${#backgrounds[@]} > 0 )) || return 1
+ 
+   current_background=$(readlink "$CURRENT_BACKGROUND_LINK" 2>/dev/null || true)
++  if [[ $theme_path != $CURRENT_THEME_PATH && ${current_background%/*} == $current_theme_backgrounds ]]; then
++    current_background="$theme_path/backgrounds/${current_background##*/}"
++  fi
++
+   index=-1
+   for i in "${!backgrounds[@]}"; do
+     if [[ ${backgrounds[$i]} == $current_background ]]; then
+@@ -99,6 +119,16 @@ choose_theme_background() {
+   fi
+ }
+ 
++choose_staged_theme_background() {
++  local next_theme_backgrounds="$NEXT_THEME_PATH/backgrounds"
++
++  choose_theme_background "$NEXT_THEME_PATH" || return 1
++
++  if [[ ${CHOSEN_THEME_BACKGROUND%/*} == $next_theme_backgrounds ]]; then
++    CHOSEN_THEME_BACKGROUND="$CURRENT_THEME_PATH/backgrounds/${CHOSEN_THEME_BACKGROUND##*/}"
++  fi
++}
++
+ set_theme_background_link() {
+   choose_theme_background || return 1
+   ln -nsf "$CHOSEN_THEME_BACKGROUND" "$CURRENT_BACKGROUND_LINK"
+@@ -107,14 +137,19 @@ set_theme_background_link() {
+ set_theme_background() {
+   local new_background new_background_snapshot
+ 
+-  if ! choose_theme_background; then
+-    omarchy-notification-send "No background was found for theme" -t 2000
+-    shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+-    return
++  if [[ -z $CHOSEN_THEME_BACKGROUND || ! -f $CHOSEN_THEME_BACKGROUND ]]; then
++    if ! choose_theme_background; then
++      omarchy-notification-send "No background was found for theme" -t 2000
++      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
++      return
++    fi
+   fi
+ 
+   new_background="$CHOSEN_THEME_BACKGROUND"
+-  new_background_snapshot=$(snapshot_background_path "$new_background" "next")
++  new_background_snapshot=""
++  if [[ $BACKGROUND_TRANSITION_SNAPSHOTS == "true" ]]; then
++    new_background_snapshot=$(snapshot_background_path "$new_background" "next")
++  fi
+ 
+   if [[ -f $OLD_BACKGROUND_SNAPSHOT && -f $new_background_snapshot ]]; then
+     shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background_snapshot" "$new_background" "$colors_payload" "$shell_payload" || \
+@@ -283,9 +318,19 @@ fi
+ # Generate dynamic configs
+ omarchy-theme-set-templates
+ 
++CHOSEN_THEME_BACKGROUND=""
+ OLD_BACKGROUND_SNAPSHOT=""
++BACKGROUND_TRANSITION_SNAPSHOTS=true
+ if [[ $THEME_HEADLESS != "1" && $OMARCHY_THEME_SKIP_BACKGROUND != "1" ]]; then
+-  OLD_BACKGROUND_SNAPSHOT=$(snapshot_current_background)
++  # Resolve the staged choice while the old theme still exists. Video changes
++  # switch directly to the durable path in QML, so neither side needs a copy.
++  if choose_staged_theme_background; then
++    if background_transition_uses_snapshots "$CHOSEN_THEME_BACKGROUND"; then
++      OLD_BACKGROUND_SNAPSHOT=$(snapshot_current_background)
++    else
++      BACKGROUND_TRANSITION_SNAPSHOTS=false
++    fi
++  fi
+ fi
+ 
+ # Swap next theme in as current
+diff --git a/bin/omarchy-theme-switcher b/bin/omarchy-theme-switcher
+index 6d014dd5..49bc127c 100755
+--- a/bin/omarchy-theme-switcher
++++ b/bin/omarchy-theme-switcher
+@@ -22,7 +22,7 @@ find_preview() {
+   local theme_path="$1"
+   local preview preview_name
+ 
+-  for preview_name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp; do
++  for preview_name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp preview.mp4 preview.m4v preview.mov preview.webm preview.mkv preview.avi; do
+     preview=$(find -L "$theme_path" -maxdepth 1 -type f -iname "$preview_name" -print -quit 2>/dev/null)
+ 
+     if [[ -n $preview ]]; then
+@@ -32,7 +32,10 @@ find_preview() {
+   done
+ 
+   if [[ -d $theme_path/backgrounds ]]; then
+-    find -L "$theme_path/backgrounds" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print 2>/dev/null | sort | head -n 1
++    find -L "$theme_path/backgrounds" -maxdepth 1 -type f \
++      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
++         -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) \
++      -print 2>/dev/null | sort | head -n 1
+   fi
+ }
+ 
+@@ -48,7 +51,7 @@ add_theme_preview() {
+   ln -s "$preview" "$preview_dir/$theme_name.$extension"
+ }
+ 
+-fast_signature="v1"$'\n'
++fast_signature="v2"$'\n'
+ for theme_dir in "$USER_THEMES_PATH" "$OMARCHY_THEMES_PATH"; do
+   if [[ -d $theme_dir ]]; then
+     fast_signature+="$theme_dir:$(stat -Lc '%Y' "$theme_dir")"$'\n'
+@@ -104,7 +107,7 @@ fi
+ 
+ current_theme=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+ selected_preview=""
+-for extension in png jpg jpeg webp gif bmp; do
++for extension in png jpg jpeg webp gif bmp mp4 m4v mov webm mkv avi; do
+   if [[ -e $preview_dir/$current_theme.$extension ]]; then
+     selected_preview="$preview_dir/$current_theme.$extension"
+     break
+diff --git a/shell/Commons/Util.qml b/shell/Commons/Util.qml
+index ca265acd..14af44fe 100644
+--- a/shell/Commons/Util.qml
++++ b/shell/Commons/Util.qml
+@@ -44,6 +44,10 @@ QtObject {
+     return "file://" + String(path).split("/").map(encodeURIComponent).join("/")
+   }
+ 
++  function isVideoPath(path) {
++    return /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(String(path || ""))
++  }
++
+   // Single-quote a string for bash. The replace handles embedded single
+   // quotes by closing, escaping, and re-opening the literal.
+   function shellQuote(value) {
+diff --git a/shell/Ui/BackgroundMedia.qml b/shell/Ui/BackgroundMedia.qml
+new file mode 100644
+index 00000000..aabde8d1
+--- /dev/null
++++ b/shell/Ui/BackgroundMedia.qml
+@@ -0,0 +1,38 @@
++import QtQuick
++import qs.Commons
++
++// The shell draws stills only. OWE owns video backgrounds on the desktop, and
++// it feeds the lock screen through its own socket.
++Item {
++  id: root
++
++  property string path: ""
++  property int version: 0
++  readonly property var current: imageLoader.item
++  readonly property bool ready: current ? current.ready : false
++  readonly property bool video: Util.isVideoPath(path)
++  // Cache-bust images selected in a running lock session, so a theme switch
++  // that replaces the file behind an unchanged path shows the new pixels.
++  readonly property url imageUrl: path && !video ? Util.fileUrl(path) + (version ? "?v=" + version : "") : ""
++
++  Loader {
++    id: imageLoader
++    anchors.fill: parent
++    active: root.path !== "" && !root.video
++    sourceComponent: imageComponent
++  }
++
++  Component {
++    id: imageComponent
++
++    Image {
++      readonly property bool ready: status === Image.Ready
++      source: root.imageUrl
++      fillMode: Image.PreserveAspectCrop
++      asynchronous: true
++      cache: root.version === 0
++      sourceSize.width: root.version > 0 ? width : 0
++      sourceSize.height: root.version > 0 ? height : 0
++    }
++  }
++}
+diff --git a/shell/Ui/qmldir b/shell/Ui/qmldir
+index 5d8e6d4a..464e25b7 100644
+--- a/shell/Ui/qmldir
++++ b/shell/Ui/qmldir
+@@ -3,6 +3,7 @@ module qs.Ui
+ BarIndicator 1.0 BarIndicator.qml
+ BarIconButton 1.0 BarIconButton.qml
+ BarWidget 1.0 BarWidget.qml
++BackgroundMedia 1.0 BackgroundMedia.qml
+ BorderOverlay 1.0 BorderOverlay.qml
+ BorderSurface 1.0 BorderSurface.qml
+ Button 1.0 Button.qml
+diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
+index 21e1b0a9..b3dd7dab 100644
+--- a/shell/plugins/background/Background.qml
++++ b/shell/plugins/background/Background.qml
+@@ -26,6 +26,10 @@ Item {
+   property string pendingShellRaw: ""
+   property real revealProgress: 1
+ 
++  function isVideo(path) {
++    return Util.isVideoPath(path)
++  }
++
+   function imageUrl(path) {
+     return Util.fileUrl(path)
+   }
+@@ -50,10 +54,12 @@ Item {
+     revealAnimation.stop()
+     finishingTransition = false
+ 
+-    if (instant || !displayedBackground) {
++    // Video frames are not fed through the image-only reveal stack. Switching
++    // instantly also avoids decoding two full videos during a transition.
++    if (instant || !displayedBackground || isVideo(path) || isVideo(displayedBackground)) {
+       oldBackground = ""
+       incomingBackground = ""
+-      displayedBackground = path
++      displayedBackground = finalPath
+       revealProgress = 1
+       return
+     }
+@@ -196,9 +202,8 @@ Item {
+       color: "transparent"
+       // Keep render updates enabled. The background layer has been observed to
+       // lose its committed buffer while parked with updatesEnabled=false,
+-      // leaving a black desktop until omarchy-shell is restarted. The wallpaper
+-      // itself is static, so this favors correctness over a small render-loop
+-      // optimization.
++      // leaving a black desktop until omarchy-shell is restarted. A still
++      // wallpaper costs nothing to keep enabled. OWE manages video layers.
+       updatesEnabled: true
+ 
+       property bool maskReady: false
+@@ -218,15 +223,14 @@ Item {
+       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+       exclusionMode: ExclusionMode.Ignore
+ 
+-      Image {
++      // OWE owns video backgrounds. This layer draws stills, and stays empty
++      // behind a video so OWE's own layer shows through.
++      BackgroundMedia {
+         id: base
+         anchors.fill: parent
+-        source: root.imageUrl(root.displayedBackground)
+-        fillMode: Image.PreserveAspectCrop
+-        asynchronous: true
+-        cache: true
+-        onStatusChanged: {
+-          if (status === Image.Ready && root.finishingTransition) {
++        path: root.displayedBackground
++        onReadyChanged: {
++          if (ready && root.finishingTransition) {
+             root.incomingBackground = ""
+             root.oldBackground = ""
+             root.finishingTransition = false
+diff --git a/shell/plugins/image-picker/list.sh b/shell/plugins/image-picker/list.sh
+index a30e4743..0fb74117 100755
+--- a/shell/plugins/image-picker/list.sh
++++ b/shell/plugins/image-picker/list.sh
+@@ -3,12 +3,18 @@
+ image_dirs=${1:-}
+ cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
+ index_file="$cache_dir/index.tsv"
++pending_video_file=$(mktemp)
+ 
+ mkdir -p "$cache_dir"
++trap 'rm -f "$pending_video_file"' EXIT
+ 
+-thumbnail_for() {
++is_video_path() {
++  [[ ${1,,} =~ \.(mp4|m4v|mov|webm|mkv|avi)$ ]]
++}
++
++thumbnail_path_for() {
+   local image="$1"
+-  local signature hash thumbnail legacy_hash
++  local signature hash
+ 
+   signature=$(stat -Lc '%s:%Y' "$image") || return
+   hash=$(awk -F '\t' -v path="$image" -v sig="$signature" '$1 == path && $2 == sig { print $3; exit }' "$index_file" 2>/dev/null)
+@@ -17,9 +23,58 @@ thumbnail_for() {
+     hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
+   fi
+ 
+-  thumbnail="$cache_dir/$hash.jpg"
++  printf '%s/%s.jpg' "$cache_dir" "$hash"
++}
++
++generate_video_thumbnail() {
++  local image="$1"
++  local thumbnail="$2"
++  local lock="$thumbnail.lock"
++  local lock_fd
++  local tmp="$thumbnail.$$.jpg"
++
++  if [[ -d $lock ]] && (( $(date +%s) - $(stat -c '%Y' "$lock" 2>/dev/null || date +%s) > 120 )); then
++    rmdir "$lock" 2>/dev/null
++  fi
++
++  exec {lock_fd}>"$lock" || return
++  flock -w 30 "$lock_fd" || return
++  rm -f "$thumbnail".*.jpg
++
++  [[ -f $thumbnail ]] && return
++
++  if timeout -k 5 10 ffmpegthumbnailer -i "$image" -o "$tmp" -s 1536 -q 8 {lock_fd}>&-; then
++    mv -f "$tmp" "$thumbnail"
++  else
++    status=$?
++    rm -f "$tmp" "$thumbnail"
++    # Remember a rejected video so it costs nothing on the next scan; the key
++    # covers size and mtime, so a repaired file starts clean. A timeout is
++    # left to retry: the machine may only have been busy.
++    (( status == 124 || status == 137 )) || : >"$thumbnail.failed"
++    return 1
++  fi
++}
++
++drain_pending_video_thumbnails() {
++  local video_jobs
++
++  [[ -s $pending_video_file ]] || return 0
++
++  video_jobs=$(( $(nproc) / 4 ))
++  (( video_jobs > 0 )) || video_jobs=1
++  export -f generate_video_thumbnail
++  xargs -a "$pending_video_file" -0 -n 2 -P "$video_jobs" \
++    bash -c 'generate_video_thumbnail "$1" "$2"' _ >/dev/null 2>&1 || true
++}
++
++thumbnail_for() {
++  local image="$1"
++  local thumbnail legacy_hash
++
++  thumbnail=$(thumbnail_path_for "$image") || return
+ 
+-  if [[ ! -f $thumbnail ]]; then
++  if [[ ! -f $thumbnail ]] && ! is_video_path "$image"; then
+     # Older on-demand picker code keyed fallback thumbnails by file content.
+     # Keep finding those if a user still has them cached.
+     legacy_hash=$(md5sum "$image" 2>/dev/null | cut -d ' ' -f 1)
+@@ -28,17 +83,31 @@ thumbnail_for() {
+ 
+   if [[ -f $thumbnail ]]; then
+     printf '%s' "$thumbnail"
+-  else
++  elif ! is_video_path "$image"; then
+     printf '%s' "$image"
+   fi
+ }
+ 
+-while IFS= read -r dir; do
+-  [[ -n $dir && -d $dir ]] || continue
+-  find -L "$dir" -maxdepth 1 -type f \
+-    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
+-    -print0 2>/dev/null
+-done <<<"$image_dirs" | sort -z | while IFS= read -r -d '' image; do
++mapfile -d '' -t images < <(
++  while IFS= read -r dir; do
++    [[ -n $dir && -d $dir ]] || continue
++    find -L "$dir" -maxdepth 1 -type f \
++      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
++         -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) \
++      -print0 2>/dev/null
++  done <<<"$image_dirs" | sort -z
++)
++
++for image in "${images[@]}"; do
++  if is_video_path "$image"; then
++    thumbnail=$(thumbnail_path_for "$image") || continue
++    [[ -f $thumbnail || -f $thumbnail.failed ]] || printf '%s\0%s\0' "$image" "$thumbnail" >>"$pending_video_file"
++  fi
++done
++
++drain_pending_video_thumbnails
++
++for image in "${images[@]}"; do
+   thumbnail=$(thumbnail_for "$image")
+   [[ -n $thumbnail ]] || continue
+   printf '%s\t%s\n' "$image" "$thumbnail"
+diff --git a/shell/plugins/lock/LockFeedSurface.qml b/shell/plugins/lock/LockFeedSurface.qml
+new file mode 100644
+index 00000000..ecd1f7d4
+--- /dev/null
++++ b/shell/plugins/lock/LockFeedSurface.qml
+@@ -0,0 +1,7 @@
++import QtQuick
++import Owe.LockFeed
++
++// Loaded through a Loader from LockView, so a system without the module shows
++// no lock video instead of losing the whole lock screen.
++LockFeed {
++}
+diff --git a/shell/plugins/lock/LockView.qml b/shell/plugins/lock/LockView.qml
+index c2deae0f..7084fb0f 100644
+--- a/shell/plugins/lock/LockView.qml
++++ b/shell/plugins/lock/LockView.qml
+@@ -7,6 +7,7 @@ Item {
+   id: root
+ 
+   property string backgroundPath: ""
++  property string videoPosterPath: ""
+   property int backgroundVersion: 0
+   property bool fingerprintConfigured: false
+   property bool authenticatingPassword: false
+@@ -14,6 +15,11 @@ Item {
+   property int failedAttempts: 0
+   property bool inputEnabled: true
+   property bool loadBackground: true
++  // A locked session blanks the displays after a few seconds. Nothing is
++  // visible from then until the user wakes it, so a video must not keep
++  // decoding through what is usually the longest part of a lock.
++  property bool displaysBlank: false
++  property bool powerSaverActive: false
+   property string passwordText: ""
+   property bool syncingPasswordText: false
+ 
+@@ -38,20 +44,14 @@ Item {
+     ? Border.surfaceSpec("lock", "border-error", Color.lock.borderError, root.outlineThickness, "border-alpha")
+     : Border.surfaceSpec("lock", "border-active", Color.lock.borderActive, root.outlineThickness, "border-alpha")
+ 
++  readonly property bool video: Util.isVideoPath(root.backgroundPath)
++  readonly property bool feedActive: root.video && root.loadBackground && !root.displaysBlank && !root.powerSaverActive
++
+   signal submitPassword(string password)
+   signal passwordTextEdited(string password)
+   signal clearFailureRequested()
+   signal wakeRequested()
+ 
+-  // Cache-busts the lock background by appending `?v=`. Adding a query
+-  // string keeps Image's loader happy while forcing it to reload when the
+-  // user picks a new background mid-session.
+-  function fileUrl(path) {
+-    if (!path) return ""
+-    var encoded = String(path).split("/").map(encodeURIComponent).join("/")
+-    return "file://" + encoded + "?v=" + backgroundVersion
+-  }
+-
+   function forcePasswordFocus() {
+     passwordInput.forceActiveFocus()
+   }
+@@ -90,28 +90,44 @@ Item {
+     anchors.fill: parent
+     color: Color.background
+ 
+-    Image {
++    BackgroundMedia {
+       id: wallpaper
++      objectName: "lockWallpaper"
+       anchors.fill: parent
+-      source: root.loadBackground ? root.fileUrl(root.backgroundPath) : ""
+-      fillMode: Image.PreserveAspectCrop
+-      asynchronous: true
+-      cache: false
+-      sourceSize.width: width
+-      sourceSize.height: height
++      path: root.loadBackground ? (root.video ? root.videoPosterPath : root.backgroundPath) : ""
++      version: root.backgroundVersion
+     }
+ 
+     MultiEffect {
+       anchors.fill: wallpaper
+       source: wallpaper
+       autoPaddingEnabled: false
+-      blurEnabled: root.loadBackground && wallpaper.status === Image.Ready
++      blurEnabled: root.loadBackground && wallpaper.ready
+       blur: 1.0
+       blurMax: 128
+       blurMultiplier: 1.25
+       contrast: -0.08
+     }
+ 
++    // The cached poster stays behind the feed when policy pauses playback,
++    // the module is unavailable, or a new connection has not received a frame.
++    Loader {
++      id: feedLoader
++      objectName: "lockFeedLoader"
++      anchors.fill: parent
++      active: root.feedActive
++      source: "LockFeedSurface.qml"
++      visible: status === Loader.Ready
++    }
++
++    // The feed item cannot be sampled by MultiEffect on every renderer.
++    // Keep video wallpapers visible and darken them slightly for legibility.
++    Rectangle {
++      anchors.fill: feedLoader
++      visible: root.video
++      color: "#22000000"
++    }
++
+     MouseArea {
+       anchors.fill: parent
+       hoverEnabled: true
+diff --git a/shell/plugins/lock/Service.qml b/shell/plugins/lock/Service.qml
+index 9ecb1cc0..6e1f703e 100644
+--- a/shell/plugins/lock/Service.qml
++++ b/shell/plugins/lock/Service.qml
+@@ -28,14 +28,25 @@ Item {
+   property string failureMessage: ""
+   property int failedAttempts: 0
+   property string backgroundPath: ""
++  property string videoPosterPath: ""
+   property int backgroundVersion: 0
+   property string lastEvent: "init"
+   property string lastEventAt: ""
++  property bool displaysBlank: false
++  // displaysBlank tracks what the lock asked for; Hyprland reports what each
++  // panel actually did. While a video is on show the two are reconciled, so a
++  // blank that failed keeps playing and a panel woken behind the lock's back
++  // (a resume that kept the same outputs) resumes instead of freezing.
++  property var monitorDpms: ({})
++  property bool monitorDpmsKnown: false
++  readonly property bool videoBackground: Util.isVideoPath(backgroundPath)
+   property bool strandedLock: false
+   property bool strandedLockResolved: false
+ 
+   readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
+   readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
++  readonly property var batteryService: shell && shell.services ? shell.firstPartyServiceFor("omarchy.battery") : null
++  readonly property bool powerSaverActive: batteryService ? batteryService.powerSaverOnBattery : false
+ 
+   function realScreenCount() {
+     var screens = Quickshell.screens || []
+@@ -103,6 +114,16 @@ Item {
+     if (!readlinkProc.running) readlinkProc.running = true
+   }
+ 
++  function refreshPoster() {
++    if (!root.videoBackground) {
++      root.videoPosterPath = ""
++      return
++    }
++    if (posterProc.running) return
++    posterProc.sourcePath = root.backgroundPath
++    posterProc.running = true
++  }
++
+   function refreshFingerprintStatus() {
+     if (!fingerprintCheckProc.running) fingerprintCheckProc.running = true
+   }
+@@ -165,14 +186,42 @@ Item {
+   }
+ 
+   function runWake() {
++    root.displaysBlank = false
++    root.monitorDpmsKnown = false
+     if (!wakeProcess.running) wakeProcess.running = true
+     if (lockRequested) armBlankTimer()
+   }
+ 
+   function runBlank() {
++    root.displaysBlank = true
++    root.monitorDpmsKnown = false
+     if (!blankProcess.running) blankProcess.running = true
+   }
+ 
++  function screenBlank(screenName) {
++    var name = String(screenName || "")
++    if (!monitorDpmsKnown || !(name in monitorDpms)) return displaysBlank
++    return !monitorDpms[name]
++  }
++
++  function applyMonitorDpms(text) {
++    var monitors
++    try {
++      monitors = JSON.parse(String(text || ""))
++    } catch (error) {
++      return
++    }
++    if (!Array.isArray(monitors)) return
++
++    var dpms = {}
++    for (var i = 0; i < monitors.length; i++) {
++      var monitor = monitors[i]
++      if (monitor && monitor.name && !monitor.disabled) dpms[String(monitor.name)] = !!monitor.dpmsStatus
++    }
++    monitorDpms = dpms
++    monitorDpmsKnown = true
++  }
++
+   function submitPassword(value) {
+     var password = String(value || "")
+     if (!lockRequested || authenticatingPassword || password.length === 0) return
+@@ -269,6 +318,7 @@ Item {
+         id: lockView
+         anchors.fill: parent
+         backgroundPath: root.backgroundPath
++        videoPosterPath: root.videoPosterPath
+         backgroundVersion: root.backgroundVersion
+         fingerprintConfigured: root.fingerprintConfigured
+         authenticatingPassword: root.authenticatingPassword
+@@ -276,6 +326,8 @@ Item {
+         failedAttempts: root.failedAttempts
+         inputEnabled: root.lockRequested
+         loadBackground: root.locked
++        displaysBlank: root.screenBlank(lockSurface.screen ? lockSurface.screen.name : "")
++        powerSaverActive: root.powerSaverActive
+         passwordText: root.enteredPassword
+         onPasswordTextEdited: function(password) { root.enteredPassword = password }
+         onSubmitPassword: function(password) { root.submitPassword(password) }
+@@ -299,6 +351,7 @@ Item {
+     LockView {
+       anchors.fill: parent
+       backgroundPath: root.backgroundPath
++      videoPosterPath: root.videoPosterPath
+       backgroundVersion: root.backgroundVersion
+       fingerprintConfigured: root.fingerprintConfigured
+       authenticatingPassword: false
+@@ -306,6 +359,7 @@ Item {
+       failedAttempts: 0
+       inputEnabled: false
+       loadBackground: root.previewVisible
++      powerSaverActive: root.powerSaverActive
+       passwordText: ""
+     }
+ 
+@@ -368,9 +422,25 @@ Item {
+       onStreamFinished: {
+         var next = String(text || "").trim()
+         if (next !== root.backgroundPath) {
++          root.videoPosterPath = ""
+           root.backgroundPath = next
+           root.backgroundVersion += 1
+         }
++        root.refreshPoster()
++      }
++    }
++  }
++
++  Process {
++    id: posterProc
++    property string sourcePath: ""
++    command: ["bash", Quickshell.env("OMARCHY_PATH") + "/shell/plugins/lock/poster.sh", sourcePath]
++    stdout: StdioCollector { id: posterOutput; waitForEnd: true }
++    onExited: function(exitCode) {
++      if (sourcePath !== root.backgroundPath) {
++        root.refreshPoster()
++      } else {
++        root.videoPosterPath = exitCode === 0 ? String(posterOutput.text || "").trim() : ""
+       }
+     }
+   }
+@@ -411,6 +481,31 @@ Item {
+     command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
+   }
+ 
++  // Quickshell exposes no DPMS signal, so the panel state is polled while a
++  // video is the locked wallpaper. A wake or blank request drops the last
++  // answer, so its optimistic state applies until the next poll confirms it.
++  Process {
++    id: monitorDpmsProcess
++    command: ["hyprctl", "monitors", "-j"]
++    stdout: StdioCollector {
++      onStreamFinished: root.applyMonitorDpms(text)
++    }
++  }
++
++  Timer {
++    id: monitorDpmsTimer
++    interval: 3000
++    repeat: true
++    triggeredOnStart: true
++    running: root.locked && root.videoBackground
++    onTriggered: {
++      if (!monitorDpmsProcess.running) monitorDpmsProcess.running = true
++    }
++    onRunningChanged: {
++      if (!running) root.monitorDpmsKnown = false
++    }
++  }
++
+   Timer {
+     id: idleBlankTimer
+     interval: 5000
+@@ -467,6 +562,10 @@ Item {
+   Connections {
+     target: Quickshell
+     function onScreensChanged() {
++      // A panel coming back is a display turning on that runWake did not ask
++      // for, so the blank state has to be given up here or a visible lock
++      // wallpaper stays frozen until the next keypress.
++      root.displaysBlank = false
+       root.requestSessionLock()
+ 
+       // A monitor still coming up has no workspace, so cannot answer yet.
+diff --git a/shell/plugins/lock/poster.sh b/shell/plugins/lock/poster.sh
+new file mode 100755
+index 00000000..836d01f0
+--- /dev/null
++++ b/shell/plugins/lock/poster.sh
+@@ -0,0 +1,24 @@
++#!/bin/bash
++
++# One cached frame shared by all lock outputs, including when OWE is paused.
++set -euo pipefail
++
++source_path=$1
++cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/lock-poster"
++signature=$(stat -Lc '%s:%y:%z' "$source_path")
++key=$(printf '%s\n%s' "$source_path" "$signature" | sha256sum | cut -d ' ' -f 1)
++poster="$cache_dir/poster-$key.jpg"
++mkdir -p "$cache_dir"
++exec {lock_fd}>"$cache_dir/.lock"
++flock -w 10 "$lock_fd"
++
++if [[ ! -s $poster ]]; then
++  temporary=$(mktemp "$cache_dir/.poster-XXXXXX.jpg")
++  trap 'rm -f "$temporary"' EXIT
++  timeout -k 1 5 ffmpegthumbnailer -i "$source_path" -o "$temporary" -s 1920 -q 8 {lock_fd}>&-
++  [[ -s $temporary ]]
++  mv -f "$temporary" "$poster"
++  find "$cache_dir" -maxdepth 1 -type f -name 'poster-*.jpg' ! -name "poster-$key.jpg" -delete
++fi
++
++printf '%s\n' "$poster"
+diff --git a/shell/plugins/services/battery/Service.qml b/shell/plugins/services/battery/Service.qml
+index 37fdf5c7..a1b01cff 100644
+--- a/shell/plugins/services/battery/Service.qml
++++ b/shell/plugins/services/battery/Service.qml
+@@ -12,6 +12,8 @@ Item {
+ 
+   readonly property int batteryThreshold: 10
+   property string pendingPowerSource: ""
++  property string activePowerProfile: ""
++  readonly property bool powerSaverOnBattery: UPower.onBattery && activePowerProfile === "power-saver"
+ 
+   PersistentProperties {
+     id: persisted
+@@ -53,11 +55,38 @@ Item {
+     powerProfileProcess.running = true
+   }
+ 
++  function refreshPowerProfile() {
++    if (!powerProfileReadProcess.running) powerProfileReadProcess.running = true
++  }
++
+   Process { id: warningProcess }
+ 
+   Process {
+     id: powerProfileProcess
+-    onExited: if (root.pendingPowerSource !== "") root.runPendingPowerProfile()
++    onExited: {
++      if (root.pendingPowerSource !== "") root.runPendingPowerProfile()
++      root.refreshPowerProfile()
++    }
++  }
++
++  Process {
++    id: powerProfileReadProcess
++    command: ["powerprofilesctl", "get"]
++    stdout: StdioCollector {
++      waitForEnd: true
++      onStreamFinished: root.activePowerProfile = String(text || "").trim()
++    }
++  }
++
++  Timer {
++    // powerprofilesctl has no portable monitor subcommand; keep profile changes
++    // visible to consumers such as the wallpaper service without requiring the
++    // power panel to be open.
++    interval: 2000
++    running: true
++    repeat: true
++    triggeredOnStart: true
++    onTriggered: root.refreshPowerProfile()
+   }
+ 
+   Timer {
+@@ -73,6 +102,9 @@ Item {
+     function onOnBatteryChanged() {
+       root.checkBattery()
+       root.applyPowerProfile()
++      root.refreshPowerProfile()
+     }
+   }
++
++  Component.onCompleted: root.refreshPowerProfile()
+ }
+diff --git a/shell/shell.qml b/shell/shell.qml
+index 0cc0575d..0685d5e8 100644
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -883,6 +883,10 @@ ShellRoot {
+       _pluginBarEntryShellApis[entryKey].barConfig = shell.publicBarConfig()
+   }
+ 
++  // Reassigned as each service registers, so a binding that reads this before
++  // looking a service up by id re-evaluates once that service exists.
++  readonly property var services: _services
++
+   function serviceFor(pluginId) {
+     return _services[String(pluginId)] || null
+   }

@@ -601,21 +601,24 @@ pkgs.testers.runNixOSTest {
         script = (
             "export XDG_RUNTIME_DIR=/run/user/1000\n"
             "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            f"echo \"$HYPRLAND_INSTANCE_SIGNATURE\" > /tmp/pkexec-{label}.sig\n"
             f"hyprctl dispatch 'hl.dsp.exec_cmd(\"sh {runner}\")' "
             f"> /tmp/pkexec-{label}.dispatch 2>&1\n"
+            f"echo $? > /tmp/pkexec-{label}.dispatchrc\n"
         )
         print(f"{label}: dispatch script:\n{script}")
         machine.succeed(
             f"cat > /tmp/pkexec-probe-{label}.sh <<'PROBE_EOF'\n" + script
             + "PROBE_EOF")
-        machine.succeed(f"su omarchy -c 'bash /tmp/pkexec-probe-{label}.sh'")
-        reply = machine.succeed(f"cat /tmp/pkexec-{label}.dispatch").strip()
-        sig = machine.succeed(
-            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 "
-            "ls -t /run/user/1000/hypr | head -1'").strip()
+        # execute, not succeed: a failing hyprctl must reach the stage-2
+        # message below with its reply, not die as "exit code 4" (#1161 probe b).
+        machine.execute(f"su omarchy -c 'bash /tmp/pkexec-probe-{label}.sh'")
+        reply = machine.execute(f"cat /tmp/pkexec-{label}.dispatch")[1].strip()
+        rc = machine.execute(f"cat /tmp/pkexec-{label}.dispatchrc")[1].strip()
+        sig = machine.execute(f"cat /tmp/pkexec-{label}.sig")[1].strip()
         assert reply == "ok", (
-            f"{label}: stage 2 -- hyprctl dispatch returned {reply!r} "
-            f"(HYPRLAND_INSTANCE_SIGNATURE={sig!r})")
+            f"{label}: stage 2 -- hyprctl dispatch exited {rc or '?'} and "
+            f"returned {reply!r} (HYPRLAND_INSTANCE_SIGNATURE={sig!r})")
 
     pkexec_probe(launch_dispatch_pkexec, "dispatch", "/tmp/pkexec-ok")
     print("the rebuild's elevation reaches the Omarchy polkit dialog")

@@ -1994,5 +1994,98 @@ pkgs.testers.runNixOSTest {
     print("a shell.json written under the running shell is recovered by "
           "omarchy-restart-shell, with the file unchanged")
 
+    # ---- panel loaders survive a plugin change (#1155) --------------------
+    #
+    # Symptom assertion, not a detector: this does not reproduce a real
+    # plugin change (that is a rescan of installed plugins, which this VM has
+    # none to add or remove), only a full shell restart -- the same
+    # Instantiator re-registering every IpcHandler from scratch. If the
+    # 1155 patch line is ever removed, CI's run of this check is the proof
+    # it goes red; pkgs/AGENTS.md#panel-loaders-survive-a-plugin-change-1155
+    # and checks.panel-loaders carry the actual bug/fix proof.
+    #
+    # Bar widgets are excluded on purpose: one IpcHandler per monitor is a
+    # legitimate duplicate (one Bar.qml instance per output), not the #1155
+    # bug, which is about panels, menus and overlays re-registering when
+    # nothing about them changed.
+    omarchy_path = machine.succeed(
+        as_user(". /run/current-system/etc/set-environment 2>/dev/null; echo $OMARCHY_PATH")
+    ).strip()
+    assert omarchy_path, "OMARCHY_PATH did not resolve for the omarchy user"
+
+    # Every overlay's own entry-point filename, read from the manifests this
+    # session actually ships -- overlays are not called Overlay.qml, each
+    # names its own (Clipboard.qml, Emojis.qml, ReminderFlow.qml, ...).
+    manifest_paths = machine.succeed(
+        "find " + omarchy_path + "/shell/plugins -name manifest.json"
+    ).split()
+    overlay_names = set()
+    for manifest_path in manifest_paths:
+        manifest = json.loads(machine.succeed("cat " + manifest_path))
+        overlay_entry = manifest.get("entryPoints", {}).get("overlay")
+        if overlay_entry:
+            overlay_names.add(overlay_entry)
+    assert overlay_names, "no overlay entry points found in any shipped manifest"
+
+    # The journal point: a timestamp, not a cursor -- `--since @<epoch>` reads
+    # the same way `journalctl -b` already does elsewhere in this file. A
+    # marker logged under the same tag right after it is the proof this
+    # window is not silently empty: an empty or mis-scoped read fails on the
+    # marker's absence, not on a false "no duplicates".
+    since = machine.succeed(as_user("date +%s")).strip()
+    marker = "nixarchy-1155-marker-" + since
+    machine.succeed(as_user("logger -t omarchy-shell " + marker))
+
+    machine.succeed(as_user("omarchy-restart-shell"))
+    machine.wait_until_succeeds(as_user("omarchy-shell shell ping"), timeout=60)
+
+    # Settle: poll for the journal to go quiet, capped at 20s -- not a bare
+    # sleep, since a loaded runner's restart can still be registering
+    # handlers well past any fixed guess.
+    journal_cmd = (
+        "journalctl --since=@" + since + " -t omarchy-shell --no-pager -o cat"
+    )
+    prev_len = None
+    settle_deadline = time.time() + 20
+    while time.time() < settle_deadline:
+        journal = machine.succeed(as_user(journal_cmd))
+        if len(journal) == prev_len:
+            break
+        prev_len = len(journal)
+        time.sleep(2)
+    journal = machine.succeed(as_user(journal_cmd))
+
+    assert journal.strip(), "the journal window since the restart is empty"
+    assert marker in journal, (
+        "the marker logged just before the restart is missing from its own "
+        "journal window -- the since-timestamp read is not seeing what it "
+        "should:\n" + journal)
+
+    offenders = {}
+    for line in journal.splitlines():
+        if "another handler is registered" not in line:
+            continue
+        # Quickshell's form, read from a real journal: "QML IpcHandler at
+        # file:///.../X.qml[168:3]: Handler was registered but will not be
+        # used because another handler is registered for target ...". The
+        # path sits mid-line, before "[line:col]".
+        start = line.find("IpcHandler at ")
+        end = line.find(".qml[", start)
+        if start < 0 or end < 0:
+            continue
+        path = line[start + len("IpcHandler at "):end + len(".qml")]
+        name = path.rsplit("/", 1)[-1]
+        if name in ("Panel.qml", "Menu.qml") or name in overlay_names:
+            offenders[path] = offenders.get(path, 0) + 1
+
+    for path, count in sorted(offenders.items()):
+        print(f"#1155: {count} re-registration(s) of {path}")
+    if not offenders:
+        print("#1155: no panel/menu/overlay IpcHandler re-registrations since the restart")
+    assert not offenders, (
+        "#1155: a panel, menu or overlay re-registered its IpcHandler across a "
+        "restart (counts above) -- panelEntryModel should have kept its Loader:\n"
+        + journal)
+
   '';
 }

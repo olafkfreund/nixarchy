@@ -1384,6 +1384,15 @@ jobs:
         # cannot rot unnoticed between releases.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.reference-toplevel
 
+      # The user configs nixarchy promises to coexist with: fixtures in
+      # tests/coexistence/fixtures.nix, checked against the reference config
+      # above (AGENTS.md §14). Claimed here, not left to the omarchy job's
+      # "build every unclaimed check" step, because it needs this job's own
+      # reference-toplevel closure warm -- elsewhere it is ~20 GB cold.
+      - name: The user configs nixarchy promises to coexist with still build
+        if: needs.gate.outputs.relevant == 'true'
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.coexistence
+
       # hypr-rdp is off by default, so no toplevel above carries it and
       # nothing here has built it -- but checks.options pulls it in further
       # down, and the push below refuses a path that is not in the store.

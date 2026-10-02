@@ -37,7 +37,7 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 claimed="wifi-hwsim install free-space installer-refusal
   install-encrypted install-iso install-iso-net iso-budget microvm-boot
   reinstall-vm
-  box-boot box-template coexist dashboard-clock installer-ui
+  box-boot box-template coexist coexistence dashboard-clock installer-ui
   installer-wizard integration microvm-template options plugin
   reference-toplevel session try-nixarchy vm-toplevel"
 

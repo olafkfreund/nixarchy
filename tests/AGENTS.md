@@ -36,6 +36,11 @@ package itself as well as the function check after changing its shell source.
 VM tests run from `/mnt/data/vmtest`, never `/tmp` — `/tmp` is a 32G tmpfs and
 a VM test that runs out of room does not fail cleanly, it wedges.
 
+`checks.coexistence` (`tests/coexistence/`, AGENTS.md §14) proves nixarchy's
+own fixtures still build and don't get silently shadowed — it cannot see
+fonts (no known failing case) or a real host config, only what a fixture
+names.
+
 ## The one nothing here can prove: a username that is not `omarchy`
 
 `tests/install-matrix.py` is not a check. It boots a **published** `.iso` in

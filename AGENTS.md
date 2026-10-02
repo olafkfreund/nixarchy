@@ -1162,3 +1162,40 @@ thing and meant another. None of them was a bug in this repo.
   collections instead of ~14. The tell was a run whose live heap was *larger*
   and still fast. When a timing changes, diff the toolchain lines of a fast
   and a slow log (`grep -o 'nix-installer v[0-9.]*'`) before the code (#1150).
+
+## 14. Coexist with the user's own config
+
+Nixarchy runs beside a user's own NixOS configuration, not instead of it, and
+that promise has a specific way to break: nixarchy sets an option the user
+also sets, in a merged environment with no obvious owner. #1162 reported it;
+#1163 was the fix, for `hardware.graphics.extraPackages` colliding with
+nixarchy's own Mesa. Found on the owner's own machine, after a PR had already
+described the risk in prose and nothing had checked it.
+
+Two failure modes, from two different merges, and they fail differently:
+
+- **`hardware.graphics`'s merged envs** (`nixos/modules/hardware/
+  graphics.nix`, `pkgs.buildEnv` with no `ignoreCollisions`) fail the
+  **build**, loudly, the moment two packages ship the same file.
+- **`environment.systemPackages`'s merged env** (`system.path`,
+  `nixos/modules/config/system-path.nix`, `ignoreCollisions = true`) resolves
+  a clash **silently**, by `meta.priority` then list order — one package's
+  file shadows the other's, and nothing says so.
+
+The rule: **a *Coexistence* section in the spec, answered by a fixture in
+`tests/coexistence/fixtures.nix`, plus an assertion or a warning where one is
+warranted.** `checks.coexistence` runs these fixtures against the reference
+config. Never answer coexistence with only a sentence in a PR — that is what
+#1162 shipped, and it was not enough until #1163 gave it a fixture that could
+fail (§1).
+
+Adding a fixture with every coexistence bug found is the standing rule, the
+same shape as `tests/graphics-mesa-clash.nix`'s own fixtures. A fixture that
+cannot fail is worse than none (§1): if no failing case exists for a
+coexistence concern (fonts, as of #1164 — no file-name collision has ever
+been found), it stays undocumented in the fixtures until one is.
+
+A changed default for an option a user commonly sets is announced in the
+release notes and the Discussions post, with the migration step — the same
+rule `announce-features-in-discussions` already carries, extended to
+defaults nobody asked to change.

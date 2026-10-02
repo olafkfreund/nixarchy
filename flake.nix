@@ -258,10 +258,10 @@
 
     # ai-mirror (#773): the binary and its bar widget on every machine, no agent
     # connected to it unless programs.nixarchy.aiMirror.mcp says so. Pinned to a
-    # commit like voice above; this one carries the steady accent watching sign.
+    # commit like voice above; this one is v2.1.0.
     # Why: spec/2026-09-22-773-ai-mirror-default.md
     ai-mirror = {
-      url = "github:olafkfreund/ai-mirror/929c9d15bbd0140d4a17e3876a18db982fe4c74e";
+      url = "github:olafkfreund/ai-mirror/044eb25b6b0646fea91de8e5415cd024ea7550f6";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

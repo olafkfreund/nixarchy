@@ -1951,7 +1951,9 @@ pkgs.testers.runNixOSTest {
     assert kill, (
         "Hyprland holds no Super+Shift+Escape bind described 'ai-mirror: stop "
         "agent control'; the seed bindings.lua lost the kill switch")
-    aim("ai-mirror control agent && ai-mirror control confirm")
+    # Since ai-mirror 2.1.0 a confirm must name the request it approves (ai-mirror#57).
+    request = json.loads(aim("ai-mirror control agent"))["request"]["id"]
+    aim("ai-mirror control confirm " + request)
     assert aim_owner() == "agent", "setup: the CLI grant (Decision A) did not take"
     aim("ai-mirror control off")
     assert aim_owner() == "off", "the kill switch's command did not take control back"

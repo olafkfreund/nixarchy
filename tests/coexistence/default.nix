@@ -109,7 +109,7 @@ let
             echo "systempkg-own-ffmpeg: ok"
             ;;
           *)
-            echo ${shQuote "systempkg-own-ffmpeg: FAIL bin/ffmpeg resolved to $target, not the user's ffmpeg-full"} >&2
+            echo "systempkg-own-ffmpeg: FAIL bin/ffmpeg resolved to $target, not the user's ffmpeg-full" >&2
             fail=1
             ;;
         esac

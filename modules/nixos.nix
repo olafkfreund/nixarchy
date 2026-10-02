@@ -760,6 +760,27 @@ in
       '';
     };
 
+    # #1153, backported onto v4.0.4 from omacom/omarchy #6792 and #12429. On
+    # by default for an installer-managed machine; Mode A gets nothing, same
+    # as everything under this option (config = lib.mkIf cfg.enable below).
+    owe.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Video and GIF desktop backgrounds, and the same video on the lock
+        screen, through owe (pkgs/apps/owe.nix) -- Omarchy's wallpaper
+        engine, backported here ahead of the Omarchy release that ships it.
+        A video background plays its sound through the default audio
+        output, the same as upstream.
+
+        owe is experimental upstream; this option is how you take it back
+        off a single machine. With it off, video and GIF files are still
+        listed and selectable as backgrounds, but the backported shell's
+        base layer draws nothing for one -- the desktop goes empty, not an
+        error -- because nothing is left running to feed it frames.
+      '';
+    };
+
     languageServer = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -1996,6 +2017,9 @@ in
     # convention read nothing else.
     environment.sessionVariables.INPUT_METHOD = lib.mkIf usingFcitx5 (lib.mkDefault "fcitx");
     environment.sessionVariables.SDL_IM_MODULE = lib.mkIf usingFcitx5 (lib.mkDefault "fcitx");
+
+    # #1153: the lock screen's LockFeedSurface.qml imports Owe.LockFeed from here.
+    environment.sessionVariables.QML_IMPORT_PATH = lib.mkIf cfg.owe.enable "${(pkgs.extend inputs.self.overlays.default).nixarchy-apps.owe}/${pkgs.qt6.qtbase.qtQmlPrefix}";
 
     xdg.portal = {
       enable = lib.mkDefault true;

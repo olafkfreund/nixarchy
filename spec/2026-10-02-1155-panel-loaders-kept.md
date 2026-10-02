@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1155
 intent: intent/2026-10-02-1155-panel-loaders-kept.md
 ---

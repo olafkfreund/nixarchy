@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1153
 spec: spec/2026-10-02-1153-owe-video-backgrounds.md
 ---

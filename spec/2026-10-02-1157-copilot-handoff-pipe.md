@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1157
 intent: intent/2026-10-02-1157-copilot-handoff-pipe.md
 ---

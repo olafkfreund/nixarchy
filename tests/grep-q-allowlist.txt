@@ -50,9 +50,7 @@ tests/qml.nix	if ! lint ${broken} | grep -q '\[syntax\]'; then	|| true absorbs 1
 tests/reinstall-vm.nix	! grep "unable to download" "$log" | grep -qv nix-cache-info	inside sh -c: no pipefail
 tests/session.nix	patchelf --print-needed $out/bin/loader-probe | grep -qx libGL.so.1	one write: patchelf --print-needed, a few lines
 tests/session.nix	machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
-tests/session.nix	"systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)	one write: systemctl list-units of one glob, a few lines
 tests/session.nix	"! systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=60)	one write: systemctl list-units of one glob, a few lines
-tests/session.nix	"systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)	one write: systemctl list-units of one glob, a few lines
 tests/session.nix	as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),	inside su -c: no pipefail
 tests/session.nix	as_user("systemctl --user show -p Result --value nixarchy-rebuild | grep -qx exit-code"),	inside su -c: no pipefail
 tests/session.nix	as_user("nixarchy-rebuild-state") + " | grep -q running", timeout=60)	one write: the command prints one short line

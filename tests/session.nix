@@ -568,8 +568,8 @@ pkgs.testers.runNixOSTest {
         # tried first and cannot read this theme's dialog (see the greeter).
         try:
             machine.wait_until_succeeds(
-                "systemctl list-units --no-legend 'polkit-agent-helper@*' "
-                "| grep -q .", timeout=90)
+                "test -n \"$(systemctl list-units --no-legend 'polkit-agent-helper@*')\"",
+                timeout=90)
         except Exception:
             dispatch = machine.succeed(
                 f"cat /tmp/pkexec-{label}.dispatch 2>/dev/null "
@@ -680,7 +680,6 @@ pkgs.testers.runNixOSTest {
     # A value Omarchy never sets (its border_size is 2), in the form
     # Hyprforge's Engine.js emits, read back through the running Hyprland.
     import json
-    import time
     forge = "/home/omarchy/.config/hypr/hyprforge.lua"
     machine.succeed(
         "printf '%s\\n' 'hl.config({ general = { border_size = 7 } })' > " + forge

@@ -827,10 +827,11 @@ which upstream only widens once a cache-busting `version` is in play
 (`root.version > 0 ? width : 4096`) and otherwise leaves open to decode at
 full size.
 
-**Carried as-is, not touched here:** the battery service's
-`powerprofilesctl get` poll that OWE's idle-pause hook depends on runs
-every two seconds, upstream's own interval, unchanged by this patch or by
-anything nixarchy adds on top of it.
+**Carried as-is:** #6792's battery service polls `powerprofilesctl get`
+every two seconds, forever, so the lock screen can drop its video feed in
+power-saver mode (`powerSaverActive` in `LockView.qml`). That is upstream's
+interval and cost, not owe's: owe's own battery policy is in
+`~/.config/owe/config.toml`.
 
 **ffmpegthumbnailer.** `omarchy-menu-images`'s video branch and the lock
 screen's `poster.sh` both call it. It is already in `runtimeDeps`, put there

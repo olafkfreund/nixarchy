@@ -1287,144 +1287,148 @@ in
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's
       # metadata scan), so their dependencies have to be on the session PATH.
-      systemPackages = [
-        cfg.package
-      ]
-      # Why: modules/AGENTS.md#minus-hyprland-itself
-      ++ builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
-      # sessionPackages alone does not populate
-      # /run/current-system/sw/share/wayland-sessions, and that is where greetd
-      # greeters actually look -- so the session package goes here as well.
-      ++ lib.optional cfg.session omarchySession
-      ++ (with pkgs; [
-        # omarchy-theme-set-gnome applies the light/dark half of every theme
-        # with `gsettings set org.gnome.desktop.interface`, and on Arch the
-        # schemas it writes arrive as transitive dependencies. Nothing pulls
-        # them into a NixOS system profile, so gsettings answered "No schemas
-        # installed" and every one of those writes was a no-op -- which is why
-        # a dark theme left GTK apps and Chromium in light mode.
-        glib
-        gsettings-desktop-schemas
+      #
+      # lowPrio: a user's own copy wins any binary it shares (#1167, as #809).
+      systemPackages = map lib.lowPrio (
+        [
+          cfg.package
+        ]
+        # Why: modules/AGENTS.md#minus-hyprland-itself
+        ++ builtins.filter (d: !(lib.hasPrefix "hyprland-" (d.name or ""))) cfg.package.passthru.runtimeDeps
+        # sessionPackages alone does not populate
+        # /run/current-system/sw/share/wayland-sessions, and that is where greetd
+        # greeters actually look -- so the session package goes here as well.
+        ++ lib.optional cfg.session omarchySession
+        ++ (with pkgs; [
+          # omarchy-theme-set-gnome applies the light/dark half of every theme
+          # with `gsettings set org.gnome.desktop.interface`, and on Arch the
+          # schemas it writes arrive as transitive dependencies. Nothing pulls
+          # them into a NixOS system profile, so gsettings answered "No schemas
+          # installed" and every one of those writes was a no-op -- which is why
+          # a dark theme left GTK apps and Chromium in light mode.
+          glib
+          gsettings-desktop-schemas
 
-        # install/omarchy-base.packages:46. GTK 3 has no Adwaita-dark of its
-        # own; gnome-themes-extra is the package that supplies it, and it is
-        # the exact name gsettings gets set to.
-        gnome-themes-extra
+          # install/omarchy-base.packages:46. GTK 3 has no Adwaita-dark of its
+          # own; gnome-themes-extra is the package that supplies it, and it is
+          # the exact name gsettings gets set to.
+          gnome-themes-extra
 
-        # install/omarchy-base.packages:147. Every theme's icons.theme names a
-        # Yaru variant -- Yaru-magenta, Yaru-sage, Yaru-olive and so on -- so
-        # without this the icon theme is set to something that does not exist.
-        yaru-theme
-        # Yaru inherits from Adwaita for anything it does not draw itself.
-        adwaita-icon-theme
-      ])
-      ++ (
-        # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
-        #
-        # Conditional, and loud when it is absent. nixos-26.05 carries no
-        # such attribute at all -- not an older one, none -- so on stable
-        # this was an `undefined variable` that stopped the whole
-        # configuration from evaluating (#526). Guarding it is what lets
-        # stable evaluate.
-        #
-        # Not a bare `optional`, which would trade a loud eval error for
-        # precisely the failure #202 took a day to find: the portal execs a
-        # name that is not there, reads selection -1 and destroys the
-        # session, so screen sharing dies in every application with no dialog
-        # and no error anywhere a user would look. A missing package that
-        # announces itself is a different thing from one that does not.
-        #
-        # Spliced in here rather than appended to the end of the list because
-        # `environment.systemPackages` order reaches buildEnv: keeping the
-        # position keeps the package list byte-identical, in order as well as
-        # in content, for every user whose nixpkgs has the picker -- which is
-        # everyone on unstable. A fix for stable should cost them nothing,
-        # and "nothing" is checkable rather than asserted.
-        lib.warnIf (!(pkgs ? hyprland-preview-share-picker)) ''
-          nixarchy: this nixpkgs has no hyprland-preview-share-picker, so
-          screen sharing will fail in every application -- silently, with no
-          dialog (#202). nixos-26.05 is the known case; unstable has it.
-        '' (lib.optional (pkgs ? hyprland-preview-share-picker) pkgs.hyprland-preview-share-picker)
-      )
-      ++ (with pkgs; [
-        # Omarchy sets a cursor size but never a cursor theme -- on Arch one
-        # comes with the desktop packages. NixOS ships none, so Hyprland used
-        # its own built-in pointer. Bibata is here rather than Yaru or Adwaita
-        # because those ship a single cursor each, and the point is to follow
-        # the theme: Ice is white for dark themes, Classic black for light.
-        bibata-cursors
-      ])
-      ++ lib.optionals cfg.commandNotFound [
-        # nix-locate, backed by the prebuilt database rather than by one this
-        # machine would have to spend an afternoon building -- and `comma`,
-        # so `, foo` runs something once. Both wrappers come from the
-        # nix-index-database input; the plain pkgs.comma reads an index that
-        # is not there and answers nothing.
-        nixIndexPackages.nix-index-with-db
-        nixIndexPackages.comma-with-db
+          # install/omarchy-base.packages:147. Every theme's icons.theme names a
+          # Yaru variant -- Yaru-magenta, Yaru-sage, Yaru-olive and so on -- so
+          # without this the icon theme is set to something that does not exist.
+          yaru-theme
+          # Yaru inherits from Adwaita for anything it does not draw itself.
+          adwaita-icon-theme
+        ])
+        ++ (
+          # Why: modules/AGENTS.md#config-hypr-xdph-conf-which-the-package-seeds-into
+          #
+          # Conditional, and loud when it is absent. nixos-26.05 carries no
+          # such attribute at all -- not an older one, none -- so on stable
+          # this was an `undefined variable` that stopped the whole
+          # configuration from evaluating (#526). Guarding it is what lets
+          # stable evaluate.
+          #
+          # Not a bare `optional`, which would trade a loud eval error for
+          # precisely the failure #202 took a day to find: the portal execs a
+          # name that is not there, reads selection -1 and destroys the
+          # session, so screen sharing dies in every application with no dialog
+          # and no error anywhere a user would look. A missing package that
+          # announces itself is a different thing from one that does not.
+          #
+          # Spliced in here rather than appended to the end of the list because
+          # `environment.systemPackages` order reaches buildEnv: keeping the
+          # position keeps the package list byte-identical, in order as well as
+          # in content, for every user whose nixpkgs has the picker -- which is
+          # everyone on unstable. A fix for stable should cost them nothing,
+          # and "nothing" is checkable rather than asserted.
+          lib.warnIf (!(pkgs ? hyprland-preview-share-picker)) ''
+            nixarchy: this nixpkgs has no hyprland-preview-share-picker, so
+            screen sharing will fail in every application -- silently, with no
+            dialog (#202). nixos-26.05 is the known case; unstable has it.
+          '' (lib.optional (pkgs ? hyprland-preview-share-picker) pkgs.hyprland-preview-share-picker)
+        )
+        ++ (with pkgs; [
+          # Omarchy sets a cursor size but never a cursor theme -- on Arch one
+          # comes with the desktop packages. NixOS ships none, so Hyprland used
+          # its own built-in pointer. Bibata is here rather than Yaru or Adwaita
+          # because those ship a single cursor each, and the point is to follow
+          # the theme: Ice is white for dark themes, Classic black for light.
+          bibata-cursors
+        ])
+        ++ lib.optionals cfg.commandNotFound [
+          # nix-locate, backed by the prebuilt database rather than by one this
+          # machine would have to spend an afternoon building -- and `comma`,
+          # so `, foo` runs something once. Both wrappers come from the
+          # nix-index-database input; the plain pkgs.comma reads an index that
+          # is not there and answers nothing.
+          nixIndexPackages.nix-index-with-db
+          nixIndexPackages.comma-with-db
 
-        # The handler itself, on PATH rather than only inside the shell hook.
-        # Two reasons, and the second is the load-bearing one: `nixarchy
-        # doctor` and a user can both ask it a question directly, and a check
-        # can RUN it. A handler reachable only through a shell function is one
-        # no evaluation-time check can do more than grep for.
-        commandNotFound
-      ]
-      ++ lib.optionals cfg.languageServer [
-        # The language server itself. The editors are pointed at it by
-        # modules/home.nix, which is where an editor's configuration file
-        # lives; what has to be on PATH is the binary they exec.
-        pkgs.nixd
-        # The formatter conform.nvim runs by bare name (#657). nixd is handed
-        # an absolute path in nixdSettings above; the editor plugin is not,
-        # and a formatter that is not on PATH is format-on-save doing nothing.
-        # It has to be the tool flake.nix's `formatter` wraps, or every save
-        # produces a diff `nix fmt -- --ci` rejects; tests/options.nix runs
-        # both on one file and diffs the result.
-        pkgs.nixfmt
-        # What LazyVim's nvim-treesitter compiles every parser with. Upstream
-        # ships `clang` and `tree-sitter-cli` in omarchy-base.packages; neither
-        # was here, so `ensure_installed` -- including the nix grammar the
-        # generated spec adds (#656) -- failed on every start with "no C
-        # compiler". gcc rather than clang because it is stdenv's, and so
-        # already in the store of any machine that has built anything.
-        pkgs.tree-sitter
-        pkgs.gcc
-      ]
-      ++ lib.optionals (config.sops.secrets != { } || config.sops.templates != { }) [
-        # nvim-sops execs `sops` by name (#658). Gated on the same predicate
-        # sops-nix gates itself on, so a machine that declares no secret gains
-        # no package -- the inertness tests/options.nix asserts for sops-nix.
-        pkgs.sops
-      ]
-      ++ lib.optionals cfg.preinstalls (
-        # Filtered by attribute name rather than by pname: the name someone
-        # writes in preinstallsExclude is the one they would look up on
-        # search.nixos.org, and pname disagrees with it often enough to matter
-        # -- pinta's is "Pinta", capitalised.
-        lib.attrValues (
-          lib.removeAttrs {
-            # omarchy-install-preinstalls, minus the six that cannot be here.
-            inherit (pkgs)
-              pinta
-              libreoffice
-              xournalpp
-              obs-studio
-              moonlight-qt
-              ;
-            inherit (pkgs.kdePackages) kdenlive;
+          # The handler itself, on PATH rather than only inside the shell hook.
+          # Two reasons, and the second is the load-bearing one: `nixarchy
+          # doctor` and a user can both ask it a question directly, and a check
+          # can RUN it. A handler reachable only through a shell function is one
+          # no evaluation-time check can do more than grep for.
+          commandNotFound
+        ]
+        ++ lib.optionals cfg.languageServer [
+          # The language server itself. The editors are pointed at it by
+          # modules/home.nix, which is where an editor's configuration file
+          # lives; what has to be on PATH is the binary they exec.
+          pkgs.nixd
+          # The formatter conform.nvim runs by bare name (#657). nixd is handed
+          # an absolute path in nixdSettings above; the editor plugin is not,
+          # and a formatter that is not on PATH is format-on-save doing nothing.
+          # It has to be the tool flake.nix's `formatter` wraps, or every save
+          # produces a diff `nix fmt -- --ci` rejects; tests/options.nix runs
+          # both on one file and diffs the result.
+          pkgs.nixfmt
+          # What LazyVim's nvim-treesitter compiles every parser with. Upstream
+          # ships `clang` and `tree-sitter-cli` in omarchy-base.packages; neither
+          # was here, so `ensure_installed` -- including the nix grammar the
+          # generated spec adds (#656) -- failed on every start with "no C
+          # compiler". gcc rather than clang because it is stdenv's, and so
+          # already in the store of any machine that has built anything.
+          pkgs.tree-sitter
+          pkgs.gcc
+        ]
+        ++ lib.optionals (config.sops.secrets != { } || config.sops.templates != { }) [
+          # nvim-sops execs `sops` by name (#658). Gated on the same predicate
+          # sops-nix gates itself on, so a machine that declares no secret gains
+          # no package -- the inertness tests/options.nix asserts for sops-nix.
+          pkgs.sops
+        ]
+        ++ lib.optionals cfg.preinstalls (
+          # Filtered by attribute name rather than by pname: the name someone
+          # writes in preinstallsExclude is the one they would look up on
+          # search.nixos.org, and pname disagrees with it often enough to matter
+          # -- pinta's is "Pinta", capitalised.
+          lib.attrValues (
+            lib.removeAttrs {
+              # omarchy-install-preinstalls, minus the six that cannot be here.
+              inherit (pkgs)
+                pinta
+                libreoffice
+                xournalpp
+                obs-studio
+                moonlight-qt
+                ;
+              inherit (pkgs.kdePackages) kdenlive;
 
-            # install/omarchy-base.packages. The GUIs manual sends people to
-            # Disks for formatting and SMART, and sushi is what makes Space
-            # preview a file in Nautilus without opening it.
-            inherit (pkgs) gnome-disk-utility sushi;
+              # install/omarchy-base.packages. The GUIs manual sends people to
+              # Disks for formatting and SMART, and sushi is what makes Space
+              # preview a file in Nautilus without opening it.
+              inherit (pkgs) gnome-disk-utility sushi;
 
-            # Omarchy's own music TUI, bound to SUPER + SHIFT + ALT + M. The
-            # text above said it was not in nixpkgs; it arrived after that was
-            # written, so the keybinding had been failing on a package that was
-            # available the whole time.
-            inherit (pkgs) cliamp;
-          } cfg.preinstallsExclude
+              # Omarchy's own music TUI, bound to SUPER + SHIFT + ALT + M. The
+              # text above said it was not in nixpkgs; it arrived after that was
+              # written, so the keybinding had been failing on a package that was
+              # available the whole time.
+              inherit (pkgs) cliamp;
+            } cfg.preinstallsExclude
+          )
         )
       );
     };

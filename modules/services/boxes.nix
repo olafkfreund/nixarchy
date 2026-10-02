@@ -111,7 +111,8 @@ in
     # which would put that derivation's own store bin/ on PATH ahead of the
     # profile and reintroduce this. `nixarchy box` was the script this was
     # written for; #801 retired it, and the rule outlived it.
-    environment.systemPackages = [ pkgs.distrobox ];
+    # lowPrio: a user's own copy wins any binary it shares (#1167, as #809).
+    environment.systemPackages = map lib.lowPrio [ pkgs.distrobox ];
 
     # The Distrobox panel's templates, in the `distrobox assemble` shape its
     # templatesFile reads (#766): one section per template, from

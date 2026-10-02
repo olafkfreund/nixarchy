@@ -1202,2749 +1202,2755 @@ in
             "nixarchy/omarchy-menu.jsonc".source = menuDefaults;
           };
 
-          environment.systemPackages = [
-            # Why: modules/AGENTS.md#the-doctor-and-verify-which-until-now-were-flake-a
-            (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
-            (pkgs.extend inputs.self.overlays.default).nixarchy-verify
-            (pkgs.extend inputs.self.overlays.default).nixarchy-explain
-
-          ]
-          # The default agent's own package, when the configuration names one.
-          #
-          # ids and attributes are omarchy-default-agent's `attr_for`, kept in
-          # step by hand. That command installs an agent through nixarchy-pkg-add
-          # when someone picks one from the menu; this is the same decision made
-          # in the configuration instead, so it reproduces on the next machine.
-          #
-          # `claude-code` is unfree, so defaultAgent = "claude" without
-          # programs.nixarchy.allowUnfree fails to evaluate with nixpkgs' own
-          # message naming the package. That is the right failure: the
-          # alternative is a missing agent and an Ask menu that never appears.
-          ++
-            lib.optional (cfg.defaultAgent != null)
-              {
-                # Three of the seven are named after their own command, which is
-                # the whole reason omarchy-agent can look for `$agent` on PATH.
-                inherit (pkgs) codex opencode crush;
-
-                claude = pkgs.claude-code;
-                gemini = pkgs.gemini-cli;
-                copilot = pkgs.github-copilot-cli;
-                grok = pkgs.grok-cli;
-              }
-              .${cfg.defaultAgent}
-          ++ [
-
-            # Why: modules/AGENTS.md#uncomments-one-app-in-config-nixarchy-apps-nix
-            (pkgs.writeShellApplication {
-              name = "nixarchy-catalogue-diff";
-              runtimeInputs = [
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.coreutils
-              ];
-              text = ''
-                add=false
-                # --add-one <part> <id>: just that row (#843). What
-                # nixarchy-service-enable calls when a file predates a row.
-                only_part=""
-                only_id=""
-                usage() {
-                  echo "usage: nixarchy-catalogue-diff [--add | --add-one apps|services|advanced <id>]" >&2
-                  exit 2
-                }
-                case "''${1:-}" in
-                  --add) add=true ;;
-                  --add-one)
-                    add=true
-                    only_part="''${2:-}"
-                    only_id="''${3:-}"
-                    case "$only_part" in apps | services | advanced) ;; *) usage ;; esac
-                    case "$only_id" in *[!a-z0-9_.-]* | "") usage ;; esac
-                    ;;
-                  "") ;;
-                  *) usage ;;
-                esac
-                refused=false
-
-                dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
-                total=0
-
-                for part in apps services advanced; do
-                  [ -z "$only_part" ] || [ "$part" = "$only_part" ] || continue
-                  user="$dir/$part.nix"
-                  tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/$part-template.nix"
-                  if [ -n "$only_id" ]; then
-                    [ -f "$user" ] || { echo "no $user" >&2; exit 1; }
-                    [ -f "$tpl" ] || { echo "no $tpl" >&2; exit 1; }
-                  fi
-                  [ -f "$user" ] && [ -f "$tpl" ] || continue
-
-                  # Compared by marker, never by line: the file's own header
-                  # invites reformatting, reordering and annotating, so anything
-                  # positional would report a file somebody had tidied as full of
-                  # holes. A marker with a space after #@ is a catalogue row; the
-                  # others -- #@pkg, #@opt, #@pkgs-begin -- are the user's own and
-                  # a template never has them.
-                  missing=$(
-                    comm -23 \
-                      <(grep -oE "#@ [a-z0-9_.-]+" "$tpl" | sort -u) \
-                      <(grep -oE "#@ [a-z0-9_.-]+" "$user" | sort -u)
-                  )
-                  if [ -n "$only_id" ]; then
-                    # Here-strings, not pipes: under pipefail a grep -q that
-                    # stops reading early can fail the pipeline it ends.
-                    have=$(grep -oE "#@ [a-z0-9_.-]+" "$user" || true)
-                    offer=$(grep -oE "#@ [a-z0-9_.-]+" "$tpl" || true)
-                    if grep -qxF "#@ $only_id" <<<"$have"; then
-                      echo "$part.nix already has $only_id"
-                      exit 0
-                    fi
-                    grep -qxF "#@ $only_id" <<<"$offer" || {
-                      echo "no $only_id in $tpl" >&2
-                      exit 1
-                    }
-                    missing="#@ $only_id"
-                  fi
-                  [ -n "$missing" ] || continue
-
-                  count=$(printf '%s\n' "$missing" | grep -c . || true)
-                  total=$((total + count))
-                  echo "$part.nix is missing $count:"
-
-                  rows=""
-                  while IFS= read -r marker; do
-                    [ -n "$marker" ] || continue
-                    echo "  ''${marker#\#@ }"
-                    row=$(grep -F -- "$marker" "$tpl" | head -1)
-                    # App rows are written relative to programs.nixarchy.apps,
-                    # which they sit inside in the template. Appended at the end
-                    # of a file they would be outside it -- harmless while
-                    # commented and broken the moment somebody uncommented one.
-                    # Written in full they are correct wherever they land. A
-                    # second `programs.nixarchy.apps = { }` block would not be:
-                    # two definitions of one attribute in one set is an error,
-                    # not a merge.
-                    if [ "$part" = apps ]; then
-                      row=$(printf '%s' "$row" |
-                        sed -E "s/^([[:space:]]*#[[:space:]]*)/\1programs.nixarchy.apps./")
-                    fi
-                    rows="$rows$row
-                "
-                  done <<MARKERS
-                $missing
-                MARKERS
-
-                  if [ "$add" = true ]; then
-                    # Before the module's closing brace, not after it. Appending
-                    # to the end of the file puts the rows outside the attrset,
-                    # where they parse -- they are comments -- and stop parsing
-                    # the moment somebody uncomments one, because that is content
-                    # after the final `}`. Which is the same trap the full-path
-                    # rewrite above exists to avoid, one line further down.
-                    close=$(grep -n "^}" "$user" | tail -1 | cut -d: -f1)
-                    if [ -z "$close" ]; then
-                      echo "  $user has no closing brace on its own line;" >&2
-                      echo "  add these by hand rather than let this guess:" >&2
-                      printf '%s' "$rows" >&2
-                      refused=true
-                      continue
-                    fi
-                    tmp=$(mktemp)
-                    head -n "$((close - 1))" "$user" >"$tmp"
-                    {
-                      echo ""
-                      echo "  # ── Added by nixarchy-catalogue-diff, $(date +%Y-%m-%d) ──"
-                      printf '%s' "$rows"
-                    } >>"$tmp"
-                    tail -n "+$close" "$user" >>"$tmp"
-                    cat "$tmp" >"$user"
-                    rm -f "$tmp"
-                    echo "  appended to $user"
-                  fi
-                done
-
-                if [ -n "$only_id" ]; then
-                  [ "$refused" = false ] || exit 1
-                  exit 0
-                fi
-
-                if [ "$total" -eq 0 ]; then
-                  echo "your files have everything the catalogue offers"
-                  exit 0
-                fi
-
-                if [ "$add" = false ]; then
-                  echo ""
-                  echo "Run 'nixarchy-catalogue-diff --add' to append these as"
-                  echo "commented-out lines. Nothing you have written changes:"
-                  echo "only new lines, at the end, under a dated heading."
-                fi
-              '';
-            })
-
-            (pkgs.writeShellApplication {
-              name = "nixarchy-service-enable";
-              runtimeInputs = [
-                pkgs.gnused
-                pkgs.gnugrep
-                pkgs.coreutils
-                cfg.package
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
-
-                # Callers (nixarchy-microvm) read this to learn that a missing
-                # row heals itself, so keep "usage:" and "missing" in it (#843).
-                case "''${1:-}" in
-                  -h | --help)
-                    echo "usage: nixarchy-service-enable <service-id>"
-                    echo "  A row missing from services.nix is added from /etc/nixarchy/services-template.nix."
-                    exit 0
-                    ;;
-                esac
-
-                id="''${1:?usage: nixarchy-service-enable <service-id>}"
-
-                # Validated before it reaches sed and grep, which the app scripts
-                # do not do: the id is interpolated into a regex, and an id with a
-                # slash or a bracket in it would either fail obscurely or match
-                # something nobody meant. Ids come from data/services.nix and look
-                # like this; anything else is a typo or a caller with a bug.
-                case "$id" in
-                  *[!a-z0-9_-]* | "")
-                    echo "nixarchy: '$id' is not a service id" >&2
-                    exit 2
-                    ;;
-                esac
-
-                [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
-
-                # A services.nix written before this row existed does not have
-                # it; nothing regenerates the file, so add just that row from
-                # the template, where catalogue-diff puts rows (#843).
-                if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  if nixarchy-catalogue-diff --add-one services "$id" >/dev/null; then
-                    echo "added the $id row from the template"
-                  else
-                    echo "nixarchy: no service '$id' in $file" >&2
-                    echo "  The full list is /etc/nixarchy/services-template.nix." >&2
-                    exit 1
-                  fi
-                fi
-
-                # Already on if the marked line is not commented out.
-                #
-                # Deliberately not the app scripts' test, which greps for
-                # `^[[:space:]]*<id>.enable` -- that cannot work here, because a
-                # plain entry's line begins with services.openssh, not with the
-                # id. Asking whether the marked line is live is also the more
-                # honest question: it does not answer "yes" to `enable = false;`.
-                if grep -qE "^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)" "$file"; then
-                  echo "$id is already enabled; run nixarchy-apply to build it"
-                  exit 0
-                fi
-
-                sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
-
-                queued=$(grep -cE "^[[:space:]]*[^#[:space:]].*#@ " "$file" || true)
-                if command -v omarchy-notification-send >/dev/null 2>&1; then
-                  omarchy-notification-send -r 8471 -t 8000 -u normal \
-                    "$id queued -- not enabled yet" \
-                    "$queued selected. Click here, or Install > Apply changes, to review and rebuild." \
-                    --exec nixarchy-plugin nixarchy.rebuild || true
-                fi
-                echo "enabled $id in $file ($queued queued)"
-                echo "run 'nixarchy-apply' when you have picked everything you want"
-              '';
-            })
-
-            (pkgs.writeShellApplication {
-              name = "nixarchy-service-disable";
-              runtimeInputs = [
-                pkgs.gnused
-                pkgs.gnugrep
-                pkgs.coreutils
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
-                id="''${1:?usage: nixarchy-service-disable <service-id>}"
-
-                case "$id" in
-                  *[!a-z0-9_-]* | "")
-                    echo "nixarchy: '$id' is not a service id" >&2
-                    exit 2
-                    ;;
-                esac
-
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-
-                if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  echo "nixarchy: no service '$id' in $file" >&2
-                  exit 1
-                fi
-
-                # Comment the marked line back out. Turning a service off is not
-                # the same as uninstalling it: the daemon stops, and whatever it
-                # wrote -- a Syncthing database, an authorised key -- stays where
-                # it is. Removing that is the user's call and not this script's.
-                sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
-                echo "disabled $id in $file"
-                echo "run 'nixarchy-apply' to rebuild without it"
-              '';
-            })
-
-            (pkgs.writeShellApplication {
-              name = "nixarchy-app-enable";
-              runtimeInputs = [
-                pkgs.gnused
-                pkgs.gnugrep
-                pkgs.coreutils
-                cfg.package # omarchy-notification-send
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
-                id="''${1:?usage: nixarchy-app-enable <app-id>}"
-
-                # A menu pick has no terminal, so an error only on stderr is a
-                # pick that silently did nothing. Say it on the desktop too.
-                fail() {
-                  echo "nixarchy: $1" >&2
-                  if command -v omarchy-notification-send >/dev/null 2>&1; then
-                    omarchy-notification-send -u critical "Could not select $id" "$1" || true
-                  fi
-                  exit 1
-                }
-
-                case "$id" in
-                  *[!a-z0-9_-]* | "") fail "'$id' is not an app id" ;;
-                esac
-
-                [ -f "$file" ] || fail "no $file -- log in again to have it created"
-
-                # apps.nix is seeded once, so an app added to the catalogue later
-                # has no row in it. Take the row from the current template and
-                # put it at the top of the apps block, still commented out.
-                if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
-                  [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
-                  grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
-                    fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
-                  tmp=$(mktemp)
-                  awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
-                    "$file" >"$tmp"
-                  cat "$tmp" >"$file"
-                  rm -f "$tmp"
-                  echo "added $id's row from the current catalogue to $file"
-                fi
-
-                if grep -q "^[[:space:]]*$id\.enable" "$file"; then
-                  echo "$id is already enabled; run nixarchy-apply to build it"
-                  exit 0
-                fi
-
-                # Strip one leading '# ' from the marked line, nothing else.
-                sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
-
-                # A menu pick runs with no terminal attached, so stdout goes
-                # nowhere and the pick looks like it did nothing at all. Say so
-                # on the desktop instead. -r keeps repeated picks replacing one
-                # notification rather than stacking a wall of them.
-                queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
-                if command -v omarchy-notification-send >/dev/null 2>&1; then
-                  # --exec makes the notification clickable: nothing is built
-                  # until a rebuild runs, so the notification that says so is
-                  # also the way to start it.
-                  omarchy-notification-send -r 8471 -t 8000 -u normal \
-                    "$id queued -- not installed yet" \
-                    "$queued app(s) selected. Click here, or Install > Apply changes, to review and rebuild." \
-                    --exec nixarchy-plugin nixarchy.rebuild || true
-                fi
-                echo "enabled $id in $file ($queued queued)"
-                echo "run 'nixarchy-apply' when you have picked everything you want"
-              '';
-            })
-
-            # The inverse of nixarchy-app-enable: re-comments the line. It only
-            # ever touches ~/.config/nixarchy/apps.nix -- never the user's own
-            # NixOS configuration, which nixarchy does not own and must not
-            # edit. An app stays installed until a rebuild runs.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-app-disable";
-              runtimeInputs = [
-                pkgs.gnused
-                pkgs.gnugrep
-                pkgs.coreutils
-                cfg.package
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                id="''${1:?usage: nixarchy-app-disable <app-id>}"
-
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-
-                if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
-                  echo "nixarchy: no app '$id' in $file" >&2
-                  exit 1
-                fi
-
-                if ! grep -qE "^[[:space:]]*$id\.enable" "$file"; then
-                  echo "$id is not enabled"
-                  exit 0
-                fi
-
-                # Comment the line back out, preserving its indentation.
-                sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
-
-                queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
-                if command -v omarchy-notification-send >/dev/null 2>&1; then
-                  omarchy-notification-send -r 8471 -t 8000 -u normal \
-                    "$id removed from your selection" \
-                    "$queued app(s) still selected. Click here to review and rebuild." \
-                    --exec nixarchy-plugin nixarchy.rebuild || true
-                fi
-                echo "disabled $id in $file ($queued still enabled)"
-                echo "it stays installed until 'nixarchy-apply' rebuilds"
-              '';
-            })
-
-            # An interactive picker over what is currently selected, for the
-            # Remove > Package row. Upstream offers a fuzzy picker over installed
-            # pacman packages; this is the same shape over the app selection.
-            #
-            # All four kinds the pickers can write, because "Remove" that
-            # only sees some of them is a menu row that lies (#494, #522): curated
-            # apps (`id.enable` lines), extra packages (`#@pkg` markers from
-            # nixarchy-pkg-add), options (`#@opt` markers from the Search
-            # picker's add_option) and drafts (`#@draft` markers from
-            # nixarchy-pkg-new).
-            (pkgs.writeShellApplication {
-              name = "nixarchy-app-remove";
-              runtimeInputs = [
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.coreutils
-                pkgs.fzf
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-
-                # `|| continue`, not `&&`: this script runs under set -e, and a
-                # failing AND-list on a blank line would end it mid-collect.
-                entries=()
-                while IFS= read -r name; do
-                  [ -n "$name" ] || continue
-                  entries+=("app"$'\t'"$name")
-                done < <(
-                  grep -oE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" \
-                    | sed -E 's/[[:space:]]*//; s/\.enable//'
-                )
-                while IFS= read -r name; do
-                  [ -n "$name" ] || continue
-                  entries+=("pkg"$'\t'"$name")
-                done < <(grep -oE '#@pkg(-other)? [A-Za-z0-9_.-]+$' "$file" | sed -E 's/^#@pkg(-other)? //')
-                while IFS= read -r name; do
-                  [ -n "$name" ] || continue
-                  entries+=("opt"$'\t'"$name")
-                done < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
-                while IFS= read -r name; do
-                  [ -n "$name" ] || continue
-                  entries+=("draft"$'\t'"$name")
-                done < <(grep -oE '#@draft [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@draft //')
-
-                if [ ''${#entries[@]} -eq 0 ]; then
-                  echo "Nothing is selected. Install > Package lists what is available."
-                  exit 0
-                fi
-
-                # The preview shows the line that would go, so what "remove"
-                # means for each entry is visible before it happens.
-                chosen=$(printf '%s\n' "''${entries[@]}" | fzf --multi \
-                  --delimiter='\t' \
-                  --prompt="remove > " \
-                  --header="tab to select several, enter to confirm" \
-                  --preview "grep -F -- {2} '$file' | grep -F -e '.enable' -e '#@'" \
-                  --preview-window='down,3,wrap') || exit 0
-                [ -n "$chosen" ] || exit 0
-
-                # Packages and options are batched: one backup, one parse check,
-                # one notification per kind rather than per line.
-                pkgsel=()
-                optsel=()
-                draftsel=()
-                while IFS=$'\t' read -r kind name; do
-                  [ -n "$name" ] || continue
-                  case "$kind" in
-                    app) nixarchy-app-disable "$name" ;;
-                    pkg) pkgsel+=("$name") ;;
-                    opt) optsel+=("$name") ;;
-                    draft) draftsel+=("$name") ;;
-                  esac
-                done <<< "$chosen"
-                [ ''${#pkgsel[@]} -eq 0 ] || nixarchy-pkg-remove "''${pkgsel[@]}"
-                [ ''${#optsel[@]} -eq 0 ] || nixarchy-opt-remove "''${optsel[@]}"
-                [ ''${#draftsel[@]} -eq 0 ] || nixarchy-pkg-undraft "''${draftsel[@]}"
-
-                echo
-                echo "Run 'nixarchy-apply' to rebuild without them."
-              '';
-            })
-
-            # The inverse of nixarchy-pkg-add. It deletes only lines carrying the
-            # `#@pkg` marker -- the marker is the writer's claim of ownership --
-            # and never reformats anything else: the file is the user's. The
-            # systemPackages block stays even when its last marked line goes,
-            # because the user may have put their own, unmarked lines in it, and
-            # an empty list evaluates fine.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-pkg-remove";
-              runtimeInputs = [
-                pkgs.coreutils
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.fzf
-                config.nix.package
-                cfg.package # omarchy-notification-send
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-
-                if [ $# -eq 0 ]; then
-                  mapfile -t attrs < <(grep -oE '#@pkg(-other)? [A-Za-z0-9_.-]+$' "$file" | sed -E 's/^#@pkg(-other)? //')
-                  if [ ''${#attrs[@]} -eq 0 ]; then
-                    echo "No extra packages are selected. 'nixarchy pkg add' or the Search picker adds one."
-                    exit 0
-                  fi
-                  chosen=$(printf '%s\n' "''${attrs[@]}" | fzf --multi \
-                    --prompt="remove pkg > " \
-                    --header="tab to select several, enter to confirm") || exit 0
-                  [ -n "$chosen" ] || exit 0
-                  mapfile -t picked <<< "$chosen"
-                  set -- "''${picked[@]}"
-                fi
-
-                # Reverted as a unit if anything goes wrong, exactly as the
-                # writer's edits are: the file is the user's own NixOS module.
-                backup=$(mktemp)
-                cp "$file" "$backup"
-                trap 'rm -f "$backup"' EXIT
-                restore() { cp "$backup" "$file"; }
-
-                removed=()
-                for attr in "$@"; do
-                  # Same alphabet nixarchy-pkg-add accepts. Anything else would
-                  # reach the sed address below as a pattern, not a name.
-                  case "$attr" in
-                    "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
-                      restore
-                      echo "'$attr' is not a nixpkgs attribute name." >&2
-                      exit 1
-                      ;;
-                  esac
-                  # Anchored exactly as the delete below is: a prefix match here
-                  # reported "removed rip" while ripgrep's line stayed. Either
-                  # marker, because --stable/--unstable rows are packages too.
-                  re="#@pkg(-other)? ''${attr//./\\.}\$"
-                  if ! grep -qE -- "$re" "$file"; then
-                    restore
-                    echo "nixarchy: no package '$attr' in $file. Nothing was changed." >&2
-                    exit 1
-                  fi
-                  # Exactly the marked line nixarchy-pkg-add wrote, wherever the
-                  # user has moved it to.
-                  sed -i -E "\|$re|d" "$file"
-                  removed+=("$attr")
-                done
-
-                [ ''${#removed[@]} -gt 0 ] || exit 0
-
-                if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                  restore
-                  echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                  exit 1
-                fi
-
-                count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
-                if command -v omarchy-notification-send >/dev/null 2>&1; then
-                  omarchy-notification-send -r 8471 -t 8000 -u normal \
-                    "''${removed[*]} removed from your selection" \
-                    "$count extra package(s) still selected. Click here to review and rebuild." \
-                    --exec nixarchy-plugin nixarchy.rebuild || true
-                fi
-                for attr in "''${removed[@]}"; do
-                  echo "removed $attr from $file"
-                done
-                echo "it stays installed until 'nixarchy-apply' rebuilds"
-              '';
-            })
-
-            # The inverse of the apps.nix line `nixarchy pkg new` wrote, and
-            # deliberately NOT of its draft file: deleting
-            # ~/.config/nixarchy/packages/<name>.nix, or the copy
-            # nixarchy-apply put in the flake, is an edit to a tree the user
-            # owns, not this tool's call -- so this drops the marked line and
-            # prints where the draft file still is. The `#@draft` marker
-            # survives the user uncommenting the line (the same property
-            # `#@opt` has), so the commented and the live form are both
-            # removable, by the same sed.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-pkg-undraft";
-              runtimeInputs = [
-                pkgs.coreutils
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.fzf
-                config.nix.package
-                cfg.package # omarchy-notification-send
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-
-                list_drafts() {
-                  grep -oE '#@draft [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@draft //'
-                }
-
-                if [ $# -eq 0 ]; then
-                  mapfile -t names < <(list_drafts)
-                  if [ ''${#names[@]} -eq 0 ]; then
-                    echo "No drafts are in $file. 'nixarchy pkg new <url>' drafts one."
-                    exit 0
-                  fi
-                  chosen=$(printf '%s\n' "''${names[@]}" | fzf --multi \
-                    --prompt="remove draft > " \
-                    --header="tab to select several, enter to confirm" \
-                    --preview "grep -F -- '#@draft '{} '$file'" \
-                    --preview-window='down,3,wrap') || exit 0
-                  [ -n "$chosen" ] || exit 0
-                  mapfile -t picked <<< "$chosen"
-                  set -- "''${picked[@]}"
-                fi
-
-                # Reverted as a unit if anything goes wrong, exactly as
-                # nixarchy-pkg-remove's edits are: the file is the user's own
-                # NixOS module.
-                backup=$(mktemp)
-                cp "$file" "$backup"
-                trap 'rm -f "$backup"' EXIT
-                restore() { cp "$backup" "$file"; }
-
-                removed=()
-                for name in "$@"; do
-                  # Same alphabet nixarchy-pkg-new accepts. Anything else would
-                  # reach the sed address below as a pattern, not a name.
-                  case "$name" in
-                    "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
-                      restore
-                      echo "'$name' is not a draft name." >&2
-                      exit 1
-                      ;;
-                  esac
-                  # Exact string, not a substring: `#@draft foo` must not
-                  # answer for `#@draft foobar`.
-                  if ! list_drafts | grep -qFx -- "$name"; then
-                    restore
-                    echo "nixarchy: no draft '$name' in $file. Nothing was changed." >&2
-                    echo "'nixarchy pkg remove' takes out a #@pkg line instead." >&2
-                    exit 1
-                  fi
-                  # The marked line wherever the user moved it, commented or
-                  # uncommented. Dots escaped: the name lands in a sed address.
-                  sed -i "/#@draft ''${name//./\\.}\$/d" "$file"
-                  removed+=("$name")
-                done
-
-                [ ''${#removed[@]} -gt 0 ] || exit 0
-
-                if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                  restore
-                  echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                  exit 1
-                fi
-
-                if command -v omarchy-notification-send >/dev/null 2>&1; then
-                  omarchy-notification-send -r 8471 -t 8000 -u normal \
-                    "''${removed[*]} removed from your selection" \
-                    "The draft file itself is kept. Click here to review and rebuild." \
-                    --exec nixarchy-plugin nixarchy.rebuild || true
-                fi
-                pkgdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/packages"
-                for name in "''${removed[@]}"; do
-                  echo "removed $name from $file"
-                  [ ! -e "$pkgdir/$name.nix" ] || \
-                    echo "the draft file is yours and stays at $pkgdir/$name.nix"
-                done
-                echo "a draft that was live stays installed until 'nixarchy-apply' rebuilds"
-              '';
-            })
-
-            # Removes an option the Search picker wrote (#522). What "remove"
-            # means here follows nixarchy-channel's rule -- only lines this
-            # project wrote get rewritten -- and the `#@opt` marker is the claim
-            # of authorship:
-            #
-            #   - a value the picker set, or a scaffold the user uncommented and
-            #     filled in while keeping the marker, is ONE marked line: that
-            #     line goes, and nothing around it. The picker's preview shows
-            #     the line first, so a filled-in scaffold is deleted with the
-            #     current value in view, not behind the user's back.
-            #   - an UNTOUCHED scaffold -- still commented, value never filled
-            #     in -- takes its doc-comment block with it: add_option wrote
-            #     blank line, comments and marker line as one unit, and the
-            #     comments mean nothing without the line they explain.
-            #   - a line the user stripped the marker from is invisible here,
-            #     which is the marker working as intended: removing it is how
-            #     an adopted line is kept out of this tool's reach.
-            #
-            # In both cases the one blank line add_option put above the unit
-            # goes too, so removing is byte-for-byte the inverse of adding --
-            # checks.options holds it to exactly that.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-opt-remove";
-              runtimeInputs = [
-                pkgs.coreutils
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.gawk
-                pkgs.fzf
-                config.nix.package
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-
-                if [ $# -eq 0 ]; then
-                  mapfile -t paths < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
-                  if [ ''${#paths[@]} -eq 0 ]; then
-                    echo "No options from the picker are in $file. The Search picker adds one."
-                    exit 0
-                  fi
-                  chosen=$(printf '%s\n' "''${paths[@]}" | fzf --multi \
-                    --prompt="remove opt > " \
-                    --header="tab to select several, enter to confirm" \
-                    --preview "grep -F -- '#@opt '{} '$file'" \
-                    --preview-window='down,3,wrap') || exit 0
-                  [ -n "$chosen" ] || exit 0
-                  mapfile -t picked <<< "$chosen"
-                  set -- "''${picked[@]}"
-                fi
-
-                backup=$(mktemp)
-                cp "$file" "$backup"
-                trap 'rm -f "$backup"' EXIT
-                restore() { cp "$backup" "$file"; }
-
-                # String comparison throughout, never a regex: option paths
-                # carry dots, quotes and <name> placeholders, and a path read
-                # as a pattern would delete the wrong line quietly.
-                remove_one() {
-                  path=$1
-                  tmp=$(mktemp)
-                  # `if !` rather than checking $? after: this script runs under
-                  # set -e, and a bare failing awk would abort before the caller
-                  # could restore the backup.
-                  if ! awk -v path="$path" '
-                    { line[NR] = $0 }
-                    END {
-                      marker = "#@opt " path
-                      target = 0
-                      for (i = 1; i <= NR; i++) {
-                        l = line[i]
-                        if (length(l) >= length(marker) &&
-                            substr(l, length(l) - length(marker) + 1) == marker) {
-                          target = i; break
-                        }
-                      }
-                      if (target == 0) exit 3
-                      first = target
-                      stripped = line[target]
-                      sub(/^[ \t]*/, "", stripped)
-                      if (stripped == "# " path " = ;  " marker) {
-                        while (first > 1) {
-                          prev = line[first - 1]
-                          sub(/^[ \t]*/, "", prev)
-                          if (substr(prev, 1, 1) == "#") first -= 1; else break
-                        }
-                      }
-                      if (first > 1 && line[first - 1] == "") first -= 1
-                      for (i = 1; i <= NR; i++)
-                        if (i < first || i > target) print line[i]
-                    }' "$file" > "$tmp"; then
-                    rm -f "$tmp"
-                    return 1
-                  fi
-                  mv "$tmp" "$file"
-                }
-
-                removed=()
-                for path in "$@"; do
-                  if ! remove_one "$path"; then
-                    restore
-                    echo "nixarchy: no option '$path' in $file. Nothing was changed." >&2
-                    exit 1
-                  fi
-                  removed+=("$path")
-                done
-
-                [ ''${#removed[@]} -gt 0 ] || exit 0
-
-                if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                  restore
-                  echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                  exit 1
-                fi
-
-                for path in "''${removed[@]}"; do
-                  echo "removed $path from $file"
-                done
-                echo "a value that was live stays in effect until 'nixarchy-apply' rebuilds"
-              '';
-            })
-
-            # Why: modules/AGENTS.md#the-answer-to-i-want-a-package-the-menu-does-not-o
-            (pkgs.writeShellApplication {
-              name = "nixarchy-pkg-add";
-              runtimeInputs = [
-                pkgs.coreutils
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.gawk
-                pkgs.jq
-                pkgs.diffutils
-                config.nix.package
-                cfg.package # omarchy-notification-send
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                table=${appAttrTable}
-                nixpkgs=${pkgs.path}
-                # This generation's licence policy, baked in at build time: the
-                # script and the system it can queue packages for are the same
-                # generation, so this cannot go stale without the script itself
-                # being replaced.
-                allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
-                # A predicate is a function of the package, so this script cannot
-                # answer for it; it says so rather than predicting a refusal.
-                haspredicate=${lib.boolToString (config.nixpkgs.config ? allowUnfreePredicate)}
-
-                # The picker is reachable through the session PATH rather than
-                # runtimeInputs (same route nixarchy-apply takes to
-                # nixarchy-preview), so its absence must degrade to the usage
-                # text, not break the command.
-                can_pick() {
-                  [ -z "''${NIXARCHY_IN_PICKER:-}" ] && [ -t 0 ] && [ -t 1 ] &&
-                    command -v nixarchy-search >/dev/null 2>&1
-                }
-
-                other_added=false
-
-                # The file is a NixOS module, so the other channel's package
-                # set reaches it as a module argument. Add it to the header
-                # once, the same way ensure_block adds `pkgs`.
-                ensure_other_arg() {
-                  sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther' && return 0
-                  if sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
-                    sed -i -E '0,/^\{([^}]*)\}:/s/^\{([^}]*)\}:/{ pkgsOther,\1}:/' "$file"
-                  else
-                    sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgsOther, ... }:/' "$file"
-                  fi
-                  if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther'; then
-                    echo "nixarchy: could not add 'pkgsOther' to the first line of $file." >&2
-                    echo "Change it by hand to:  { pkgs, pkgsOther, ... }:" >&2
-                    restore
-                    exit 1
-                  fi
-                }
-
-                # ---- the other channel (#531) -------------------------
-                #
-                # `--stable` and `--unstable` name a CHANNEL, not a flag the
-                # tool interprets loosely: the machine follows one of them and
-                # this can only mean the other. Naming the one it is already
-                # on is refused rather than silently accepted, because the
-                # cost of getting it wrong is a whole duplicate closure for a
-                # package that was already there.
-                other=false
-                want_channel=""
-                # --dry-run answers #495: show the diff before touching the
-                # user's file. It costs nothing extra -- everything below
-                # already edits $file with $backup as the pre-edit copy, so
-                # dry-run's whole job is to diff those two and put $file back.
-                dry_run=false
-                while [ $# -gt 0 ]; do
-                  case "$1" in
-                    --stable)   other=true; want_channel=stable;   shift ;;
-                    --unstable) other=true; want_channel=unstable; shift ;;
-                    --dry-run)  dry_run=true; shift ;;
-                    --) shift; break ;;
-                    -*) echo "nixarchy-pkg-add: unknown option '$1'" >&2; exit 1 ;;
-                    *) break ;;
-                  esac
-                done
-
-                if [ "$other" = true ]; then
-                  # Which channel this machine follows, read the way
-                  # nixarchy-channel and the doctor read it: from the URL,
-                  # which is what an update resolves, not the lock, which is
-                  # only where it last landed.
-                  flakedir="''${NIXARCHY_FLAKE:-/etc/nixos}"
-                  mine=custom
-                  if [ -r "$flakedir/flake.nix" ]; then
-                    u=$(sed -nE "s/^[[:space:]]*nixpkgs\.url[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p" \
-                      "$flakedir/flake.nix" | head -1)
-                    case "$u" in
-                      *nixos-unstable*) mine=unstable ;;
-                      *nixos-[0-9][0-9].[0-9][0-9]*) mine=stable ;;
-                    esac
-                  fi
-
-                  # "Could not tell" is NOT "a different channel", and the
-                  # difference costs a whole duplicate closure. The regex
-                  # above matches the shape this project generates
-                  # (`nixpkgs.url` inside an `inputs` block); the equally
-                  # valid flat form `inputs.nixpkgs.url = ...` does not match
-                  # it, and neither does a flake somebody has reshaped.
-                  #
-                  # Said out loud rather than assumed either way: refusing
-                  # would block a legitimate request on a flake this tool
-                  # merely cannot parse, and staying silent is how somebody
-                  # ends up with two copies of the channel they were already
-                  # on and no idea why the disk filled.
-                  if [ "$mine" = custom ]; then
-                    echo "nixarchy: cannot tell which channel this machine follows from" >&2
-                    echo "  $flakedir/flake.nix, so I cannot check that --$want_channel is" >&2
-                    echo "  the OTHER one. If it is the channel you are already on, this" >&2
-                    echo "  adds a second copy of it that shares nothing with the first." >&2
-                    echo "  ''${dim:-}nixarchy channel   reports what this machine follows.''${off:-}" >&2
-                    echo >&2
-                  fi
-
-                  if [ "$mine" = "$want_channel" ]; then
-                    echo "nixarchy: this machine already follows $want_channel." >&2
-                    echo "  --$want_channel asks for a SECOND copy of it, from a second" >&2
-                    echo "  nixpkgs, sharing nothing with the one you have. Drop the" >&2
-                    echo "  flag and the package comes from the channel you are on." >&2
-                    exit 1
-                  fi
-                fi
-
-                if [ $# -eq 0 ]; then
-                  # No arguments is not a mistake to scold, it is "show me what
-                  # there is" -- which is exactly what the picker answers (#492).
-                  if can_pick; then
-                    exec nixarchy-search
-                  fi
-                  echo "usage: nixarchy-pkg-add [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
-                  echo "  e.g. nixarchy-pkg-add ripgrep fd" >&2
-                  echo "  or run 'nixarchy-search' to browse everything" >&2
-                  echo >&2
-                  echo "  --stable / --unstable take ONE package from the other" >&2
-                  echo "  channel. The two share no store paths even at the same" >&2
-                  echo "  version, so each one costs its whole closure." >&2
-                  echo >&2
-                  echo "  --dry-run shows the diff to $file without writing it." >&2
-                  exit 1
-                fi
-
-                [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
-
-                # Every edit below is reverted as a unit if the result will not parse. The
-                # file is the user's own NixOS module; leaving it broken would take the whole
-                # system's evaluation down with it, not just this feature.
-                backup=$(mktemp)
-                cp "$file" "$backup"
-                trap 'rm -f "$backup" "$backup.err"' EXIT
-                restore() { cp "$backup" "$file"; }
-
-                # The list this appends to does not exist in a freshly generated file: the
-                # template is all curated apps and nothing else. Create it once, in place,
-                # before the module's closing brace.
-                ensure_block() {
-                  grep -q '#@pkgs-end' "$file" && return 0
-
-                  # systemPackages needs `pkgs`, and the generated template takes `{ ... }:`.
-                  if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
-                    sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgs, ... }:/' "$file"
-                  fi
-
-                  tmp=$(mktemp)
-                  awk '
-                    !ins && /^}[[:space:]]*$/ {
-                      print "";
-                      print "  # ── Extra packages ──────────────────────────────────────────────";
-                      print "  # Plain nixpkgs attributes, added by nixarchy-pkg-add. These are";
-                      print "  # not part of the curated app list above: the Omarchy menu does";
-                      print "  # not offer them and will not remove them. The file stays yours --";
-                      print "  # reformat and annotate freely, the tool only ever inserts one";
-                      print "  # line before the end marker.";
-                      print "  environment.systemPackages = with pkgs; [  #@pkgs-begin";
-                      print "  ];  #@pkgs-end";
-                      ins = 1;
-                    }
-                    { print }
-                  ' "$file" > "$tmp"
-                  mv "$tmp" "$file"
-
-                  if ! grep -q '#@pkgs-end' "$file"; then
-                    echo "nixarchy: could not find the closing '}' of $file." >&2
-                    echo "Add this to it by hand, then run this again:" >&2
-                    echo >&2
-                    echo "  environment.systemPackages = with pkgs; [  #@pkgs-begin" >&2
-                    echo "  ];  #@pkgs-end" >&2
-                    restore
-                    exit 1
-                  fi
-
-                  if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
-                    echo "nixarchy: $file does not take a 'pkgs' argument, so the list just" >&2
-                    echo "added cannot refer to it. Change its first line to:  { pkgs, ... }:" >&2
-                  fi
-                }
-
-                added=()
-                missed=()
-                unfree_hits=()
-                to_eval=()
-                report=()
-
-                # First pass: everything answerable without evaluating nixpkgs.
-                # What survives it goes into ONE evaluation below (#496) --
-                # loading nixpkgs is the cost, and it is the same load whether
-                # it answers for one attribute or ten, so a multi-select from
-                # the picker must not pay it per selection.
-                for attr in "$@"; do
-                  case "$attr" in
-                    "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
-                      echo "'$attr' is not a nixpkgs attribute name." >&2
-                      exit 1
-                      ;;
-                  esac
-
-                  # The curated list first. Typing `firefox` should get you the app, which is
-                  # a NixOS module and brings policies and extensions with it, not a bare
-                  # package in systemPackages that does none of that.
-                  app=$(awk -F'\t' -v a="$attr" '$1 == a { print $2; exit }' "$table")
-                  if [ -n "$app" ]; then
-                    report+=("$attr"$'\t'"curated"$'\t'"an Omarchy app -- enable it that way:  nixarchy-app-enable $app")
-                    continue
-                  fi
-
-                  if grep -qE "#@pkg(-other)? ''${attr//./\\.}\$" "$file"; then
-                    report+=("$attr"$'\t'"present"$'\t'"already in $file")
-                    continue
-                  fi
-
-                  to_eval+=("$attr")
-                done
-
-                # Resolved against the system's own nixpkgs rather than the flake registry,
-                # so the answer matches what a rebuild would actually build, and it works
-                # with no network. nix-instantiate rather than `nix eval`: no pure-eval mode
-                # to fight over an absolute store path, and no experimental flag to require.
-                # allowUnfree only so an unfree package reports as unfree instead of
-                # throwing here; nothing in this script decides your licence policy.
-                #
-                # Every name in one evaluation, each probed under tryEval: one
-                # evaluation that died on the first bad attribute would be worse
-                # than N evaluations, because a user adding five packages would
-                # learn about one typo (#496). The names travel as a JSON
-                # argument, not spliced into the expression.
-                declare -A evalinfo
-                if [ ''${#to_eval[@]} -gt 0 ]; then
-                  names_json=$(printf '%s\n' "''${to_eval[@]}" | jq -R . | jq -sc .)
-                  batch=$(nix-instantiate --eval --strict --json \
-                    --argstr attrsJson "$names_json" --expr "
-                    { attrsJson }:
-                    let
-                      p = import $nixpkgs { config.allowUnfree = true; };
-                      probe = a:
-                        let
-                          path = p.lib.splitString \".\" a;
-                          q = p.lib.attrByPath path null p;
-                          # tryEval does not catch a missing attribute, so a
-                          # non-package (python3Packages) must never reach v.
-                          isPkg = p.lib.isDerivation q;
-                          ls = if (q.meta or { }) ? license then
-                                 (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
-                               else [ ];
-                          v = {
-                            inherit (q) name;
-                            pname = q.pname or \"\";
-                            description = q.meta.description or \"\";
-                            unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
-                            broken = q.meta.broken or false;
-                          };
-                          r = builtins.tryEval
-                            (if isPkg
-                             then { ok = true; } // builtins.deepSeq v v
-                             else { ok = false; });
-                        in if r.success then r.value else { ok = false; };
-                    in builtins.listToAttrs
-                      (map (a: { name = a; value = probe a; }) (builtins.fromJSON attrsJson))" \
-                    2>"$backup.err") || {
-                    # Not "no match" for every name: an evaluation that failed
-                    # outright is a different answer, and the reason matters.
-                    restore
-                    echo "nixarchy: could not evaluate nixpkgs to check these names:" >&2
-                    tail -5 "$backup.err" >&2
-                    exit 1
+          # lowPrio: a user's own copy wins any binary it shares (#1167, as
+          # #809). appPackages is the user's own app selection and stays at
+          # normal priority; everything else here is nixarchy's own, unasked.
+          environment.systemPackages =
+            map lib.lowPrio (
+              [
+                # Why: modules/AGENTS.md#the-doctor-and-verify-which-until-now-were-flake-a
+                (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
+                (pkgs.extend inputs.self.overlays.default).nixarchy-verify
+                (pkgs.extend inputs.self.overlays.default).nixarchy-explain
+
+              ]
+              # The default agent's own package, when the configuration names one.
+              #
+              # ids and attributes are omarchy-default-agent's `attr_for`, kept in
+              # step by hand. That command installs an agent through nixarchy-pkg-add
+              # when someone picks one from the menu; this is the same decision made
+              # in the configuration instead, so it reproduces on the next machine.
+              #
+              # `claude-code` is unfree, so defaultAgent = "claude" without
+              # programs.nixarchy.allowUnfree fails to evaluate with nixpkgs' own
+              # message naming the package. That is the right failure: the
+              # alternative is a missing agent and an Ask menu that never appears.
+              ++
+                lib.optional (cfg.defaultAgent != null)
+                  {
+                    # Three of the seven are named after their own command, which is
+                    # the whole reason omarchy-agent can look for `$agent` on PATH.
+                    inherit (pkgs) codex opencode crush;
+
+                    claude = pkgs.claude-code;
+                    gemini = pkgs.gemini-cli;
+                    copilot = pkgs.github-copilot-cli;
+                    grok = pkgs.grok-cli;
                   }
-                  for attr in "''${to_eval[@]}"; do
-                    evalinfo[$attr]=$(jq -c --arg a "$attr" '.[$a] // { ok: false }' <<<"$batch")
-                  done
-                fi
+                  .${cfg.defaultAgent}
+              ++ [
 
-                for attr in "''${to_eval[@]}"; do
-                  info=''${evalinfo[$attr]}
-                  if [ "$(jq -r .ok <<<"$info")" != true ]; then
-                    # A name that does not resolve is a typo more often than a
-                    # missing package, and the fuzzy index exists for typos: open
-                    # the picker on the query instead of handing back homework
-                    # (#492). Collected here, acted on after the loop, so one
-                    # bad name does not sink the rest of the batch (#496).
-                    missed+=("$attr")
-                    report+=("$attr"$'\t'"no match"$'\t'"nixpkgs has no attribute by that name")
-                    continue
-                  fi
+                # Why: modules/AGENTS.md#uncomments-one-app-in-config-nixarchy-apps-nix
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-catalogue-diff";
+                  runtimeInputs = [
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.coreutils
+                  ];
+                  text = ''
+                    add=false
+                    # --add-one <part> <id>: just that row (#843). What
+                    # nixarchy-service-enable calls when a file predates a row.
+                    only_part=""
+                    only_id=""
+                    usage() {
+                      echo "usage: nixarchy-catalogue-diff [--add | --add-one apps|services|advanced <id>]" >&2
+                      exit 2
+                    }
+                    case "''${1:-}" in
+                      --add) add=true ;;
+                      --add-one)
+                        add=true
+                        only_part="''${2:-}"
+                        only_id="''${3:-}"
+                        case "$only_part" in apps | services | advanced) ;; *) usage ;; esac
+                        case "$only_id" in *[!a-z0-9_.-]* | "") usage ;; esac
+                        ;;
+                      "") ;;
+                      *) usage ;;
+                    esac
+                    refused=false
 
-                  ensure_block
+                    dir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
+                    total=0
 
-                  if [ "$other" = true ]; then
-                    # From the other channel (#531). A distinct marker, not a
-                    # variant of `#@pkg`: nixarchy-pkg-remove, the Search
-                    # picker and the doctor all read these markers, and a row
-                    # that costs a whole extra closure should not be
-                    # indistinguishable from one that costs nothing.
-                    ensure_other_arg
-                    sed -i "/#@pkgs-end/i\\    pkgsOther.$attr  #@pkg-other $attr" "$file"
-                    if ! grep -q "#@pkg-other $attr\$" "$file"; then
-                      restore
-                      echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
-                      exit 1
-                    fi
-                    other_added=true
-                    added+=("$attr")
-                    report+=("$attr"$'\t'"added"$'\t'"from the $want_channel channel -- it brings its own closure; the two channels share no store paths")
-                    continue
-                  fi
+                    for part in apps services advanced; do
+                      [ -z "$only_part" ] || [ "$part" = "$only_part" ] || continue
+                      user="$dir/$part.nix"
+                      tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/$part-template.nix"
+                      if [ -n "$only_id" ]; then
+                        [ -f "$user" ] || { echo "no $user" >&2; exit 1; }
+                        [ -f "$tpl" ] || { echo "no $tpl" >&2; exit 1; }
+                      fi
+                      [ -f "$user" ] && [ -f "$tpl" ] || continue
 
-                  sed -i "/#@pkgs-end/i\\    $attr  #@pkg $attr" "$file"
+                      # Compared by marker, never by line: the file's own header
+                      # invites reformatting, reordering and annotating, so anything
+                      # positional would report a file somebody had tidied as full of
+                      # holes. A marker with a space after #@ is a catalogue row; the
+                      # others -- #@pkg, #@opt, #@pkgs-begin -- are the user's own and
+                      # a template never has them.
+                      missing=$(
+                        comm -23 \
+                          <(grep -oE "#@ [a-z0-9_.-]+" "$tpl" | sort -u) \
+                          <(grep -oE "#@ [a-z0-9_.-]+" "$user" | sort -u)
+                      )
+                      if [ -n "$only_id" ]; then
+                        # Here-strings, not pipes: under pipefail a grep -q that
+                        # stops reading early can fail the pipeline it ends.
+                        have=$(grep -oE "#@ [a-z0-9_.-]+" "$user" || true)
+                        offer=$(grep -oE "#@ [a-z0-9_.-]+" "$tpl" || true)
+                        if grep -qxF "#@ $only_id" <<<"$have"; then
+                          echo "$part.nix already has $only_id"
+                          exit 0
+                        fi
+                        grep -qxF "#@ $only_id" <<<"$offer" || {
+                          echo "no $only_id in $tpl" >&2
+                          exit 1
+                        }
+                        missing="#@ $only_id"
+                      fi
+                      [ -n "$missing" ] || continue
 
-                  # sed reports success when its address matches nothing, which would leave
-                  # this reporting a package it never wrote. Check the line is really there.
-                  if ! grep -q "#@pkg $attr\$" "$file"; then
-                    restore
-                    echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
-                    exit 1
-                  fi
-                  added+=("$attr")
+                      count=$(printf '%s\n' "$missing" | grep -c . || true)
+                      total=$((total + count))
+                      echo "$part.nix is missing $count:"
 
-                  flags=""
-                  if [ "$(jq -r .unfree <<<"$info")" = true ]; then
-                    if [ "$allowunfree" = true ]; then
-                      flags=" [unfree -- fine here, this machine allows it]"
-                    elif [ "$haspredicate" = true ]; then
-                      flags=" [unfree -- allowed only if your allowUnfreePredicate accepts it]"
-                    else
-                      # The minority case (#497): allowUnfree defaults on, so
-                      # reaching this line means somebody turned it off on
-                      # purpose. Collect the pname (what allowUnfreePredicate
-                      # matches on), and offer the narrow grant after the loop.
-                      flags=" [unfree -- allowUnfree = false here, the rebuild will refuse it]"
-                      pn=$(jq -r '.pname // ""' <<<"$info")
-                      unfree_hits+=("''${pn:-$attr}")
-                    fi
-                  fi
-                  if [ "$(jq -r .broken <<<"$info")" = true ]; then
-                    flags="$flags [broken in nixpkgs -- expect the build to fail]"
-                  fi
-                  report+=("$attr"$'\t'"added"$'\t'"$(jq -r .name <<<"$info") -- $(jq -r '.description // ""' <<<"$info")$flags")
-                done
+                      rows=""
+                      while IFS= read -r marker; do
+                        [ -n "$marker" ] || continue
+                        echo "  ''${marker#\#@ }"
+                        row=$(grep -F -- "$marker" "$tpl" | head -1)
+                        # App rows are written relative to programs.nixarchy.apps,
+                        # which they sit inside in the template. Appended at the end
+                        # of a file they would be outside it -- harmless while
+                        # commented and broken the moment somebody uncommented one.
+                        # Written in full they are correct wherever they land. A
+                        # second `programs.nixarchy.apps = { }` block would not be:
+                        # two definitions of one attribute in one set is an error,
+                        # not a merge.
+                        if [ "$part" = apps ]; then
+                          row=$(printf '%s' "$row" |
+                            sed -E "s/^([[:space:]]*#[[:space:]]*)/\1programs.nixarchy.apps./")
+                        fi
+                        rows="$rows$row
+                    "
+                      done <<MARKERS
+                    $missing
+                    MARKERS
 
-                # One report for the whole batch, one row per name asked for
-                # (#496): every outcome side by side, so a typo among five good
-                # names is visible without costing the other four.
-                printf '%s\n' "''${report[@]}" |
-                  awk -F'\t' '{ printf "  %-28s %-9s %s\n", $1, $2, $3 }'
-
-                # Names that resolved nowhere, with a picker available: hand them
-                # to it, pre-filtered, so a typo becomes a fuzzy match. exec, so
-                # this only runs once everything above is committed or reverted.
-                # Without a picker (no tty, or this run IS the picker's writer,
-                # where a miss is an index bug -- #492), the guidance is printed
-                # instead and the exit code says something failed; whatever did
-                # resolve is already committed above.
-                open_missed() {
-                  [ ''${#missed[@]} -gt 0 ] || return 0
-                  if ! can_pick; then
-                    echo "nixpkgs has no package matching: ''${missed[*]}" >&2
-                    echo >&2
-                    echo "Search for the right name:" >&2
-                    echo "  nixarchy-search ''${missed[*]}" >&2
-                    echo >&2
-                    echo "If nixpkgs genuinely does not have it, draft a package from its source:" >&2
-                    echo "  nixarchy pkg new <url>" >&2
-                    exit 1
-                  fi
-                  echo "no exact match for ''${missed[*]} -- opening the picker on it"
-                  # Said here, before exec, because the picker itself cannot:
-                  # its miss is fzf exiting empty, and no script runs after
-                  # that. This is the one moment a user has proved nixpkgs
-                  # lacks a name, so the way onward is named now (#581).
-                  echo "  (if nothing there matches either, nixpkgs may not have it --"
-                  echo "   'nixarchy pkg new <url>' drafts a package from its source)"
-                  exec nixarchy-search "''${missed[@]}"
-                }
-
-                if [ ''${#added[@]} -eq 0 ]; then
-                  open_missed
-                  exit 0
-                fi
-
-                # The narrow grant (#497): a commented allowUnfreePredicate
-                # naming just these packages, in the user's own file, rather
-                # than advice to flip the global flag. Commented, because
-                # changing licence policy is the user's line to uncomment.
-                # Runs before the parse check so one validation covers it.
-                offer_unfree_grant() {
-                  [ ''${#unfree_hits[@]} -gt 0 ] || return 0
-
-                  if grep -q '#@unfree-allow' "$file"; then
-                    # A grant already exists (ours, by its marker): grow its
-                    # list in place rather than scaffold a second predicate --
-                    # nixpkgs.config is a plain attrset, and two definitions of
-                    # one key do not merge.
-                    for pn in "''${unfree_hits[@]}"; do
-                      grep -q "\"$pn\"" "$file" ||
-                        sed -i "/#@unfree-allow/s/ \];/ \"$pn\" ];/" "$file"
-                      if ! grep -q "\"$pn\"" "$file"; then
-                        echo "  add \"$pn\" to the allowUnfreePredicate list already in $file"
+                      if [ "$add" = true ]; then
+                        # Before the module's closing brace, not after it. Appending
+                        # to the end of the file puts the rows outside the attrset,
+                        # where they parse -- they are comments -- and stop parsing
+                        # the moment somebody uncomments one, because that is content
+                        # after the final `}`. Which is the same trap the full-path
+                        # rewrite above exists to avoid, one line further down.
+                        close=$(grep -n "^}" "$user" | tail -1 | cut -d: -f1)
+                        if [ -z "$close" ]; then
+                          echo "  $user has no closing brace on its own line;" >&2
+                          echo "  add these by hand rather than let this guess:" >&2
+                          printf '%s' "$rows" >&2
+                          refused=true
+                          continue
+                        fi
+                        tmp=$(mktemp)
+                        head -n "$((close - 1))" "$user" >"$tmp"
+                        {
+                          echo ""
+                          echo "  # ── Added by nixarchy-catalogue-diff, $(date +%Y-%m-%d) ──"
+                          printf '%s' "$rows"
+                        } >>"$tmp"
+                        tail -n "+$close" "$user" >>"$tmp"
+                        cat "$tmp" >"$user"
+                        rm -f "$tmp"
+                        echo "  appended to $user"
                       fi
                     done
-                    return 0
-                  fi
 
-                  if [ -t 0 ]; then
-                    printf 'Scaffold a commented allowUnfreePredicate for %s into %s? [Y/n] ' \
-                      "''${unfree_hits[*]}" "$file"
-                    read -r reply || reply=n
-                    case "$reply" in
-                      [nN]*)
-                        echo "  then allow it yourself, or set programs.nixarchy.allowUnfree = true"
-                        return 0
+                    if [ -n "$only_id" ]; then
+                      [ "$refused" = false ] || exit 1
+                      exit 0
+                    fi
+
+                    if [ "$total" -eq 0 ]; then
+                      echo "your files have everything the catalogue offers"
+                      exit 0
+                    fi
+
+                    if [ "$add" = false ]; then
+                      echo ""
+                      echo "Run 'nixarchy-catalogue-diff --add' to append these as"
+                      echo "commented-out lines. Nothing you have written changes:"
+                      echo "only new lines, at the end, under a dated heading."
+                    fi
+                  '';
+                })
+
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-service-enable";
+                  runtimeInputs = [
+                    pkgs.gnused
+                    pkgs.gnugrep
+                    pkgs.coreutils
+                    cfg.package
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+
+                    # Callers (nixarchy-microvm) read this to learn that a missing
+                    # row heals itself, so keep "usage:" and "missing" in it (#843).
+                    case "''${1:-}" in
+                      -h | --help)
+                        echo "usage: nixarchy-service-enable <service-id>"
+                        echo "  A row missing from services.nix is added from /etc/nixarchy/services-template.nix."
+                        exit 0
                         ;;
                     esac
-                  fi
 
-                  names=""
-                  for pn in "''${unfree_hits[@]}"; do names="$names\"$pn\" "; done
-                  # printf rather than a multi-line literal: a raw
-                  # newline-in-string here would lower the whole nix
-                  # indented string's common indent and shift every
-                  # line of the built script.
-                  payload=$(printf '%s\n' \
-                    "" \
-                    "  # ''${unfree_hits[*]}: unfree, and this machine sets programs.nixarchy.allowUnfree" \
-                    "  # = false. Uncomment the line below to allow JUST the packages named -- the" \
-                    "  # narrow grant -- rather than flipping the global switch:" \
-                    "  # nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ $names];  #@unfree-allow")
+                    id="''${1:?usage: nixarchy-service-enable <service-id>}"
 
-                  tmp=$(mktemp)
-                  awk -v payload="$payload" '
-                    { print }
-                    !done && /#@pkgs-end/ { print payload; done = 1 }
-                  ' "$file" > "$tmp"
-                  mv "$tmp" "$file"
-
-                  if grep -q '#@unfree-allow' "$file"; then
-                    echo "  scaffolded a commented allowUnfreePredicate in $file -- uncomment it to allow just ''${unfree_hits[*]}"
-                  else
-                    restore
-                    echo "nixarchy: failed to write the allowUnfreePredicate scaffold. Nothing was changed." >&2
-                    exit 1
-                  fi
-                }
-                offer_unfree_grant
-
-                if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                  restore
-                  echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                  exit 1
-                fi
-
-                # $file has been edited in place all along, with $backup as
-                # the pre-edit copy every restore above already relies on --
-                # so the diff nobody has seen yet is just the two of them,
-                # compared now that the result is known to parse.
-                #
-                # NIXARCHY_IN_PICKER means fzf already collected a yes a
-                # moment ago; asking again here would be a second prompt for
-                # the same choice. can_pick's own guard is why: a menu pick
-                # runs with no terminal attached at all, where a prompt would
-                # not double-ask, it would hang.
-                interactive() {
-                  [ -z "''${NIXARCHY_IN_PICKER:-}" ] && [ -t 0 ] && [ -t 1 ]
-                }
-
-                if [ "$dry_run" = true ] || interactive; then
-                  echo "-- $file --"
-                  diff -u --label "$file (before)" --label "$file (after)" "$backup" "$file" || true
-                  echo
-                fi
-
-                if [ "$dry_run" = true ]; then
-                  restore
-                  echo "dry run: nothing written to $file"
-                  exit 0
-                fi
-
-                if interactive; then
-                  printf 'Write this to %s? [Y/n] ' "$file"
-                  read -r reply || reply=n
-                  case "$reply" in
-                    [nN]*)
-                      restore
-                      echo "Nothing changed."
-                      exit 0
-                      ;;
-                  esac
-                fi
-
-                count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
-
-                # A menu pick runs with no terminal attached, so stdout goes nowhere. Say it
-                # on the desktop instead, clickable, because a rebuild is what is still owed.
-                if command -v omarchy-notification-send >/dev/null 2>&1; then
-                  omarchy-notification-send -r 8471 -t 8000 -u normal \
-                    "''${added[*]} queued -- not installed yet" \
-                    "$count extra package(s) selected. Click here, or Install > Apply changes, to review and rebuild." \
-                    --exec nixarchy-plugin nixarchy.rebuild || true
-                fi
-
-                # The flake half, which this tool cannot do for you (#531).
-                #
-                # flake.nix is the user's, and adding an INPUT to it is a
-                # different act from adding a line to the selection file this
-                # tool owns -- nixarchy-channel's rule again: only lines this
-                # project wrote get rewritten. So this prints the two lines and
-                # lets the owner add them.
-                #
-                # Checked rather than always printed: somebody who wired it
-                # once should not be told again every time.
-                if [ "$other_added" = true ]; then
-                  flakedir="''${NIXARCHY_FLAKE:-/etc/nixos}"
-                  if ! grep -rqs 'otherChannel\.flake' "$flakedir"; then
-                    echo
-                    echo "One more step, in your own flake.nix -- this tool does not edit it:"
-                    echo
-                    echo "  inputs.nixpkgs-other.url ="
-                    echo "    \"github:NixOS/nixpkgs/$( [ "$want_channel" = stable ] && echo nixos-${stableRelease} || echo nixos-unstable )\";"
-                    echo
-                    echo "and, in your host configuration:"
-                    echo
-                    echo "  programs.nixarchy.otherChannel.flake = inputs.nixpkgs-other;"
-                    echo
-                    echo "Until both are there the rebuild will stop and say so."
-                  fi
-                fi
-
-                echo
-                echo "run 'nixarchy-apply' when you have picked everything you want"
-
-                # Last, because exec does not come back: anything that
-                # resolved is committed above before a typo's picker
-                # takes over the terminal.
-                open_missed
-              '';
-            })
-
-            # `nixarchy pkg new <url>`: a draft derivation for software in no
-            # repository (#581). The body lives in pkgs/pkg-new.sh, spliced
-            # here the way flake.nix splices pkgs/doctor.sh, so a check can
-            # run the raw file against stubs -- see tests/pkg-new.nix.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-pkg-new";
-              runtimeInputs = [
-                pkgs.coreutils
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.gawk
-                pkgs.nix-init
-                # nix-init resolves GitHub URLs entirely on its own (proven
-                # under a PATH holding nothing else), but shells out for the
-                # rest of its fetchers; an undeclared command here reads as
-                # "cannot draft this", not "git is missing".
-                pkgs.git
-                config.nix.package
-              ];
-              text = lib.replaceStrings [ "@nixpkgs@" ] [ "${pkgs.path}" ] (builtins.readFile ../pkgs/pkg-new.sh);
-            })
-
-            # Why: modules/AGENTS.md#search-everything-this-machine-could-install-and-r
-            (pkgs.writeShellApplication {
-              name = "nixarchy-search";
-              runtimeInputs = [
-                pkgs.coreutils
-                pkgs.gnugrep
-                pkgs.gnused
-                pkgs.gawk
-                pkgs.jq
-                pkgs.fzf
-                pkgs.curl
-                config.nix.package
-              ];
-              text = ''
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nixarchy"
-                index="$cache/index.tsv"
-                stamp="$cache/stamp"
-
-                appindex=${appIndexTable}
-                apptable=${appAttrTable}
-                flatpakrows=${flatpakIndexRows}
-                pkgnewrow=${pkgNewIndexRow}
-                optionsjson=${optionsJsonPath}
-                nixpkgs=${pkgs.path}
-                walk=${./pkg-index.nix}
-                flakedir="''${NIXARCHY_FLAKE:-${cfg.flake}}"
-                # This generation's licence policy, baked in like the index is:
-                # both are replaced together with the system generation. A
-                # predicate may allow any given package, so it is not flagged.
-                allowunfree=${
-                  lib.boolToString (
-                    (config.nixpkgs.config.allowUnfree or false) || config.nixpkgs.config ? allowUnfreePredicate
-                  )
-                }
-
-                # The writers this picker calls fall back TO the picker on a miss
-                # (#492). A row that then misses would recurse into a second
-                # picker; this says "you are already inside one", so they error
-                # instead -- an index row that does not resolve is an index bug.
-                export NIXARCHY_IN_PICKER=1
-
-                reindex=0
-                [ "''${1:-}" = "--reindex" ] && { reindex=1; shift; }
-
-                # One index, five tab-separated fields: kind, name, one-line summary,
-                # a kind-specific fourth (an option's type; a package's flags, e.g.
-                # "unfree broken curated:firefox"; empty otherwise), and the preview
-                # text with its newlines escaped. The preview is carried in the line
-                # rather than looked up on selection because fzf runs the preview
-                # command on every keystroke, and a jq pass over 19 MB of package
-                # metadata is not something to do sixty times a second.
-                build_index() {
-                  mkdir -p "$cache"
-                  tmp=$(mktemp)
-
-                  # Curated apps first, so they sort above the raw nixpkgs attribute of the
-                  # same name. Enabling `firefox` as an app gets you programs.firefox; adding
-                  # it as a package does not.
-                  awk -F'\t' -v OFS='\t' '{
-                    note = ($4 == "" ? "" : "\\n\\n" $4)
-                    foot = ($5 == "try" ? "\\n\\nctrl-t tries it now, without installing." : "")
-                    print "app", $1, $2 " (" $3 ")", "",
-                      "OMARCHY APP  " $1 "\\n\\n" $2 "\\n" $3 \
-                      note "\\n\\nEnabling this writes a line in your app selection:\\n  " \
-                      $1 ".enable = true;" foot
-                  }' "$appindex" > "$tmp"
-
-                  # Empty when this system builds no manual, in which case the
-                  # picker is packages and apps only rather than not working at all.
-                  if [ -n "$optionsjson" ] && [ -f "$optionsjson" ]; then
-                    jq -r '
-                      def val(x):
-                        if x == null then "(none)"
-                        elif (x | type) == "object" then (x.text // (x | tostring))
-                        else (x | tostring) end;
-                      to_entries[] | .key as $k | .value as $v |
-                      [ "opt", $k,
-                        (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
-                        ($v.type // ""),
-                        ( "NIXOS OPTION  " + $k
-                          + "\n\ntype:     " + ($v.type // "?")
-                          + "\ndefault:  " + val($v.default)
-                          + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
-                          + "\n\n" + ($v.description // "(undocumented)")
-                          + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
-                        )
-                      ] | @tsv' "$optionsjson" >> "$tmp"
-                  else
-                    echo "  no option index: documentation.nixos.enable is off on this" >&2
-                    echo "  system, so there is no options.json to read." >&2
-                  fi
-
-                  # The system's own nixpkgs, not the flake registry: an index that offers a
-                  # package this machine cannot build is worse than no index. Slow enough to
-                  # be worth saying so -- about a minute, once each time nixpkgs changes.
-                  #
-                  # Our own walk (modules/pkg-index.nix) rather than `nix search`:
-                  # verified to produce the identical row set, and it carries the
-                  # meta `nix search --json` does not -- homepage, licence, unfree,
-                  # broken (#493).
-                  echo "  indexing nixpkgs (this takes about a minute)..." >&2
-                  if ! nix-instantiate --eval --strict --json \
-                    --arg nixpkgs "$nixpkgs" "$walk" 2>"$cache/index-errors.log" |
-                    jq -r '
-                      .[] |
-                      [ "pkg", .attr,
-                        ( ((.description // "") | gsub("[\n\t ]+"; " ") | .[0:100])
-                          + (if .unfree then "  [unfree]" else "" end)
-                          + (if .broken then "  [broken]" else "" end)
-                        ),
-                        ( (if .unfree then "unfree " else "" end)
-                          + (if .broken then "broken" else "" end)
-                          | sub(" $"; "")
-                        ),
-                        ( "NIXPKGS PACKAGE  " + .attr
-                          + "\n\nversion:  " + (if .version == "" then "?" else .version end)
-                          + "\nlicence:  " + (if .license == "" then "unknown" else .license end)
-                          + (if .homepage == "" then "" else "\nhomepage: " + .homepage end)
-                          + (if .broken then "\n\nMarked BROKEN in nixpkgs: expect the build to fail." else "" end)
-                          + "\n\n" + (if .description == "" then "(no description)" else .description end)
-                          + "\n\nAdding this writes it into your app selection:\n  "
-                          + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
-                          + "\n\nctrl-t tries it now, without installing."
-                        )
-                      ] | @tsv' >> "$tmp"; then
-                    # Said, not swallowed: out of memory looked like the script
-                    # simply stopping after "indexing nixpkgs".
-                    rm -f "$tmp"
-                    echo "  indexing nixpkgs failed; the end of $cache/index-errors.log:" >&2
-                    tail -5 "$cache/index-errors.log" >&2
-                    exit 1
-                  fi
-
-                  # A raw attribute that the curated list already covers deserves a
-                  # warning on its row: picking the APP gets the module, policies
-                  # and defaults; picking the package gets a bare binary. Baked in
-                  # at build time -- the curated list is as per-generation as the
-                  # index (#493).
-                  tmp2=$(mktemp)
-                  awk -F'\t' -v OFS='\t' '
-                    NR == FNR { curated[$1] = $2; next }
-                    $1 == "pkg" && ($2 in curated) {
-                      $4 = ($4 == "" ? "" : $4 " ") "curated:" curated[$2]
-                      $5 = $5 "\\n\\nCURATED: this name is on the app list as \047" curated[$2] "\047.\\nThe app row above sets programs." curated[$2] " -- the module, with policies\\nand defaults -- where this row would add only a bare package."
-                    }
-                    { print }
-                  ' "$apptable" "$tmp" > "$tmp2"
-                  mv "$tmp2" "$tmp"
-
-                  # Curated flatpaks and the Flathub entry point. A plain cat:
-                  # these rows are already in the index's five-field shape, and
-                  # they are local, so building the index still needs no network.
-                  cat "$flatpakrows" >> "$tmp"
-
-                  # The tier below those: draft a package nixpkgs lacks (#581).
-                  cat "$pkgnewrow" >> "$tmp"
-
-                  mv "$tmp" "$index"
-                  stamp_key > "$stamp"
-                }
-
-                # Keyed on what the index is built FROM, not on the system
-                # generation: every apply is a new generation, and reindexing
-                # an unchanged nixpkgs cost a minute on the next search.
-                stamp_key() {
-                  printf '%s\n' "$nixpkgs" "$walk" "$optionsjson" "$appindex" "$apptable" "$flatpakrows" "$pkgnewrow"
-                }
-                index_stale() {
-                  [ ! -s "$index" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$(stamp_key)" ]
-                }
-
-                if [ "$reindex" = 1 ] || index_stale; then
-                  echo "Building the search index. This happens when nixpkgs changes." >&2
-                  build_index
-                fi
-
-                # Status, at picker start rather than in the cached index (#493):
-                # what is selected changes with every pick, the index once per
-                # generation. Two greps and one awk pass over the index -- no
-                # evaluation, and nothing per keystroke.
-                #
-                # "enabled" vs "queued" comes from the copy nixarchy-apply makes
-                # into the flake before rebuilding: a selection that has not
-                # reached the copy has not been built. Same host-dir logic as
-                # nixarchy-apply. An unreadable flake dir marks everything
-                # selected as queued, which is the honest claim for a machine
-                # that has never applied.
-                appsbase="$flakedir"
-                [ -d "$flakedir/hosts/$(uname -n)" ] && appsbase="$flakedir/hosts/$(uname -n)"
-
-                # Live (uncommented) marked lines only: kind<TAB>name per line.
-                mark_live() {
-                  [ -r "$1" ] || return 0
-                  sed -nE "s/^[[:space:]]*[^#[:space:]].*#@pkg ([A-Za-z0-9_.-]+)[[:space:]]*$/pkg\t\1/p" "$1"
-                  sed -nE "s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
-                }
-
-                selected=$(mktemp)
-                applied=$(mktemp)
-                shown=$(mktemp)
-                trap 'rm -f "$selected" "$applied" "$shown"' EXIT
-
-                {
-                  mark_live "$file" app
-                  mark_live "''${file%/apps.nix}/services.nix" flatpak
-                } > "$selected" || true
-                {
-                  mark_live "$appsbase/nixarchy/apps.nix" app
-                  mark_live "$appsbase/nixarchy/services.nix" flatpak
-                } > "$applied" || true
-
-                awk -F'\t' -v OFS='\t' -v unfreeok="$allowunfree" '
-                  FILENAME == ARGV[1] { sel[$0] = 1; next }
-                  FILENAME == ARGV[2] { app[$0] = 1; next }
-                  {
-                    key = $1 "\t" $2
-                    if (key in sel) {
-                      st = (key in app) ? "enabled" : "queued"
-                      note = (st == "enabled") \
-                        ? "enabled -- selected, and nixarchy-apply has copied it into the flake" \
-                        : "queued -- selected but not rebuilt; nixarchy-apply will install it"
-                      $3 = "[" st "] " $3
-                      $5 = $5 "\\n\\nstatus: " note
-                    }
-                    if ($1 == "pkg" && index($4, "unfree") && unfreeok != "true") {
-                      $3 = $3 "  [disallowed]"
-                      $5 = $5 "\\n\\nUNFREE, and this machine sets programs.nixarchy.allowUnfree = false:\\nthe rebuild will refuse it as it stands. nixarchy-pkg-add offers the\\nnarrow grant -- an allowUnfreePredicate naming just this package."
-                    }
-                    print
-                  }
-                ' "$selected" "$applied" "$index" > "$shown"
-
-
-                # --expect makes fzf accept on ctrl-t as well as enter, and say which
-                # was pressed on the first output line. The previews on pkg and app
-                # rows document the key; the other two kinds have nothing to run.
-                picked=$(fzf --multi \
-                  --delimiter='\t' --with-nth=1,2,3 --nth=2,3 \
-                  --expect=ctrl-t \
-                  --preview 'printf "%b\n" {5}' \
-                  --preview-window='right,58%,wrap' \
-                  --prompt='nixarchy > ' \
-                  --header='enter to select · ctrl-t to try · tab for several · esc to cancel' \
-                  --query="''${*:-}" < "$shown") || exit 0
-                key=$(printf '%s\n' "$picked" | head -n 1)
-                selection=$(printf '%s\n' "$picked" | tail -n +2)
-                [ -n "$selection" ] || exit 0
-
-                # Try, not queue: run it now, in this terminal, and write nothing.
-                # `nixarchy try` owns the how -- the pinned tree, the catalogue's
-                # binary field, unfree -- and refuses with a reason on an app that
-                # is really a NixOS module. Options and flatpaks have no package
-                # attribute to run, so the picker says so itself.
-                if [ "$key" = "ctrl-t" ]; then
-                  while IFS=$'\t' read -r kind name _ _ _; do
-                    [ -n "$kind" ] || continue
-                    case "$kind" in
-                      app | pkg) nixarchy try "$name" || true ;;
-                      opt) echo "$name is a NixOS option -- there is nothing to run, so nothing to try" ;;
-                      flatpak) echo "$name is a flatpak -- nothing to try; enable it and apply instead" ;;
-                      new) echo "nothing to try yet -- picking this row asks for a source URL to draft from" ;;
+                    # Validated before it reaches sed and grep, which the app scripts
+                    # do not do: the id is interpolated into a regex, and an id with a
+                    # slash or a bracket in it would either fail obscurely or match
+                    # something nobody meant. Ids come from data/services.nix and look
+                    # like this; anything else is a typo or a caller with a bug.
+                    case "$id" in
+                      *[!a-z0-9_-]* | "")
+                        echo "nixarchy: '$id' is not a service id" >&2
+                        exit 2
+                        ;;
                     esac
-                  done <<< "$selection"
-                  exit 0
-                fi
 
-                [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+                    [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
 
-                backup=$(mktemp)
-                cp "$file" "$backup"
-                trap 'rm -f "$backup" "$selected" "$applied" "$shown"' EXIT
+                    # A services.nix written before this row existed does not have
+                    # it; nothing regenerates the file, so add just that row from
+                    # the template, where catalogue-diff puts rows (#843).
+                    if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                      if nixarchy-catalogue-diff --add-one services "$id" >/dev/null; then
+                        echo "added the $id row from the template"
+                      else
+                        echo "nixarchy: no service '$id' in $file" >&2
+                        echo "  The full list is /etc/nixarchy/services-template.nix." >&2
+                        exit 1
+                      fi
+                    fi
 
-                changed=0
-                scaffolded=0
-                written=0
+                    # Already on if the marked line is not commented out.
+                    #
+                    # Deliberately not the app scripts' test, which greps for
+                    # `^[[:space:]]*<id>.enable` -- that cannot work here, because a
+                    # plain entry's line begins with services.openssh, not with the
+                    # id. Asking whether the marked line is live is also the more
+                    # honest question: it does not answer "yes" to `enable = false;`.
+                    if grep -qE "^[[:space:]]*[^#[:space:]].*#@ $id([[:space:]]|\$)" "$file"; then
+                      echo "$id is already enabled; run nixarchy-apply to build it"
+                      exit 0
+                    fi
 
-                # Options are written at the module's top level, before its closing brace.
-                # Nothing here parses Nix: the brace is found textually and the result is
-                # checked with nix-instantiate before anything is kept.
-                insert_line() {
-                  tmp=$(mktemp)
-                  awk -v payload="$1" '
-                    !ins && /^}[[:space:]]*$/ { printf "%s", payload; ins = 1 }
-                    { print }
-                  ' "$file" > "$tmp"
-                  mv "$tmp" "$file"
-                }
+                    sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
 
-                # One option's default or example, structured, straight out of
-                # options.json -- not parsed back out of the index's preview
-                # text, which flattened it for display (#581). Both fields are
-                # rendered `{ _type: literalExpression, text: ... }` in modern
-                # options.json; a bare JSON value is the fallback shape. Empty
-                # when this system builds no manual, and every caller degrades
-                # to the pre-#581 behaviour on empty.
-                opt_field() {
-                  [ -n "$optionsjson" ] && [ -f "$optionsjson" ] || return 0
-                  jq -r --arg p "$1" --arg f "$2" \
-                    '.[$p][$f]? // empty
-                     | if type == "object" then (.text // tostring) else tojson end' \
-                    "$optionsjson"
-                }
+                    queued=$(grep -cE "^[[:space:]]*[^#[:space:]].*#@ " "$file" || true)
+                    if command -v omarchy-notification-send >/dev/null 2>&1; then
+                      omarchy-notification-send -r 8471 -t 8000 -u normal \
+                        "$id queued -- not enabled yet" \
+                        "$queued selected. Click here, or Install > Apply changes, to review and rebuild." \
+                        --exec nixarchy-plugin nixarchy.rebuild || true
+                    fi
+                    echo "enabled $id in $file ($queued queued)"
+                    echo "run 'nixarchy-apply' when you have picked everything you want"
+                  '';
+                })
 
-                add_option() {
-                  path=$1
-                  type=$2
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-service-disable";
+                  runtimeInputs = [
+                    pkgs.gnused
+                    pkgs.gnugrep
+                    pkgs.coreutils
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+                    id="''${1:?usage: nixarchy-service-disable <service-id>}"
 
-                  if grep -q "#@opt $path\$" "$file"; then
-                    echo "$path is already in $file"
-                    return 0
-                  fi
+                    case "$id" in
+                      *[!a-z0-9_-]* | "")
+                        echo "nixarchy: '$id' is not a service id" >&2
+                        exit 2
+                        ;;
+                    esac
 
-                  value=""
-                  case "$type" in
-                    boolean)
-                      value=$(printf 'true\nfalse\n' | fzf --height=6 --prompt="$path = ") || return 0
-                      ;;
-                    "one of "*)
-                      value=$(printf '%s' "''${type#one of }" | grep -oE '"[^"]*"' |
-                        fzf --height=12 --prompt="$path = ") || return 0
-                      ;;
-                    # Simple scalars: ask, with the default in sight (#581).
-                    # /dev/tty, because stdin here is the picker's selection
-                    # herestring. Empty input keeps the default by writing
-                    # NOTHING -- a copied-out default is a line that reads as
-                    # a choice and is not one. The patterns are anchored
-                    # whole-string, so "list of string" and "null or path"
-                    # fall through to the scaffold below, as they should:
-                    # their values are not one prompted word.
-                    "signed integer"* | "unsigned integer"* | *" bit unsigned integer"* | "positive integer"* | string | "string,"* | "string "* | path | "path,"* | "absolute path"*)
-                      default=$(opt_field "$path" default || true)
-                      default=''${default//$'\n'/ }
-                      if ! read -r -p "$path [''${default:-no default}] = " value < /dev/tty; then
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                    if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                      echo "nixarchy: no service '$id' in $file" >&2
+                      exit 1
+                    fi
+
+                    # Comment the marked line back out. Turning a service off is not
+                    # the same as uninstalling it: the daemon stops, and whatever it
+                    # wrote -- a Syncthing database, an authorised key -- stays where
+                    # it is. Removing that is the user's call and not this script's.
+                    sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+                    echo "disabled $id in $file"
+                    echo "run 'nixarchy-apply' to rebuild without it"
+                  '';
+                })
+
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-app-enable";
+                  runtimeInputs = [
+                    pkgs.gnused
+                    pkgs.gnugrep
+                    pkgs.coreutils
+                    cfg.package # omarchy-notification-send
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    tpl="''${NIXARCHY_TEMPLATES:-/etc/nixarchy}/apps-template.nix"
+                    id="''${1:?usage: nixarchy-app-enable <app-id>}"
+
+                    # A menu pick has no terminal, so an error only on stderr is a
+                    # pick that silently did nothing. Say it on the desktop too.
+                    fail() {
+                      echo "nixarchy: $1" >&2
+                      if command -v omarchy-notification-send >/dev/null 2>&1; then
+                        omarchy-notification-send -u critical "Could not select $id" "$1" || true
+                      fi
+                      exit 1
+                    }
+
+                    case "$id" in
+                      *[!a-z0-9_-]* | "") fail "'$id' is not an app id" ;;
+                    esac
+
+                    [ -f "$file" ] || fail "no $file -- log in again to have it created"
+
+                    # apps.nix is seeded once, so an app added to the catalogue later
+                    # has no row in it. Take the row from the current template and
+                    # put it at the top of the apps block, still commented out.
+                    if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                      row=$(grep -E "#@ $id([[:space:]]|\$)" "$tpl" 2>/dev/null | head -1 || true)
+                      [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
+                      grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
+                        fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
+                      tmp=$(mktemp)
+                      awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
+                        "$file" >"$tmp"
+                      cat "$tmp" >"$file"
+                      rm -f "$tmp"
+                      echo "added $id's row from the current catalogue to $file"
+                    fi
+
+                    if grep -q "^[[:space:]]*$id\.enable" "$file"; then
+                      echo "$id is already enabled; run nixarchy-apply to build it"
+                      exit 0
+                    fi
+
+                    # Strip one leading '# ' from the marked line, nothing else.
+                    sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+
+                    # A menu pick runs with no terminal attached, so stdout goes
+                    # nowhere and the pick looks like it did nothing at all. Say so
+                    # on the desktop instead. -r keeps repeated picks replacing one
+                    # notification rather than stacking a wall of them.
+                    queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
+                    if command -v omarchy-notification-send >/dev/null 2>&1; then
+                      # --exec makes the notification clickable: nothing is built
+                      # until a rebuild runs, so the notification that says so is
+                      # also the way to start it.
+                      omarchy-notification-send -r 8471 -t 8000 -u normal \
+                        "$id queued -- not installed yet" \
+                        "$queued app(s) selected. Click here, or Install > Apply changes, to review and rebuild." \
+                        --exec nixarchy-plugin nixarchy.rebuild || true
+                    fi
+                    echo "enabled $id in $file ($queued queued)"
+                    echo "run 'nixarchy-apply' when you have picked everything you want"
+                  '';
+                })
+
+                # The inverse of nixarchy-app-enable: re-comments the line. It only
+                # ever touches ~/.config/nixarchy/apps.nix -- never the user's own
+                # NixOS configuration, which nixarchy does not own and must not
+                # edit. An app stays installed until a rebuild runs.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-app-disable";
+                  runtimeInputs = [
+                    pkgs.gnused
+                    pkgs.gnugrep
+                    pkgs.coreutils
+                    cfg.package
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    id="''${1:?usage: nixarchy-app-disable <app-id>}"
+
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                    if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
+                      echo "nixarchy: no app '$id' in $file" >&2
+                      exit 1
+                    fi
+
+                    if ! grep -qE "^[[:space:]]*$id\.enable" "$file"; then
+                      echo "$id is not enabled"
+                      exit 0
+                    fi
+
+                    # Comment the line back out, preserving its indentation.
+                    sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)([^[:space:]#])/\1# \2/" "$file"
+
+                    queued=$(grep -cE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || true)
+                    if command -v omarchy-notification-send >/dev/null 2>&1; then
+                      omarchy-notification-send -r 8471 -t 8000 -u normal \
+                        "$id removed from your selection" \
+                        "$queued app(s) still selected. Click here to review and rebuild." \
+                        --exec nixarchy-plugin nixarchy.rebuild || true
+                    fi
+                    echo "disabled $id in $file ($queued still enabled)"
+                    echo "it stays installed until 'nixarchy-apply' rebuilds"
+                  '';
+                })
+
+                # An interactive picker over what is currently selected, for the
+                # Remove > Package row. Upstream offers a fuzzy picker over installed
+                # pacman packages; this is the same shape over the app selection.
+                #
+                # All four kinds the pickers can write, because "Remove" that
+                # only sees some of them is a menu row that lies (#494, #522): curated
+                # apps (`id.enable` lines), extra packages (`#@pkg` markers from
+                # nixarchy-pkg-add), options (`#@opt` markers from the Search
+                # picker's add_option) and drafts (`#@draft` markers from
+                # nixarchy-pkg-new).
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-app-remove";
+                  runtimeInputs = [
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.coreutils
+                    pkgs.fzf
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                    # `|| continue`, not `&&`: this script runs under set -e, and a
+                    # failing AND-list on a blank line would end it mid-collect.
+                    entries=()
+                    while IFS= read -r name; do
+                      [ -n "$name" ] || continue
+                      entries+=("app"$'\t'"$name")
+                    done < <(
+                      grep -oE "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" \
+                        | sed -E 's/[[:space:]]*//; s/\.enable//'
+                    )
+                    while IFS= read -r name; do
+                      [ -n "$name" ] || continue
+                      entries+=("pkg"$'\t'"$name")
+                    done < <(grep -oE '#@pkg(-other)? [A-Za-z0-9_.-]+$' "$file" | sed -E 's/^#@pkg(-other)? //')
+                    while IFS= read -r name; do
+                      [ -n "$name" ] || continue
+                      entries+=("opt"$'\t'"$name")
+                    done < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
+                    while IFS= read -r name; do
+                      [ -n "$name" ] || continue
+                      entries+=("draft"$'\t'"$name")
+                    done < <(grep -oE '#@draft [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@draft //')
+
+                    if [ ''${#entries[@]} -eq 0 ]; then
+                      echo "Nothing is selected. Install > Package lists what is available."
+                      exit 0
+                    fi
+
+                    # The preview shows the line that would go, so what "remove"
+                    # means for each entry is visible before it happens.
+                    chosen=$(printf '%s\n' "''${entries[@]}" | fzf --multi \
+                      --delimiter='\t' \
+                      --prompt="remove > " \
+                      --header="tab to select several, enter to confirm" \
+                      --preview "grep -F -- {2} '$file' | grep -F -e '.enable' -e '#@'" \
+                      --preview-window='down,3,wrap') || exit 0
+                    [ -n "$chosen" ] || exit 0
+
+                    # Packages and options are batched: one backup, one parse check,
+                    # one notification per kind rather than per line.
+                    pkgsel=()
+                    optsel=()
+                    draftsel=()
+                    while IFS=$'\t' read -r kind name; do
+                      [ -n "$name" ] || continue
+                      case "$kind" in
+                        app) nixarchy-app-disable "$name" ;;
+                        pkg) pkgsel+=("$name") ;;
+                        opt) optsel+=("$name") ;;
+                        draft) draftsel+=("$name") ;;
+                      esac
+                    done <<< "$chosen"
+                    [ ''${#pkgsel[@]} -eq 0 ] || nixarchy-pkg-remove "''${pkgsel[@]}"
+                    [ ''${#optsel[@]} -eq 0 ] || nixarchy-opt-remove "''${optsel[@]}"
+                    [ ''${#draftsel[@]} -eq 0 ] || nixarchy-pkg-undraft "''${draftsel[@]}"
+
+                    echo
+                    echo "Run 'nixarchy-apply' to rebuild without them."
+                  '';
+                })
+
+                # The inverse of nixarchy-pkg-add. It deletes only lines carrying the
+                # `#@pkg` marker -- the marker is the writer's claim of ownership --
+                # and never reformats anything else: the file is the user's. The
+                # systemPackages block stays even when its last marked line goes,
+                # because the user may have put their own, unmarked lines in it, and
+                # an empty list evaluates fine.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-pkg-remove";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.fzf
+                    config.nix.package
+                    cfg.package # omarchy-notification-send
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                    if [ $# -eq 0 ]; then
+                      mapfile -t attrs < <(grep -oE '#@pkg(-other)? [A-Za-z0-9_.-]+$' "$file" | sed -E 's/^#@pkg(-other)? //')
+                      if [ ''${#attrs[@]} -eq 0 ]; then
+                        echo "No extra packages are selected. 'nixarchy pkg add' or the Search picker adds one."
+                        exit 0
+                      fi
+                      chosen=$(printf '%s\n' "''${attrs[@]}" | fzf --multi \
+                        --prompt="remove pkg > " \
+                        --header="tab to select several, enter to confirm") || exit 0
+                      [ -n "$chosen" ] || exit 0
+                      mapfile -t picked <<< "$chosen"
+                      set -- "''${picked[@]}"
+                    fi
+
+                    # Reverted as a unit if anything goes wrong, exactly as the
+                    # writer's edits are: the file is the user's own NixOS module.
+                    backup=$(mktemp)
+                    cp "$file" "$backup"
+                    trap 'rm -f "$backup"' EXIT
+                    restore() { cp "$backup" "$file"; }
+
+                    removed=()
+                    for attr in "$@"; do
+                      # Same alphabet nixarchy-pkg-add accepts. Anything else would
+                      # reach the sed address below as a pattern, not a name.
+                      case "$attr" in
+                        "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+                          restore
+                          echo "'$attr' is not a nixpkgs attribute name." >&2
+                          exit 1
+                          ;;
+                      esac
+                      # Anchored exactly as the delete below is: a prefix match here
+                      # reported "removed rip" while ripgrep's line stayed. Either
+                      # marker, because --stable/--unstable rows are packages too.
+                      re="#@pkg(-other)? ''${attr//./\\.}\$"
+                      if ! grep -qE -- "$re" "$file"; then
+                        restore
+                        echo "nixarchy: no package '$attr' in $file. Nothing was changed." >&2
+                        exit 1
+                      fi
+                      # Exactly the marked line nixarchy-pkg-add wrote, wherever the
+                      # user has moved it to.
+                      sed -i -E "\|$re|d" "$file"
+                      removed+=("$attr")
+                    done
+
+                    [ ''${#removed[@]} -gt 0 ] || exit 0
+
+                    if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                      restore
+                      echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                      exit 1
+                    fi
+
+                    count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
+                    if command -v omarchy-notification-send >/dev/null 2>&1; then
+                      omarchy-notification-send -r 8471 -t 8000 -u normal \
+                        "''${removed[*]} removed from your selection" \
+                        "$count extra package(s) still selected. Click here to review and rebuild." \
+                        --exec nixarchy-plugin nixarchy.rebuild || true
+                    fi
+                    for attr in "''${removed[@]}"; do
+                      echo "removed $attr from $file"
+                    done
+                    echo "it stays installed until 'nixarchy-apply' rebuilds"
+                  '';
+                })
+
+                # The inverse of the apps.nix line `nixarchy pkg new` wrote, and
+                # deliberately NOT of its draft file: deleting
+                # ~/.config/nixarchy/packages/<name>.nix, or the copy
+                # nixarchy-apply put in the flake, is an edit to a tree the user
+                # owns, not this tool's call -- so this drops the marked line and
+                # prints where the draft file still is. The `#@draft` marker
+                # survives the user uncommenting the line (the same property
+                # `#@opt` has), so the commented and the live form are both
+                # removable, by the same sed.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-pkg-undraft";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.fzf
+                    config.nix.package
+                    cfg.package # omarchy-notification-send
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                    list_drafts() {
+                      grep -oE '#@draft [A-Za-z0-9_.-]+$' "$file" | sed 's/^#@draft //'
+                    }
+
+                    if [ $# -eq 0 ]; then
+                      mapfile -t names < <(list_drafts)
+                      if [ ''${#names[@]} -eq 0 ]; then
+                        echo "No drafts are in $file. 'nixarchy pkg new <url>' drafts one."
+                        exit 0
+                      fi
+                      chosen=$(printf '%s\n' "''${names[@]}" | fzf --multi \
+                        --prompt="remove draft > " \
+                        --header="tab to select several, enter to confirm" \
+                        --preview "grep -F -- '#@draft '{} '$file'" \
+                        --preview-window='down,3,wrap') || exit 0
+                      [ -n "$chosen" ] || exit 0
+                      mapfile -t picked <<< "$chosen"
+                      set -- "''${picked[@]}"
+                    fi
+
+                    # Reverted as a unit if anything goes wrong, exactly as
+                    # nixarchy-pkg-remove's edits are: the file is the user's own
+                    # NixOS module.
+                    backup=$(mktemp)
+                    cp "$file" "$backup"
+                    trap 'rm -f "$backup"' EXIT
+                    restore() { cp "$backup" "$file"; }
+
+                    removed=()
+                    for name in "$@"; do
+                      # Same alphabet nixarchy-pkg-new accepts. Anything else would
+                      # reach the sed address below as a pattern, not a name.
+                      case "$name" in
+                        "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+                          restore
+                          echo "'$name' is not a draft name." >&2
+                          exit 1
+                          ;;
+                      esac
+                      # Exact string, not a substring: `#@draft foo` must not
+                      # answer for `#@draft foobar`.
+                      if ! list_drafts | grep -qFx -- "$name"; then
+                        restore
+                        echo "nixarchy: no draft '$name' in $file. Nothing was changed." >&2
+                        echo "'nixarchy pkg remove' takes out a #@pkg line instead." >&2
+                        exit 1
+                      fi
+                      # The marked line wherever the user moved it, commented or
+                      # uncommented. Dots escaped: the name lands in a sed address.
+                      sed -i "/#@draft ''${name//./\\.}\$/d" "$file"
+                      removed+=("$name")
+                    done
+
+                    [ ''${#removed[@]} -gt 0 ] || exit 0
+
+                    if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                      restore
+                      echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                      exit 1
+                    fi
+
+                    if command -v omarchy-notification-send >/dev/null 2>&1; then
+                      omarchy-notification-send -r 8471 -t 8000 -u normal \
+                        "''${removed[*]} removed from your selection" \
+                        "The draft file itself is kept. Click here to review and rebuild." \
+                        --exec nixarchy-plugin nixarchy.rebuild || true
+                    fi
+                    pkgdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/packages"
+                    for name in "''${removed[@]}"; do
+                      echo "removed $name from $file"
+                      [ ! -e "$pkgdir/$name.nix" ] || \
+                        echo "the draft file is yours and stays at $pkgdir/$name.nix"
+                    done
+                    echo "a draft that was live stays installed until 'nixarchy-apply' rebuilds"
+                  '';
+                })
+
+                # Removes an option the Search picker wrote (#522). What "remove"
+                # means here follows nixarchy-channel's rule -- only lines this
+                # project wrote get rewritten -- and the `#@opt` marker is the claim
+                # of authorship:
+                #
+                #   - a value the picker set, or a scaffold the user uncommented and
+                #     filled in while keeping the marker, is ONE marked line: that
+                #     line goes, and nothing around it. The picker's preview shows
+                #     the line first, so a filled-in scaffold is deleted with the
+                #     current value in view, not behind the user's back.
+                #   - an UNTOUCHED scaffold -- still commented, value never filled
+                #     in -- takes its doc-comment block with it: add_option wrote
+                #     blank line, comments and marker line as one unit, and the
+                #     comments mean nothing without the line they explain.
+                #   - a line the user stripped the marker from is invisible here,
+                #     which is the marker working as intended: removing it is how
+                #     an adopted line is kept out of this tool's reach.
+                #
+                # In both cases the one blank line add_option put above the unit
+                # goes too, so removing is byte-for-byte the inverse of adding --
+                # checks.options holds it to exactly that.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-opt-remove";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.gawk
+                    pkgs.fzf
+                    config.nix.package
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+
+                    if [ $# -eq 0 ]; then
+                      mapfile -t paths < <(grep -o '#@opt .*' "$file" | sed 's/^#@opt //' | sort -u)
+                      if [ ''${#paths[@]} -eq 0 ]; then
+                        echo "No options from the picker are in $file. The Search picker adds one."
+                        exit 0
+                      fi
+                      chosen=$(printf '%s\n' "''${paths[@]}" | fzf --multi \
+                        --prompt="remove opt > " \
+                        --header="tab to select several, enter to confirm" \
+                        --preview "grep -F -- '#@opt '{} '$file'" \
+                        --preview-window='down,3,wrap') || exit 0
+                      [ -n "$chosen" ] || exit 0
+                      mapfile -t picked <<< "$chosen"
+                      set -- "''${picked[@]}"
+                    fi
+
+                    backup=$(mktemp)
+                    cp "$file" "$backup"
+                    trap 'rm -f "$backup"' EXIT
+                    restore() { cp "$backup" "$file"; }
+
+                    # String comparison throughout, never a regex: option paths
+                    # carry dots, quotes and <name> placeholders, and a path read
+                    # as a pattern would delete the wrong line quietly.
+                    remove_one() {
+                      path=$1
+                      tmp=$(mktemp)
+                      # `if !` rather than checking $? after: this script runs under
+                      # set -e, and a bare failing awk would abort before the caller
+                      # could restore the backup.
+                      if ! awk -v path="$path" '
+                        { line[NR] = $0 }
+                        END {
+                          marker = "#@opt " path
+                          target = 0
+                          for (i = 1; i <= NR; i++) {
+                            l = line[i]
+                            if (length(l) >= length(marker) &&
+                                substr(l, length(l) - length(marker) + 1) == marker) {
+                              target = i; break
+                            }
+                          }
+                          if (target == 0) exit 3
+                          first = target
+                          stripped = line[target]
+                          sub(/^[ \t]*/, "", stripped)
+                          if (stripped == "# " path " = ;  " marker) {
+                            while (first > 1) {
+                              prev = line[first - 1]
+                              sub(/^[ \t]*/, "", prev)
+                              if (substr(prev, 1, 1) == "#") first -= 1; else break
+                            }
+                          }
+                          if (first > 1 && line[first - 1] == "") first -= 1
+                          for (i = 1; i <= NR; i++)
+                            if (i < first || i > target) print line[i]
+                        }' "$file" > "$tmp"; then
+                        rm -f "$tmp"
+                        return 1
+                      fi
+                      mv "$tmp" "$file"
+                    }
+
+                    removed=()
+                    for path in "$@"; do
+                      if ! remove_one "$path"; then
+                        restore
+                        echo "nixarchy: no option '$path' in $file. Nothing was changed." >&2
+                        exit 1
+                      fi
+                      removed+=("$path")
+                    done
+
+                    [ ''${#removed[@]} -gt 0 ] || exit 0
+
+                    if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                      restore
+                      echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                      exit 1
+                    fi
+
+                    for path in "''${removed[@]}"; do
+                      echo "removed $path from $file"
+                    done
+                    echo "a value that was live stays in effect until 'nixarchy-apply' rebuilds"
+                  '';
+                })
+
+                # Why: modules/AGENTS.md#the-answer-to-i-want-a-package-the-menu-does-not-o
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-pkg-add";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.gawk
+                    pkgs.jq
+                    pkgs.diffutils
+                    config.nix.package
+                    cfg.package # omarchy-notification-send
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    table=${appAttrTable}
+                    nixpkgs=${pkgs.path}
+                    # This generation's licence policy, baked in at build time: the
+                    # script and the system it can queue packages for are the same
+                    # generation, so this cannot go stale without the script itself
+                    # being replaced.
+                    allowunfree=${lib.boolToString (config.nixpkgs.config.allowUnfree or false)}
+                    # A predicate is a function of the package, so this script cannot
+                    # answer for it; it says so rather than predicting a refusal.
+                    haspredicate=${lib.boolToString (config.nixpkgs.config ? allowUnfreePredicate)}
+
+                    # The picker is reachable through the session PATH rather than
+                    # runtimeInputs (same route nixarchy-apply takes to
+                    # nixarchy-preview), so its absence must degrade to the usage
+                    # text, not break the command.
+                    can_pick() {
+                      [ -z "''${NIXARCHY_IN_PICKER:-}" ] && [ -t 0 ] && [ -t 1 ] &&
+                        command -v nixarchy-search >/dev/null 2>&1
+                    }
+
+                    other_added=false
+
+                    # The file is a NixOS module, so the other channel's package
+                    # set reaches it as a module argument. Add it to the header
+                    # once, the same way ensure_block adds `pkgs`.
+                    ensure_other_arg() {
+                      sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther' && return 0
+                      if sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
+                        sed -i -E '0,/^\{([^}]*)\}:/s/^\{([^}]*)\}:/{ pkgsOther,\1}:/' "$file"
+                      else
+                        sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgsOther, ... }:/' "$file"
+                      fi
+                      if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther'; then
+                        echo "nixarchy: could not add 'pkgsOther' to the first line of $file." >&2
+                        echo "Change it by hand to:  { pkgs, pkgsOther, ... }:" >&2
+                        restore
+                        exit 1
+                      fi
+                    }
+
+                    # ---- the other channel (#531) -------------------------
+                    #
+                    # `--stable` and `--unstable` name a CHANNEL, not a flag the
+                    # tool interprets loosely: the machine follows one of them and
+                    # this can only mean the other. Naming the one it is already
+                    # on is refused rather than silently accepted, because the
+                    # cost of getting it wrong is a whole duplicate closure for a
+                    # package that was already there.
+                    other=false
+                    want_channel=""
+                    # --dry-run answers #495: show the diff before touching the
+                    # user's file. It costs nothing extra -- everything below
+                    # already edits $file with $backup as the pre-edit copy, so
+                    # dry-run's whole job is to diff those two and put $file back.
+                    dry_run=false
+                    while [ $# -gt 0 ]; do
+                      case "$1" in
+                        --stable)   other=true; want_channel=stable;   shift ;;
+                        --unstable) other=true; want_channel=unstable; shift ;;
+                        --dry-run)  dry_run=true; shift ;;
+                        --) shift; break ;;
+                        -*) echo "nixarchy-pkg-add: unknown option '$1'" >&2; exit 1 ;;
+                        *) break ;;
+                      esac
+                    done
+
+                    if [ "$other" = true ]; then
+                      # Which channel this machine follows, read the way
+                      # nixarchy-channel and the doctor read it: from the URL,
+                      # which is what an update resolves, not the lock, which is
+                      # only where it last landed.
+                      flakedir="''${NIXARCHY_FLAKE:-/etc/nixos}"
+                      mine=custom
+                      if [ -r "$flakedir/flake.nix" ]; then
+                        u=$(sed -nE "s/^[[:space:]]*nixpkgs\.url[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p" \
+                          "$flakedir/flake.nix" | head -1)
+                        case "$u" in
+                          *nixos-unstable*) mine=unstable ;;
+                          *nixos-[0-9][0-9].[0-9][0-9]*) mine=stable ;;
+                        esac
+                      fi
+
+                      # "Could not tell" is NOT "a different channel", and the
+                      # difference costs a whole duplicate closure. The regex
+                      # above matches the shape this project generates
+                      # (`nixpkgs.url` inside an `inputs` block); the equally
+                      # valid flat form `inputs.nixpkgs.url = ...` does not match
+                      # it, and neither does a flake somebody has reshaped.
+                      #
+                      # Said out loud rather than assumed either way: refusing
+                      # would block a legitimate request on a flake this tool
+                      # merely cannot parse, and staying silent is how somebody
+                      # ends up with two copies of the channel they were already
+                      # on and no idea why the disk filled.
+                      if [ "$mine" = custom ]; then
+                        echo "nixarchy: cannot tell which channel this machine follows from" >&2
+                        echo "  $flakedir/flake.nix, so I cannot check that --$want_channel is" >&2
+                        echo "  the OTHER one. If it is the channel you are already on, this" >&2
+                        echo "  adds a second copy of it that shares nothing with the first." >&2
+                        echo "  ''${dim:-}nixarchy channel   reports what this machine follows.''${off:-}" >&2
+                        echo >&2
+                      fi
+
+                      if [ "$mine" = "$want_channel" ]; then
+                        echo "nixarchy: this machine already follows $want_channel." >&2
+                        echo "  --$want_channel asks for a SECOND copy of it, from a second" >&2
+                        echo "  nixpkgs, sharing nothing with the one you have. Drop the" >&2
+                        echo "  flag and the package comes from the channel you are on." >&2
+                        exit 1
+                      fi
+                    fi
+
+                    if [ $# -eq 0 ]; then
+                      # No arguments is not a mistake to scold, it is "show me what
+                      # there is" -- which is exactly what the picker answers (#492).
+                      if can_pick; then
+                        exec nixarchy-search
+                      fi
+                      echo "usage: nixarchy-pkg-add [--stable|--unstable] [--dry-run] <nixpkgs-attribute>..." >&2
+                      echo "  e.g. nixarchy-pkg-add ripgrep fd" >&2
+                      echo "  or run 'nixarchy-search' to browse everything" >&2
+                      echo >&2
+                      echo "  --stable / --unstable take ONE package from the other" >&2
+                      echo "  channel. The two share no store paths even at the same" >&2
+                      echo "  version, so each one costs its whole closure." >&2
+                      echo >&2
+                      echo "  --dry-run shows the diff to $file without writing it." >&2
+                      exit 1
+                    fi
+
+                    [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+                    # Every edit below is reverted as a unit if the result will not parse. The
+                    # file is the user's own NixOS module; leaving it broken would take the whole
+                    # system's evaluation down with it, not just this feature.
+                    backup=$(mktemp)
+                    cp "$file" "$backup"
+                    trap 'rm -f "$backup" "$backup.err"' EXIT
+                    restore() { cp "$backup" "$file"; }
+
+                    # The list this appends to does not exist in a freshly generated file: the
+                    # template is all curated apps and nothing else. Create it once, in place,
+                    # before the module's closing brace.
+                    ensure_block() {
+                      grep -q '#@pkgs-end' "$file" && return 0
+
+                      # systemPackages needs `pkgs`, and the generated template takes `{ ... }:`.
+                      if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
+                        sed -i -E '0,/^\{[[:space:]]*\.\.\.[[:space:]]*\}:[[:space:]]*$/s//{ pkgs, ... }:/' "$file"
+                      fi
+
+                      tmp=$(mktemp)
+                      awk '
+                        !ins && /^}[[:space:]]*$/ {
+                          print "";
+                          print "  # ── Extra packages ──────────────────────────────────────────────";
+                          print "  # Plain nixpkgs attributes, added by nixarchy-pkg-add. These are";
+                          print "  # not part of the curated app list above: the Omarchy menu does";
+                          print "  # not offer them and will not remove them. The file stays yours --";
+                          print "  # reformat and annotate freely, the tool only ever inserts one";
+                          print "  # line before the end marker.";
+                          print "  environment.systemPackages = with pkgs; [  #@pkgs-begin";
+                          print "  ];  #@pkgs-end";
+                          ins = 1;
+                        }
+                        { print }
+                      ' "$file" > "$tmp"
+                      mv "$tmp" "$file"
+
+                      if ! grep -q '#@pkgs-end' "$file"; then
+                        echo "nixarchy: could not find the closing '}' of $file." >&2
+                        echo "Add this to it by hand, then run this again:" >&2
+                        echo >&2
+                        echo "  environment.systemPackages = with pkgs; [  #@pkgs-begin" >&2
+                        echo "  ];  #@pkgs-end" >&2
+                        restore
+                        exit 1
+                      fi
+
+                      if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then
+                        echo "nixarchy: $file does not take a 'pkgs' argument, so the list just" >&2
+                        echo "added cannot refer to it. Change its first line to:  { pkgs, ... }:" >&2
+                      fi
+                    }
+
+                    added=()
+                    missed=()
+                    unfree_hits=()
+                    to_eval=()
+                    report=()
+
+                    # First pass: everything answerable without evaluating nixpkgs.
+                    # What survives it goes into ONE evaluation below (#496) --
+                    # loading nixpkgs is the cost, and it is the same load whether
+                    # it answers for one attribute or ten, so a multi-select from
+                    # the picker must not pay it per selection.
+                    for attr in "$@"; do
+                      case "$attr" in
+                        "" | -* | .* | *..* | *[!A-Za-z0-9_.-]*)
+                          echo "'$attr' is not a nixpkgs attribute name." >&2
+                          exit 1
+                          ;;
+                      esac
+
+                      # The curated list first. Typing `firefox` should get you the app, which is
+                      # a NixOS module and brings policies and extensions with it, not a bare
+                      # package in systemPackages that does none of that.
+                      app=$(awk -F'\t' -v a="$attr" '$1 == a { print $2; exit }' "$table")
+                      if [ -n "$app" ]; then
+                        report+=("$attr"$'\t'"curated"$'\t'"an Omarchy app -- enable it that way:  nixarchy-app-enable $app")
+                        continue
+                      fi
+
+                      if grep -qE "#@pkg(-other)? ''${attr//./\\.}\$" "$file"; then
+                        report+=("$attr"$'\t'"present"$'\t'"already in $file")
+                        continue
+                      fi
+
+                      to_eval+=("$attr")
+                    done
+
+                    # Resolved against the system's own nixpkgs rather than the flake registry,
+                    # so the answer matches what a rebuild would actually build, and it works
+                    # with no network. nix-instantiate rather than `nix eval`: no pure-eval mode
+                    # to fight over an absolute store path, and no experimental flag to require.
+                    # allowUnfree only so an unfree package reports as unfree instead of
+                    # throwing here; nothing in this script decides your licence policy.
+                    #
+                    # Every name in one evaluation, each probed under tryEval: one
+                    # evaluation that died on the first bad attribute would be worse
+                    # than N evaluations, because a user adding five packages would
+                    # learn about one typo (#496). The names travel as a JSON
+                    # argument, not spliced into the expression.
+                    declare -A evalinfo
+                    if [ ''${#to_eval[@]} -gt 0 ]; then
+                      names_json=$(printf '%s\n' "''${to_eval[@]}" | jq -R . | jq -sc .)
+                      batch=$(nix-instantiate --eval --strict --json \
+                        --argstr attrsJson "$names_json" --expr "
+                        { attrsJson }:
+                        let
+                          p = import $nixpkgs { config.allowUnfree = true; };
+                          probe = a:
+                            let
+                              path = p.lib.splitString \".\" a;
+                              q = p.lib.attrByPath path null p;
+                              # tryEval does not catch a missing attribute, so a
+                              # non-package (python3Packages) must never reach v.
+                              isPkg = p.lib.isDerivation q;
+                              ls = if (q.meta or { }) ? license then
+                                     (if builtins.isList q.meta.license then q.meta.license else [ q.meta.license ])
+                                   else [ ];
+                              v = {
+                                inherit (q) name;
+                                pname = q.pname or \"\";
+                                description = q.meta.description or \"\";
+                                unfree = !(builtins.all (l: if builtins.isAttrs l then (l.free or true) else true) ls);
+                                broken = q.meta.broken or false;
+                              };
+                              r = builtins.tryEval
+                                (if isPkg
+                                 then { ok = true; } // builtins.deepSeq v v
+                                 else { ok = false; });
+                            in if r.success then r.value else { ok = false; };
+                        in builtins.listToAttrs
+                          (map (a: { name = a; value = probe a; }) (builtins.fromJSON attrsJson))" \
+                        2>"$backup.err") || {
+                        # Not "no match" for every name: an evaluation that failed
+                        # outright is a different answer, and the reason matters.
+                        restore
+                        echo "nixarchy: could not evaluate nixpkgs to check these names:" >&2
+                        tail -5 "$backup.err" >&2
+                        exit 1
+                      }
+                      for attr in "''${to_eval[@]}"; do
+                        evalinfo[$attr]=$(jq -c --arg a "$attr" '.[$a] // { ok: false }' <<<"$batch")
+                      done
+                    fi
+
+                    for attr in "''${to_eval[@]}"; do
+                      info=''${evalinfo[$attr]}
+                      if [ "$(jq -r .ok <<<"$info")" != true ]; then
+                        # A name that does not resolve is a typo more often than a
+                        # missing package, and the fuzzy index exists for typos: open
+                        # the picker on the query instead of handing back homework
+                        # (#492). Collected here, acted on after the loop, so one
+                        # bad name does not sink the rest of the batch (#496).
+                        missed+=("$attr")
+                        report+=("$attr"$'\t'"no match"$'\t'"nixpkgs has no attribute by that name")
+                        continue
+                      fi
+
+                      ensure_block
+
+                      if [ "$other" = true ]; then
+                        # From the other channel (#531). A distinct marker, not a
+                        # variant of `#@pkg`: nixarchy-pkg-remove, the Search
+                        # picker and the doctor all read these markers, and a row
+                        # that costs a whole extra closure should not be
+                        # indistinguishable from one that costs nothing.
+                        ensure_other_arg
+                        sed -i "/#@pkgs-end/i\\    pkgsOther.$attr  #@pkg-other $attr" "$file"
+                        if ! grep -q "#@pkg-other $attr\$" "$file"; then
+                          restore
+                          echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                          exit 1
+                        fi
+                        other_added=true
+                        added+=("$attr")
+                        report+=("$attr"$'\t'"added"$'\t'"from the $want_channel channel -- it brings its own closure; the two channels share no store paths")
+                        continue
+                      fi
+
+                      sed -i "/#@pkgs-end/i\\    $attr  #@pkg $attr" "$file"
+
+                      # sed reports success when its address matches nothing, which would leave
+                      # this reporting a package it never wrote. Check the line is really there.
+                      if ! grep -q "#@pkg $attr\$" "$file"; then
+                        restore
+                        echo "nixarchy: failed to write $attr into $file. Nothing was changed." >&2
+                        exit 1
+                      fi
+                      added+=("$attr")
+
+                      flags=""
+                      if [ "$(jq -r .unfree <<<"$info")" = true ]; then
+                        if [ "$allowunfree" = true ]; then
+                          flags=" [unfree -- fine here, this machine allows it]"
+                        elif [ "$haspredicate" = true ]; then
+                          flags=" [unfree -- allowed only if your allowUnfreePredicate accepts it]"
+                        else
+                          # The minority case (#497): allowUnfree defaults on, so
+                          # reaching this line means somebody turned it off on
+                          # purpose. Collect the pname (what allowUnfreePredicate
+                          # matches on), and offer the narrow grant after the loop.
+                          flags=" [unfree -- allowUnfree = false here, the rebuild will refuse it]"
+                          pn=$(jq -r '.pname // ""' <<<"$info")
+                          unfree_hits+=("''${pn:-$attr}")
+                        fi
+                      fi
+                      if [ "$(jq -r .broken <<<"$info")" = true ]; then
+                        flags="$flags [broken in nixpkgs -- expect the build to fail]"
+                      fi
+                      report+=("$attr"$'\t'"added"$'\t'"$(jq -r .name <<<"$info") -- $(jq -r '.description // ""' <<<"$info")$flags")
+                    done
+
+                    # One report for the whole batch, one row per name asked for
+                    # (#496): every outcome side by side, so a typo among five good
+                    # names is visible without costing the other four.
+                    printf '%s\n' "''${report[@]}" |
+                      awk -F'\t' '{ printf "  %-28s %-9s %s\n", $1, $2, $3 }'
+
+                    # Names that resolved nowhere, with a picker available: hand them
+                    # to it, pre-filtered, so a typo becomes a fuzzy match. exec, so
+                    # this only runs once everything above is committed or reverted.
+                    # Without a picker (no tty, or this run IS the picker's writer,
+                    # where a miss is an index bug -- #492), the guidance is printed
+                    # instead and the exit code says something failed; whatever did
+                    # resolve is already committed above.
+                    open_missed() {
+                      [ ''${#missed[@]} -gt 0 ] || return 0
+                      if ! can_pick; then
+                        echo "nixpkgs has no package matching: ''${missed[*]}" >&2
+                        echo >&2
+                        echo "Search for the right name:" >&2
+                        echo "  nixarchy-search ''${missed[*]}" >&2
+                        echo >&2
+                        echo "If nixpkgs genuinely does not have it, draft a package from its source:" >&2
+                        echo "  nixarchy pkg new <url>" >&2
+                        exit 1
+                      fi
+                      echo "no exact match for ''${missed[*]} -- opening the picker on it"
+                      # Said here, before exec, because the picker itself cannot:
+                      # its miss is fzf exiting empty, and no script runs after
+                      # that. This is the one moment a user has proved nixpkgs
+                      # lacks a name, so the way onward is named now (#581).
+                      echo "  (if nothing there matches either, nixpkgs may not have it --"
+                      echo "   'nixarchy pkg new <url>' drafts a package from its source)"
+                      exec nixarchy-search "''${missed[@]}"
+                    }
+
+                    if [ ''${#added[@]} -eq 0 ]; then
+                      open_missed
+                      exit 0
+                    fi
+
+                    # The narrow grant (#497): a commented allowUnfreePredicate
+                    # naming just these packages, in the user's own file, rather
+                    # than advice to flip the global flag. Commented, because
+                    # changing licence policy is the user's line to uncomment.
+                    # Runs before the parse check so one validation covers it.
+                    offer_unfree_grant() {
+                      [ ''${#unfree_hits[@]} -gt 0 ] || return 0
+
+                      if grep -q '#@unfree-allow' "$file"; then
+                        # A grant already exists (ours, by its marker): grow its
+                        # list in place rather than scaffold a second predicate --
+                        # nixpkgs.config is a plain attrset, and two definitions of
+                        # one key do not merge.
+                        for pn in "''${unfree_hits[@]}"; do
+                          grep -q "\"$pn\"" "$file" ||
+                            sed -i "/#@unfree-allow/s/ \];/ \"$pn\" ];/" "$file"
+                          if ! grep -q "\"$pn\"" "$file"; then
+                            echo "  add \"$pn\" to the allowUnfreePredicate list already in $file"
+                          fi
+                        done
                         return 0
                       fi
-                      if [ -z "$value" ]; then
-                        echo "kept the default for $path -- nothing written"
+
+                      if [ -t 0 ]; then
+                        printf 'Scaffold a commented allowUnfreePredicate for %s into %s? [Y/n] ' \
+                          "''${unfree_hits[*]}" "$file"
+                        read -r reply || reply=n
+                        case "$reply" in
+                          [nN]*)
+                            echo "  then allow it yourself, or set programs.nixarchy.allowUnfree = true"
+                            return 0
+                            ;;
+                        esac
+                      fi
+
+                      names=""
+                      for pn in "''${unfree_hits[@]}"; do names="$names\"$pn\" "; done
+                      # printf rather than a multi-line literal: a raw
+                      # newline-in-string here would lower the whole nix
+                      # indented string's common indent and shift every
+                      # line of the built script.
+                      payload=$(printf '%s\n' \
+                        "" \
+                        "  # ''${unfree_hits[*]}: unfree, and this machine sets programs.nixarchy.allowUnfree" \
+                        "  # = false. Uncomment the line below to allow JUST the packages named -- the" \
+                        "  # narrow grant -- rather than flipping the global switch:" \
+                        "  # nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ $names];  #@unfree-allow")
+
+                      tmp=$(mktemp)
+                      awk -v payload="$payload" '
+                        { print }
+                        !done && /#@pkgs-end/ { print payload; done = 1 }
+                      ' "$file" > "$tmp"
+                      mv "$tmp" "$file"
+
+                      if grep -q '#@unfree-allow' "$file"; then
+                        echo "  scaffolded a commented allowUnfreePredicate in $file -- uncomment it to allow just ''${unfree_hits[*]}"
+                      else
+                        restore
+                        echo "nixarchy: failed to write the allowUnfreePredicate scaffold. Nothing was changed." >&2
+                        exit 1
+                      fi
+                    }
+                    offer_unfree_grant
+
+                    if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                      restore
+                      echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                      exit 1
+                    fi
+
+                    # $file has been edited in place all along, with $backup as
+                    # the pre-edit copy every restore above already relies on --
+                    # so the diff nobody has seen yet is just the two of them,
+                    # compared now that the result is known to parse.
+                    #
+                    # NIXARCHY_IN_PICKER means fzf already collected a yes a
+                    # moment ago; asking again here would be a second prompt for
+                    # the same choice. can_pick's own guard is why: a menu pick
+                    # runs with no terminal attached at all, where a prompt would
+                    # not double-ask, it would hang.
+                    interactive() {
+                      [ -z "''${NIXARCHY_IN_PICKER:-}" ] && [ -t 0 ] && [ -t 1 ]
+                    }
+
+                    if [ "$dry_run" = true ] || interactive; then
+                      echo "-- $file --"
+                      diff -u --label "$file (before)" --label "$file (after)" "$backup" "$file" || true
+                      echo
+                    fi
+
+                    if [ "$dry_run" = true ]; then
+                      restore
+                      echo "dry run: nothing written to $file"
+                      exit 0
+                    fi
+
+                    if interactive; then
+                      printf 'Write this to %s? [Y/n] ' "$file"
+                      read -r reply || reply=n
+                      case "$reply" in
+                        [nN]*)
+                          restore
+                          echo "Nothing changed."
+                          exit 0
+                          ;;
+                      esac
+                    fi
+
+                    count=$(grep -cE '#@pkg(-other)? ' "$file" || true)
+
+                    # A menu pick runs with no terminal attached, so stdout goes nowhere. Say it
+                    # on the desktop instead, clickable, because a rebuild is what is still owed.
+                    if command -v omarchy-notification-send >/dev/null 2>&1; then
+                      omarchy-notification-send -r 8471 -t 8000 -u normal \
+                        "''${added[*]} queued -- not installed yet" \
+                        "$count extra package(s) selected. Click here, or Install > Apply changes, to review and rebuild." \
+                        --exec nixarchy-plugin nixarchy.rebuild || true
+                    fi
+
+                    # The flake half, which this tool cannot do for you (#531).
+                    #
+                    # flake.nix is the user's, and adding an INPUT to it is a
+                    # different act from adding a line to the selection file this
+                    # tool owns -- nixarchy-channel's rule again: only lines this
+                    # project wrote get rewritten. So this prints the two lines and
+                    # lets the owner add them.
+                    #
+                    # Checked rather than always printed: somebody who wired it
+                    # once should not be told again every time.
+                    if [ "$other_added" = true ]; then
+                      flakedir="''${NIXARCHY_FLAKE:-/etc/nixos}"
+                      if ! grep -rqs 'otherChannel\.flake' "$flakedir"; then
+                        echo
+                        echo "One more step, in your own flake.nix -- this tool does not edit it:"
+                        echo
+                        echo "  inputs.nixpkgs-other.url ="
+                        echo "    \"github:NixOS/nixpkgs/$( [ "$want_channel" = stable ] && echo nixos-${stableRelease} || echo nixos-unstable )\";"
+                        echo
+                        echo "and, in your host configuration:"
+                        echo
+                        echo "  programs.nixarchy.otherChannel.flake = inputs.nixpkgs-other;"
+                        echo
+                        echo "Until both are there the rebuild will stop and say so."
+                      fi
+                    fi
+
+                    echo
+                    echo "run 'nixarchy-apply' when you have picked everything you want"
+
+                    # Last, because exec does not come back: anything that
+                    # resolved is committed above before a typo's picker
+                    # takes over the terminal.
+                    open_missed
+                  '';
+                })
+
+                # `nixarchy pkg new <url>`: a draft derivation for software in no
+                # repository (#581). The body lives in pkgs/pkg-new.sh, spliced
+                # here the way flake.nix splices pkgs/doctor.sh, so a check can
+                # run the raw file against stubs -- see tests/pkg-new.nix.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-pkg-new";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.gawk
+                    pkgs.nix-init
+                    # nix-init resolves GitHub URLs entirely on its own (proven
+                    # under a PATH holding nothing else), but shells out for the
+                    # rest of its fetchers; an undeclared command here reads as
+                    # "cannot draft this", not "git is missing".
+                    pkgs.git
+                    config.nix.package
+                  ];
+                  text = lib.replaceStrings [ "@nixpkgs@" ] [ "${pkgs.path}" ] (builtins.readFile ../pkgs/pkg-new.sh);
+                })
+
+                # Why: modules/AGENTS.md#search-everything-this-machine-could-install-and-r
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-search";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    pkgs.gnugrep
+                    pkgs.gnused
+                    pkgs.gawk
+                    pkgs.jq
+                    pkgs.fzf
+                    pkgs.curl
+                    config.nix.package
+                  ];
+                  text = ''
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nixarchy"
+                    index="$cache/index.tsv"
+                    stamp="$cache/stamp"
+
+                    appindex=${appIndexTable}
+                    apptable=${appAttrTable}
+                    flatpakrows=${flatpakIndexRows}
+                    pkgnewrow=${pkgNewIndexRow}
+                    optionsjson=${optionsJsonPath}
+                    nixpkgs=${pkgs.path}
+                    walk=${./pkg-index.nix}
+                    flakedir="''${NIXARCHY_FLAKE:-${cfg.flake}}"
+                    # This generation's licence policy, baked in like the index is:
+                    # both are replaced together with the system generation. A
+                    # predicate may allow any given package, so it is not flagged.
+                    allowunfree=${
+                      lib.boolToString (
+                        (config.nixpkgs.config.allowUnfree or false) || config.nixpkgs.config ? allowUnfreePredicate
+                      )
+                    }
+
+                    # The writers this picker calls fall back TO the picker on a miss
+                    # (#492). A row that then misses would recurse into a second
+                    # picker; this says "you are already inside one", so they error
+                    # instead -- an index row that does not resolve is an index bug.
+                    export NIXARCHY_IN_PICKER=1
+
+                    reindex=0
+                    [ "''${1:-}" = "--reindex" ] && { reindex=1; shift; }
+
+                    # One index, five tab-separated fields: kind, name, one-line summary,
+                    # a kind-specific fourth (an option's type; a package's flags, e.g.
+                    # "unfree broken curated:firefox"; empty otherwise), and the preview
+                    # text with its newlines escaped. The preview is carried in the line
+                    # rather than looked up on selection because fzf runs the preview
+                    # command on every keystroke, and a jq pass over 19 MB of package
+                    # metadata is not something to do sixty times a second.
+                    build_index() {
+                      mkdir -p "$cache"
+                      tmp=$(mktemp)
+
+                      # Curated apps first, so they sort above the raw nixpkgs attribute of the
+                      # same name. Enabling `firefox` as an app gets you programs.firefox; adding
+                      # it as a package does not.
+                      awk -F'\t' -v OFS='\t' '{
+                        note = ($4 == "" ? "" : "\\n\\n" $4)
+                        foot = ($5 == "try" ? "\\n\\nctrl-t tries it now, without installing." : "")
+                        print "app", $1, $2 " (" $3 ")", "",
+                          "OMARCHY APP  " $1 "\\n\\n" $2 "\\n" $3 \
+                          note "\\n\\nEnabling this writes a line in your app selection:\\n  " \
+                          $1 ".enable = true;" foot
+                      }' "$appindex" > "$tmp"
+
+                      # Empty when this system builds no manual, in which case the
+                      # picker is packages and apps only rather than not working at all.
+                      if [ -n "$optionsjson" ] && [ -f "$optionsjson" ]; then
+                        jq -r '
+                          def val(x):
+                            if x == null then "(none)"
+                            elif (x | type) == "object" then (x.text // (x | tostring))
+                            else (x | tostring) end;
+                          to_entries[] | .key as $k | .value as $v |
+                          [ "opt", $k,
+                            (($v.description // "") | gsub("[\n\t ]+"; " ") | .[0:110]),
+                            ($v.type // ""),
+                            ( "NIXOS OPTION  " + $k
+                              + "\n\ntype:     " + ($v.type // "?")
+                              + "\ndefault:  " + val($v.default)
+                              + (if $v.example == null then "" else "\nexample:  " + val($v.example) end)
+                              + "\n\n" + ($v.description // "(undocumented)")
+                              + "\n\ndeclared in:\n  " + (($v.declarations // []) | join("\n  "))
+                            )
+                          ] | @tsv' "$optionsjson" >> "$tmp"
+                      else
+                        echo "  no option index: documentation.nixos.enable is off on this" >&2
+                        echo "  system, so there is no options.json to read." >&2
+                      fi
+
+                      # The system's own nixpkgs, not the flake registry: an index that offers a
+                      # package this machine cannot build is worse than no index. Slow enough to
+                      # be worth saying so -- about a minute, once each time nixpkgs changes.
+                      #
+                      # Our own walk (modules/pkg-index.nix) rather than `nix search`:
+                      # verified to produce the identical row set, and it carries the
+                      # meta `nix search --json` does not -- homepage, licence, unfree,
+                      # broken (#493).
+                      echo "  indexing nixpkgs (this takes about a minute)..." >&2
+                      if ! nix-instantiate --eval --strict --json \
+                        --arg nixpkgs "$nixpkgs" "$walk" 2>"$cache/index-errors.log" |
+                        jq -r '
+                          .[] |
+                          [ "pkg", .attr,
+                            ( ((.description // "") | gsub("[\n\t ]+"; " ") | .[0:100])
+                              + (if .unfree then "  [unfree]" else "" end)
+                              + (if .broken then "  [broken]" else "" end)
+                            ),
+                            ( (if .unfree then "unfree " else "" end)
+                              + (if .broken then "broken" else "" end)
+                              | sub(" $"; "")
+                            ),
+                            ( "NIXPKGS PACKAGE  " + .attr
+                              + "\n\nversion:  " + (if .version == "" then "?" else .version end)
+                              + "\nlicence:  " + (if .license == "" then "unknown" else .license end)
+                              + (if .homepage == "" then "" else "\nhomepage: " + .homepage end)
+                              + (if .broken then "\n\nMarked BROKEN in nixpkgs: expect the build to fail." else "" end)
+                              + "\n\n" + (if .description == "" then "(no description)" else .description end)
+                              + "\n\nAdding this writes it into your app selection:\n  "
+                              + "environment.systemPackages = with pkgs; [ " + .attr + " ];"
+                              + "\n\nctrl-t tries it now, without installing."
+                            )
+                          ] | @tsv' >> "$tmp"; then
+                        # Said, not swallowed: out of memory looked like the script
+                        # simply stopping after "indexing nixpkgs".
+                        rm -f "$tmp"
+                        echo "  indexing nixpkgs failed; the end of $cache/index-errors.log:" >&2
+                        tail -5 "$cache/index-errors.log" >&2
+                        exit 1
+                      fi
+
+                      # A raw attribute that the curated list already covers deserves a
+                      # warning on its row: picking the APP gets the module, policies
+                      # and defaults; picking the package gets a bare binary. Baked in
+                      # at build time -- the curated list is as per-generation as the
+                      # index (#493).
+                      tmp2=$(mktemp)
+                      awk -F'\t' -v OFS='\t' '
+                        NR == FNR { curated[$1] = $2; next }
+                        $1 == "pkg" && ($2 in curated) {
+                          $4 = ($4 == "" ? "" : $4 " ") "curated:" curated[$2]
+                          $5 = $5 "\\n\\nCURATED: this name is on the app list as \047" curated[$2] "\047.\\nThe app row above sets programs." curated[$2] " -- the module, with policies\\nand defaults -- where this row would add only a bare package."
+                        }
+                        { print }
+                      ' "$apptable" "$tmp" > "$tmp2"
+                      mv "$tmp2" "$tmp"
+
+                      # Curated flatpaks and the Flathub entry point. A plain cat:
+                      # these rows are already in the index's five-field shape, and
+                      # they are local, so building the index still needs no network.
+                      cat "$flatpakrows" >> "$tmp"
+
+                      # The tier below those: draft a package nixpkgs lacks (#581).
+                      cat "$pkgnewrow" >> "$tmp"
+
+                      mv "$tmp" "$index"
+                      stamp_key > "$stamp"
+                    }
+
+                    # Keyed on what the index is built FROM, not on the system
+                    # generation: every apply is a new generation, and reindexing
+                    # an unchanged nixpkgs cost a minute on the next search.
+                    stamp_key() {
+                      printf '%s\n' "$nixpkgs" "$walk" "$optionsjson" "$appindex" "$apptable" "$flatpakrows" "$pkgnewrow"
+                    }
+                    index_stale() {
+                      [ ! -s "$index" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$(stamp_key)" ]
+                    }
+
+                    if [ "$reindex" = 1 ] || index_stale; then
+                      echo "Building the search index. This happens when nixpkgs changes." >&2
+                      build_index
+                    fi
+
+                    # Status, at picker start rather than in the cached index (#493):
+                    # what is selected changes with every pick, the index once per
+                    # generation. Two greps and one awk pass over the index -- no
+                    # evaluation, and nothing per keystroke.
+                    #
+                    # "enabled" vs "queued" comes from the copy nixarchy-apply makes
+                    # into the flake before rebuilding: a selection that has not
+                    # reached the copy has not been built. Same host-dir logic as
+                    # nixarchy-apply. An unreadable flake dir marks everything
+                    # selected as queued, which is the honest claim for a machine
+                    # that has never applied.
+                    appsbase="$flakedir"
+                    [ -d "$flakedir/hosts/$(uname -n)" ] && appsbase="$flakedir/hosts/$(uname -n)"
+
+                    # Live (uncommented) marked lines only: kind<TAB>name per line.
+                    mark_live() {
+                      [ -r "$1" ] || return 0
+                      sed -nE "s/^[[:space:]]*[^#[:space:]].*#@pkg ([A-Za-z0-9_.-]+)[[:space:]]*$/pkg\t\1/p" "$1"
+                      sed -nE "s/^[[:space:]]*[^#[:space:]].*#@ ([A-Za-z0-9_.-]+).*$/$2\t\1/p" "$1"
+                    }
+
+                    selected=$(mktemp)
+                    applied=$(mktemp)
+                    shown=$(mktemp)
+                    trap 'rm -f "$selected" "$applied" "$shown"' EXIT
+
+                    {
+                      mark_live "$file" app
+                      mark_live "''${file%/apps.nix}/services.nix" flatpak
+                    } > "$selected" || true
+                    {
+                      mark_live "$appsbase/nixarchy/apps.nix" app
+                      mark_live "$appsbase/nixarchy/services.nix" flatpak
+                    } > "$applied" || true
+
+                    awk -F'\t' -v OFS='\t' -v unfreeok="$allowunfree" '
+                      FILENAME == ARGV[1] { sel[$0] = 1; next }
+                      FILENAME == ARGV[2] { app[$0] = 1; next }
+                      {
+                        key = $1 "\t" $2
+                        if (key in sel) {
+                          st = (key in app) ? "enabled" : "queued"
+                          note = (st == "enabled") \
+                            ? "enabled -- selected, and nixarchy-apply has copied it into the flake" \
+                            : "queued -- selected but not rebuilt; nixarchy-apply will install it"
+                          $3 = "[" st "] " $3
+                          $5 = $5 "\\n\\nstatus: " note
+                        }
+                        if ($1 == "pkg" && index($4, "unfree") && unfreeok != "true") {
+                          $3 = $3 "  [disallowed]"
+                          $5 = $5 "\\n\\nUNFREE, and this machine sets programs.nixarchy.allowUnfree = false:\\nthe rebuild will refuse it as it stands. nixarchy-pkg-add offers the\\nnarrow grant -- an allowUnfreePredicate naming just this package."
+                        }
+                        print
+                      }
+                    ' "$selected" "$applied" "$index" > "$shown"
+
+
+                    # --expect makes fzf accept on ctrl-t as well as enter, and say which
+                    # was pressed on the first output line. The previews on pkg and app
+                    # rows document the key; the other two kinds have nothing to run.
+                    picked=$(fzf --multi \
+                      --delimiter='\t' --with-nth=1,2,3 --nth=2,3 \
+                      --expect=ctrl-t \
+                      --preview 'printf "%b\n" {5}' \
+                      --preview-window='right,58%,wrap' \
+                      --prompt='nixarchy > ' \
+                      --header='enter to select · ctrl-t to try · tab for several · esc to cancel' \
+                      --query="''${*:-}" < "$shown") || exit 0
+                    key=$(printf '%s\n' "$picked" | head -n 1)
+                    selection=$(printf '%s\n' "$picked" | tail -n +2)
+                    [ -n "$selection" ] || exit 0
+
+                    # Try, not queue: run it now, in this terminal, and write nothing.
+                    # `nixarchy try` owns the how -- the pinned tree, the catalogue's
+                    # binary field, unfree -- and refuses with a reason on an app that
+                    # is really a NixOS module. Options and flatpaks have no package
+                    # attribute to run, so the picker says so itself.
+                    if [ "$key" = "ctrl-t" ]; then
+                      while IFS=$'\t' read -r kind name _ _ _; do
+                        [ -n "$kind" ] || continue
+                        case "$kind" in
+                          app | pkg) nixarchy try "$name" || true ;;
+                          opt) echo "$name is a NixOS option -- there is nothing to run, so nothing to try" ;;
+                          flatpak) echo "$name is a flatpak -- nothing to try; enable it and apply instead" ;;
+                          new) echo "nothing to try yet -- picking this row asks for a source URL to draft from" ;;
+                        esac
+                      done <<< "$selection"
+                      exit 0
+                    fi
+
+                    [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+                    backup=$(mktemp)
+                    cp "$file" "$backup"
+                    trap 'rm -f "$backup" "$selected" "$applied" "$shown"' EXIT
+
+                    changed=0
+                    scaffolded=0
+                    written=0
+
+                    # Options are written at the module's top level, before its closing brace.
+                    # Nothing here parses Nix: the brace is found textually and the result is
+                    # checked with nix-instantiate before anything is kept.
+                    insert_line() {
+                      tmp=$(mktemp)
+                      awk -v payload="$1" '
+                        !ins && /^}[[:space:]]*$/ { printf "%s", payload; ins = 1 }
+                        { print }
+                      ' "$file" > "$tmp"
+                      mv "$tmp" "$file"
+                    }
+
+                    # One option's default or example, structured, straight out of
+                    # options.json -- not parsed back out of the index's preview
+                    # text, which flattened it for display (#581). Both fields are
+                    # rendered `{ _type: literalExpression, text: ... }` in modern
+                    # options.json; a bare JSON value is the fallback shape. Empty
+                    # when this system builds no manual, and every caller degrades
+                    # to the pre-#581 behaviour on empty.
+                    opt_field() {
+                      [ -n "$optionsjson" ] && [ -f "$optionsjson" ] || return 0
+                      jq -r --arg p "$1" --arg f "$2" \
+                        '.[$p][$f]? // empty
+                         | if type == "object" then (.text // tostring) else tojson end' \
+                        "$optionsjson"
+                    }
+
+                    add_option() {
+                      path=$1
+                      type=$2
+
+                      if grep -q "#@opt $path\$" "$file"; then
+                        echo "$path is already in $file"
                         return 0
                       fi
-                      # A string or path needs Nix quotes; typing them is the
-                      # sort of homework this prompt exists to remove. Already
-                      # quoted input passes through untouched.
+
+                      value=""
                       case "$type" in
-                        string* | path* | "absolute path"*)
-                          case "$value" in
-                            \"*) ;;
-                            *) value="\"''${value//\"/\\\"}\"" ;;
+                        boolean)
+                          value=$(printf 'true\nfalse\n' | fzf --height=6 --prompt="$path = ") || return 0
+                          ;;
+                        "one of "*)
+                          value=$(printf '%s' "''${type#one of }" | grep -oE '"[^"]*"' |
+                            fzf --height=12 --prompt="$path = ") || return 0
+                          ;;
+                        # Simple scalars: ask, with the default in sight (#581).
+                        # /dev/tty, because stdin here is the picker's selection
+                        # herestring. Empty input keeps the default by writing
+                        # NOTHING -- a copied-out default is a line that reads as
+                        # a choice and is not one. The patterns are anchored
+                        # whole-string, so "list of string" and "null or path"
+                        # fall through to the scaffold below, as they should:
+                        # their values are not one prompted word.
+                        "signed integer"* | "unsigned integer"* | *" bit unsigned integer"* | "positive integer"* | string | "string,"* | "string "* | path | "path,"* | "absolute path"*)
+                          default=$(opt_field "$path" default || true)
+                          default=''${default//$'\n'/ }
+                          if ! read -r -p "$path [''${default:-no default}] = " value < /dev/tty; then
+                            return 0
+                          fi
+                          if [ -z "$value" ]; then
+                            echo "kept the default for $path -- nothing written"
+                            return 0
+                          fi
+                          # A string or path needs Nix quotes; typing them is the
+                          # sort of homework this prompt exists to remove. Already
+                          # quoted input passes through untouched.
+                          case "$type" in
+                            string* | path* | "absolute path"*)
+                              case "$value" in
+                                \"*) ;;
+                                *) value="\"''${value//\"/\\\"}\"" ;;
+                              esac
+                              ;;
                           esac
                           ;;
                       esac
-                      ;;
-                  esac
 
-                  if [ -n "$value" ]; then
-                    insert_line "\n  $path = $value;  #@opt $path\n"
-                    echo "set $path = $value"
-                    changed=1
-                    written=$((written + 1))
-                    return 0
-                  fi
-
-                  # Anything else. An option's value is arbitrary Nix -- a submodule, a
-                  # function, a package, a list of them -- and a picker that pretended
-                  # otherwise would write plausible-looking wrong configuration. So it writes
-                  # what it does know, commented out, in the right file, and leaves the
-                  # expression to you -- seeded with the option's own example (or its
-                  # default, when there is no example) as a starting shape to edit,
-                  # rather than a shape to invent (#581).
-                  #
-                  # The seed lines are COMMENTS above the marked line, and the marked
-                  # line itself keeps the exact `# <path> = ;  #@opt <path>` bytes:
-                  # nixarchy-opt-remove keys its walk up the comment block on that
-                  # shape, which is what lets a scaffold leave byte for byte
-                  # (checks.options asserts it, seed included).
-                  seed=$(opt_field "$path" example || true)
-                  seedsrc=example
-                  if [ -z "$seed" ]; then
-                    seed=$(opt_field "$path" default || true)
-                    seedsrc=default
-                  fi
-                  {
-                    printf '\n'
-                    grep -P "^opt\t\Q$path\E\t" "$index" | head -1 |
-                      cut -f5 | sed 's/\\n/\n/g' | sed 's/^/  # /'
-                    if [ -n "$seed" ]; then
-                      printf '  #\n'
-                      printf "  # a starting shape, from the option's %s -- yours to edit:\n" "$seedsrc"
-                      printf '%s\n' "$seed" | awk -v p="$path" 'NR == 1 { $0 = p " = " $0 } { print "  #   " $0 }'
-                    fi
-                    printf '  # %s = ;  #@opt %s\n' "$path" "$path"
-                  } > "$cache/scaffold.$$"
-                  insert_line "$(cat "$cache/scaffold.$$")
-                "
-                  rm -f "$cache/scaffold.$$"
-                  echo "scaffolded $path (commented out -- set the value and uncomment it)"
-                  changed=1
-                  written=$((written + 1))
-                  scaffolded=$((scaffolded + 1))
-                }
-
-                # Why: modules/AGENTS.md#ask-flathub-org-directly
-                flathub_search() {
-                  local query hits picked id line
-                  # /dev/tty, because stdin here is the picker's selection --
-                  # this function is called from inside `done <<< "$selection"`,
-                  # which has already consumed it. Without this the read hits
-                  # EOF, `|| return 0` fires, and the row that exists for
-                  # "the other three sources have failed you" silently does
-                  # NOTHING. It failed quietly, which is why it survived (#596).
-                  read -r -p "Search Flathub for: " query < /dev/tty || return 0
-                  [ -n "$query" ] || return 0
-
-                  # --fail so an HTTP error is an error rather than an error page
-                  # parsed as zero results, which is the failure that looks like
-                  # "nothing matched" and sends someone hunting for a typo.
-                  if ! hits=$(curl -sS --fail -m 20 \
-                        -X POST https://flathub.org/api/v2/search \
-                        -H 'Content-Type: application/json' \
-                        -d "$(jq -nc --arg q "$query" '{query: $q, filters: []}')" 2>&1); then
-                    echo "nixarchy: could not reach flathub.org." >&2
-                    echo "  Searching Flathub needs a network; the other rows in this picker do not." >&2
-                    return 1
-                  fi
-
-                  picked=$(printf '%s' "$hits" |
-                    jq -r '.hits[]? | [.app_id, (.name // ""), ((.summary // "") | gsub("[\n\t]"; " "))] | @tsv' |
-                    fzf --multi --with-nth=2.. --delimiter='\t' \
-                        --prompt="flathub > " --height=80% \
-                        --preview='echo {1}' --preview-window=down,3) || return 0
-                  [ -n "$picked" ] || { echo "nothing on Flathub matched '$query'"; return 0; }
-
-                  while IFS=$'\t' read -r id _ _; do
-                    [ -n "$id" ] || continue
-                    # In the catalogue? Then it has been checked, and the normal
-                    # writer handles it.
-                    if grep -qE "^flatpak\t[^\t]+\t" "$index" &&
-                       awk -F'\t' -v i="$id" '$1=="flatpak" && $2==i {found=1} END {exit !found}' "$index"; then
-                      nixarchy-service-enable "$id" && changed=1
-                      continue
-                    fi
-                    # Otherwise print it rather than write it. Nixarchy has not
-                    # checked this app, and generating configuration for an id
-                    # nobody has looked at is not a thing to do on someone's
-                    # behalf.
-                    line="  services.flatpak.packages = [ \"$id\" ];"
-                    echo
-                    echo "$id is not in nixarchy's catalogue, so nothing was written."
-                    echo "Add this to ~/.config/nixarchy/advanced.nix yourself:"
-                    echo
-                    echo "$line"
-                  done <<< "$picked"
-                  echo
-                  echo "then run 'nixarchy-apply'"
-                }
-
-                pkg_batch=()
-                while IFS=$'\t' read -r kind name _ type _; do
-                  [ -n "$kind" ] || continue
-                  case "$kind" in
-                    app) nixarchy-app-enable "$name" && changed=1 ;;
-                    # Collected, not dispatched one by one: pkg-add resolves its
-                    # names in a single nixpkgs evaluation and sends a single
-                    # notification, so a multi-select must arrive as one call
-                    # to get one of each rather than N (#496).
-                    pkg) pkg_batch+=("$name") ;;
-                    opt) add_option "$name" "$type" ;;
-                    # nixarchy-service-enable, not a flatpak-specific command:
-                    # the rows live in services.nix and carry the same #@ markers,
-                    # so the writer that already exists is the right one.
-                    flatpak)
-                      if [ "$name" = "flathub" ]; then
-                        flathub_search
-                      else
-                        nixarchy-service-enable "$name" && changed=1
+                      if [ -n "$value" ]; then
+                        insert_line "\n  $path = $value;  #@opt $path\n"
+                        echo "set $path = $value"
+                        changed=1
+                        written=$((written + 1))
+                        return 0
                       fi
-                      ;;
-                    # Software in no repository at all (#581). The binary, not
-                    # `nixarchy pkg new`: the same session-PATH route every
-                    # other writer in this case uses, without leaning on the
-                    # dispatcher's routing. /dev/tty, because stdin here is
-                    # the selection herestring and a bare read would eat the
-                    # next picked row. `|| true`: a draft that fails to build
-                    # is a reported outcome, not a reason to abort the loop.
-                    # No changed=1 -- nixarchy-pkg-new validates its own write
-                    # and prints its own guidance.
-                    new)
-                      if read -r -p "Source URL (e.g. https://github.com/someone/tool): " url < /dev/tty; then
-                        [ -z "$url" ] || nixarchy-pkg-new "$url" || true
+
+                      # Anything else. An option's value is arbitrary Nix -- a submodule, a
+                      # function, a package, a list of them -- and a picker that pretended
+                      # otherwise would write plausible-looking wrong configuration. So it writes
+                      # what it does know, commented out, in the right file, and leaves the
+                      # expression to you -- seeded with the option's own example (or its
+                      # default, when there is no example) as a starting shape to edit,
+                      # rather than a shape to invent (#581).
+                      #
+                      # The seed lines are COMMENTS above the marked line, and the marked
+                      # line itself keeps the exact `# <path> = ;  #@opt <path>` bytes:
+                      # nixarchy-opt-remove keys its walk up the comment block on that
+                      # shape, which is what lets a scaffold leave byte for byte
+                      # (checks.options asserts it, seed included).
+                      seed=$(opt_field "$path" example || true)
+                      seedsrc=example
+                      if [ -z "$seed" ]; then
+                        seed=$(opt_field "$path" default || true)
+                        seedsrc=default
                       fi
-                      ;;
-                  esac
-                done <<< "$selection"
+                      {
+                        printf '\n'
+                        grep -P "^opt\t\Q$path\E\t" "$index" | head -1 |
+                          cut -f5 | sed 's/\\n/\n/g' | sed 's/^/  # /'
+                        if [ -n "$seed" ]; then
+                          printf '  #\n'
+                          printf "  # a starting shape, from the option's %s -- yours to edit:\n" "$seedsrc"
+                          printf '%s\n' "$seed" | awk -v p="$path" 'NR == 1 { $0 = p " = " $0 } { print "  #   " $0 }'
+                        fi
+                        printf '  # %s = ;  #@opt %s\n' "$path" "$path"
+                      } > "$cache/scaffold.$$"
+                      insert_line "$(cat "$cache/scaffold.$$")
+                    "
+                      rm -f "$cache/scaffold.$$"
+                      echo "scaffolded $path (commented out -- set the value and uncomment it)"
+                      changed=1
+                      written=$((written + 1))
+                      scaffolded=$((scaffolded + 1))
+                    }
 
-                if [ ''${#pkg_batch[@]} -gt 0 ]; then
-                  # Judged by the file, not the exit code: pkg-add exits
-                  # nonzero when ANY name missed, and inside the picker a miss
-                  # is an index bug -- but the names that did resolve are
-                  # committed, and they still deserve the summary below.
-                  pre=$(cksum < "$file")
-                  nixarchy-pkg-add "''${pkg_batch[@]}" || true
-                  [ "$pre" = "$(cksum < "$file")" ] || changed=1
-                fi
+                    # Why: modules/AGENTS.md#ask-flathub-org-directly
+                    flathub_search() {
+                      local query hits picked id line
+                      # /dev/tty, because stdin here is the picker's selection --
+                      # this function is called from inside `done <<< "$selection"`,
+                      # which has already consumed it. Without this the read hits
+                      # EOF, `|| return 0` fires, and the row that exists for
+                      # "the other three sources have failed you" silently does
+                      # NOTHING. It failed quietly, which is why it survived (#596).
+                      read -r -p "Search Flathub for: " query < /dev/tty || return 0
+                      [ -n "$query" ] || return 0
 
-                [ "$changed" = 1 ] || exit 0
-
-                if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
-                  cp "$backup" "$file"
-                  echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
-                  exit 1
-                fi
-
-                if [ "$scaffolded" -gt 0 ]; then
-                  echo
-                  echo "$scaffolded option(s) are commented out in $file. Edit them first:"
-                  echo "  omarchy-launch-editor $file"
-                fi
-
-                # Only when this script wrote something itself: nixarchy-app-enable and
-                # nixarchy-pkg-add each print this line already, and saying it twice reads
-                # like two separate things happened.
-                if [ "$written" -gt 0 ]; then
-                  echo
-                  echo "run 'nixarchy-apply' when you have picked everything you want"
-                fi
-              '';
-            })
-
-            # `nixarchy vm <subcommand>`. Its own file for the same reason as
-            # secret.nix below: `checks.microvm-template` (#224) has to run
-            # the real command. See pkgs/microvm.nix for what it does and why.
-            (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
-
-            # `nixarchy secret <subcommand>`. Its own file for the same reason
-            # as the two above: tests/menu-verbs.nix reads the verbs out of
-            # the command the Secrets rows exec. See pkgs/secret.nix for why
-            # the host's age identity never leaves root, and why the
-            # declaration line is printed rather than written.
-            (pkgs.callPackage ../pkgs/secret.nix { })
-
-            # `nixarchy-plugin <id>`, what the default plugins' rows and binds
-            # call. Its own file so tests/options.nix runs the real command.
-            (pkgs.callPackage ../pkgs/nixarchy-plugin.nix { omarchy = cfg.package; })
-
-            # Why: modules/AGENTS.md#one-name-for-the-commands-this-repo-adds-and-a-way
-            (pkgs.writeShellApplication {
-              name = "nixarchy";
-              runtimeInputs = [
-                pkgs.coreutils
-                cfg.package # omarchy, for the fallthrough
-              ];
-              text = ''
-                # Routed by hand rather than by scanning a bin/ directory the way
-                # upstream's dispatcher does: these commands are separate
-                # derivations on PATH, not siblings in one tree, so there is no
-                # directory to scan. A handful of entries is not a table worth
-                # generating.
-                case "''${1:-}" in
-                  search)   shift; exec nixarchy-search "$@" ;;
-                  apply)    shift; exec nixarchy-apply "$@" ;;
-                  verify)   shift; exec nixarchy-verify "$@" ;;
-                  # Omarchy's `version` answers only "which Omarchy"; this prints
-                  # both, which is the question someone on nixarchy is asking.
-                  version)  shift; exec nixarchy-version "$@" ;;
-                  explain)  shift; exec nixarchy-explain "$@" ;;
-                  doctor)
-                    if command -v nixarchy-doctor >/dev/null 2>&1; then
-                      shift; exec nixarchy-doctor "$@"
-                    fi
-                    echo "The doctor is not installed -- it runs from the flake, so that it" >&2
-                    echo "works on a machine that has not adopted nixarchy yet:" >&2
-                    echo >&2
-                    echo "  nix run github:olafkfreund/nixarchy#doctor" >&2
-                    exit 1
-                    ;;
-                  pkg)
-                    case "''${2:-}" in
-                      add) shift 2; exec nixarchy-pkg-add "$@" ;;
-                      remove) shift 2; exec nixarchy-pkg-remove "$@" ;;
-                      new) shift 2; exec nixarchy-pkg-new "$@" ;;
-                      undraft) shift 2; exec nixarchy-pkg-undraft "$@" ;;
-
-                    esac
-                    ;;
-                  app)
-                    case "''${2:-}" in
-                      enable)  shift 2; exec nixarchy-app-enable "$@" ;;
-                      disable) shift 2; exec nixarchy-app-disable "$@" ;;
-                      remove)  shift 2; exec nixarchy-app-remove "$@" ;;
-                    esac
-                    ;;
-                  # `nixarchy dev ...` is the terminal half of the Dev
-                  # environments panel (#802): the plugin's own CLI, which
-                  # comes with the panel and so is here wherever the devenv
-                  # service is on. Every subcommand is forwarded, not just
-                  # init, because the CLI grew list, templates, status and
-                  # remove and a second list here would drift from it.
-                  #
-                  # Where devenv is off the CLI is absent, and this says what
-                  # to turn on -- the same answer `nixarchy dev init` gave on
-                  # such a machine before the plugin replaced it.
-                  dev)
-                    shift
-                    if command -v nixarchy-devenv >/dev/null 2>&1; then
-                      exec nixarchy-devenv "$@"
-                    fi
-                    echo "nixarchy: devenv is not enabled on this machine, so there is" >&2
-                    echo "nothing for 'nixarchy dev' to drive." >&2
-                    echo >&2
-                    echo "  nixarchy-service-enable devenv && nixarchy apply" >&2
-                    echo >&2
-                    echo "or, in your own configuration:" >&2
-                    echo >&2
-                    echo "  programs.nixarchy.services.devenv.enable = true;" >&2
-                    exit 1
-                    ;;
-                  # Without this row `nixarchy try foo` falls through to
-                  # `exec omarchy try ...` and dies as "Unknown Omarchy command"
-                  # -- omarchy's own dispatcher discovers only omarchy-*
-                  # siblings, and nixarchy-try is not one.
-                  #
-                  # It is the Search picker's ctrl-t path too, so the whole
-                  # feature is unreachable without it. Both halves shipped
-                  # green: the picker's check greps that nixarchy-search SAYS
-                  # `nixarchy try `, which is the call site, not the route.
-                  # checks.options now asserts the route.
-                  try) shift; exec nixarchy-try "$@" ;;
-                  vm) shift; exec nixarchy-vm "$@" ;;
-                  # Retired (#801): the Distrobox panel does all of it. Not
-                  # listed in the usage above any more -- a help text naming a
-                  # verb that prints "is retired" is the #538 defect wearing
-                  # the opposite coat.
-                  # A pointer for one release rather than falling through to
-                  # `exec omarchy "$@"`, which would answer a command this
-                  # project shipped with "Unknown Omarchy command: omarchy
-                  # box" -- the #538 failure, in reverse.
-                  box) echo "nixarchy box is retired -- boxes live in the Distrobox panel" \
-                            "(Super+Alt+D, or the Boxes row in the menu)." >&2; exit 1 ;;
-                  secret) shift; exec nixarchy-secret "$@" ;;
-
-                  # The rest of them (#538). Every one of these was shipped,
-                  # documented, and unreachable: without a row here the command
-                  # reaches `exec omarchy "$@"`, and Omarchy's own dispatcher
-                  # builds `omarchy-$(join_words ...)` and globs `omarchy-*`
-                  # only -- so `nixarchy channel stable` died as "Unknown
-                  # Omarchy command: omarchy channel stable".
-                  #
-                  # `try` was found by hand and fixed alone. Nothing generalised
-                  # it, and the same bug was sitting in ten siblings. What makes
-                  # that not happen again is not this list -- it is
-                  # checks.options deriving the list from the commands' own
-                  # `# omarchy:examples=nixarchy <verb>` headers and asserting
-                  # every one of them routes. A command declares the verb it
-                  # answers to; the check makes the dispatcher agree.
-                  android) shift; exec nixarchy-android "$@" ;;
-                  ask) shift; exec nixarchy-ask "$@" ;;
-                  channel) shift; exec nixarchy-channel "$@" ;;
-                  local-ai) shift; exec nixarchy-local-ai "$@" ;;
-                  preview) shift; exec nixarchy-preview "$@" ;;
-                  remote) shift; exec nixarchy-remote "$@" ;;
-                  rollback) shift; exec nixarchy-rollback "$@" ;;
-                  unfreeze) shift; exec nixarchy-unfreeze "$@" ;;
-
-                  # Two-word verbs, in the shape `pkg`, `app` and `dev` already
-                  # use. These are the ones a route check that matches
-                  # `^ *<verb>)` cannot see, which is why the first version of
-                  # that check passed over them.
-                  #
-                  # No bare fallthrough on the inner case: `nixarchy config`
-                  # with no second word drops out of the inner `case` and
-                  # reaches `exec omarchy "$@"`, which is the right answer --
-                  # Omarchy has its own `config` and this port does not take the
-                  # word from it.
-                  config)
-                    case "''${2:-}" in
-                      repo) shift 2; exec nixarchy-config-repo "$@" ;;
-                    esac
-                    ;;
-                  home)
-                    case "''${2:-}" in
-                      backup) shift 2; exec nixarchy-home-backup "$@" ;;
-                    esac
-                    ;;
-                  reinstall)
-                    case "''${2:-}" in
-                      iso) shift 2; exec nixarchy-reinstall-iso "$@" ;;
-                    esac
-                    ;;
-                  ""|--help|-h|help)
-                    cat <<'USAGE'
-                nixarchy -- the Omarchy desktop, vendored for NixOS.
-
-                Commands this port adds:
-
-                  nixarchy search [query]     Every package, NixOS option and app, in one picker
-                  nixarchy pkg add <attr>     Add a nixpkgs package to the app selection
-                  nixarchy pkg remove [attr]  Take one out again (no argument picks interactively)
-                  nixarchy pkg new <url>      Draft a derivation for software in no repository
-                  nixarchy pkg undraft [name] Take a draft's line out again (the draft file stays)
-                  nixarchy app enable <id>    Select an app from the curated list
-                  nixarchy app disable <id>   Deselect one
-                  nixarchy app remove         Pick apps, packages and options to remove
-                  nixarchy apply              Copy the selection into your flake and rebuild
-                  nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
-                  nixarchy dev list --json    Every devenv project under your roots
-                                              The panel is Super+Alt+E, or Apps > Dev environments
-                  nixarchy try <app|attr>     Run something once without installing it
-                  nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
-                  nixarchy doctor             What this machine needs to run nixarchy
-                  nixarchy verify             Check the hardware nixarchy cannot test in a VM
-                  nixarchy version            The Omarchy version and the nixarchy revision
-                  nixarchy explain            What a Nix error means -- pipe a failure into it
-
-                This machine:
-
-                  nixarchy channel [stable|unstable]  Which nixpkgs this machine follows
-                  nixarchy preview            Boot this configuration in a VM before switching
-                  nixarchy rollback           Go back to an earlier system generation
-                  nixarchy unfreeze           Let this machine receive updates again
-                  nixarchy config repo        Put /etc/nixos in git, with a remote and CI
-                  nixarchy secret <subcommand> Passwords and keys, encrypted -- 'nixarchy secret help'
-                  nixarchy home backup        Back up the desktop configuration in your home
-                  nixarchy reinstall iso      Build an image that reinstalls this machine
-                  nixarchy android            Connect an Android phone over Wi-Fi, for scrcpy
-                  nixarchy ask                Ask the default agent, with the right skill chosen
-                  nixarchy local-ai           Set up the local language model
-
-                Everything else is Omarchy's own, and reaches it unchanged:
-
-                  nixarchy theme set <name>   = omarchy theme set <name>
-                  nixarchy update             = omarchy update
-                  omarchy commands            Every one of them
-
-                Both names work for those. They are the same scripts as on Arch,
-                which is why they keep Omarchy's name: a bug in one is a bug to
-                report upstream, not here.
-                USAGE
-                    exit 0
-                    ;;
-                esac
-
-                # Anything else is Omarchy's. Not a warning and not a wrapper:
-                # exec, so the exit status, the terminal and the signals are the
-                # command's own.
-                exec omarchy "$@"
-              '';
-            })
-
-            # Copies the selection into the flake and switches. Kept separate
-            # from enabling so several apps can be picked before anything builds.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-apply";
-              runtimeInputs = [
-                (pkgs.callPackage ../pkgs/branch-guard.nix { })
-                pkgs.coreutils
-                pkgs.diffutils
-                pkgs.gnugrep
-                pkgs.git
-                pkgs.gnused
-                # nh rather than nixos-rebuild: a progress view that says what is
-                # building and how far along it is, and a package diff against the
-                # running generation once it lands. Both matter more here than
-                # anywhere else -- this is the command a menu pick runs, in front
-                # of someone who just clicked "install" and has no other signal
-                # that anything is happening. It is also the smaller closure of
-                # the two, by about 200 MiB.
-                pkgs.nh
-                # systemd-run and systemctl, for --detach (#765).
-                pkgs.systemd
-                # --status --json, which is the CONTRACT half of that output
-                # and so must be valid JSON rather than a printf that happens
-                # to look like it (#986). Declared because this is a
-                # writeShellApplication inherits the caller's PATH after its
-                # runtimeInputs: an undeclared jq could work on one machine
-                # and produce a wrong answer on another.
-                pkgs.jq
-              ];
-              text = ''
-                # The two answers as flags, for a caller with no terminal (#765).
-                # Anything else exits 2: an unknown flag must never mean "switch".
-                yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation=""
-                expect=()
-                while [ $# -gt 0 ]; do
-                  case "$1" in
-                    --yes) yes=1 ;;
-                    --no-preview) nopreview=1 ;;
-                    --detach) detach=1 ;;
-                    --status) status=1 ;;
-                    --json) json=1 ;;
-                    --log) wantlog=1 ;;
-                    --follow) follow=1 ;;
-                    --invocation) shift; invocation=''${1:?--invocation needs an id} ;;
-                    # Repeatable, <part>=<sha256>. Opt-in on purpose (#979,
-                    # #967): a caller that checked a file says so, and one that
-                    # did not is neither protected nor blocked. The other shape
-                    # -- refuse every changed file from every caller -- shipped
-                    # and was reverted the same evening, because the callers
-                    # that cannot answer are exactly the ones it stopped.
-                    --expect-sha256) shift; expect+=("''${1:?--expect-sha256 needs <part>=<sha256>}") ;;
-                    # The --detach branch forwards these into the unit, and a
-                    # unit's command line is easier to read with one word per
-                    # pair. #986: before this they were dropped entirely, so a
-                    # caller that pinned what it checked and asked for a
-                    # detached build got an UNPINNED build and no warning --
-                    # exactly the guarantee the flag exists to give, missing in
-                    # the mode a panel actually uses.
-                    --expect-sha256=*) expect+=("''${1#--expect-sha256=}") ;;
-                    *)
-                      echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
-                      echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
-                      echo "       nixarchy-apply --status [--json]" >&2
-                      echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
-                      echo "" >&2
-                      echo "  --json is a stable contract; the plain --status output is NOT." >&2
-                      exit 2
-                      ;;
-                  esac
-                  shift
-                done
-
-                file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
-                flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
-
-                # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
-                # A supervised user unit, so a closed window or a shell restart
-                # cannot kill a switch halfway; its state and log are the unit's.
-                # The detached rebuild's state, for callers (#979).
-                #
-                # SubState and InvocationID decide "none", NEVER Result: the
-                # unit runs with RemainAfterExit and without --collect (see the
-                # detach block below for why), and a unit that has never run
-                # reads Result=success ExecMainStatus=0. Reading Result first
-                # answers "succeeded" for a rebuild that never happened, which
-                # is the one wrong answer that matters.
-                rebuild_state() {
-                  local sub res code inv key value props
-                  props=$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null) || true
-                  while IFS='=' read -r key value; do
-                    case "$key" in
-                      SubState) sub=$value ;;
-                      Result) res=$value ;;
-                      ExecMainStatus) code=$value ;;
-                      InvocationID) inv=$value ;;
-                    esac
-                  done <<< "$props"
-                  sub=''${sub:-} res=''${res:-} code=''${code:-} inv=''${inv:-}
-                  # `dead` is NONE whether or not an InvocationID survives it
-                  # (#986 item 3). A unit left over from an earlier session --
-                  # stopped, or reset-failed -- keeps its InvocationID while
-                  # holding no result for THIS session, and requiring an empty
-                  # id here reported that stale run as the current one. That is
-                  # the same class as reading Result first, which the comment
-                  # above already warns about: an answer about a run that is
-                  # not the one being asked about.
-                  if [ -z "$sub" ] || [ "$sub" = dead ]; then
-                    printf 'none\t\t\t\n'
-                    return
-                  fi
-                  case "$sub" in
-                    running | start*) printf 'running\t%s\t%s\t%s\n' "$res" "$code" "$inv" ;;
-                    *)
-                      if [ "$res" = success ] && [ "''${code:-0}" = 0 ]; then
-                        printf 'succeeded\t%s\t%s\t%s\n' "$res" "$code" "$inv"
-                      else
-                        printf 'failed\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                      # --fail so an HTTP error is an error rather than an error page
+                      # parsed as zero results, which is the failure that looks like
+                      # "nothing matched" and sends someone hunting for a typo.
+                      if ! hits=$(curl -sS --fail -m 20 \
+                            -X POST https://flathub.org/api/v2/search \
+                            -H 'Content-Type: application/json' \
+                            -d "$(jq -nc --arg q "$query" '{query: $q, filters: []}')" 2>&1); then
+                        echo "nixarchy: could not reach flathub.org." >&2
+                        echo "  Searching Flathub needs a network; the other rows in this picker do not." >&2
+                        return 1
                       fi
-                      ;;
-                  esac
-                }
 
-                # Queries act and exit: they are not an apply.
-                if [ -n "$status" ]; then
-                  IFS=$'\t' read -r st res code inv < <(rebuild_state)
-                  if [ "$st" != failed ]; then
-                    code=0
-                  else
-                    case "$code" in
-                      "" | *[!0-9]*) code=1 ;;
-                      *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
-                    esac
-                  fi
-                  if [ -n "$json" ]; then
-                    # jq, not printf: --json is the CONTRACT half of this
-                    # output (nixarchy-flatsnap parses it), and a contract that
-                    # emits invalid JSON the first time systemd says something
-                    # with a quote in it is not one. `exit` stays a number and
-                    # `invocation` stays null-or-string.
-                    jq -cn --arg state "$st" --arg result "$res" \
-                      --argjson exit "$code" \
-                      --arg inv "$inv" \
-                      '{state: $state, result: $result, exit: $exit,
-                        invocation: (if $inv == "" then null else $inv end)}'
-                  else
-                    echo "$st''${inv:+ (invocation $inv)}"
-                  fi
-                  exit 0
-                fi
+                      picked=$(printf '%s' "$hits" |
+                        jq -r '.hits[]? | [.app_id, (.name // ""), ((.summary // "") | gsub("[\n\t]"; " "))] | @tsv' |
+                        fzf --multi --with-nth=2.. --delimiter='\t' \
+                            --prompt="flathub > " --height=80% \
+                            --preview='echo {1}' --preview-window=down,3) || return 0
+                      [ -n "$picked" ] || { echo "nothing on Flathub matched '$query'"; return 0; }
 
-                if [ -n "$wantlog" ]; then
-                  if [ -z "$invocation" ]; then
-                    IFS=$'\t' read -r _ _ _ invocation < <(rebuild_state)
-                  fi
-                  # That run, not everything the unit ever did.
-                  # --no-pager and -o cat: a caller reading this is a script
-                  # or a panel, and a pager on a pipe is a hang rather than
-                  # output (#986 item 3). With no invocation to scope it -- a
-                  # machine that has never detached -- the unit's whole history
-                  # would be dumped, so it is capped.
-                  jscope=()
-                  if [ -n "$invocation" ]; then
-                    jscope=(--invocation="$invocation")
-                  else
-                    # No invocation to scope it: a machine that has never
-                    # detached would otherwise get the unit's whole history.
-                    jscope=(-n 200)
-                  fi
-                  [ -n "$follow" ] && jscope+=(-f)
-                  exec journalctl --user -u nixarchy-rebuild --no-pager -o cat "''${jscope[@]}"
-                fi
-
-                # Refuse a checkout on a branch nobody chose to deploy (#1037):
-                # after the read-only modes above, before anything is written.
-                # Not in the --detach parent -- the panel ignores its output,
-                # so the unit refuses instead, where the panel can see it.
-                [ -n "$detach" ] || nixarchy-branch-guard "$flake"
-
-                if [ -n "$detach" ]; then
-                  [ -n "$yes" ] || {
-                    echo "nixarchy-apply: --detach needs --yes: a unit has no terminal to answer" >&2
-                    exit 2
-                  }
-                  # SubState, not ActiveState: RemainAfterExit keeps a finished
-                  # rebuild "active" (SubState exited) so its result stays readable.
-                  case "$(systemctl --user show -p SubState --value nixarchy-rebuild 2>/dev/null || true)" in
-                    running | start*)
-                      echo "nixarchy-apply: a rebuild is already running." >&2
-                      echo "  Follow it with: journalctl --user -fu nixarchy-rebuild" >&2
-                      exit 3
-                      ;;
-                    "" | dead) ;;
-                    *)
-                      systemctl --user stop nixarchy-rebuild 2>/dev/null || true
-                      systemctl --user reset-failed nixarchy-rebuild 2>/dev/null || true
-                      ;;
-                  esac
-                  # No NoNewPrivileges: elevation goes through the setuid pkexec.
-                  # Rate limit off: a build log is bursty, and it is the log a
-                  # failure needs. No --collect: it unloads a FAILED unit at once,
-                  # which then reads Result=success -- the one result that matters.
-                  systemd-run --user --unit=nixarchy-rebuild \
-                    -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
-                    --setenv=NIXARCHY_FLAKE="$flake" \
-                    --setenv=ALLOW_BRANCH_DEPLOY="''${ALLOW_BRANCH_DEPLOY:-}" \
-                    --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
-                    --setenv=XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
-                    --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
-                    -- "$(readlink -f "$0")" --yes --no-preview \
-                    ''${expect+"''${expect[@]/#/--expect-sha256=}"}
-                  echo "Rebuilding in the background. Follow it with:"
-                  echo "  journalctl --user -fu nixarchy-rebuild"
-                  exit 0
-                fi
-
-                # Why: modules/AGENTS.md#where-the-selection-lands
-                base="$flake"
-                # uname -n, not hostname(1): the latter would depend on the
-                # caller's PATH. uname is already supplied by coreutils and
-                # reports the same name.
-                host=$(uname -n)
-                if [ -d "$flake/hosts/$host" ]; then
-                  base="$flake/hosts/$host"
-                fi
-                dest="$base/nixarchy-apps.nix"
-
-                [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
-                [ -d "$flake" ] || {
-                  echo "nixarchy: flake directory '$flake' does not exist." >&2
-                  echo "Set programs.nixarchy.flake, or export NIXARCHY_FLAKE." >&2
-                  exit 1
-                }
-
-                echo "Enabled apps:"
-                grep -E "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || echo "  (none)"
-                echo
-
-                # Why: modules/AGENTS.md#a-flake-cannot-read-a-file-outside-its-own-tree-so
-                srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
-                mkdir -p "$base/nixarchy"
-
-                imports=""
-                copied=""
-                # What apply last wrote to each copy, so an edit made in the flake
-                # itself is told apart from a new pick -- and kept, not overwritten.
-                applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
-                mkdir -p "$applied"
-                # flatsnap: written by the nixarchy-flatsnap plugin (#904). Like the
-                # others it is copied only when it exists, so a machine without
-                # the plugin imports exactly what it did before.
-                # #979: build only what the caller checked. Opt-in -- an empty
-                # array means nothing is asserted and nothing is refused, which
-                # is why this can exist at all where #967's blanket refusal
-                # could not. Checked BEFORE the copy loop, so a mismatch copies
-                # nothing and builds nothing.
-                # A SNAPSHOT is taken and the snapshot is hashed, so what gets
-                # built is the exact bytes that were checked (#986 item 2).
-                # Hashing the file and copying it later reads it twice, 28 lines
-                # apart with nothing held in between -- a write in that window
-                # was built unchecked, which is the guarantee this flag exists
-                # to give. No shared lock is needed for this: the caller's file
-                # can change freely afterwards, and what is built is still what
-                # it pinned.
-                pinned=$(mktemp -d)
-                trap 'rm -rf "$pinned"' EXIT
-                for pair in ''${expect+"''${expect[@]}"}; do
-                  part=''${pair%%=*}
-                  want=''${pair#*=}
-                  file="$srcdir/$part.nix"
-                  if [ -f "$file" ]; then
-                    cp "$file" "$pinned/$part.nix"
-                    have=$(sha256sum <"$pinned/$part.nix" | cut -d" " -f1)
-                  else
-                    have=""
-                  fi
-                  if [ "$have" != "$want" ]; then
-                    echo "nixarchy-apply: $part.nix is not what you checked." >&2
-                    echo "  you passed: $want" >&2
-                    echo "  on disk:    ''${have:-<no such file>}" >&2
-                    echo "  Nothing was copied and nothing was built." >&2
-                    exit 4
-                  fi
-                done
-
-                for part in apps services advanced flatsnap; do
-                  # The snapshot, for a part the caller pinned: the bytes that
-                  # were hashed above, not whatever is on disk now (#986).
-                  # `srcmsg` is what a MESSAGE names, always the user's own
-                  # file -- telling somebody to edit a temp directory would be
-                  # worse than the race this fixes.
-                  srcmsg="$srcdir/$part.nix"
-                  if [ -f "$pinned/$part.nix" ]; then
-                    src="$pinned/$part.nix"
-                  else
-                    src="$srcmsg"
-                  fi
-                  [ -f "$src" ] || continue
-
-                  dst="$base/nixarchy/$part.nix"
-                  imports="$imports ./nixarchy/$part.nix"
-                  record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
-                  if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
-                    sha256sum <"$dst" >"$record"
-                    continue
-                  fi
-                  if [ -f "$dst" ] && [ -f "$record" ] && ! sha256sum <"$dst" | cmp -s - "$record"; then
-                    kept="$applied/$part.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)"
-                    cp "$dst" "$kept"
-                    echo "NOTE: $dst was edited in the flake since the last apply."
-                    echo "  Your version is kept at $kept -- move the change into"
-                    echo "  $srcmsg, which is the file apply copies from."
-                  fi
-                  cp "$src" "$dst"
-                  sha256sum <"$dst" >"$record"
-                  copied="$copied $part"
-                done
-
-                # Draft derivations from `nixarchy pkg new` ride along:
-                # apps.nix names them as ./packages/<name>.nix, a path
-                # relative to the COPY, so they must sit beside it or the
-                # uncommented line fails evaluation with "path does not
-                # exist". Copies accumulate and are never deleted here --
-                # removing a draft from the flake is an edit to a tree the
-                # user owns, not this tool's call.
-                if [ -d "$srcdir/packages" ]; then
-                  mkdir -p "$base/nixarchy/packages"
-                  for src in "$srcdir"/packages/*.nix; do
-                    [ -f "$src" ] || continue
-                    dst="$base/nixarchy/packages/$(basename "$src")"
-                    if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
-                      continue
-                    fi
-                    cp "$src" "$dst"
-                    copied="$copied packages/$(basename "$src")"
-                  done
-                fi
-
-                # Only what exists is imported. A machine seeded before
-                # services.nix existed has two files, not three, and a stub
-                # importing a path that is not there fails to evaluate.
-                {
-                  echo "# Generated by nixarchy-apply. Do not edit -- your files"
-                  echo "# are ~/.config/nixarchy/{apps,services,advanced,flatsnap}.nix and"
-                  echo "# this is regenerated from them on every apply."
-                  echo "{"
-                  echo "  imports = [$imports ];"
-                  echo "}"
-                } >"$dest"
-
-                if [ -n "$copied" ]; then
-                  echo "copied ->$copied"
-                else
-                  echo "$base is already up to date."
-                fi
-
-                # Why: modules/AGENTS.md#stage-what-was-written-or-a-flake-in-a-git-worktre
-                if [ -e "$flake/.git" ]; then
-                  # -C "$base", not "$flake": the copies went to whichever
-                  # directory base names, and staging the root staged nothing on
-                  # a hosts/<hostname> layout (#720).
-                  git -C "$base" add -A -- nixarchy nixarchy-apps.nix 2>/dev/null || {
-                    echo
-                    echo "NOTE: could not stage the copies in $flake."
-                    echo "  A flake in a git repository sees only tracked files,"
-                    echo "  so the rebuild may fail with \"path does not exist\"."
-                    echo "  Fix with: sudo git -C $base add -A"
-                    echo
-                  }
-                fi
-
-                # Why: modules/AGENTS.md#whether-anything-in-the-flake-actually-imports-it
-                # Uncommented mentions only: a `# imports = [ ./nixarchy-apps.nix ];`
-                # left in a file used to silence this warning.
-                # Each mention is RESOLVED against the file it appears in and
-                # compared with what was just written, rather than matched by
-                # name anywhere in the flake (#734). A name match was satisfied
-                # by a STALE root-level import on a flake predating the
-                # hosts/<hostname> layout: apply wrote hosts/<name>/, nothing
-                # imported it, no warning appeared, and the app set FROZE -- the
-                # root copy kept serving the old selection, so apps enabled
-                # before the move went on working and new ones never appeared.
-                # Nothing looks broken, which is why it went unreported.
-                destreal=$(readlink -m "$dest")
-                importers=""
-                # Process substitution, not a pipe: a piped `while read` runs in
-                # a subshell and `importers` would be empty afterwards, so this
-                # would warn on every apply. Empty output is a legitimate answer
-                # here (nothing imports it) and is the safe direction to fail.
-                while IFS= read -r candidate; do
-                  case "$candidate" in */nixarchy-apps.nix) continue ;; esac
-                  while IFS= read -r ref; do
-                    [ "$(readlink -m "$(dirname "$candidate")/$ref")" = "$destreal" ] || continue
-                    importers="$importers $candidate"
-                    break
-                  done < <(grep -E '^[^#]*nixarchy-apps\.nix' "$candidate" |
-                    grep -oE '[^[:space:]"]*nixarchy-apps\.nix')
-                done < <(grep -rlE '^[^#]*nixarchy-apps\.nix' "$flake" --include='*.nix' 2>/dev/null)
-
-                if [ -z "$importers" ]; then
-                  echo
-                  echo "WARNING: nothing in $flake imports $dest."
-                  echo
-                  echo "  The selection has been copied, and a rebuild will"
-                  echo "  ignore it: every app you enable will look installed"
-                  echo "  and never be built."
-                  echo
-                  echo "  Add it to this host's configuration:"
-                  echo "    imports = [ ./nixarchy-apps.nix ];"
-                  echo
-                  echo "  The path is relative to the file you put it in, and"
-                  echo "  must resolve to what apply just wrote:"
-                  echo "    $dest"
-                  echo
-                  echo "  A root-level nixarchy-apps.nix imported from elsewhere"
-                  echo "  does NOT count despite the matching name: this"
-                  echo "  selection would be ignored and the old one kept (#734)."
-                  echo
-                fi
-
-                # The offer, at the one moment somebody actually wants it
-                # (#488): the selection is copied, the switch is the next
-                # keypress, and a look before leaping costs a question.
-                #
-                # `command -v`, because nixarchy-preview ships in the omarchy
-                # package rather than in this script's runtimeInputs -- it is
-                # reached through the session PATH writeShellApplication
-                # prepends to, and on a machine without the package the offer
-                # must vanish rather than break the apply.
-                #
-                # `|| true`: a refused preflight (or a preview closed with a
-                # nonzero status) must land back at the switch question, not
-                # kill the apply under set -e.
-                # `|| reply=""` on every prompt, because EOF is not a crash.
-                #
-                # `read` returns non-zero at end of input, and under
-                # writeShellApplication's `set -e` that KILLS the script. So the
-                # moment this file grew a second prompt, `echo n | nixarchy-apply`
-                # -- one line, two reads -- started exiting 1: the first read took
-                # the "n", the second hit EOF. checks.session drives exactly that
-                # and went red on it.
-                #
-                # Treating EOF as an empty answer is also the right behaviour
-                # rather than a test accommodation: a piped or non-interactive
-                # apply should decline to switch, not die halfway through.
-                # --no-preview and --yes answer the two questions instead; EOF
-                # still declines when they are not given.
-                if [ -z "$nopreview" ] && command -v nixarchy-preview >/dev/null 2>&1; then
-                  read -r -p "Preview in a VM first? [y/N] " reply || reply=""
-                  case "$reply" in
-                    [yY]*) nixarchy-preview || true ;;
-                  esac
-                fi
-
-                if [ -n "$yes" ]; then
-                  reply=y
-                else
-                  read -r -p "Build and switch now? [y/N] " reply || reply=""
-                fi
-                case "$reply" in
-                  # No sudo: nh elevates itself, and wrapping it means the
-                  # elevation happens before nh can decide how to do it.
-                  #
-                  # The flake is passed explicitly rather than left to nh's own
-                  # default. nh reads $NH_FLAKE, which plenty of people already
-                  # export at whatever configuration they usually work on -- and
-                  # an app selection copied into one flake then switched into
-                  # another is a failure that looks like nothing happening.
-                  [yY]*)
-                    rc=0
-                    # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
-                    export NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}"
-                    # nom draws with escape codes, unreadable in a journal or a pipe.
-                    nomflag=""
-                    [ -t 1 ] || nomflag=--no-nom
-                    nh os switch ''${nomflag:+"$nomflag"} "$flake" || rc=$?
-                    if [ "$rc" -ne 0 ]; then
-                      # The selection stays copied, so every later apply or update
-                      # fails the same way until the cause is taken out. No claim
-                      # about what changed: nh activates before it sets the profile
-                      # and the bootloader, so a late failure leaves it switched.
+                      while IFS=$'\t' read -r id _ _; do
+                        [ -n "$id" ] || continue
+                        # In the catalogue? Then it has been checked, and the normal
+                        # writer handles it.
+                        if grep -qE "^flatpak\t[^\t]+\t" "$index" &&
+                           awk -F'\t' -v i="$id" '$1=="flatpak" && $2==i {found=1} END {exit !found}' "$index"; then
+                          nixarchy-service-enable "$id" && changed=1
+                          continue
+                        fi
+                        # Otherwise print it rather than write it. Nixarchy has not
+                        # checked this app, and generating configuration for an id
+                        # nobody has looked at is not a thing to do on someone's
+                        # behalf.
+                        line="  services.flatpak.packages = [ \"$id\" ];"
+                        echo
+                        echo "$id is not in nixarchy's catalogue, so nothing was written."
+                        echo "Add this to ~/.config/nixarchy/advanced.nix yourself:"
+                        echo
+                        echo "$line"
+                      done <<< "$picked"
                       echo
-                      echo "The rebuild failed (exit $rc). The log above says where."
-                      echo "  If it stopped while building, the running system is unchanged."
-                      echo "  If it stopped while activating, it may be partly switched --"
-                      echo "  'nixarchy rollback' lists the earlier generations to go back to."
-                      echo "  What you picked is still in the selection, so the next"
-                      echo "  rebuild will fail the same way until it is removed:"
-                      echo "    nixarchy app remove                    take out what you just picked"
-                      echo "    nh os switch $flake 2>&1 | nixarchy explain   what the error means"
+                      echo "then run 'nixarchy-apply'"
+                    }
+
+                    pkg_batch=()
+                    while IFS=$'\t' read -r kind name _ type _; do
+                      [ -n "$kind" ] || continue
+                      case "$kind" in
+                        app) nixarchy-app-enable "$name" && changed=1 ;;
+                        # Collected, not dispatched one by one: pkg-add resolves its
+                        # names in a single nixpkgs evaluation and sends a single
+                        # notification, so a multi-select must arrive as one call
+                        # to get one of each rather than N (#496).
+                        pkg) pkg_batch+=("$name") ;;
+                        opt) add_option "$name" "$type" ;;
+                        # nixarchy-service-enable, not a flatpak-specific command:
+                        # the rows live in services.nix and carry the same #@ markers,
+                        # so the writer that already exists is the right one.
+                        flatpak)
+                          if [ "$name" = "flathub" ]; then
+                            flathub_search
+                          else
+                            nixarchy-service-enable "$name" && changed=1
+                          fi
+                          ;;
+                        # Software in no repository at all (#581). The binary, not
+                        # `nixarchy pkg new`: the same session-PATH route every
+                        # other writer in this case uses, without leaning on the
+                        # dispatcher's routing. /dev/tty, because stdin here is
+                        # the selection herestring and a bare read would eat the
+                        # next picked row. `|| true`: a draft that fails to build
+                        # is a reported outcome, not a reason to abort the loop.
+                        # No changed=1 -- nixarchy-pkg-new validates its own write
+                        # and prints its own guidance.
+                        new)
+                          if read -r -p "Source URL (e.g. https://github.com/someone/tool): " url < /dev/tty; then
+                            [ -z "$url" ] || nixarchy-pkg-new "$url" || true
+                          fi
+                          ;;
+                      esac
+                    done <<< "$selection"
+
+                    if [ ''${#pkg_batch[@]} -gt 0 ]; then
+                      # Judged by the file, not the exit code: pkg-add exits
+                      # nonzero when ANY name missed, and inside the picker a miss
+                      # is an index bug -- but the names that did resolve are
+                      # committed, and they still deserve the summary below.
+                      pre=$(cksum < "$file")
+                      nixarchy-pkg-add "''${pkg_batch[@]}" || true
+                      [ "$pre" = "$(cksum < "$file")" ] || changed=1
                     fi
-                    exit "$rc"
-                    ;;
-                  *) echo "Not switching. Run: nh os switch $flake" ;;
-                esac
-              '';
-            })
 
-            # What the rebuild panel reads, and the only place the unit's
-            # properties are turned into a state (#765 PR 5). A command rather
-            # than logic in QML so tests/apply-staging.nix can run it against a
-            # stubbed systemctl: a panel's state machine is the part worth
-            # testing, and nothing in the suite drives QML.
-            (pkgs.writeShellApplication {
-              name = "nixarchy-rebuild-state";
-              runtimeInputs = [ pkgs.systemd ];
-              text = ''
-                # One show call, not three: a unit that finishes between two
-                # calls would otherwise report a state that never existed.
-                # Property order is systemd's, so read by key rather than line.
-                props=$(systemctl --user show \
-                  -p SubState -p Result -p ExecMainStatus \
-                  -p ExecMainExitTimestampMonotonic nixarchy-rebuild \
-                  2>/dev/null || true)
-                get() { printf '%s\n' "$props" | sed -n "s/^$1=//p" | tail -1; }
+                    [ "$changed" = 1 ] || exit 0
 
-                sub=$(get SubState)
-                result=$(get Result)
-                code=$(get ExecMainStatus)
-                raw_code=$code
-                [ -n "$code" ] || code=0
+                    if ! nix-instantiate --parse "$file" >/dev/null 2>&1; then
+                      cp "$backup" "$file"
+                      echo "nixarchy: that would have left $file unparseable. Nothing was changed." >&2
+                      exit 1
+                    fi
 
-                # SubState, not ActiveState, for the reason nixarchy-apply gives
-                # at its own read: RemainAfterExit keeps a finished rebuild
-                # "active", and `exited` plus Result is the only pair that
-                # separates a success from a failure that already activated.
-                case "$sub" in
-                  running | start | start-pre | start-post) state=running ;;
-                  failed) state=failed ;;
-                  exited)
-                    if [ "$result" = "success" ] && [ "$code" = "0" ]; then
-                      state=succeeded
+                    if [ "$scaffolded" -gt 0 ]; then
+                      echo
+                      echo "$scaffolded option(s) are commented out in $file. Edit them first:"
+                      echo "  omarchy-launch-editor $file"
+                    fi
+
+                    # Only when this script wrote something itself: nixarchy-app-enable and
+                    # nixarchy-pkg-add each print this line already, and saying it twice reads
+                    # like two separate things happened.
+                    if [ "$written" -gt 0 ]; then
+                      echo
+                      echo "run 'nixarchy-apply' when you have picked everything you want"
+                    fi
+                  '';
+                })
+
+                # `nixarchy vm <subcommand>`. Its own file for the same reason as
+                # secret.nix below: `checks.microvm-template` (#224) has to run
+                # the real command. See pkgs/microvm.nix for what it does and why.
+                (pkgs.callPackage ../pkgs/microvm.nix { inherit (inputs) self; })
+
+                # `nixarchy secret <subcommand>`. Its own file for the same reason
+                # as the two above: tests/menu-verbs.nix reads the verbs out of
+                # the command the Secrets rows exec. See pkgs/secret.nix for why
+                # the host's age identity never leaves root, and why the
+                # declaration line is printed rather than written.
+                (pkgs.callPackage ../pkgs/secret.nix { })
+
+                # `nixarchy-plugin <id>`, what the default plugins' rows and binds
+                # call. Its own file so tests/options.nix runs the real command.
+                (pkgs.callPackage ../pkgs/nixarchy-plugin.nix { omarchy = cfg.package; })
+
+                # Why: modules/AGENTS.md#one-name-for-the-commands-this-repo-adds-and-a-way
+                (pkgs.writeShellApplication {
+                  name = "nixarchy";
+                  runtimeInputs = [
+                    pkgs.coreutils
+                    cfg.package # omarchy, for the fallthrough
+                  ];
+                  text = ''
+                    # Routed by hand rather than by scanning a bin/ directory the way
+                    # upstream's dispatcher does: these commands are separate
+                    # derivations on PATH, not siblings in one tree, so there is no
+                    # directory to scan. A handful of entries is not a table worth
+                    # generating.
+                    case "''${1:-}" in
+                      search)   shift; exec nixarchy-search "$@" ;;
+                      apply)    shift; exec nixarchy-apply "$@" ;;
+                      verify)   shift; exec nixarchy-verify "$@" ;;
+                      # Omarchy's `version` answers only "which Omarchy"; this prints
+                      # both, which is the question someone on nixarchy is asking.
+                      version)  shift; exec nixarchy-version "$@" ;;
+                      explain)  shift; exec nixarchy-explain "$@" ;;
+                      doctor)
+                        if command -v nixarchy-doctor >/dev/null 2>&1; then
+                          shift; exec nixarchy-doctor "$@"
+                        fi
+                        echo "The doctor is not installed -- it runs from the flake, so that it" >&2
+                        echo "works on a machine that has not adopted nixarchy yet:" >&2
+                        echo >&2
+                        echo "  nix run github:olafkfreund/nixarchy#doctor" >&2
+                        exit 1
+                        ;;
+                      pkg)
+                        case "''${2:-}" in
+                          add) shift 2; exec nixarchy-pkg-add "$@" ;;
+                          remove) shift 2; exec nixarchy-pkg-remove "$@" ;;
+                          new) shift 2; exec nixarchy-pkg-new "$@" ;;
+                          undraft) shift 2; exec nixarchy-pkg-undraft "$@" ;;
+
+                        esac
+                        ;;
+                      app)
+                        case "''${2:-}" in
+                          enable)  shift 2; exec nixarchy-app-enable "$@" ;;
+                          disable) shift 2; exec nixarchy-app-disable "$@" ;;
+                          remove)  shift 2; exec nixarchy-app-remove "$@" ;;
+                        esac
+                        ;;
+                      # `nixarchy dev ...` is the terminal half of the Dev
+                      # environments panel (#802): the plugin's own CLI, which
+                      # comes with the panel and so is here wherever the devenv
+                      # service is on. Every subcommand is forwarded, not just
+                      # init, because the CLI grew list, templates, status and
+                      # remove and a second list here would drift from it.
+                      #
+                      # Where devenv is off the CLI is absent, and this says what
+                      # to turn on -- the same answer `nixarchy dev init` gave on
+                      # such a machine before the plugin replaced it.
+                      dev)
+                        shift
+                        if command -v nixarchy-devenv >/dev/null 2>&1; then
+                          exec nixarchy-devenv "$@"
+                        fi
+                        echo "nixarchy: devenv is not enabled on this machine, so there is" >&2
+                        echo "nothing for 'nixarchy dev' to drive." >&2
+                        echo >&2
+                        echo "  nixarchy-service-enable devenv && nixarchy apply" >&2
+                        echo >&2
+                        echo "or, in your own configuration:" >&2
+                        echo >&2
+                        echo "  programs.nixarchy.services.devenv.enable = true;" >&2
+                        exit 1
+                        ;;
+                      # Without this row `nixarchy try foo` falls through to
+                      # `exec omarchy try ...` and dies as "Unknown Omarchy command"
+                      # -- omarchy's own dispatcher discovers only omarchy-*
+                      # siblings, and nixarchy-try is not one.
+                      #
+                      # It is the Search picker's ctrl-t path too, so the whole
+                      # feature is unreachable without it. Both halves shipped
+                      # green: the picker's check greps that nixarchy-search SAYS
+                      # `nixarchy try `, which is the call site, not the route.
+                      # checks.options now asserts the route.
+                      try) shift; exec nixarchy-try "$@" ;;
+                      vm) shift; exec nixarchy-vm "$@" ;;
+                      # Retired (#801): the Distrobox panel does all of it. Not
+                      # listed in the usage above any more -- a help text naming a
+                      # verb that prints "is retired" is the #538 defect wearing
+                      # the opposite coat.
+                      # A pointer for one release rather than falling through to
+                      # `exec omarchy "$@"`, which would answer a command this
+                      # project shipped with "Unknown Omarchy command: omarchy
+                      # box" -- the #538 failure, in reverse.
+                      box) echo "nixarchy box is retired -- boxes live in the Distrobox panel" \
+                                "(Super+Alt+D, or the Boxes row in the menu)." >&2; exit 1 ;;
+                      secret) shift; exec nixarchy-secret "$@" ;;
+
+                      # The rest of them (#538). Every one of these was shipped,
+                      # documented, and unreachable: without a row here the command
+                      # reaches `exec omarchy "$@"`, and Omarchy's own dispatcher
+                      # builds `omarchy-$(join_words ...)` and globs `omarchy-*`
+                      # only -- so `nixarchy channel stable` died as "Unknown
+                      # Omarchy command: omarchy channel stable".
+                      #
+                      # `try` was found by hand and fixed alone. Nothing generalised
+                      # it, and the same bug was sitting in ten siblings. What makes
+                      # that not happen again is not this list -- it is
+                      # checks.options deriving the list from the commands' own
+                      # `# omarchy:examples=nixarchy <verb>` headers and asserting
+                      # every one of them routes. A command declares the verb it
+                      # answers to; the check makes the dispatcher agree.
+                      android) shift; exec nixarchy-android "$@" ;;
+                      ask) shift; exec nixarchy-ask "$@" ;;
+                      channel) shift; exec nixarchy-channel "$@" ;;
+                      local-ai) shift; exec nixarchy-local-ai "$@" ;;
+                      preview) shift; exec nixarchy-preview "$@" ;;
+                      remote) shift; exec nixarchy-remote "$@" ;;
+                      rollback) shift; exec nixarchy-rollback "$@" ;;
+                      unfreeze) shift; exec nixarchy-unfreeze "$@" ;;
+
+                      # Two-word verbs, in the shape `pkg`, `app` and `dev` already
+                      # use. These are the ones a route check that matches
+                      # `^ *<verb>)` cannot see, which is why the first version of
+                      # that check passed over them.
+                      #
+                      # No bare fallthrough on the inner case: `nixarchy config`
+                      # with no second word drops out of the inner `case` and
+                      # reaches `exec omarchy "$@"`, which is the right answer --
+                      # Omarchy has its own `config` and this port does not take the
+                      # word from it.
+                      config)
+                        case "''${2:-}" in
+                          repo) shift 2; exec nixarchy-config-repo "$@" ;;
+                        esac
+                        ;;
+                      home)
+                        case "''${2:-}" in
+                          backup) shift 2; exec nixarchy-home-backup "$@" ;;
+                        esac
+                        ;;
+                      reinstall)
+                        case "''${2:-}" in
+                          iso) shift 2; exec nixarchy-reinstall-iso "$@" ;;
+                        esac
+                        ;;
+                      ""|--help|-h|help)
+                        cat <<'USAGE'
+                    nixarchy -- the Omarchy desktop, vendored for NixOS.
+
+                    Commands this port adds:
+
+                      nixarchy search [query]     Every package, NixOS option and app, in one picker
+                      nixarchy pkg add <attr>     Add a nixpkgs package to the app selection
+                      nixarchy pkg remove [attr]  Take one out again (no argument picks interactively)
+                      nixarchy pkg new <url>      Draft a derivation for software in no repository
+                      nixarchy pkg undraft [name] Take a draft's line out again (the draft file stays)
+                      nixarchy app enable <id>    Select an app from the curated list
+                      nixarchy app disable <id>   Deselect one
+                      nixarchy app remove         Pick apps, packages and options to remove
+                      nixarchy apply              Copy the selection into your flake and rebuild
+                      nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
+                      nixarchy dev list --json    Every devenv project under your roots
+                                                  The panel is Super+Alt+E, or Apps > Dev environments
+                      nixarchy try <app|attr>     Run something once without installing it
+                      nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
+                      nixarchy doctor             What this machine needs to run nixarchy
+                      nixarchy verify             Check the hardware nixarchy cannot test in a VM
+                      nixarchy version            The Omarchy version and the nixarchy revision
+                      nixarchy explain            What a Nix error means -- pipe a failure into it
+
+                    This machine:
+
+                      nixarchy channel [stable|unstable]  Which nixpkgs this machine follows
+                      nixarchy preview            Boot this configuration in a VM before switching
+                      nixarchy rollback           Go back to an earlier system generation
+                      nixarchy unfreeze           Let this machine receive updates again
+                      nixarchy config repo        Put /etc/nixos in git, with a remote and CI
+                      nixarchy secret <subcommand> Passwords and keys, encrypted -- 'nixarchy secret help'
+                      nixarchy home backup        Back up the desktop configuration in your home
+                      nixarchy reinstall iso      Build an image that reinstalls this machine
+                      nixarchy android            Connect an Android phone over Wi-Fi, for scrcpy
+                      nixarchy ask                Ask the default agent, with the right skill chosen
+                      nixarchy local-ai           Set up the local language model
+
+                    Everything else is Omarchy's own, and reaches it unchanged:
+
+                      nixarchy theme set <name>   = omarchy theme set <name>
+                      nixarchy update             = omarchy update
+                      omarchy commands            Every one of them
+
+                    Both names work for those. They are the same scripts as on Arch,
+                    which is why they keep Omarchy's name: a bug in one is a bug to
+                    report upstream, not here.
+                    USAGE
+                        exit 0
+                        ;;
+                    esac
+
+                    # Anything else is Omarchy's. Not a warning and not a wrapper:
+                    # exec, so the exit status, the terminal and the signals are the
+                    # command's own.
+                    exec omarchy "$@"
+                  '';
+                })
+
+                # Copies the selection into the flake and switches. Kept separate
+                # from enabling so several apps can be picked before anything builds.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-apply";
+                  runtimeInputs = [
+                    (pkgs.callPackage ../pkgs/branch-guard.nix { })
+                    pkgs.coreutils
+                    pkgs.diffutils
+                    pkgs.gnugrep
+                    pkgs.git
+                    pkgs.gnused
+                    # nh rather than nixos-rebuild: a progress view that says what is
+                    # building and how far along it is, and a package diff against the
+                    # running generation once it lands. Both matter more here than
+                    # anywhere else -- this is the command a menu pick runs, in front
+                    # of someone who just clicked "install" and has no other signal
+                    # that anything is happening. It is also the smaller closure of
+                    # the two, by about 200 MiB.
+                    pkgs.nh
+                    # systemd-run and systemctl, for --detach (#765).
+                    pkgs.systemd
+                    # --status --json, which is the CONTRACT half of that output
+                    # and so must be valid JSON rather than a printf that happens
+                    # to look like it (#986). Declared because this is a
+                    # writeShellApplication inherits the caller's PATH after its
+                    # runtimeInputs: an undeclared jq could work on one machine
+                    # and produce a wrong answer on another.
+                    pkgs.jq
+                  ];
+                  text = ''
+                    # The two answers as flags, for a caller with no terminal (#765).
+                    # Anything else exits 2: an unknown flag must never mean "switch".
+                    yes="" nopreview="" detach="" status="" json="" wantlog="" follow="" invocation=""
+                    expect=()
+                    while [ $# -gt 0 ]; do
+                      case "$1" in
+                        --yes) yes=1 ;;
+                        --no-preview) nopreview=1 ;;
+                        --detach) detach=1 ;;
+                        --status) status=1 ;;
+                        --json) json=1 ;;
+                        --log) wantlog=1 ;;
+                        --follow) follow=1 ;;
+                        --invocation) shift; invocation=''${1:?--invocation needs an id} ;;
+                        # Repeatable, <part>=<sha256>. Opt-in on purpose (#979,
+                        # #967): a caller that checked a file says so, and one that
+                        # did not is neither protected nor blocked. The other shape
+                        # -- refuse every changed file from every caller -- shipped
+                        # and was reverted the same evening, because the callers
+                        # that cannot answer are exactly the ones it stopped.
+                        --expect-sha256) shift; expect+=("''${1:?--expect-sha256 needs <part>=<sha256>}") ;;
+                        # The --detach branch forwards these into the unit, and a
+                        # unit's command line is easier to read with one word per
+                        # pair. #986: before this they were dropped entirely, so a
+                        # caller that pinned what it checked and asked for a
+                        # detached build got an UNPINNED build and no warning --
+                        # exactly the guarantee the flag exists to give, missing in
+                        # the mode a panel actually uses.
+                        --expect-sha256=*) expect+=("''${1#--expect-sha256=}") ;;
+                        *)
+                          echo "usage: nixarchy-apply [--yes] [--no-preview] [--detach]" >&2
+                          echo "                      [--expect-sha256 <part>=<sha256>]..." >&2
+                          echo "       nixarchy-apply --status [--json]" >&2
+                          echo "       nixarchy-apply --log [--follow] [--invocation <id>]" >&2
+                          echo "" >&2
+                          echo "  --json is a stable contract; the plain --status output is NOT." >&2
+                          exit 2
+                          ;;
+                      esac
+                      shift
+                    done
+
+                    file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
+                    flake="''${NIXARCHY_FLAKE:-${cfg.flake}}"
+
+                    # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+                    # A supervised user unit, so a closed window or a shell restart
+                    # cannot kill a switch halfway; its state and log are the unit's.
+                    # The detached rebuild's state, for callers (#979).
+                    #
+                    # SubState and InvocationID decide "none", NEVER Result: the
+                    # unit runs with RemainAfterExit and without --collect (see the
+                    # detach block below for why), and a unit that has never run
+                    # reads Result=success ExecMainStatus=0. Reading Result first
+                    # answers "succeeded" for a rebuild that never happened, which
+                    # is the one wrong answer that matters.
+                    rebuild_state() {
+                      local sub res code inv key value props
+                      props=$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null) || true
+                      while IFS='=' read -r key value; do
+                        case "$key" in
+                          SubState) sub=$value ;;
+                          Result) res=$value ;;
+                          ExecMainStatus) code=$value ;;
+                          InvocationID) inv=$value ;;
+                        esac
+                      done <<< "$props"
+                      sub=''${sub:-} res=''${res:-} code=''${code:-} inv=''${inv:-}
+                      # `dead` is NONE whether or not an InvocationID survives it
+                      # (#986 item 3). A unit left over from an earlier session --
+                      # stopped, or reset-failed -- keeps its InvocationID while
+                      # holding no result for THIS session, and requiring an empty
+                      # id here reported that stale run as the current one. That is
+                      # the same class as reading Result first, which the comment
+                      # above already warns about: an answer about a run that is
+                      # not the one being asked about.
+                      if [ -z "$sub" ] || [ "$sub" = dead ]; then
+                        printf 'none\t\t\t\n'
+                        return
+                      fi
+                      case "$sub" in
+                        running | start*) printf 'running\t%s\t%s\t%s\n' "$res" "$code" "$inv" ;;
+                        *)
+                          if [ "$res" = success ] && [ "''${code:-0}" = 0 ]; then
+                            printf 'succeeded\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                          else
+                            printf 'failed\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                          fi
+                          ;;
+                      esac
+                    }
+
+                    # Queries act and exit: they are not an apply.
+                    if [ -n "$status" ]; then
+                      IFS=$'\t' read -r st res code inv < <(rebuild_state)
+                      if [ "$st" != failed ]; then
+                        code=0
+                      else
+                        case "$code" in
+                          "" | *[!0-9]*) code=1 ;;
+                          *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
+                        esac
+                      fi
+                      if [ -n "$json" ]; then
+                        # jq, not printf: --json is the CONTRACT half of this
+                        # output (nixarchy-flatsnap parses it), and a contract that
+                        # emits invalid JSON the first time systemd says something
+                        # with a quote in it is not one. `exit` stays a number and
+                        # `invocation` stays null-or-string.
+                        jq -cn --arg state "$st" --arg result "$res" \
+                          --argjson exit "$code" \
+                          --arg inv "$inv" \
+                          '{state: $state, result: $result, exit: $exit,
+                            invocation: (if $inv == "" then null else $inv end)}'
+                      else
+                        echo "$st''${inv:+ (invocation $inv)}"
+                      fi
+                      exit 0
+                    fi
+
+                    if [ -n "$wantlog" ]; then
+                      if [ -z "$invocation" ]; then
+                        IFS=$'\t' read -r _ _ _ invocation < <(rebuild_state)
+                      fi
+                      # That run, not everything the unit ever did.
+                      # --no-pager and -o cat: a caller reading this is a script
+                      # or a panel, and a pager on a pipe is a hang rather than
+                      # output (#986 item 3). With no invocation to scope it -- a
+                      # machine that has never detached -- the unit's whole history
+                      # would be dumped, so it is capped.
+                      jscope=()
+                      if [ -n "$invocation" ]; then
+                        jscope=(--invocation="$invocation")
+                      else
+                        # No invocation to scope it: a machine that has never
+                        # detached would otherwise get the unit's whole history.
+                        jscope=(-n 200)
+                      fi
+                      [ -n "$follow" ] && jscope+=(-f)
+                      exec journalctl --user -u nixarchy-rebuild --no-pager -o cat "''${jscope[@]}"
+                    fi
+
+                    # Refuse a checkout on a branch nobody chose to deploy (#1037):
+                    # after the read-only modes above, before anything is written.
+                    # Not in the --detach parent -- the panel ignores its output,
+                    # so the unit refuses instead, where the panel can see it.
+                    [ -n "$detach" ] || nixarchy-branch-guard "$flake"
+
+                    if [ -n "$detach" ]; then
+                      [ -n "$yes" ] || {
+                        echo "nixarchy-apply: --detach needs --yes: a unit has no terminal to answer" >&2
+                        exit 2
+                      }
+                      # SubState, not ActiveState: RemainAfterExit keeps a finished
+                      # rebuild "active" (SubState exited) so its result stays readable.
+                      case "$(systemctl --user show -p SubState --value nixarchy-rebuild 2>/dev/null || true)" in
+                        running | start*)
+                          echo "nixarchy-apply: a rebuild is already running." >&2
+                          echo "  Follow it with: journalctl --user -fu nixarchy-rebuild" >&2
+                          exit 3
+                          ;;
+                        "" | dead) ;;
+                        *)
+                          systemctl --user stop nixarchy-rebuild 2>/dev/null || true
+                          systemctl --user reset-failed nixarchy-rebuild 2>/dev/null || true
+                          ;;
+                      esac
+                      # No NoNewPrivileges: elevation goes through the setuid pkexec.
+                      # Rate limit off: a build log is bursty, and it is the log a
+                      # failure needs. No --collect: it unloads a FAILED unit at once,
+                      # which then reads Result=success -- the one result that matters.
+                      systemd-run --user --unit=nixarchy-rebuild \
+                        -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
+                        --setenv=NIXARCHY_FLAKE="$flake" \
+                        --setenv=ALLOW_BRANCH_DEPLOY="''${ALLOW_BRANCH_DEPLOY:-}" \
+                        --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
+                        --setenv=XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
+                        --setenv=NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}" \
+                        -- "$(readlink -f "$0")" --yes --no-preview \
+                        ''${expect+"''${expect[@]/#/--expect-sha256=}"}
+                      echo "Rebuilding in the background. Follow it with:"
+                      echo "  journalctl --user -fu nixarchy-rebuild"
+                      exit 0
+                    fi
+
+                    # Why: modules/AGENTS.md#where-the-selection-lands
+                    base="$flake"
+                    # uname -n, not hostname(1): the latter would depend on the
+                    # caller's PATH. uname is already supplied by coreutils and
+                    # reports the same name.
+                    host=$(uname -n)
+                    if [ -d "$flake/hosts/$host" ]; then
+                      base="$flake/hosts/$host"
+                    fi
+                    dest="$base/nixarchy-apps.nix"
+
+                    [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
+                    [ -d "$flake" ] || {
+                      echo "nixarchy: flake directory '$flake' does not exist." >&2
+                      echo "Set programs.nixarchy.flake, or export NIXARCHY_FLAKE." >&2
+                      exit 1
+                    }
+
+                    echo "Enabled apps:"
+                    grep -E "^[[:space:]]*[a-z0-9_-]+\.enable" "$file" || echo "  (none)"
+                    echo
+
+                    # Why: modules/AGENTS.md#a-flake-cannot-read-a-file-outside-its-own-tree-so
+                    srcdir="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy"
+                    mkdir -p "$base/nixarchy"
+
+                    imports=""
+                    copied=""
+                    # What apply last wrote to each copy, so an edit made in the flake
+                    # itself is told apart from a new pick -- and kept, not overwritten.
+                    applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
+                    mkdir -p "$applied"
+                    # flatsnap: written by the nixarchy-flatsnap plugin (#904). Like the
+                    # others it is copied only when it exists, so a machine without
+                    # the plugin imports exactly what it did before.
+                    # #979: build only what the caller checked. Opt-in -- an empty
+                    # array means nothing is asserted and nothing is refused, which
+                    # is why this can exist at all where #967's blanket refusal
+                    # could not. Checked BEFORE the copy loop, so a mismatch copies
+                    # nothing and builds nothing.
+                    # A SNAPSHOT is taken and the snapshot is hashed, so what gets
+                    # built is the exact bytes that were checked (#986 item 2).
+                    # Hashing the file and copying it later reads it twice, 28 lines
+                    # apart with nothing held in between -- a write in that window
+                    # was built unchecked, which is the guarantee this flag exists
+                    # to give. No shared lock is needed for this: the caller's file
+                    # can change freely afterwards, and what is built is still what
+                    # it pinned.
+                    pinned=$(mktemp -d)
+                    trap 'rm -rf "$pinned"' EXIT
+                    for pair in ''${expect+"''${expect[@]}"}; do
+                      part=''${pair%%=*}
+                      want=''${pair#*=}
+                      file="$srcdir/$part.nix"
+                      if [ -f "$file" ]; then
+                        cp "$file" "$pinned/$part.nix"
+                        have=$(sha256sum <"$pinned/$part.nix" | cut -d" " -f1)
+                      else
+                        have=""
+                      fi
+                      if [ "$have" != "$want" ]; then
+                        echo "nixarchy-apply: $part.nix is not what you checked." >&2
+                        echo "  you passed: $want" >&2
+                        echo "  on disk:    ''${have:-<no such file>}" >&2
+                        echo "  Nothing was copied and nothing was built." >&2
+                        exit 4
+                      fi
+                    done
+
+                    for part in apps services advanced flatsnap; do
+                      # The snapshot, for a part the caller pinned: the bytes that
+                      # were hashed above, not whatever is on disk now (#986).
+                      # `srcmsg` is what a MESSAGE names, always the user's own
+                      # file -- telling somebody to edit a temp directory would be
+                      # worse than the race this fixes.
+                      srcmsg="$srcdir/$part.nix"
+                      if [ -f "$pinned/$part.nix" ]; then
+                        src="$pinned/$part.nix"
+                      else
+                        src="$srcmsg"
+                      fi
+                      [ -f "$src" ] || continue
+
+                      dst="$base/nixarchy/$part.nix"
+                      imports="$imports ./nixarchy/$part.nix"
+                      record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
+                      if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                        sha256sum <"$dst" >"$record"
+                        continue
+                      fi
+                      if [ -f "$dst" ] && [ -f "$record" ] && ! sha256sum <"$dst" | cmp -s - "$record"; then
+                        kept="$applied/$part.nix.edited-in-flake.$(date +%Y%m%d%H%M%S)"
+                        cp "$dst" "$kept"
+                        echo "NOTE: $dst was edited in the flake since the last apply."
+                        echo "  Your version is kept at $kept -- move the change into"
+                        echo "  $srcmsg, which is the file apply copies from."
+                      fi
+                      cp "$src" "$dst"
+                      sha256sum <"$dst" >"$record"
+                      copied="$copied $part"
+                    done
+
+                    # Draft derivations from `nixarchy pkg new` ride along:
+                    # apps.nix names them as ./packages/<name>.nix, a path
+                    # relative to the COPY, so they must sit beside it or the
+                    # uncommented line fails evaluation with "path does not
+                    # exist". Copies accumulate and are never deleted here --
+                    # removing a draft from the flake is an edit to a tree the
+                    # user owns, not this tool's call.
+                    if [ -d "$srcdir/packages" ]; then
+                      mkdir -p "$base/nixarchy/packages"
+                      for src in "$srcdir"/packages/*.nix; do
+                        [ -f "$src" ] || continue
+                        dst="$base/nixarchy/packages/$(basename "$src")"
+                        if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                          continue
+                        fi
+                        cp "$src" "$dst"
+                        copied="$copied packages/$(basename "$src")"
+                      done
+                    fi
+
+                    # Only what exists is imported. A machine seeded before
+                    # services.nix existed has two files, not three, and a stub
+                    # importing a path that is not there fails to evaluate.
+                    {
+                      echo "# Generated by nixarchy-apply. Do not edit -- your files"
+                      echo "# are ~/.config/nixarchy/{apps,services,advanced,flatsnap}.nix and"
+                      echo "# this is regenerated from them on every apply."
+                      echo "{"
+                      echo "  imports = [$imports ];"
+                      echo "}"
+                    } >"$dest"
+
+                    if [ -n "$copied" ]; then
+                      echo "copied ->$copied"
                     else
-                      state=failed
+                      echo "$base is already up to date."
                     fi
-                    ;;
-                  *) state=idle ;;
-                esac
 
-                # exit is meaningless unless it failed; say 0 rather than leave
-                # the key out, so the panel never has to test for absence.
-                if [ "$state" = failed ]; then
-                  case "$raw_code" in
-                    "" | *[!0-9]*) code=1 ;;
-                    *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
-                  esac
-                else
-                  code=0
-                fi
+                    # Why: modules/AGENTS.md#stage-what-was-written-or-a-flake-in-a-git-worktre
+                    if [ -e "$flake/.git" ]; then
+                      # -C "$base", not "$flake": the copies went to whichever
+                      # directory base names, and staging the root staged nothing on
+                      # a hosts/<hostname> layout (#720).
+                      git -C "$base" add -A -- nixarchy nixarchy-apps.nix 2>/dev/null || {
+                        echo
+                        echo "NOTE: could not stage the copies in $flake."
+                        echo "  A flake in a git repository sees only tracked files,"
+                        echo "  so the rebuild may fail with \"path does not exist\"."
+                        echo "  Fix with: sudo git -C $base add -A"
+                        echo
+                      }
+                    fi
 
-                # When it finished, so a settled result can say WHICH run it is
-                # describing (#919). The unit stays loaded across a reboot --
-                # #765 omits --collect on purpose -- so without this the bar
-                # would claim a fresh success at every login.
-                #
-                # Monotonic, not realtime: it is a clock the panel can compare
-                # against its own uptime without a timezone or a format to
-                # parse, and systemd reports 0 for a unit that has never run.
-                # Same key-absent rule as `exit`: always present, 0 when it
-                # means nothing.
-                # How long ago it finished, in whole seconds, computed HERE
-                # rather than in the panel -- the same reason the state mapping
-                # is a command (#765 PR 5): nothing in the suite drives QML, so
-                # arithmetic left there ships untested.
-                #
-                # Both clocks are systemd's monotonic one, which /proc/uptime
-                # also reports, so this needs no timezone and no date parsing
-                # and survives a clock change. -1 means "cannot say": never
-                # ran, still running, or /proc/uptime unreadable. A negative
-                # difference means the unit finished before this boot, which is
-                # exactly what the panel must not report as a fresh result.
-                finished=$(get ExecMainExitTimestampMonotonic)
-                ago=-1
-                case "$state" in
-                  succeeded | failed)
-                    case "$finished" in
-                      "" | 0 | *[!0-9]*) ;;
-                      *)
-                        up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null || true)
-                        case "$up" in
-                          "" | *[!0-9.]*) ;;
-                          *) ago=$(( ''${up%%.*} - finished / 1000000 )) ;;
+                    # Why: modules/AGENTS.md#whether-anything-in-the-flake-actually-imports-it
+                    # Uncommented mentions only: a `# imports = [ ./nixarchy-apps.nix ];`
+                    # left in a file used to silence this warning.
+                    # Each mention is RESOLVED against the file it appears in and
+                    # compared with what was just written, rather than matched by
+                    # name anywhere in the flake (#734). A name match was satisfied
+                    # by a STALE root-level import on a flake predating the
+                    # hosts/<hostname> layout: apply wrote hosts/<name>/, nothing
+                    # imported it, no warning appeared, and the app set FROZE -- the
+                    # root copy kept serving the old selection, so apps enabled
+                    # before the move went on working and new ones never appeared.
+                    # Nothing looks broken, which is why it went unreported.
+                    destreal=$(readlink -m "$dest")
+                    importers=""
+                    # Process substitution, not a pipe: a piped `while read` runs in
+                    # a subshell and `importers` would be empty afterwards, so this
+                    # would warn on every apply. Empty output is a legitimate answer
+                    # here (nothing imports it) and is the safe direction to fail.
+                    while IFS= read -r candidate; do
+                      case "$candidate" in */nixarchy-apps.nix) continue ;; esac
+                      while IFS= read -r ref; do
+                        [ "$(readlink -m "$(dirname "$candidate")/$ref")" = "$destreal" ] || continue
+                        importers="$importers $candidate"
+                        break
+                      done < <(grep -E '^[^#]*nixarchy-apps\.nix' "$candidate" |
+                        grep -oE '[^[:space:]"]*nixarchy-apps\.nix')
+                    done < <(grep -rlE '^[^#]*nixarchy-apps\.nix' "$flake" --include='*.nix' 2>/dev/null)
+
+                    if [ -z "$importers" ]; then
+                      echo
+                      echo "WARNING: nothing in $flake imports $dest."
+                      echo
+                      echo "  The selection has been copied, and a rebuild will"
+                      echo "  ignore it: every app you enable will look installed"
+                      echo "  and never be built."
+                      echo
+                      echo "  Add it to this host's configuration:"
+                      echo "    imports = [ ./nixarchy-apps.nix ];"
+                      echo
+                      echo "  The path is relative to the file you put it in, and"
+                      echo "  must resolve to what apply just wrote:"
+                      echo "    $dest"
+                      echo
+                      echo "  A root-level nixarchy-apps.nix imported from elsewhere"
+                      echo "  does NOT count despite the matching name: this"
+                      echo "  selection would be ignored and the old one kept (#734)."
+                      echo
+                    fi
+
+                    # The offer, at the one moment somebody actually wants it
+                    # (#488): the selection is copied, the switch is the next
+                    # keypress, and a look before leaping costs a question.
+                    #
+                    # `command -v`, because nixarchy-preview ships in the omarchy
+                    # package rather than in this script's runtimeInputs -- it is
+                    # reached through the session PATH writeShellApplication
+                    # prepends to, and on a machine without the package the offer
+                    # must vanish rather than break the apply.
+                    #
+                    # `|| true`: a refused preflight (or a preview closed with a
+                    # nonzero status) must land back at the switch question, not
+                    # kill the apply under set -e.
+                    # `|| reply=""` on every prompt, because EOF is not a crash.
+                    #
+                    # `read` returns non-zero at end of input, and under
+                    # writeShellApplication's `set -e` that KILLS the script. So the
+                    # moment this file grew a second prompt, `echo n | nixarchy-apply`
+                    # -- one line, two reads -- started exiting 1: the first read took
+                    # the "n", the second hit EOF. checks.session drives exactly that
+                    # and went red on it.
+                    #
+                    # Treating EOF as an empty answer is also the right behaviour
+                    # rather than a test accommodation: a piped or non-interactive
+                    # apply should decline to switch, not die halfway through.
+                    # --no-preview and --yes answer the two questions instead; EOF
+                    # still declines when they are not given.
+                    if [ -z "$nopreview" ] && command -v nixarchy-preview >/dev/null 2>&1; then
+                      read -r -p "Preview in a VM first? [y/N] " reply || reply=""
+                      case "$reply" in
+                        [yY]*) nixarchy-preview || true ;;
+                      esac
+                    fi
+
+                    if [ -n "$yes" ]; then
+                      reply=y
+                    else
+                      read -r -p "Build and switch now? [y/N] " reply || reply=""
+                    fi
+                    case "$reply" in
+                      # No sudo: nh elevates itself, and wrapping it means the
+                      # elevation happens before nh can decide how to do it.
+                      #
+                      # The flake is passed explicitly rather than left to nh's own
+                      # default. nh reads $NH_FLAKE, which plenty of people already
+                      # export at whatever configuration they usually work on -- and
+                      # an app selection copied into one flake then switched into
+                      # another is a failure that looks like nothing happening.
+                      [yY]*)
+                        rc=0
+                        # Why: modules/AGENTS.md#the-rebuild-asks-through-polkit
+                        export NH_ELEVATION_STRATEGY="''${NH_ELEVATION_STRATEGY:-/run/wrappers/bin/pkexec}"
+                        # nom draws with escape codes, unreadable in a journal or a pipe.
+                        nomflag=""
+                        [ -t 1 ] || nomflag=--no-nom
+                        nh os switch ''${nomflag:+"$nomflag"} "$flake" || rc=$?
+                        if [ "$rc" -ne 0 ]; then
+                          # The selection stays copied, so every later apply or update
+                          # fails the same way until the cause is taken out. No claim
+                          # about what changed: nh activates before it sets the profile
+                          # and the bootloader, so a late failure leaves it switched.
+                          echo
+                          echo "The rebuild failed (exit $rc). The log above says where."
+                          echo "  If it stopped while building, the running system is unchanged."
+                          echo "  If it stopped while activating, it may be partly switched --"
+                          echo "  'nixarchy rollback' lists the earlier generations to go back to."
+                          echo "  What you picked is still in the selection, so the next"
+                          echo "  rebuild will fail the same way until it is removed:"
+                          echo "    nixarchy app remove                    take out what you just picked"
+                          echo "    nh os switch $flake 2>&1 | nixarchy explain   what the error means"
+                        fi
+                        exit "$rc"
+                        ;;
+                      *) echo "Not switching. Run: nh os switch $flake" ;;
+                    esac
+                  '';
+                })
+
+                # What the rebuild panel reads, and the only place the unit's
+                # properties are turned into a state (#765 PR 5). A command rather
+                # than logic in QML so tests/apply-staging.nix can run it against a
+                # stubbed systemctl: a panel's state machine is the part worth
+                # testing, and nothing in the suite drives QML.
+                (pkgs.writeShellApplication {
+                  name = "nixarchy-rebuild-state";
+                  runtimeInputs = [ pkgs.systemd ];
+                  text = ''
+                    # One show call, not three: a unit that finishes between two
+                    # calls would otherwise report a state that never existed.
+                    # Property order is systemd's, so read by key rather than line.
+                    props=$(systemctl --user show \
+                      -p SubState -p Result -p ExecMainStatus \
+                      -p ExecMainExitTimestampMonotonic nixarchy-rebuild \
+                      2>/dev/null || true)
+                    get() { printf '%s\n' "$props" | sed -n "s/^$1=//p" | tail -1; }
+
+                    sub=$(get SubState)
+                    result=$(get Result)
+                    code=$(get ExecMainStatus)
+                    raw_code=$code
+                    [ -n "$code" ] || code=0
+
+                    # SubState, not ActiveState, for the reason nixarchy-apply gives
+                    # at its own read: RemainAfterExit keeps a finished rebuild
+                    # "active", and `exited` plus Result is the only pair that
+                    # separates a success from a failure that already activated.
+                    case "$sub" in
+                      running | start | start-pre | start-post) state=running ;;
+                      failed) state=failed ;;
+                      exited)
+                        if [ "$result" = "success" ] && [ "$code" = "0" ]; then
+                          state=succeeded
+                        else
+                          state=failed
+                        fi
+                        ;;
+                      *) state=idle ;;
+                    esac
+
+                    # exit is meaningless unless it failed; say 0 rather than leave
+                    # the key out, so the panel never has to test for absence.
+                    if [ "$state" = failed ]; then
+                      case "$raw_code" in
+                        "" | *[!0-9]*) code=1 ;;
+                        *) while [[ $code == 0* && $code != 0 ]]; do code=''${code#0}; done ;;
+                      esac
+                    else
+                      code=0
+                    fi
+
+                    # When it finished, so a settled result can say WHICH run it is
+                    # describing (#919). The unit stays loaded across a reboot --
+                    # #765 omits --collect on purpose -- so without this the bar
+                    # would claim a fresh success at every login.
+                    #
+                    # Monotonic, not realtime: it is a clock the panel can compare
+                    # against its own uptime without a timezone or a format to
+                    # parse, and systemd reports 0 for a unit that has never run.
+                    # Same key-absent rule as `exit`: always present, 0 when it
+                    # means nothing.
+                    # How long ago it finished, in whole seconds, computed HERE
+                    # rather than in the panel -- the same reason the state mapping
+                    # is a command (#765 PR 5): nothing in the suite drives QML, so
+                    # arithmetic left there ships untested.
+                    #
+                    # Both clocks are systemd's monotonic one, which /proc/uptime
+                    # also reports, so this needs no timezone and no date parsing
+                    # and survives a clock change. -1 means "cannot say": never
+                    # ran, still running, or /proc/uptime unreadable. A negative
+                    # difference means the unit finished before this boot, which is
+                    # exactly what the panel must not report as a fresh result.
+                    finished=$(get ExecMainExitTimestampMonotonic)
+                    ago=-1
+                    case "$state" in
+                      succeeded | failed)
+                        case "$finished" in
+                          "" | 0 | *[!0-9]*) ;;
+                          *)
+                            up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null || true)
+                            case "$up" in
+                              "" | *[!0-9.]*) ;;
+                              *) ago=$(( ''${up%%.*} - finished / 1000000 )) ;;
+                            esac
+                            ;;
                         esac
                         ;;
                     esac
-                    ;;
-                esac
-                [ "$ago" -ge 0 ] 2>/dev/null || ago=-1
+                    [ "$ago" -ge 0 ] 2>/dev/null || ago=-1
 
-                # Two values from one read, and they are not interchangeable:
-                # `finishedUsec` is a STABLE id for this run, which is what the
-                # bar keys "the user has seen this result" on; `finishedAgoSec`
-                # grows with every poll and is for display only. Keying the
-                # acknowledgement on the seconds-ago would mean no result is
-                # ever acknowledged, because the number changes each time.
-                case "$finished" in
-                  "" | *[!0-9]*) finished=0 ;;
-                esac
-                [ "$state" = succeeded ] || [ "$state" = failed ] || finished=0
+                    # Two values from one read, and they are not interchangeable:
+                    # `finishedUsec` is a STABLE id for this run, which is what the
+                    # bar keys "the user has seen this result" on; `finishedAgoSec`
+                    # grows with every poll and is for display only. Keying the
+                    # acknowledgement on the seconds-ago would mean no result is
+                    # ever acknowledged, because the number changes each time.
+                    case "$finished" in
+                      "" | *[!0-9]*) finished=0 ;;
+                    esac
+                    [ "$state" = succeeded ] || [ "$state" = failed ] || finished=0
 
-                printf '{"state":"%s","exit":%s,"finishedUsec":%s,"finishedAgoSec":%s}\n' \
-                  "$state" "$code" "$finished" "$ago"
-              '';
-            })
+                    printf '{"state":"%s","exit":%s,"finishedUsec":%s,"finishedAgoSec":%s}\n' \
+                      "$state" "$code" "$finished" "$ago"
+                  '';
+                })
 
-          ]
-          ++ appPackages
-          ++ lib.optionals cfg.apps.retroarch.enable (
-            with pkgs;
-            [
-              libretro-core-info
-              libretro-shaders-slang
-              retroarch-joypad-autoconfig
-            ]
-          );
+              ]
+              ++ lib.optionals cfg.apps.retroarch.enable (
+                with pkgs;
+                [
+                  libretro-core-info
+                  libretro-shaders-slang
+                  retroarch-joypad-autoconfig
+                ]
+              )
+            )
+            ++ appPackages;
         }
       ]
     ))

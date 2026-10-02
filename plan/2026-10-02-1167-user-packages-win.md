@@ -115,3 +115,19 @@ alone.
 
 Revert the squash commit. nixarchy's packages go back to beating the user's
 on a tie.
+
+## Deviations (2026-10-03)
+
+- **The check's scope is narrowed to entries nixarchy's own files define.**
+  "Absent with nixarchy off" also caught 42 packages at normal priority that
+  NixOS's own service modules add, because nixarchy enables those services
+  (`networkmanager`, `pipewire`, `cups`, `bluez`, `docker`, `sddm`, …). No
+  nixarchy list contains them, so there is nothing to wrap. The check now
+  reads `options.environment.systemPackages.definitionsWithLocations`, keeps
+  the definitions from this repo's `modules/`, subtracts the app picks, and
+  requires priority ≥ 10. Service packages stay out of scope: a user changes
+  those through `services.*.package`, not `systemPackages`. Found by the coder
+  agent at step 2.
+- **`modules/services/devenv.nix:104` is wrapped too:** an unasked service
+  package that the plan's file list missed. The MicroVM guest templates are
+  separate systems, and out of scope.

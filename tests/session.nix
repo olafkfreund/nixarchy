@@ -562,10 +562,11 @@ pkgs.testers.runNixOSTest {
         # measures (a dispatch reply, say) was not "ok".
         launch(label)
 
-        # Stage 3: the dialog. Only a polkit agent starts
-        # polkit-agent-helper, and only once it is asking for the password
-        # -- so this is the dialog being up, deterministically. OCR was
-        # tried first and cannot read this theme's dialog (see the greeter).
+        # Stage 3: the dialog. Only a polkit agent starts polkit-agent-helper,
+        # but the unit appears BEFORE the password field is focused and the
+        # prompt live: keys sent then were lost and PAM got an empty password
+        # (#1168 CI). Stage 3b below waits for the dialog itself. OCR was tried
+        # first and cannot read this theme's dialog (see the greeter).
         try:
             machine.wait_until_succeeds(
                 "test -n \"$(systemctl list-units --no-legend 'polkit-agent-helper@*')\"",
@@ -588,9 +589,37 @@ pkgs.testers.runNixOSTest {
                 f"{label}: stage 3 timed out after 90s waiting for "
                 "polkit-agent-helper@*")
 
-        machine.send_chars("omarchy\n")
+        # Stage 3b: the dialog's own layer (PolkitAgent.qml, namespace
+        # omarchy-polkit, exclusive keyboard focus) is mapped. Then one second
+        # for its Qt.callLater(refocus) to put focus in the field.
         machine.wait_until_succeeds(
-            f'test "$(stat -c %U {ok_file})" = root', timeout=60)
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+            " hyprctl layers -j' > /tmp/pkexec-layers.json;"
+            " grep -q omarchy-polkit /tmp/pkexec-layers.json", timeout=30)
+        machine.sleep(1)
+
+        # Stage 4: the password, and the command it authorises.
+        typed_at = machine.succeed("date +%s").strip()
+        machine.send_chars("omarchy\n")
+        try:
+            machine.wait_until_succeeds(
+                f'test "$(stat -c %U {ok_file})" = root', timeout=60)
+        except Exception:
+            pam = machine.succeed(
+                f"journalctl -b --since=@{typed_at} --no-pager -o cat"
+                " -t polkit-agent-helper-1 || true")
+            pklog = machine.succeed(
+                f"cat /tmp/pkexec-{label}.log 2>/dev/null || echo absent")
+            pkrc = machine.succeed(
+                f"cat /tmp/pkexec-{label}.rc 2>/dev/null || echo absent")
+            print(f"{label}: polkit-agent-helper since typing:\n{pam}")
+            print(f"{label}: pkexec log: {pklog.strip()!r}, exit code: {pkrc.strip()!r}")
+            cause = ("authentication failed: the password did not reach the"
+                     " field intact" if "pam_authenticate failed" in pam
+                     else "pkexec did not create it")
+            raise Exception(f"{label}: stage 4 -- {ok_file} never appeared as"
+                            f" root ({cause})")
 
     def launch_dispatch_pkexec(label):
         runner = write_pkexec_runner(

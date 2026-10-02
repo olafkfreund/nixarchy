@@ -2449,6 +2449,15 @@
             config = self.nixosConfigurations.reference.config;
           };
 
+          # #1163: a user's own Mesa in hardware.graphics.extraPackages(32)
+          # collides with nixarchy's, in buildEnv, once both are force-set --
+          # evaluation only, against modules/nixos.nix's assertions. See
+          # tests/graphics-mesa-clash.nix.
+          graphics-mesa-clash = import ./tests/graphics-mesa-clash.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+          };
+
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
           # for what that can and cannot prove. Costs about what reference-toplevel
           # above does: a runCommand plus a ~1-1.5 GB guest closure from

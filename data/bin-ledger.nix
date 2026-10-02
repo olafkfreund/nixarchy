@@ -148,6 +148,10 @@
     reason = "It tests for the LSP limiter at a fixed path under /usr/lib/lv2. NixOS keeps LV2 plugins in the store and points hosts at them with LV2_PATH, so the search is over LV2_PATH and the system profile.";
     allow = "systemctl-user";
   };
+  "omarchy-bar-text-color" = {
+    class = "patch";
+    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: ImageMagick now samples the file's first frame only ([0]), since a GIF or video background otherwise decodes every frame and the colour match falls into the fallback. Deleted by the quattro bump, with the rest of that patch.";
+  };
   "omarchy-bluetooth-device" = {
     class = "patch";
     reason = "Upstream pairs without an agent lifecycle. For #1085, the pair action starts a temporary NoInputNoOutput bt-agent, waits until the adapter is pairable, then stops that agent after pairing and trust but before connect; the other actions keep upstream behavior.";
@@ -315,6 +319,10 @@
   "omarchy-menu" = {
     class = "patch";
     reason = "`close` asks the menu to dismiss() over `shell call` before falling back to upstream's `shell hide`: hide reaches the menu's close(), which nixarchy-menu turns into dictation when voice is on (the hotkey's second tap), so a script that closed the menu started a recording (#1070). `call` exits 0 with \"unknown\" when the enabled menu has no dismiss(), so the reply is matched, not the status.";
+  };
+  "omarchy-menu-images" = {
+    class = "patch";
+    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: the image picker now lists video files too, thumbnailed with ffmpegthumbnailer (a separate, narrower-concurrency queue from vipsthumbnail's) rather than Qt's Image, with a per-file failure cache so one bad video does not retry every open. Needs ffmpegthumbnailer, already in pkgs/omarchy/default.nix runtimeDeps (first for Nautilus). Deleted by the quattro bump, with the rest of that patch.";
   };
   "omarchy-menu-keybindings" = {
     class = "patch";
@@ -574,9 +582,17 @@
     reason = "Vendored unchanged. Runs as root from a sysinit unit and clears machine identity: userdel, the /etc/ssh host keys, NetworkManager connections, the sddm autologin drop-in and /etc/machine-id. Most of those paths are generated on NixOS, and the unit it removes itself from does not exist here.";
     allow = "account-tools etc-write";
   };
+  "omarchy-theme-bg-next" = {
+    class = "patch";
+    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: the cycle-through-backgrounds find now matches video extensions (mp4, m4v, mov, webm, mkv, avi) alongside the still-image ones. Deleted by the quattro bump, with the rest of that patch.";
+  };
+  "omarchy-theme-bg-set" = {
+    class = "patch";
+    reason = "Part of the #1153 video-backgrounds backport, carried as a patch: usage text and the summary/args metadata comment say \"media\" rather than \"image\", since this now accepts a video or GIF path too. Deleted by the quattro bump, with the rest of that patch.";
+  };
   "omarchy-theme-set" = {
     class = "patch";
-    reason = "Two edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; and omarchy-theme-set-zed is appended, which upstream has no equivalent of.";
+    reason = "Three edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; omarchy-theme-set-zed is appended, which upstream has no equivalent of; and the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429) adds is_video_path and the staged-background lookups it needs, carried as a patch and deleted by the quattro bump with the rest of it.";
   };
   "omarchy-theme-set-browser-policy" = {
     class = "patch";
@@ -589,6 +605,10 @@
   "omarchy-theme-set-zed" = {
     class = "new";
     reason = "Not in upstream, which ships theme setters for vscode, obsidian and others but none for Zed, pointing at the AUR's omazed instead -- which cannot work on v4. Reads the palette from colors.toml.";
+  };
+  "omarchy-theme-switcher" = {
+    class = "patch";
+    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: theme-preview lookup and caching now also match video extensions (mp4, m4v, mov, webm, mkv, avi), so a theme whose preview or first background is a video still gets one in the switcher. Deleted by the quattro bump, with the rest of that patch.";
   };
   "omarchy-toggle-crash-capture" = {
     class = "vendor";

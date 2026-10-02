@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1163
 author: olafkfreund
 ---
@@ -96,3 +96,8 @@ collision … share/glvnd/egl_vendor.d/50_mesa.json
    Hyprland too, but carry no Mesa collision. The proposal is: not in this
    fix. `checks.graphics-glibc` already compares their glibc for the
    reference machine, and #1164 takes the general case.
+
+## Owner's answers (2026-10-02)
+
+1. **(a), an assertion** with the fix spelled out.
+2. **Other driver packages are out of this fix,** and covered by #1164.

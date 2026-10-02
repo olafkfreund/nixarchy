@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1163
 intent: intent/2026-10-02-1163-mesa-extrapackages.md
 ---

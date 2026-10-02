@@ -3,7 +3,7 @@
 # collides with nixarchy's own Mesa in buildEnv (both ship
 # share/glvnd/egl_vendor.d/*mesa.json). The assertions in modules/nixos.nix
 # catch this at evaluation; this check proves they fire exactly when they
-# should, against five fixtures built from the reference machine.
+# should, against seven fixtures built from the reference machine.
 #
 # Never built: fakeMesa/fakeMesa32 are runCommand derivations whose pname and
 # outPath are all the assertion reads. Building merged graphics-drivers
@@ -64,10 +64,28 @@ let
       expectFail = false;
       mustContain = [ ];
     };
+    # The user's own package, and a *different* Mesa beside it: theirs to
+    # reconcile, so no #1163 error. Fails if the "still nixarchy's" gate goes.
     D = {
       assertions = extend {
         hardware.graphics.package = fakeMesa;
-        hardware.graphics.extraPackages = [ fakeMesa ];
+        hardware.graphics.extraPackages = [ fakeMesa32 ];
+      };
+      expectFail = false;
+      mustContain = [ ];
+    };
+    # Rusticl: mesa.opencl shares pname "mesa" but ships no egl_vendor.d file,
+    # so it collides with nothing (review of #1165).
+    F = {
+      assertions = extend { hardware.graphics.extraPackages = [ oursMesa.opencl ]; };
+      expectFail = false;
+      mustContain = [ ];
+    };
+    # A leftover extraPackages32 with 32-bit off is never merged.
+    G = {
+      assertions = extend {
+        hardware.graphics.enable32Bit = false;
+        hardware.graphics.extraPackages32 = [ fakeMesa32 ];
       };
       expectFail = false;
       mustContain = [ ];

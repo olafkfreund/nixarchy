@@ -17,7 +17,8 @@ let
   # Mesa in extraPackages collides with it in buildEnv. Matched by pname, so an
   # overridden or i686 Mesa is caught too.
   g = config.hardware.graphics;
-  isMesa = p: (p.pname or (lib.getName p)) == "mesa";
+  # Main output only: mesa.opencl etc. share pname but ship no egl_vendor.d.
+  isMesa = p: (p.pname or (lib.getName p)) == "mesa" && (p.outputName or "out") == "out";
   ours = hyprPkgs.mesa;
   ours32 = hyprPkgs.pkgsi686Linux.mesa;
   mesaClash = mine: extras: lib.filter (p: isMesa p && p.outPath != mine.outPath) extras;

@@ -42,7 +42,8 @@ log=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null \
   | awk -F'\t' '$1 != job { job = $1; skip = 0 } /Post job cleanup/ { skip = 1 } !skip { print $1 ": " $3 }' \
   | sed 's/\x1b\[[0-9;]*m//g; s/\^\[\[[0-9;]*m//g; s/: \xEF\xBB\xBF\?[0-9T:.-]*Z /: /' \
   | grep -vE '^[^:]*: +(… |[0-9]+ *\||\|)' \
-  | grep -E -A6 'error|Error|does not evaluate|unexpected changes|Failed to|FAIL' | head -100)
+  | grep -E -A6 'error|Error|does not evaluate|unexpected changes|Failed to|FAIL' \
+  | sed -n '1,100p') # sed, not head: head exits early and the stages before it die of SIGPIPE under pipefail (#1157, tests/AGENTS.md).
 
 body=$(cat <<EOF
 @copilot The dependency bump on this branch broke the build. Fix it here, on this branch.

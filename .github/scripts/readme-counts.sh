@@ -103,7 +103,7 @@ quantity() {
     return
   fi
 
-  current=$(sed -nE "s/$find/\1/p" "$readme" | head -1)
+  current=$(sed -nE "s/$find/\1/p" "$readme" | sed -n 1p)
   if [ -z "$current" ]; then
     echo "::error::$name: nothing in $(basename "$readme") matches its pattern" >&2
     echo "::error::  the wording moved, or the pattern is wrong. Not guessing." >&2
@@ -153,7 +153,7 @@ quantity() {
 # ---- the quantities ---------------------------------------------------------
 
 commands=$("$omarchy/bin/omarchy" commands --check 2>/dev/null |
-  grep -oE '[0-9]+ commands' | grep -oE '[0-9]+' | head -1)
+  grep -oE '[0-9]+ commands' | grep -oE '[0-9]+' | sed -n 1p)
 
 # The app counts, using the expression build.yml already had -- verbatim, so
 # the two cannot drift apart while both exist. The field names are the

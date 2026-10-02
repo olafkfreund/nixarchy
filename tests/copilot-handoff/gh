@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Stub `gh` for checks.copilot-handoff (tests/copilot-handoff.nix). Dispatches
+# on the whole argument line, since the real copilot-handoff.sh runs `gh`
+# with a different --json/-q combination for each call it makes.
+set -euo pipefail
+args="$*"
+
+case "$args" in
+  *"--json jobs"*)
+    printf '%s\n' "system"
+    ;;
+  *"pr list "*)
+    printf '%s\n' "1154"
+    ;;
+  *"--json headSha"*)
+    printf '%s\n' "deadbeef"
+    ;;
+  *"--json comments"*)
+    printf '%s\n' "[]"
+    ;;
+  *"--log-failed"*)
+    # 500 lines, enough to make `head -100` close the pipe on a still-writing
+    # upstream stage and SIGPIPE it under pipefail (#1157).
+    for i in $(seq 1 500); do
+      printf 'system\tDrive a session\t2026-10-02T00:00:00.0000000Z error: line %d\n' "$i"
+    done
+    ;;
+  *)
+    echo "copilot-handoff/gh stub: unexpected call: $args" >&2
+    exit 3
+    ;;
+esac

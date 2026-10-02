@@ -192,6 +192,19 @@ pkgs.mesa;` (and `package32`), and then keeping its glibc in step with
 Hyprland's is that machine's job: `checks.graphics-glibc` only covers the
 reference machine.
 
+**A second Mesa in `extraPackages` collides, so #1163 refuses it.**
+`hardware.graphics.package` is only one entry in the `buildEnv` NixOS builds
+from `package` plus `extraPackages`; a *different* Mesa listed there (its own
+`pkgs.mesa`, say) ships the same
+`share/glvnd/egl_vendor.d/50_mesa.json`, and `buildEnv` collides. An
+assertion in `modules/nixos.nix` catches this at evaluation -- while this
+module's Mesa is still the one in effect, and only against a Mesa with a
+different `outPath` -- and names both store paths. The way out is either:
+drop `mesa` from `extraPackages` (this module's Mesa already provides it), or
+set `hardware.graphics.package` (and `package32`) yourself, which then makes
+its glibc your own job to keep in step with Hyprland's, same as the overlay
+case above. `checks.graphics-mesa-clash` holds the pairing.
+
 <a id="declarative-flatpaks-for-the-software-nixpkgs-genu"></a>
 ### Declarative Flatpaks, for the software nixpkgs genuinely does not carry
 

@@ -13,6 +13,20 @@ let
   # hardware.graphics block below.
   hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
 
+  # #1163: while hardware.graphics.package is nixarchy's Mesa, a *different*
+  # Mesa in extraPackages collides with it in buildEnv. Matched by pname, so an
+  # overridden or i686 Mesa is caught too.
+  g = config.hardware.graphics;
+  # Main output only: mesa.opencl etc. share pname but ship no egl_vendor.d.
+  isMesa = p: (p.pname or (lib.getName p)) == "mesa" && (p.outputName or "out") == "out";
+  ours = hyprPkgs.mesa;
+  ours32 = hyprPkgs.pkgsi686Linux.mesa;
+  mesaClash = mine: extras: lib.filter (p: isMesa p && p.outPath != mine.outPath) extras;
+  clash64 = lib.optionals (g.package.outPath == ours.outPath) (mesaClash g.package g.extraPackages);
+  clash32 = lib.optionals (g.enable32Bit && g.package32.outPath == ours32.outPath) (
+    mesaClash g.package32 g.extraPackages32
+  );
+
   # The rows of upstream's /etc overlay that are installed as themselves.
   installedEtc = lib.attrNames (
     lib.filterAttrs (_: row: row.class == "installed") (import ../data/etc-overlay.nix)
@@ -886,6 +900,40 @@ in
           Omarchy 4.x is written against (hl.bind / hl.window_rule / hl.on).
           Use inputs.hyprland's package, not nixpkgs'.
         '';
+      }
+      {
+        assertion = clash64 == [ ];
+        message =
+          let
+            p = builtins.head clash64;
+          in
+          "programs.nixarchy: hardware.graphics.extraPackages contains "
+          + "${lib.getName p}-${p.version or "?"} (${p.outPath}), but nixarchy sets "
+          + "hardware.graphics.package to Hyprland's own Mesa (${ours.outPath}) so "
+          + "the drivers Hyprland loads share its glibc (#1158). Two different "
+          + "Mesa builds collide in graphics-drivers (#1163). Remove mesa from "
+          + "hardware.graphics.extraPackages: Hyprland's Mesa already provides "
+          + "it. Or, to keep your own, set hardware.graphics.package = pkgs.mesa; "
+          + "yourself, and then keeping its glibc in step with Hyprland's is "
+          + "yours to check "
+          + "(docs/internals/flake.md#hyprlands-mesa-follows-its-own-nixpkgs).";
+      }
+      {
+        assertion = clash32 == [ ];
+        message =
+          let
+            p = builtins.head clash32;
+          in
+          "programs.nixarchy: hardware.graphics.extraPackages32 contains "
+          + "${lib.getName p}-${p.version or "?"} (${p.outPath}), but nixarchy sets "
+          + "hardware.graphics.package32 to Hyprland's own Mesa (${ours32.outPath}) "
+          + "so the drivers Hyprland loads share its glibc (#1158). Two different "
+          + "Mesa builds collide in graphics-drivers-32bit (#1163). Remove mesa "
+          + "from hardware.graphics.extraPackages32: Hyprland's Mesa already "
+          + "provides it. Or, to keep your own, set "
+          + "hardware.graphics.package32 = pkgs.driversi686Linux.mesa; yourself, "
+          + "and then keeping its glibc in step with Hyprland's is yours to check "
+          + "(docs/internals/flake.md#hyprlands-mesa-follows-its-own-nixpkgs).";
       }
     ];
 

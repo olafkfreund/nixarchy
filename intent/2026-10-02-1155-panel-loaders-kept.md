@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1155
 author: olafkfreund
 ---
@@ -89,3 +89,8 @@ in v4.0.4.
 2. **#958, the IpcHandler segfault.** It crashed in the same registration
    path. Should this task also try to reproduce #958 and show whether it is
    gone, or leave #958 closed as it is and only note the link?
+
+## Owner's approval (2026-10-02)
+
+Approved without answers to the two open questions. The spec proposes one
+for each, and the spec approval settles them.

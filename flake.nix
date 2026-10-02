@@ -743,6 +743,12 @@
             # not read clocksource" for a reason that has nothing to do with
             # whether the guest has a key configured.
             openssh
+            # owe, for the #1153 section: an undeclared `owe` here would read
+            # as "owe not on PATH" on a machine that simply has not rebuilt
+            # since this row was added, rather than naming the real cause.
+            # Guarded with `command -v owe` regardless, the same as distrobox
+            # above, because programs.nixarchy.owe can be turned off.
+            nixarchy-apps.owe
           ];
           text = builtins.readFile ./pkgs/verify.sh;
         };

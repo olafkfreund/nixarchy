@@ -20,6 +20,33 @@ wallpaper all restyle together when a theme is applied:
 
 ![Three full desktop restyles in a row: applying a theme recolours the bar, the terminal, the window borders and the wallpaper in one step](../img/features/themes.gif)
 
+## Video backgrounds
+
+A theme's `backgrounds/` directory, and the picker that reads it, accept a
+video or an animated GIF alongside the usual images: `mp4`, `m4v`, `mov`,
+`webm`, `mkv`, `avi`, or `gif`. Drop one in next to your stills --
+`~/.config/omarchy/backgrounds/<theme>/` for your own themes, or a theme's
+own `backgrounds/` if you are building one -- and it shows up in the
+picker and in `omarchy theme bg next` exactly like a picture does.
+
+This plays through [owe](https://github.com/omacom/owe), backported here a
+release ahead of upstream carrying it. As upstream describes it, a video
+background plays its sound through the default audio output -- there is no
+silent-by-default setting. Decoding and rendering a video costs more than a
+still, continuously, for as long as it is on screen; on battery that is a
+real cost, and owe can be configured to pause while unplugged (see its own
+`config.toml.example`, installed beside the package).
+
+`owe status` reports what is currently playing and why; `owe pause` and
+`owe resume` override the policy manually, for as long as the session lasts.
+
+Turning the whole feature off is `programs.nixarchy.owe.enable = false;`.
+Video and GIF files stay listed and selectable -- nothing here stops you
+picking one -- but with the option off nothing is running to play it, so
+the desktop draws an empty background and the lock screen shows a still
+frame of the video instead. It is on by default everywhere nixarchy
+manages the whole machine.
+
 ## Where the stock themes live, and why you cannot copy-edit them in place
 
 Upstream says: copy one of the existing themes from `/usr/share/omarchy/themes`

@@ -178,3 +178,14 @@ spec: spec/2026-10-03-1179-seed-instrumentation-depth.md
 
 Revert the squash commit. The three tests return to their own seed copies,
 and the check goes with them.
+
+## Deviations (2026-10-03, during implementation)
+
+- **Step 1, the helper's parameters:** `install-encrypted`'s configuration
+  values differ: autologin on, and
+  `boot.initrd.secrets."/etc/shadow" = "/var/lib/nixarchy/initrd-shadow"`.
+  The helper takes them the way the template does, from `install.sh`'s
+  placeholders: `encrypt ? false` drives `services.displayManager.autoLogin.enable`
+  (`@autologin@` follows `@encrypt@`), and `recoverySecret ? false` adds the
+  `initrd.secrets` entry (`@recoverysecret@`). Found by the coder agent at
+  step 1.

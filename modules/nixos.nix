@@ -297,6 +297,10 @@ let
   ];
 in
 {
+  # Names this file as "declared in" (#1166). Here, not as an imports wrap in
+  # flake.nix: an extra import level reorders list merges (free-space, #1176).
+  _file = ./nixos.nix;
+
   imports = [
     inputs.home-manager.nixosModules.home-manager
     inputs.nixarchy-omatheme.nixosModules.default

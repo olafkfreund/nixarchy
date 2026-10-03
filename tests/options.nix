@@ -197,7 +197,15 @@ let
   # Bound once for the same reason (#747): the #773 cases share it.
   # It also stands in for a user running ai-mirror's own module: a stub option
   # is enough, since the default reads only `programs.ai-mirror.enable`.
-  aiMirrorMcpHome = homeOn { aiMirror.mcp = true; } {
+  # localAi on, so pi is installed: pi's writer is gated on that (#1177), and
+  # an "on" home without it could not show all four writers present.
+  aiMirrorMcpHome = homeOn {
+    aiMirror.mcp = true;
+    localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+  } {
     imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
     programs.ai-mirror.enable = true;
   };
@@ -296,6 +304,7 @@ let
     "nixarchyAiMirrorMcpClaude"
     "nixarchyAiMirrorMcpCodex"
     "nixarchyAiMirrorMcpOpencode"
+    "nixarchyAiMirrorMcpPi"
   ];
   hasAiMirrorPackage = home: builtins.any (p: (p.pname or "") == "ai-mirror") home.home.packages;
   hasOwePackage = home: builtins.any (p: (p.pname or "") == "owe") home.home.packages;
@@ -667,6 +676,42 @@ let
       on = hasAny defaultHomeOn mcpActivationNames;
       off = hasAny defaultHome mcpActivationNames;
     };
+
+    # #1177: pi's two MCP files are written only where pi is installed. `mcp`
+    # is on for everyone and mergeJson creates the file it merges into, so an
+    # ungated writer would put ~/.pi/agent/mcp.json on every machine. `on` is
+    # a machine with pi, `off` the same one without localAi at all: the
+    # assertion that tells a gate that works from one that never fires.
+    piMcpGate =
+      let
+        withLocalAi = enable: homeOn { aiMirror.mcp = true; localAi = { inherit enable; allowCpu = true; }; } { };
+        # localAi on, but pi not among its agents: the half of piOn that
+        # `enable` alone does not reach. A regression to `piOn =
+        # localAi.enable` passes every other case here and fails this one.
+        withoutPi = homeOn {
+          aiMirror.mcp = true;
+          localAi = { enable = true; allowCpu = true; agents = [ "opencode" ]; };
+        } { };
+        # And the `mcpEnabled &&` half of the NixOS server's gate, which no
+        # other case reaches: nixarchyMcpPi is deliberately not in
+        # mcpActivationNames, because the default home has no pi.
+        mcpOffWithPi = homeOn {
+          mcp = false;
+          localAi = { enable = true; allowCpu = true; };
+        } { };
+        names = [
+          "nixarchyMcpPi"
+          "nixarchyAiMirrorMcpPi"
+        ];
+      in
+      {
+        on = hasAll (withLocalAi true) names;
+        off =
+          hasAny (withLocalAi false) names
+          || hasAny defaultHomeOn names
+          || hasAny withoutPi names
+          || hasAny mcpOffWithPi [ "nixarchyMcpPi" ];
+      };
 
     # ---- #888: the Nix skills, and the switch that takes them away --------
     #

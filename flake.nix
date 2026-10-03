@@ -2458,6 +2458,15 @@
             reference = self.nixosConfigurations.reference;
           };
 
+          # Every package nixarchy adds to environment.systemPackages unasked
+          # must yield to a user's own copy -- evaluation only. See
+          # tests/user-packages-win.nix and #1167.
+          user-packages-win = import ./tests/user-packages-win.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+            inherit lib;
+          };
+
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
           # for what that can and cannot prove. Costs about what reference-toplevel
           # above does: a runCommand plus a ~1-1.5 GB guest closure from

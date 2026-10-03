@@ -101,7 +101,8 @@ in
   };
 
   config = lib.mkIf (cfg.enable && svc.enable) {
-    environment.systemPackages = [ svc.package ];
+    # lowPrio: a user's own copy wins any binary it shares (#1167, as #809).
+    environment.systemPackages = map lib.lowPrio [ svc.package ];
 
     programs = {
       # `lines`, which merges -- so this composes with the Omarchy rc chain

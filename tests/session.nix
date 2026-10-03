@@ -263,6 +263,7 @@ pkgs.testers.runNixOSTest {
 
   testScript = builtins.readFile ./session-journal.py + ''
     import os
+    import time
 
     # A note on order, because the config-repo block below cost a CI run to
     # learn it: a gate asked EARLIER than an existing one can make that one
@@ -510,25 +511,145 @@ pkgs.testers.runNixOSTest {
     # agent through the logind session, and only this file logs in through the
     # greeter. pkexec is started by Hyprland so it sits in that session, as a
     # menu-launched rebuild does.
-    machine.wait_until_succeeds(
-        "out=$(journalctl -b -t omarchy-shell --no-pager); "
-        "grep -q 'omarchy polkit agent registered' <<<\"$out\"", timeout=120)
-    machine.succeed(
-        "cat > /tmp/pkexec-probe.sh <<'PROBE_EOF'\n"
-        "export XDG_RUNTIME_DIR=/run/user/1000\n"
-        "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
-        # Lua-era Hyprland: dispatch takes a Lua expression, as upstream's own
-        # omarchy-restart-shell does.
-        "hyprctl dispatch 'hl.dsp.exec_cmd(\"/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok\")'\n"
-        "PROBE_EOF")
-    machine.succeed("su omarchy -c 'bash /tmp/pkexec-probe.sh'")
-    # Only a polkit agent starts polkit-agent-helper, and only once it is asking
-    # for the password -- so this is the dialog being up, deterministically.
-    # OCR was tried first and cannot read this theme's dialog (see the greeter).
-    machine.wait_until_succeeds(
-        "systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)
-    machine.send_chars("omarchy\n")
-    machine.wait_until_succeeds("test \"$(stat -c %U /tmp/pkexec-ok)\" = root", timeout=60)
+    #
+    # #1161: run 37042891405 timed out at the generic 90s
+    # polkit-agent-helper@* wait with nothing to say why. The old probe's
+    # "registered at any point since boot" grep can also match a dead
+    # shell's line, because omarchy-launch-shell can relaunch Quickshell
+    # mid-session (PolkitAgent.qml declares no IpcHandler, so the journal by
+    # PID is the only way to ask "is *this* shell's agent up"). pkexec_probe
+    # scopes stage 1 to the running shell's PID, checks the launch itself
+    # (stage 2) instead of assuming it worked, and on a stage-3 timeout
+    # prints what each stage actually saw instead of a bare timeout.
+    def write_pkexec_runner(label, pkexec_cmd):
+        # A standalone script, not the launch command's own argv or Lua
+        # string: capturing pkexec's log and exit code needs a `;` and a
+        # `$?`, and nesting those through su's, systemd-run's and Hyprland's
+        # own quoting is a quote-escaping trap for no gain over a file.
+        runner = f"/tmp/pkexec-{label}-run.sh"
+        machine.succeed(
+            f"cat > {runner} <<'RUN_EOF'\n"
+            f"{pkexec_cmd} >/tmp/pkexec-{label}.log 2>&1\n"
+            f"echo $? >/tmp/pkexec-{label}.rc\n"
+            + "RUN_EOF")
+        return runner
+
+    def pkexec_probe(launch, label, ok_file):
+        # Stage 1: the agent registered for the shell running right now.
+        pid = ""
+        deadline = time.monotonic() + 120
+        while True:
+            new_pid = machine.succeed("pgrep -o quickshell").strip()
+            if new_pid != pid:
+                pid = new_pid
+                print(f"{label}: watching omarchy-shell[{pid}] for its polkit agent")
+            out = machine.succeed(
+                f"journalctl -b -t omarchy-shell _PID={pid} -o cat --no-pager")
+            if "not registered; another agent may be running" in out:
+                raise Exception(
+                    f"{label}: stage 1 -- omarchy-shell[{pid}] logged "
+                    "'omarchy polkit agent is not registered; another "
+                    "agent may be running'")
+            if "omarchy polkit agent registered" in out:
+                break
+            if time.monotonic() > deadline:
+                raise Exception(
+                    f"{label}: stage 1 timed out after 120s waiting for "
+                    f"omarchy-shell[{pid}] to register its polkit agent")
+            machine.sleep(2)
+
+        # Stage 2: launch, checked -- `launch` raises itself if what it
+        # measures (a dispatch reply, say) was not "ok".
+        launch(label)
+
+        # Stage 3: the dialog. Only a polkit agent starts polkit-agent-helper,
+        # but the unit appears BEFORE the password field is focused and the
+        # prompt live: keys sent then were lost and PAM got an empty password
+        # (#1168 CI). Stage 3b below waits for the dialog itself. OCR was tried
+        # first and cannot read this theme's dialog (see the greeter).
+        try:
+            machine.wait_until_succeeds(
+                "test -n \"$(systemctl list-units --no-legend 'polkit-agent-helper@*')\"",
+                timeout=90)
+        except Exception:
+            dispatch = machine.succeed(
+                f"cat /tmp/pkexec-{label}.dispatch 2>/dev/null "
+                "|| echo 'no dispatch file'")
+            pklog = machine.succeed(
+                f"cat /tmp/pkexec-{label}.log 2>/dev/null || echo absent")
+            pkrc = machine.succeed(
+                f"cat /tmp/pkexec-{label}.rc 2>/dev/null || echo absent")
+            print(f"{label}: dispatch reply: {dispatch.strip()!r}")
+            print(f"{label}: pkexec log: {pklog.strip()!r}")
+            print(f"{label}: pkexec exit code: {pkrc.strip()!r}")
+            print(machine.succeed("journalctl -b -u polkit --no-pager | tail -40"))
+            print(machine.succeed(
+                "journalctl -b -t omarchy-shell --no-pager | tail -40"))
+            raise Exception(
+                f"{label}: stage 3 timed out after 90s waiting for "
+                "polkit-agent-helper@*")
+
+        # Stage 3b: the dialog's own layer (PolkitAgent.qml, namespace
+        # omarchy-polkit, exclusive keyboard focus) is mapped. Then one second
+        # for its Qt.callLater(refocus) to put focus in the field.
+        machine.wait_until_succeeds(
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+            " hyprctl layers -j' > /tmp/pkexec-layers.json;"
+            " grep -q omarchy-polkit /tmp/pkexec-layers.json", timeout=30)
+        machine.sleep(1)
+
+        # Stage 4: the password, and the command it authorises.
+        typed_at = machine.succeed("date +%s").strip()
+        machine.send_chars("omarchy\n")
+        try:
+            machine.wait_until_succeeds(
+                f'test "$(stat -c %U {ok_file})" = root', timeout=60)
+        except Exception:
+            pam = machine.succeed(
+                f"journalctl -b --since=@{typed_at} --no-pager -o cat"
+                " -t polkit-agent-helper-1 || true")
+            pklog = machine.succeed(
+                f"cat /tmp/pkexec-{label}.log 2>/dev/null || echo absent")
+            pkrc = machine.succeed(
+                f"cat /tmp/pkexec-{label}.rc 2>/dev/null || echo absent")
+            print(f"{label}: polkit-agent-helper since typing:\n{pam}")
+            print(f"{label}: pkexec log: {pklog.strip()!r}, exit code: {pkrc.strip()!r}")
+            cause = ("authentication failed: the password did not reach the"
+                     " field intact" if "pam_authenticate failed" in pam
+                     else "pkexec did not create it")
+            raise Exception(f"{label}: stage 4 -- {ok_file} never appeared as"
+                            f" root ({cause})")
+
+    def launch_dispatch_pkexec(label):
+        runner = write_pkexec_runner(
+            label, "/run/wrappers/bin/pkexec env touch /tmp/pkexec-ok")
+        # Lua-era Hyprland: dispatch takes a Lua expression, as upstream's
+        # own omarchy-restart-shell does. hyprctl's reply is captured, not
+        # assumed: anything but "ok" fails stage 2 at once.
+        script = (
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            f"echo \"$HYPRLAND_INSTANCE_SIGNATURE\" > /tmp/pkexec-{label}.sig\n"
+            f"hyprctl dispatch 'hl.dsp.exec_cmd(\"sh {runner}\")' "
+            f"> /tmp/pkexec-{label}.dispatch 2>&1\n"
+            f"echo $? > /tmp/pkexec-{label}.dispatchrc\n"
+        )
+        print(f"{label}: dispatch script:\n{script}")
+        machine.succeed(
+            f"cat > /tmp/pkexec-probe-{label}.sh <<'PROBE_EOF'\n" + script
+            + "PROBE_EOF")
+        # execute, not succeed: a failing hyprctl must reach the stage-2
+        # message below with its reply, not die as "exit code 4" (#1161 probe b).
+        machine.execute(f"su omarchy -c 'bash /tmp/pkexec-probe-{label}.sh'")
+        reply = machine.execute(f"cat /tmp/pkexec-{label}.dispatch")[1].strip()
+        rc = machine.execute(f"cat /tmp/pkexec-{label}.dispatchrc")[1].strip()
+        sig = machine.execute(f"cat /tmp/pkexec-{label}.sig")[1].strip()
+        assert reply == "ok", (
+            f"{label}: stage 2 -- hyprctl dispatch exited {rc or '?'} and "
+            f"returned {reply!r} (HYPRLAND_INSTANCE_SIGNATURE={sig!r})")
+
+    pkexec_probe(launch_dispatch_pkexec, "dispatch", "/tmp/pkexec-ok")
     print("the rebuild's elevation reaches the Omarchy polkit dialog")
 
     # The same, from a `systemd-run --user` unit, which is where a detached
@@ -538,15 +659,20 @@ pkgs.testers.runNixOSTest {
     # a kept one would pass without a dialog.
     machine.wait_until_succeeds(
         "! systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=60)
-    machine.succeed(
-        "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
-        " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
-        " systemd-run --user --collect --unit=unit-pkexec-probe --"
-        " /run/wrappers/bin/pkexec touch /tmp/unit-pkexec-ok'")
-    machine.wait_until_succeeds(
-        "systemctl list-units --no-legend 'polkit-agent-helper@*' | grep -q .", timeout=90)
-    machine.send_chars("omarchy\n")
-    machine.wait_until_succeeds("test \"$(stat -c %U /tmp/unit-pkexec-ok)\" = root", timeout=60)
+
+    def launch_systemd_run_pkexec(label):
+        runner = write_pkexec_runner(
+            label, "/run/wrappers/bin/pkexec touch /tmp/unit-pkexec-ok")
+        cmd = (
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+            " systemd-run --user --collect --unit=unit-pkexec-probe --"
+            f" sh {runner}'"
+        )
+        print(f"{label}: launch command:\n{cmd}")
+        machine.succeed(cmd)
+
+    pkexec_probe(launch_systemd_run_pkexec, "unit", "/tmp/unit-pkexec-ok")
     print("pkexec from a user unit reaches the Omarchy polkit dialog")
 
     # ---- hypr-rdp brings its desktop up (#1031) ----------------------------
@@ -586,7 +712,6 @@ pkgs.testers.runNixOSTest {
     # A value Omarchy never sets (its border_size is 2), in the form
     # Hyprforge's Engine.js emits, read back through the running Hyprland.
     import json
-    import time
     forge = "/home/omarchy/.config/hypr/hyprforge.lua"
     machine.succeed(
         "printf '%s\\n' 'hl.config({ general = { border_size = 7 } })' > " + forge

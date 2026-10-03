@@ -140,99 +140,118 @@ let
       cpuModule,
       instrumented ? false,
     }:
-    (inputs.nixpkgs.lib.nixosSystem {
-      # Not `inherit (pkgs) system`: pkgs.system is deprecated in favour of
-      # stdenv.hostPlatform.system, and nixpkgs warns on every evaluation of
-      # this check. Written out rather than inherited because the inherit form
-      # is what hid it -- a grep for `pkgs.system` does not find it.
-      system = pkgs.stdenv.hostPlatform.system;
-      specialArgs = { inherit inputs; };
-      modules = [
-        inputs.self.nixosModules.nixarchy
-        inputs.home-manager.nixosModules.home-manager
-        inputs.disko.nixosModules.disko
+    let
+      sys =
+        (inputs.nixpkgs.lib.nixosSystem {
+          # Not `inherit (pkgs) system`: pkgs.system is deprecated in favour of
+          # stdenv.hostPlatform.system, and nixpkgs warns on every evaluation of
+          # this check. Written out rather than inherited because the inherit form
+          # is what hid it -- a grep for `pkgs.system` does not find it.
+          system = pkgs.stdenv.hostPlatform.system;
+          specialArgs = { inherit inputs; };
+          modules = [
+            inputs.self.nixosModules.nixarchy
+            inputs.home-manager.nixosModules.home-manager
+            inputs.disko.nixosModules.disko
 
-        # The machine, as ONE module whose imports are the files
-        # installer/template/host/default.nix imports -- not as flat entries
-        # in this list.
-        #
-        # The shape is load-bearing and was not, before the hosts/ layout. A
-        # module's `imports` and a nixosSystem's `modules` merge in different
-        # orders, so listing these flat gives the same packages in a different
-        # environment.systemPackages ORDER; system-path hashes that order into
-        # chosenOutputs, so it is a different derivation, so the toplevel is,
-        # and the install has to build what it can no longer copy -- offline,
-        # which means stdenv, which means 459 derivations from hex0-seed and a
-        # fetch of a Debian patch that never arrives.
-        #
-        # So this mirrors hosts/<name>/default.nix, and the inner block below
-        # mirrors the configuration.nix that sits beside it, one level
-        # DEEPER: default.nix imports host.nix, disk-config.nix and
-        # configuration.nix (depth 1), and configuration.nix itself imports
-        # hardware-configuration.nix -- which carries install.sh's initrd pin
-        # -- and, in these tests, test-instrumentation.nix (depth 2). Before
-        # #1176 all three seeds put hardwareConfig/initrdPin/instrumentation
-        # at depth 0, flat in this very `modules` list, which is a different
-        # merge order and a different chosenOutputs from the real install --
-        # the gap checks.install-seed-shape now asserts closed. Keep both
-        # depths in step with installer/template/host/ -- a mismatch shows up
-        # as "cannot build", which is a clear enough signal.
-        {
-          imports = [
-            (import ../../installer/host.nix {
-              hostname = "installed";
-              username = "omarchy";
-            })
-            diskConfig
+            # The machine, as ONE module whose imports are the files
+            # installer/template/host/default.nix imports -- not as flat entries
+            # in this list.
+            #
+            # The shape is load-bearing and was not, before the hosts/ layout. A
+            # module's `imports` and a nixosSystem's `modules` merge in different
+            # orders, so listing these flat gives the same packages in a different
+            # environment.systemPackages ORDER; system-path hashes that order into
+            # chosenOutputs, so it is a different derivation, so the toplevel is,
+            # and the install has to build what it can no longer copy -- offline,
+            # which means stdenv, which means 459 derivations from hex0-seed and a
+            # fetch of a Debian patch that never arrives.
+            #
+            # So this mirrors hosts/<name>/default.nix, and the inner block below
+            # mirrors the configuration.nix that sits beside it, one level
+            # DEEPER: default.nix imports host.nix, disk-config.nix and
+            # configuration.nix (depth 1), and configuration.nix itself imports
+            # hardware-configuration.nix -- which carries install.sh's initrd pin
+            # -- and, in these tests, test-instrumentation.nix (depth 2). Before
+            # #1176 all three seeds put hardwareConfig/initrdPin/instrumentation
+            # at depth 0, flat in this very `modules` list, which is a different
+            # merge order and a different chosenOutputs from the real install --
+            # the gap checks.install-seed-shape now asserts closed. Keep both
+            # depths in step with installer/template/host/ -- a mismatch shows up
+            # as "cannot build", which is a clear enough signal.
             {
               imports = [
-                (hardwareConfig cpuModule)
-                initrdPin
-              ]
-              # A store file, not a derivation: builtins.toFile hashes the
-              # string itself, so this is not IFD. Importing it rather than
-              # the `instrumentation` module tests/install.nix used to carry
-              # is what makes the seed and the generated flake import
-              # BYTE-IDENTICAL content -- see `etcInstrumentation` above.
-              ++ pkgs.lib.optional instrumented (
-                import (builtins.toFile "test-instrumentation.nix" etcInstrumentation)
-              );
+                (import ../../installer/host.nix {
+                  hostname = "installed";
+                  username = "omarchy";
+                })
+                diskConfig
+                {
+                  imports = [
+                    (hardwareConfig cpuModule)
+                    initrdPin
+                  ]
+                  # A store file, not a derivation: builtins.toFile hashes the
+                  # string itself, so this is not IFD. Importing it rather than
+                  # the `instrumentation` module tests/install.nix used to carry
+                  # is what makes the seed and the generated flake import
+                  # BYTE-IDENTICAL content -- see `etcInstrumentation` above.
+                  ++ pkgs.lib.optional instrumented (
+                    import (builtins.toFile "test-instrumentation.nix" etcInstrumentation)
+                  );
 
-              time.timeZone = "UTC";
-              console.keyMap = "us";
-              nixpkgs.config.allowUnfree = true;
-              # Autologin follows encryption -- install.sh substitutes
-              # @autologin@ with the same $encrypt it substitutes @encrypt@
-              # with, because an encrypted disk has already authenticated the
-              # user by the time a greeter would ask.
-              services.displayManager.autoLogin = {
-                enable = encrypt;
-                user = "omarchy";
-              };
-              # hashedPasswordFile, as installer/template/host/configuration.nix
-              # sets it -- this block mirrors that file and the comment above
-              # says to keep them in step. It had drifted to `hashedPassword`,
-              # which nixpkgs now warns about: with both set, and mutableUsers
-              # true, the FILE wins, so the literal here was already dead and
-              # the machine was already logging in with what install.sh wrote.
-              #
-              # The warning appeared when installer/host.nix started setting
-              # the file too (#457), which is what made the drift visible
-              # rather than what caused it.
-              users.users.omarchy.hashedPasswordFile = "/var/lib/nixarchy/password.hash";
+                  time.timeZone = "UTC";
+                  console.keyMap = "us";
+                  nixpkgs.config.allowUnfree = true;
+                  # Autologin follows encryption -- install.sh substitutes
+                  # @autologin@ with the same $encrypt it substitutes @encrypt@
+                  # with, because an encrypted disk has already authenticated the
+                  # user by the time a greeter would ask.
+                  services.displayManager.autoLogin = {
+                    enable = encrypt;
+                    user = "omarchy";
+                  };
+                  # hashedPasswordFile, as installer/template/host/configuration.nix
+                  # sets it -- this block mirrors that file and the comment above
+                  # says to keep them in step. It had drifted to `hashedPassword`,
+                  # which nixpkgs now warns about: with both set, and mutableUsers
+                  # true, the FILE wins, so the literal here was already dead and
+                  # the machine was already logging in with what install.sh wrote.
+                  #
+                  # The warning appeared when installer/host.nix started setting
+                  # the file too (#457), which is what made the drift visible
+                  # rather than what caused it.
+                  users.users.omarchy.hashedPasswordFile = "/var/lib/nixarchy/password.hash";
 
-              # @recoverysecret@'s substituted value: the initrd.secrets block
-              # when a recovery passphrase was given, `{ }` otherwise -- same
-              # depth as the keys above, because configuration.nix carries
-              # both as one file.
-              boot.initrd.secrets =
-                if recoverySecret then { "/etc/shadow" = "/var/lib/nixarchy/initrd-shadow"; } else { };
+                  # @recoverysecret@'s substituted value: the initrd.secrets block
+                  # when a recovery passphrase was given, `{ }` otherwise -- same
+                  # depth as the keys above, because configuration.nix carries
+                  # both as one file.
+                  boot.initrd.secrets =
+                    if recoverySecret then { "/etc/shadow" = "/var/lib/nixarchy/initrd-shadow"; } else { };
+                }
+              ];
             }
           ];
-        }
-      ];
-    }).config.system.build;
+        }).config.system;
+    in
+    # Keep the old shape every caller (tests/install.nix, free-space.nix,
+    # install-encrypted.nix) already uses -- `.toplevel`, `.diskoScript`,
+    # `.initialRamdisk`, `.etc` -- and add `.path` beside them: `system.path`
+    # is config.system's own sibling of config.system.build, not inside it,
+    # and tests/install-seed-shape.nix needs it (#1176: `system.path` is the
+    # property the depth bug moves, not `toplevel`, which can differ for
+    # reasons unrelated to depth such as hostname-bearing initrd bits).
+    sys.build // { inherit (sys) path; };
 in
 {
   inherit targetSystemFor etcInstrumentation instrumentScript;
+
+  # Exposed for tests/install-seed-shape.nix, which has to reproduce the real
+  # hardware-configuration.nix's CONTRIBUTION exactly -- mkForce and all -- on
+  # the rendered-template side it compares against. Passed through
+  # nixosSystem's specialArgs there rather than serialised to text: the same
+  # Nix values both sides import, not a second encoding of them to keep in
+  # step.
+  inherit hardwareConfig initrdPin;
 }

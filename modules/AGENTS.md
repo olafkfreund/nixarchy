@@ -835,6 +835,46 @@ and, in GTK4 and Electron apps, sometimes nothing at all.
 Nixarchy is Wayland-only -- there is no session here where the X11
 default is the right one -- so this is set rather than left to the user.
 
+<a id="the-catalogue-for-1166-built-here-rather-than-in-f"></a>
+
+### The catalogue for #1166, built here rather than in flake.nix
+
+```nix
+nixarchyOptions =
+```
+
+Built here rather than in flake.nix calling back into this module, so
+there is one builder and one file, on the machine
+(`/etc/nixarchy/options.json`) and in the release
+(`packages.<system>.nixarchy-options` re-exports
+`system.build.nixarchyOptions`).
+
+`transformOptions` follows the same idiom nixpkgs' own manual uses for
+its declarations (`nixos/doc/manual/default.nix`): a declaration under
+`src` becomes a github blob URL at `rev`; anything else (nixpkgs,
+home-manager, another flake input's module) is left as the store path it
+already is. `tests/nixarchy-options.nix` exempts declarations inside
+`inputs.nixarchy-flatsnap`'s source from the "every option gets a URL" rule
+for exactly that last reason -- that flake's own module declares
+`programs.nixarchy.flatsnap.*`. It is exempt by path, not by key, so an
+option of ours declared under that prefix is still caught.
+
+**`_file` is set inside the module, never as an imports wrap in
+`flake.nix`.** Without it every option declared directly in `nixos.nix` or
+`home.nix` is "declared in" whichever file called the evaluation (nixpkgs'
+`flake.nix`, home-manager's `common.nix`). The first fix wrapped the exports
+as `{ _file = …; imports = [ (import … inputs) ]; }`, and that broke
+`checks.free-space` (#1176): `lib.modules` merges list definitions in
+import-depth order, the wrap moved this module one level deeper, and
+`environment.systemPackages` came out in a different order wherever another
+module sat at a different depth. In the free-space VM,
+`test-instrumentation.nix` is imported three levels down, while the test's
+seed appends it at the top; `xwininfo` moved from entry 21 to entry 0,
+`system-path` stopped matching the seeded one, and rebuilding it offline
+needed `texinfo` (documentation's `install-info`). **Changing a module's
+import depth is a change to list order, and so to `system-path`**, even with
+the same set of packages.
+
 ## `modules/home.nix`
 
 <a id="what-omarchy-path-points-at-and-the-source-of-ever"></a>

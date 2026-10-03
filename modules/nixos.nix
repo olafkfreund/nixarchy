@@ -245,8 +245,62 @@ let
       home-manager.expr = "(builtins.getFlake \"${cfg.flake}\").nixosConfigurations.${config.networking.hostName}.options.home-manager.users.type.getSubOptions []";
     };
   };
+
+  # Why: modules/AGENTS.md#the-catalogue-for-1166-built-here-rather-than-in-f
+  # A tree with no commit (a dirty checkout) has no self.rev; it links to main.
+  src = toString ../.;
+  rev = inputs.self.rev or "main";
+  # Reaches our HM module through sharedModules only; a per-user import of it
+  # is not catalogued.
+  hmOpts =
+    (options.home-manager.users.type.getSubOptions [
+      "home-manager"
+      "users"
+    ]).programs.nixarchy or { };
+  nixarchyOptions =
+    (pkgs.nixosOptionsDoc {
+      options = {
+        programs.nixarchy = options.programs.nixarchy;
+        hm = hmOpts;
+      };
+      # A missing description elsewhere must not abort this build.
+      warningsAreErrors = false;
+      transformOptions =
+        opt:
+        opt
+        // {
+          declarations = map (
+            d:
+            if lib.hasPrefix (src + "/") (toString d) then
+              let
+                subpath = lib.removePrefix (src + "/") (toString d);
+              in
+              {
+                url = "https://github.com/olafkfreund/nixarchy/blob/${rev}/${subpath}";
+                name = subpath;
+              }
+            else
+              d
+          ) opt.declarations;
+        };
+    }).optionsJSON;
+  # The manual and llms.txt only, not the 23 MB docs/ (mostly screenshots).
+  nixarchyDocs = pkgs.linkFarm "nixarchy-docs" [
+    {
+      name = "manual";
+      path = ../docs/manual;
+    }
+    {
+      name = "llms.txt";
+      path = ../docs/llms.txt;
+    }
+  ];
 in
 {
+  # Names this file as "declared in" (#1166). Here, not as an imports wrap in
+  # flake.nix: an extra import level reorders list merges (free-space, #1176).
+  _file = ./nixos.nix;
+
   imports = [
     inputs.home-manager.nixosModules.home-manager
     inputs.nixarchy-omatheme.nixosModules.default
@@ -730,7 +784,8 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Declare the NixOS MCP server (`mcp-nixos`) in the coding agents this
+        Declare the NixOS MCP server (`mcp-nixarchy`, a fork of `mcp-nixos` that
+        also answers nixarchy's own options and manual) in the coding agents this
         machine already seeds skills into.
 
         LLMs write bad Nix because the corpus is small, the language is lazy
@@ -1208,49 +1263,55 @@ in
       package32 = lib.mkOverride 900 hyprPkgs.pkgsi686Linux.mesa;
     };
 
-    # The resolved half of the flake's safe.directory entry -- see the
-    # programs.git block above for why it cannot be written at evaluation
-    # time. Writes a real path only when it differs from the configured one,
-    # so on the normal case (a real directory at /etc/nixos) this leaves an
-    # empty file and changes nothing.
-    #
-    # Always writes, never appends: the file is derived state, and a stale
-    # entry left behind after somebody repoints programs.nixarchy.flake would
-    # keep exempting a directory nobody asked about.
-    system.activationScripts.nixarchyFlakeSafeDirectory = ''
-      install -d -m 0755 -o root -g root /var/lib/nixarchy
+    # Merged into one `system` set: statix rejects three separate top-level
+    # `system.*` statements in one attrset.
+    system = {
+      build.nixarchyOptions = nixarchyOptions;
 
-      # readlink -f, not realpath: coreutils is guaranteed here and this runs
-      # before much else. A flake directory that does not exist yet resolves
-      # to nothing, which is the empty-file case and correct -- the machine
-      # simply has no flake to exempt.
-      nixarchy_flake_resolved=$(${pkgs.coreutils}/bin/readlink -f ${lib.escapeShellArg cfg.flake} 2>/dev/null || true)
+      # The resolved half of the flake's safe.directory entry -- see the
+      # programs.git block above for why it cannot be written at evaluation
+      # time. Writes a real path only when it differs from the configured one,
+      # so on the normal case (a real directory at /etc/nixos) this leaves an
+      # empty file and changes nothing.
+      #
+      # Always writes, never appends: the file is derived state, and a stale
+      # entry left behind after somebody repoints programs.nixarchy.flake would
+      # keep exempting a directory nobody asked about.
+      activationScripts.nixarchyFlakeSafeDirectory = ''
+        install -d -m 0755 -o root -g root /var/lib/nixarchy
 
-      {
-        echo "# Written by programs.nixarchy. Do not edit; see modules/nixos.nix."
-        if [ -n "$nixarchy_flake_resolved" ] &&
-           [ "$nixarchy_flake_resolved" != ${lib.escapeShellArg cfg.flake} ]; then
-          echo "[safe]"
-          echo "	directory = $nixarchy_flake_resolved"
-        fi
-      } > ${safeDirInclude}.tmp
+        # readlink -f, not realpath: coreutils is guaranteed here and this runs
+        # before much else. A flake directory that does not exist yet resolves
+        # to nothing, which is the empty-file case and correct -- the machine
+        # simply has no flake to exempt.
+        nixarchy_flake_resolved=$(${pkgs.coreutils}/bin/readlink -f ${lib.escapeShellArg cfg.flake} 2>/dev/null || true)
 
-      chmod 0644 ${safeDirInclude}.tmp
-      chown root:root ${safeDirInclude}.tmp
-      mv -f ${safeDirInclude}.tmp ${safeDirInclude}
-    '';
+        {
+          echo "# Written by programs.nixarchy. Do not edit; see modules/nixos.nix."
+          if [ -n "$nixarchy_flake_resolved" ] &&
+             [ "$nixarchy_flake_resolved" != ${lib.escapeShellArg cfg.flake} ]; then
+            echo "[safe]"
+            echo "	directory = $nixarchy_flake_resolved"
+          fi
+        } > ${safeDirInclude}.tmp
 
-    # Clear generated user links from first-run and the retired bt-agent.
-    # NixOS already installs these units through wantedBy.
-    system.activationScripts.nixarchyRemoveOldUserUnitLinks = ''
-      ${pkgs.bash}/bin/bash ${../pkgs/omarchy/cleanup-user-unit-links.sh} ${
-        lib.concatMapStringsSep " " lib.escapeShellArg (
-          lib.mapAttrsToList (_: user: user.home) (
-            lib.filterAttrs (_: user: user.isNormalUser) config.users.users
+        chmod 0644 ${safeDirInclude}.tmp
+        chown root:root ${safeDirInclude}.tmp
+        mv -f ${safeDirInclude}.tmp ${safeDirInclude}
+      '';
+
+      # Clear generated user links from first-run and the retired bt-agent.
+      # NixOS already installs these units through wantedBy.
+      activationScripts.nixarchyRemoveOldUserUnitLinks = ''
+        ${pkgs.bash}/bin/bash ${../pkgs/omarchy/cleanup-user-unit-links.sh} ${
+          lib.concatMapStringsSep " " lib.escapeShellArg (
+            lib.mapAttrsToList (_: user: user.home) (
+              lib.filterAttrs (_: user: user.isNormalUser) config.users.users
+            )
           )
-        )
-      }
-    '';
+        }
+      '';
+    };
 
     environment = {
       # The single indirection point. bin/, shell/, themes/, the Hyprland Lua
@@ -1600,7 +1661,12 @@ in
       # Why: modules/AGENTS.md#three-files-from-upstreams-etc-overlay-installed-as-themselves
       // lib.genAttrs installedEtc (name: {
         source = "${cfg.package}/share/omarchy/etc/${name}";
-      });
+      })
+      # /etc/nixarchy: the catalogue and manual, for #1166's `nixos` MCP tool.
+      // {
+        "nixarchy/options.json".source = "${nixarchyOptions}/share/doc/nixos/options.json";
+        "nixarchy/docs".source = nixarchyDocs;
+      };
 
     # glib looks for compiled schemas in $XDG_DATA_DIRS/glib-2.0/schemas, but
     # nixpkgs' glib setup hook relocates them to

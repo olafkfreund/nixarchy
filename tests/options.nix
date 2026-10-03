@@ -5699,8 +5699,8 @@ pkgs.runCommand "nixarchy-options"
             echo "no generated MCP config reached the $who activation" >&2
             exit 1
           }
-          grep -q 'mcp-nixos' "$f" || {
-            echo "the $who MCP config does not name mcp-nixos:" >&2
+          grep -q 'mcp-nixarchy' "$f" || {
+            echo "the $who MCP config does not name mcp-nixarchy:" >&2
             cat "$f" >&2
             echo "  an empty server block is what a misspelled package attribute" >&2
             echo "  produces, and it fails silently inside the agent" >&2

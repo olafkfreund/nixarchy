@@ -414,6 +414,22 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The `nixos` MCP server itself, for #1166 -- a fork of mcp-nixos that
+    # also answers from nixarchy's own options and manual
+    # (`/etc/nixarchy/options.json`, `/etc/nixarchy/docs`), not just nixpkgs'.
+    # `programs.nixos.package` in modules/home.nix points at it; the server
+    # key stays `nixos`, so tool names and permissions are unchanged.
+    #
+    # `follows`, for the same reason as mcp-servers-nix above: the server
+    # runs inside the `servers = nixpkgs.extend <overlay>` closure, so without
+    # it this is a second nixpkgs and a second Python closure to build.
+    #
+    # Pinned to a COMMIT: upstream publishes no tags. Bump it deliberately.
+    mcp-nixarchy = {
+      url = "github:olafkfreund/mcp-nixarchy/b92b9c6dece4acc5cb7dc21394ef3fe1f8b94cc4";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The prebuilt nix-index database, for #628 -- `command-not-found` that
     # answers, and `comma`.
     #
@@ -1280,6 +1296,13 @@
               # not block every other package's bump for the night.
               derivationArgs.passthru.pinned = lib.attrNames pinned;
             };
+
+          # The release asset for #1166: nixarchy's own options, read by the
+          # `nixos` MCP tool and by anyone grepping the file by hand.
+          # Re-exports system.build.nixarchyOptions (modules/nixos.nix)
+          # rather than building a second catalogue, so the machine and the
+          # release ship the same file.
+          nixarchy-options = self.nixosConfigurations.reference.config.system.build.nixarchyOptions;
 
           # Boot the smoke test: `nix run .#vm`
           vm = self.nixosConfigurations.vm.config.system.build.vm;
@@ -2476,6 +2499,15 @@
           graphics-glibc = import ./tests/graphics-glibc.nix {
             pkgs = pkgsFor.${system};
             config = self.nixosConfigurations.reference.config;
+          };
+
+          # #1166: the /etc/nixarchy catalogue names real files (not store
+          # paths), is Mode A inert, and ships the manual. See
+          # tests/nixarchy-options.nix.
+          nixarchy-options = import ./tests/nixarchy-options.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+            flatsnap = self.inputs.nixarchy-flatsnap.outPath;
           };
 
           # #1163: a user's own Mesa in hardware.graphics.extraPackages(32)

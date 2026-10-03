@@ -205,6 +205,11 @@ let
     inputs.mcp-servers-nix.lib.mkConfig pkgs (
       {
         programs.nixos.enable = true;
+        # mcp-nixarchy, for #1166: a fork of mcp-nixos that also answers
+        # from nixarchy's own options and manual. The server key stays
+        # `nixos`, so tool names and permissions are unchanged.
+        programs.nixos.package =
+          inputs.mcp-nixarchy.packages.${pkgs.stdenv.hostPlatform.system}.mcp-nixarchy;
       }
       // args
     );
@@ -549,6 +554,10 @@ let
   ) cfg.plugins;
 in
 {
+  # Names this file as "declared in" (#1166). Here, not as an imports wrap in
+  # flake.nix: an extra import level reorders list merges (free-space, #1176).
+  _file = ./home.nix;
+
   # Nixi: the guide that should come with nixarchy -- since 0.10 (#709) an
   # Omarchy overlay card with a hands-on tour, a manual search grounded in this
   # machine, and an AI tutor (Claude Code by default). No server, no port.

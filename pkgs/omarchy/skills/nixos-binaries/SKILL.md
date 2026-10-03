@@ -90,7 +90,7 @@ To go from a soname to the package that carries it:
 nix-locate lib/libfoo.so.2          # nix-index, most direct
 ```
 
-or search the file name at <https://search.nixos.org>.
+or use the `nix` MCP tool, or search the file name at <https://search.nixos.org>.
 
 ### The correction that matters most: nix-ld does NOT help a nixpkgs Python
 

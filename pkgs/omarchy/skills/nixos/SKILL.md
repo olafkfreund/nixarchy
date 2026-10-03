@@ -172,12 +172,21 @@ programs.steam.enable = true;
 
 ### Finding the right name
 
-Guessing attribute names wastes rebuilds. Search first:
+Guessing attribute names wastes rebuilds. Search first, in this order:
+
+1. The `nix` MCP tool, channel matching this machine. For `programs.nixarchy.*`
+   or `home-manager.users.<name>.programs.nixarchy.*`, ask with
+   `source=nixarchy`; for a manual question, `source=nixarchy-docs`. Both
+   answer from the installed version (`/etc/nixarchy`), not nixpkgs' upstream.
+2. `nixarchy-search` or `nix search` for everything else:
 
 ```bash
 nix search nixpkgs ripgrep                 # packages
 man configuration.nix                      # options, offline
 ```
+
+3. `jq` against `/etc/nixarchy/options.json` directly if no MCP tool is
+   available.
 
 Or use <https://search.nixos.org/packages> and <https://search.nixos.org/options>.
 The package attribute and the command it installs often differ — `vscode` puts
@@ -268,7 +277,7 @@ evidence than a package log.
 ### Reading a failure
 
 - **`error: attribute 'foo' missing`** — wrong package name. Search for the real one.
-- **`error: The option 'services.foo' does not exist`** — wrong option path, or the module is not imported. Check <https://search.nixos.org/options>.
+- **`error: The option 'services.foo' does not exist`** — wrong option path, or the module is not imported. Check with the `nix` MCP tool, or <https://search.nixos.org/options>.
 - **`error: path '/nix/store/...' does not exist` on a file you just created** — untracked in git. `git add` it.
 - **`infinite recursion encountered`** — usually a `config` value used to compute something it also defines. Look for a self-reference.
 - **unfree licence errors** — a single unfree package aborts the whole rebuild. Set `nixpkgs.config.allowUnfree = true;` deliberately, or drop the package.

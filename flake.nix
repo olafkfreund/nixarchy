@@ -1297,6 +1297,13 @@
               derivationArgs.passthru.pinned = lib.attrNames pinned;
             };
 
+          # The release asset for #1166: nixarchy's own options, read by the
+          # `nixos` MCP tool and by anyone grepping the file by hand.
+          # Re-exports system.build.nixarchyOptions (modules/nixos.nix)
+          # rather than building a second catalogue, so the machine and the
+          # release ship the same file.
+          nixarchy-options = self.nixosConfigurations.reference.config.system.build.nixarchyOptions;
+
           # Boot the smoke test: `nix run .#vm`
           vm = self.nixosConfigurations.vm.config.system.build.vm;
 

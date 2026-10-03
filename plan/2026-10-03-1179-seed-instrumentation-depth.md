@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1179
 spec: spec/2026-10-03-1179-seed-instrumentation-depth.md
 ---

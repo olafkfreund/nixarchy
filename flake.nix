@@ -2075,6 +2075,13 @@
             installScript = ./installer/install.sh;
           };
 
+          # Why: tests/install-seed-shape.nix (#1176, #1179)
+          install-seed-shape = import ./tests/install-seed-shape.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            installScript = ./installer/install.sh;
+          };
+
           # Why: tests/installer-baked-guard.nix
           installer-baked-guard = import ./tests/installer-baked-guard.nix {
             pkgs = pkgsFor.${system};

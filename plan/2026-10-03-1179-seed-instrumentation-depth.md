@@ -189,3 +189,8 @@ and the check goes with them.
   (`@autologin@` follows `@encrypt@`), and `recoverySecret ? false` adds the
   `initrd.secrets` entry (`@recoverysecret@`). Found by the coder agent at
   step 1.
+- **Step 3, free-space gains the instrumentation `grep`:** its cp/sed never
+  checked that the sed landed, although its comment said "Identical to
+  checks.install". The shared `instrumentScript` carries `install`'s
+  `grep -q test-instrumentation`, so free-space now asserts it too (strictly
+  stronger; it makes the comment true). Found by the coder agent.

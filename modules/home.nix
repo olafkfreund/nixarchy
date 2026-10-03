@@ -205,6 +205,11 @@ let
     inputs.mcp-servers-nix.lib.mkConfig pkgs (
       {
         programs.nixos.enable = true;
+        # mcp-nixarchy, for #1166: a fork of mcp-nixos that also answers
+        # from nixarchy's own options and manual. The server key stays
+        # `nixos`, so tool names and permissions are unchanged.
+        programs.nixos.package =
+          inputs.mcp-nixarchy.packages.${pkgs.stdenv.hostPlatform.system}.mcp-nixarchy;
       }
       // args
     );

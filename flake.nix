@@ -414,6 +414,22 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The `nixos` MCP server itself, for #1166 -- a fork of mcp-nixos that
+    # also answers from nixarchy's own options and manual
+    # (`/etc/nixarchy/options.json`, `/etc/nixarchy/docs`), not just nixpkgs'.
+    # `programs.nixos.package` in modules/home.nix points at it; the server
+    # key stays `nixos`, so tool names and permissions are unchanged.
+    #
+    # `follows`, for the same reason as mcp-servers-nix above: the server
+    # runs inside the `servers = nixpkgs.extend <overlay>` closure, so without
+    # it this is a second nixpkgs and a second Python closure to build.
+    #
+    # Pinned to a COMMIT: upstream publishes no tags. Bump it deliberately.
+    mcp-nixarchy = {
+      url = "github:olafkfreund/mcp-nixarchy/b92b9c6dece4acc5cb7dc21394ef3fe1f8b94cc4";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # The prebuilt nix-index database, for #628 -- `command-not-found` that
     # answers, and `comma`.
     #

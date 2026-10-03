@@ -110,10 +110,12 @@ corpus of it is small, and option names are not guessable, so a confident
 sentence naming an option that does not exist is the normal failure rather than
 an unusual one.
 
-So nixarchy declares [`mcp-nixos`](https://github.com/utensils/mcp-nixos) in the
-agents that can take one. It is an MCP server that answers package and option
-questions against the real sets — nixpkgs, NixOS options, Home Manager and
-nix-darwin — so the answer comes from the index rather than from memory.
+So nixarchy declares [mcp-nixarchy](https://github.com/olafkfreund/mcp-nixarchy)
+— a fork of mcp-nixos — in the agents that can take one. It answers package and
+option questions against the real sets — nixpkgs, NixOS options, Home Manager
+and nix-darwin — so the answer comes from the index rather than from memory,
+and on an installed machine it also answers nixarchy's own options and manual
+from `/etc/nixarchy`, for the version actually running.
 
 Three agents get it, each in the file that agent actually reads:
 

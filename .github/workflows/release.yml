@@ -272,6 +272,13 @@ jobs:
           # cannot fit gets taken apart.
           cp -- "$net" "out/$netbase"
 
+          # mcp-nixarchy's fallback (#1166): the catalogue the `nixos` MCP
+          # tool reads from an installed machine, also attached here for a
+          # machine running an older release. Covered by the attach check
+          # below through SHA256SUMS, like every other asset.
+          nix build .#nixarchy-options -o result-options
+          cp -- result-options/share/doc/nixos/options.json out/options.json
+
           # One SHA256SUMS covering the parts *and* the assembled image, so a
           # single `sha256sum -c` after reassembly checks both the download and
           # the cat that put it back together. Checked in that order, because
@@ -288,6 +295,7 @@ jobs:
             printf '%s  %s\n' \
               "$(sha256sum < "$OLDPWD/$iso" | cut -d' ' -f1)" "$base" >> SHA256SUMS
             sha256sum "$netbase" >> SHA256SUMS
+            sha256sum options.json >> SHA256SUMS
           )
 
           {

@@ -202,3 +202,9 @@ and the check goes with them.
   text via `builtins.toFile` at depth 2. Seed and VM load byte-identical
   instrumentation. Measured in one tree: the encrypted seed's toplevel `drvPath`
   is unchanged by the port, and install's plain and instrumented seeds too.
+- **Step 6, break (b) alone stays green:** with nixarchy's module at depth 0,
+  instrumentation at depth 0 or 2 gives the same order. Only (c), the old seed
+  shape plus #1176's wrap, splits seed from VM, which is exactly #1176. (a),
+  the wrap with the new helper, stays green: the property. (d) the real
+  `nixarchy-hardware.nix` (AMD and Intel) does not change `system-path`, so it
+  stays out of the seed.

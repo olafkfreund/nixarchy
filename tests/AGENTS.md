@@ -217,6 +217,16 @@ want proof the forcing still happens, assert on something derived from the
 value (a length, a count) so a silent change to the shape makes the check
 refuse rather than pass.
 
+**It is the same when the path is interpolated into the script.**
+`checks.install-seed-shape` (#1179) first compared six systems with
+`if [ "${seed.drvPath}" = "${vm.drvPath}" ]` in the `runCommand` body. The
+string context made all twelve systems build inputs, and the host load hit 101
+before the build was stopped, twice. Compare in Nix (`equal = a == b`, which
+ignores context), and print `builtins.unsafeDiscardStringContext` copies.
+**Check before building:** `nix derivation show` on the check's `drvPath`
+should list no `nixos-system`, `system-path` or `linux` among its
+`inputDrvs`. For that check the list is empty.
+
 **And a second trap found in the same hour:** `--override-input` does NOT
 reach a `builtins.getFlake` inside `--expr`. It applies to installables.
 
@@ -1430,3 +1440,40 @@ a live shell, sees that.
   every `installer-*` check, not the ones that look related; they are seconds
   each. And a line-order check also needs the call that reaches the moved code,
   or it stays green when nothing calls it.
+
+## The install checks' seed is the installer template's shape, depth for depth
+
+`checks.install`, `free-space` and `install-encrypted` install offline. They
+pass only if the system the VM installs is byte for byte the one the test
+seeded, `system-path` included. `system-path` hashes the ORDER of
+`environment.systemPackages`, and `lib.modules` merges list definitions in
+import-depth order. So the seed must import every module at the depth the
+generated host does:
+- nixarchy, home-manager and disko at 0;
+- `host.nix`, `disk-config.nix` and the configuration values at 1;
+- the hardware config, the initrd pin and `test-instrumentation.nix` at 2,
+  where `configuration.nix` imports them.
+
+All three tests build it through `tests/lib/installed-target.nix`. The seed
+imports the same instrumentation text the VM gets, via `builtins.toFile`.
+
+Each test used to carry its own copy with the last three at depth 0. That held
+only while nothing else changed depth: #1176's `_file` imports wrap put
+nixarchy's own module one level deeper, `xwininfo` moved from entry 21 to 0,
+and the offline install tried to build `texinfo` from source.
+
+**Measured on the helper (#1179):**
+- instrumentation at depth 0 alone: still equal;
+- #1176's wrap alone: still equal;
+- both together: three instrumented cases differ.
+
+So the split needs two depths to move, and a check that varies only one
+cannot see it (§3).
+
+`checks.install-seed-shape` renders the real template with `install.sh`'s own
+`substitute_host_files`, and compares `system-path` against the seed for all
+six cases. It is evaluation only, so the next mismatch is red on the pull
+request rather than forty minutes into the install job.
+`nixarchy-hardware.nix` (nixos-hardware CPU modules) is left out of the seed:
+measured for both vendors, it does not change `system-path`.
+

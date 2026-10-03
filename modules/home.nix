@@ -53,6 +53,10 @@ let
   mcpEnabled = osConfig.programs.nixarchy.mcp or false;
   # #773: off unless asked for, and taken back out when turned off again.
   aiMirrorMcp = osConfig.programs.nixarchy.aiMirror.mcp or false;
+  # pi is installed only through programs.nixarchy.localAi.agents -- it has no
+  # apps catalogue entry -- so that is the only predicate for "this machine has
+  # pi". The pi writers below all use it.
+  piOn = localAi.enable && builtins.elem "pi" localAi.agents;
   # #1153: both halves of `or false`, for two different reasons. A standalone
   # home-manager user has no NixOS module to have set either option, same as
   # above. And `owe.enable` defaults to true on its OWN -- a module's option
@@ -1446,11 +1450,15 @@ in
 
     # ---- #623: the NixOS MCP server, in the agents that have one --------
     #
-    # Three agents, not the four this module seeds skills into. `~/.agents`
-    # and `~/.pi/agent` have no documented MCP configuration file, and a path
-    # invented for them would be a feature that writes a file nothing reads --
-    # the shape §2 of AGENTS.md is about. Named here so the gap is a decision
-    # rather than an oversight; close it the day either tool documents one.
+    # Three agents everywhere, and a fourth -- pi -- where it is installed.
+    # `~/.agents` has no documented MCP configuration file, and a path invented
+    # for it would be a feature that writes a file nothing reads -- the shape
+    # §2 of AGENTS.md is about. Named here so the gap is a decision rather than
+    # an oversight; close it the day that convention documents one. Pi was the
+    # other half of this gap until 0.99.2, whose `pi mcp --help` documents
+    # `~/.pi/agent/mcp.json`: that is the condition this comment set, so pi's
+    # writers below exist. They are gated on pi being installed, because `mcp`
+    # is on for everyone and `mergeJson` creates the file it merges into.
     home.activation.nixarchyMcpClaude = lib.mkIf mcpEnabled (mergeJson {
       what = "the NixOS MCP server";
       # Claude Code's user scope is ~/.claude.json, not a file under
@@ -1485,10 +1493,18 @@ in
         fileName = "nixarchy-mcp-codex.toml";
       };
     });
+    home.activation.nixarchyMcpPi = lib.mkIf (mcpEnabled && piOn) (mergeJson {
+      what = "the NixOS MCP server";
+      file = "$HOME/.pi/agent/mcp.json";
+      json = mcpConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-mcp-pi.json";
+      };
+    });
 
     # ---- #773: ai-mirror's MCP server, only when asked for -------------------
     #
-    # The same three agents and the same helpers as the NixOS server above,
+    # The same agents and the same helpers as the NixOS server above,
     # under its own switch. Both helpers only ever add, so the off state is
     # not "write nothing": it is the removal below, which takes back an entry
     # whose command is our store path and leaves one the user wrote.
@@ -1518,12 +1534,21 @@ in
         fileName = "nixarchy-ai-mirror-mcp-codex.toml";
       };
     });
+    home.activation.nixarchyAiMirrorMcpPi = lib.mkIf (aiMirrorMcp && piOn) (mergeJson {
+      what = "ai-mirror's MCP server";
+      file = "$HOME/.pi/agent/mcp.json";
+      json = aiMirrorConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-ai-mirror-mcp-pi.json";
+      };
+    });
     home.activation.nixarchyAiMirrorMcpRemove = lib.mkIf (!aiMirrorMcp) (
       lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
           "${config.home.homeDirectory}/.claude.json" \
           "${config.xdg.configHome}/opencode/opencode.json" \
-          "${config.home.homeDirectory}/.codex/config.toml"
+          "${config.home.homeDirectory}/.codex/config.toml" \
+          "$HOME/.pi/agent/mcp.json"
       ''
     );
 
@@ -1737,7 +1762,7 @@ in
     # to Ollama directly goes in programs.nixarchy.neovimSpecs and reads
     # OLLAMA_ENDPOINT.
     home.activation.nixarchyNeovimAiLocal =
-      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents && cfg.neovim != "off")
+      lib.mkIf (piOn && cfg.neovim != "off")
         (nvimSpec {
           file = "nixarchy-ai-local.lua";
           because = "programs.nixarchy.localAi points pi at the local model";
@@ -1801,7 +1826,7 @@ in
 
     # Why: modules/AGENTS.md#pi-keeps-its-configuration-in-pi-agent-not-under-x
     home.activation.nixarchyPiProvider =
-      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
+      lib.mkIf piOn
         (mergeJson {
           what = "the local model";
           file = "$HOME/.pi/agent/models.json";
@@ -1838,7 +1863,7 @@ in
     # by the activation below, and only when absent -- after which it belongs to
     # the user and to theme-set, and nothing here touches it again.
     home.activation.nixarchyPiDefaultModel =
-      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
+      lib.mkIf piOn
         (
           lib.hm.dag.entryAfter [ "writeBoundary" ] ''
             settings="$HOME/.pi/agent/settings.json"

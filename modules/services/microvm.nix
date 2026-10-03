@@ -164,6 +164,7 @@ in
                       tag = lib.mkOption {
                         type = lib.types.str;
                         default = baseNameOf config.mountPoint;
+                        defaultText = lib.literalExpression "baseNameOf mountPoint";
                         description = "virtiofs tag. Defaults to the mount point's basename, which is unique unless two shares share one.";
                       };
                     };

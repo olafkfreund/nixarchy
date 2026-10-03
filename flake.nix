@@ -1421,12 +1421,21 @@
 
       nixosModules = {
         default = self.nixosModules.nixarchy;
-        nixarchy = import ./modules/nixos.nix inputs;
+        # _file, for #1166: without it every option these two modules
+        # declare shows "declared in" this flake.nix (or a store path for
+        # it), not the file that actually declares the option.
+        nixarchy = {
+          _file = ./modules/nixos.nix;
+          imports = [ (import ./modules/nixos.nix inputs) ];
+        };
       };
 
       homeManagerModules = {
         default = self.homeManagerModules.nixarchy;
-        nixarchy = import ./modules/home.nix inputs;
+        nixarchy = {
+          _file = ./modules/home.nix;
+          imports = [ (import ./modules/home.nix inputs) ];
+        };
       };
 
       # Smoke-test VM. Not a daily driver -- it exists to prove the QuickShell

@@ -10,9 +10,11 @@
 # lists are pinned -- reference-unencrypted for an unencrypted install,
 # reference for an encrypted one.
 #
-# extraInstrumentation: an extra module merged in ALONGSIDE instrumentation,
-# only when instrumented -- install-encrypted's console=ttyS0 and
-# plymouth-off, say. Defaults to nothing.
+# extraInstrumentationText: extra module BODY lines, as literal Nix source
+# text, spliced into `etcInstrumentation` alongside the test backdoor import
+# -- install-encrypted's console=ttyS0 and plymouth-off, say. Defaults to
+# nothing. A string rather than a module: see `etcInstrumentation` below on
+# why there is only one source of truth for this file's content.
 #
 # encrypt, recoverySecret: the template's own placeholders, substituted by
 # install.sh's write_host_files (`@autologin@` follows `@encrypt@`, and
@@ -22,32 +24,11 @@
 {
   diskConfig,
   reference,
-  extraInstrumentation ? { },
+  extraInstrumentationText ? "",
   encrypt ? false,
   recoverySecret ? false,
 }:
 let
-  # The NixOS test backdoor, as a module the generated flake can import.
-  #
-  # An installed machine has no reason to carry it, and the installer is right
-  # not to write it -- but without it the driver cannot run a single command on
-  # the target: wait_for_unit, succeed and the rest all talk to a root shell on
-  # /dev/hvc0 that only this module provides. The alternative is to type every
-  # assertion into a getty and scrape the console for it, which is a worse test
-  # of the same things.
-  #
-  # So the installer runs untouched and writes what it would write; then this
-  # is added and nixos-install is run a second time, which is a copy rather
-  # than a build because the instrumented system is seeded too. What boots is
-  # the disk the installer produced, plus a serial shell.
-  #
-  # modulesPath, not an absolute store path: the generated flake evaluates in
-  # pure mode, where a path outside its own tree is an error, and modulesPath
-  # points into the nixpkgs the flake already has.
-  instrumentation = {
-    imports = [ "${inputs.nixpkgs}/nixos/modules/testing/test-instrumentation.nix" ];
-  };
-
   # What nixos-generate-config writes on the target, as a module.
   #
   # This is the file the install generates INSIDE the VM, and #12 called it
@@ -98,17 +79,35 @@ let
     boot.initrd.kernelModules = pkgs.lib.mkForce reference.boot.initrd.kernelModules;
   };
 
-  # Copied into the generated flake after the install; see the note on
-  # `instrumentation` above for why it cannot be there from the start. This
-  # is the literal Nix SOURCE TEXT written to
-  # /etc/nixarchy/test-instrumentation.nix on the installer node -- a string,
-  # not an evaluated module, because that is what `environment.etc.*.text`
-  # takes. modulesPath, not an absolute store path -- the same reason
-  # `instrumentation` uses it: the flake it joins evaluates in pure mode.
+  # The NixOS test backdoor, as literal Nix SOURCE TEXT -- one source of
+  # truth for both sides of the instrumented install, not a module evaluated
+  # here and a separate heredoc on the installer node.
+  #
+  # An installed machine has no reason to carry it, and the installer is
+  # right not to write it -- but without it the driver cannot run a single
+  # command on the target: wait_for_unit, succeed and the rest all talk to a
+  # root shell on /dev/hvc0 that only this module provides. So the installer
+  # runs untouched and writes what it would write; then this text is copied
+  # in as a file beside configuration.nix (see `instrumentScript`) and
+  # nixos-install is run a second time, which is a copy rather than a build
+  # because the SEED below imports this exact text too -- see
+  # `targetSystemFor`. What boots is the disk the installer produced, plus a
+  # serial shell.
+  #
+  # modulesPath and lib, not an absolute store path or a bare mkForce: the
+  # generated flake evaluates in pure mode, where a path outside its own tree
+  # is an error, and modulesPath/lib are supplied by the module system to
+  # whatever imports this text -- both the real installed flake and the
+  # seed's own `import (builtins.toFile ...)` below.
+  #
+  # extraInstrumentationText is install-encrypted's console=ttyS0 and
+  # plymouth-off, spliced in as a second body line; `""` for every other
+  # caller.
   etcInstrumentation = ''
-    { modulesPath, ... }:
+    { modulesPath, lib, ... }:
     {
       imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
+      ${extraInstrumentationText}
     }
   '';
 
@@ -190,10 +189,14 @@ let
                 (hardwareConfig cpuModule)
                 initrdPin
               ]
-              ++ pkgs.lib.optionals instrumented [
-                instrumentation
-                extraInstrumentation
-              ];
+              # A store file, not a derivation: builtins.toFile hashes the
+              # string itself, so this is not IFD. Importing it rather than
+              # the `instrumentation` module tests/install.nix used to carry
+              # is what makes the seed and the generated flake import
+              # BYTE-IDENTICAL content -- see `etcInstrumentation` above.
+              ++ pkgs.lib.optional instrumented (
+                import (builtins.toFile "test-instrumentation.nix" etcInstrumentation)
+              );
 
               time.timeZone = "UTC";
               console.keyMap = "us";

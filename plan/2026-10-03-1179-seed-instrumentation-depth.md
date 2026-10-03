@@ -194,3 +194,11 @@ and the check goes with them.
   checks.install". The shared `instrumentScript` carries `install`'s
   `grep -q test-instrumentation`, so free-space now asserts it too (strictly
   stronger; it makes the comment true). Found by the coder agent.
+- **Step 4, one source for the instrumentation (option C):** `install-encrypted`
+  writes its console and plymouth settings into the same `test-instrumentation.nix`
+  the VM imports, so a separate `extraInstrumentation` module would have been a
+  second copy to keep in step by hand. The helper takes `extraInstrumentationText`,
+  renders the one file (`etcInstrumentation`), and the seed imports that same
+  text via `builtins.toFile` at depth 2. Seed and VM load byte-identical
+  instrumentation. Measured in one tree: the encrypted seed's toplevel `drvPath`
+  is unchanged by the port, and install's plain and instrumented seeds too.

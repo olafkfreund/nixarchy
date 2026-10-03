@@ -94,108 +94,32 @@ let
     else
       only;
 
-  # Test backdoor plus the two things this check needs from the target that
-  # tests/install.nix's does not:
+  # The machine the installer is about to produce, at the real installed
+  # host's import depths -- see tests/lib/installed-target.nix. encrypt =
+  # true, reference = reference (the encrypted one): the values install.sh
+  # substitutes for an ENCRYPTED install -- autologin = true (it follows
+  # encryption) and the recovery secret present, since the answers below
+  # carry a recovery_passphrase.
   #
-  #   console=ttyS0 puts stage 1 -- and its passphrase prompt -- on the serial
-  #   line the driver reads and types at. Same move as install-iso.nix's SERIAL
-  #   step, made here in the instrumentation module because both the seeded
-  #   instrumented system and the flake's copy have to agree.
-  #
-  #   plymouth off, forced: the splash's password agent would take the prompt
-  #   off the console, and the splash is not what is under test.
-  #
-  # Kept semantically identical to the /etc/nixarchy/test-instrumentation.nix
-  # text below -- the second nixos-install copies rather than builds only while
-  # the two produce the same configuration.
-  instrumentation = {
-    imports = [ "${inputs.nixpkgs}/nixos/modules/testing/test-instrumentation.nix" ];
-    boot.kernelParams = [ "console=ttyS0,115200" ];
-    boot.plymouth.enable = pkgs.lib.mkForce false;
-  };
-
-  # See tests/install.nix on why this is knowable, and late.
-  hardwareConfig = cpuModule: {
-    imports = [ "${inputs.nixpkgs}/nixos/modules/profiles/qemu-guest.nix" ];
-    boot = {
-      initrd.availableKernelModules = [
-        "virtio_pci"
-        "uhci_hcd"
-        "ehci_pci"
-        "ahci"
-        "sr_mod"
-        "virtio_blk"
-      ];
-      initrd.kernelModules = [ ];
-      kernelModules = [ cpuModule ];
-      extraModulePackages = [ ];
+  # extraInstrumentationText: console=ttyS0 puts stage 1 -- and its
+  # passphrase prompt -- on the serial line the driver reads and types at.
+  # Same move as install-iso.nix's SERIAL step. plymouth off, forced: the
+  # splash's password agent would take the prompt off the console, and the
+  # splash is not what is under test.
+  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) {
+    diskConfig = import ../installer/disk-config.nix {
+      device = "/dev/vdb";
+      encrypt = true;
     };
-    nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.stdenv.hostPlatform.system;
+    reference = inputs.self.nixosConfigurations.reference.config;
+    encrypt = true;
+    recoverySecret = true;
+    extraInstrumentationText = ''
+      boot.kernelParams = [ "console=ttyS0,115200" ];
+      boot.plymouth.enable = lib.mkForce false;
+    '';
   };
-
-  # The pin a CORRECT installer adds for an encrypted install: the encrypted
-  # reference's lists. This is what the seeded systems carry, so if the
-  # installer pins the other list the installed toplevel differs from every
-  # seed -- and before that can surface as an offline build, the assertion on
-  # hardware-configuration.nix below names the actual bug.
-  initrdPin =
-    let
-      ref = inputs.self.nixosConfigurations.reference.config;
-    in
-    {
-      boot.initrd.availableKernelModules = pkgs.lib.mkForce ref.boot.initrd.availableKernelModules;
-      boot.initrd.kernelModules = pkgs.lib.mkForce ref.boot.initrd.kernelModules;
-    };
-
-  targetSystemFor =
-    {
-      cpuModule,
-      instrumented ? false,
-    }:
-    (inputs.nixpkgs.lib.nixosSystem {
-      system = pkgs.stdenv.hostPlatform.system;
-      specialArgs = { inherit inputs; };
-      modules = [
-        inputs.self.nixosModules.nixarchy
-        inputs.home-manager.nixosModules.home-manager
-        inputs.disko.nixosModules.disko
-
-        # ONE module mirroring installer/template/host/ -- the shape is
-        # load-bearing; see tests/install.nix on module merge order. The
-        # values are what install.sh substitutes for an ENCRYPTED install:
-        # encrypt = true, autologin = true (it follows encryption), and the
-        # recovery secret present, since the answers below carry a
-        # recovery_passphrase.
-        {
-          imports = [
-            (import ../installer/host.nix {
-              hostname = "installed";
-              username = "omarchy";
-            })
-            (import ../installer/disk-config.nix {
-              device = "/dev/vdb";
-              encrypt = true;
-            })
-            {
-              time.timeZone = "UTC";
-              console.keyMap = "us";
-              nixpkgs.config.allowUnfree = true;
-              services.displayManager.autoLogin = {
-                enable = true;
-                user = "omarchy";
-              };
-              users.users.omarchy.hashedPasswordFile = "/var/lib/nixarchy/password.hash";
-              boot.initrd.secrets = {
-                "/etc/shadow" = "/var/lib/nixarchy/initrd-shadow";
-              };
-            }
-          ];
-        }
-        (hardwareConfig cpuModule)
-        initrdPin
-      ]
-      ++ pkgs.lib.optional instrumented instrumentation;
-    }).config.system.build;
+  inherit (installedTarget) targetSystemFor etcInstrumentation instrumentScript;
 
   targetSystems =
     pkgs.lib.concatMap
@@ -293,15 +217,9 @@ pkgs.testers.runNixOSTest {
           keymap=us
         '';
 
-        # Must produce the same configuration as `instrumentation` above.
-        "nixarchy/test-instrumentation.nix".text = ''
-          { modulesPath, lib, ... }:
-          {
-            imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
-            boot.kernelParams = [ "console=ttyS0,115200" ];
-            boot.plymouth.enable = lib.mkForce false;
-          }
-        '';
+        # Copied into the generated flake after the install; see
+        # tests/lib/installed-target.nix's `etcInstrumentation` note.
+        "nixarchy/test-instrumentation.nix".text = etcInstrumentation;
       };
 
       # The offline seeding contract, unchanged from tests/install.nix except
@@ -500,15 +418,7 @@ pkgs.testers.runNixOSTest {
     # ---- make the result observable ------------------------------------
     # As in tests/install.nix, plus this file's serial console and plymouth
     # switch-off riding in the same module.
-    installer.succeed(
-        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/hosts/installed/")
-    installer.succeed(
-        "sed -i 's|./hardware-configuration.nix|./hardware-configuration.nix\\n"
-        "    ./test-instrumentation.nix|'"
-        " /mnt/etc/nixos/hosts/installed/configuration.nix")
-    installer.succeed(
-        "grep -q test-instrumentation"
-        " /mnt/etc/nixos/hosts/installed/configuration.nix")
+    ${instrumentScript}
     installer.succeed("git -C /mnt/etc/nixos add -A")
     # The whole log to a file, the tail to the console.
     #

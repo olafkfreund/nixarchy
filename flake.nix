@@ -1971,6 +1971,7 @@
             # tests/skill-parity.nix and #643.
             "skill-parity"
             "swap-guard"
+            "switch-indicator"
             "try-nixarchy"
             "update-available"
             "user-unit-links"

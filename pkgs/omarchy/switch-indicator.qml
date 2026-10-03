@@ -40,14 +40,15 @@ BarIndicator {
   // user typed themselves is exactly as worth showing as one the menu started,
   // and a file only knows about the second. pgrep knows about both.
   //
-  // ponytail: a cmdline match, so an editor holding a file called
-  // nixos-rebuild.md in its arguments will light this up. Cheap, and wrong in
-  // the harmless direction -- it over-reports rather than staying dark while
-  // the machine is busy, which is the failure that matters.
+  // Match the command or its interpreter, not arbitrary arguments: concurrent
+  // pgrep probes otherwise match each other's pattern and report a rebuild.
+  // -A also excludes ancestors, such as a launcher holding a rebuild command.
   function refresh() {
     if (!root.bar || statusProc.running) return;
-    statusProc.command = ["pgrep", "-f",
-      "nixos-rebuild|nixarchy-apply|switch-to-configuration|(^|/)nh( |$)"];
+    statusProc.command = ["pgrep", "-A", "-f",
+      "^([^ ]*/)?((bash|sh|python[0-9.]*)( +-[^ ]+)* +([^ ]*/)?)?\\.?"
+      + "(nixos-rebuild(-ng)?|nixarchy-apply|switch-to-configuration)(-wrapped)?( |$)"
+      + "|^([^ ]*/)?\\.?nh(-wrapped)? +os +(switch|boot|test|build)( |$)"];
     statusProc.running = true;
   }
 

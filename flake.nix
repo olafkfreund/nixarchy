@@ -2465,6 +2465,11 @@
           # and vm-toplevel builds, the extraction has not let the two drift.
           reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
 
+          # The nightly's `nix run .#update`, built on every pull request: an
+          # updateScript that is not a derivation (owe's nix-update-script list)
+          # broke it at evaluation, and only update.yml ever evaluated it.
+          update-app = self.packages.${system}.update;
+
           # Hyprland loads its GPU drivers into its own process, so they must
           # share its glibc -- evaluation only, no boot. See
           # tests/graphics-glibc.nix and #1154, #1158.

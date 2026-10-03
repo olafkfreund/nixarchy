@@ -18,7 +18,8 @@
   systemd,
   qt6,
   socat,
-  nix-update-script,
+  writeShellApplication,
+  nix-update,
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "owe";
@@ -157,15 +158,24 @@ stdenv.mkDerivation (finalAttrs: {
     }
 
     version=$("$out/bin/owe" --version)
-    [[ $version == *0.2.8* ]] || {
-      echo "owe: owe --version did not report 0.2.8" >&2
+    [[ $version == *${finalAttrs.version}* ]] || {
+      echo "owe: owe --version did not report ${finalAttrs.version}" >&2
       exit 1
     }
 
     runHook postInstallCheck
   '';
 
-  passthru.updateScript = nix-update-script { };
+  # nix-update-script is a list that only works under nixpkgs' update.nix;
+  # `nix run .#update` calls getExe on every updateScript, as for ttfx.
+  passthru.updateScript = writeShellApplication {
+    name = "update-owe";
+    runtimeInputs = [ nix-update ];
+    text = ''
+      [ -f flake.nix ] || { echo "owe: run from the repo root" >&2; exit 1; }
+      nix-update --flake owe
+    '';
+  };
 
   meta = {
     description = "Video and GIF desktop backgrounds and a lock-screen video feed for Omarchy";

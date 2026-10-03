@@ -191,11 +191,9 @@ let
                     (hardwareConfig cpuModule)
                     initrdPin
                   ]
-                  # A store file, not a derivation: builtins.toFile hashes the
-                  # string itself, so this is not IFD. Importing it rather than
-                  # the `instrumentation` module tests/install.nix used to carry
-                  # is what makes the seed and the generated flake import
-                  # BYTE-IDENTICAL content -- see `etcInstrumentation` above.
+                  # A store file, not a derivation (no IFD), byte-identical to
+                  # what the real install writes.
+                  # Why: tests/AGENTS.md#byte-identical-instrumentation
                   ++ pkgs.lib.optional instrumented (
                     import (builtins.toFile "test-instrumentation.nix" etcInstrumentation)
                   );
@@ -235,23 +233,15 @@ let
           ];
         }).config.system;
     in
-    # Keep the old shape every caller (tests/install.nix, free-space.nix,
-    # install-encrypted.nix) already uses -- `.toplevel`, `.diskoScript`,
-    # `.initialRamdisk`, `.etc` -- and add `.path` beside them: `system.path`
-    # is config.system's own sibling of config.system.build, not inside it,
-    # and tests/install-seed-shape.nix needs it (#1176: `system.path` is the
-    # property the depth bug moves, not `toplevel`, which can differ for
-    # reasons unrelated to depth such as hostname-bearing initrd bits).
+    # Old shape (`.toplevel`, `.diskoScript`, `.initialRamdisk`, `.etc`)
+    # plus `.path` beside it, for tests/install-seed-shape.nix.
+    # Why: tests/AGENTS.md#why-systempath-not-toplevel
     sys.build // { inherit (sys) path; };
 in
 {
   inherit targetSystemFor etcInstrumentation instrumentScript;
 
-  # Exposed for tests/install-seed-shape.nix, which has to reproduce the real
-  # hardware-configuration.nix's CONTRIBUTION exactly -- mkForce and all -- on
-  # the rendered-template side it compares against. Passed through
-  # nixosSystem's specialArgs there rather than serialised to text: the same
-  # Nix values both sides import, not a second encoding of them to keep in
-  # step.
+  # Exposed for tests/install-seed-shape.nix's specialArgs re-use.
+  # Why: tests/AGENTS.md#one-source-for-hardwareconfig-and-initrdpin
   inherit hardwareConfig initrdPin;
 }

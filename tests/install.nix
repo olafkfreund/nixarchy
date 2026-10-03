@@ -85,16 +85,23 @@ let
   passwordHash = "$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo.yhxsVpM6bgkeTdCG9D91zOaGX9Bu/YsQTlWLwuQF1SrOL0DY8Bu/V/";
 
   # The machine the installer is about to produce, at the real installed
-  # host's import depths -- see tests/lib/installed-target.nix. encrypt = no,
-  # reference-unencrypted: this test installs with encrypt=no and LUKS adds a
-  # dozen crypto modules to the other reference.
-  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) {
-    diskConfig = import ../installer/disk-config.nix {
-      device = "/dev/vdb";
-      encrypt = false;
-    };
-    reference = inputs.self.nixosConfigurations.reference-unencrypted.config;
-  };
+  # host's import depths -- see tests/lib/installed-target.nix.
+  # tests/lib/installed-target-cases.nix is the one place this test's
+  # arguments are named; checks.install-seed-shape reads the same case.
+  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) (
+    let
+      case = (import ./lib/installed-target-cases.nix { inherit inputs; }).install;
+    in
+    {
+      inherit (case)
+        diskConfig
+        reference
+        encrypt
+        recoverySecret
+        extraInstrumentationText
+        ;
+    }
+  );
   inherit (installedTarget) targetSystemFor etcInstrumentation instrumentScript;
 
   # Every system the target might end up being: two CPU vendors, with and
@@ -542,8 +549,9 @@ pkgs.testers.runNixOSTest {
 
     # ---- make the result observable ------------------------------------
     # Everything above this line is the product. Everything below adds the
-    # serial root shell the driver needs and nothing else; see the note on
-    # `instrumentation` for why it cannot be there from the start. The second
+    # serial root shell the driver needs and nothing else; see
+    # tests/lib/installed-target.nix's note on `etcInstrumentation` for why
+    # it cannot be there from the start. The second
     # nixos-install copies -- the instrumented system is seeded -- so if this
     # step ever starts building, the seeding has drifted and the offline
     # failure will say which derivation.

@@ -106,19 +106,23 @@ let
   # Same move as install-iso.nix's SERIAL step. plymouth off, forced: the
   # splash's password agent would take the prompt off the console, and the
   # splash is not what is under test.
-  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) {
-    diskConfig = import ../installer/disk-config.nix {
-      device = "/dev/vdb";
-      encrypt = true;
-    };
-    reference = inputs.self.nixosConfigurations.reference.config;
-    encrypt = true;
-    recoverySecret = true;
-    extraInstrumentationText = ''
-      boot.kernelParams = [ "console=ttyS0,115200" ];
-      boot.plymouth.enable = lib.mkForce false;
-    '';
-  };
+  #
+  # tests/lib/installed-target-cases.nix is the one place this test's
+  # arguments are named; checks.install-seed-shape reads the same case.
+  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) (
+    let
+      case = (import ./lib/installed-target-cases.nix { inherit inputs; })."install-encrypted";
+    in
+    {
+      inherit (case)
+        diskConfig
+        reference
+        encrypt
+        recoverySecret
+        extraInstrumentationText
+        ;
+    }
+  );
   inherit (installedTarget) targetSystemFor etcInstrumentation instrumentScript;
 
   targetSystems =

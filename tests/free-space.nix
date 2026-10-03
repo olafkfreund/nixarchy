@@ -70,15 +70,22 @@ let
   # addresses two partitions by partlabel and declares no partition table at
   # all, so this is a different toplevel from the whole-disk reference and
   # has to be seeded separately or the install builds it with no network.
-  # encrypt = no, reference-unencrypted: same reason checks.install uses them.
-  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) {
-    diskConfig = import ../installer/disk-config.nix {
-      mode = "free";
-      device = "/dev/vdb";
-      encrypt = false;
-    };
-    reference = inputs.self.nixosConfigurations.reference-unencrypted.config;
-  };
+  # tests/lib/installed-target-cases.nix is the one place this test's
+  # arguments are named; checks.install-seed-shape reads the same case.
+  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) (
+    let
+      case = (import ./lib/installed-target-cases.nix { inherit inputs; })."free-space";
+    in
+    {
+      inherit (case)
+        diskConfig
+        reference
+        encrypt
+        recoverySecret
+        extraInstrumentationText
+        ;
+    }
+  );
   inherit (installedTarget) targetSystemFor etcInstrumentation instrumentScript;
 
   # Every system the target might end up being: two CPU vendors, with and
@@ -529,7 +536,8 @@ pkgs.testers.runNixOSTest {
     # ---- make the result observable ---------------------------------------
     # Identical to checks.install, and for the same reason: an installed
     # machine has no serial root shell and the driver cannot assert anything on
-    # one without it. See tests/install.nix's note on `instrumentation`.
+    # one without it. See tests/lib/installed-target.nix's note on
+    # `etcInstrumentation`.
     ${instrumentScript}
     installer.succeed("git -C /mnt/etc/nixos add -A")
     print(installer.succeed(

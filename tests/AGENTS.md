@@ -225,7 +225,7 @@ before the build was stopped, twice. Compare in Nix (`equal = a == b`, which
 ignores context), and print `builtins.unsafeDiscardStringContext` copies.
 **Check before building:** `nix derivation show` on the check's `drvPath`
 should list no `nixos-system`, `system-path` or `linux` among its
-`inputDrvs`. For that check the list is empty.
+`inputDrvs`. For that check it lists only `stdenv` and `bash`.
 
 **And a second trap found in the same hour:** `--override-input` does NOT
 reach a `builtins.getFlake` inside `--expr`. It applies to installables.
@@ -1476,4 +1476,59 @@ six cases. It is evaluation only, so the next mismatch is red on the pull
 request rather than forty minutes into the install job.
 `nixarchy-hardware.nix` (nixos-hardware CPU modules) is left out of the seed:
 measured for both vendors, it does not change `system-path`.
+
+The VM side renders `installer/template/host/` with `install.sh`'s own
+`subst`/`substitute_host_files`, extracted with sed rather than sourced --
+sourcing install.sh starts the wizard (the same pattern
+`tests/installer-offline-rescue.nix:37` uses) -- then imports it inside a
+`nixosSystem` the way `installer/template/flake.nix` would: real derivation
+outputs, not `builtins.toFile`, so evaluating the check builds six small
+IFD renders (seconds each, no VM).
+
+`hardware-configuration.nix` is the one file `nixos-generate-config` writes
+that nothing here can reproduce by substitution -- it runs on a real
+machine to detect. So the VM side's stub takes the seed's own
+`hardwareConfig` and `initrdPin` MODULES through `specialArgs`, not a
+second text encoding of them: this compares WHERE they are imported, at
+the real depth, not what `install.sh` writes INTO the file. The seed's
+`initrdPin` is a bare `mkForce`; `install.sh`'s real pin additionally wraps
+it in `lib.mkIf (config.boot.kernelPackages.kernel.version == "...")`, so a
+kernel-version mismatch this check cannot see is still `install.sh`'s to
+catch, not this one's.
+
+<a id="byte-identical-instrumentation"></a>
+### Byte-identical instrumentation
+
+The seed imports `test-instrumentation.nix` the same way the real install
+does: `builtins.toFile` writes the text once, and both sides import that
+exact store path. Importing it rather than the `instrumentation` module
+every test used to carry separately is what makes the seed and the
+generated flake import BYTE-IDENTICAL content -- not merely equivalent
+Nix, the same file. `builtins.toFile` hashes the string itself, so this is
+not IFD.
+
+<a id="why-systempath-not-toplevel"></a>
+### Why `system.path`, not `toplevel`
+
+`targetSystemFor` keeps the old shape every caller (tests/install.nix,
+free-space.nix, install-encrypted.nix) already uses -- `.toplevel`,
+`.diskoScript`, `.initialRamdisk`, `.etc` -- and adds `.path` beside them:
+`system.path` is `config.system`'s own sibling of `config.system.build`,
+not inside it. `checks.install-seed-shape` needs `.path` because #1176 is
+about the ORDER `environment.systemPackages` is built in, which
+`system.path`'s `buildEnv` hashes directly into its own derivation.
+`toplevel` sits on top of a great deal else -- the initrd, the activation
+script, hostname-bearing bits -- that can legitimately differ for reasons
+this check is not about.
+
+<a id="one-source-for-hardwareconfig-and-initrdpin"></a>
+### One source for `hardwareConfig` and `initrdPin`
+
+`tests/lib/installed-target.nix` exposes `hardwareConfig` and `initrdPin`
+so `tests/install-seed-shape.nix` can reproduce the real
+`hardware-configuration.nix`'s CONTRIBUTION exactly -- `mkForce` and all --
+on the rendered-template side it compares against. Passed through
+`nixosSystem`'s `specialArgs` there rather than serialised to text: the
+same Nix values both sides import, not a second encoding of them to keep
+in step.
 

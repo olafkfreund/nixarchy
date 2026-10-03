@@ -7,93 +7,15 @@
 # tests/install-encrypted.nix carry (tests/lib/installed-target.nix) describe
 # the SAME machine the real installer writes?
 #
-# #1176 found that it did not: all three seeds put hardwareConfig/initrdPin
-# /instrumentation flat in the nixosSystem `modules` list (depth 0), while
-# install.sh's own template nests them two levels deeper --
-# hosts/<name>/default.nix imports host.nix, disk-config.nix and
-# configuration.nix (depth 1), and configuration.nix imports
-# hardware-configuration.nix, which carries the initrd pin, and
-# test-instrumentation.nix (depth 2). A module's `imports` and a
-# nixosSystem's `modules` merge in a different order, so the two shapes can
-# describe the same packages in a different environment.systemPackages
-# ORDER -- a different chosenOutputs, a different toplevel, and an offline
-# install that has to BUILD what it can no longer copy.
-#
-# So this builds BOTH sides for the same six cases (install, free-space,
-# install-encrypted, each plain and instrumented) and compares
-# system.build.toplevel.drvPath:
-#
-#   seed  tests/lib/installed-target.nix's targetSystemFor, as each test
-#         calls it.
-#
-#   VM    install.sh's own substitute_host_files/subst, run against
-#         installer/template/host/ -- extracted with sed rather than
-#         sourced, because sourcing install.sh starts the wizard (the same
-#         pattern tests/installer-offline-rescue.nix:37 uses) -- then
-#         imported as `installer/template/flake.nix`'s module list would
-#         import it (IFD: this is a real derivation's output, not a toFile).
-#
-# hardware-configuration.nix is the one file nixos-generate-config writes
-# that this cannot reproduce by substitution, because nothing here runs on a
-# real machine to detect. Rather than re-encode hardwareConfig/initrdPin as
-# TEXT -- a second copy of mkForce's shape to keep in step with the first --
-# the VM side's stub takes them from specialArgs as the exact Nix VALUES the
-# seed already computed. tests/lib/installed-target.nix exports them for
-# exactly this.
-#
-# nixarchy-hardware.nix is `{ ... }: { }` on both sides for now -- #1176's
-# step 6 tries the real content install.sh writes for a QEMU guest and
-# records whether it changes anything.
+# Why: tests/AGENTS.md#the-install-checks-seed-is-the-installer-templates-shape-depth-for-depth
 let
   helper = import ./lib/installed-target.nix { inherit inputs pkgs; };
 
   cpuModule = "kvm-amd";
 
-  # The three tests' own arguments to the helper -- kept in step with
   # tests/install.nix, tests/free-space.nix and tests/install-encrypted.nix
-  # by hand; a mismatch here tests the wrong machine, silently.
-  targets = [
-    {
-      name = "install";
-      diskMode = "whole";
-      encrypt = false;
-      recoverySecret = false;
-      extraInstrumentationText = "";
-      diskConfig = import ../installer/disk-config.nix {
-        device = "/dev/vdb";
-        encrypt = false;
-      };
-      reference = inputs.self.nixosConfigurations.reference-unencrypted.config;
-    }
-    {
-      name = "free-space";
-      diskMode = "free";
-      encrypt = false;
-      recoverySecret = false;
-      extraInstrumentationText = "";
-      diskConfig = import ../installer/disk-config.nix {
-        mode = "free";
-        device = "/dev/vdb";
-        encrypt = false;
-      };
-      reference = inputs.self.nixosConfigurations.reference-unencrypted.config;
-    }
-    {
-      name = "install-encrypted";
-      diskMode = "whole";
-      encrypt = true;
-      recoverySecret = true;
-      extraInstrumentationText = ''
-        boot.kernelParams = [ "console=ttyS0,115200" ];
-        boot.plymouth.enable = lib.mkForce false;
-      '';
-      diskConfig = import ../installer/disk-config.nix {
-        device = "/dev/vdb";
-        encrypt = true;
-      };
-      reference = inputs.self.nixosConfigurations.reference.config;
-    }
-  ];
+  # read their own arguments from the same file.
+  targets = builtins.attrValues (import ./lib/installed-target-cases.nix { inherit inputs; });
 
   # install.sh's own substitute_host_files/subst, then the installed-target
   # layout, rendered for one case. A real derivation, not builtins.toFile --
@@ -103,8 +25,8 @@ let
   # appended to the initrd by systemd-boot at bootloader-install time, not
   # baked into any derivation (installer/template/host/configuration.nix's
   # own comment on boot.initrd.secrets says so) -- so its text cannot move
-  # system.build.toplevel.drvPath, which is the only thing this check reads
-  # off either side.
+  # system.path.drvPath, which is the only thing this check reads off
+  # either side.
   renderHost =
     {
       name,
@@ -165,7 +87,8 @@ let
         substitute_host_files
 
         ${pkgs.lib.optionalString instrumented ''
-          printf '%s\n' '${etcInstrumentation}' > "$out/hosts/installed/test-instrumentation.nix"
+          cp ${builtins.toFile "test-instrumentation.nix" etcInstrumentation} \
+            "$out/hosts/installed/test-instrumentation.nix"
           sed -i 's|./hardware-configuration.nix|./hardware-configuration.nix\n    ./test-instrumentation.nix|' \
             "$out/hosts/installed/configuration.nix"
           if ! grep -q test-instrumentation "$out/hosts/installed/configuration.nix"; then

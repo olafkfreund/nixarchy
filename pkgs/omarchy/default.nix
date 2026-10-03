@@ -438,6 +438,13 @@ stdenvNoCC.mkDerivation {
                     # Bound the Lua source scan so a loop in hyprland.lua cannot pin a CPU when this menu opens.
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail "    lua <<'LUA'" "    timeout 3 lua <<'LUA'"
+                    # Drop undescribed binds in non-default submaps (a hint plugin registers
+                    # ~2,800): the list otherwise exceeds the 128 KiB single-argument limit
+                    # omarchy-menu-select hands to perl and omarchy-shell, so the menu never opens.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
+                      --replace-fail '      if (!seen) return' '      if (!seen) return
+      if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
+                      --replace-fail "printf 'v11\\n'" "printf 'v11-submaps\\n'"
 
                     # bin/ is a symlink farm, NOT wrapProgram'd. `bin/omarchy` discovers its
                     # subcommands by grepping the first 80 lines of each sibling for

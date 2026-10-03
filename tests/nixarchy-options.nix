@@ -1,4 +1,8 @@
-{ pkgs, reference }:
+{
+  pkgs,
+  reference,
+  flatsnap,
+}:
 # #1166: the catalogue nixarchy-options builds and ships to /etc/nixarchy,
 # checked for the three things a silent regression would otherwise hide --
 # every non-flatsnap option names its real file rather than a store path
@@ -6,9 +10,9 @@
 # (gated on cfg.enable, not written unconditionally), and the docs linkFarm
 # actually carries the manual.
 #
-# programs.nixarchy.flatsnap.* is exempt from the declaration rule: those
-# options are declared by inputs.nixarchy-flatsnap's own module, a separate
-# flake this one does not control the _file of. See modules/AGENTS.md.
+# Declarations inside inputs.nixarchy-flatsnap's source are exempt: that
+# flake's module declares programs.nixarchy.flatsnap.*, and its _file is not
+# ours. Exempt by path, not key, so an option of ours there is still caught.
 let
   inherit (pkgs) lib;
   opts = reference.config.system.build.nixarchyOptions;
@@ -43,11 +47,11 @@ pkgs.runCommand "nixarchy-options-check"
       }
     done
 
-    offenders=$(jq -r '
+    offenders=$(jq -r --arg flatsnap ${pkgs.lib.escapeShellArg "${flatsnap}"} '
       to_entries
       | map(select(
-          (.key | startswith("programs.nixarchy.flatsnap.") | not)
-          and (.value.declarations | any(type == "string"))
+          .value.declarations
+          | any(type == "string" and (startswith($flatsnap) | not))
         ))
       | .[].key
     ' "$options")

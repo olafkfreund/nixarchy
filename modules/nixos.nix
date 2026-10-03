@@ -247,19 +247,16 @@ let
   };
 
   # Why: modules/AGENTS.md#the-catalogue-for-1166-built-here-rather-than-in-f
-  # rev falls back to "main" on a dirty tree (no self.rev), which this
-  # worktree build is.
+  # A tree with no commit (a dirty checkout) has no self.rev; it links to main.
   src = toString ../.;
   rev = inputs.self.rev or "main";
-  # Guarded: a machine with no home-manager imported has no such option.
+  # Reaches our HM module through sharedModules only; a per-user import of it
+  # is not catalogued.
   hmOpts =
-    if options ? home-manager then
-      (options.home-manager.users.type.getSubOptions [
-        "home-manager"
-        "users"
-      ]).programs.nixarchy or { }
-    else
-      { };
+    (options.home-manager.users.type.getSubOptions [
+      "home-manager"
+      "users"
+    ]).programs.nixarchy or { };
   nixarchyOptions =
     (pkgs.nixosOptionsDoc {
       options = {
@@ -268,7 +265,6 @@ let
       };
       # A missing description elsewhere must not abort this build.
       warningsAreErrors = false;
-      # Why: modules/AGENTS.md#the-catalogue-for-1166-built-here-rather-than-in-f
       transformOptions =
         opt:
         opt
@@ -784,7 +780,8 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Declare the NixOS MCP server (`mcp-nixos`) in the coding agents this
+        Declare the NixOS MCP server (`mcp-nixarchy`, a fork of `mcp-nixos` that
+        also answers nixarchy's own options and manual) in the coding agents this
         machine already seeds skills into.
 
         LLMs write bad Nix because the corpus is small, the language is lazy
@@ -1262,20 +1259,20 @@ in
       package32 = lib.mkOverride 900 hyprPkgs.pkgsi686Linux.mesa;
     };
 
-    # The resolved half of the flake's safe.directory entry -- see the
-    # programs.git block above for why it cannot be written at evaluation
-    # time. Writes a real path only when it differs from the configured one,
-    # so on the normal case (a real directory at /etc/nixos) this leaves an
-    # empty file and changes nothing.
-    #
-    # Always writes, never appends: the file is derived state, and a stale
-    # entry left behind after somebody repoints programs.nixarchy.flake would
-    # keep exempting a directory nobody asked about.
     # Merged into one `system` set: statix rejects three separate top-level
     # `system.*` statements in one attrset.
     system = {
       build.nixarchyOptions = nixarchyOptions;
 
+      # The resolved half of the flake's safe.directory entry -- see the
+      # programs.git block above for why it cannot be written at evaluation
+      # time. Writes a real path only when it differs from the configured one,
+      # so on the normal case (a real directory at /etc/nixos) this leaves an
+      # empty file and changes nothing.
+      #
+      # Always writes, never appends: the file is derived state, and a stale
+      # entry left behind after somebody repoints programs.nixarchy.flake would
+      # keep exempting a directory nobody asked about.
       activationScripts.nixarchyFlakeSafeDirectory = ''
         install -d -m 0755 -o root -g root /var/lib/nixarchy
 

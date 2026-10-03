@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1179
 author: olafkfreund
 ---
@@ -87,3 +87,8 @@ plymouth off).
    builds both shapes for each test and compares `system-path` `drvPath`s.
    The proposal is yes. It catches the next depth change on every pull
    request, minutes before the install job would.
+
+## Owner's answers (2026-10-03)
+
+1. **A shared helper.**
+2. **Yes to the cheap evaluation check.**

@@ -685,6 +685,20 @@ let
     piMcpGate =
       let
         withLocalAi = enable: homeOn { aiMirror.mcp = true; localAi = { inherit enable; allowCpu = true; }; } { };
+        # localAi on, but pi not among its agents: the half of piOn that
+        # `enable` alone does not reach. A regression to `piOn =
+        # localAi.enable` passes every other case here and fails this one.
+        withoutPi = homeOn {
+          aiMirror.mcp = true;
+          localAi = { enable = true; allowCpu = true; agents = [ "opencode" ]; };
+        } { };
+        # And the `mcpEnabled &&` half of the NixOS server's gate, which no
+        # other case reaches: nixarchyMcpPi is deliberately not in
+        # mcpActivationNames, because the default home has no pi.
+        mcpOffWithPi = homeOn {
+          mcp = false;
+          localAi = { enable = true; allowCpu = true; };
+        } { };
         names = [
           "nixarchyMcpPi"
           "nixarchyAiMirrorMcpPi"
@@ -692,7 +706,11 @@ let
       in
       {
         on = hasAll (withLocalAi true) names;
-        off = hasAny (withLocalAi false) names || hasAny defaultHomeOn names;
+        off =
+          hasAny (withLocalAi false) names
+          || hasAny defaultHomeOn names
+          || hasAny withoutPi names
+          || hasAny mcpOffWithPi [ "nixarchyMcpPi" ];
       };
 
     # ---- #888: the Nix skills, and the switch that takes them away --------

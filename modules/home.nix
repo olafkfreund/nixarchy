@@ -1552,6 +1552,19 @@ in
       ''
     );
 
+    # The switch is still on, but pi has gone: dropping pi from
+    # programs.nixarchy.localAi.agents gates its writer off, and the removal
+    # above only runs when the SWITCH goes off -- so without this the entry
+    # nixarchy wrote stays in ~/.pi/agent/mcp.json, naming a store path that
+    # will be collected. Only pi's file is passed; the other three agents are
+    # still connected and must keep their entries.
+    home.activation.nixarchyAiMirrorMcpPiRemove = lib.mkIf (aiMirrorMcp && !piOn) (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
+          "" "" "" "$HOME/.pi/agent/mcp.json"
+      ''
+    );
+
     # ---- #630: nixd, in the editors the Install menu offers --------------
     #
     # Every block is gated on the editor actually being selected. nixd itself

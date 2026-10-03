@@ -127,13 +127,13 @@ fourth, pi, on a machine that has it:
 | opencode | `~/.config/opencode/opencode.json` | `mcp` |
 | pi (only where installed) | `~/.pi/agent/mcp.json` | `mcpServers` |
 
-One of the four skill directories above gets nothing, and that is deliberate
-rather than an omission: `~/.agents/skills` is a generic convention with no
-single tool behind it and no MCP configuration file. Writing one anyway would
-put a file on your disk that nothing reads. Pi used to be the second case; since
-0.99.2 it documents `~/.pi/agent/mcp.json`, so it gets the file, but only when
-`pi` is in `programs.nixarchy.localAi.agents` -- the switch is on for everyone,
-and most machines have no pi.
+One of the skill directories above gets nothing, and that is deliberate rather
+than an omission: `~/.agents/skills` is a generic convention with no single tool
+behind it and no MCP configuration file. Writing one anyway would put a file on
+your disk that nothing reads. Pi used to be the second case; since 0.99.2 it
+documents `~/.pi/agent/mcp.json`, so it gets the file — but only when `pi` is in
+`programs.nixarchy.localAi.agents`, because the switch is on for everyone and
+most machines have no pi.
 
 Nothing is clobbered. Each file is merged into key by key — a server you
 declared yourself survives, and so does everything else in the file. Turn the

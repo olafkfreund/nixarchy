@@ -2510,6 +2510,14 @@
             config = self.nixosConfigurations.reference.config;
           };
 
+          # #1166: the /etc/nixarchy catalogue names real files (not store
+          # paths), is Mode A inert, and ships the manual. See
+          # tests/nixarchy-options.nix.
+          nixarchy-options = import ./tests/nixarchy-options.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+          };
+
           # #1163: a user's own Mesa in hardware.graphics.extraPackages(32)
           # collides with nixarchy's, in buildEnv, once both are force-set --
           # evaluation only, against modules/nixos.nix's assertions. See

@@ -246,17 +246,12 @@ let
     };
   };
 
-  # The catalogue for #1166: nixarchy's own options, read by the `nixos` MCP
-  # tool (now mcp-nixarchy) and by anyone grepping /etc/nixarchy/options.json
-  # by hand. Built here, not in flake.nix calling back into this module, so
-  # there is one builder and one file, on the machine and in the release
-  # (packages.<system>.nixarchy-options below re-exports the same attribute).
+  # Why: modules/AGENTS.md#the-catalogue-for-1166-built-here-rather-than-in-f
+  # rev falls back to "main" on a dirty tree (no self.rev), which this
+  # worktree build is.
   src = toString ../.;
   rev = inputs.self.rev or "main";
-  # home-manager's own submodule options, read the same way nixdSettings
-  # above reads them -- getSubOptions on the user type, since no user is
-  # evaluated at this scope. Guarded: a machine without home-manager
-  # imported (none today, but nothing here assumes it) has no such option.
+  # Guarded: a machine with no home-manager imported has no such option.
   hmOpts =
     if options ? home-manager then
       (options.home-manager.users.type.getSubOptions [
@@ -271,14 +266,9 @@ let
         programs.nixarchy = options.programs.nixarchy;
         hm = hmOpts;
       };
-      # A build that aborts on nixarchy's own missing defaultText or
-      # description is not what #1166 asked for; the three fixes elsewhere in
-      # this change are the real guard against a bad catalogue.
+      # A missing description elsewhere must not abort this build.
       warningsAreErrors = false;
-      # The same idiom nixpkgs' own manual uses for its declarations
-      # (nixos/doc/manual/default.nix): a declaration under nixarchy's
-      # source becomes a github blob URL at this build's rev; anything else
-      # (nixpkgs, home-manager) is left as the store path it already is.
+      # Why: modules/AGENTS.md#the-catalogue-for-1166-built-here-rather-than-in-f
       transformOptions =
         opt:
         opt
@@ -298,8 +288,7 @@ let
           ) opt.declarations;
         };
     }).optionsJSON;
-  # docs/manual plus docs/llms.txt only, not the 23 MB docs/ (most of which
-  # is screenshots the MCP tool and a terminal reader have no use for).
+  # The manual and llms.txt only, not the 23 MB docs/ (mostly screenshots).
   nixarchyDocs = pkgs.linkFarm "nixarchy-docs" [
     {
       name = "manual";
@@ -1282,10 +1271,8 @@ in
     # Always writes, never appends: the file is derived state, and a stale
     # entry left behind after somebody repoints programs.nixarchy.flake would
     # keep exempting a directory nobody asked about.
-    # The three `system.*` statements this module makes are merged into one
-    # set (statix's own suggestion): nixarchyOptions is #1166's catalogue,
-    # read by packages.<system>.nixarchy-options (flake.nix) for the
-    # release; the two activationScripts are unchanged from before.
+    # Merged into one `system` set: statix rejects three separate top-level
+    # `system.*` statements in one attrset.
     system = {
       build.nixarchyOptions = nixarchyOptions;
 
@@ -1674,9 +1661,7 @@ in
       // lib.genAttrs installedEtc (name: {
         source = "${cfg.package}/share/omarchy/etc/${name}";
       })
-      # /etc/nixarchy, for #1166: the catalogue and the manual, in
-      # whichever shape the `nixos` MCP tool (mcp-nixarchy) and a
-      # terminal `jq`/`grep` both read.
+      # /etc/nixarchy: the catalogue and manual, for #1166's `nixos` MCP tool.
       // {
         "nixarchy/options.json".source = "${nixarchyOptions}/share/doc/nixos/options.json";
         "nixarchy/docs".source = nixarchyDocs;

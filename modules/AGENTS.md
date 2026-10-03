@@ -835,6 +835,29 @@ and, in GTK4 and Electron apps, sometimes nothing at all.
 Nixarchy is Wayland-only -- there is no session here where the X11
 default is the right one -- so this is set rather than left to the user.
 
+<a id="the-catalogue-for-1166-built-here-rather-than-in-f"></a>
+
+### The catalogue for #1166, built here rather than in flake.nix
+
+```nix
+nixarchyOptions =
+```
+
+Built here rather than in flake.nix calling back into this module, so
+there is one builder and one file, on the machine
+(`/etc/nixarchy/options.json`) and in the release
+(`packages.<system>.nixarchy-options` re-exports
+`system.build.nixarchyOptions`).
+
+`transformOptions` follows the same idiom nixpkgs' own manual uses for
+its declarations (`nixos/doc/manual/default.nix`): a declaration under
+`src` becomes a github blob URL at `rev`; anything else (nixpkgs,
+home-manager, another flake input's module) is left as the store path it
+already is. `tests/nixarchy-options.nix` exempts
+`programs.nixarchy.flatsnap.*` from the "every option gets a URL" rule for
+exactly that last reason -- those options are declared by
+`inputs.nixarchy-flatsnap`'s own module, not by this one.
+
 ## `modules/home.nix`
 
 <a id="what-omarchy-path-points-at-and-the-source-of-ever"></a>

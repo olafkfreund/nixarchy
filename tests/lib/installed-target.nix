@@ -13,10 +13,18 @@
 # extraInstrumentation: an extra module merged in ALONGSIDE instrumentation,
 # only when instrumented -- install-encrypted's console=ttyS0 and
 # plymouth-off, say. Defaults to nothing.
+#
+# encrypt, recoverySecret: the template's own placeholders, substituted by
+# install.sh's write_host_files (`@autologin@` follows `@encrypt@`, and
+# `@recoverysecret@` is the initrd.secrets block when a recovery passphrase
+# was given, `{ }` otherwise). Both default to what tests/install.nix and
+# tests/free-space.nix want; install-encrypted sets both true.
 {
   diskConfig,
   reference,
   extraInstrumentation ? { },
+  encrypt ? false,
+  recoverySecret ? false,
 }:
 let
   # The NixOS test backdoor, as a module the generated flake can import.
@@ -91,14 +99,18 @@ let
   };
 
   # Copied into the generated flake after the install; see the note on
-  # `instrumentation` above for why it cannot be there from the start.
-  # modulesPath, not an absolute store path -- the same reason `instrumentation`
-  # uses it: the flake it joins evaluates in pure mode.
-  etcInstrumentation =
+  # `instrumentation` above for why it cannot be there from the start. This
+  # is the literal Nix SOURCE TEXT written to
+  # /etc/nixarchy/test-instrumentation.nix on the installer node -- a string,
+  # not an evaluated module, because that is what `environment.etc.*.text`
+  # takes. modulesPath, not an absolute store path -- the same reason
+  # `instrumentation` uses it: the flake it joins evaluates in pure mode.
+  etcInstrumentation = ''
     { modulesPath, ... }:
     {
-      imports = [ "${modulesPath}/testing/test-instrumentation.nix" ];
-    };
+      imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
+    }
+  '';
 
   # The exact cp/sed/grep the test script runs to add `etcInstrumentation`'s
   # text into the installed flake, as one string ready to interpolate into a
@@ -186,8 +198,12 @@ let
               time.timeZone = "UTC";
               console.keyMap = "us";
               nixpkgs.config.allowUnfree = true;
+              # Autologin follows encryption -- install.sh substitutes
+              # @autologin@ with the same $encrypt it substitutes @encrypt@
+              # with, because an encrypted disk has already authenticated the
+              # user by the time a greeter would ask.
               services.displayManager.autoLogin = {
-                enable = false;
+                enable = encrypt;
                 user = "omarchy";
               };
               # hashedPasswordFile, as installer/template/host/configuration.nix
@@ -201,6 +217,13 @@ let
               # the file too (#457), which is what made the drift visible
               # rather than what caused it.
               users.users.omarchy.hashedPasswordFile = "/var/lib/nixarchy/password.hash";
+
+              # @recoverysecret@'s substituted value: the initrd.secrets block
+              # when a recovery passphrase was given, `{ }` otherwise -- same
+              # depth as the keys above, because configuration.nix carries
+              # both as one file.
+              boot.initrd.secrets =
+                if recoverySecret then { "/etc/shadow" = "/var/lib/nixarchy/initrd-shadow"; } else { };
             }
           ];
         }

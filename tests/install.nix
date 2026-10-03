@@ -84,156 +84,18 @@ let
   # and check it round-trips before trusting it.
   passwordHash = "$6$rounds=100000$nixarchytestsalt$zoz9HmOtqvELBidMdICVEOuvNl5LQCo.yhxsVpM6bgkeTdCG9D91zOaGX9Bu/YsQTlWLwuQF1SrOL0DY8Bu/V/";
 
-  # The NixOS test backdoor, as a module the generated flake can import.
-  #
-  # An installed machine has no reason to carry it, and the installer is right
-  # not to write it -- but without it the driver cannot run a single command on
-  # the target: wait_for_unit, succeed and the rest all talk to a root shell on
-  # /dev/hvc0 that only this module provides. The alternative is to type every
-  # assertion into a getty and scrape the console for it, which is a worse test
-  # of the same things.
-  #
-  # So the installer runs untouched and writes what it would write; then this
-  # is added and nixos-install is run a second time, which is a copy rather
-  # than a build because the instrumented system is seeded too. What boots is
-  # the disk the installer produced, plus a serial shell.
-  #
-  # modulesPath, not an absolute store path: the generated flake evaluates in
-  # pure mode, where a path outside its own tree is an error, and modulesPath
-  # points into the nixpkgs the flake already has.
-  instrumentation = {
-    imports = [ "${inputs.nixpkgs}/nixos/modules/testing/test-instrumentation.nix" ];
-  };
-
-  # What nixos-generate-config writes on the target, as a module.
-  #
-  # This is the file the install generates INSIDE the VM, and #12 called it
-  # unknowable from outside -- which is why this check could not pass. It is
-  # not unknowable, it is just late: the machine is qemu, its devices are the
-  # ones the test driver gives it, and the output is the same every run. What
-  # is genuinely variable is one line, the host CPU's KVM module, so both
-  # values are seeded and the install picks whichever it wrote.
-  #
-  # The file's TEXT does not have to match. It is imported as Nix source, not
-  # copied to the store, so only the configuration it produces matters -- and
-  # that is what this reproduces. If qemu's devices ever change, the install
-  # falls back to building the difference, finds no network, and fails here
-  # with the derivation it wanted; update this to match.
-  hardwareConfig = cpuModule: {
-    imports = [ "${inputs.nixpkgs}/nixos/modules/profiles/qemu-guest.nix" ];
-    boot = {
-      initrd.availableKernelModules = [
-        "virtio_pci"
-        "uhci_hcd"
-        "ehci_pci"
-        "ahci"
-        "sr_mod"
-        "virtio_blk"
-      ];
-      initrd.kernelModules = [ ];
-      kernelModules = [ cpuModule ];
-      extraModulePackages = [ ];
+  # The machine the installer is about to produce, at the real installed
+  # host's import depths -- see tests/lib/installed-target.nix. encrypt = no,
+  # reference-unencrypted: this test installs with encrypt=no and LUKS adds a
+  # dozen crypto modules to the other reference.
+  installedTarget = (import ./lib/installed-target.nix { inherit inputs pkgs; }) {
+    diskConfig = import ../installer/disk-config.nix {
+      device = "/dev/vdb";
+      encrypt = false;
     };
-    nixpkgs.hostPlatform = pkgs.lib.mkDefault pkgs.stdenv.hostPlatform.system;
+    reference = inputs.self.nixosConfigurations.reference-unencrypted.config;
   };
-
-  # And the pin installer/install.sh adds underneath it.
-  #
-  # The installer forces both initrd lists to what the medium carries, so the
-  # machine can reuse the initrd already there instead of building a
-  # near-identical one -- see reuse_baked_initrd. That means the system this
-  # test seeds has to carry the same force, or the installed system differs
-  # from the seeded one by exactly an initrd and the install has to build it
-  # with no network. Which is not a subtle failure: it is the source bootstrap,
-  # and it ends by trying to download a patch from salsa.debian.org.
-  #
-  # reference-unencrypted, because this test installs with encrypt=no and LUKS
-  # adds a dozen crypto modules to the other one.
-  initrdPin =
-    let
-      ref = inputs.self.nixosConfigurations.reference-unencrypted.config;
-    in
-    {
-      boot.initrd.availableKernelModules = pkgs.lib.mkForce ref.boot.initrd.availableKernelModules;
-      boot.initrd.kernelModules = pkgs.lib.mkForce ref.boot.initrd.kernelModules;
-    };
-
-  # The exact disko script the generated flake will evaluate to. The reference
-  # host's is for /dev/vda -- its placeholder device -- and this test installs
-  # to /dev/vdb, so they are different derivations and the VM would have to
-  # build one with no network. Seeding it here is what the ISO does for the
-  # whole closure in #15; the test meets the same requirement early.
-  targetSystemFor =
-    {
-      cpuModule,
-      instrumented ? false,
-    }:
-    (inputs.nixpkgs.lib.nixosSystem {
-      # Not `inherit (pkgs) system`: pkgs.system is deprecated in favour of
-      # stdenv.hostPlatform.system, and nixpkgs warns on every evaluation of
-      # this check. Written out rather than inherited because the inherit form
-      # is what hid it -- a grep for `pkgs.system` does not find it.
-      system = pkgs.stdenv.hostPlatform.system;
-      specialArgs = { inherit inputs; };
-      modules = [
-        inputs.self.nixosModules.nixarchy
-        inputs.home-manager.nixosModules.home-manager
-        inputs.disko.nixosModules.disko
-
-        # The machine, as ONE module whose imports are the three files
-        # installer/template/host/default.nix imports -- not as three entries
-        # in this list.
-        #
-        # The shape is load-bearing and was not, before the hosts/ layout. A
-        # module's `imports` and a nixosSystem's `modules` merge in different
-        # orders, so listing these flat gives the same packages in a different
-        # environment.systemPackages ORDER; system-path hashes that order into
-        # chosenOutputs, so it is a different derivation, so the toplevel is,
-        # and the install has to build what it can no longer copy -- offline,
-        # which means stdenv, which means 459 derivations from hex0-seed and a
-        # fetch of a Debian patch that never arrives.
-        #
-        # So this mirrors hosts/<name>/default.nix, and the block below mirrors
-        # the configuration.nix that sits beside it. Keep both in step with
-        # installer/template/host/ -- a mismatch shows up as "cannot build",
-        # which is a clear enough signal.
-        {
-          imports = [
-            (import ../installer/host.nix {
-              hostname = "installed";
-              username = "omarchy";
-            })
-            (import ../installer/disk-config.nix {
-              device = "/dev/vdb";
-              encrypt = false;
-            })
-            {
-              time.timeZone = "UTC";
-              console.keyMap = "us";
-              nixpkgs.config.allowUnfree = true;
-              services.displayManager.autoLogin = {
-                enable = false;
-                user = "omarchy";
-              };
-              # hashedPasswordFile, as installer/template/host/configuration.nix
-              # sets it -- this block mirrors that file and the comment above
-              # says to keep them in step. It had drifted to `hashedPassword`,
-              # which nixpkgs now warns about: with both set, and mutableUsers
-              # true, the FILE wins, so the literal here was already dead and
-              # the machine was already logging in with what install.sh wrote.
-              #
-              # The warning appeared when installer/host.nix started setting
-              # the file too (#457), which is what made the drift visible
-              # rather than what caused it.
-              users.users.omarchy.hashedPasswordFile = "/var/lib/nixarchy/password.hash";
-            }
-          ];
-        }
-        (hardwareConfig cpuModule)
-        initrdPin
-      ]
-      ++ pkgs.lib.optional instrumented instrumentation;
-    }).config.system.build;
+  inherit (installedTarget) targetSystemFor etcInstrumentation instrumentScript;
 
   # Every system the target might end up being: two CPU vendors, with and
   # without the backdoor. They share all but a handful of derivations, so the
@@ -359,15 +221,9 @@ pkgs.testers.runNixOSTest {
           keymap=us
         '';
 
-        # Copied into the generated flake after the install; see the note on
-        # `instrumentation`. modulesPath rather than an absolute store path,
-        # because the flake it joins evaluates in pure mode.
-        "nixarchy/test-instrumentation.nix".text = ''
-          { modulesPath, ... }:
-          {
-            imports = [ "''${modulesPath}/testing/test-instrumentation.nix" ];
-          }
-        '';
+        # Copied into the generated flake after the install; see
+        # tests/lib/installed-target.nix's `etcInstrumentation` note.
+        "nixarchy/test-instrumentation.nix".text = etcInstrumentation;
       };
 
       # Everything the install will copy or evaluate, already present: the test
@@ -695,15 +551,7 @@ pkgs.testers.runNixOSTest {
     # imports it. Relative imports are why: hosts/installed/configuration.nix
     # says ./test-instrumentation.nix, and a copy at the flake root is not
     # that path.
-    installer.succeed(
-        "cp /etc/nixarchy/test-instrumentation.nix /mnt/etc/nixos/hosts/installed/")
-    installer.succeed(
-        "sed -i 's|./hardware-configuration.nix|./hardware-configuration.nix\\n"
-        "    ./test-instrumentation.nix|'"
-        " /mnt/etc/nixos/hosts/installed/configuration.nix")
-    installer.succeed(
-        "grep -q test-instrumentation"
-        " /mnt/etc/nixos/hosts/installed/configuration.nix")
+    ${instrumentScript}
     installer.succeed("git -C /mnt/etc/nixos add -A")
     print(installer.succeed(
         "nixos-install --root /mnt --flake /mnt/etc/nixos#installed"

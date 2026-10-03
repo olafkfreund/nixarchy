@@ -4,21 +4,21 @@
 # still works, per AGENTS.md#14. See #1162 -> #1163 for the worked example of
 # what a coexistence bug looks like without one of these.
 {
-  # The commonest pattern: add a package to the merged graphics-drivers env.
-  # pkgs.mesa here is Hyprland's own pin, so this is the "identical Mesa"
-  # case -- it must build clean, with no #1163 assertion firing.
+  # The commonest pattern: add nixarchy's configured package to the merged
+  # graphics-drivers env. Use config rather than pkgs.mesa: nixpkgs and
+  # Hyprland's pin can now provide distinct Mesa builds.
   graphics-own-mesa =
-    { pkgs, ... }:
+    { config, ... }:
     {
-      hardware.graphics.extraPackages = [ pkgs.mesa ];
+      hardware.graphics.extraPackages = [ config.hardware.graphics.package ];
     };
 
   # p620's original pattern: 32-bit drivers added the same way.
   graphics-32bit =
-    { pkgs, ... }:
+    { config, ... }:
     {
       hardware.graphics.enable32Bit = true;
-      hardware.graphics.extraPackages32 = [ pkgs.driversi686Linux.mesa ];
+      hardware.graphics.extraPackages32 = [ config.hardware.graphics.package32 ];
     };
 
   # The documented escape hatch from #1163: replace nixarchy's package

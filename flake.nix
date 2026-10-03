@@ -2467,6 +2467,17 @@
             inherit lib;
           };
 
+          # A user's own config, beside nixarchy's: builds the graphics and
+          # systemPackages envs fixtures.nix names and checks nixarchy still
+          # produces a working machine. See tests/coexistence/default.nix and
+          # AGENTS.md#14. Claimed by the `system` job (build.yml), after the
+          # installed-machine closure: it needs the reference toplevel's
+          # closure warm.
+          coexistence = import ./tests/coexistence/default.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+          };
+
           # Builds a runner and reads it. Boots nothing -- see tests/microvm-template.nix
           # for what that can and cannot prove. Costs about what reference-toplevel
           # above does: a runCommand plus a ~1-1.5 GB guest closure from

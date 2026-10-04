@@ -1894,6 +1894,9 @@ in
           path = [ "/run/current-system/sw" ];
           unitConfig = {
             ConditionEnvironment = "WAYLAND_DISPLAY";
+            # Not in the greeter: SDDM's user manager (uid 175) also reaches
+            # graphical-session.target, and the watcher fails there (#1192).
+            ConditionUser = "!@system";
             # Written by omarchy-toggle-crash-capture. Checked here so a
             # watcher switched off stays off across logins, which matters more
             # on NixOS than on Arch: the unit is declared, so `systemctl --user

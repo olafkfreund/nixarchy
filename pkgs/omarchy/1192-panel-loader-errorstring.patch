@@ -1,0 +1,30 @@
+nixarchy #1192: a panel that fails to load says why.
+
+CARRIED: the panel Loader's onStatusChanged called `errorString &&
+errorString()`, but Qt 6's Loader has no errorString(), so a failed panel
+logged "ReferenceError: errorString is not defined" instead of its real load
+error. The Component has errorString(); with no component the source is named.
+Not reported upstream (the owner carries fixes here); drop this when upstream
+fixes the handler.
+
+Applied AFTER #1153 and #1155 in default.nix: its context is the tree those two
+leave. --fuzz=0, so a reworded upstream block fails this build and says so.
+
+diff --git a/shell/shell.qml b/shell/shell.qml
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -1391,11 +1391,9 @@
+         }
+         onStatusChanged: {
+           if (status === Loader.Error) {
+-            // Loader.errorString() reflects the source-load failure even when
+-            // sourceComponent is null. Surface both so the user sees something
+-            // actionable instead of a panel that silently refuses to open.
+-            var detail = errorString && errorString() ? errorString() : ""
+-            if (!detail && sourceComponent) detail = sourceComponent.errorString()
++            // Qt 6's Loader has no errorString(); the Component does. With no
++            // component, name the source so the user still sees what failed.
++            var detail = sourceComponent ? sourceComponent.errorString() : String(source)
+             console.warn("panel plugin " + panelEntry.pluginId + " failed to load:", detail)
+             shell.hide(panelEntry.pluginId)
+           }

@@ -4074,6 +4074,9 @@ pkgs.runCommand "nixarchy-options"
           test -e "$vm/etc/systemd/user/$unit.service" || {
             echo "$unit.service is not installed where systemd looks" >&2; exit 1; }
         done
+        # #1192: not in the greeter's user manager, where it failed and restarted.
+        grep -qx 'ConditionUser=!@system' "$vm/etc/systemd/user/omarchy-crash-watch.service" || {
+          echo "omarchy-crash-watch would start in the SDDM greeter (no ConditionUser=!@system)" >&2; exit 1; }
         if test -e "$vm/etc/systemd/user/bt-agent.service" || \
           test -L "$vm/etc/systemd/user/bt-agent.service"; then
           echo "bt-agent.service must not be installed permanently" >&2

@@ -197,11 +197,10 @@ let
   # Bound once for the same reason (#747): the #773 cases share it.
   # It also stands in for a user running ai-mirror's own module: a stub option
   # is enough, since the default reads only `programs.ai-mirror.enable`.
-  # localAi on, so pi is installed, but nixarchy's pi pin (0.87.1) does not
-  # read ~/.pi/agent/mcp.json (#1177), so this machine's three writers are
+  # localAi on, so pi is installed, but held at 0.87.1, which does not read
+  # ~/.pi/agent/mcp.json (#1177), so this machine's three writers are
   # Claude, Codex and opencode -- pi's MCP writer is asserted on its own, on
-  # `piMcpReferenceHome` below, the same machine settings with the newer-pi
-  # overlay left out. A second `homeOn` call with identical settings would be
+  # `piMcpReferenceHome` below, the same machine. A second `homeOn` call with identical settings would be
   # a second full evaluation of the same machine, which is exactly the
   # duplication #747's comment above `defaultMachine` warns against.
   aiMirrorMcpHome =
@@ -214,7 +213,10 @@ let
         };
       }
       {
-        imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
+        imports = [
+          { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; }
+          (piVersionOverlay "0.87.1")
+        ];
         programs.ai-mirror.enable = true;
       };
   # #1153: the off state. owe.enable only reads osConfig, so the home side
@@ -254,8 +256,7 @@ let
       ];
     }).config;
 
-  # #1177: nixarchy's pi pin (checked above) is 0.87.1, which does not read
-  # ~/.pi/agent/mcp.json -- the reader arrived in 0.99.2.
+  # #1177: pi reads ~/.pi/agent/mcp.json from 0.99.2; 0.87.1 does not.
   #
   # Not a `pkgs` passed in from here, by `.extend` or by a shallow `//`:
   # every `homeManagerConfiguration` call in this file runs with
@@ -272,18 +273,20 @@ let
   # feeds it, so this goes in as one through `nixpkgs.overlays` on the
   # specific fixture's `hmSettings` instead -- no second top-level pkgs
   # binding, and every other fixture's `pkgs` thunk is untouched.
-  newPiOverlay = {
+  # Both sides of the gate pin pi's version here, never nixpkgs': #1188 moved
+  # nixpkgs' pi from 0.87.1 to 0.99.2 and flipped a reference that read the pin.
+  piVersionOverlay = version: {
     nixpkgs.overlays = [
       (_: prev: {
         pi-coding-agent = prev.pi-coding-agent // {
-          version = "0.99.2";
+          inherit version;
         };
       })
     ];
   };
 
   # The reference machine for #1177's gate: localAi on, pi among its default
-  # agents, at nixarchy's actual pi pin (0.87.1). Bound once (#747) because
+  # agents, with pi held at 0.87.1 (no mcp.json reader). Bound once (#747) because
   # both piMcpGate and piMcpRemoveGate below read it -- a second `homeOn`
   # call with the same settings would be a second full nixosSystem-plus-
   # home-manager evaluation of the same machine.
@@ -293,8 +296,8 @@ let
       enable = true;
       allowCpu = true;
     };
-  } { };
-  # Same machine, `newPiOverlay` added so pi reads as the version that
+  } (piVersionOverlay "0.87.1");
+  # Same machine, pi at 0.99.2, the first version that
   # documents ~/.pi/agent/mcp.json. Bound once for the same reason.
   piMcpNewPiHome = homeOn {
     aiMirror.mcp = true;
@@ -302,7 +305,7 @@ let
       enable = true;
       allowCpu = true;
     };
-  } newPiOverlay;
+  } (piVersionOverlay "0.99.2");
 
   # configWith, with a hostname. The nixd option expressions name
   # `nixosConfigurations.<host>`, and every machine configWith builds has an
@@ -742,8 +745,8 @@ let
     # installed pi is new enough to read them. `mcp` is on for everyone and
     # mergeJson creates the file it merges into, so an ungated writer would
     # put ~/.pi/agent/mcp.json on every machine. `off` includes the reference
-    # machine itself (localAi on, pi among its agents): nixarchy's pi pin is
-    # 0.87.1, which does not read the file, so even that machine must write
+    # machine itself (localAi on, pi among its agents) with pi held at 0.87.1,
+    # which does not read the file, so even that machine must write
     # nothing. `on` is the same machine with pi overridden to 0.99.2, by
     # evaluation only -- the deviation recorded in plan/2026-10-03-1177-pi-mcp.md.
     piMcpGate =

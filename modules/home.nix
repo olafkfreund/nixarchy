@@ -57,6 +57,10 @@ let
   # apps catalogue entry -- so that is the only predicate for "this machine has
   # pi". The pi writers below all use it.
   piOn = localAi.enable && builtins.elem "pi" localAi.agents;
+  # pi only reads ~/.pi/agent/mcp.json from 0.99.2 onward; nixarchy's pin,
+  # 0.87.1, does not. The two pi MCP writers gate on this rather than on piOn
+  # alone, so they stay silent until nixpkgs' pi catches up (#1174).
+  piMcp = piOn && lib.versionAtLeast pkgs.pi-coding-agent.version "0.99.2";
   # #1153: both halves of `or false`, for two different reasons. A standalone
   # home-manager user has no NixOS module to have set either option, same as
   # above. And `owe.enable` defaults to true on its OWN -- a module's option
@@ -1457,8 +1461,10 @@ in
     # an oversight; close it the day that convention documents one. Pi was the
     # other half of this gap until 0.99.2, whose `pi mcp --help` documents
     # `~/.pi/agent/mcp.json`: that is the condition this comment set, so pi's
-    # writers below exist. They are gated on pi being installed, because `mcp`
-    # is on for everyone and `mergeJson` creates the file it merges into.
+    # writers below exist. They are gated on `piMcp`, not `piOn`: pi being
+    # installed is necessary but not sufficient, because `mcp` is on for
+    # everyone and `mergeJson` creates the file it merges into, and
+    # nixarchy's own pi pin is older than 0.99.2 and does not read it.
     home.activation.nixarchyMcpClaude = lib.mkIf mcpEnabled (mergeJson {
       what = "the NixOS MCP server";
       # Claude Code's user scope is ~/.claude.json, not a file under
@@ -1493,7 +1499,7 @@ in
         fileName = "nixarchy-mcp-codex.toml";
       };
     });
-    home.activation.nixarchyMcpPi = lib.mkIf (mcpEnabled && piOn) (mergeJson {
+    home.activation.nixarchyMcpPi = lib.mkIf (mcpEnabled && piMcp) (mergeJson {
       what = "the NixOS MCP server";
       file = "$HOME/.pi/agent/mcp.json";
       json = mcpConfig {
@@ -1534,7 +1540,7 @@ in
         fileName = "nixarchy-ai-mirror-mcp-codex.toml";
       };
     });
-    home.activation.nixarchyAiMirrorMcpPi = lib.mkIf (aiMirrorMcp && piOn) (mergeJson {
+    home.activation.nixarchyAiMirrorMcpPi = lib.mkIf (aiMirrorMcp && piMcp) (mergeJson {
       what = "ai-mirror's MCP server";
       file = "$HOME/.pi/agent/mcp.json";
       json = aiMirrorConfig {
@@ -1552,13 +1558,15 @@ in
       ''
     );
 
-    # The switch is still on, but pi has gone: dropping pi from
-    # programs.nixarchy.localAi.agents gates its writer off, and the removal
-    # above only runs when the SWITCH goes off -- so without this the entry
-    # nixarchy wrote stays in ~/.pi/agent/mcp.json, naming a store path that
-    # will be collected. Only pi's file is passed; the other three agents are
-    # still connected and must keep their entries.
-    home.activation.nixarchyAiMirrorMcpPiRemove = lib.mkIf (aiMirrorMcp && !piOn) (
+    # The switch is still on, but pi has gone -- or pi is installed but too
+    # old to read the file, which is the same "no writer, stale entry" case:
+    # dropping pi from programs.nixarchy.localAi.agents, or never reaching
+    # piMcp, gates its writer off, and the removal above only runs when the
+    # SWITCH goes off -- so without this the entry nixarchy wrote stays in
+    # ~/.pi/agent/mcp.json, naming a store path that will be collected. Only
+    # pi's file is passed; the other three agents are still connected and
+    # must keep their entries.
+    home.activation.nixarchyAiMirrorMcpPiRemove = lib.mkIf (aiMirrorMcp && !piMcp) (
       lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
           "" "" "" "$HOME/.pi/agent/mcp.json"

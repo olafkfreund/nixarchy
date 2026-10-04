@@ -197,10 +197,11 @@ let
   # Bound once for the same reason (#747): the #773 cases share it.
   # It also stands in for a user running ai-mirror's own module: a stub option
   # is enough, since the default reads only `programs.ai-mirror.enable`.
-  # localAi on, so pi is installed: pi's writer is gated on that (#1177), and
-  # an "on" home without it could not show all four writers present.
+  # localAi on, so pi is installed, and pi overridden to 0.99.2 so its MCP
+  # gate (#1177) is open too: an "on" home without both could not show all
+  # four writers present.
   aiMirrorMcpHome =
-    homeOn
+    homeOnNewPi
       {
         aiMirror.mcp = true;
         localAi = {
@@ -228,10 +229,12 @@ let
   # on it would assert nothing. This passes a real NixOS configuration in
   # through extraSpecialArgs, which is the same route home-manager takes when
   # it is used as a NixOS module.
-  homeOn =
-    osSettings: hmSettings:
+  # Parameterized on pkgs so #1177's version-gate case below can pass a pkgs
+  # set with pi-coding-agent overridden, without a second copy of this body.
+  homeOnPkgs =
+    p: osSettings: hmSettings:
     (inputs.home-manager.lib.homeManagerConfiguration {
-      inherit pkgs;
+      pkgs = p;
       extraSpecialArgs = {
         osConfig = configNamed "testbox" osSettings;
       };
@@ -248,6 +251,24 @@ let
         hmSettings
       ];
     }).config;
+
+  homeOn = homeOnPkgs pkgs;
+
+  # #1177: nixarchy's pi pin (checked above) is 0.87.1, which does not read
+  # ~/.pi/agent/mcp.json -- the reader arrived in 0.99.2. This pkgs set
+  # overrides only the version, by evaluation only, so fixtures below can
+  # assert the writers' "on" side without nixpkgs' pi actually moving.
+  pkgsWithNewPi = pkgs.extend (
+    _: prev: {
+      pi-coding-agent = prev.pi-coding-agent.overrideAttrs (_: {
+        version = "0.99.2";
+        # Evaluation only -- nothing here is built -- so the real fetch
+        # nixpkgs' warning asks for would buy nothing.
+        __intentionallyOverridingVersion = true;
+      });
+    }
+  );
+  homeOnNewPi = homeOnPkgs pkgsWithNewPi;
 
   # configWith, with a hostname. The nixd option expressions name
   # `nixosConfigurations.<host>`, and every machine configWith builds has an
@@ -680,11 +701,14 @@ let
       off = hasAny defaultHome mcpActivationNames;
     };
 
-    # #1177: pi's two MCP files are written only where pi is installed. `mcp`
-    # is on for everyone and mergeJson creates the file it merges into, so an
-    # ungated writer would put ~/.pi/agent/mcp.json on every machine. `on` is
-    # a machine with pi, `off` the same one without localAi at all: the
-    # assertion that tells a gate that works from one that never fires.
+    # #1177: pi's two MCP files are written only where pi is installed AND the
+    # installed pi is new enough to read them. `mcp` is on for everyone and
+    # mergeJson creates the file it merges into, so an ungated writer would
+    # put ~/.pi/agent/mcp.json on every machine. `off` includes the reference
+    # machine itself (localAi on, pi among its agents): nixarchy's pi pin is
+    # 0.87.1, which does not read the file, so even that machine must write
+    # nothing. `on` is the same machine with pi overridden to 0.99.2, by
+    # evaluation only -- the deviation recorded in plan/2026-10-03-1177-pi-mcp.md.
     piMcpGate =
       let
         withLocalAi =
@@ -696,6 +720,19 @@ let
               allowCpu = true;
             };
           } { };
+        # Same machine as `withLocalAi true`, but pi overridden to the version
+        # that documents ~/.pi/agent/mcp.json (`pkgsWithNewPi`, bound once
+        # above). Only this case may show the writers; a regression to
+        # `piMcp = piOn` would make `withLocalAi true` show them too and this
+        # test would not catch it, since both would read "on" -- which is why
+        # `withLocalAi true` is asserted below under `off`, not dropped.
+        withNewPi = homeOnNewPi {
+          aiMirror.mcp = true;
+          localAi = {
+            enable = true;
+            allowCpu = true;
+          };
+        } { };
         # localAi on, but pi not among its agents: the half of piOn that
         # `enable` alone does not reach. A regression to `piOn =
         # localAi.enable` passes every other case here and fails this one.
@@ -723,9 +760,10 @@ let
         ];
       in
       {
-        on = hasAll (withLocalAi true) names;
+        on = hasAll withNewPi names;
         off =
-          hasAny (withLocalAi false) names
+          hasAny (withLocalAi true) names
+          || hasAny (withLocalAi false) names
           || hasAny defaultHomeOn names
           || hasAny withoutPi names
           || hasAny mcpOffWithPi [ "nixarchyMcpPi" ];

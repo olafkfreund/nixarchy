@@ -60,6 +60,12 @@ let
   # pi only reads ~/.pi/agent/mcp.json from 0.99.2 onward; nixarchy's pin,
   # 0.87.1, does not. The two pi MCP writers gate on this rather than on piOn
   # alone, so they stay silent until nixpkgs' pi catches up (#1174).
+  # `pkgs` here is this module's own argument, not the same instance as
+  # modules/local-ai.nix's -- nixarchy does not set
+  # `home-manager.useGlobalPkgs`, so home-manager builds its own pkgs rather
+  # than reusing the NixOS side's. Both resolve against the same pinned
+  # nixpkgs flake input and no overlay touches `pi-coding-agent`, so the
+  # version read here agrees with what local-ai.nix installs.
   piMcp = piOn && lib.versionAtLeast pkgs.pi-coding-agent.version "0.99.2";
   # #1153: both halves of `or false`, for two different reasons. A standalone
   # home-manager user has no NixOS module to have set either option, same as

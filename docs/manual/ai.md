@@ -125,7 +125,7 @@ fourth, pi, on a machine that has it:
 | Claude Code | `~/.claude.json` | `mcpServers` |
 | Codex | `~/.codex/config.toml` | `[mcp_servers.nixos]` |
 | opencode | `~/.config/opencode/opencode.json` | `mcp` |
-| pi (only where installed) | `~/.pi/agent/mcp.json` | `mcpServers` |
+| pi (only where installed, 0.99.2 or newer) | `~/.pi/agent/mcp.json` | `mcpServers` |
 
 One of the skill directories above gets nothing, and that is deliberate rather
 than an omission: `~/.agents/skills` is a generic convention with no single tool

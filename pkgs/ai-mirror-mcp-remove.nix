@@ -1,4 +1,4 @@
-# Takes ai-mirror's MCP server back out of the three agent configs when
+# Takes ai-mirror's MCP server back out of the four agent configs when
 # programs.nixarchy.aiMirror.mcp is off (#773). The helpers that put it there
 # only ever add -- mergeJson merges, appendToml appends -- so without this,
 # turning the option off would leave every agent still able to reach the

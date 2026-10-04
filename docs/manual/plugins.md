@@ -327,7 +327,7 @@ with one keypress.
 **What it does.** A small MCP server and a mark in the bar (right). It is
 installed on every nixarchy machine, and **no agent is connected to it** until
 you set `programs.nixarchy.aiMirror.mcp = true;`. Turning that off again takes
-the connection back out of Claude Code, Codex and opencode (and pi, where it is installed).
+the connection back out of Claude Code, Codex and opencode (and pi, where it is installed and at least 0.99.2).
 
 **The mark says what an agent is doing.**
 

@@ -820,7 +820,7 @@ in
       default = false;
       description = ''
         Connect Claude Code, Codex and opencode -- and pi, where it is
-        installed -- to ai-mirror, which lets an
+        installed and at least 0.99.2 -- to ai-mirror, which lets an
         agent see this desktop and, once you say yes on screen, drive its
         keyboard and mouse. The ai-mirror widget in the bar shows when an agent
         is watching or driving, and Super+Shift+Escape takes control back.

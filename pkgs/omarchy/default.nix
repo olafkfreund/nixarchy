@@ -434,6 +434,8 @@ stdenvNoCC.mkDerivation {
                     # CARRIED (#1155): upstream's per-entry panel sync. Applied first so the
                     # #901 part-A edits below target the patched text.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1155-panel-loaders-kept.patch}
+                    # CARRIED (#1192): the panel Loader's error handler called a function Qt 6's Loader lacks.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1192-panel-loader-errorstring.patch}
 
                     # Bound the Lua source scan so a loop in hyprland.lua cannot pin a CPU when this menu opens.
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \

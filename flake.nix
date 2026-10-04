@@ -424,9 +424,10 @@
     # runs inside the `servers = nixpkgs.extend <overlay>` closure, so without
     # it this is a second nixpkgs and a second Python closure to build.
     #
-    # Pinned to a COMMIT: upstream publishes no tags. Bump it deliberately.
+    # Pinned to a release tag (release-please); the nightly review flags a newer
+    # one. Bump it deliberately.
     mcp-nixarchy = {
-      url = "github:olafkfreund/mcp-nixarchy/b92b9c6dece4acc5cb7dc21394ef3fe1f8b94cc4";
+      url = "github:olafkfreund/mcp-nixarchy/v3.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

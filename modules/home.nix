@@ -1774,26 +1774,24 @@ in
     # plugin, and therefore nothing to pin at every bump; a plugin that talks
     # to Ollama directly goes in programs.nixarchy.neovimSpecs and reads
     # OLLAMA_ENDPOINT.
-    home.activation.nixarchyNeovimAiLocal =
-      lib.mkIf (piOn && cfg.neovim != "off")
-        (nvimSpec {
-          file = "nixarchy-ai-local.lua";
-          because = "programs.nixarchy.localAi points pi at the local model";
-          said = "gave Neovim <leader>o for the local model, through pi";
-          text = ''
-            return {
-              ${sidekickSpec}
-                keys = {
-                  { "<leader>o", "", desc = "+local ai (pi, offline)", mode = { "n", "v" } },
-                  { "<leader>oo", function() require("sidekick.cli").toggle({ name = "pi", focus = true }) end, desc = "Toggle pi" },
-                  { "<leader>ot", function() require("sidekick.cli").send({ name = "pi", msg = "{this}" }) end, mode = { "n", "x" }, desc = "Send this to pi" },
-                  { "<leader>ov", function() require("sidekick.cli").send({ name = "pi", msg = "{selection}" }) end, mode = { "x" }, desc = "Send selection to pi" },
-                  { "<leader>op", function() require("sidekick.cli").prompt({ name = "pi" }) end, mode = { "n", "x" }, desc = "Prompt pi" },
-                },
-              },
-            }
-          '';
-        });
+    home.activation.nixarchyNeovimAiLocal = lib.mkIf (piOn && cfg.neovim != "off") (nvimSpec {
+      file = "nixarchy-ai-local.lua";
+      because = "programs.nixarchy.localAi points pi at the local model";
+      said = "gave Neovim <leader>o for the local model, through pi";
+      text = ''
+        return {
+          ${sidekickSpec}
+            keys = {
+              { "<leader>o", "", desc = "+local ai (pi, offline)", mode = { "n", "v" } },
+              { "<leader>oo", function() require("sidekick.cli").toggle({ name = "pi", focus = true }) end, desc = "Toggle pi" },
+              { "<leader>ot", function() require("sidekick.cli").send({ name = "pi", msg = "{this}" }) end, mode = { "n", "x" }, desc = "Send this to pi" },
+              { "<leader>ov", function() require("sidekick.cli").send({ name = "pi", msg = "{selection}" }) end, mode = { "x" }, desc = "Send selection to pi" },
+              { "<leader>op", function() require("sidekick.cli").prompt({ name = "pi" }) end, mode = { "n", "x" }, desc = "Prompt pi" },
+            },
+          },
+        }
+      '';
+    });
 
     # The user's own specs, through the same helper and under the same rules.
     home.activation.nixarchyNeovimSpecs = lib.mkIf (cfg.neovimSpecs != { } && cfg.neovim != "off") (
@@ -1838,34 +1836,32 @@ in
         });
 
     # Why: modules/AGENTS.md#pi-keeps-its-configuration-in-pi-agent-not-under-x
-    home.activation.nixarchyPiProvider =
-      lib.mkIf piOn
-        (mergeJson {
-          what = "the local model";
-          file = "$HOME/.pi/agent/models.json";
-          json = pkgs.writeText "pi-provider.json" (
-            builtins.toJSON {
-              providers.ollama = {
-                baseUrl = localAi.resolved.endpoint or "";
-                api = "openai-completions";
-                # Ignored by Ollama, but pi requires the field to be present.
-                apiKey = "ollama";
-                # pi sends system instructions in the `developer` role to
-                # reasoning-capable models. Ollama -- like vLLM and SGLang --
-                # rejects a role it does not know, and every request then fails
-                # with an error that does not name the cause.
-                compat.supportsDeveloperRole = false;
-                models = [
-                  {
-                    id = localAi.model;
-                    contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
-                    maxTokens = 8192;
-                  }
-                ];
-              };
-            }
-          );
-        });
+    home.activation.nixarchyPiProvider = lib.mkIf piOn (mergeJson {
+      what = "the local model";
+      file = "$HOME/.pi/agent/models.json";
+      json = pkgs.writeText "pi-provider.json" (
+        builtins.toJSON {
+          providers.ollama = {
+            baseUrl = localAi.resolved.endpoint or "";
+            api = "openai-completions";
+            # Ignored by Ollama, but pi requires the field to be present.
+            apiKey = "ollama";
+            # pi sends system instructions in the `developer` role to
+            # reasoning-capable models. Ollama -- like vLLM and SGLang --
+            # rejects a role it does not know, and every request then fails
+            # with an error that does not name the cause.
+            compat.supportsDeveloperRole = false;
+            models = [
+              {
+                id = localAi.model;
+                contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
+                maxTokens = 8192;
+              }
+            ];
+          };
+        }
+      );
+    });
 
     # settings.json is where pi reads defaultProvider/defaultModel, and it is
     # also where omarchy-theme-set-pi writes the theme -- with
@@ -1875,25 +1871,23 @@ in
     # read-only store path and fail on every theme change. It is seeded instead,
     # by the activation below, and only when absent -- after which it belongs to
     # the user and to theme-set, and nothing here touches it again.
-    home.activation.nixarchyPiDefaultModel =
-      lib.mkIf piOn
-        (
-          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-            settings="$HOME/.pi/agent/settings.json"
-            if [ ! -e "$settings" ]; then
-              run mkdir -p "$HOME/.pi/agent"
-              run install -m 0644 ${
-                pkgs.writeText "pi-settings.json" (
-                  builtins.toJSON {
-                    defaultProvider = "ollama";
-                    defaultModel = localAi.model;
-                  }
-                )
-              } "$settings"
-              echo "nixarchy: pointed pi at the local model (${localAi.model})"
-            fi
-          ''
-        );
+    home.activation.nixarchyPiDefaultModel = lib.mkIf piOn (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        settings="$HOME/.pi/agent/settings.json"
+        if [ ! -e "$settings" ]; then
+          run mkdir -p "$HOME/.pi/agent"
+          run install -m 0644 ${
+            pkgs.writeText "pi-settings.json" (
+              builtins.toJSON {
+                defaultProvider = "ollama";
+                defaultModel = localAi.model;
+              }
+            )
+          } "$settings"
+          echo "nixarchy: pointed pi at the local model (${localAi.model})"
+        fi
+      ''
+    );
 
     programs.nixarchy = {
       defaultPluginSet = {

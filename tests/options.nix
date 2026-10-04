@@ -199,16 +199,19 @@ let
   # is enough, since the default reads only `programs.ai-mirror.enable`.
   # localAi on, so pi is installed: pi's writer is gated on that (#1177), and
   # an "on" home without it could not show all four writers present.
-  aiMirrorMcpHome = homeOn {
-    aiMirror.mcp = true;
-    localAi = {
-      enable = true;
-      allowCpu = true;
-    };
-  } {
-    imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
-    programs.ai-mirror.enable = true;
-  };
+  aiMirrorMcpHome =
+    homeOn
+      {
+        aiMirror.mcp = true;
+        localAi = {
+          enable = true;
+          allowCpu = true;
+        };
+      }
+      {
+        imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
+        programs.ai-mirror.enable = true;
+      };
   # #1153: the off state. owe.enable only reads osConfig, so the home side
   # needs no hmSettings of its own.
   oweOffHome = homeOn { owe.enable = false; } { };
@@ -684,20 +687,35 @@ let
     # assertion that tells a gate that works from one that never fires.
     piMcpGate =
       let
-        withLocalAi = enable: homeOn { aiMirror.mcp = true; localAi = { inherit enable; allowCpu = true; }; } { };
+        withLocalAi =
+          enable:
+          homeOn {
+            aiMirror.mcp = true;
+            localAi = {
+              inherit enable;
+              allowCpu = true;
+            };
+          } { };
         # localAi on, but pi not among its agents: the half of piOn that
         # `enable` alone does not reach. A regression to `piOn =
         # localAi.enable` passes every other case here and fails this one.
         withoutPi = homeOn {
           aiMirror.mcp = true;
-          localAi = { enable = true; allowCpu = true; agents = [ "opencode" ]; };
+          localAi = {
+            enable = true;
+            allowCpu = true;
+            agents = [ "opencode" ];
+          };
         } { };
         # And the `mcpEnabled &&` half of the NixOS server's gate, which no
         # other case reaches: nixarchyMcpPi is deliberately not in
         # mcpActivationNames, because the default home has no pi.
         mcpOffWithPi = homeOn {
           mcp = false;
-          localAi = { enable = true; allowCpu = true; };
+          localAi = {
+            enable = true;
+            allowCpu = true;
+          };
         } { };
         names = [
           "nixarchyMcpPi"

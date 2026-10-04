@@ -197,10 +197,26 @@ let
   # Bound once for the same reason (#747): the #773 cases share it.
   # It also stands in for a user running ai-mirror's own module: a stub option
   # is enough, since the default reads only `programs.ai-mirror.enable`.
-  aiMirrorMcpHome = homeOn { aiMirror.mcp = true; } {
-    imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
-    programs.ai-mirror.enable = true;
-  };
+  # localAi on, so pi is installed, but nixarchy's pi pin (0.87.1) does not
+  # read ~/.pi/agent/mcp.json (#1177), so this machine's three writers are
+  # Claude, Codex and opencode -- pi's MCP writer is asserted on its own, on
+  # `piMcpReferenceHome` below, the same machine settings with the newer-pi
+  # overlay left out. A second `homeOn` call with identical settings would be
+  # a second full evaluation of the same machine, which is exactly the
+  # duplication #747's comment above `defaultMachine` warns against.
+  aiMirrorMcpHome =
+    homeOn
+      {
+        aiMirror.mcp = true;
+        localAi = {
+          enable = true;
+          allowCpu = true;
+        };
+      }
+      {
+        imports = [ { options.programs.ai-mirror.enable = pkgs.lib.mkEnableOption "stub"; } ];
+        programs.ai-mirror.enable = true;
+      };
   # #1153: the off state. owe.enable only reads osConfig, so the home side
   # needs no hmSettings of its own.
   oweOffHome = homeOn { owe.enable = false; } { };
@@ -237,6 +253,56 @@ let
         hmSettings
       ];
     }).config;
+
+  # #1177: nixarchy's pi pin (checked above) is 0.87.1, which does not read
+  # ~/.pi/agent/mcp.json -- the reader arrived in 0.99.2.
+  #
+  # Not a `pkgs` passed in from here, by `.extend` or by a shallow `//`:
+  # every `homeManagerConfiguration` call in this file runs with
+  # home-manager's default `useNixpkgsModule = true` (nothing here sets
+  # `home-manager.useGlobalPkgs`, and the standalone `lib.homeManagerConfiguration`
+  # does not expose that option at all), which makes `modules/misc/nixpkgs.nix`
+  # throw our `pkgs` argument away and rebuild its own from `pkgs.path` plus
+  # `config.nixpkgs.{config,overlays}` -- measured: a shallow `pi-coding-agent`
+  # override on the outer `pkgs` evaluates fine on its own but never reaches
+  # `modules/home.nix`'s `pkgs` argument, so `piMcp` stayed false on the
+  # "newer pi" fixture too and the gate's `on` side would have passed on a
+  # version check that never ran. An overlay survives that rebuild, because
+  # `inherit (pkgs) overlays;` in home-manager's `lib/eval-config.nix` is what
+  # feeds it, so this goes in as one through `nixpkgs.overlays` on the
+  # specific fixture's `hmSettings` instead -- no second top-level pkgs
+  # binding, and every other fixture's `pkgs` thunk is untouched.
+  newPiOverlay = {
+    nixpkgs.overlays = [
+      (_: prev: {
+        pi-coding-agent = prev.pi-coding-agent // {
+          version = "0.99.2";
+        };
+      })
+    ];
+  };
+
+  # The reference machine for #1177's gate: localAi on, pi among its default
+  # agents, at nixarchy's actual pi pin (0.87.1). Bound once (#747) because
+  # both piMcpGate and piMcpRemoveGate below read it -- a second `homeOn`
+  # call with the same settings would be a second full nixosSystem-plus-
+  # home-manager evaluation of the same machine.
+  piMcpReferenceHome = homeOn {
+    aiMirror.mcp = true;
+    localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+  } { };
+  # Same machine, `newPiOverlay` added so pi reads as the version that
+  # documents ~/.pi/agent/mcp.json. Bound once for the same reason.
+  piMcpNewPiHome = homeOn {
+    aiMirror.mcp = true;
+    localAi = {
+      enable = true;
+      allowCpu = true;
+    };
+  } newPiOverlay;
 
   # configWith, with a hostname. The nixd option expressions name
   # `nixosConfigurations.<host>`, and every machine configWith builds has an
@@ -292,6 +358,10 @@ let
     "nixarchyNixdHelix"
   ];
 
+  # pi is deliberately not here: on `aiMirrorMcpHome`'s machine (pi 0.87.1)
+  # its writer never fires (#1177), so including it would make the `on`
+  # assertion below false on the very fixture meant to prove it true.
+  # nixarchyAiMirrorMcpPi is asserted on its own, in piMcpGate.
   aiMirrorActivationNames = [
     "nixarchyAiMirrorMcpClaude"
     "nixarchyAiMirrorMcpCodex"
@@ -666,6 +736,71 @@ let
     mcpInertWithoutOsConfig = {
       on = hasAny defaultHomeOn mcpActivationNames;
       off = hasAny defaultHome mcpActivationNames;
+    };
+
+    # #1177: pi's two MCP files are written only where pi is installed AND the
+    # installed pi is new enough to read them. `mcp` is on for everyone and
+    # mergeJson creates the file it merges into, so an ungated writer would
+    # put ~/.pi/agent/mcp.json on every machine. `off` includes the reference
+    # machine itself (localAi on, pi among its agents): nixarchy's pi pin is
+    # 0.87.1, which does not read the file, so even that machine must write
+    # nothing. `on` is the same machine with pi overridden to 0.99.2, by
+    # evaluation only -- the deviation recorded in plan/2026-10-03-1177-pi-mcp.md.
+    piMcpGate =
+      let
+        # localAi on, but pi not among its agents: the half of piOn that
+        # `enable` alone does not reach. A regression to `piOn =
+        # localAi.enable` passes every other case here and fails this one.
+        withoutPi = homeOn {
+          aiMirror.mcp = true;
+          localAi = {
+            enable = true;
+            allowCpu = true;
+            agents = [ "opencode" ];
+          };
+        } { };
+        # And the `mcpEnabled &&` half of the NixOS server's gate, which no
+        # other case reaches: nixarchyMcpPi is deliberately not in
+        # mcpActivationNames, because the default home has no pi.
+        mcpOffWithPi = homeOn {
+          mcp = false;
+          localAi = {
+            enable = true;
+            allowCpu = true;
+          };
+        } { };
+        names = [
+          "nixarchyMcpPi"
+          "nixarchyAiMirrorMcpPi"
+        ];
+      in
+      {
+        # `piMcpNewPiHome`: pi overridden to the version that documents
+        # ~/.pi/agent/mcp.json. Only this case may show the writers; a
+        # regression to `piMcp = piOn` would make `piMcpReferenceHome` show
+        # them too, and this test would not catch it, since both would read
+        # "on" -- which is why `piMcpReferenceHome` is asserted below under
+        # `off`, not dropped. A separate "localAi off" case is not needed:
+        # with localAi off, piOn is already false regardless of version,
+        # which is exactly what `defaultHomeOn` (localAi off by default)
+        # already proves.
+        on = hasAll piMcpNewPiHome names;
+        off =
+          hasAny piMcpReferenceHome names
+          || hasAny defaultHomeOn names
+          || hasAny withoutPi names
+          || hasAny mcpOffWithPi [ "nixarchyMcpPi" ];
+      };
+
+    # The ai-mirror remover for pi's file, which the writer assertions above
+    # never reach -- it is gated on `!piMcp`, the opposite sense. On
+    # `piMcpReferenceHome` (pi 0.87.1, piMcp false) nixarchy's own entry from
+    # a formerly-newer pi, or from a dropped `pi` in `agents`, must still be
+    # removable: present. On `piMcpNewPiHome` (0.99.2) the writer itself is
+    # running, and the remover must stand aside: absent.
+    piMcpRemoveGate = {
+      on = piMcpReferenceHome.home.activation ? nixarchyAiMirrorMcpPiRemove;
+      off = piMcpNewPiHome.home.activation ? nixarchyAiMirrorMcpPiRemove;
     };
 
     # ---- #888: the Nix skills, and the switch that takes them away --------

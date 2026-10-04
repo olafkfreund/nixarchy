@@ -117,18 +117,24 @@ and nix-darwin — so the answer comes from the index rather than from memory,
 and on an installed machine it also answers nixarchy's own options and manual
 from `/etc/nixarchy`, for the version actually running.
 
-Three agents get it, each in the file that agent actually reads:
+Three agents get it, each in the file that agent actually reads, and a
+fourth, pi, on a machine that has it:
 
 | agent | file | key |
 |---|---|---|
 | Claude Code | `~/.claude.json` | `mcpServers` |
 | Codex | `~/.codex/config.toml` | `[mcp_servers.nixos]` |
 | opencode | `~/.config/opencode/opencode.json` | `mcp` |
+| pi (only where installed, 0.99.2 or newer) | `~/.pi/agent/mcp.json` | `mcpServers` |
 
-Two of the four skill directories above get nothing, and that is deliberate
-rather than an omission: `~/.agents/skills` is a generic convention with no
-single tool behind it, and Pi documents no MCP configuration file. Writing one
-anyway would put a file on your disk that nothing reads.
+One of the skill directories above gets nothing, and that is deliberate rather
+than an omission: `~/.agents/skills` is a generic convention with no single tool
+behind it and no MCP configuration file. Writing one anyway would put a file on
+your disk that nothing reads. Pi used to be the second case; since 0.99.2 it
+documents `~/.pi/agent/mcp.json`, so it gets the file — but only when `pi` is in
+`programs.nixarchy.localAi.agents` **and** the installed pi is 0.99.2 or
+newer: nixarchy's current pin is older than that and does not read the file,
+so the writer stays off until nixpkgs' pi catches up.
 
 Nothing is clobbered. Each file is merged into key by key — a server you
 declared yourself survives, and so does everything else in the file. Turn the
@@ -140,7 +146,7 @@ programs.nixarchy.mcp = false;
 
 That switch is only the NixOS server. **ai-mirror**, which lets an agent see and
 drive your desktop, has its own, and it is off:
-`programs.nixarchy.aiMirror.mcp = true;` connects the same three agents to it.
+`programs.nixarchy.aiMirror.mcp = true;` connects the same agents to it.
 The two are independent. Read [what the yes does not cover](plugins#ai-mirror)
 before you turn it on.
 

@@ -53,6 +53,20 @@ let
   mcpEnabled = osConfig.programs.nixarchy.mcp or false;
   # #773: off unless asked for, and taken back out when turned off again.
   aiMirrorMcp = osConfig.programs.nixarchy.aiMirror.mcp or false;
+  # pi is installed only through programs.nixarchy.localAi.agents -- it has no
+  # apps catalogue entry -- so that is the only predicate for "this machine has
+  # pi". The pi writers below all use it.
+  piOn = localAi.enable && builtins.elem "pi" localAi.agents;
+  # pi only reads ~/.pi/agent/mcp.json from 0.99.2 onward; nixarchy's pin,
+  # 0.87.1, does not. The two pi MCP writers gate on this rather than on piOn
+  # alone, so they stay silent until nixpkgs' pi catches up (#1174).
+  # `pkgs` here is this module's own argument, not the same instance as
+  # modules/local-ai.nix's -- nixarchy does not set
+  # `home-manager.useGlobalPkgs`, so home-manager builds its own pkgs rather
+  # than reusing the NixOS side's. Both resolve against the same pinned
+  # nixpkgs flake input and no overlay touches `pi-coding-agent`, so the
+  # version read here agrees with what local-ai.nix installs.
+  piMcp = piOn && lib.versionAtLeast pkgs.pi-coding-agent.version "0.99.2";
   # #1153: both halves of `or false`, for two different reasons. A standalone
   # home-manager user has no NixOS module to have set either option, same as
   # above. And `owe.enable` defaults to true on its OWN -- a module's option
@@ -1446,11 +1460,17 @@ in
 
     # ---- #623: the NixOS MCP server, in the agents that have one --------
     #
-    # Three agents, not the four this module seeds skills into. `~/.agents`
-    # and `~/.pi/agent` have no documented MCP configuration file, and a path
-    # invented for them would be a feature that writes a file nothing reads --
-    # the shape §2 of AGENTS.md is about. Named here so the gap is a decision
-    # rather than an oversight; close it the day either tool documents one.
+    # Three agents everywhere, and a fourth -- pi -- where it is installed.
+    # `~/.agents` has no documented MCP configuration file, and a path invented
+    # for it would be a feature that writes a file nothing reads -- the shape
+    # §2 of AGENTS.md is about. Named here so the gap is a decision rather than
+    # an oversight; close it the day that convention documents one. Pi was the
+    # other half of this gap until 0.99.2, whose `pi mcp --help` documents
+    # `~/.pi/agent/mcp.json`: that is the condition this comment set, so pi's
+    # writers below exist. They are gated on `piMcp`, not `piOn`: pi being
+    # installed is necessary but not sufficient, because `mcp` is on for
+    # everyone and `mergeJson` creates the file it merges into, and
+    # nixarchy's own pi pin is older than 0.99.2 and does not read it.
     home.activation.nixarchyMcpClaude = lib.mkIf mcpEnabled (mergeJson {
       what = "the NixOS MCP server";
       # Claude Code's user scope is ~/.claude.json, not a file under
@@ -1485,10 +1505,18 @@ in
         fileName = "nixarchy-mcp-codex.toml";
       };
     });
+    home.activation.nixarchyMcpPi = lib.mkIf (mcpEnabled && piMcp) (mergeJson {
+      what = "the NixOS MCP server";
+      file = "$HOME/.pi/agent/mcp.json";
+      json = mcpConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-mcp-pi.json";
+      };
+    });
 
     # ---- #773: ai-mirror's MCP server, only when asked for -------------------
     #
-    # The same three agents and the same helpers as the NixOS server above,
+    # The same agents and the same helpers as the NixOS server above,
     # under its own switch. Both helpers only ever add, so the off state is
     # not "write nothing": it is the removal below, which takes back an entry
     # whose command is our store path and leaves one the user wrote.
@@ -1518,12 +1546,36 @@ in
         fileName = "nixarchy-ai-mirror-mcp-codex.toml";
       };
     });
+    home.activation.nixarchyAiMirrorMcpPi = lib.mkIf (aiMirrorMcp && piMcp) (mergeJson {
+      what = "ai-mirror's MCP server";
+      file = "$HOME/.pi/agent/mcp.json";
+      json = aiMirrorConfig {
+        flavor = "claude-code";
+        fileName = "nixarchy-ai-mirror-mcp-pi.json";
+      };
+    });
     home.activation.nixarchyAiMirrorMcpRemove = lib.mkIf (!aiMirrorMcp) (
       lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
           "${config.home.homeDirectory}/.claude.json" \
           "${config.xdg.configHome}/opencode/opencode.json" \
-          "${config.home.homeDirectory}/.codex/config.toml"
+          "${config.home.homeDirectory}/.codex/config.toml" \
+          "$HOME/.pi/agent/mcp.json"
+      ''
+    );
+
+    # The switch is still on, but pi has gone -- or pi is installed but too
+    # old to read the file, which is the same "no writer, stale entry" case:
+    # dropping pi from programs.nixarchy.localAi.agents, or never reaching
+    # piMcp, gates its writer off, and the removal above only runs when the
+    # SWITCH goes off -- so without this the entry nixarchy wrote stays in
+    # ~/.pi/agent/mcp.json, naming a store path that will be collected. Only
+    # pi's file is passed; the other three agents are still connected and
+    # must keep their entries.
+    home.activation.nixarchyAiMirrorMcpPiRemove = lib.mkIf (aiMirrorMcp && !piMcp) (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        run ${pkgs.callPackage ../pkgs/ai-mirror-mcp-remove.nix { }}/bin/nixarchy-ai-mirror-mcp-remove \
+          "" "" "" "$HOME/.pi/agent/mcp.json"
       ''
     );
 
@@ -1736,26 +1788,24 @@ in
     # plugin, and therefore nothing to pin at every bump; a plugin that talks
     # to Ollama directly goes in programs.nixarchy.neovimSpecs and reads
     # OLLAMA_ENDPOINT.
-    home.activation.nixarchyNeovimAiLocal =
-      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents && cfg.neovim != "off")
-        (nvimSpec {
-          file = "nixarchy-ai-local.lua";
-          because = "programs.nixarchy.localAi points pi at the local model";
-          said = "gave Neovim <leader>o for the local model, through pi";
-          text = ''
-            return {
-              ${sidekickSpec}
-                keys = {
-                  { "<leader>o", "", desc = "+local ai (pi, offline)", mode = { "n", "v" } },
-                  { "<leader>oo", function() require("sidekick.cli").toggle({ name = "pi", focus = true }) end, desc = "Toggle pi" },
-                  { "<leader>ot", function() require("sidekick.cli").send({ name = "pi", msg = "{this}" }) end, mode = { "n", "x" }, desc = "Send this to pi" },
-                  { "<leader>ov", function() require("sidekick.cli").send({ name = "pi", msg = "{selection}" }) end, mode = { "x" }, desc = "Send selection to pi" },
-                  { "<leader>op", function() require("sidekick.cli").prompt({ name = "pi" }) end, mode = { "n", "x" }, desc = "Prompt pi" },
-                },
-              },
-            }
-          '';
-        });
+    home.activation.nixarchyNeovimAiLocal = lib.mkIf (piOn && cfg.neovim != "off") (nvimSpec {
+      file = "nixarchy-ai-local.lua";
+      because = "programs.nixarchy.localAi points pi at the local model";
+      said = "gave Neovim <leader>o for the local model, through pi";
+      text = ''
+        return {
+          ${sidekickSpec}
+            keys = {
+              { "<leader>o", "", desc = "+local ai (pi, offline)", mode = { "n", "v" } },
+              { "<leader>oo", function() require("sidekick.cli").toggle({ name = "pi", focus = true }) end, desc = "Toggle pi" },
+              { "<leader>ot", function() require("sidekick.cli").send({ name = "pi", msg = "{this}" }) end, mode = { "n", "x" }, desc = "Send this to pi" },
+              { "<leader>ov", function() require("sidekick.cli").send({ name = "pi", msg = "{selection}" }) end, mode = { "x" }, desc = "Send selection to pi" },
+              { "<leader>op", function() require("sidekick.cli").prompt({ name = "pi" }) end, mode = { "n", "x" }, desc = "Prompt pi" },
+            },
+          },
+        }
+      '';
+    });
 
     # The user's own specs, through the same helper and under the same rules.
     home.activation.nixarchyNeovimSpecs = lib.mkIf (cfg.neovimSpecs != { } && cfg.neovim != "off") (
@@ -1800,34 +1850,32 @@ in
         });
 
     # Why: modules/AGENTS.md#pi-keeps-its-configuration-in-pi-agent-not-under-x
-    home.activation.nixarchyPiProvider =
-      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
-        (mergeJson {
-          what = "the local model";
-          file = "$HOME/.pi/agent/models.json";
-          json = pkgs.writeText "pi-provider.json" (
-            builtins.toJSON {
-              providers.ollama = {
-                baseUrl = localAi.resolved.endpoint or "";
-                api = "openai-completions";
-                # Ignored by Ollama, but pi requires the field to be present.
-                apiKey = "ollama";
-                # pi sends system instructions in the `developer` role to
-                # reasoning-capable models. Ollama -- like vLLM and SGLang --
-                # rejects a role it does not know, and every request then fails
-                # with an error that does not name the cause.
-                compat.supportsDeveloperRole = false;
-                models = [
-                  {
-                    id = localAi.model;
-                    contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
-                    maxTokens = 8192;
-                  }
-                ];
-              };
-            }
-          );
-        });
+    home.activation.nixarchyPiProvider = lib.mkIf piOn (mergeJson {
+      what = "the local model";
+      file = "$HOME/.pi/agent/models.json";
+      json = pkgs.writeText "pi-provider.json" (
+        builtins.toJSON {
+          providers.ollama = {
+            baseUrl = localAi.resolved.endpoint or "";
+            api = "openai-completions";
+            # Ignored by Ollama, but pi requires the field to be present.
+            apiKey = "ollama";
+            # pi sends system instructions in the `developer` role to
+            # reasoning-capable models. Ollama -- like vLLM and SGLang --
+            # rejects a role it does not know, and every request then fails
+            # with an error that does not name the cause.
+            compat.supportsDeveloperRole = false;
+            models = [
+              {
+                id = localAi.model;
+                contextWindow = if localAi.contextWindow != null then localAi.contextWindow else 32768;
+                maxTokens = 8192;
+              }
+            ];
+          };
+        }
+      );
+    });
 
     # settings.json is where pi reads defaultProvider/defaultModel, and it is
     # also where omarchy-theme-set-pi writes the theme -- with
@@ -1837,25 +1885,23 @@ in
     # read-only store path and fail on every theme change. It is seeded instead,
     # by the activation below, and only when absent -- after which it belongs to
     # the user and to theme-set, and nothing here touches it again.
-    home.activation.nixarchyPiDefaultModel =
-      lib.mkIf (localAi.enable && builtins.elem "pi" localAi.agents)
-        (
-          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-            settings="$HOME/.pi/agent/settings.json"
-            if [ ! -e "$settings" ]; then
-              run mkdir -p "$HOME/.pi/agent"
-              run install -m 0644 ${
-                pkgs.writeText "pi-settings.json" (
-                  builtins.toJSON {
-                    defaultProvider = "ollama";
-                    defaultModel = localAi.model;
-                  }
-                )
-              } "$settings"
-              echo "nixarchy: pointed pi at the local model (${localAi.model})"
-            fi
-          ''
-        );
+    home.activation.nixarchyPiDefaultModel = lib.mkIf piOn (
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        settings="$HOME/.pi/agent/settings.json"
+        if [ ! -e "$settings" ]; then
+          run mkdir -p "$HOME/.pi/agent"
+          run install -m 0644 ${
+            pkgs.writeText "pi-settings.json" (
+              builtins.toJSON {
+                defaultProvider = "ollama";
+                defaultModel = localAi.model;
+              }
+            )
+          } "$settings"
+          echo "nixarchy: pointed pi at the local model (${localAi.model})"
+        fi
+      ''
+    );
 
     programs.nixarchy = {
       defaultPluginSet = {

@@ -18,6 +18,7 @@ pkgs.runCommand "nixarchy-ai-mirror-mcp-remove" { nativeBuildInputs = [ pkgs.jq 
 
   # nixarchy's entries, beside things that are not ours and must survive.
   printf '%s\n' '{"theme":"dark","mcpServers":{"ai-mirror":{"command":"${ours}","args":["mcp"]},"nixos":{"command":"mcp-nixos"}}}' > claude.json
+  printf '%s\n' '{"theme":"dark","mcpServers":{"ai-mirror":{"command":"${ours}","args":["mcp"]},"nixos":{"command":"mcp-nixos"}}}' > pi.json
   printf '%s\n' '{"mcp":{"ai-mirror":{"type":"local","command":["${ours}","mcp"]},"nixos":{"type":"local","command":["mcp-nixos"]}}}' > opencode.json
   printf '%s\n' '[model]' 'name = "x"' "" \
     "# The NixOS MCP server -- added by nixarchy. Delete this block to be rid of it;" \
@@ -28,10 +29,12 @@ pkgs.runCommand "nixarchy-ai-mirror-mcp-remove" { nativeBuildInputs = [ pkgs.jq 
     '[mcp_servers.ai-mirror]' 'command = "${ours}"' 'args = ["mcp"]' "" \
     '[profiles.work]' 'model = "y"' > codex.toml
 
-  ${remove}/bin/nixarchy-ai-mirror-mcp-remove claude.json opencode.json codex.toml
+  ${remove}/bin/nixarchy-ai-mirror-mcp-remove claude.json opencode.json codex.toml pi.json
 
   jq -e '.mcpServers | has("ai-mirror") | not' claude.json >/dev/null || fail "claude: nixarchy's ai-mirror entry was left in place"
   jq -e '.mcpServers.nixos and .theme == "dark"' claude.json >/dev/null || fail "claude: an unrelated key was lost"
+  jq -e '.mcpServers | has("ai-mirror") | not' pi.json >/dev/null || fail "pi: nixarchy's ai-mirror entry was left in place"
+  jq -e '.mcpServers.nixos and .theme == "dark"' pi.json >/dev/null || fail "pi: an unrelated key was lost"
   jq -e '.mcp | has("ai-mirror") | not' opencode.json >/dev/null || fail "opencode: nixarchy's ai-mirror entry was left in place"
   jq -e '.mcp.nixos' opencode.json >/dev/null || fail "opencode: an unrelated server was lost"
   ! grep -qF '[mcp_servers.ai-mirror]' codex.toml || fail "codex: nixarchy's ai-mirror table was left in place"
@@ -43,19 +46,25 @@ pkgs.runCommand "nixarchy-ai-mirror-mcp-remove" { nativeBuildInputs = [ pkgs.jq 
 
   # Entries the user wrote by hand: a bare command, not a store path. Kept.
   printf '%s\n' '{"mcpServers":{"ai-mirror":{"command":"ai-mirror","args":["mcp"]}}}' > claude.json
+  printf '%s\n' '{"mcpServers":{"ai-mirror":{"command":"ai-mirror","args":["mcp"]}}}' > pi.json
   printf '%s\n' '{"mcp":{"ai-mirror":{"type":"local","command":["ai-mirror","mcp"]}}}' > opencode.json
   printf '%s\n' '[mcp_servers.ai-mirror]' 'command = "ai-mirror"' 'args = ["mcp"]' > codex.toml
-  cp claude.json claude.before; cp opencode.json opencode.before; cp codex.toml codex.before
+  cp claude.json claude.before; cp pi.json pi.before; cp opencode.json opencode.before; cp codex.toml codex.before
 
-  ${remove}/bin/nixarchy-ai-mirror-mcp-remove claude.json opencode.json codex.toml
+  ${remove}/bin/nixarchy-ai-mirror-mcp-remove claude.json opencode.json codex.toml pi.json
 
   cmp -s claude.json claude.before || fail "claude: removed an ai-mirror entry the user wrote"
+  cmp -s pi.json pi.before || fail "pi: removed an ai-mirror entry the user wrote"
   cmp -s opencode.json opencode.before || fail "opencode: removed an ai-mirror entry the user wrote"
   cmp -s codex.toml codex.before || fail "codex: removed an ai-mirror table the user wrote"
 
-  # Nothing there at all is not an error.
+  # Nothing there at all is not an error. Three arguments, on purpose: the
+  # fourth is optional, and a caller that predates it must keep working.
   ${remove}/bin/nixarchy-ai-mirror-mcp-remove missing.json missing2.json missing.toml
 
-  echo "ai-mirror-mcp-remove: ours removed from all three, the user's kept in all three"
+  # And the fourth, missing, is not an error either.
+  ${remove}/bin/nixarchy-ai-mirror-mcp-remove missing.json missing2.json missing.toml missing3.json
+
+  echo "ai-mirror-mcp-remove: ours removed from all four, the user's kept in all four"
   touch $out
 ''

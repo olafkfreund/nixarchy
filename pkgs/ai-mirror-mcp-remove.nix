@@ -1,4 +1,4 @@
-# Takes ai-mirror's MCP server back out of the three agent configs when
+# Takes ai-mirror's MCP server back out of the four agent configs when
 # programs.nixarchy.aiMirror.mcp is off (#773). The helpers that put it there
 # only ever add -- mergeJson merges, appendToml appends -- so without this,
 # turning the option off would leave every agent still able to reach the
@@ -24,8 +24,8 @@ writeShellApplication {
     coreutils
   ];
   text = ''
-    # Usage: nixarchy-ai-mirror-mcp-remove <claude.json> <opencode.json> <codex.toml>
-    claude=$1 opencode=$2 codex=$3
+    # Usage: nixarchy-ai-mirror-mcp-remove <claude.json> <opencode.json> <codex.toml> [pi-mcp.json]
+    claude=$1 opencode=$2 codex=$3 pi=''${4:-}
     ours='^/nix/store/[a-z0-9]{32}-[^/]+/bin/ai-mirror$'
 
     # file, the jq path to the entry, the jq path to its command within it
@@ -44,6 +44,7 @@ writeShellApplication {
     }
     json_drop "$claude" '.mcpServers["ai-mirror"]' '.command'
     json_drop "$opencode" '.mcp["ai-mirror"]' '.command[0]'
+    json_drop "$pi" '.mcpServers["ai-mirror"]' '.command'
 
     # Codex: drop the [mcp_servers.ai-mirror] table if its command is ours,
     # with the two comment lines and the blank line appendToml wrote above it.

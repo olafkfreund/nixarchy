@@ -445,6 +445,11 @@ stdenvNoCC.mkDerivation {
                       --replace-fail '      if (!seen) return' '      if (!seen) return
       if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
                       --replace-fail "printf 'v11\\n'" "printf 'v11-submaps\\n'"
+                    # Summoned from a key bind, the menu reaches the screen after omarchy-shell's
+                    # 2 s IPC timeout; the script then exits and the menu it opened does nothing.
+                    # The script waits for the selection anyway, so a longer timeout costs nothing.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-menu-select \
+                      --replace-fail 'omarchy-shell shell summon omarchy.menu' 'OMARCHY_SHELL_IPC_TIMEOUT="''${OMARCHY_SHELL_IPC_TIMEOUT:-10s}" omarchy-shell shell summon omarchy.menu'
 
                     # bin/ is a symlink farm, NOT wrapProgram'd. `bin/omarchy` discovers its
                     # subcommands by grepping the first 80 lines of each sibling for

@@ -326,7 +326,11 @@
   };
   "omarchy-menu-keybindings" = {
     class = "patch";
-    reason = "Bound the Lua scan of a user's hyprland.lua to three seconds so a loop cannot leave a CPU pinned when the keybindings menu opens.";
+    reason = "Bound the Lua scan of a user's hyprland.lua to three seconds so a loop cannot leave a CPU pinned when the keybindings menu opens, and drop undescribed submap binds so a hint plugin's thousands of them cannot push the list past the 128 KiB argument limit (#1181).";
+  };
+  "omarchy-menu-select" = {
+    class = "patch";
+    reason = "Summon the menu with a 10 s IPC timeout instead of omarchy-shell's 2 s: from a key bind the shell answers later than that, and the script would exit and leave the menu it opened doing nothing (#1189).";
   };
   "omarchy-menu-timezone" = {
     class = "vendor";

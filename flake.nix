@@ -2495,10 +2495,14 @@
           # and vm-toplevel builds, the extraction has not let the two drift.
           reference-toplevel = self.nixosConfigurations.reference.config.system.build.toplevel;
 
-          # The nightly's `nix run .#update`, built on every pull request: an
-          # updateScript that is not a derivation (owe's nix-update-script list)
-          # broke it at evaluation, and only update.yml ever evaluated it.
-          update-app = self.packages.${system}.update;
+          # The nightly's `nix run .#update`, EVALUATED on every pull request: an
+          # updateScript that is not a derivation (owe's list) broke it at
+          # evaluation. A value, not the app: building it was 537 MB, unproofable.
+          update-app = pkgsFor.${system}.runCommand "nixarchy-update-app" {
+            drvLength = builtins.stringLength (
+              builtins.unsafeDiscardStringContext self.packages.${system}.update.drvPath
+            );
+          } "touch $out";
 
           # Hyprland loads its GPU drivers into its own process, so they must
           # share its glibc -- evaluation only, no boot. See

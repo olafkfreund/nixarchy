@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1192
 spec: spec/2026-10-04-1192-greeter-crash-watch-panel-error.md
 ---

@@ -583,11 +583,32 @@
       # this configuration emits one on purpose (the screen-sharing note in
       # modules/nixos.nix). It would have gone red on arrival, for a reason
       # that is correct behaviour.
+      #
+      # Wired the way an installed stable machine is: installer/template's
+      # `follows` makes nixarchy's own nixpkgs the user's 26.05, and the
+      # 26.05 home-manager comes with it. Built from this flake's inputs
+      # instead, every `inputs.nixpkgs` read inside the modules saw unstable,
+      # and a stable machine that could not evaluate passed here (#1200).
+      # `self` too: installer/host.nix takes the HM module from it.
+      stableInputs = inputs // {
+        nixpkgs = nixpkgs-stable;
+        home-manager = home-manager-stable;
+        self = self // {
+          nixosModules = self.nixosModules // {
+            nixarchy = import ./modules/nixos.nix stableInputs;
+          };
+          homeManagerModules = self.homeManagerModules // {
+            nixarchy = import ./modules/home.nix stableInputs;
+          };
+        };
+      };
       stableVm = nixpkgs-stable.lib.nixosSystem {
         system = "x86_64-linux";
-        specialArgs = { inherit inputs; };
+        specialArgs = {
+          inputs = stableInputs;
+        };
         modules = [
-          self.nixosModules.nixarchy
+          stableInputs.self.nixosModules.nixarchy
           ./vm/configuration.nix
         ];
       };

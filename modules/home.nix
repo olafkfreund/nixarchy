@@ -2027,8 +2027,13 @@ in
           src = herdrSessions;
           packages = [
             # Stable lacks herdr. Prefer the consumer's CLI when it exists;
-            # only the missing standalone tool comes from our pinned nixpkgs.
-            (pkgs.herdr or inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.herdr)
+            # only the missing tool comes from Hyprland's nixpkgs pin. Not
+            # inputs.nixpkgs: the installer template's `follows` makes that
+            # the user's 26.05 too (#1200). Hyprland's pin is never followed
+            # and stays unstable, as hyprPkgs in nixos.nix relies on.
+            (pkgs.herdr
+              or inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.herdr
+            )
             pkgs.jq
             pkgs.iproute2
           ];

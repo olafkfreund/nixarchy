@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1199
 intent: intent/2026-10-06-1199-release-cadence.md
 ---

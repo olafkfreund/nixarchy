@@ -2178,6 +2178,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Why: tests/unavailable-apps.nix
+          unavailable-apps = import ./tests/unavailable-apps.nix {
+            pkgs = pkgsFor.${system};
+            vm = self.nixosConfigurations.vm;
+          };
+
           stable-eval = import ./tests/stable-eval.nix {
             inherit inputs stableVm;
             pkgs = pkgsFor.${system};

@@ -1025,7 +1025,22 @@ in
         default = { };
         description = "${app.label} (${app.category}).";
       }
-    ) available;
+    ) available
+    # An apps.nix written before an app became unavailable still says
+    # `<name>.enable = true`. Without an option that is an evaluation error
+    # that stops the whole rebuild; with one it is a warning (#1201). Not
+    # appModule: for an entry that keeps `attr` it would add a package option
+    # defaulting to the package that made it unavailable.
+    // lib.mapAttrs (
+      name: app:
+      lib.mkOption {
+        type = lib.types.submodule {
+          options.enable = lib.mkEnableOption "${app.label} (not available on NixOS)";
+        };
+        default = { };
+        description = "${app.label}: not available on NixOS. ${app.unavailable}";
+      }
+    ) unavailable;
 
     # ---- the per-package escape (#530) --------------------------------
     #
@@ -1183,12 +1198,17 @@ in
           # nixarchy defaults allowUnfree on, so reaching this warning means it
           # was deliberately turned back off. Keep it: that user is exactly the
           # one who needs the predicate escape hatch named.
-          warnings = lib.optional (needsUnfree && !(config.nixpkgs.config.allowUnfree or false)) ''
-            nixarchy: an enabled app is unfree but nixpkgs.config.allowUnfree is
-            off, so the build will fail with a licence error. nixarchy defaults it
-            on; something in your configuration sets it false. Allow it, or add just
-            this app to nixpkgs.config.allowUnfreePredicate.
-          '';
+          warnings =
+            lib.optional (needsUnfree && !(config.nixpkgs.config.allowUnfree or false)) ''
+              nixarchy: an enabled app is unfree but nixpkgs.config.allowUnfree is
+              off, so the build will fail with a licence error. nixarchy defaults it
+              on; something in your configuration sets it false. Allow it, or add just
+              this app to nixpkgs.config.allowUnfreePredicate.
+            ''
+            ++ lib.mapAttrsToList (
+              name: app:
+              "nixarchy: ${app.label} is enabled in ~/.config/nixarchy/apps.nix but is not available on NixOS: ${app.unavailable} It installs nothing; remove `${name}.enable`."
+            ) (lib.filterAttrs (name: _: cfg.apps.${name}.enable) unavailable);
 
           # Exported so the Home Manager module can seed it, and so a user can
           # always diff their file against the current full list.

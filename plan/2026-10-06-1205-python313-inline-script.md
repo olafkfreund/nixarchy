@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1205
 spec: spec/2026-10-06-1205-python313-inline-script.md
 ---

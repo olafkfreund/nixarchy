@@ -739,7 +739,13 @@ pkgs.testers.runNixOSTest {
     # system profile; when that path was missing the palette never loaded and
     # Super+Space opened nothing, with the stock menu already disabled.
     # Whichever menu is enabled answers omarchy.menu, and draws this layer.
-    machine.succeed(on_desktop("omarchy-menu summon install"))
+    # Retried (#1203): after the reload above, Quickshell rebuilds its windows
+    # and IPC can miss the client's 2 s timeout. Safe: summon is idempotent.
+    try:
+        machine.wait_until_succeeds(on_desktop("omarchy-menu summon install"), timeout=60)
+    except Exception as e:
+        raise AssertionError(
+            "#1203: the shell did not answer IPC within 60 s of a hyprctl reload") from e
     for _ in range(30):
         layers = machine.succeed(on_desktop("hyprctl layers"))
         if "namespace: omarchy-menu" in layers:

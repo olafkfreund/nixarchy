@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1201
 intent: intent/2026-10-06-1201-remove-grok-bot.md
 ---

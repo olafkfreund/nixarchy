@@ -17,7 +17,7 @@ Two things differ, and the second matters more than it looks.
 
 ## The desktop apps are declared, not installed
 
-The `Install > AI` rows (ChatGPT, Grok Bot, LM Studio, Ollama) do what every
+The `Install > AI` rows (ChatGPT, LM Studio, Ollama) do what every
 Install row does here: they queue the app in `~/.config/nixarchy/apps.nix`, and
 `nixarchy-apply` rebuilds. See
 [the philosophy page](philosophy#what-this-does-to-the-install-menu).

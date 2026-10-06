@@ -16,8 +16,8 @@ has been mapped to how NixOS installs the thing, beside a few apps upstream does
 not list. There are 68 apps in total:
 50 are plain nixpkgs packages,
 7 are NixOS modules,
-9 are built by nixarchy itself because nixpkgs does not carry them,
-and 2 have no equivalent and say so in the menu.
+8 are built by nixarchy itself because nixpkgs does not carry them,
+and 3 have no equivalent and say so in the menu.
 
 Picking a row does not install anything. It uncomments one line in
 `~/.config/nixarchy/apps.nix`, which is a file nixarchy writes for you, fully

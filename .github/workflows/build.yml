@@ -1251,12 +1251,10 @@ jobs:
       - name: Build every app the flake ships itself
         if: needs.gate.outputs.relevant == 'true'
         env:
-          # grok-bot is unfree, and a bare `nix build` refuses to evaluate it.
-          # The same pair the menu-mapping job above uses, for the same
-          # reasons: unfree is allowed because the app selection offers unfree
-          # apps, and broken is NOT, because a package nixpkgs marks broken
-          # aborts the user's whole rebuild rather than just its own install.
-          NIXPKGS_ALLOW_UNFREE: "1"
+          # Broken is NOT allowed, as in the menu-mapping job above: a package
+          # nixpkgs marks broken aborts the user's whole rebuild rather than
+          # just its own install. No unfree override: none of the apps built
+          # here is unfree since grok-bot went (#1201).
           NIXPKGS_ALLOW_BROKEN: "0"
         run: |
           mapfile -t attrs < <(nix eval --raw --impure --expr '
@@ -1271,7 +1269,7 @@ jobs:
           echo "apps to build: ${#attrs[@]}"
           test "${#attrs[@]}" -ge 8
 
-          # --impure because NIXPKGS_ALLOW_UNFREE is an environment variable,
+          # --impure because NIXPKGS_ALLOW_BROKEN is an environment variable,
           # and a pure evaluation cannot see it.
           nix build --impure --keep-going --no-link --print-build-logs \
             "${attrs[@]/#/.#}"

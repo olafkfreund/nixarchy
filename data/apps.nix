@@ -458,9 +458,9 @@
     menuId = "install.ai.grok-bot";
     label = "Grok Bot";
     category = "AI";
-    attr = "grok-bot";
-    ours = true;
-    unfree = true;
+    # Removed in #1201. The entry stays so upstream's row says why it is
+    # gone, and so an apps.nix that still enables it warns instead of failing.
+    unavailable = "Removed from nixarchy: an unfree Electron build pinned to a Cursor CDN commit with no update path.";
     arch = "grok-bot";
   };
   t3-code = {

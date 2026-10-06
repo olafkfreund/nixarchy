@@ -1202,9 +1202,8 @@ reached, and needed a human (#195, 2026-09-05).
 
 `nix eval .#update.pinned` lists the covered attributes; update.yml
 builds exactly those after a rewrite, off the same set. A package
-pinned by hand WITHOUT an updateScript is still invisible to this
--- as of this writing only grok-bot, whose Cursor CDN pin has no
-queryable "latest" (pkgs/review.sh probes its age instead).
+pinned by hand WITHOUT an updateScript is still invisible to this.
+The one there was, grok-bot, was removed in #1201.
 
 <a id="a-vm-that-installs-onto-a-blank-disk-with-a-networ"></a>
 ### A VM that installs onto a blank disk, WITH a network -- which

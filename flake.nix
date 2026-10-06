@@ -824,7 +824,6 @@
         # holes in it.
         nixarchy-apps = {
           once = final.callPackage ./pkgs/apps/once.nix { };
-          grok-bot = final.callPackage ./pkgs/apps/grok-bot.nix { };
 
           # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
           # simply follow nixpkgs the way most apps here do.
@@ -1284,7 +1283,6 @@
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once
-            grok-bot
             retroarch
             hey-cli
             omawrite
@@ -2199,6 +2197,12 @@
           # anything. See tests/substitutable.nix.
           substitutable = import ./tests/substitutable.nix {
             pkgs = pkgsFor.${system};
+          };
+
+          # Why: tests/unavailable-apps.nix
+          unavailable-apps = import ./tests/unavailable-apps.nix {
+            pkgs = pkgsFor.${system};
+            vm = self.nixosConfigurations.vm;
           };
 
           stable-eval = import ./tests/stable-eval.nix {

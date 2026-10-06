@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1203
 intent: intent/2026-10-06-1203-session-shell-reload-race.md
 ---

@@ -39,6 +39,8 @@ spec: spec/2026-10-06-1201-remove-grok-bot.md
    Update the comments at `:339` and `:612` that list the AI rows by name.
    → verify by `python3 .github/scripts/check-menu-mapping.py` with the same
    arguments `build.yml:1044` passes. It must say every row is mapped.
+   *Deviation:* the comments at `:339` and `:612` stay. They describe the
+   rows upstream Omarchy ships, which still include grok-bot.
    Traps: `check-menu-mapping.py` parses with regexes, so keep the entry's
    layout (`arch = "grok-bot";` on its own line).
 

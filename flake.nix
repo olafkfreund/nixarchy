@@ -803,7 +803,6 @@
         # holes in it.
         nixarchy-apps = {
           once = final.callPackage ./pkgs/apps/once.nix { };
-          grok-bot = final.callPackage ./pkgs/apps/grok-bot.nix { };
 
           # nixpkgs' `hey` is an unrelated HTTP load generator, so this cannot
           # simply follow nixpkgs the way most apps here do.
@@ -1263,7 +1262,6 @@
 
           inherit (pkgsFor.${system}.nixarchy-apps)
             once
-            grok-bot
             retroarch
             hey-cli
             omawrite

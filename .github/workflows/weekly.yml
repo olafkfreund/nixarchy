@@ -1,0 +1,115 @@
+name: weekly
+
+# Two weekly jobs that keep the release branch honest (#1199).
+#
+# Installed machines follow `release`, which moves only when a human pushes a
+# tag. Nothing reminded anyone to, and on 2026-10-06 it was 305 commits behind
+# main. `propose` keeps one issue saying what the next release would be; it
+# never tags, because moving `release` ships to every installed machine.
+#
+# `stable-session` boots a session on nixos-26.05. stable-eval proves only that
+# the expression evaluates there; this is the VM it said it could not afford.
+# Weekly rather than nightly: stable closures are not in nixarchy.cachix, so a
+# run builds a lot locally.
+#
+# github.event.schedule is the exact cron string, so each job's `if:` must
+# match its entry below character for character.
+
+on:
+  schedule:
+    - cron: "0 22 * * 0" # stable-session, Sunday night
+    - cron: "0 6 * * 1" # propose, Monday after the 03:00 nightly
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        required: true
+        type: choice
+        options: [propose, stable-session]
+
+permissions:
+  contents: read
+
+jobs:
+  propose:
+    if: github.event.schedule == '0 6 * * 1' || inputs.job == 'propose'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: git fetch -q origin release main --tags
+      - uses: ./.github/actions/setup-nix
+
+      - name: Propose the newest green nightly
+        run: |
+          set -euo pipefail
+          candidate=$(gh run list -R "$GITHUB_REPOSITORY" -w nightly.yml -b main \
+            -s success -L 1 --json headSha -q '.[0].headSha')
+          if [ -z "$candidate" ]; then
+            echo "no green nightly on main; nothing to propose" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Read the way release.yml reads it, so the tag proposed here is one
+          # its "names the Omarchy the flake vendors" step accepts.
+          version=$(nix eval --raw ".#packages.x86_64-linux.omarchy.version")
+          .github/scripts/release-candidate.sh "$candidate" "$version" > body.md
+
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" -l release-candidate -s open \
+            --json number -q '.[0].number')
+          if [ ! -s body.md ]; then
+            if [ -n "$open" ]; then
+              echo "\`release\` already contains the newest green nightly." > close.md
+              gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body-file close.md
+              gh issue close "$open" -R "$GITHUB_REPOSITORY"
+            fi
+            echo "release is current" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tag=$(grep -oE 'Proposed tag: `[^`]+`' body.md | tr -d '`' | sed 's/Proposed tag: //')
+          gh label create release-candidate -R "$GITHUB_REPOSITORY" --force \
+            --description "The next release, proposed weekly" --color 0e8a16
+          if [ -n "$open" ]; then
+            gh issue edit "$open" -R "$GITHUB_REPOSITORY" --title "Release candidate: $tag" --body-file body.md
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" -l release-candidate \
+              --title "Release candidate: $tag" --body-file body.md
+          fi
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+
+  stable-session:
+    if: github.event.schedule == '0 22 * * 0' || inputs.job == 'stable-session'
+    runs-on: [self-hosted, nixos, kvm, big]
+    # The first run builds most of a stable closure locally. Revisit once a few
+    # runs show the real figure.
+    timeout-minutes: 300
+    concurrency:
+      group: stable-session
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      # No cachix push: stable closures are not on the allowlist, and the free
+      # tier would evict what users actually download.
+      # checks.session with nixpkgs and home-manager swapped for this flake's
+      # locked 26.05 pair. An override re-resolves every input that follows
+      # nixpkgs (nixi, ai-mirror, ...), exactly as the installer template's
+      # `follows` does on a stable machine. Swapping only the nixpkgs
+      # attribute left those on unstable and collided two Pythons in the
+      # user profile -- a failure no real machine has.
+      - name: Boot a session on nixos-26.05
+        run: |
+          set -euo pipefail
+          locked() {
+            jq -r --arg n "$1" '.nodes[.nodes.root.inputs[$n]].locked | "github:\(.owner)/\(.repo)/\(.rev)"' flake.lock
+          }
+          nix build .#checks.x86_64-linux.session --print-build-logs \
+            --override-input nixpkgs "$(locked nixpkgs-stable)" \
+            --override-input home-manager "$(locked home-manager-stable)"

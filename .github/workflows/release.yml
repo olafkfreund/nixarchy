@@ -52,6 +52,8 @@ permissions:
   # call fails, taking the release with it -- the discussion is the smaller
   # half and must not be able to cost the larger one.
   discussions: write
+  # The guard below asks which commit the newest green nightly tested.
+  actions: read
 
 # Never cancel a release mid-upload. A half-attached release is worse than a
 # late one, and two tags pushed together should queue rather than race.
@@ -108,12 +110,15 @@ jobs:
       # of being wrong here is a release that has to be superseded, deleted or
       # explained.
       #
-      # RELEASE_ALLOW_BEHIND_MAIN is the way out, for a deliberate release of
-      # an older commit. It has to be set on the run, so it cannot be the
-      # thing that happens by default.
+      # The one exception is the newest green nightly: the commit that was
+      # built, installed and booted, so releasing it rather than main's tip is
+      # deliberate (#1199). RELEASE_ALLOW_BEHIND_MAIN is the way out, for a
+      # deliberate release of any other older commit. It has to be set on the
+      # run, so it cannot be the thing that happens by default.
       - name: The tag is not behind main
         env:
           TAG: ${{ steps.tag.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="$TAG"
@@ -141,31 +146,15 @@ jobs:
           # checkout already fetched every branch and tag, so there is nothing
           # to save here anyway.
           git fetch -q origin main
-          tagged=$(git rev-parse HEAD)
-          main=$(git rev-parse FETCH_HEAD)
-
-          if [ "$tagged" = "$main" ]; then
-            echo "$tag is the tip of main"
-            exit 0
-          fi
-
-          # Not an ancestor: a hotfix branch or a tag off something else. Not
-          # what this guard is about, and refusing it would block a real case.
-          if ! git merge-base --is-ancestor "$tagged" "$main"; then
-            echo "::notice::$tag is not on main; not a staleness question, continuing"
-            exit 0
-          fi
-
-          echo "::error::$tag is BEHIND main and would ship without these:"
-          git --no-pager log --oneline "$tagged..$main" | sed 's/^/  /'
-          if [ "${RELEASE_ALLOW_BEHIND_MAIN:-}" = "1" ]; then
-            echo "::warning::RELEASE_ALLOW_BEHIND_MAIN=1, publishing anyway"
-            exit 0
-          fi
-          echo ""
-          echo "Re-tag at main, or set RELEASE_ALLOW_BEHIND_MAIN=1 if this"
-          echo "older commit is genuinely the one to publish."
-          exit 1
+          # The newest green nightly may be released behind main (#1199). A
+          # failed lookup leaves this empty, which only makes the guard stricter.
+          NIGHTLY_SHA=$(gh run list -R "$GITHUB_REPOSITORY" -w nightly.yml -b main \
+            -s success -L 1 --json headSha -q '.[0].headSha' || true)
+          export NIGHTLY_SHA
+          # From the workflow's own commit, not the tag's tree: a dispatch that
+          # re-publishes an older tag checks out a tree without this script.
+          git show "$GITHUB_SHA:.github/scripts/release-guard.sh" |
+            bash -s -- "$tag" "$(git rev-parse HEAD)" "$(git rev-parse FETCH_HEAD)"
 
       # The notes are derived by a nix build that fetches this flake BY REV,
       # and nix refuses a shallow repository when asked for one. Nothing about

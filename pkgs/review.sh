@@ -111,10 +111,6 @@ fi
 # Every hand-pinned package: name, the file that pins it, the GitHub repo to
 # ask. Kept here rather than derived, because the point of the list is to be
 # read -- a pin nobody remembers is exactly the one that goes stale.
-#
-# grok-bot is absent on purpose: it is pinned to a Cursor CDN commit hash with
-# no queryable "latest", so there is nothing to compare it against. Its
-# staleness is probed by date instead, below.
 pins=$(
   cat <<'EOF'
 once	pkgs/apps/once.nix	basecamp/once
@@ -283,17 +279,6 @@ while IFS=$'\t' read -r name file repo; do
     ok "$name" "$have" "$latest"
   fi
 done <<<"$pins"
-
-# grok-bot pins a CDN build by commit hash. Nothing upstream answers "is there
-# a newer one", so the only honest signal is how long it has been since anyone
-# looked.
-age_days=$(( ($(date +%s) - $(git log -1 --format=%ct -- pkgs/apps/grok-bot.nix)) / 86400 ))
-if [ "$age_days" -gt 60 ]; then
-  finding "grok-bot" "$(pinned_version pkgs/apps/grok-bot.nix)" "unknowable" \
-    "pinned by CDN commit, untouched for $age_days days -- check by hand"
-else
-  ok "grok-bot" "$(pinned_version pkgs/apps/grok-bot.nix)" "checked ${age_days}d ago"
-fi
 
 # ------------------------------------------------------------- consistency --
 

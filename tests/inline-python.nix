@@ -30,21 +30,28 @@ pkgs.runCommand "nixarchy-inline-python"
   }
   ''
     cd ${src}
+    # Sites and offences are printed, not counted, so a find that xargs
+    # splits across several awk runs still adds up.
     find tests modules pkgs installer .github flake.nix -type f \
       \( -name '*.nix' -o -name '*.sh' \) -print0 \
       | xargs -0 awk '
           FNR == 1 { pending = 0 }
-          pending && /^[ \t]/ { print FILENAME ":" FNR - 1; bad++ }
+          pending && /^[ \t]/ { print "bad " FILENAME ":" FNR - 1 }
           { pending = 0 }
-          /python3?( +-[A-Za-z]+)* +-c +\x27$/ { pending = 1; seen++ }
-          END {
-            printf "%d multi-line python -c site(s), %d indented\n", seen, bad > "/dev/stderr"
-            exit (bad > 0)
-          }
-        ' >"$TMPDIR/bad" || {
-      echo "indented python -c code; Python 3.13 refuses it (#1205). Move it to a file:" >&2
-      cat "$TMPDIR/bad" >&2
+          /(python3?|interpreter\})( +-[A-Za-z]+)* +-c +[\x27"] *$/ { pending = 1; print "site" }
+        ' >"$TMPDIR/scan"
+    sites=$(grep -c '^site$' "$TMPDIR/scan" || true)
+    bad=$(grep '^bad ' "$TMPDIR/scan" || true)
+    echo "$sites multi-line python -c site(s)"
+    # Zero sites means the pattern stopped matching, not a clean tree.
+    if [ "$sites" -lt 1 ]; then
+      echo "no python -c site found at all; the pattern no longer matches this tree" >&2
       exit 1
-    }
+    fi
+    if [ -n "$bad" ]; then
+      echo "indented python -c code; Python 3.13 refuses it (#1205). Move it to a file:" >&2
+      echo "$bad" >&2
+      exit 1
+    fi
     touch $out
   ''

@@ -97,6 +97,11 @@ spec: spec/2026-10-06-1201-remove-grok-bot.md
   `grok-bot`.
 - `nix flake check --no-build` with no `NIXPKGS_ALLOW_UNFREE` → evaluates. If
   an unrelated failure stops it, record it in the PR.
+  *Result:* the grok-bot unfree error is gone. The command now stops on
+  `path '...-try-lookup.nix' is not valid` from `tests/try.nix:42`
+  (`import (builtins.toFile ...)` cannot work under `--no-build`). `main` stops
+  on the same error once grok-bot is out of the way, so it is not caused by
+  this change.
 - `nix build .#checks.x86_64-linux.unavailable-apps -L` → passes.
 - `nix build .#checks.x86_64-linux.options -L` and
   `.#checks.x86_64-linux.doc-options -L` → pass. If either snapshots option

@@ -62,8 +62,9 @@ jobs:
           #
           # Derived from the same set the updater ran, not named by hand: the
           # old list here named a package this job could never change (it had
-          # no updateScript) and skipped one it could (hey-cli). Building every covered package rather than
-          # only what changed is deliberate -- the set is two small binary
+          # no updateScript) and skipped one it could (hey-cli). Building every
+          # covered package rather than only what changed is deliberate -- the
+          # set is two small binary
           # repacks, and it avoids trusting a filename-to-attribute convention
           # nothing enforces.
           mapfile -t attrs < <(nix eval --json .#update.pinned | jq -r '.[] | ".#" + .')

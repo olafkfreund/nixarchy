@@ -91,6 +91,12 @@ spec: spec/2026-10-06-1201-remove-grok-bot.md
    → verify by reading the paragraphs in context.
    Traps: `docs/` is published; keep relative links intact.
 
+   *Deviation (review):* `.github/scripts/readme-counts.sh` derives the app
+   counts in `README.md` and `docs/manual/other-packages.md` from
+   `data/apps.nix`, and `build.yml` fails on drift. Ran it with `--fix`
+   (8 built here, 3 with no equivalent, 65 of 68 indexable) and corrected the
+   word "two" it does not rewrite.
+
 ## Tests
 
 - `nix eval .#packages.x86_64-linux --apply builtins.attrNames` → no
@@ -109,6 +115,9 @@ spec: spec/2026-10-06-1201-remove-grok-bot.md
 - `python3 .github/scripts/check-menu-mapping.py ...` → all rows mapped.
 - `git grep -n -i grok-bot -- . ':!intent' ':!spec' ':!plan'` → only the
   `data/apps.nix` entry and the new test.
+  *Result:* also two deliberate history notes, `build.yml:1257` and
+  `docs/internals/flake.md:1206`, and the upstream-menu comments in
+  `data/apps.nix` kept by step 2's deviation.
 
 ## Rollback
 

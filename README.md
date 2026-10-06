@@ -160,7 +160,7 @@ from a terminal:
 ```
 
 **About 137,000 rows on a default install: some 25,000 NixOS options, 112,000
-packages, and 66 of the 68 apps** (the two with no nixpkgs equivalent cannot be
+packages, and 65 of the 68 apps** (the three with no nixpkgs equivalent cannot be
 indexed). The exact count is each machine's own, because the index is built from
 that system's options and package set. Three kinds,
 one picker, because you should not have to know which kind you want before you
@@ -497,7 +497,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 68 apps in the selection | 50 from nixpkgs, 7 as NixOS modules, 9 built here, 2 with no equivalent |
+| 68 apps in the selection | 50 from nixpkgs, 7 as NixOS modules, 8 built here, 3 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |

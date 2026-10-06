@@ -1207,7 +1207,7 @@ in
             ''
             ++ lib.mapAttrsToList (
               name: app:
-              "nixarchy: ${app.label} is enabled in ~/.config/nixarchy/apps.nix but is not available on NixOS: ${app.unavailable} It installs nothing; remove `${name}.enable`."
+              "nixarchy: ${app.label} is enabled (normally in ~/.config/nixarchy/apps.nix) but is not available on NixOS: ${app.unavailable} It installs nothing; remove `${name}.enable`."
             ) (lib.filterAttrs (name: _: cfg.apps.${name}.enable) unavailable);
 
           # Exported so the Home Manager module can seed it, and so a user can

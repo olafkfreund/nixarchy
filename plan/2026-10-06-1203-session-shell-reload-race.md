@@ -43,6 +43,15 @@ spec: spec/2026-10-06-1203-session-shell-reload-race.md
 - `nix build .#checks.x86_64-linux.session -L` → passes.
 - `nix fmt -- --ci`, statix, deadnix → clean.
 
+*Result:* two runs of `checks.session` on p620. In both, the summon ran under
+`wait_until_succeeds` and "summoning the menu opens one (#1069)" passed. Both
+then failed later, in the `nixarchy-apply --detach` section, on #1209: the
+refusal line is in the journal but lacks its invocation's metadata, so the
+invocation-filtered query never sees it. That is outside this change, so the
+green session run is left to CI. Review notes kept for later, not applied:
+`except Exception` could be `AssertionError` (narrower), and a summon the shell
+refuses outright still ends the retry at once, as before.
+
 ## Rollback
 
 Revert the PR. The check goes back to failing on the race now and then.

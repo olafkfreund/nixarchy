@@ -2391,6 +2391,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The release guard and the weekly release-candidate body, against a
+          # fixture repository (#1199). See tests/release-scripts.nix.
+          release-scripts = import ./tests/release-scripts.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # The nightly's cache step: probe every allowlist entry, rebuild and
           # push what the cache dropped, and still fail when a push delivers
           # nothing. Against a stubbed nix, curl and cachix. See

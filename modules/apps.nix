@@ -1018,29 +1018,30 @@ in
     # all: evaluating an outer submodule's _module.freeformType forces config,
     # and config here defines programs.* for the module-backed apps, which is
     # a cycle. One option per app has no such wrapper to evaluate.
-    apps = lib.mapAttrs (
-      name: app:
-      lib.mkOption {
-        type = lib.types.submodule { options = appModule name app; };
-        default = { };
-        description = "${app.label} (${app.category}).";
-      }
-    ) available
-    # An apps.nix written before an app became unavailable still says
-    # `<name>.enable = true`. Without an option that is an evaluation error
-    # that stops the whole rebuild; with one it is a warning (#1201). Not
-    # appModule: for an entry that keeps `attr` it would add a package option
-    # defaulting to the package that made it unavailable.
-    // lib.mapAttrs (
-      name: app:
-      lib.mkOption {
-        type = lib.types.submodule {
-          options.enable = lib.mkEnableOption "${app.label} (not available on NixOS)";
-        };
-        default = { };
-        description = "${app.label}: not available on NixOS. ${app.unavailable}";
-      }
-    ) unavailable;
+    apps =
+      lib.mapAttrs (
+        name: app:
+        lib.mkOption {
+          type = lib.types.submodule { options = appModule name app; };
+          default = { };
+          description = "${app.label} (${app.category}).";
+        }
+      ) available
+      # An apps.nix written before an app became unavailable still says
+      # `<name>.enable = true`. Without an option that is an evaluation error
+      # that stops the whole rebuild; with one it is a warning (#1201). Not
+      # appModule: for an entry that keeps `attr` it would add a package option
+      # defaulting to the package that made it unavailable.
+      // lib.mapAttrs (
+        name: app:
+        lib.mkOption {
+          type = lib.types.submodule {
+            options.enable = lib.mkEnableOption "${app.label} (not available on NixOS)";
+          };
+          default = { };
+          description = "${app.label}: not available on NixOS. ${app.unavailable}";
+        }
+      ) unavailable;
 
     # ---- the per-package escape (#530) --------------------------------
     #

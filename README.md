@@ -691,6 +691,41 @@ keeping until it means something. Until then, expect options to be added and
 occasionally reshaped between releases, and read the release notes before
 bumping.
 
+**Two kinds of "stable".** `nixarchy channel stable` picks your *nixpkgs*
+(26.05 instead of unstable; see
+[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)).
+The `release` branch picks your *nixarchy*. Every installed machine follows
+`release`, so `nix flake update nixarchy` moves it to the latest release and
+never to `main`. The two choices are independent.
+
+### Releasing
+
+`main` takes every merge; `release` is what users get. It moves only when a
+`v*` tag is pushed, and `release.yml` fast-forwards it to the tag. It never
+moves backwards.
+
+Every Monday a workflow (`weekly.yml`) updates one issue labelled
+`release-candidate`. The issue names the newest commit that nightly built,
+installed and booted, the tag it would be, and what would ship. Cutting the
+release is the two commands in that issue. Nothing tags automatically.
+
+A release is either the tip of `main` or that newest green nightly. The
+release job refuses any other commit behind `main`: that is how `v4.0.2-7`
+shipped without a fix that was already merged.
+
+**A hotfix**, when one fix cannot wait for everything else on `main`:
+
+1. Merge the fix to `main` as usual.
+2. `git switch -c hotfix/<issue> origin/release`, then `git cherry-pick` it.
+3. Tag the branch head with the next packaging number (`v4.0.4-1` becomes
+   `v4.0.4-2`) and push the tag. `release.yml` publishes it and moves
+   `release`, because the commit is not on `main` and descends from `release`.
+4. Merge the tag back into `main` with a merge commit, keeping `main`'s tree:
+   `git merge -s ours <tag>` on a branch, opened as a pull request and merged
+   with **Create a merge commit**. Without this, `release` is no longer an
+   ancestor of `main`, and the next normal release cannot move it. The weekly
+   issue warns when this step was missed.
+
 ## Roadmap
 
 What is being worked on, and what is planned. The issues are the detail; this

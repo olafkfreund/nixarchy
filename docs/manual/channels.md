@@ -4,6 +4,11 @@ title: Stable or unstable
 
 # Stable or unstable
 
+This page is about which **nixpkgs** your machine uses. Which **nixarchy** it
+runs is a separate question: every installed machine follows nixarchy's
+`release` branch, which moves only when a release is cut. See
+[Releases](https://github.com/olafkfreund/nixarchy#releases).
+
 Omarchy lets you pick a release channel. So does nixarchy — **Update ▸ Channel**
 in the menu, or:
 
@@ -25,9 +30,10 @@ What CI proves about stable is narrow and worth knowing exactly: a check
 evaluates this flake against `nixos-26.05` on every change, in about twenty
 seconds. That proves the configuration is **valid** on stable — every attribute
 exists, every option is an option. It does **not** prove the machine boots or
-that the desktop comes up. Nothing starts a VM on stable, because the install
-job is already the slowest thing in the project and doubling it would slow every
-change for everyone.
+that the desktop comes up. That part is checked weekly instead: a VM boots a
+desktop session on stable every Sunday night. It is not run on every change,
+because the install job is already the slowest thing in the project and
+doubling it would slow every change for everyone.
 
 So: fewer people run stable here, and the automated evidence behind it is
 thinner. If you want the combination that is actually exercised, that is
@@ -40,7 +46,7 @@ unstable.
 | nixpkgs | `nixos-26.05` | `nixos-unstable` |
 | home-manager | `release-26.05` | tracks master |
 | package versions | frozen until the next release | move continuously |
-| tested by nixarchy | evaluation only | everything |
+| tested by nixarchy | evaluated on every change; a session boot weekly | everything |
 
 Switching moves **both** nixpkgs and home-manager, and that is not a
 convenience. The two are developed as a pair, and a machine on stable nixpkgs

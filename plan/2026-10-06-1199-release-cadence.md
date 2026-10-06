@@ -190,6 +190,17 @@ spec: spec/2026-10-06-1199-release-cadence.md
    weekly job is expected to be red until then. That is the job doing what it
    is for.
 
+   *Review fixes (recorded with the code):* `gh issue close` has no
+   `--comment-file`, so the close is now `gh issue comment --body-file` then
+   `gh issue close`. release.yml runs the guard script from `$GITHUB_SHA` (the
+   workflow's own commit), so a dispatch that re-publishes an older tag still
+   finds it. The candidate body says it is valid only until the next nightly
+   goes green. Lock nodes are resolved through `root.inputs`. The next-tag
+   test covers `-9`/`-10`/`-rc1`. channels.md says the weekly stable job is
+   red until #1211. Not fixed: a hotfix on top of a release that already
+   contains the newest nightly closes the issue without the merge-back
+   warning, until the next nightly goes green.
+
 ## Stable-only skips
 
 `hyprland-preview-share-picker`, decided by `pkgs ? hyprland-preview-share-picker`

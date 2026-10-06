@@ -43,6 +43,10 @@ if [ "$count" -gt 100 ]; then
   echo "and $((count - 100)) more."
 fi
 echo
+echo "This is valid until the next nightly goes green (03:00 UTC daily): the"
+echo "release job accepts only the newest one. Re-run \`weekly.yml\` with"
+echo "\`job: propose\` first if that has happened."
+echo
 echo "To release it:"
 echo
 echo '```sh'

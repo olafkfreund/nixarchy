@@ -37,6 +37,9 @@ pkgs.runCommand "nixarchy-release-scripts"
     git tag v4.0.3-2 "$root"
     git tag v4.0.4-1 "$A"
     git tag v4.0.4x9 "$A" # not a packaging tag; must not count
+    git tag v4.0.4-9 "$root"
+    git tag v4.0.4-10 "$root" # numeric, not lexical: 10 beats 9
+    git tag v4.0.4-rc1 "$root" # not a packaging number; must not count
     git push -q origin main "$A:refs/heads/release" --tags
     git checkout -q -b hotfix "$A"
     git commit -q --allow-empty -m H
@@ -66,9 +69,9 @@ pkgs.runCommand "nixarchy-release-scripts"
 
     rc() { bash "$scripts/release-candidate.sh" "$@"; }
     body=$(rc "$C" 4.0.4)
-    grep -qF 'Proposed tag: `v4.0.4-2`, 2 commits' <<<"$body"
+    grep -qF 'Proposed tag: `v4.0.4-11`, 2 commits' <<<"$body"
     if grep -q 'not an ancestor' <<<"$body"; then exit 1; fi
-    grep -qF "git tag -a v4.0.4-2 $C -m v4.0.4-2" <<<"$body"
+    grep -qF "git tag -a v4.0.4-11 $C -m v4.0.4-11" <<<"$body"
     echo "candidate next-tag: ok"
 
     [ -z "$(rc "$A" 4.0.4)" ]

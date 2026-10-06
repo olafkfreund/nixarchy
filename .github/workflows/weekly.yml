@@ -67,7 +67,8 @@ jobs:
           if [ ! -s body.md ]; then
             if [ -n "$open" ]; then
               echo "\`release\` already contains the newest green nightly." > close.md
-              gh issue close "$open" -R "$GITHUB_REPOSITORY" --comment-file close.md
+              gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body-file close.md
+              gh issue close "$open" -R "$GITHUB_REPOSITORY"
             fi
             echo "release is current" >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -107,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           locked() {
-            jq -r --arg n "$1" '.nodes[$n].locked | "github:\(.owner)/\(.repo)/\(.rev)"' flake.lock
+            jq -r --arg n "$1" '.nodes[.nodes.root.inputs[$n]].locked | "github:\(.owner)/\(.repo)/\(.rev)"' flake.lock
           }
           nix build .#checks.x86_64-linux.session --print-build-logs \
             --override-input nixpkgs "$(locked nixpkgs-stable)" \

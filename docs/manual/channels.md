@@ -31,7 +31,8 @@ evaluates this flake against `nixos-26.05` on every change, in about twenty
 seconds. That proves the configuration is **valid** on stable — every attribute
 exists, every option is an option. It does **not** prove the machine boots or
 that the desktop comes up. That part is checked weekly instead: a VM boots a
-desktop session on stable every Sunday night. It is not run on every change,
+desktop session on stable every Sunday night. (Currently red: on 26.05 the
+login screen cannot load the GPU driver, Issue #1211.) It is not run on every change,
 because the install job is already the slowest thing in the project and
 doubling it would slow every change for everyone.
 

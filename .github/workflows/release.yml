@@ -151,7 +151,10 @@ jobs:
           NIGHTLY_SHA=$(gh run list -R "$GITHUB_REPOSITORY" -w nightly.yml -b main \
             -s success -L 1 --json headSha -q '.[0].headSha' || true)
           export NIGHTLY_SHA
-          .github/scripts/release-guard.sh "$tag" "$(git rev-parse HEAD)" "$(git rev-parse FETCH_HEAD)"
+          # From the workflow's own commit, not the tag's tree: a dispatch that
+          # re-publishes an older tag checks out a tree without this script.
+          git show "$GITHUB_SHA:.github/scripts/release-guard.sh" |
+            bash -s -- "$tag" "$(git rev-parse HEAD)" "$(git rev-parse FETCH_HEAD)"
 
       # The notes are derived by a nix build that fetches this flake BY REV,
       # and nix refuses a shallow repository when asked for one. Nothing about

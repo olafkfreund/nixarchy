@@ -1898,6 +1898,9 @@
             # secret. Parse that file, not the template's source (#1087).
             "hypr-rdp-toml"
             "initrd-pin-guard"
+            # No indented python -c program: 3.13 refuses what 3.14 dedents (#1205).
+            # Why: tests/inline-python.nix
+            "inline-python"
             "install"
             # The same question with encrypt=yes -- the DEFAULT interactive
             # answer, which until this check had no coverage past evaluation.

@@ -1033,7 +1033,7 @@ in
       # appModule: for an entry that keeps `attr` it would add a package option
       # defaulting to the package that made it unavailable.
       // lib.mapAttrs (
-        name: app:
+        _: app:
         lib.mkOption {
           type = lib.types.submodule {
             options.enable = lib.mkEnableOption "${app.label} (not available on NixOS)";

@@ -170,9 +170,30 @@ spec: spec/2026-10-06-1199-release-cadence.md
    Traps: `docs/` is a published site (`_config.yml`), so keep relative links
    working; a line starting with `#1199` turns into a heading.
 
+   *Deviation (step 5, recorded with the code):* no `stable-session` check,
+   no `stable` argument, no input rewiring in `tests/session.nix`. The first
+   design swapped only the `nixpkgs` attribute, so inputs that follow nixpkgs
+   (`nixi`, `ai-mirror`, `flake.nix:253,289`) stayed on unstable. The user
+   profile then held Python 3.13 and 3.14 and buildEnv refused it, a
+   collision no installed machine has. `weekly.yml` now builds the ordinary
+   `checks.session` with `--override-input nixpkgs` and
+   `--override-input home-manager` set to this flake's locked 26.05 pair, which
+   re-resolves every `follows` the way the installer template does. The only
+   stable difference left in the test is the share picker, read from the
+   package set itself. With no new check, `generated-checks.sh` is unchanged.
+   The first build on this path also found #1205, fixed and released as
+   v4.0.4-2.
+   The override run then booted the VM on 26.05 and found #1211: the SDDM
+   greeter's weston (glibc 2.42) cannot load the system Mesa that `main` takes
+   from Hyprland's unstable pin (glibc 2.43), so no greeter ever starts. Step
+   5's "passes on p620" therefore cannot hold until #1211 is fixed, and the
+   weekly job is expected to be red until then. That is the job doing what it
+   is for.
+
 ## Stable-only skips
 
-Filled in during step 5. Starts with one: `hyprland-preview-share-picker`.
+`hyprland-preview-share-picker`, decided by `pkgs ? hyprland-preview-share-picker`
+rather than a flag. Others are added here if the stable run finds them.
 
 ## Tests
 

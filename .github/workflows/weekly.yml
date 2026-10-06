@@ -97,5 +97,18 @@ jobs:
       - uses: actions/checkout@v5
       # No cachix push: stable closures are not on the allowlist, and the free
       # tier would evict what users actually download.
+      # checks.session with nixpkgs and home-manager swapped for this flake's
+      # locked 26.05 pair. An override re-resolves every input that follows
+      # nixpkgs (nixi, ai-mirror, ...), exactly as the installer template's
+      # `follows` does on a stable machine. Swapping only the nixpkgs
+      # attribute left those on unstable and collided two Pythons in the
+      # user profile -- a failure no real machine has.
       - name: Boot a session on nixos-26.05
-        run: nix build .#checks.x86_64-linux.stable-session --print-build-logs
+        run: |
+          set -euo pipefail
+          locked() {
+            jq -r --arg n "$1" '.nodes[$n].locked | "github:\(.owner)/\(.repo)/\(.rev)"' flake.lock
+          }
+          nix build .#checks.x86_64-linux.session --print-build-logs \
+            --override-input nixpkgs "$(locked nixpkgs-stable)" \
+            --override-input home-manager "$(locked home-manager-stable)"

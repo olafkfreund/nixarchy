@@ -1603,6 +1603,10 @@ pkgs.testers.runNixOSTest {
     # hatch the assertion below points at -- a name goes in here with its
     # reason, the way omawrite is named in the sibling keybinding probe.
     expected_absent = set()
+    # Absent on nixos-26.05, where weekly.yml runs this check (#1199);
+    # modules/nixos.nix leaves the picker out there on purpose.
+    if not ${if pkgs ? hyprland-preview-share-picker then "True" else "False"}:
+        expected_absent.add("hyprland-preview-share-picker")
     missing = [
         n for n in named
         if n not in expected_absent

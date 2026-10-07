@@ -2564,6 +2564,7 @@
           graphics-mesa-clash = import ./tests/graphics-mesa-clash.nix {
             pkgs = pkgsFor.${system};
             reference = self.nixosConfigurations.reference;
+            hyprMesa = inputs.hyprland.inputs.nixpkgs.legacyPackages.${system}.mesa;
           };
 
           # Every package nixarchy adds to environment.systemPackages unasked

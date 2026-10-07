@@ -1267,7 +1267,9 @@ in
     # and a tie fails evaluation. A user's plain assignment still wins; their
     # own mkDefault does not.
     # Only where hyprMesaFits: on an older-glibc system (nixos-26.05) its own
-    # Mesa stays, which Hyprland's newer glibc can still load (#1211).
+    # Mesa stays, which Hyprland's newer glibc can still load (#1211). There
+    # nixpkgs' own mkDefault is the only definition, so a user's mkDefault
+    # ties with it rather than losing quietly.
     hardware.graphics = lib.mkIf hyprMesaFits {
       package = lib.mkOverride 900 hyprPkgs.mesa;
       package32 = lib.mkOverride 900 hyprPkgs.pkgsi686Linux.mesa;

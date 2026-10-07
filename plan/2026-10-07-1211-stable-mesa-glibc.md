@@ -67,6 +67,16 @@ handed over cleanly, and the whole session script finished, so Hyprland runs
 on 26.05's own Mesa (`mesa-26.1.8`) and the spec's GBM backend risk did not
 materialise. Unstable `vm` and `reference` kept the identical Mesa path.
 
+*Review fixes (recorded with the code):* the first docs edit went through
+the editor's formatter, which rewrote 53 lines of `docs/internals/flake.md`
+and turned two mid-paragraph `#1070`/`#221` lines into H1 headings. The file
+is restored from `main` with only the new paragraph added, and its glibc
+number corrected to 2.44. `tests/graphics-mesa-clash.nix` (not in the
+original plan) takes Hyprland's Mesa and expects fixtures A and B to fire only
+while that Mesa is the system one, so the check holds on 26.05 too. The
+comment in `modules/nixos.nix` notes that a user's `mkDefault` ties with
+nixpkgs' where the rule is false.
+
 ## Rollback
 
 Revert the PR. Stable machines lose the greeter again; unstable is untouched

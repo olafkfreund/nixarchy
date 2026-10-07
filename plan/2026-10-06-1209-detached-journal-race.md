@@ -81,6 +81,12 @@ VM test because its logs are never byte-identical.
 - `nix build .#checks.x86_64-linux.session-journal-race` passes.
 - `nix fmt -- --ci`, statix, deadnix: clean.
 
+*Result (2026-10-07, p620):* three consecutive `checks.session` runs on the
+fixed code (each after deleting the previous output) all passed, with both
+detached cases green: the refusal reaches `nixarchy-apply --log`, and the
+`ALLOW_BRANCH_DEPLOY=1` run does not see the previous run's refusal. Before the
+fix, this section failed 2 of 3 local runs and twice in CI.
+
 ## Rollback
 
 Revert the PR. `--log` returns to the invocation filter, and the race returns

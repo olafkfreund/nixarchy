@@ -63,6 +63,18 @@ spec: spec/2026-10-06-1209-detached-journal-race.md
    test that reads the wrong run passes the first case and fails the second,
    so both must be checked.
 
+*Review fixes (recorded with the code):* `--timestamp=unix` rounds the start
+down to the whole second, so the previous run's last lines, or the stop that
+precedes a new `--detach`, could fall inside the window. It is now
+`--timestamp=us+utc` (microseconds), read only when no `--invocation` was
+given and `rebuild_state` reports a live run, so a dead unit still falls back
+to `-n 200`. `tests/apply-staging.nix` (not in the original plan) gains a
+stub answer for `InactiveExitTimestamp` and a case asserting `--since <µs>`,
+the identifier match and no `--invocation`. The stub test caught the gap
+itself (`--since exited`) before the fix. Repeat runs of `checks.session`
+delete the previous output instead of using `--rebuild`, which fails on any
+VM test because its logs are never byte-identical.
+
 ## Tests
 
 - 3 consecutive green `checks.session` runs on p620.

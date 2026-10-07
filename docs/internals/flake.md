@@ -39,6 +39,7 @@ it. This page is read when somebody follows a pointer.
 ## `flake.nix`
 
 <a id="for-the-person-who-has-never-seen-this-repository-"></a>
+
 ### For the person who has never seen this repository and types
 
 ```nix
@@ -62,6 +63,7 @@ so `#try` detects that case with a dry-run and falls back to the
 release download instead of leaning on these substituters.
 
 <a id="deliberately-unpinned-unlike-hyprland-sops-nix-and"></a>
+
 ### Deliberately UNPINNED, unlike hyprland, sops-nix and microvm below, and
 
 ```nix
@@ -80,6 +82,7 @@ attrs a few updates from now -- which is the exact failure pinning is
 supposed to prevent. Pin this the day nixpkgs is pinned, and not before.
 
 <a id="hyprland-from-hyprwm-tracking-their-branch-not-a"></a>
+
 ### Hyprland from hyprwm, tracking their branch — not a pinned commit
 
 ```nix
@@ -113,7 +116,7 @@ moves it, and `pkgs/flake-pins.py` reports it as a `ref` rather than a frozen
 What this buys, and what it costs, measured rather than assumed:
 
 | | hyprwm's flake | nixpkgs |
-|---|---|---|
+| --- | --- | --- |
 | speed to a fix | their branch, same day | nixpkgs' packaging lag |
 | built or fetched | **fetched** — `hyprland.cachix.org` | fetched — `cache.nixos.org` |
 | inputs fetched at update | **~60**, including a second nixpkgs | none |
@@ -146,6 +149,7 @@ configures Hyprland through the Lua API that landed in 0.55, and that is a
 requirement rather than a preference.
 
 <a id="hyprlands-mesa-follows-its-own-nixpkgs"></a>
+
 ### Hyprland's Mesa follows its own nixpkgs (#1154, #1158)
 
 Hyprland loads its GPU drivers into its own process, not into a separate one
@@ -165,6 +169,18 @@ drivers' glibc is newer than the compositor's.
 hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
 hardware.graphics.package = lib.mkOverride 900 hyprPkgs.mesa;
 ```
+
+**Only where the system's glibc is at least as new (#1211).** That driver is
+system-wide, so every OpenGL program on the machine loads it, not only
+Hyprland. On a nixos-26.05 machine Hyprland's pin is still unstable (the
+installer template never overrides it), so its Mesa needed glibc 2.43 while
+everything built from 26.05 had 2.42. The SDDM greeter could not load it, and
+the machine had no login screen. glibc is backward compatible, not forward, so
+the override applies only when
+`lib.versionAtLeast pkgs.glibc.version hyprPkgs.glibc.version`. Where it
+does not, the system keeps nixpkgs' own Mesa, which the greeter, the user's
+programs and Hyprland's newer glibc can all load. On unstable the two glibcs
+match and nothing changes.
 
 **Not `lib.mkDefault`.** `nixos/modules/hardware/graphics.nix` sets both
 options at `mkDefault` itself, unconditionally once `hardware.graphics.enable`
@@ -206,6 +222,7 @@ its glibc your own job to keep in step with Hyprland's, same as the overlay
 case above. `checks.graphics-mesa-clash` holds the pairing.
 
 <a id="declarative-flatpaks-for-the-software-nixpkgs-genu"></a>
+
 ### Declarative Flatpaks, for the software nixpkgs genuinely does not carry
 
 ```nix
@@ -237,6 +254,7 @@ No `follows`: v0.7.0 has no inputs at all, which makes this the cheapest
 kind of dependency -- nothing to override, nothing to drift.
 
 <a id="zen-is-not-in-nixpkgs-and-upstream-maintains-its-o"></a>
+
 ### Zen is not in nixpkgs and upstream maintains its own flake, which tracks
 
 ```nix
@@ -264,6 +282,7 @@ to become MANDATORY the day nixpkgs drops its `ffmpeg_7` formal, when
 this rev's override starts throwing. Never track a branch here.
 
 <a id="the-rdp-server-behind-the-remote-desktop-feature-1"></a>
+
 ### The RDP server behind the remote-desktop feature (#159)
 
 ```nix
@@ -319,6 +338,7 @@ cargoHash does not depend on which nixpkgs supplies ffmpeg, and they
 publish no binary cache to forfeit by overriding it.
 
 <a id="declarative-secrets-adopted-for-one-concrete-reaso"></a>
+
 ### Declarative secrets, adopted for one concrete reason rather than as a
 
 ```nix
@@ -367,6 +387,7 @@ mkDefault rule in modules/services/default.nix never even arises here.
 tests/options.nix asserts the inertness rather than trusting this note.
 
 <a id="the-package-manager-panel-on-by-default-766"></a>
+
 ### The package manager panel, on by default (#766)
 
 ```nix
@@ -404,6 +425,7 @@ section 4) and would check nothing more.
    row, the default and the enable-once hook all name the plugin.
 
 <a id="the-podman-panel-wherever-podman-is-on-766"></a>
+
 ### The Podman panel, wherever podman is on (#766)
 
 ```nix
@@ -432,6 +454,7 @@ manifest.
 `nixarchy.podman`.
 
 <a id="the-dev-environments-panel-wherever-devenv-is-802"></a>
+
 ### The Dev environments panel, wherever devenv is (#802)
 
 ```nix
@@ -602,7 +625,7 @@ rm -rf ~/.config/omarchy/plugins/nixarchy.menu   # then log in again
 
 **The inputs follow.** Its only inputs are `nixpkgs` and `omarchy`
 (`flake = false`), so both follow nixarchy's and the lock gains one node. Since
-#1070 `omarchy` is also a build input of the `plugin` output, not checks
+# 1070 `omarchy` is also a build input of the `plugin` output, not checks
 alone: one file (`MenuModel.js`, about 18 KB) is copied into the store and
 imported by absolute path. The 128 MiB tree itself is not referenced.
 
@@ -826,13 +849,14 @@ panel is used.
    runs the grep again on the installed copy.
 
 <a id="221-222"></a>
+
 ### #221/#222
 
 ```nix
 microvm = {
 ```
 
-#221/#222: the foundation of the sandboxes epic. A guest whose
+# 221/#222: the foundation of the sandboxes epic. A guest whose
 `/nix/store` is a 9p share of the HOST's store -- `microvm.storeOnDisk
 = false`, computed by upstream itself the moment
 `microvm.shares` contains a `source = "/nix/store"` entry -- so no
@@ -868,6 +892,7 @@ machine that never asked for a VM at all. Paid because the alternative
 trade #221 already surveyed and rejected.
 
 <a id="which-nixarchy-built-this-machine-208-for-nixarchy"></a>
+
 ### Which nixarchy built this machine (#208), for nixarchy-version
 
 ```nix
@@ -892,6 +917,7 @@ exists when the source is not a git tree at all, hence the last
 fallback.
 
 <a id="vainfo-for-the-graphics-section"></a>
+
 ### vainfo, for the Graphics section
 
 ```nix
@@ -910,6 +936,7 @@ Bluetooth check reads /sys/class/bluetooth, and sysfs hands over
 the PCI address already in the form the bus IDs need.
 
 <a id="nixarchy-apps-first-then-the-top-level"></a>
+
 ### nixarchy-apps first, then the top level
 
 ```nix
@@ -928,6 +955,7 @@ installing bin/hey. Both were reported as absent
 on machines that had them.
 
 <a id="podman-info-podman-inspect-for-the-boxes-section"></a>
+
 ### podman info / podman inspect, for the Boxes section
 
 ```nix
@@ -946,6 +974,7 @@ and this list cannot; the Graphics section's comment in
 verify.sh makes the argument.
 
 <a id="not-built-here-upstreams-own-flake-re-exported-int"></a>
+
 ### Not built here -- upstream's own flake, re-exported into the overlay
 
 ```nix
@@ -969,6 +998,7 @@ for longer -- it reads cfg.apps.<name>.package instead of this
 overlay; see appBinary in modules/apps.nix.
 
 <a id="nixpkgs-retroarch-is-retroarch-with-cores-built-wi"></a>
+
 ### nixpkgs' `retroarch` is `retroarch-with-cores` built with an
 
 ```nix
@@ -987,6 +1017,7 @@ snes9x and genesis-plus-gx are unfree, hence bsnes and blastem
 for those systems.
 
 <a id="the-rdp-daemon-re-exported-from-its-own-flake-so-t"></a>
+
 ### The RDP daemon, re-exported from its own flake so the module that
 
 ```nix
@@ -1027,6 +1058,7 @@ Delete the file and the `overrideAttrs` together. When the input itself
 goes (see above), the patch goes with it.
 
 <a id="nixpkgs-is-on-0-3-0-whose-session-lock-aborts-on-d"></a>
+
 ### nixpkgs is on 0.3.0, whose session lock aborts on DPMS
 
 ```nix
@@ -1056,6 +1088,7 @@ something of its own keeps nixpkgs'.
 DELETE THIS once nixpkgs ships >= 0.3.1.
 
 <a id="the-boot-splash-and-nothing-else-on-the-disk-with-"></a>
+
 ### The boot splash, and nothing else on the disk with it
 
 ```nix
@@ -1082,6 +1115,7 @@ omarchy.plymouth already points at /etc/plymouth/themes/omarchy, so
 this output has no store references and costs only its own size.
 
 <a id="nix-run-github-olafkfreund-nixarchy-verify-from-in"></a>
+
 ### `nix run github:olafkfreund/nixarchy#verify`, from inside a running
 
 ```nix
@@ -1100,6 +1134,7 @@ Every answer ends up as text in that flake: the machine it produces
 belongs to the flake, not to this script.
 
 <a id="nix-run-release-notes-from-tag-to-ref-what-changed"></a>
+
 ### `nix run .#release-notes <from-tag> <to-ref>` -- what changed for
 
 ```nix
@@ -1121,6 +1156,7 @@ the question "what did this Omarchy release add and drop" already has
 an answer here, and two of them would disagree eventually.
 
 <a id="nix-run-devenv-presets-scaffolds-every-preset-in"></a>
+
 ### `nix run .#devenv-presets` -- every template the plugin ships
 
 ```nix
@@ -1165,6 +1201,7 @@ and `DEVENV_HOME` inside one temporary root, and compares the caller's allow
 list checksum before and after, failing if it moved.
 
 <a id="screencasts-of-a-real-session-scene-by-scene-see"></a>
+
 ### Screencasts of a real session, scene by scene -- see
 
 ```nix
@@ -1184,6 +1221,7 @@ every push.
                                    what the scene claims to show
 
 <a id="nix-run-update-rewrites-the-pinned-versions-and-ha"></a>
+
 ### `nix run .#update` -- rewrites the pinned versions and hashes in
 
 ```nix
@@ -1206,6 +1244,7 @@ pinned by hand WITHOUT an updateScript is still invisible to this.
 The one there was, grok-bot, was removed in #1201.
 
 <a id="a-vm-that-installs-onto-a-blank-disk-with-a-networ"></a>
+
 ### A VM that installs onto a blank disk, WITH a network -- which
 
 ```nix
@@ -1224,6 +1263,7 @@ and says so. The sizes come from the configuration itself so the
 check cannot drift away from what the VM actually asks for.
 
 <a id="the-front-door"></a>
+
 ### The front door
 
 ```nix
@@ -1248,6 +1288,7 @@ wizard itself from a baked answers file -- a test harness, and
 exactly the thing a person trying nixarchy must not get.
 
 <a id="two-runners-per-data-microvm-templates-nix-entry-b"></a>
+
 ### Two runners per data/microvm-templates.nix entry, both built by
 
 ```nix
@@ -1276,7 +1317,7 @@ there is only this one.
 
 machineOpts on the -tcg variant, and every entry is load-bearing:
 
-  - `pit = "on"`, `pic = "on"`. Upstream's default microvm machine
+- `pit = "on"`, `pic = "on"`. Upstream's default microvm machine
     sets both off, which is correct under KVM -- kvmclock is the
     guest's clock -- and fatal under TCG, which has no kvmclock:
     with no PIT, no PIC and no HPET on this machine type, early
@@ -1288,7 +1329,7 @@ machineOpts on the -tcg variant, and every entry is load-bearing:
     login prompt in 2m13s. `-cpu qemu64` wedged identically, so
     the CPU model was ruled out.
 
-  - `accel = "tcg"`, PINNED -- not upstream's `kvm:tcg` fallback
+- `accel = "tcg"`, PINNED -- not upstream's `kvm:tcg` fallback
     chain. The fallback is how the wedge above shipped unnoticed:
     qemu silently takes KVM wherever /dev/kvm exists (including
     inside a test VM on a host with nested virtualisation), so
@@ -1300,11 +1341,12 @@ machineOpts on the -tcg variant, and every entry is load-bearing:
     fallback back in: an artifact that never runs as what its
     name promises is how this bug lived long enough to gate a PR.
 
-  - the rest reproduce upstream's x86 defaults (machineOpts
+- the rest reproduce upstream's x86 defaults (machineOpts
     REPLACES the whole set, so omitting one is turning it off).
     `pcie = "on"` because the 9p shares sit on virtio-pci.
 
 <a id="the-same-vm-with-room-to-run-a-model"></a>
+
 ### The same VM with room to run a model
 
 ```nix
@@ -1318,10 +1360,10 @@ root, which is right for catching a broken desktop and wrong for
 anything to do with programs.nixarchy.localAi. Two reasons, and the
 second is the one that is not obvious:
 
-  - 8GB does not hold a useful model. qwen3:8b is 5.2GB of weights
+- 8GB does not hold a useful model. qwen3:8b is 5.2GB of weights
     before any cache.
 
-  - diskImage = null puts the root on a tmpfs, so the weights live in
+- diskImage = null puts the root on a tmpfs, so the weights live in
     RAM. They are then paid for twice, once to store and once to load,
     out of the same pool -- and the service is OOM-killed while every
     visible number says it had room. Observed, not theorised.
@@ -1366,6 +1408,7 @@ Boxes pulls images, so a vm-big run offline has a Distrobox panel that
 lists templates and cannot fetch one. Honest behaviour, not a fault.
 
 <a id="one-module-that-imports-the-machines-own-two-rathe"></a>
+
 ### One module that imports the machine's own two, rather than two
 
 ```nix
@@ -1388,6 +1431,7 @@ Nothing about the packages differs. Only the order does, and only
 the order has to.
 
 <a id="one-closure-per-template-shared-by-every-vm-a-user"></a>
+
 ### One closure per template, shared by every VM a user ever names from
 
 ```nix
@@ -1411,6 +1455,7 @@ Returns `declaredRunner`, upstream's own name for
 which is what `packages.<system>.microvm-<template>` has to be.
 
 <a id="both-images-against-the-budgets-recorded-in-instal"></a>
+
 ### Both images, against the budgets recorded in installer/cd.nix
 
 ```nix

@@ -23,7 +23,7 @@ nixpkgs' own Mesa (`graphics.nix`'s `mkDefault`).
 
 - **Unstable:** the pin and the system share a glibc, so the rule is true and
   nothing changes. #1158 stays fixed.
-- **26.05:** 2.42 < 2.43, so the rule is false. The system Mesa is 26.05's,
+- **26.05:** 2.42 < 2.44 (the pin on 2026-10-07; 2.43 when #1211 was found), so the rule is false. The system Mesa is 26.05's,
   which the greeter, the user's 26.05 OpenGL programs, and (by backward
   compatibility) Hyprland's newer glibc can all load.
 - **The #1158 direction** (a compositor older than the system) is the case the

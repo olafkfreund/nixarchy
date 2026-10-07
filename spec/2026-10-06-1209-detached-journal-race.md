@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1209
 intent: intent/2026-10-06-1209-detached-journal-race.md
 ---

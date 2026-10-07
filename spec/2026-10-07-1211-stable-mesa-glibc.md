@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1211
 intent: intent/2026-10-07-1211-stable-mesa-glibc.md
 ---

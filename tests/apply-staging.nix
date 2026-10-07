@@ -241,6 +241,7 @@ pkgs.runCommand "nixarchy-apply-staging"
           printf 'ExecMainExitTimestampMonotonic=%s\n' "''${UNIT_FINISHED:-0}"
           case " $* " in *" -p InvocationID "*) printf 'InvocationID=%s\n' "''${UNIT_INVOCATION:-}" ;; esac
           ;;
+        *" -p InactiveExitTimestamp "*) echo "''${UNIT_STARTED:-}" ;;
         *" show "*) echo "''${UNIT_STATE:-}" ;;
         *) echo "$*" >> "$sccalls" ;;
       esac
@@ -342,6 +343,20 @@ pkgs.runCommand "nixarchy-apply-staging"
       ok "apply --log scopes the panel's log to the current invocation"
     else
       bad "apply --log exited $log_rc or read more than the current invocation: $(cat "$PWD/log.out"); $(cat "$PWD/journal.calls" 2>/dev/null)"
+    fi
+    # #1209: with a start time, the run is read by time and identity, to the
+    # microsecond, and not by invocation (a fast exit can lose that field).
+    log_rc=0
+    UNIT_STATE=exited UNIT_RESULT=failed UNIT_CODE=1 UNIT_INVOCATION=abcd \
+      UNIT_STARTED='Wed 2026-10-07 06:03:19.246227 UTC' $apply --log > "$PWD/log.out" 2>&1 || log_rc=$?
+    calls=$(cat "$PWD/journal.calls" 2>/dev/null || true)
+    if [ "$log_rc" -eq 0 ] &&
+      grep -F -- '--since Wed 2026-10-07 06:03:19.246227 UTC' <<<"$calls" >/dev/null &&
+      grep -F -- 'SYSLOG_IDENTIFIER=nixarchy-rebuild' <<<"$calls" >/dev/null &&
+      ! grep -F -- '--invocation' <<<"$calls" >/dev/null; then
+      ok "apply --log reads the current run by its start time and identifier"
+    else
+      bad "apply --log exited $log_rc or did not scope by start time and identifier: $calls"
     fi
 
     panel=${../pkgs/rebuild-panel/RebuildState.qml}

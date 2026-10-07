@@ -784,8 +784,8 @@ pkgs.testers.runNixOSTest {
     missing_inv = machine.succeed(
         as_user("systemctl --user show -p InvocationID --value nixarchy-rebuild")).strip()
     assert missing_inv, "the missing-flake unit has no InvocationID"
-    invocation_journal(machine, as_user(
-        "journalctl --user -u nixarchy-rebuild --invocation=" + missing_inv + " --no-pager -o cat"),
+    # Through --log, the panel's own read of the current run (#1209).
+    invocation_journal(machine, as_user("nixarchy-apply --log"),
         "does not exist", missing_inv)
     print("a detached apply runs as nixarchy-rebuild, keeps its result, and logs to the journal")
     machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
@@ -810,10 +810,8 @@ pkgs.testers.runNixOSTest {
         inv = machine.succeed(
             as_user("systemctl --user show -p InvocationID --value nixarchy-rebuild")).strip()
         assert inv, "the detached unit has no InvocationID"
-        # --invocation, as nixarchy-apply's own log mode scopes it: this run only.
-        log = invocation_journal(machine, as_user(
-            "journalctl --user -u nixarchy-rebuild --invocation=" + inv + " --no-pager -o cat"),
-            expected, inv)
+        # What the panel copies: --log, scoped to this run only (#1209).
+        log = invocation_journal(machine, as_user("nixarchy-apply --log"), expected, inv)
         machine.succeed(as_user("systemctl --user reset-failed nixarchy-rebuild || true"))
         machine.succeed(as_user("systemctl --user stop nixarchy-rebuild || true"))
         return log

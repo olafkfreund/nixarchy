@@ -3400,7 +3400,7 @@ in
                       --json) json=1 ;;
                       --log) wantlog=1 ;;
                       --follow) follow=1 ;;
-                      --invocation) shift; invocation=''${1:?--invocation needs an id} ;;
+                      --invocation) shift; invocation=''${1:?--invocation needs an id}; asked=1 ;;
                       # Repeatable, <part>=<sha256>. Opt-in on purpose (#979,
                       # #967): a caller that checked a file says so, and one that
                       # did not is neither protected nor blocked. The other shape
@@ -3518,6 +3518,25 @@ in
                     # machine that has never detached -- the unit's whole history
                     # would be dumped, so it is capped.
                     jscope=()
+                    # The current run by its start time and identity, not by
+                    # invocation (#1209): a line its process writes just before
+                    # exiting can reach the journal without the invocation, but
+                    # never without the SyslogIdentifier --detach gives the unit.
+                    # Microseconds, not --timestamp=unix: that rounds down to the
+                    # second, and the previous run's last lines (or the stop that
+                    # precedes a new --detach) would fall inside the window.
+                    start=
+                    if [ -z "''${asked:-}" ] && [ -n "$invocation" ]; then
+                      start=$(systemctl --user show -p InactiveExitTimestamp --timestamp=us+utc --value nixarchy-rebuild 2>/dev/null || true)
+                    fi
+                    if [ -n "$start" ]; then
+                      set --
+                      if [ -n "$follow" ]; then set -- -f; fi
+                      exec journalctl --user --no-pager -o cat --since "$start" "$@" \
+                        _SYSTEMD_USER_UNIT=nixarchy-rebuild.service + \
+                        USER_UNIT=nixarchy-rebuild.service + \
+                        SYSLOG_IDENTIFIER=nixarchy-rebuild
+                    fi
                     if [ -n "$invocation" ]; then
                       jscope=(--invocation="$invocation")
                     else
@@ -3558,8 +3577,10 @@ in
                     # Rate limit off: a build log is bursty, and it is the log a
                     # failure needs. No --collect: it unloads a FAILED unit at once,
                     # which then reads Result=success -- the one result that matters.
+                    # SyslogIdentifier: --log finds this run's lines by it (#1209).
                     systemd-run --user --unit=nixarchy-rebuild \
                       -p RemainAfterExit=yes -p LogRateLimitIntervalSec=0 \
+                      -p SyslogIdentifier=nixarchy-rebuild \
                       --setenv=NIXARCHY_FLAKE="$flake" \
                       --setenv=ALLOW_BRANCH_DEPLOY="''${ALLOW_BRANCH_DEPLOY:-}" \
                       --setenv=XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \

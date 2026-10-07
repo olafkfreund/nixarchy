@@ -61,6 +61,12 @@ spec: spec/2026-10-07-1211-stable-mesa-glibc.md
   statix, deadnix: clean.
 - Step 3's stable run as above.
 
+*Result (2026-10-07, p620):* the stable session command passed end to end.
+The SDDM greeter started (`Greeter session started successfully`), the login
+handed over cleanly, and the whole session script finished, so Hyprland runs
+on 26.05's own Mesa (`mesa-26.1.8`) and the spec's GBM backend risk did not
+materialise. Unstable `vm` and `reference` kept the identical Mesa path.
+
 ## Rollback
 
 Revert the PR. Stable machines lose the greeter again; unstable is untouched

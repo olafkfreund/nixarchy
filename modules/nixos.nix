@@ -13,6 +13,11 @@ let
   # hardware.graphics block below.
   hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
 
+  # glibc is backward compatible, not forward: everything on the machine can
+  # load Hyprland's Mesa only if the system's glibc is at least as new. On
+  # nixos-26.05 it is older, and the greeter could not start (#1211).
+  hyprMesaFits = lib.versionAtLeast pkgs.glibc.version hyprPkgs.glibc.version;
+
   # #1163: while hardware.graphics.package is nixarchy's Mesa, a *different*
   # Mesa in extraPackages collides with it in buildEnv. Matched by pname, so an
   # overridden or i686 Mesa is caught too.
@@ -1261,7 +1266,11 @@ in
     # mkOverride 900, not mkDefault: graphics.nix sets these at mkDefault itself,
     # and a tie fails evaluation. A user's plain assignment still wins; their
     # own mkDefault does not.
-    hardware.graphics = {
+    # Only where hyprMesaFits: on an older-glibc system (nixos-26.05) its own
+    # Mesa stays, which Hyprland's newer glibc can still load (#1211). There
+    # nixpkgs' own mkDefault is the only definition, so a user's mkDefault
+    # ties with it rather than losing quietly.
+    hardware.graphics = lib.mkIf hyprMesaFits {
       package = lib.mkOverride 900 hyprPkgs.mesa;
       package32 = lib.mkOverride 900 hyprPkgs.pkgsi686Linux.mesa;
     };

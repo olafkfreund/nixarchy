@@ -166,6 +166,19 @@ hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatf
 hardware.graphics.package = lib.mkOverride 900 hyprPkgs.mesa;
 ```
 
+**Only where the system's glibc is at least as new (Issue #1211).** That
+driver is system-wide, so every OpenGL program on the machine loads it, not
+only Hyprland. On a nixos-26.05 machine Hyprland's pin is still unstable (the
+installer template never overrides it), so its Mesa needed a newer glibc
+(2.44 on 2026-10-07) than everything built from 26.05 (2.42). The SDDM
+greeter could not load it, and the machine had no login screen. glibc is
+backward compatible, not forward, so the override applies only when
+`lib.versionAtLeast pkgs.glibc.version hyprPkgs.glibc.version`. Where it does
+not, the system keeps nixpkgs' own Mesa, which the greeter, the user's
+programs and Hyprland's newer glibc can all load. The same rule covers a
+Hyprland bump that moves its glibc ahead of this flake's nixpkgs: the system
+Mesa is kept there too, until the two meet again.
+
 **Not `lib.mkDefault`.** `nixos/modules/hardware/graphics.nix` sets both
 options at `mkDefault` itself, unconditionally once `hardware.graphics.enable`
 is on -- which Hyprland turns on -- so a second `mkDefault` here ties with

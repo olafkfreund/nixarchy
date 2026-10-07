@@ -1,4 +1,8 @@
-{ pkgs, reference }:
+{
+  pkgs,
+  reference,
+  hyprMesa,
+}:
 # #1163: a second, different Mesa in hardware.graphics.extraPackages(32)
 # collides with nixarchy's own Mesa in buildEnv (both ship
 # share/glvnd/egl_vendor.d/*mesa.json). The assertions in modules/nixos.nix
@@ -34,6 +38,10 @@ let
 
   oursMesa = reference.config.hardware.graphics.package;
 
+  # The assertion guards Hyprland's Mesa only. Where the system keeps its own
+  # (an older system glibc, #1211) there is nothing for A and B to trip.
+  hyprInUse = oursMesa.outPath == hyprMesa.outPath;
+
   extend = modules: (reference.extendModules { modules = [ modules ]; }).config.assertions;
 
   has1163Failure =
@@ -42,7 +50,7 @@ let
   fixtures = {
     A = {
       assertions = extend { hardware.graphics.extraPackages = [ fakeMesa ]; };
-      expectFail = true;
+      expectFail = hyprInUse;
       mustContain = [
         "extraPackages"
         "hardware.graphics.package"
@@ -53,7 +61,7 @@ let
         hardware.graphics.enable32Bit = true;
         hardware.graphics.extraPackages32 = [ fakeMesa32 ];
       };
-      expectFail = true;
+      expectFail = hyprInUse;
       mustContain = [
         "extraPackages32"
         "hardware.graphics.package32"

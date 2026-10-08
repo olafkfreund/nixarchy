@@ -103,7 +103,6 @@
   "nixarchy-preview" = {
     class = "new";
     reason = "Not in upstream, where a config change is a pacman transaction with no dry run to look at. Builds nixosConfigurations.<host>.config.system.build.vm -- the same configuration re-evaluated under qemu-vm.nix -- and boots it in a window, on a managed disk that is refused when stale rather than silently reused.";
-    allow = "account-tools";
   };
   "nixarchy-reinstall-iso" = {
     class = "new";

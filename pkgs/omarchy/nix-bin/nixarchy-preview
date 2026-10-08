@@ -96,8 +96,8 @@ explain_kvm() {
       echo "  not in the 'kvm' group. The preview will run under software"
       echo "  emulation, SEVERAL TIMES SLOWER; the lag is the emulation, not"
       echo "  your configuration. To fix it:"
-      # shellcheck disable=SC2016  # $USER is theirs to expand, not ours
-      echo '    sudo usermod -aG kvm $USER    # then log out and back in'
+      echo '    users.users.<name>.extraGroups = [ "kvm" ];'
+      echo '  Rebuild the system, then log out and back in.'
       ;;
   esac
 }

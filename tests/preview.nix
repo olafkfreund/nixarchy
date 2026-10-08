@@ -141,6 +141,22 @@ pkgs.runCommand "nixarchy-preview" { } ''
   EOF
   bash dkt.sh
 
+  sed -n '/^explain_kvm()/,/^}/p' ${previewScript} > explain-kvm.sh
+  test -s explain-kvm.sh || { echo "explain_kvm is not in nixarchy-preview any more" >&2; exit 1; }
+  printf '%s\n' 'red() { printf "%s\n" "$1"; }' > kvm-advice.sh
+  cat explain-kvm.sh >> kvm-advice.sh
+  printf '%s\n' 'explain_kvm nogroup' >> kvm-advice.sh
+  bash kvm-advice.sh > kvm-advice
+  advice=$(cat kvm-advice)
+  case "$advice" in
+    *'users.users.<name>.extraGroups = [ "kvm" ];'*) ;;
+    *) echo "FAIL: KVM advice is not declarative" >&2; exit 1 ;;
+  esac
+  case "$advice" in
+    *usermod*) echo "FAIL: KVM advice still uses usermod" >&2; exit 1 ;;
+  esac
+  echo "preview KVM advice survives a rebuild"
+
   echo "the probes refuse what they must and only that"
 
   # ------------------------------------------------------------------------

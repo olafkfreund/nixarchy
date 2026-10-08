@@ -6,6 +6,24 @@ author: olafkfreund
 
 # Intent: a machine installed offline can still rebuild offline after a collection
 
+## Outcome after measuring (2026-10-08) — premise false, closed as documented
+
+The premise below does not hold. An offline install builds nothing: it copies
+the reference toplevel with `nixos-install --system` (`installer/install.sh`,
+the `/etc/nixarchy-reference-*` branch), and the per-machine initrd is identical
+across machines since stage 1 (`networking.hostName = ""`, `installer/host.nix`).
+The build environment the ISO seeds is in the *image's* closure, not the
+installed system's: two local reference toplevels (rev 494ce7f, ~2,500 paths
+each) contain no `stdenv-linux`, `kmod-*-dev`, `microcode-*` or `gnumake`. So
+the parts never reach the target store, there is nothing for a collection to
+remove, and `keep-derivations`/`keep-outputs` would keep nothing.
+
+The real gap — no offline rebuild at all after an offline install — is by
+design (the hardware configuration arrives with the first rebuild, #435). The
+approver chose to document it rather than root a build environment in every
+installed machine: one paragraph in `docs/manual/the-iso.md`. No spec or plan
+follows; that change is below the workflow's threshold.
+
 ## Problem
 
 The offline ISO installs a prebuilt reference closure (#436). Some derivations

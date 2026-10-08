@@ -72,6 +72,11 @@ boot every night, it works on a machine that has never had a network, and it is
 faster once you have it. `#iso-net` is a quarter of the download and asks you
 to get online first — its first screen offers Wi-Fi if there is no cable.
 
+Offline covers the install, not the first rebuild. `#iso` installs the system
+it carries by copying it, and carries no compiler to build a different one, so
+the first rebuild of your own configuration — which is when the detected
+`hardware-configuration.nix` takes effect — needs a network, once.
+
 No boot menu, no login prompt: the installer is what comes up.
 
 ![Selecting a keyboard layout](../img/installer/step-01-keyboard.png)

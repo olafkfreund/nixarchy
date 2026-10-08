@@ -143,7 +143,9 @@ confirm() { # confirm <prompt> <yes|no, when it cannot be asked>
 # The command each agent installs is its own id. Checked against PATH rather
 # than against a package database: what matters is whether omarchy-agent will
 # find it, and that is the same question.
-if command -v "$agent" &>/dev/null; then
+agent_cmd=$agent
+[[ $agent == antigravity ]] && agent_cmd=agy
+if command -v "$agent_cmd" &>/dev/null; then
   record
   exec omarchy-agent
 fi

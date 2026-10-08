@@ -1077,6 +1077,15 @@ of itself.
 the issue with the `epic` label, the README Roadmap row, and the milestone
 with its children. Do all three in the same change.
 
+**A batch issue is closed when every group has a merged PR, not when the
+cross-references stop.** #1098 was closed by hand after its fifth `Refs #1098`
+PR merged, with its "Stale scripts" group approved, four steps committed — and
+on a branch that had never been pushed. GitHub cannot see a local branch, so
+nothing in the issue's timeline said a group was missing; four user-facing
+script bugs sat on `main` for a week until a worktree cleanup found them.
+Before closing one, list its groups against merged PRs by name, and push a
+group's branch the day its plan is approved.
+
 ### What the board does on its own
 
 - **"Auto-add sub-issues" is on.** Adding a tracked epic pulls in its

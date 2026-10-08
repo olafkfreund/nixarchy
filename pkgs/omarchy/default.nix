@@ -1036,6 +1036,12 @@ stdenvNoCC.mkDerivation {
                     "uwsm-app -- $binary"
                 done
 
+                for entry in 'service-spotify spotify' 'service-signal signal-desktop' 'ai-chatgpt chatgpt'; do
+                  read -r script binary <<< "$entry"
+                  substituteInPlace "$out/share/omarchy/bin/omarchy-install-$script" \
+                    --replace-fail "uwsm-app -- /usr/bin/$binary" "uwsm-app -- $binary"
+                done
+
                 # The App Library's Remove, for an app that came from the store.
                     #
                     # omarchy-remove-launcher-entry handles four cases that all work here --

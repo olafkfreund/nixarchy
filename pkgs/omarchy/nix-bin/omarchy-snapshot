@@ -172,7 +172,7 @@ case "${1:-list}" in
     # config file, and the honest answer to that is a file manager pointed at
     # a directory, not a procedure that can lose a day's work.
     line=$(snapper --config home list --columns number,date,description 2>/dev/null |
-      tail -n +3 | gum choose --header "Restore from which snapshot?") || exit 0
+      tail -n +3 | awk '$1 != 0' | gum choose --header "Restore from which snapshot?") || exit 0
     [ -n "$line" ] || exit 0
     num=$(echo "$line" | awk '{print $1}')
     path="/home/.snapshots/$num/snapshot"

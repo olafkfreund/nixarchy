@@ -169,10 +169,11 @@ let
   # source bootstrap (hex0, mescc-tools) and dies. 677 derivations, of which
   # the top three are this machine's own initrd and boot config.
   #
-  # This is why the offline image is not published at the moment; see
-  # .github/workflows/release.yml. The NET image is unaffected and is what
-  # people install from: it fetches whatever it lacks, so the same divergence
-  # costs a download instead of the install.
+  # This withdrew the offline image (#430). It is published again since
+  # #469, because the install no longer builds: stage 3 of #436 copies the
+  # baked toplevel instead (install.sh, the nixarchy-reference-* branch). The
+  # NET image fetches whatever it lacks, so there the same divergence costs a
+  # download instead of the install.
   #
   # Worth knowing before anyone tries to finish this: an official offline
   # install of a CUSTOM configuration is not a thing NixOS supports. Its own

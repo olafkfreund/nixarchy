@@ -2086,7 +2086,7 @@ pkgs.testers.runNixOSTest {
 
     enabled = False
     for _ in range(24):
-        rows = json.loads(aim("omarchy-plugin-list --json"))
+        rows = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
         enabled = any(r["id"] == "olafkfreund.ai-mirror" and r["enabled"] for r in rows)
         if enabled:
             break
@@ -2217,8 +2217,10 @@ pkgs.testers.runNixOSTest {
     # guarantees this call happened. isEnabled() in PluginRegistry.qml reads
     # the toggle off the SAME in-memory config setEnabled() just mutated, not
     # a stale on-disk shell.json, so omarchy-plugin-list --json (which wraps
-    # `omarchy-shell shell listPlugins`) sees it live.
-    plugins = json.loads(aim("omarchy-plugin-list --json"))
+    # `omarchy-shell shell listPlugins`) sees it live. 10 s, not the default
+    # 2 s: right after an owe hand-off the shell can be too busy to answer in
+    # time (#1220), the same race #1189 fixed for the menu.
+    plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
     background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
     assert background is not None and not background["enabled"], (
         f"the background plugin is still enabled while owe's renderer holds "
@@ -2258,7 +2260,7 @@ pkgs.testers.runNixOSTest {
     # (shell.c: `omarchy-shell shell setPluginEnabled omarchy.background
     # true`) once the shell has the layer back. omarchy-plugin-list --json
     # is the CLI the menu and the doctor both already use to read this back.
-    plugins = json.loads(aim("omarchy-plugin-list --json"))
+    plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
     background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
     assert background is not None and background["enabled"], (
         f"the background plugin is not enabled after owe handed the still "
@@ -2353,7 +2355,7 @@ pkgs.testers.runNixOSTest {
     # that write landed and failed its cmp (#1156 CI).
     for _ in range(30):
         status = owe_status()
-        plugins = json.loads(aim("omarchy-plugin-list --json"))
+        plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
         background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
         if not status.get("render_alive") and background and background["enabled"]:
             break

@@ -58,6 +58,8 @@ rebuild asks for your password through the Omarchy dialog.
 
 ![The package manager: across its tabs, then one app ticked and the line that writes](../img/features/pkg.gif)
 
+![The Services tab: podman ticked, the footer saying it was enabled in services.nix and is queued but never applied, and the key sheet opened and closed over it](../img/features/services.gif)
+
 ![The package manager's Apps tab: curated apps and services, with what each one turns on](../img/plugins/pkg-apps.jpg)
 
 ![Searching nixpkgs for a package](../img/plugins/pkg-search.jpg)
@@ -156,6 +158,8 @@ your AI agent to fill in the create form. It is **Trigger ▸ Sandbox** now,
 and `nixarchy vm` is still there in a terminal.
 
 ![A MicroVM started from the bar popup, its build streaming into the panel until it runs in the background](../img/features/microvm.gif)
+
+![The create form's Template field emptied to list six templates by name (agent, agent-claude, hyprland, k3s, node, persistent), the cursor moving down the list, then narrowed to the agent templates and to node, and widened again](../img/features/microvm-templates.gif)
 
 ![The MicroVMs menu: two disposable VMs running and a permanent one pending apply, in one list](../img/plugins/microvm-panel.jpg)
 

@@ -798,12 +798,105 @@ let
 
       # The key sheet: a full repaint, and the thing a reader wants next
       # anyway. Diversity is earned with panels that change, not with steps.
-      machine.send_key("question")
+      machine.send_key("?")
       machine.sleep(2)
       shot("pkg-keys", hold=4)
       machine.send_key("esc")
       machine.sleep(1)
 
+      machine.send_key("esc")
+      machine.sleep(1)
+    '';
+
+    services = ''
+      # ---- enabling a service ----------------------------------------------
+      # The Services tab, which the pkg scene crosses and never uses. Same
+      # claim as the Apps tab, a different file: a pick becomes a line in
+      # services.nix, and nothing is built until you apply.
+      user("omarchy-shell shell toggle nixarchy.pkg", timeout=30)
+      machine.sleep(3)
+      shot("services-apps", hold=4)
+
+      # `l` moves a tab (Menu.qml), and Services is the next one along.
+      machine.send_key("l")
+      machine.sleep(2)
+      shot("services-tab", hold=5)
+
+      # Two rows down, onto a row with two states for Space to toggle (podman
+      # in the first recording; the gate does not depend on which).
+      machine.send_key("j")
+      machine.send_key("j")
+      machine.sleep(1)
+      machine.send_key("spc")
+      machine.sleep(2)
+      shot("services-queued", hold=6)
+
+      # The key sheet opening and closing over the queued pick: pkg's repaint,
+      # since three shots scored 2 of 7 transitions. Not the Selection tab --
+      # it lists packages, so after a service tick it says "no packages in
+      # your nixarchy selection yet". "?", not "question": the driver maps the
+      # character to shift-0x35, but passes a name to QEMU's sendkey as is,
+      # and QEMU silently drops one it does not know.
+      machine.send_key("?")
+      machine.sleep(2)
+      shot("services-keys", hold=4)
+      machine.send_key("esc")
+      machine.sleep(2)
+      shot("services-still-queued", hold=4)
+
+      machine.send_key("esc")
+      machine.sleep(1)
+    '';
+
+    microvm-templates = ''
+      # ---- choosing a MicroVM template --------------------------------------
+      # The microvm scene shows one guest booting; this shows the CHOICE.
+      # data/microvm-templates.nix has nine templates and the create form's
+      # picker shows six of them, sorted by name (CreateForm.qml slices to 6),
+      # so shell and python are not among them on an empty field. It stops at
+      # the choice: microvm.gif already films creating one. Nothing starts, so
+      # no /dev/kvm assert -- with -cpu host removed the guest had one anyway.
+
+      # Opened by IPC, which Menu.qml documents: no guessed key, and nothing
+      # typed into a field that holds the keyboard.
+      user(
+          "omarchy-shell shell toggle nixarchy.microvm "
+          "'{\"create\":true}'",
+          timeout=30,
+      )
+      machine.sleep(3)
+      shot("microvm-create", hold=4)
+
+      # Down twice reaches Template (Kind, Name, Template). The field opens
+      # holding "shell", and the picker lists only templates matching the
+      # field (Model.js templatesMatching) -- so the first recording showed
+      # one template. Emptying it is what puts the choice on screen.
+      machine.send_key("down")
+      machine.send_key("down")
+      machine.sleep(1)
+      for _ in range(5):
+          machine.send_key("backspace")
+      machine.sleep(2)
+      shot("microvm-templates", hold=6)
+
+      machine.send_key("down")
+      machine.send_key("down")
+      machine.sleep(2)
+      shot("microvm-templates-moved", hold=4)
+
+      # Narrowing and widening redraw the whole list; a highlight moving one
+      # row does not clear the 2% RMSE floor on its own.
+      for query in ("agent", "node"):
+          machine.send_chars(query)
+          machine.sleep(2)
+          shot(f"microvm-templates-{query}", hold=4)
+          for _ in query:
+              machine.send_key("backspace")
+          machine.sleep(2)
+          shot(f"microvm-templates-after-{query}", hold=3)
+
+      machine.send_key("esc")
+      machine.sleep(1)
       machine.send_key("esc")
       machine.sleep(1)
     '';
@@ -1015,6 +1108,35 @@ let
       minDistinct = 4;
       online = true;
       extraNode = panelExtras;
+    };
+
+    # #1223. Neither needs podman or boxes, so the base node.
+    services = {
+      script = segments.services;
+      # A regex, not one service name: which row the cursor lands on is a fact
+      # about the catalogue's order. " in" is load-bearing: without it the
+      # toast's "not enabled yet" satisfies the gate on its own. "Services"
+      # is a tab name, on screen from the first frame: it proves the panel
+      # opened, and the line after it is the one that needs the tick.
+      expects = [
+        "Services"
+        "enabled [a-z0-9-]+ in"
+      ];
+      minDistinct = 4;
+      extraNode = { };
+    };
+
+    microvm-templates = {
+      script = segments.microvm-templates;
+      # Two names on screen only once the Template field is emptied (it opens
+      # holding "shell"), and not substrings of each other. Not python: the
+      # picker's six, sorted, stop at persistent.
+      expects = [
+        "hyprland"
+        "persistent"
+      ];
+      minDistinct = 4;
+      extraNode = { };
     };
 
     boxes = {

@@ -2242,19 +2242,21 @@ pkgs.testers.runNixOSTest {
         "a decode failure, or a committed buffer nothing is actually in")
     print("owe: the desktop series moves and no frame is near-black")
 
-    # 3. Back to the still this theme started with. switch_to_shell() hands
-    # the background plugin the layer back and releases the renderer.
+    # 3. Back to the still this theme started with. OWE 0.2.10 keeps the
+    # renderer warm for a minute after handing the layer back to the shell.
     aim(f"omarchy-theme-bg-set {original_background}")
     status = None
     for _ in range(30):
         status = owe_status()
-        if status.get("source_kind") not in ("video", "gif") and not status.get("render_alive"):
+        if status.get("source_kind") not in ("video", "gif") and status.get("engine") == "shell":
             break
         machine.sleep(2)
     assert status is not None and status.get("source_kind") not in ("video", "gif"), (
         f"owe status still reports a video/gif source after setting a still back: {status}")
-    assert not status.get("render_alive"), (
-        f"owe's renderer is still alive after switching back to a still: {status}")
+    assert status.get("engine") == "shell", (
+        f"owe's renderer still owns the layer after switching back to a still: {status}")
+    assert status.get("render_alive"), (
+        f"owe did not keep its renderer warm after switching back to a still: {status}")
 
     # owed's switch_to_shell() re-enables the background plugin itself
     # (shell.c: `omarchy-shell shell setPluginEnabled omarchy.background
@@ -2265,7 +2267,7 @@ pkgs.testers.runNixOSTest {
     assert background is not None and background["enabled"], (
         f"the background plugin is not enabled after owe handed the still "
         f"back to the shell: {background}")
-    print("owe: back to the original still, renderer released, background "
+    print("owe: back to the original still, renderer warm, background "
           "plugin enabled again")
 
     # 4. Lock with a video background set, which is what makes LockView load

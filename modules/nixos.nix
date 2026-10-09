@@ -620,6 +620,11 @@ in
         cliamp is, and is included: it arrived after this was first written.
         lazydocker is already a runtime dependency.
 
+        gliff, Omarchy's Hyprland remote desktop over ssh, is included: it is in
+        upstream's base packages rather than its preinstalls, and lives here so
+        it can be left out the same way. A machine you connect *to* also needs
+        `services.openssh.enable`.
+
         Turning this off is the declarative Remove > Preinstalls.
       '';
     };
@@ -931,6 +936,7 @@ in
               "gnome-disk-utility"
               "sushi"
               "cliamp"
+              "gliff"
             ];
           in
           lib.all (n: builtins.elem n known) cfg.preinstallsExclude;
@@ -948,10 +954,11 @@ in
               "gnome-disk-utility"
               "sushi"
               "cliamp"
+              "gliff"
             ] cfg.preinstallsExclude
           )
           + ". The set is: pinta libreoffice xournalpp obs-studio moonlight-qt "
-          + "kdenlive gnome-disk-utility sushi cliamp.";
+          + "kdenlive gnome-disk-utility sushi cliamp gliff.";
       }
       {
         # versionAtLeast, not string >=: Nix compares strings lexicographically,
@@ -1514,6 +1521,9 @@ in
                 # written, so the keybinding had been failing on a package that was
                 # available the whole time.
                 inherit (pkgs) cliamp;
+
+                # install/omarchy-base.packages names it (omacom/omarchy#14712).
+                inherit (pkgs) gliff;
               } cfg.preinstallsExclude
             )
           )

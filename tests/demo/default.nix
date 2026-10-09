@@ -822,14 +822,26 @@ let
       machine.sleep(2)
       shot("services-tab", hold=5)
 
-      # Two rows down: the first list has a settings row Space cannot toggle,
-      # and a tick that does not land looks exactly like a wrong gate.
+      # Two rows down, onto a row with two states for Space to toggle (podman
+      # in the first recording; the gate does not depend on which).
       machine.send_key("j")
       machine.send_key("j")
       machine.sleep(1)
       machine.send_key("spc")
       machine.sleep(2)
       shot("services-queued", hold=6)
+
+      # Selection lists what is queued, so the pick is visible waiting for
+      # apply; the key sheet after it is pkg's repaint. Three shots scored 2
+      # of 7 transitions, and each of these redraws the whole panel.
+      machine.send_key("l")
+      machine.sleep(2)
+      shot("services-selection", hold=5)
+      machine.send_key("question")
+      machine.sleep(2)
+      shot("services-keys", hold=4)
+      machine.send_key("esc")
+      machine.sleep(1)
 
       machine.send_key("esc")
       machine.sleep(1)
@@ -1085,11 +1097,11 @@ let
     services = {
       script = segments.services;
       # A regex, not one service name: which row the cursor lands on is a fact
-      # about the catalogue's order. The second line is provisional -- confirm
-      # it against the first recording's verify frames.
+      # about the catalogue's order. " in" is load-bearing: without it the
+      # toast's "not enabled yet" satisfies the gate on its own.
       expects = [
         "Services"
-        "enabled [a-z0-9-]+"
+        "enabled [a-z0-9-]+ in"
       ];
       minDistinct = 4;
       extraNode = { };

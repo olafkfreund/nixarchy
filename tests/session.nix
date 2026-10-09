@@ -2267,7 +2267,7 @@ pkgs.testers.runNixOSTest {
     assert background is not None and background["enabled"], (
         f"the background plugin is not enabled after owe handed the still "
         f"back to the shell: {background}")
-    print("owe: back to the original still, renderer released, background "
+    print("owe: back to the original still, renderer warm, background "
           "plugin enabled again")
 
     # 4. Lock with a video background set, which is what makes LockView load

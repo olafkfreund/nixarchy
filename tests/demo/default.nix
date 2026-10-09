@@ -831,17 +831,16 @@ let
       machine.sleep(2)
       shot("services-queued", hold=6)
 
-      # Selection lists what is queued, so the pick is visible waiting for
-      # apply; the key sheet after it is pkg's repaint. Three shots scored 2
-      # of 7 transitions, and each of these redraws the whole panel.
-      machine.send_key("l")
-      machine.sleep(2)
-      shot("services-selection", hold=5)
+      # The key sheet opening and closing over the queued pick: pkg's repaint,
+      # since three shots scored 2 of 7 transitions. Not the Selection tab --
+      # it lists packages, so after a service tick it says "no packages in
+      # your nixarchy selection yet", and it focuses a field that eats `?`.
       machine.send_key("question")
       machine.sleep(2)
       shot("services-keys", hold=4)
       machine.send_key("esc")
-      machine.sleep(1)
+      machine.sleep(2)
+      shot("services-still-queued", hold=4)
 
       machine.send_key("esc")
       machine.sleep(1)

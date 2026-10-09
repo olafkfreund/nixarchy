@@ -67,6 +67,13 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
      - open the create form with
        `omarchy-shell shell toggle nixarchy.microvm '{"create":true}'`;
      - `shot`, then three rounds of `down` + `shot`, then `esc`.
+     - **Deviation, found by the first recording:** the Template field opens
+       holding `shell`, and the picker lists only templates matching the
+       field (`Model.js` `templatesMatching`). So it showed one template, and
+       Down only moved focus. The scene instead goes Down twice to Template,
+       empties the field (the first six: shell, hyprland, python, podman,
+       node, agent), moves twice, types `agent` to narrow, and clears it
+       again. Narrowing and widening are the repaints.
    - Fix the old comment's "carries eight": there are nine templates now, and
      the picker shows the first six (`CreateForm.qml:73`).
    - Add `sceneDefs.microvm-templates` with `minDistinct = 4;` and
@@ -76,8 +83,9 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
    - Check that the MicroVM panel is visible on the base node at all. If it
      is gated on a service, enable that service in `extraNode` and note it
      here.
-   → Verify, red-first twice. First, remove the `down` presses: the second
-   name never appears, so `expects` refuses. Second, remove `-cpu host`: the
+   → Verify, red-first twice. First, remove the first `backspace` loop: the
+   field keeps `shell`, so neither name appears and `expects` refuses (the
+   Down presses were the old break, but they cannot vary the names). Second, remove `-cpu host`: the
    scene's own assert fails with its message. Capture both, restore, and
    re-record green.
    Traps: the same as step 1.
@@ -105,7 +113,7 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
 | `nix run .#demo-record -- services` | under 1 MB; both `expects` lines found; diversity ≥ 4 |
 | … with `spc` removed | refused on `expects` |
 | `nix run .#demo-record -- microvm-templates` | under 1 MB; both names found; diversity ≥ 4 |
-| … with the `down` presses removed | refused on `expects` |
+| … with the field not emptied | refused on `expects` |
 | … without `-cpu host` | the scene's `/dev/kvm` assert fails |
 | `nix fmt -- --ci`, statix, deadnix | clean |
 

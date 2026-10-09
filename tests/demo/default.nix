@@ -872,15 +872,37 @@ let
           timeout=30,
       )
       machine.sleep(3)
-      shot("microvm-create", hold=5)
+      shot("microvm-create", hold=4)
 
-      # Each move redraws the inline picker, which earns a diversity score --
-      # a highlighted row alone does not clear a 2% RMSE floor.
-      for n in ("two", "three", "four"):
-          machine.send_key("down")
-          machine.sleep(2)
-          shot(f"microvm-template-{n}", hold=4)
+      # Down twice reaches Template (Kind, Name, Template). The field opens
+      # holding "shell", and the picker lists only templates matching the
+      # field (Model.js templatesMatching) -- so the first recording showed
+      # one template. Emptying it is what puts the choice on screen.
+      machine.send_key("down")
+      machine.send_key("down")
+      machine.sleep(1)
+      for _ in range(5):
+          machine.send_key("backspace")
+      machine.sleep(2)
+      shot("microvm-templates", hold=6)
 
+      machine.send_key("down")
+      machine.send_key("down")
+      machine.sleep(2)
+      shot("microvm-templates-moved", hold=4)
+
+      # Narrowing and widening redraw the whole list; a highlight moving one
+      # row does not clear the 2% RMSE floor on its own.
+      machine.send_chars("agent")
+      machine.sleep(2)
+      shot("microvm-templates-agent", hold=5)
+      for _ in range(5):
+          machine.send_key("backspace")
+      machine.sleep(2)
+      shot("microvm-templates-all", hold=4)
+
+      machine.send_key("esc")
+      machine.sleep(1)
       machine.send_key("esc")
       machine.sleep(1)
     '';

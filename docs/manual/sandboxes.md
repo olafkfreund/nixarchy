@@ -16,7 +16,7 @@ booted with your host's `/nix/store` mounted read-only over 9p rather than
 copied into a disk image — a sandbox costs megabytes, not gigabytes, and the
 packages inside it are the same store paths as the ones outside it.
 
-![nixarchy vm templates listing shell, python, podman and persistent; vm create demo --template shell; vm list; then vm run booting the guest through systemd to "Welcome to NixOS 26.11", automatic login as dev, and uname -a answering from inside the guest](../img/features/microvm.gif)
+![The MicroVMs panel running demo-shell: the guest's closure copied and built, streaming into the panel until it reports the VM running in the background](../img/features/microvm.gif)
 
 ## What it is not
 

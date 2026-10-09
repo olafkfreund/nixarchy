@@ -328,10 +328,14 @@ What IS covered, and it is more than it sounds:
   `tests/options.nix` drives that guard against both a good and an empty
   rendered config.
 
-What is left is a client connecting and seeing a desktop. That is a step in
-`pkgs/verify.sh` for a human, and it is written down here rather than left
-implicit because a documented hole gets tested by a person and an
-undocumented one gets tested by a user (#1015; connecting out is #1016).
+What is left is an RDP client connecting and seeing a desktop. That is tested
+nowhere -- `pkgs/verify.sh` has no RDP step -- and it is written down here
+rather than left implicit because a documented hole gets tested by a person
+and an undocumented one gets tested by a user (#1015; connecting out is
+#1016). gliff, the other remote-desktop tool, is covered short of its ssh
+hop: `checks.session` streams from its server over loopback TCP to a client
+that decodes frames on the CPU tier, and `pkgs/verify.sh` has a row for the
+GPU tier (#1226). The ssh hop is ssh's, and the session VM runs no sshd.
 
 Worth knowing before you try to close it: `nixarchy secret enroll` itself
 cannot be driven in a sandbox either. It reads the hostname from

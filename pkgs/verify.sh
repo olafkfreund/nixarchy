@@ -1183,6 +1183,23 @@ for app in nautilus pinta gnome-disks xournalpp; do
   fi
 done
 
+# ---- gliff's GPU tier ----------------------------------------------------
+# checks.session runs gliff on the CPU tier; only real hardware can answer
+# whether Vulkan and VA-API H.264 work (#1226).
+head_ "Remote desktop (gliff)"
+if command -v gliff-probe >/dev/null 2>&1; then
+  gliff_gpu=$(timeout 60 gliff-probe gpu 2>&1 || true)
+  if grep -q 'PASS VA-API H.264 encode' <<<"$gliff_gpu" &&
+    grep -q 'PASS VA-API H.264 decode' <<<"$gliff_gpu"; then
+    ok "gliff GPU tier" "Vulkan + VA-API H.264 encode and decode"
+  else
+    hmm "gliff GPU tier" "CPU tier only (expected on NVIDIA: no VA-API encoder)"
+    say_dim "$(grep -E 'FAIL' <<<"$gliff_gpu" | head -3)"
+  fi
+else
+  hmm "gliff" "not installed (preinstallsExclude?)"
+fi
+
 # ---- boxes ----------------------------------------------------------------
 # What only real hardware and a live network can answer for distrobox (#230).
 # CI's checks.box-template (#258) proves the catalogue is well-formed with no

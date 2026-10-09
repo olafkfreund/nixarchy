@@ -705,6 +705,43 @@ pkgs.testers.runNixOSTest {
     machine.succeed(on_desktop("systemctl --user is-active hypr-rdp"))
     print("hypr-rdp set its headless output's mode and is serving on Hyprland 0.56")
 
+    # ---- gliff-server reaches Hyprland and negotiates a stream (#1226) ------
+    # gliff is a default preinstall, so this is the server half of what a user
+    # gets, up to capture and no further. The VM has no /dev/dri/renderD128 and
+    # hypr-capture allocates its buffers with GBM there even on the CPU tier, so
+    # capture ends in ENOENT here (measured). What this does prove: the server is
+    # on PATH, reaches the compositor, creates its headless output through the
+    # Lua config (#1031's failure class) and negotiates a stream. Frames are
+    # verify.sh's `gliff-probe all` row. `--listen` is gliff's dev mode: no authentication, one connection.
+    # It is acceptable HERE only because it binds loopback inside a throwaway
+    # VM, and it is never documented for users (docs use ssh). CPU tier on both
+    # ends: the VM has no GPU, and the GPU tier is verify.sh's row.
+    # A transient unit, not a bare `&`, which hangs machine.succeed on the
+    # inherited file descriptors. wait_for_open_port is not used: it connects,
+    # and the server accepts exactly one connection.
+    gliff_env = ("--setenv=XDG_RUNTIME_DIR=/run/user/1000"
+                 " --setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+                 " --setenv=HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)")
+    machine.succeed(on_desktop(
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+        " systemd-run --user --unit=gliff-probe-server " + gliff_env
+        + " gliff-server --listen 127.0.0.1:9077 --headless --video cpu"))
+    machine.wait_until_succeeds(
+        "out=$(ss -ltn); grep -q '127.0.0.1:9077' <<<\"$out\"", timeout=60)
+    _, gliff_out = machine.execute(on_desktop(
+        "timeout 120 gliff-probe --video cpu serve-test --connect 127.0.0.1:9077 --frames 10 2>&1"))
+    # As root: a volatile journal keeps no per-user files for --user to read.
+    _, gliff_log = machine.execute(
+        "journalctl _SYSTEMD_USER_UNIT=gliff-probe-server.service --no-pager -o cat 2>&1")
+    machine.execute(on_desktop("systemctl --user stop gliff-probe-server"))
+    # The output name is the server's own (gliff-<pid>): only a headless output
+    # it created answers with it.
+    for needle in ("HelloAck: headless=true output=gliff-", "StreamConfig:"):
+        assert needle in gliff_out, (
+            "gliff-probe serve-test lacks " + repr(needle) + ":\n" + gliff_out
+            + "\nserver log:\n" + gliff_log)
+    print("gliff-server created its headless output and negotiated a stream")
+
     # ---- Hyprforge's saves reach the session (#1059) -----------------------
     # Hyprforge writes ~/.config/hypr/hyprforge.lua and relies on hyprland.lua
     # requiring it. The session runs the STORE hyprland.lua (--config), so

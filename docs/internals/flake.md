@@ -331,6 +331,51 @@ pkg/nix/package.nix is a plain rustPlatform.buildRustPackage whose
 cargoHash does not depend on which nixpkgs supplies ffmpeg, and they
 publish no binary cache to forfeit by overriding it.
 
+<a id="gliff-from-a-non-flake-input-pinned-to-a-tag"></a>
+### gliff, from a non-flake input pinned to a tag
+
+```nix
+gliff = {
+  url = "github:omacom/gliff/v0.3.0";
+  flake = false;
+};
+```
+
+gliff (omacom/gliff, MIT, Rust) is Omarchy's remote desktop over SSH: a
+`gliff` client, a `gliff-server` that ssh spawns on the far machine, and a
+`gliff-probe` for diagnosing both. Upstream's `install/omarchy-base.packages`
+names it (omacom/omarchy#14712), so a fresh Omarchy has it; nixpkgs does not
+carry it, so nixarchy builds it (#1226).
+
+**Why `flake = false`.** Upstream ships no `flake.nix`, so there is nothing to
+take `packages` from. The input is a source tree and `pkgs/gliff/default.nix`
+builds it. Its `Cargo.lock` has no git sources, so `cargoLock.lockFile` needs
+no output hashes: nothing here to update by hand except the tag.
+
+**Why a tag.** The same argument as hypr-rdp above: a bad rebuild breaks the
+machine you are remote to. Bump it deliberately, never track a branch. The
+exit is nixpkgs carrying `gliff`: delete the input and the overlay entry, and
+point `modules/nixos.nix` at it.
+
+**The RUNPATH trap.** gliff loads Vulkan with `ash::Entry::load()`, which
+dlopens `libvulkan.so.1` by name. Nothing links it, so nothing puts the loader
+on the RUNPATH; without it gliff does not fail, it falls back to the CPU tier
+and every machine looks fine. `postFixup` adds `vulkan-loader` to all three
+binaries (before `wrapGApp`, so it lands on the ELF that becomes
+`.gliff-wrapped`) and `checks.gliff-runpath` reads it back. The `gliff` client
+also runs `ssh` by name, so the wrapper puts `openssh` on its PATH. Measured on
+an RX 7900 XT: `gliff-probe gpu` reports PASS for VA-API H.264 encode and
+decode.
+
+**Why a preinstall and not an `omarchy` runtime dependency.** The upstream
+remote-session plugin only `pgrep`s for `gliff-server`; it does not need the
+package to build. As a preinstall, `programs.nixarchy.preinstallsExclude =
+[ "gliff" ]` can drop it, which a runtime dependency would not allow.
+
+**No cache allowlist entry.** As a preinstall gliff rides inside
+`vm-toplevel` and `reference-toplevel`, which the cache already holds; what it
+adds is what `cache-budget.sh` reports on the PR.
+
 <a id="declarative-secrets-adopted-for-one-concrete-reaso"></a>
 ### Declarative secrets, adopted for one concrete reason rather than as a
 

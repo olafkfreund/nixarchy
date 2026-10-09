@@ -1183,6 +1183,42 @@ for app in nautilus pinta gnome-disks xournalpp; do
   fi
 done
 
+# ---- gliff's GPU tier ----------------------------------------------------
+# checks.session runs gliff on the CPU tier; only real hardware can answer
+# whether Vulkan and VA-API H.264 work (#1226).
+head_ "Remote desktop (gliff)"
+if command -v gliff-probe >/dev/null 2>&1; then
+  gliff_gpu=$(timeout 60 gliff-probe gpu 2>&1 || true)
+  if grep -q 'PASS VA-API H.264 encode' <<<"$gliff_gpu" &&
+    grep -q 'PASS VA-API H.264 decode' <<<"$gliff_gpu"; then
+    ok "gliff GPU tier" "Vulkan + VA-API H.264 encode and decode"
+  else
+    hmm "gliff GPU tier" "CPU tier only (expected without a VA-API H.264 encoder, e.g. NVIDIA)"
+    gliff_why=$(grep -E 'FAIL' <<<"$gliff_gpu" | head -3 || true)
+    say_dim "${gliff_why:-$(tail -3 <<<"$gliff_gpu")}"
+  fi
+  # `all` checks protocols, permissions and a synthetic round trip; `pipeline`
+  # captures one real frame (in memory, no file) and runs it through encode and
+  # decode -- the part the session VM cannot reach, having no render node.
+  # Neither injects input. Both need this desktop's session.
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    gliff_all=$({
+      timeout 180 gliff-probe all
+      timeout 60 gliff-probe pipeline
+    } 2>&1 || true)
+    if grep -q '^PASS' <<<"$gliff_all" && ! grep -q '^FAIL' <<<"$gliff_all"; then
+      ok "gliff end to end" "a captured frame through encode and decode"
+    else
+      bad "gliff end to end" "gliff-probe all reported a FAIL"
+      say_dim "$( (grep '^FAIL' <<<"$gliff_all" || tail -3 <<<"$gliff_all") | head -3)"
+    fi
+  else
+    hmm "gliff end to end" "not in a Wayland session; run verify from the desktop"
+  fi
+else
+  hmm "gliff" "not installed (preinstallsExclude?)"
+fi
+
 # ---- boxes ----------------------------------------------------------------
 # What only real hardware and a live network can answer for distrobox (#230).
 # CI's checks.box-template (#258) proves the catalogue is well-formed with no

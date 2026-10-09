@@ -129,6 +129,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#gliff-from-a-non-flake-input-pinned-to-a-tag
+    gliff = {
+      url = "github:omacom/gliff/v0.3.0";
+      flake = false;
+    };
+
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
       url = "github:Mic92/sops-nix/5efb5a6f4f5ab192817d28557dd4d650fa14d866";
@@ -891,6 +897,8 @@
               checkFlags = [ "hyprland::tests" ];
             });
 
+        gliff = final.callPackage ./pkgs/gliff { src = inputs.gliff; };
+
         omarchy = final.callPackage ./pkgs/omarchy {
           src = omarchy;
           version = omarchyVersion;
@@ -1165,6 +1173,7 @@
           # until #699 stopped every job pushing its whole store diff, and the
           # first 45-minute timeout on that job is the next day.
           hypr-rdp = pkgsFor.${system}.hypr-rdp;
+          gliff = pkgsFor.${system}.gliff;
 
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
 
@@ -1878,6 +1887,9 @@
             # that is not ours, and this is the gate it sits behind.
             "free-space"
             "generate-config-surface"
+            # gliff's Vulkan loader RUNPATH and ssh wrapper: losing either is silent
+            # (CPU tier, or no client), and only this layer reads them. #1226.
+            "gliff-runpath"
             # Every pipe into grep -q is rewritten or allowlisted with a reason (#1060).
             "grep-q-pipefail"
             "hardware-modules"

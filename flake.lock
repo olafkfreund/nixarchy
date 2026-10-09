@@ -162,6 +162,23 @@
         "type": "github"
       }
     },
+    "gliff": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791381622,
+        "narHash": "sha256-Rw6N9gwcVWqdIAYH+RF8fmzMqPc9HQOBC2adJawNHJM=",
+        "owner": "omacom",
+        "repo": "gliff",
+        "rev": "159401bddf4e748cc221f29eaf3be56d6ac7a7b4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "omacom",
+        "ref": "v0.3.0",
+        "repo": "gliff",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -1267,6 +1284,7 @@
       "inputs": {
         "ai-mirror": "ai-mirror",
         "disko": "disko",
+        "gliff": "gliff",
         "home-manager": "home-manager",
         "home-manager-stable": "home-manager-stable",
         "hypr-rdp": "hypr-rdp",

@@ -4,10 +4,59 @@ title: Remote desktop
 
 # Remote desktop
 
-nixarchy can serve the Hyprland session you are already logged into over RDP,
-so a Windows laptop's built-in `mstsc`, or any other RDP client, opens your
-actual desktop. It is off, and enabling it is four decisions rather than one
-switch. This page is those decisions.
+nixarchy gives you two ways to reach a desktop you are not sitting at. Between
+two nixarchy machines there is [gliff](#between-two-nixarchy-machines-gliff),
+which is installed by default and goes over SSH. From anything else, nixarchy
+can serve the Hyprland session you are already logged into over RDP, so a
+Windows laptop's built-in `mstsc`, or any other RDP client, opens your actual
+desktop. RDP is off, and enabling it is four decisions rather than one switch.
+Most of this page is those decisions.
+
+## Between two nixarchy machines: gliff
+
+gliff is a remote desktop over SSH for Hyprland. It needs nothing enabled on
+the machine you sit at, and no password of its own: your SSH key is the
+authentication.
+
+```sh
+gliff you@desk
+```
+
+opens the desk's session in a window. Two options change what you get:
+
+- `--output NAME` mirrors one of its monitors, for example `--output DP-1`.
+- `--headless` gives the session a dedicated virtual output that follows the
+  size of your window, so the physical monitors keep showing what they showed.
+
+The machine you connect *to* needs:
+
+```nix
+services.openssh.enable = true;
+```
+
+and somebody logged into a Hyprland session, for the same reason as RDP below:
+gliff is a client of a compositor that is already running.
+
+gliff is installed by default. To remove it:
+
+```nix
+programs.nixarchy.preinstallsExclude = [ "gliff" ];
+```
+
+**Mind the clipboard.** While a gliff tab is open, that host can read your
+local clipboard, without you pasting anything into it. Do not keep a tab open
+to a machine you do not trust while you copy secrets.
+
+If something does not work, `gliff-probe all` on either machine checks the
+protocols, the outputs, the GPU and the codec path, and prints PASS or FAIL for
+each. On a machine without VA-API H.264 encode (NVIDIA, for one) gliff runs on
+the CPU instead, which is slower and not an error.
+
+## From Windows, macOS or a phone: RDP
+
+gliff needs a nixarchy machine on both ends. For everything else there is RDP,
+served by [hypr-rdp](https://github.com/MuNeNiCK/hypr-rdp). The rest of this
+page is about it.
 
 ## What it is not
 

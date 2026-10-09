@@ -256,3 +256,15 @@ Revert the squash commit. Nothing is stateful: no service, no secret, no
 migration. Users who already rebuilt lose the package on their next
 rebuild. A single user can drop it at any time with
 `preinstallsExclude = [ "gliff" ]`.
+
+## Deviations
+
+- **Step 6:** the RDP material is introduced by a new
+  `## From Windows, macOS or a phone: RDP` section that sits before it.
+  Its existing headings were not demoted under that section, so every anchor
+  in the page stays where it was. The plan asked for them to move under the
+  new heading.
+  - A grep of `docs/` and `README.md` found no deep links into the page, so
+    nothing depended on the anchors.
+  - The cost is that "Letting an agent drive another machine", which is not
+    RDP, still reads as a sibling of the RDP sections.

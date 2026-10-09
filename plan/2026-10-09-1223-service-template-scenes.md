@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1223
 spec: spec/2026-10-09-1223-service-template-scenes.md
 ---

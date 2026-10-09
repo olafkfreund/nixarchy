@@ -1887,6 +1887,9 @@
             # that is not ours, and this is the gate it sits behind.
             "free-space"
             "generate-config-surface"
+            # gliff's Vulkan loader RUNPATH and ssh wrapper: losing either is silent
+            # (CPU tier, or no client), and only this layer reads them. #1226.
+            "gliff-runpath"
             # Every pipe into grep -q is rewritten or allowlisted with a reason (#1060).
             "grep-q-pipefail"
             "hardware-modules"

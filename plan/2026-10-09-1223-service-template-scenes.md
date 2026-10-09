@@ -63,7 +63,7 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
 2. **`tests/demo/default.nix`: the `microvm-templates` scene.**
    - Add `segments.microvm-templates` after `segments.services`, ported from
      `cd43ef7f`:
-     - assert `/dev/kvm` in the guest, and fail loudly without it;
+     - ~~assert `/dev/kvm` in the guest~~ — **removed, see the deviation below**;
      - open the create form with
        `omarchy-shell shell toggle nixarchy.microvm '{"create":true}'`;
      - `shot`, then three rounds of `down` + `shot`, then `esc`.
@@ -77,7 +77,7 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
    - Fix the old comment's "carries eight": there are nine templates now, and
      the picker shows the first six (`CreateForm.qml:73`).
    - Add `sceneDefs.microvm-templates` with `minDistinct = 4;` and
-     `extraNode.virtualisation.qemu.options = [ "-cpu host" ];`. Take the two
+     ~~`extraNode.virtualisation.qemu.options = [ "-cpu host" ];`~~ (removed). Take the two
      `expects` names (old: `python`, `node`) from the first verify dump; they
      must not be substrings of each other.
    - Check that the MicroVM panel is visible on the base node at all. If it
@@ -85,9 +85,13 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
      here.
    → Verify, red-first twice. First, remove the first `backspace` loop: the
    field keeps `shell`, so neither name appears and `expects` refuses (the
-   Down presses were the old break, but they cannot vary the names). Second, remove `-cpu host`: the
-   scene's own assert fails with its message. Capture both, restore, and
-   re-record green.
+   Down presses were the old break, but they cannot vary the names).
+   **Deviation, found by the second red proof:** with `-cpu host` removed the
+   guest still had `/dev/kvm` and the recording stayed green -- the property
+   is provided twice (§1). And the scene starts nothing, so KVM cannot change
+   what it films; the assert was pass B's, from when a template would start.
+   So `-cpu host` and the assert are deleted rather than given a harder break,
+   `extraNode = { };`, and the green take is re-recorded from that tree.
    Traps: the same as step 1.
 
 3. **`docs/`: publish and correct.**
@@ -114,7 +118,7 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
 | … with `spc` removed | refused on `expects` |
 | `nix run .#demo-record -- microvm-templates` | under 1 MB; both names found; diversity ≥ 4 |
 | … with the field not emptied | refused on `expects` |
-| … without `-cpu host` | the scene's `/dev/kvm` assert fails |
+| … without `-cpu host` | was expected to fail the assert; stayed green with `/dev/kvm` present, so both were removed |
 | `nix fmt -- --ci`, statix, deadnix | clean |
 
 Every recording is a VM check under the §6 tiers. It starts only when

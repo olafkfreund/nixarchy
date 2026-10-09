@@ -854,16 +854,8 @@ let
       # data/microvm-templates.nix has nine templates and the create form's
       # picker shows six of them, sorted by name (CreateForm.qml slices to 6),
       # so shell and python are not among them on an empty field. It stops at
-      # the choice: microvm.gif already films creating one.
-      #
-      # Without /dev/kvm the panel lists templates and starts nothing, so the
-      # recording would be a GIF of a list. Assert rather than hope.
-      kvm = user("test -e /dev/kvm && echo yes || echo no", timeout=30).strip()
-      print(f"  /dev/kvm in the guest: {kvm}")
-      assert kvm == "yes", (
-          "no /dev/kvm in the guest, so a template cannot start and this scene "
-          "would film a list rather than the panel doing its job"
-      )
+      # the choice: microvm.gif already films creating one. Nothing starts, so
+      # no /dev/kvm assert -- with -cpu host removed the guest had one anyway.
 
       # Opened by IPC, which Menu.qml documents: no guessed key, and nothing
       # typed into a field that holds the keyboard.
@@ -1142,8 +1134,7 @@ let
         "persistent"
       ];
       minDistinct = 4;
-      # Nested virtualisation, asserted by the scene itself before it films.
-      extraNode.virtualisation.qemu.options = [ "-cpu host" ];
+      extraNode = { };
     };
 
     boxes = {

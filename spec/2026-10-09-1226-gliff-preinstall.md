@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1226
 intent: intent/2026-10-09-1226-gliff-preinstall.md
 ---

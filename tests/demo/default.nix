@@ -808,6 +808,70 @@ let
       machine.sleep(1)
     '';
 
+    services = ''
+      # ---- enabling a service ----------------------------------------------
+      # The Services tab, which the pkg scene crosses and never uses. Same
+      # claim as the Apps tab, a different file: a pick becomes a line in
+      # services.nix, and nothing is built until you apply.
+      user("omarchy-shell shell toggle nixarchy.pkg", timeout=30)
+      machine.sleep(3)
+      shot("services-apps", hold=4)
+
+      # `l` moves a tab (Menu.qml), and Services is the next one along.
+      machine.send_key("l")
+      machine.sleep(2)
+      shot("services-tab", hold=5)
+
+      # Two rows down: the first list has a settings row Space cannot toggle,
+      # and a tick that does not land looks exactly like a wrong gate.
+      machine.send_key("j")
+      machine.send_key("j")
+      machine.sleep(1)
+      machine.send_key("spc")
+      machine.sleep(2)
+      shot("services-queued", hold=6)
+
+      machine.send_key("esc")
+      machine.sleep(1)
+    '';
+
+    microvm-templates = ''
+      # ---- choosing a MicroVM template --------------------------------------
+      # The microvm scene shows one guest booting; this shows the CHOICE.
+      # data/microvm-templates.nix has nine templates and the create form's
+      # picker shows the first six (CreateForm.qml slices to 6). It stops at
+      # the choice: microvm.gif already films creating one.
+      #
+      # Without /dev/kvm the panel lists templates and starts nothing, so the
+      # recording would be a GIF of a list. Assert rather than hope.
+      kvm = user("test -e /dev/kvm && echo yes || echo no", timeout=30).strip()
+      print(f"  /dev/kvm in the guest: {kvm}")
+      assert kvm == "yes", (
+          "no /dev/kvm in the guest, so a template cannot start and this scene "
+          "would film a list rather than the panel doing its job"
+      )
+
+      # Opened by IPC, which Menu.qml documents: no guessed key, and nothing
+      # typed into a field that holds the keyboard.
+      user(
+          "omarchy-shell shell toggle nixarchy.microvm "
+          "'{\"create\":true}'",
+          timeout=30,
+      )
+      machine.sleep(3)
+      shot("microvm-create", hold=5)
+
+      # Each move redraws the inline picker, which earns a diversity score --
+      # a highlighted row alone does not clear a 2% RMSE floor.
+      for n in ("two", "three", "four"):
+          machine.send_key("down")
+          machine.sleep(2)
+          shot(f"microvm-template-{n}", hold=4)
+
+      machine.send_key("esc")
+      machine.sleep(1)
+    '';
+
     plugin = ''
       # ---- plugins --------------------------------------------------------
       # The one deliberately imperative corner of Omarchy: a plugin is cloned
@@ -1015,6 +1079,33 @@ let
       minDistinct = 4;
       online = true;
       extraNode = panelExtras;
+    };
+
+    # #1223. Neither needs podman or boxes, so the base node.
+    services = {
+      script = segments.services;
+      # A regex, not one service name: which row the cursor lands on is a fact
+      # about the catalogue's order. The second line is provisional -- confirm
+      # it against the first recording's verify frames.
+      expects = [
+        "Services"
+        "enabled [a-z0-9-]+"
+      ];
+      minDistinct = 4;
+      extraNode = { };
+    };
+
+    microvm-templates = {
+      script = segments.microvm-templates;
+      # Provisional, as above. Two names that are not substrings of each
+      # other, so a partial OCR read cannot satisfy both at once.
+      expects = [
+        "python"
+        "node"
+      ];
+      minDistinct = 4;
+      # Nested virtualisation, asserted by the scene itself before it films.
+      extraNode.virtualisation.qemu.options = [ "-cpu host" ];
     };
 
     boxes = {

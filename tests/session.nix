@@ -705,6 +705,35 @@ pkgs.testers.runNixOSTest {
     machine.succeed(on_desktop("systemctl --user is-active hypr-rdp"))
     print("hypr-rdp set its headless output's mode and is serving on Hyprland 0.56")
 
+    # ---- gliff serves and a client decodes frames (#1226) -------------------
+    # gliff is a default preinstall, so this is the server half of what a user
+    # gets. `--listen` is gliff's dev mode: no authentication, one connection.
+    # It is acceptable HERE only because it binds loopback inside a throwaway
+    # VM, and it is never documented for users (docs use ssh). CPU tier on both
+    # ends: the VM has no GPU, and the GPU tier is verify.sh's row.
+    # A transient unit, not a bare `&`, which hangs machine.succeed on the
+    # inherited file descriptors. wait_for_open_port is not used: it connects,
+    # and the server accepts exactly one connection.
+    gliff_env = ("--setenv=XDG_RUNTIME_DIR=/run/user/1000"
+                 " --setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+                 " --setenv=HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)")
+    machine.succeed(on_desktop(
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+        " systemd-run --user --unit=gliff-probe-server " + gliff_env
+        + " gliff-server --listen 127.0.0.1:9077 --headless --video cpu"))
+    machine.wait_until_succeeds(
+        "out=$(ss -ltn); grep -q '127.0.0.1:9077' <<<\"$out\"", timeout=60)
+    _, gliff_out = machine.execute(on_desktop(
+        "gliff-probe --video cpu serve-test --connect 127.0.0.1:9077 --frames 10 2>&1"))
+    _, gliff_log = machine.execute(on_desktop(
+        "journalctl --user -u gliff-probe-server --no-pager -o cat 2>&1"))
+    machine.execute(on_desktop("systemctl --user stop gliff-probe-server"))
+    for needle in ("HelloAck", "StreamConfig", "PASS decoded 10 frames"):
+        assert needle in gliff_out, (
+            "gliff-probe serve-test lacks " + repr(needle) + ":\n" + gliff_out
+            + "\nserver log:\n" + gliff_log)
+    print("gliff-server streamed to a client that decoded 10 frames on the CPU tier")
+
     # ---- Hyprforge's saves reach the session (#1059) -----------------------
     # Hyprforge writes ~/.config/hypr/hyprforge.lua and relies on hyprland.lua
     # requiring it. The session runs the STORE hyprland.lua (--config), so

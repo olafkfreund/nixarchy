@@ -51,7 +51,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)** | `Update ▸ Channel`, per machine or per package |
 | **[A toolchain per project](https://olafkfreund.github.io/nixarchy/manual/per-project-environments)** | `nixarchy dev init react`, or the panel on `Super+Alt+E` |
 | **[Your phone on the desktop](https://olafkfreund.github.io/nixarchy/manual/android)** | `nixarchy android`, mirrored or emulated |
-| **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `hypr-rdp`, the running session over RDP |
+| **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `gliff` between two Hyprland machines over SSH, installed by default; `hypr-rdp`, the running session over RDP |
 | **[Ask the machine](https://olafkfreund.github.io/nixarchy/manual/ai)** | agent skills written for NixOS, even against a [local model](https://olafkfreund.github.io/nixarchy/manual/ai#running-the-model-locally) |
 
 | the menu (Super+Space) | Install |
@@ -509,7 +509,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Trigger ▸ Boxes** | your distrobox boxes in a panel ([nixarchy-distrobox](https://github.com/olafkfreund/nixarchy-distrobox)), created from nixarchy's own templates. **On wherever Boxes are**, Super+Alt+D on a new install; `programs.nixarchy.defaultPlugins.distrobox = false` removes it |
 | **Trigger ▸ Sandbox** | disposable and permanent MicroVMs in one panel ([nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm)). **On by default**, Super+Alt+V on a new install; `programs.nixarchy.defaultPlugins.microvm = false` removes it |
 | **Apps ▸ Podman** | containers, images, volumes and networks in a panel ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)). **On wherever podman is** — the Podman services row or Boxes — Super+Alt+O on a new install; `docker` stays Docker |
-| **Remote desktop** | `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](https://olafkfreund.github.io/nixarchy/manual/remote-desktop). Off by default |
+| **Remote desktop** | `gliff user@host` shows another Hyprland machine's session over SSH, **installed by default**; `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](https://olafkfreund.github.io/nixarchy/manual/remote-desktop). RDP is off by default |
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](https://olafkfreund.github.io/nixarchy/manual/sandboxes). Off by default |
 | **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries). **On by default** |
 | Branded boot splash | the wordmark animates in with [ttfx](https://github.com/omacom/ttfx), over a progress bar that is on for every boot |

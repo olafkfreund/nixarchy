@@ -54,7 +54,7 @@ the CPU instead, which is slower and not an error.
 
 ## From Windows, macOS or a phone: RDP
 
-gliff needs a nixarchy machine on both ends. For everything else there is RDP,
+gliff needs a Hyprland machine running gliff on both ends. For everything else there is RDP,
 served by [hypr-rdp](https://github.com/MuNeNiCK/hypr-rdp). The rest of this
 page is about it.
 

@@ -1193,8 +1193,9 @@ if command -v gliff-probe >/dev/null 2>&1; then
     grep -q 'PASS VA-API H.264 decode' <<<"$gliff_gpu"; then
     ok "gliff GPU tier" "Vulkan + VA-API H.264 encode and decode"
   else
-    hmm "gliff GPU tier" "CPU tier only (expected on NVIDIA: no VA-API encoder)"
-    say_dim "$(grep -E 'FAIL' <<<"$gliff_gpu" | head -3)"
+    hmm "gliff GPU tier" "CPU tier only (expected without a VA-API H.264 encoder, e.g. NVIDIA)"
+    gliff_why=$(grep -E 'FAIL' <<<"$gliff_gpu" | head -3 || true)
+    say_dim "${gliff_why:-$(tail -3 <<<"$gliff_gpu")}"
   fi
 else
   hmm "gliff" "not installed (preinstallsExclude?)"

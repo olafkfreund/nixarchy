@@ -275,3 +275,23 @@ rebuild. A single user can drop it at any time with
     `owe` (`:2200`): `inherit (pkgs.extend inputs.self.overlays.default) gliff;`.
   - Found by the step 3 evaluation, before any check that would have failed
     on it in CI.
+- **Step 4:** in the session VM, capture fails, as the spec's risk said it
+  might. The server came up, `HelloAck: headless=true output=gliff-26053` and
+  `StreamConfig: 1920x1080 chroma Single420` arrived, and then:
+  `gliff_server: session ended with error error=capture: io: No such file or directory (os error 2)`.
+  - The cause is that hypr-capture allocates its capture buffers with GBM on
+    `/dev/dri/renderD128` (`crates/hypr-capture/src/lib.rs:69`), even on the
+    CPU tier, and the VM has no render node.
+  - The plan said to drop the block. It is **narrowed instead**, to what the
+    VM can answer: the server is on PATH, it reaches Hyprland, it creates its
+    own headless output (`output=gliff-<pid>`) through the Lua config (#1031's
+    failure class), and it negotiates a stream.
+  - The dead-port break still turns it red, so it can fail (§1).
+  - Frames move to hardware: `pkgs/verify.sh`'s row now also runs
+    `gliff-probe all` and `gliff-probe pipeline`. Neither injects input.
+    - Measured on p620: `captured 2560x1440 … from DP-1`,
+      `PASS Dual420 4:4:4 GPU pipeline on a captured frame`, 41.5 dB PSNR
+      against the CPU reference.
+  - The hole is named in `tests/AGENTS.md` and `tests/install-matrix.py`
+    (§3). The same edit corrects install-matrix.py's two sentences that
+    claimed RDP steps in verify.sh, which do not exist.

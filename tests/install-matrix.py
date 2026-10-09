@@ -206,15 +206,20 @@ NONET = os.environ.get("MATRIX_NONET") == "1"
 # own ExecStartPre refuses an empty password at runtime. checks.session starts
 # the daemon and asserts it sets its headless output's mode and keeps serving,
 # on a Hyprland that refuses the legacy keyword request (#1031). What is not covered
-# is a client connecting and seeing a desktop, and that is a step in
-# pkgs/verify.sh for a human. A documented hole gets tested by a person; an
-# undocumented one gets tested by a user (#1015, #1016).
+# is a client connecting and seeing a desktop, and no check reaches it --
+# pkgs/verify.sh has no RDP step either. A documented hole gets tested by a
+# person; an undocumented one gets tested by a user (#1015, #1016).
+#
+# gliff (#1226) reaches further in one VM but not to a picture: checks.session
+# sees its server create a headless output and negotiate a stream, and capture
+# then fails because the VM has no render node for GBM. Frames are
+# pkgs/verify.sh's `gliff-probe all` row.
 #
 # The CLIENT half is in the same position. checks.remote-tunnel proves the
 # tunnel is trapped and the menu row is gated, which needs no second
 # machine; what it cannot prove is that sdl-freerdp opens a desktop and
-# that the headless output resizes to the window. Both are steps in
-# pkgs/verify.sh.
+# that the headless output resizes to the window. Neither is reached by
+# anything, pkgs/verify.sh included.
 NVME = os.environ.get("MATRIX_NVME") == "1"
 TARGET = "/dev/nvme0n1" if NVME else "/dev/vda"
 

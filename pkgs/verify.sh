@@ -1197,6 +1197,24 @@ if command -v gliff-probe >/dev/null 2>&1; then
     gliff_why=$(grep -E 'FAIL' <<<"$gliff_gpu" | head -3 || true)
     say_dim "${gliff_why:-$(tail -3 <<<"$gliff_gpu")}"
   fi
+  # `all` checks protocols, permissions and a synthetic round trip; `pipeline`
+  # captures one real frame (in memory, no file) and runs it through encode and
+  # decode -- the part the session VM cannot reach, having no render node.
+  # Neither injects input. Both need this desktop's session.
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    gliff_all=$({
+      timeout 180 gliff-probe all
+      timeout 60 gliff-probe pipeline
+    } 2>&1 || true)
+    if grep -q '^PASS' <<<"$gliff_all" && ! grep -q '^FAIL' <<<"$gliff_all"; then
+      ok "gliff end to end" "a captured frame through encode and decode"
+    else
+      bad "gliff end to end" "gliff-probe all reported a FAIL"
+      say_dim "$( (grep '^FAIL' <<<"$gliff_all" || tail -3 <<<"$gliff_all") | head -3)"
+    fi
+  else
+    hmm "gliff end to end" "not in a Wayland session; run verify from the desktop"
+  fi
 else
   hmm "gliff" "not installed (preinstallsExclude?)"
 fi

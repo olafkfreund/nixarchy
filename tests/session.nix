@@ -705,9 +705,14 @@ pkgs.testers.runNixOSTest {
     machine.succeed(on_desktop("systemctl --user is-active hypr-rdp"))
     print("hypr-rdp set its headless output's mode and is serving on Hyprland 0.56")
 
-    # ---- gliff serves and a client decodes frames (#1226) -------------------
+    # ---- gliff-server reaches Hyprland and negotiates a stream (#1226) ------
     # gliff is a default preinstall, so this is the server half of what a user
-    # gets. `--listen` is gliff's dev mode: no authentication, one connection.
+    # gets, up to capture and no further. The VM has no /dev/dri/renderD128 and
+    # hypr-capture allocates its buffers with GBM there even on the CPU tier, so
+    # capture ends in ENOENT here (measured). What this does prove: the server is
+    # on PATH, reaches the compositor, creates its headless output through the
+    # Lua config (#1031's failure class) and negotiates a stream. Frames are
+    # verify.sh's `gliff-probe all` row. `--listen` is gliff's dev mode: no authentication, one connection.
     # It is acceptable HERE only because it binds loopback inside a throwaway
     # VM, and it is never documented for users (docs use ssh). CPU tier on both
     # ends: the VM has no GPU, and the GPU tier is verify.sh's row.
@@ -729,13 +734,13 @@ pkgs.testers.runNixOSTest {
     _, gliff_log = machine.execute(
         "journalctl _SYSTEMD_USER_UNIT=gliff-probe-server.service --no-pager -o cat 2>&1")
     machine.execute(on_desktop("systemctl --user stop gliff-probe-server"))
-    for needle in ("HelloAck", "StreamConfig", "PASS decoded 10 frames"):
+    # The output name is the server's own (gliff-<pid>): only a headless output
+    # it created answers with it.
+    for needle in ("HelloAck: headless=true output=gliff-", "StreamConfig:"):
         assert needle in gliff_out, (
             "gliff-probe serve-test lacks " + repr(needle) + ":\n" + gliff_out
             + "\nserver log:\n" + gliff_log)
-    # The probe's second verdict: the --headless output took the size it asked for.
-    assert "FAIL" not in gliff_out, "gliff-probe serve-test reported a FAIL:\n" + gliff_out
-    print("gliff-server streamed to a client that decoded 10 frames on the CPU tier")
+    print("gliff-server created its headless output and negotiated a stream")
 
     # ---- Hyprforge's saves reach the session (#1059) -----------------------
     # Hyprforge writes ~/.config/hypr/hyprforge.lua and relies on hyprland.lua

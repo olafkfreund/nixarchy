@@ -834,8 +834,10 @@ let
       # The key sheet opening and closing over the queued pick: pkg's repaint,
       # since three shots scored 2 of 7 transitions. Not the Selection tab --
       # it lists packages, so after a service tick it says "no packages in
-      # your nixarchy selection yet", and it focuses a field that eats `?`.
-      machine.send_key("question")
+      # your nixarchy selection yet". "?", not "question": the driver maps the
+      # character to shift-0x35, but passes a name to QEMU's sendkey as is,
+      # and QEMU silently drops one it does not know.
+      machine.send_key("?")
       machine.sleep(2)
       shot("services-keys", hold=4)
       machine.send_key("esc")

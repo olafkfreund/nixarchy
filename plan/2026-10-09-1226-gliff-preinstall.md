@@ -268,3 +268,10 @@ rebuild. A single user can drop it at any time with
     nothing depended on the anchors.
   - The cost is that "Letting an agent drive another machine", which is not
     RDP, still reads as a sibling of the RDP sections.
+- **Step 3:** `inherit (pkgs) gliff;` fails with `attribute 'gliff' missing`.
+  The spec was wrong to say this module's `pkgs` already has nixarchy's
+  overlay applied: Mode A means it does not.
+  - The fix is the pattern the module already uses for `omarchy` (`:400`) and
+    `owe` (`:2200`): `inherit (pkgs.extend inputs.self.overlays.default) gliff;`.
+  - Found by the step 3 evaluation, before any check that would have failed
+    on it in CI.

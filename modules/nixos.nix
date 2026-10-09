@@ -1523,7 +1523,8 @@ in
                 inherit (pkgs) cliamp;
 
                 # install/omarchy-base.packages names it (omacom/omarchy#14712).
-                inherit (pkgs) gliff;
+                # Not in nixpkgs, and this module's pkgs has no overlay of ours.
+                inherit (pkgs.extend inputs.self.overlays.default) gliff;
               } cfg.preinstallsExclude
             )
           )

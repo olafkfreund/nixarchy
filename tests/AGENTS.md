@@ -1054,8 +1054,8 @@ in there that names a command is unguarded by construction.
 **`send_key` drops a key name QEMU does not know, silently** (#1223). The
 driver maps a *character* (`"?"` becomes `shift-0x35`) but passes a *name* to
 `sendkey` as is, and QEMU ignores names it has no code for: no error, nothing
-typed. `send_key("question")` has never opened the key sheet, here or in the
-`pkg` scene that it was copied from, and the `services` scene still passed
+typed. `send_key("question")` never opened the key sheet, in the `pkg`
+scene or in the `services` scene copied from it, and `services` still passed
 its gate twice, on transitions earned by a toast fading and the panel closing.
 Send the character, and look at the verify frames of any gate that passes at
 its floor. A diversity count proves the screen changed, not what changed it.

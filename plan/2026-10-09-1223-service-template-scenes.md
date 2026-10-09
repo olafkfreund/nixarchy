@@ -50,6 +50,21 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
      appears only after the tick (most likely `enabled <id>`, as in pkg). Set
      the second `expects` to that line, as a regex that does not name the
      service: the row the cursor lands on is a fact about catalogue order.
+   - **Deviation, found by the recordings** (a183f834, 8297847b, cbae1274;
+     recorded here late, after review):
+     - Three shots scored 2 of 7 transitions against a floor of 4, so the
+       scene opens the key sheet over the queued pick and holds a shot after
+       closing it.
+     - The Selection tab was tried for that repaint and rejected: it lists
+       packages, so after a service tick it says "no packages in your
+       nixarchy selection yet", and its field eats `?`.
+     - `send_key("question")` presses nothing (QEMU drops unknown key names),
+       so the key is sent as `"?"`. The `pkg` scene has the same line and
+       is corrected too, but `pkg.gif` is not re-recorded.
+     - The second gate is `enabled [a-z0-9-]+ in`: without ` in`, the toast's
+       "not enabled yet" satisfies it. `"Services"` is a tab name and is on
+       screen from the first frame, so it only proves the panel opened.
+     - The red proof below was run on the final scene (cbae1274).
    → Verify: the recording passes. Then remove the `spc` line, re-record, and
    confirm it is refused **on `expects`**, not on diversity. Capture that
    output, restore the line, and re-record green.

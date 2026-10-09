@@ -798,7 +798,7 @@ let
 
       # The key sheet: a full repaint, and the thing a reader wants next
       # anyway. Diversity is earned with panels that change, not with steps.
-      machine.send_key("question")
+      machine.send_key("?")
       machine.sleep(2)
       shot("pkg-keys", hold=4)
       machine.send_key("esc")
@@ -1115,7 +1115,9 @@ let
       script = segments.services;
       # A regex, not one service name: which row the cursor lands on is a fact
       # about the catalogue's order. " in" is load-bearing: without it the
-      # toast's "not enabled yet" satisfies the gate on its own.
+      # toast's "not enabled yet" satisfies the gate on its own. "Services"
+      # is a tab name, on screen from the first frame: it proves the panel
+      # opened, and the line after it is the one that needs the tick.
       expects = [
         "Services"
         "enabled [a-z0-9-]+ in"

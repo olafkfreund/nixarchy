@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1223
 intent: intent/2026-10-09-1223-service-template-scenes.md
 ---

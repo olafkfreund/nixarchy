@@ -852,7 +852,8 @@ let
       # ---- choosing a MicroVM template --------------------------------------
       # The microvm scene shows one guest booting; this shows the CHOICE.
       # data/microvm-templates.nix has nine templates and the create form's
-      # picker shows the first six (CreateForm.qml slices to 6). It stops at
+      # picker shows six of them, sorted by name (CreateForm.qml slices to 6),
+      # so shell and python are not among them on an empty field. It stops at
       # the choice: microvm.gif already films creating one.
       #
       # Without /dev/kvm the panel lists templates and starts nothing, so the
@@ -893,13 +894,14 @@ let
 
       # Narrowing and widening redraw the whole list; a highlight moving one
       # row does not clear the 2% RMSE floor on its own.
-      machine.send_chars("agent")
-      machine.sleep(2)
-      shot("microvm-templates-agent", hold=5)
-      for _ in range(5):
-          machine.send_key("backspace")
-      machine.sleep(2)
-      shot("microvm-templates-all", hold=4)
+      for query in ("agent", "node"):
+          machine.send_chars(query)
+          machine.sleep(2)
+          shot(f"microvm-templates-{query}", hold=4)
+          for _ in query:
+              machine.send_key("backspace")
+          machine.sleep(2)
+          shot(f"microvm-templates-after-{query}", hold=3)
 
       machine.send_key("esc")
       machine.sleep(1)
@@ -1132,11 +1134,12 @@ let
 
     microvm-templates = {
       script = segments.microvm-templates;
-      # Provisional, as above. Two names that are not substrings of each
-      # other, so a partial OCR read cannot satisfy both at once.
+      # Two names on screen only once the Template field is emptied (it opens
+      # holding "shell"), and not substrings of each other. Not python: the
+      # picker's six, sorted, stop at persistent.
       expects = [
-        "python"
-        "node"
+        "hyprland"
+        "persistent"
       ];
       minDistinct = 4;
       # Nested virtualisation, asserted by the scene itself before it films.

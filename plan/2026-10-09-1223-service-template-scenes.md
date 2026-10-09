@@ -71,9 +71,9 @@ with `git show cd43ef7f -- tests/demo/default.nix`. One commit per step.
        holding `shell`, and the picker lists only templates matching the
        field (`Model.js` `templatesMatching`). So it showed one template, and
        Down only moved focus. The scene instead goes Down twice to Template,
-       empties the field (the first six: shell, hyprland, python, podman,
-       node, agent), moves twice, types `agent` to narrow, and clears it
-       again. Narrowing and widening are the repaints.
+       empties the field (six, sorted: agent, agent-claude, hyprland, k3s,
+       node, persistent), moves twice, then narrows to `agent` and `node`
+       and clears each. Gate: `hyprland`, `persistent` (python is not shown).
    - Fix the old comment's "carries eight": there are nine templates now, and
      the picker shows the first six (`CreateForm.qml:73`).
    - Add `sceneDefs.microvm-templates` with `minDistinct = 4;` and

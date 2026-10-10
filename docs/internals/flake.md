@@ -336,7 +336,7 @@ publish no binary cache to forfeit by overriding it.
 
 ```nix
 gliff = {
-  url = "github:omacom/gliff/v0.3.0";
+  url = "github:omacom/gliff/v0.3.1";
   flake = false;
 };
 ```

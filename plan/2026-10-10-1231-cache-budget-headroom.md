@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1231
 spec: spec/2026-10-10-1231-cache-budget-headroom.md
 ---

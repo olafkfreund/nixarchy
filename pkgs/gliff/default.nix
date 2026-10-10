@@ -22,7 +22,7 @@
 }:
 rustPlatform.buildRustPackage {
   pname = "gliff";
-  version = "0.3.0";
+  version = "0.3.1";
   inherit src;
   cargoLock.lockFile = "${src}/Cargo.lock";
 

@@ -10,13 +10,14 @@
 # all five KVM runners' QEMU) and adding them up per entry would count those
 # several times over.
 #
-# 2 GB per commit, not 5: omarchy alone is a new 124 MiB path on every commit
-# (it depends on the flake's rev, #212), so the cache always holds a few
-# commits at once until the older ones age out. See spec/ for the arithmetic.
+# 2.5 GB per commit, not 5: the cache must hold this commit and the one before.
+# They share the box images, pinned by digest (508 MiB), so the worst case, a
+# nixpkgs bump, costs 2 x 2560 - 508 = 4612 MiB of 5120.
+# See spec/2026-10-10-1231-cache-budget-headroom.md.
 set -uo pipefail
 
 here=$(dirname "$0")
-budget_mib=${CACHE_BUDGET_MIB:-2048}
+budget_mib=${CACHE_BUDGET_MIB:-2560}
 upstreams=${UPSTREAM_CACHES:-https://cache.nixos.org https://hyprland.cachix.org}
 jobs=${LOOKUP_JOBS:-16}
 

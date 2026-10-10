@@ -1661,8 +1661,11 @@ jobs:
         # over budget, on the pull request that would have grown it (#697).
         # NOT continue-on-error: this step is the gate, and a budget nobody
         # enforces is how the cache filled the first time.
+        # 2560 MiB: this commit and the previous one should fit 5 GB even on a
+        # nixpkgs bump, since they share the box images (computed, not
+        # observed: spec/2026-10-10-1231-cache-budget-headroom.md).
         env:
-          CACHE_BUDGET_MIB: "2048"
+          CACHE_BUDGET_MIB: "2560"
         run: .github/scripts/cache-budget.sh
 
   # PROPOSED CI-GATE CHANGE (AGENTS.md 4 and 11): this job is new gate wiring,

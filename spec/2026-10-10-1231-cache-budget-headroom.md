@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1231
 intent: intent/2026-10-10-1231-cache-budget-headroom.md
 ---

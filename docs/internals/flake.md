@@ -222,7 +222,7 @@ case above. `checks.graphics-mesa-clash` holds the pairing.
 ### Declarative Flatpaks, for the software nixpkgs genuinely does not carry
 
 ```nix
-nix-flatpak.url = "github:gmodena/nix-flatpak/v0.7.0";
+nix-flatpak.url = "github:gmodena/nix-flatpak/v0.8.0";
 ```
 
 Declarative Flatpaks, for the software nixpkgs genuinely does not carry.

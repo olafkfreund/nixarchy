@@ -94,7 +94,7 @@ pkgs.runCommand "nixarchy-cache-budget"
     ok()   { echo "  ok      $1"; }
     bad()  { echo "  FAILED  $1"; fails=$((fails + 1)); }
 
-    # (a) Under budget: 10 + 20 + 5 + 400 (shared once) = 435 MiB of 2048.
+    # (a) Under budget: 10 + 20 + 5 + 400 (shared once) = 435 MiB of 2560.
     if got=$(bash $budget .#small .#other .#twin 2>&1); then
       ok "entries under the budget pass"
     else
@@ -119,7 +119,7 @@ pkgs.runCommand "nixarchy-cache-budget"
 
     # (b) Over budget: fails, and names the entry that pulled it in.
     if got=$(bash $budget .#small .#huge 2>&1); then
-      bad "3 GB of allowlist passed a 2 GB budget"
+      bad "3 GB of allowlist passed a 2.5 GB budget"
     elif grep -q '::error::the allowlist costs 3010 MiB' <<<"$got" && grep -q 'from .#huge' <<<"$got"; then
       ok "over budget fails, naming the entry that grew"
     else

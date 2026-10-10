@@ -72,6 +72,16 @@ reviews with a fresh Opus agent, and commits.
    **Do not arm auto-merge.** After CI, confirm that the `system` job log
    prints "of a 2560 MiB budget".
 
+## Deviations
+
+- Step 1: the comment is three lines rather than one, wrapped under 80
+  columns, and says the nixpkgs-bump fit is computed, not observed (the
+  spec's Risks).
+- Step 5: "the most a nixpkgs bump leaves room for" overstated it -- the
+  ceiling is (5120 + 508) / 2 ~ 2814 MiB and 2560 is the round figure under
+  it -- so AGENTS.md says "which leaves room for a nixpkgs bump". Both from
+  review.
+
 ## Tests
 
 | command | expected |

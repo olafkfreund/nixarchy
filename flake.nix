@@ -84,7 +84,7 @@
     };
 
     # Why: docs/internals/flake.md#declarative-flatpaks-for-the-software-nixpkgs-genu
-    nix-flatpak.url = "github:gmodena/nix-flatpak/v0.7.0";
+    nix-flatpak.url = "github:gmodena/nix-flatpak/v0.8.0";
 
     # The installer's one disk layout is a disko expression, and the installed
     # machine imports the same file -- that is what keeps `fileSystems`

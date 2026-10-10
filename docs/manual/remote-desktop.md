@@ -28,6 +28,10 @@ opens the desk's session in a window. Two options change what you get:
 - `--headless` gives the session a dedicated virtual output that follows the
   size of your window, so the physical monitors keep showing what they showed.
 
+**Setup → Remote desktop → Connect with gliff** opens the same window without a
+terminal. The first time, its address bar takes `you@desk`; after that it opens
+with a tab for each machine you have used, and `+` adds another.
+
 The machine you connect *to* needs:
 
 ```nix

@@ -72,6 +72,29 @@ pkgs.runCommand "nixarchy-remote-tunnel"
     esac
     echo "  ok: gated on sdl-freerdp or xfreerdp"
 
+    echo "== the gliff row is gated on gliff and opens it"
+    row=$(grep -m1 '"setup\.remote\.gliff"' "$menu") || {
+      echo "FAIL: no setup.remote.gliff row in the generated menu."; exit 1; }
+    case "$row" in
+      *'"when":"command -v gliff'*) ;;
+      *)
+        echo "FAIL: the gliff row has no \`when\` naming gliff."
+        echo "  Without it the row is offered on machines that removed gliff"
+        echo "  (preinstallsExclude), where it can only fail."
+        echo "  row: $row"
+        exit 1
+        ;;
+    esac
+    case "$row" in
+      *'"action":"uwsm-app -- gliff"'*) ;;
+      *)
+        echo "FAIL: the gliff row's action does not launch gliff."
+        echo "  row: $row"
+        exit 1
+        ;;
+    esac
+    echo "  ok: gated on gliff, launches gliff"
+
     echo "== self-test: an UNTRAPPED background child does survive"
         # Without this the check below cannot fail, and a teardown test that
         # passes whether or not there is a teardown is a green light.

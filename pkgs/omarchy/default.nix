@@ -167,6 +167,9 @@ let
   # that does not exist. serve needs nothing installed, so it is always shown
   # -- it is the row that tells you what is missing.
   #
+  # The gliff row is gated on gliff for the connect row's reason, and opens
+  # gliff's own window (its own address bar) rather than a wizard.
+  #
   # The glyphs are copied from setup.network and setup.monitors rather than
   # chosen: they are proven to render with the shipped font. A Private Use
   # Area codepoint the font lacks is a literal empty box in the menu, which
@@ -175,6 +178,7 @@ let
     "setup.remote": {"icon":"󰛳","label":"Remote desktop","aliases":["rdp","remote","screen share"]},
     "setup.remote.serve": {"icon":"󰍹","label":"Allow connections","aliases":["rdp","incoming","serve","allow"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote serve"},
     "setup.remote.connect": {"icon":"󰐲","label":"Connect to a machine","aliases":["rdp","connect","remote","desktop"],"when":"command -v sdl-freerdp >/dev/null || command -v xfreerdp >/dev/null","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote connect"},
+    "setup.remote.gliff": {"icon":"󰐲","label":"Connect with gliff","aliases":["gliff","remote","connect","omarchy","hyprland"],"when":"command -v gliff >/dev/null","action":"uwsm-app -- gliff"},
   '';
 
   antigravityMenuRow = builtins.toFile "antigravity-menu-row.jsonc" ''

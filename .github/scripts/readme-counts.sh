@@ -296,7 +296,8 @@ questions_word=$(word_for "$questions" | tr '[:upper:]' '[:lower:]')
 # means the block moved, not that nixarchy stopped shipping plugins.
 plugins_block=$(awk '/^      defaultPluginSet = \{/{f=1} f; f && /^      \};/{exit}' "$root/modules/home.nix")
 p_total=$(grep -c 'id = "' <<<"$plugins_block" || true)
-p_gated=$(grep -c 'gate = ' <<<"$plugins_block" || true)
+# `gate =` may end its line: nixfmt moves a long expression to the next one (#1238).
+p_gated=$(grep -cE 'gate =( |$)' <<<"$plugins_block" || true)
 if [ "$p_total" -lt 5 ]; then
   echo "::error::default-plugins: found $p_total ids under 'defaultPluginSet = {' in modules/home.nix -- the block moved; refusing" >&2
   fail=1

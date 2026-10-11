@@ -504,7 +504,7 @@ itself, takes the channel from `/etc/os-release`, finds the NixOS-wrapped
 process names (`.gliff-wrapped`, `.Hyprland-wrapp`), runs no package manager
 and does not offer the Arch session fix on NixOS. It is a default plugin
 (`nixarchy.gliff-manager`), gated on `preinstalls` and not
-`preinstallsExclude` containing `gliff`: wherever gliff is installed.
+`preinstallsExclude` containing `gliff`: wherever nixarchy installs gliff.
 
 The input follows `nixpkgs` and `home-manager` (the fork's flake uses
 home-manager only in its own check), so nixarchy pulls in nothing extra.

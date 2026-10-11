@@ -196,7 +196,8 @@ and opens from **Apps ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
 write to the Nix store: update herdr with nixpkgs, or put your own build ahead
 of it on `PATH`.
 The Gliff-Manager widget ([nixarchy-gliff-manager](https://github.com/olafkfreund/nixarchy-gliff-manager))
-follows gliff rather than nixarchy: it comes wherever gliff is installed, and
+follows gliff rather than nixarchy: it comes wherever nixarchy installs gliff (`preinstalls`, unless gliff is in
+`preinstallsExclude`), and
 opens from the bar or **Setup ▸ Remote desktop ▸ Manage gliff machines**.
 
 "Once" is the point. A marker in `~/.local/state/nixarchy/enabled-once/` records

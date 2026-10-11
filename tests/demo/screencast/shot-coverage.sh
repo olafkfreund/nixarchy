@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Every shipped plugin is in the shot list (#930, plan step 9).
 #
-# The shot list claims to show all fifteen. That claim was already miscounted
+# The shot list claims to show all of them. That claim was already miscounted
 # once -- a reviewer read only the montage line and concluded nine -- so it is
 # asserted rather than written down.
 #

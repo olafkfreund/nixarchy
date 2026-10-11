@@ -899,17 +899,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1791754495,
-        "narHash": "sha256-TizwQd0FSZRY1kd86Yjw6DQnlVjfyiUfCUZFaD88hMA=",
+        "lastModified": 1791755428,
+        "narHash": "sha256-rmniKgXPSYCuctaHmS4GDlgXoBIa9kPiRArJh21PvUg=",
         "owner": "olafkfreund",
         "repo": "nixarchy-gliff-manager",
-        "rev": "25d07a95d280cbbb1c4702fc4b9cf679a8defcab",
+        "rev": "71f87207096e425f56c53103b23f64fb8643f5d5",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-gliff-manager",
-        "rev": "25d07a95d280cbbb1c4702fc4b9cf679a8defcab",
+        "rev": "71f87207096e425f56c53103b23f64fb8643f5d5",
         "type": "github"
       }
     },

@@ -320,7 +320,7 @@
 
     # Why: docs/internals/flake.md#gliff-manager-from-a-nixos-ready-fork
     nixarchy-gliff-manager = {
-      url = "github:olafkfreund/nixarchy-gliff-manager/25d07a95d280cbbb1c4702fc4b9cf679a8defcab";
+      url = "github:olafkfreund/nixarchy-gliff-manager/71f87207096e425f56c53103b23f64fb8643f5d5";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.home-manager.follows = "home-manager";
     };

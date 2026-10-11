@@ -756,7 +756,8 @@ in
         nixarchy's own shell plugins, installed and turned on for you: the
         package manager, GitLab pipelines, GitHub Actions and herdr panels
         always, podman when podman is on, `gliff-manager` (Gliff-Manager, the
-        gliff machines panel) wherever gliff is installed, distrobox when
+        gliff machines panel) wherever nixarchy installs gliff (`preinstalls`,
+        unless gliff is in `preinstallsExclude`), distrobox when
         Boxes is on,
         microvms always, dev environments when the devenv service is on, and
         the Plugin Browser (Setup > Plugins > Add Plugin), `menu`
@@ -1988,8 +1989,8 @@ in
           src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
           gate = osConfig.virtualisation.podman.enable or false;
         };
-        # Wherever gliff is installed, and nowhere else: the same decision that
-        # installs gliff (modules/nixos.nix preinstalls).
+        # Wherever nixarchy installs gliff, and nowhere else: the same decision as
+        # the one that installs gliff (modules/nixos.nix preinstalls).
         gliff-manager = {
           id = "nixarchy.gliff-manager";
           src = inputs.nixarchy-gliff-manager.packages.${pkgs.stdenv.hostPlatform.system}.default;

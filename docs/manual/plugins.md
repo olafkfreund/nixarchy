@@ -39,7 +39,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Runtime themes](#runtime-themes) | switch the active palette across supported applications without a rebuild | **on by default** | Setup ▸ Themes <!-- io.github.nobledoodle.omarchroma --> |
 | [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **on by default** | Super+Space, and every Omarchy menu binding <!-- nixarchy.menu --> |
 | [Hyprforge](#hyprforge) | every Hyprland setting, previewed live on your real windows | **on by default** | Super+Space ▸ Hyprforge <!-- aziz.hyprforge --> |
-| [Gliff-Manager](#gliff-manager) | your gliff machines: ready or not, headless or mirror, connect | **on wherever gliff is** | the bar, or Setup ▸ Remote desktop ▸ Manage gliff machines <!-- nixarchy.gliff-manager --> |
+| [Gliff-Manager](#gliff-manager) | your gliff machines: ready or not, headless or mirror, connect | **on wherever nixarchy installs gliff** | the bar, or Setup ▸ Remote desktop ▸ Manage gliff machines <!-- nixarchy.gliff-manager --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
 
 ## Package manager
@@ -438,7 +438,7 @@ programs.nixarchy.defaultPlugins.hyprforge = false;
 
 [Gliff-Manager](https://github.com/28allday/Gliff-Manager) by Gavin Nugent, via
 [our NixOS-ready fork](https://github.com/olafkfreund/nixarchy-gliff-manager) · MIT ·
-**on wherever gliff is**
+**on wherever nixarchy installs gliff** (`preinstalls`, unless gliff is in `preinstallsExclude`)
 
 **What it solves.** gliff connects to a machine you name, but nothing tells you
 beforehand whether that machine is ready: is ssh allowed, is gliff installed
@@ -468,8 +468,9 @@ It is also absent when you remove gliff with
 `~/.config/gliff-manager/`.
 
 **Short names.** Its short tab names add an `Include` line to `~/.ssh/config`.
-If Home Manager owns that file, it is read-only and the setting cannot be
-turned on; leave it off, or put the `Include` in your Home Manager config.
+If `~/.ssh/config` is managed by Home Manager (a link into the Nix store),
+turning short names on refuses with a message and changes nothing; full names
+keep working.
 
 ## Voice
 

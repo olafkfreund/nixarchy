@@ -191,6 +191,8 @@ pkgs.testers.runNixOSTest rec {
             menu = false;
             # And Hyprforge (#1059).
             hyprforge = false;
+            # And Gliff-Manager (#1238).
+            gliff-manager = false;
           };
 
           # The declarative half. Same plugin the imperative flow adds below,

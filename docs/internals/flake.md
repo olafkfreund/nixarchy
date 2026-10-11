@@ -489,6 +489,31 @@ manifest.
 **`master`**, not `main`, and the id to confirm in step 3 is
 `nixarchy.podman`.
 
+<a id="gliff-manager-from-a-nixos-ready-fork"></a>
+### Gliff-Manager, from a NixOS-ready fork (#1238)
+
+```nix
+nixarchy-gliff-manager = {
+```
+
+[Gliff-Manager](https://github.com/28allday/Gliff-Manager) is Gavin Nugent's
+bar panel for gliff machines (MIT; his copyright is kept in the plugin's
+`LICENSE`). Upstream assumes Arch, so nixarchy pins our fork,
+`olafkfreund/nixarchy-gliff-manager`, which reads gliff's version from gliff
+itself, takes the channel from `/etc/os-release`, finds the NixOS-wrapped
+process names (`.gliff-wrapped`, `.Hyprland-wrapp`), runs no package manager
+and does not offer the Arch session fix on NixOS. It is a default plugin
+(`nixarchy.gliff-manager`), gated on `preinstalls` and not
+`preinstallsExclude` containing `gliff`: wherever gliff is installed.
+
+The input follows `nixpkgs` and `home-manager` (the fork's flake uses
+home-manager only in its own check), so nixarchy pulls in nothing extra.
+
+**Bumping the pin.** nixarchy pins a commit (the release tag's sha). Read the
+diff against both the fork and upstream (`28allday/Gliff-Manager`, whose
+last-synced commit is in the fork's `UPSTREAM` file), confirm the id is still
+`nixarchy.gliff-manager`, and build `checks.options` and `checks.plugin`.
+
 <a id="the-dev-environments-panel-wherever-devenv-is-802"></a>
 ### The Dev environments panel, wherever devenv is (#802)
 

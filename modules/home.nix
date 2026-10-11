@@ -744,6 +744,7 @@ in
         github = true;
         herdr = true;
         podman = true;
+        gliff-manager = true;
         distrobox = true;
         microvm = true;
         devenv = true;
@@ -754,7 +755,9 @@ in
       description = ''
         nixarchy's own shell plugins, installed and turned on for you: the
         package manager, GitLab pipelines, GitHub Actions and herdr panels
-        always, podman when podman is on, distrobox when Boxes is on,
+        always, podman when podman is on, `gliff-manager` (Gliff-Manager, the
+        gliff machines panel) wherever gliff is installed, distrobox when
+        Boxes is on,
         microvms always, dev environments when the devenv service is on, and
         the Plugin Browser (Setup > Plugins > Add Plugin), `menu`
         (nixarchy-menu, which replaces the Omarchy menu; `false` brings the
@@ -1984,6 +1987,15 @@ in
           id = "nixarchy.podman";
           src = inputs.nixarchy-podman.packages.${pkgs.stdenv.hostPlatform.system}.default;
           gate = osConfig.virtualisation.podman.enable or false;
+        };
+        # Wherever gliff is installed, and nowhere else: the same decision that
+        # installs gliff (modules/nixos.nix preinstalls).
+        gliff-manager = {
+          id = "nixarchy.gliff-manager";
+          src = inputs.nixarchy-gliff-manager.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          gate =
+            (osConfig.programs.nixarchy.preinstalls or false)
+            && !(builtins.elem "gliff" (osConfig.programs.nixarchy.preinstallsExclude or [ ]));
         };
         # The GitLab pipelines panel, on wherever nixarchy is, with the CLI it
         # drives and the python its gitlab.py runs on (#770).

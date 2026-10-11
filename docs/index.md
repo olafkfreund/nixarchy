@@ -88,9 +88,10 @@ a key, keyboard-first, in the desktop's own look:
 - browse the plugin marketplace, and audit a plugin before installing it;
 - open anything from one palette on Super+Space: apps, the whole menu, sums, files;
 - tune every Hyprland setting with a live preview, and keep what you save;
-- switch the colour palette across your apps without a rebuild.
+- switch the colour palette across your apps without a rebuild;
+- see which of your machines are ready for gliff, and connect.
 
-Fifteen ship by default: twelve are always on, three turn on with their feature. Voice is opt-in.
+Sixteen ship by default: twelve are always on, four turn on with their feature. Voice is opt-in.
 
 [![The Podman panel: containers, images and volumes, then a container stopping](img/features/podman.gif)](img/features/podman.gif)
 

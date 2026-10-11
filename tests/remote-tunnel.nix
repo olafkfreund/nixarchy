@@ -95,6 +95,27 @@ pkgs.runCommand "nixarchy-remote-tunnel"
     esac
     echo "  ok: gated on gliff, launches gliff"
 
+    echo "== the Gliff-Manager row follows its plugin and opens it"
+    row=$(grep -m1 '"setup\.remote\.gliff-manager"' "$menu") || {
+      echo "FAIL: no setup.remote.gliff-manager row in the generated menu."; exit 1; }
+    case "$row" in
+      *'"when":"nixarchy-plugin --enabled nixarchy.gliff-manager"'*) ;;
+      *)
+        echo "FAIL: the Gliff-Manager row's \`when\` does not name its plugin."
+        echo "  row: $row"
+        exit 1
+        ;;
+    esac
+    case "$row" in
+      *'"action":"nixarchy-plugin nixarchy.gliff-manager"'*) ;;
+      *)
+        echo "FAIL: the Gliff-Manager row's action does not open the plugin."
+        echo "  row: $row"
+        exit 1
+        ;;
+    esac
+    echo "  ok: enabled-gated, opens nixarchy.gliff-manager"
+
     echo "== self-test: an UNTRAPPED background child does survive"
         # Without this the check below cannot fail, and a teardown test that
         # passes whether or not there is a teardown is a green light.

@@ -127,6 +127,9 @@ let
   defaultHomeOn = homeOn { } { };
   # #888: the same machine with the nix-skills input turned off.
   skillsOffHome = homeOn { nixSkills = false; } { };
+  # #1238: gliff excluded, so its manager panel has nothing to manage. Bound
+  # once (#747).
+  homeNoGliff = homeOn { preinstallsExclude = [ "gliff" ]; } { };
 
   # #766's default plugins, exercised with fixtures rather than the real four:
   # those arrive with their own inputs in later PRs, and a test that fetched
@@ -192,6 +195,7 @@ let
       omatheme = false;
       menu = false;
       hyprforge = false;
+      gliff-manager = false;
     };
   };
   # Bound once for the same reason (#747): the #773 cases share it.
@@ -1217,6 +1221,19 @@ let
       on =
         defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.pkg" && hookLists "nixarchy.pkg" defaultHomeOn;
       off = defaultHome.programs.nixarchy.plugins ? "nixarchy.pkg";
+    };
+    # #1238: the Gliff-Manager panel follows gliff itself: on wherever nixarchy
+    # preinstalls it, off with gliff excluded, with the default opted out, and
+    # in standalone Home Manager or with nixarchy off.
+    gliffManagerIsADefault = {
+      on =
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.gliff-manager"
+        && hookLists "nixarchy.gliff-manager" defaultHomeOn;
+      off =
+        homeNoGliff.programs.nixarchy.plugins ? "nixarchy.gliff-manager"
+        || noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.gliff-manager"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.gliff-manager"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.gliff-manager";
     };
     # #1023: Nixarchy owns the default plugin files while omatheme owns the
     # runtime daemon and bridges. The two declarations must agree on the

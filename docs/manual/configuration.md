@@ -195,6 +195,9 @@ sits in the bar's right section with `herdr` itself, on at your first login,
 and opens from **Apps ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
 write to the Nix store: update herdr with nixpkgs, or put your own build ahead
 of it on `PATH`.
+The Gliff-Manager widget ([nixarchy-gliff-manager](https://github.com/olafkfreund/nixarchy-gliff-manager))
+follows gliff rather than nixarchy: it comes wherever gliff is installed, and
+opens from the bar or **Setup ▸ Remote desktop ▸ Manage gliff machines**.
 
 "Once" is the point. A marker in `~/.local/state/nixarchy/enabled-once/` records
 that it was turned on, so if you turn it off in Setup → Plugins it stays off. To
@@ -206,6 +209,7 @@ programs.nixarchy.defaultPlugins.podman = false;
 programs.nixarchy.defaultPlugins.gitlab = false;
 programs.nixarchy.defaultPlugins.github = false;
 programs.nixarchy.defaultPlugins.herdr = false;
+programs.nixarchy.defaultPlugins.gliff-manager = false;
 programs.nixarchy.defaultPlugins.devenv = false;
 programs.nixarchy.defaultPlugins.plugin-browser = false;
 programs.nixarchy.defaultPlugins.menu = false;

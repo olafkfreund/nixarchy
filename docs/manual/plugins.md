@@ -39,6 +39,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Runtime themes](#runtime-themes) | switch the active palette across supported applications without a rebuild | **on by default** | Setup ▸ Themes <!-- io.github.nobledoodle.omarchroma --> |
 | [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **on by default** | Super+Space, and every Omarchy menu binding <!-- nixarchy.menu --> |
 | [Hyprforge](#hyprforge) | every Hyprland setting, previewed live on your real windows | **on by default** | Super+Space ▸ Hyprforge <!-- aziz.hyprforge --> |
+| [Gliff-Manager](#gliff-manager) | your gliff machines: ready or not, headless or mirror, connect | **on wherever gliff is** | the bar, or Setup ▸ Remote desktop ▸ Manage gliff machines <!-- nixarchy.gliff-manager --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
 
 ## Package manager
@@ -432,6 +433,43 @@ programs.nixarchy.defaultPlugins.hyprforge = false;
 
 -- removes the panel, but keeps what you saved applied. Delete
 `~/.config/hypr/hyprforge.lua` to go back to Omarchy's own settings.
+
+## Gliff-Manager
+
+[Gliff-Manager](https://github.com/28allday/Gliff-Manager) by Gavin Nugent, via
+[our NixOS-ready fork](https://github.com/olafkfreund/nixarchy-gliff-manager) · MIT ·
+**on wherever gliff is**
+
+**What it solves.** gliff connects to a machine you name, but nothing tells you
+beforehand whether that machine is ready: is ssh allowed, is gliff installed
+there, is anyone logged in to Hyprland, is a screen plugged in.
+
+**What it does.** A bar widget listing your gliff machines. It checks each one
+over ssh, picks headless or mirror per machine, explains what is wrong, and
+connects. Open it from the bar, or **Setup ▸ Remote desktop ▸ Manage gliff
+machines**, or `omarchy-shell nixarchy.gliff-manager toggle`.
+
+**What the fork changed.** Upstream assumes Arch. The fork reads gliff's version
+from gliff, takes the channel from `/etc/os-release`, finds NixOS's wrapped
+process names, runs no package manager, and does not offer the Arch session fix
+on NixOS.
+
+**Turning it off** -- Setup ▸ Plugins, or
+
+```nix
+programs.nixarchy.defaultPlugins.gliff-manager = false;
+```
+
+It is also absent when you remove gliff with
+`programs.nixarchy.preinstallsExclude = [ "gliff" ];`.
+
+**Had upstream's copy?** Remove it with
+`omarchy plugin remove nosignal.gliff-manager`; both share
+`~/.config/gliff-manager/`.
+
+**Short names.** Its short tab names add an `Include` line to `~/.ssh/config`.
+If Home Manager owns that file, it is read-only and the setting cannot be
+turned on; leave it off, or put the `Include` in your Home Manager config.
 
 ## Voice
 

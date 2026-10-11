@@ -318,6 +318,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Why: docs/internals/flake.md#gliff-manager-from-a-nixos-ready-fork
+    nixarchy-gliff-manager = {
+      url = "github:olafkfreund/nixarchy-gliff-manager/25d07a95d280cbbb1c4702fc4b9cf679a8defcab";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+    };
+
     # Why: docs/internals/flake.md#the-gitlab-pipelines-panel-on-by-default-770
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-gltui = {
@@ -1160,6 +1167,7 @@
           # modules/home.nix names it as a default plugin (#766).
           nixarchy-pkg = inputs.nixarchy-pkg.packages.${system}.default;
           nixarchy-podman = inputs.nixarchy-podman.packages.${system}.default;
+          nixarchy-gliff-manager = inputs.nixarchy-gliff-manager.packages.${system}.default;
           nixarchy-microvm = inputs.nixarchy-microvm.packages.${system}.default;
           nixarchy-distrobox = inputs.nixarchy-distrobox.packages.${system}.default;
 

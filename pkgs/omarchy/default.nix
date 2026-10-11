@@ -179,6 +179,7 @@ let
     "setup.remote.serve": {"icon":"󰍹","label":"Allow connections","aliases":["rdp","incoming","serve","allow"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote serve"},
     "setup.remote.connect": {"icon":"󰐲","label":"Connect to a machine","aliases":["rdp","connect","remote","desktop"],"when":"command -v sdl-freerdp >/dev/null || command -v xfreerdp >/dev/null","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote connect"},
     "setup.remote.gliff": {"icon":"󰐲","label":"Connect with gliff","aliases":["gliff","remote","connect","omarchy","hyprland"],"when":"command -v gliff >/dev/null","action":"uwsm-app -- gliff"},
+    "setup.remote.gliff-manager": {"icon":"󰛳","label":"Manage gliff machines","aliases":["gliff","machines","remote","manager"],"when":"nixarchy-plugin --enabled nixarchy.gliff-manager","action":"nixarchy-plugin nixarchy.gliff-manager"},
   '';
 
   antigravityMenuRow = builtins.toFile "antigravity-menu-row.jsonc" ''

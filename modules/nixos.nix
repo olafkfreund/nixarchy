@@ -622,8 +622,8 @@ in
 
         gliff, Omarchy's Hyprland remote desktop over ssh, is included: it is in
         upstream's base packages rather than its preinstalls, and lives here so
-        it can be left out the same way. A machine you connect *to* also needs
-        `services.openssh.enable`.
+        it can be left out the same way, and the Gliff-Manager bar widget comes
+        with it. A machine you connect *to* also needs `services.openssh.enable`.
 
         Turning this off is the declarative Remove > Preinstalls.
       '';

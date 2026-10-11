@@ -41,7 +41,12 @@ services.openssh.enable = true;
 and somebody logged into a Hyprland session, for the same reason as RDP below:
 gliff is a client of a compositor that is already running.
 
-gliff is installed by default. To remove it:
+**Setup → Remote desktop → Manage gliff machines** (also a bar widget) lists
+your machines, checks each over ssh, and connects them the right way; see
+[Gliff-Manager](plugins#gliff-manager). Turn the widget off alone with
+`programs.nixarchy.defaultPlugins.gliff-manager = false;`.
+
+gliff is installed by default. To remove it, and the widget with it:
 
 ```nix
 programs.nixarchy.preinstallsExclude = [ "gliff" ];

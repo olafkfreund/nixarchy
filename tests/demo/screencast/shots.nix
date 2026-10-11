@@ -12,25 +12,25 @@
 # let a caption satisfy its own expectation, so the gate runs on the raw
 # master and refuses a file that already carries captions.
 #
-# ALL FIFTEEN shipped plugins appear. Stated rather than left implicit,
+# ALL SIXTEEN shipped plugins appear. Stated rather than left implicit,
 # because a reviewer counted the montage alone and concluded nine:
 #
 #   named beats  nixarchy.menu (menu), nixarchy.pkg (search),
 #                plugin-browser (audit), nixarchy.rebuild (apply)
 #   montage      microvm, podman, distrobox, devenv, github-actions,
 #                gitlab-pipelines, herdr, flatsnap, hyprforge,
-#                omarchroma, ai-mirror
+#                gliff-manager, omarchroma, ai-mirror
 #
-# Four plus eleven.
+# Four plus twelve.
 #
 # RUNTIME:
 #
 #   spine   2 + 3 + 4 + 5 + 4 + 5 + 6       = 29.0
 #   theme   3 + 2.5 + 3 + 2.5               = 11.0
-#   montage 11 x 2.4                        = 26.4
+#   montage 12 x 2.4                        = 28.8
 #   tail    3.5 + 5 + 4                     = 12.5
 #                                             ------
-#                                             78.9
+#                                             81.3
 #
 # That is over the 60-second brief, and deliberately so. The brief is 60
 # seconds for the CUT, and screencast-edit speeds the whole master to
@@ -109,6 +109,12 @@ let
           id = "aziz.hyprforge";
           name = "Hyprforge — every Hyprland setting, previewed live";
           expect = "Hyprforge|Windows & Gaps|Borders & Colors";
+        }
+        {
+          short = "gliff-manager";
+          id = "nixarchy.gliff-manager";
+          name = "Your gliff machines, ready or not";
+          expect = "Gliff|gliff|Headless|Mirror";
         }
         {
           # A bar widget only, like ai-mirror below -- but this one opens:
@@ -240,7 +246,7 @@ in
     # whichever of the two the gate sampled, the other would be unchecked.
     #
     # It sits here, before the montage, on purpose: everything after it is
-    # recorded in the new theme, so "the plugins follow" is shown eleven more
+    # recorded in the new theme, so "the plugins follow" is shown twelve more
     # times rather than claimed once.
     {
       label = "theme";
@@ -303,9 +309,9 @@ in
       # It is NOT a shell plugin -- it is `services.nixi`, a home-manager
       # module -- so it is absent from `defaultPluginSet`, and shot-coverage.sh
       # was green with the video never mentioning it. That check compares the
-      # shot list against the fifteen plugins and can say nothing about anything
+      # shot list against the sixteen plugins and can say nothing about anything
       # that is not one; the gap was found by a person watching the cut. Worth
-      # knowing before trusting the count: "all fifteen plugins" is a smaller
+      # knowing before trusting the count: "all sixteen plugins" is a smaller
       # claim than "everything nixarchy does".
       #
       # The beat shows the MENU and does not run a question. Deliberate:

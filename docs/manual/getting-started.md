@@ -23,15 +23,15 @@ want depends on whether the drive is blank.
 >
 > Everything here is being worked on and tested continuously. Please
 > [report what you hit](https://github.com/olafkfreund/nixarchy/issues) —
-> `omarchy bug-report` collects the useful details for you.
+> `omarchy debug --no-sudo --print` collects the useful details for you.
 
 
 ## The ISO
 
 Two images are published with each
 [release](https://github.com/olafkfreund/nixarchy/releases): a **net** image of
-about 1.6 GB that downloads the desktop while it installs, and an **offline**
-image of about 6 GB that carries it. The offline one is split into `.part-*`
+about 2 GB that downloads the desktop while it installs, and an **offline**
+image of about 7 GB that carries it. The offline one is split into `.part-*`
 files because GitHub refuses a single asset over 2 GiB; the release notes give
 the one command that joins them.
 
@@ -56,7 +56,7 @@ comes up, and it asks the same questions Omarchy asks, in the same order.
 
 ![Selecting a keyboard layout](../img/installer/step-01-keyboard.png)
 
-Forty-five layouts, English variants first. Not the several hundred files under
+Forty-three layouts, English variants first. Not the several hundred files under
 `share/keymaps` — `mod-dh-ansi-us-fatz-wide` is not a thing to put in front of
 someone who has just booted a disk.
 
@@ -130,7 +130,8 @@ Three things to know first.
 **Only the net image needs a network.** It downloads the closure rather than
 carrying it, so an install is as fast as your connection. The offline image
 carries the whole closure and installs with no network at all — see
-[The ISO](#the-iso) above.
+[The ISO](#the-iso) above. The first rebuild of your own configuration needs a
+network once, whichever image you used; [The ISO in depth](the-iso) says why.
 
 **It is UEFI only.** The layout is an ESP with systemd-boot, and there is no BIOS
 path — the installer checks and refuses rather than failing at the end.
@@ -140,6 +141,18 @@ happens in the initrd, before Bluetooth exists, so a keyboard that pairs once th
 desktop is up has no way to type into it — the machine simply waits. Upstream's
 manual carries the same warning because people hit it. Use a wired keyboard for
 the first boot, or choose an unencrypted install with Ctrl+C.
+
+## Already on your desktop
+
+Three things are there from the first boot, with nothing to switch on:
+
+- the guide, nixi, which tours the desktop and answers about your machine
+  ([The guide](#the-guide));
+- the bar widgets: the package manager, GitHub and GitLab, herdr,
+  Gliff-Manager, MicroVMs, Rebuild and ai-mirror, and the rest
+  ([Plugins](plugins));
+- gliff, a remote desktop to your other nixarchy machines over SSH
+  ([Your first session](remote-desktop#your-first-session)).
 
 ## Configuring it, once you are in
 
@@ -270,7 +283,7 @@ From the README, the whole of it:
 
 ```nix
 {
-  inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.1-1";
+  inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.3-2";
 
   outputs = { nixpkgs, nixarchy, ... }: {
     nixosConfigurations.mymachine = nixpkgs.lib.nixosSystem {
@@ -287,6 +300,10 @@ From the README, the whole of it:
   };
 }
 ```
+
+gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
+after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
+(main) to get them.
 
 And for the user who will sit at the desktop, in Home Manager:
 
@@ -378,9 +395,9 @@ the output of `omarchy debug --no-sudo --print`.
 
 ## No Nix yet? Try it from any Linux
 
-`#try` above is a `nix run` app, so it needs Nix installed. If you are on
-Ubuntu, Fedora, Arch or anything else and would rather look first, there is a
-script that needs only `qemu` and `curl` from your own package manager:
+[`#try`](try-it-in-a-vm) is a `nix run` app, so it needs Nix installed. If you
+are on Ubuntu, Fedora, Arch or anything else and would rather look first, there
+is a script that needs only `qemu` and `curl` from your own package manager:
 
 ```sh
 curl -fLO https://raw.githubusercontent.com/olafkfreund/nixarchy/main/installer/try-nixarchy.sh

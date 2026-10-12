@@ -31,7 +31,7 @@ the documentation as much as the code.
 
 | topic | |
 |---|---|
-| Welcome to omarchy | same as Omarchy — [read there](https://omarchy.org/manual/welcome-to-omarchy/) |
+| Welcome to omarchy | same as Omarchy — [read there](https://omarchy.org/manual/) |
 | **Getting started** | **differs on NixOS** — [read here](getting-started) |
 | **The ISO in depth** | **nixarchy only** — [read here](the-iso) |
 | Coming from mac or windows | same as Omarchy — [read there](https://omarchy.org/manual/coming-from-mac-or-windows/) |
@@ -67,7 +67,7 @@ the documentation as much as the code.
 | Filling out pdfs | same as Omarchy — [read there](https://omarchy.org/manual/filling-out-pdfs/) |
 | Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |
 | **Other packages** | **differs on NixOS** — [read here](other-packages) |
-| **Flatpak and Snap** | **differs on NixOS** — [read here](flatpak-and-snap) |
+| **Flatpak and Snap** | **nixarchy only** — [read here](flatpak-and-snap) |
 | **Configuring nixarchy** | **nixarchy only** — [read here](configuration) |
 | **nixarchy's plugins** | **nixarchy only** — [read here](plugins) |
 | **Preview changes** | **nixarchy only** — [read here](preview) |

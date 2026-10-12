@@ -40,8 +40,9 @@ terminal -- nothing references it, and collecting it can never cost you a
 rollback.
 
 On a machine the installer built, that collection is automatic: the Nix
-daemon collects when free space falls below 5 GiB, which is the case this
-setting exists for. You can also do it now, and it is the same operation:
+daemon collects when free space falls below 3 GiB, and frees until 8 GiB are
+free, which is the case this setting exists for. You can also do it now, and it
+is the same operation:
 
 ```sh
 sudo nix-collect-garbage

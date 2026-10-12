@@ -1281,6 +1281,23 @@ and on an entry whose line is gone (delete it). It does not read
 reasons: an entry with a wrong reason is a review failure, not a check
 failure (see "An inventory check cannot check its own reasons" above).
 
+## A list check must look where the item lives, not anywhere on the page
+
+`checks.docs-lists` (#1246) first did `grep -qF "$line" configuration.md`
+for each default plugin and service. Its §1 proof was red twice and correct
+both times. It was still blind to two of the eleven service rows: the
+OpenSSH and Tailscale lines also appear in the prose and the code block above
+the table, so deleting their rows left the check green. The proof had removed
+`hyprforge` and `graphics32`, both of which appear once on the page, so it
+could not have seen the problem. An independent review found it by removing
+the duplicated rows.
+
+So a check that a document lists X has to match X **in the place a reader
+looks for it**: a table cell (`| \`X\` |`), a whole line (`grep -xF`), a
+heading. And the break that proves it should pick the item most likely to be
+satisfied by something else: the one that also appears elsewhere, not the
+first one that comes to hand.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

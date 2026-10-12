@@ -14,7 +14,7 @@ used to be the middle of the README, and moved here unchanged.
 
 ```nix
 {
-  inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.1-1";
+  inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.3-2";
 
   outputs = { nixpkgs, nixarchy, ... }: {
     nixosConfigurations.mymachine = nixpkgs.lib.nixosSystem {
@@ -31,6 +31,10 @@ used to be the middle of the README, and moved here unchanged.
   };
 }
 ```
+
+gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
+after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
+(main) to get them.
 
 And in Home Manager:
 
@@ -62,7 +66,7 @@ call the `omarchy-*` executables directly, not these functions.
 
 ## Plugins
 
-[Omarchy's plugin system](https://omarchy.org/manual/plugins/) works here
+[Omarchy's plugin system](https://omarchy.org/manual/shell-plugins/) works here
 unchanged — the menu below is upstream's own, running on NixOS:
 
 ![Setup > Plugins, with Enable, Disable, Add, Clone and Remove](https://github.com/olafkfreund/nixarchy/raw/main/docs/screenshots/17-plugins-menu.jpg)
@@ -205,16 +209,26 @@ that it was turned on, so if you turn it off in Setup → Plugins it stays off. 
 stop nixarchy installing one at all:
 
 ```nix
+programs.nixarchy.defaultPlugins.rebuild = false;
 programs.nixarchy.defaultPlugins.pkg = false;
+programs.nixarchy.defaultPlugins.flatsnap = false;
+programs.nixarchy.defaultPlugins.menu = false;
 programs.nixarchy.defaultPlugins.podman = false;
+programs.nixarchy.defaultPlugins.gliff-manager = false;
 programs.nixarchy.defaultPlugins.gitlab = false;
 programs.nixarchy.defaultPlugins.github = false;
+programs.nixarchy.defaultPlugins.hyprforge = false;
 programs.nixarchy.defaultPlugins.herdr = false;
-programs.nixarchy.defaultPlugins.gliff-manager = false;
+programs.nixarchy.defaultPlugins.distrobox = false;
+programs.nixarchy.defaultPlugins.microvm = false;
 programs.nixarchy.defaultPlugins.devenv = false;
 programs.nixarchy.defaultPlugins.plugin-browser = false;
-programs.nixarchy.defaultPlugins.menu = false;
+programs.nixarchy.defaultPlugins.omatheme = false;
+programs.nixarchy.defaultPlugins.ai-mirror = false;
 ```
+
+ai-mirror is already off on a machine where you run ai-mirror's own module
+(`programs.ai-mirror.enable`), because yours wins.
 
 That never edits your `shell.json`, so a plugin you already have on stays on
 until you turn it off there. If you already declare it yourself through
@@ -471,6 +485,22 @@ upstream's and are written beside ours:
 programs.nixarchy.services.tailscale.enable = true;   # + trusts the interface
 services.tailscale.useRoutingFeatures = "client";     # upstream's option, untouched
 ```
+
+All eleven entries of `data/services.nix`:
+
+| Service | Category | What you write |
+|---|---|---|
+| devenv | Development | `programs.nixarchy.services.devenv.enable = true;` |
+| Flatpak | Desktop | `services.flatpak.enable = true;` |
+| 32-bit graphics | Hardware | `hardware.graphics.enable32Bit = true;` |
+| Remote desktop (RDP) | Network | `programs.nixarchy.services.hypr-rdp.enable = true;` |
+| Sandboxes (MicroVMs) | Development | `programs.nixarchy.services.microvm.enable = true;` |
+| Open WebUI (local chat) | Desktop | `programs.nixarchy.services.open-webui.enable = true;` |
+| OpenSSH server | Network | `services.openssh.enable = true;` |
+| Podman | Development | `virtualisation.podman.enable = true;` |
+| Syncthing | Desktop | `programs.nixarchy.services.syncthing.enable = true;` |
+| Tailscale | Network | `programs.nixarchy.services.tailscale.enable = true;` |
+| Waydroid (Android apps) | Development | `virtualisation.waydroid.enable = true;` |
 
 ## On a machine you already run
 

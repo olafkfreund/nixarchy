@@ -165,7 +165,7 @@ See **[a reinstall image of this machine](manual/reinstall-image)**.
 > **nixarchy is in active development, and you should expect to hit problems.**
 > Everything here is being worked on and tested continuously. Please
 > [report what you hit](https://github.com/olafkfreund/nixarchy/issues) —
-> `omarchy bug-report` collects the useful details for you.
+> `omarchy debug --no-sudo --print` collects the useful details for you.
 
 ### Already running NixOS? Use the flake
 
@@ -201,7 +201,8 @@ is written there rather than done behind it.
 
 **The ISO carries its own closure, so an install needs no network.** It is
 checked with no network device present at all: 2,221 store paths copied from
-the medium, zero fetched, nothing built.
+the medium, zero fetched, nothing built. The first rebuild of your own
+configuration does need a network, once.
 
 See **[the ISO](manual/the-iso)** for the remaining limits.
 

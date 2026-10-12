@@ -167,7 +167,7 @@ And if you want to try something by hand rather than read about it:
 `nix run .#vm` is a throwaway desktop whose state deliberately does not
 survive, while **`nix run .#vm-big` is the one to keep** — it has a real disk,
 every default panel turned on, and a local model. Both are described in
-[the flake's own notes](../internals/flake.md#the-same-vm-with-room-to-run-a-model).
+[the flake's own notes](https://github.com/olafkfreund/nixarchy/blob/main/docs/internals/flake.md#the-same-vm-with-room-to-run-a-model).
 
 The commit messages are part of the documentation. When something here was wrong,
 the commit that fixed it says what was wrong, how it was found, and what would

@@ -41,6 +41,54 @@ services.openssh.enable = true;
 and somebody logged into a Hyprland session, for the same reason as RDP below:
 gliff is a client of a compositor that is already running.
 
+### Your first session
+
+The steps below take two machines, called `desk` (the one you connect to) and
+your own, from nothing to a connected window.
+
+1. **On `desk`,** set `services.openssh.enable = true;`, rebuild, and log into
+   Hyprland there. gliff is already installed unless
+   `programs.nixarchy.preinstallsExclude` lists it.
+2. **On the machine you sit at,** make a key if `~/.ssh/id_ed25519` does not
+   exist (`ssh-keygen -t ed25519`), then copy it over with
+   `ssh-copy-id you@desk`. This step is required: the widget checks each
+   machine with ssh `BatchMode=yes`, so one that would ask for a password reads
+   as "Login refused".
+3. **Pick a name.** `desk.local` works on the same LAN. With Tailscale, use
+   the tailnet name; the widget lists tailnet machines under "ON YOUR
+   TAILNET".
+4. **Run `ssh you@desk` once** to save its host key.
+5. **Open the widget** from the bar, or **Setup → Remote desktop → Manage gliff
+   machines**, type `you@desk` into the field (it says `user@host`) and press
+   Enter or **Add machine**.
+6. **Read the status** on the machine's row. The table below says what each
+   one means.
+7. **Choose a mode** by clicking the mode chip, which cycles Auto → Headless →
+   Mirror → each screen the machine reported. Auto means headless when nothing
+   is plugged in there, and mirror when a display is. Use headless to work
+   beside someone at that desk, and mirror to see its screen.
+8. **Connect** with the play button (its tooltip says Connect) or Enter. On a
+   row with a warning, they run the fix instead. Once the row says "Connected"
+   the same button disconnects. **Shift+Esc** inside a gliff window gives the
+   keyboard back to your own desktop.
+
+| The widget says | Meaning | Fix |
+|---|---|---|
+| Connected · *mode* | a session is open | — |
+| Not checked yet / Checking… | no answer yet | wait, or press R |
+| Tailscale wants you to sign in again | Tailscale SSH needs a fresh login | the widget's fix opens the sign-in |
+| Offline or not answering ssh | no ssh reply | the machine is off, asleep, or has no `services.openssh.enable` |
+| Login refused for *user* | ssh refused your key | step 2, or the wrong user name |
+| Host key not saved yet | first contact | step 4; the widget offers it |
+| Host key changed — booted into another OS? | the key no longer matches | find out why first; then the widget's fix re-saves it |
+| Hyprland runs as *A*, not *B* | someone else is logged in there | the fix switches to `A@host` |
+| No Hyprland session running | nobody is logged in there | log in on that machine |
+| gliff is not installed there | gliff is missing on that machine | on nixarchy it is installed unless `preinstallsExclude` lists it |
+| Ready · *arch* · *channel* | ready | — |
+| Ready · gliff *x* there, *y* here | the versions differ | update the older machine |
+
+### Managing your machines
+
 **Setup → Remote desktop → Manage gliff machines** (also a bar widget) lists
 your machines, checks each over ssh, and connects them the right way; see
 [Gliff-Manager](plugins#gliff-manager). Turn the widget off alone with

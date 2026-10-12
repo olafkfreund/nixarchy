@@ -2372,6 +2372,15 @@
               self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
           };
 
+          # configuration.md names every default plugin and service by its line
+          # (#1246); tests/docs-lists.nix says which is missing.
+          docs-lists = import ./tests/docs-lists.nix {
+            pkgs = pkgsFor.${system};
+            pluginNames = builtins.attrNames self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet;
+            services = import ./data/services.nix;
+            doc = ./docs/manual/configuration.md;
+          };
+
           # A keep-loaded plugin lost its shell API at the first shell.json
           # change, because manifestHasKind tested kinds with Array.isArray and a
           # Qt sequence is not one (#877). Runs the built function in a real QML

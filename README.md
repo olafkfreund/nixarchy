@@ -235,7 +235,7 @@ that this machine then refuses to build. The options half substitutes from
 > Everything is being worked on and tested continuously; the four VM install
 > checks in CI exist precisely because this is the part that needs proving.
 > Please [file what you hit](https://github.com/olafkfreund/nixarchy/issues) —
-> `omarchy bug-report` collects the useful details for you.
+> `omarchy debug --no-sudo --print` collects the useful details for you.
 
 ### On NixOS you already run
 
@@ -255,11 +255,15 @@ Then, in order:
    version means.
 
    ```nix
-   inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.1-1";
+   inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.3-2";
    # in your host's modules:
    imports = [ inputs.nixarchy.nixosModules.nixarchy ];
    programs.nixarchy.enable = true;
    ```
+
+   gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
+   after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
+   (main) to get them.
 
 2. **Paste what the doctor printed.** On a machine that already runs Hyprland
    behind greetd, that is:
@@ -320,7 +324,7 @@ that runs the nightly checks. The large one is split, because GitHub will not
 take a single file that size:
 
 ```
-cat nixarchy-v*.iso.part-* > nixarchy.iso     # the 6.6 GB image only
+cat nixarchy-v*.iso.part-* > nixarchy.iso     # the ~7 GB image only
 sha256sum -c --ignore-missing SHA256SUMS
 sudo dd if=nixarchy.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
@@ -332,8 +336,8 @@ There are two images, and the difference is what they carry:
 
 | | Size | Needs a network | |
 |---|---|---|---|
-| `#iso` | 6.6 GB | no | carries the desktop; installs by copying |
-| `#iso-net` | 1.5 GB | yes | downloads the desktop as it installs |
+| `#iso` | about 7 GB | no | carries the desktop; installs by copying |
+| `#iso-net` | about 2 GB | yes | downloads the desktop as it installs |
 
 Take `#iso` unless the download is the thing you mind. It is the one the tests
 boot every night, it works on a machine that has never had a network, and it is
@@ -357,8 +361,8 @@ installer ISO a release ships, in a local UEFI VM, and you answer the wizard
 yourself:
 
 ```sh
-nix run github:olafkfreund/nixarchy#try            # offline image, ~6.6 GB download
-nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~1.9 GB download
+nix run github:olafkfreund/nixarchy#try            # offline image, ~7 GB download
+nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~2 GB download
 ```
 
 The offline image installs with no network at all; the network image fetches
@@ -493,7 +497,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Gliff-Manager** | your gliff machines in the bar: ready or not, headless or mirror, connect ([Gliff-Manager](https://github.com/28allday/Gliff-Manager), by Gavin Nugent, through [a NixOS-ready fork](https://github.com/olafkfreund/nixarchy-gliff-manager)). **On wherever nixarchy installs gliff** |
 | **Setup ▸ Plugins ▸ Add Plugin** | the plugin marketplace, audited in a sandbox before anything installs ([nixarchy-plugin-browser](https://github.com/olafkfreund/nixarchy-plugin-browser)). **On by default**, Super+Alt+U |
 | **Runtime themes** | the active palette across supported apps without a rebuild ([omatheme](https://github.com/olafkfreund/nixarchy-omatheme)). **On by default** |
-| **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **Coming**, and it asks a human before it takes control — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
+| **ai-mirror** | let an agent use your real desktop, and stop it ([ai-mirror](https://github.com/olafkfreund/ai-mirror)) — it works through the desktop a person sees, so the thing it drives is the dialog or the unlabelled button, not an API. **On by default**, and it asks a human before it takes control — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#ai-mirror) |
 | **Voice** | operate the desktop by talking to it ([nixarchy-voice](https://github.com/olafkfreund/nixarchy-voice)). **Opt-in** — [the page](https://olafkfreund.github.io/nixarchy/manual/plugins#voice) |
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 445 |
 | **Remove menu** | deselects apps, never touches your own config |
@@ -655,10 +659,14 @@ programs.nixarchy.apps.once.package =
 
 ```nix
 inputs.nixarchy = {
-  url = "github:olafkfreund/nixarchy/v4.0.1-1";
+  url = "github:olafkfreund/nixarchy/v4.0.3-2";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
+
+gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
+after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
+(main) to get them.
 
 From `v4.0.1-3` on, a tag also publishes the two ISOs and a `SHA256SUMS` to
 the [Releases](https://github.com/olafkfreund/nixarchy/releases) page, so a tag

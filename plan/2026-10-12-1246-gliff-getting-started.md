@@ -334,3 +334,46 @@ Run under bash, one at a time:
 Revert the squashed commit. Nothing outside `docs/`, `README.md`,
 `tests/docs-lists.nix` and the one `flake.nix` entry changes, and no deployed
 machine reads any of them.
+
+## Deviations recorded during implementation
+
+- **Step 1:**
+  - The tailnet heading is quoted as "ON YOUR TAILNET", because the widget
+    renders it in capitals (`Panel.qml:675`).
+  - Add machine is described as the field (placeholder `user@host`) plus Enter
+    or the **Add machine** button, because it is an icon button.
+  - avahi is at `modules/nixos.nix:1588-1590`, not 635-639 (the spec cited the
+    `data/services.nix` comment's stale numbers). The fact holds.
+- **Step 3e:** `the-iso.md` also said the net image is small "rather than
+  5.6". That became "rather than 7" under the same rounding rule.
+  `the-iso.md`'s paragraph is wrapped so that "The 68 selectable apps are the
+  exception" stays on one line, because `readme-counts.sh`'s `apps-iso`
+  pattern needs it that way.
+- **Step 5:**
+  - `docs-lists` sits after the `qml` entry, before the next comment block,
+    so `qml` is not separated from its own comment.
+  - The §1 breaks were restored by copying a saved `configuration.md` back
+    (confirmed identical with `cmp`) rather than `git checkout HEAD --`,
+    because the coder agent cannot commit a baseline.
+- **Steps 1–6** were done by the `coder` agent. The commit and the PR are the
+  session model's.
+- **After the independent review:**
+  - `checks.docs-lists` matched lines anywhere on the page, so the OpenSSH and
+    Tailscale rows could vanish unseen (both lines also appear in the text
+    above the table). Plugin lines now match a whole line (`grep -qxF`), and
+    services match their table cell (`| \`<line>\` |`). The §1 proof was
+    re-run with the Tailscale row removed, and it fails naming it.
+  - `remote-desktop.md` gains `### Managing your machines` after the status
+    table, so the existing paragraphs (the clipboard warning among them) no
+    longer sit under "Your first session".
+  - Step 8 says Connect and Disconnect are icon buttons, and that on a
+    warning row they run the fix (`primaryAction`).
+  - The two adjacent "The ISO" links are relabelled or dropped.
+  - **The release pin:** `v4.0.3-2` predates gliff and `defaultPlugins`
+    (`git grep` at the tag finds neither). By the user's decision the pin
+    stays, and each pinned example (`configuration.md`, `getting-started.md`,
+    README twice) gets one sentence pointing to `main` until a later release
+    is marked Latest.
+  - `tests/AGENTS.md` gains "A list check must look where the item lives",
+    the general lesson from the review finding. This follows the repo's
+    write-back rule ("same PR").

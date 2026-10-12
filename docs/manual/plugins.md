@@ -13,10 +13,10 @@ the desktop already is: a chord and a list, keyboard-first, in the shell's own
 look.
 
 Some are **on by default**: installed with nixarchy and turned on at your first
-login. Others are on their way, and some stay **opt-in** on purpose. Each entry
-below says which. Turning one on happens *once*, so a plugin you switch off in
-**Setup → Plugins** stays off. [Configuring nixarchy](configuration#nixarchys-own-plugins)
-covers how to stop nixarchy installing one at all.
+login. Some stay **opt-in** on purpose. Each entry below says which. Turning
+one on happens *once*, so a plugin you switch off in **Setup → Plugins** stays
+off. [Configuring nixarchy](configuration#nixarchys-own-plugins) covers how to
+stop nixarchy installing one at all.
 
 The keys below (Super+Alt+…) are seeded into `~/.config/hypr/bindings.lua` on
 **new** installs. nixarchy never edits that file afterwards, so on an existing
@@ -362,8 +362,6 @@ after ten idle minutes, and `ai-mirror control off` in any terminal ends it at
 once.
 
 **[Watch the nixarchy desktop showcase](https://github.com/olafkfreund/ai-mirror/releases/download/demo-2026-09-18/nixarchy-desktop-showcase.mp4)**, recorded by an agent through ai-mirror.
-
-*Not recorded yet. It needs an agent driving the desktop, which is [#816](https://github.com/olafkfreund/nixarchy/issues/816) pass C.*
 
 ## Runtime themes
 

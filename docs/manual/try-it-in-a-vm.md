@@ -16,8 +16,8 @@ pages you want.
 ## With Nix
 
 ```sh
-nix run github:olafkfreund/nixarchy#try            # offline image, ~6.6 GB download
-nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~1.9 GB download
+nix run github:olafkfreund/nixarchy#try            # offline image, ~7 GB download
+nix run github:olafkfreund/nixarchy#try -- --net   # network image, ~2 GB download
 ```
 
 The **offline** image installs with no network at all — it carries its own

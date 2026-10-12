@@ -64,8 +64,8 @@ There are two images, and the difference is what they carry:
 
 | | Size | Needs a network | |
 |---|---|---|---|
-| `#iso` | 6.6 GB | no | carries the desktop; installs by copying |
-| `#iso-net` | 1.5 GB | yes | downloads the desktop as it installs |
+| `#iso` | about 7 GB | no | carries the desktop; installs by copying |
+| `#iso-net` | about 2 GB | yes | downloads the desktop as it installs |
 
 Take `#iso` unless the download is the thing you mind. It is the one the tests
 boot every night, it works on a machine that has never had a network, and it is
@@ -106,13 +106,14 @@ the passphrase you typed at boot already proved who you are, so there is no
 second password.
 
 **`#iso` does not need a network.** The image carries the desktop rather than
-downloading it — 6.6 GB of ISO holding an 18.3 GB closure — so an install is a
-store copy and an activation, not a download. Unplug the cable and it still
-works; `checks.install-iso` proves that by installing with no network device
-present at all. `#iso-net` trades exactly this away: it fetches the same
-closure from `nixarchy.cachix.org` instead, which is why it is 1.5 GB rather
-than 5.6, and why it stops at a Wi-Fi prompt on a machine with no cable. The 68 selectable apps are the exception, and are meant to be:
-they come from the Install menu after first boot, from your own nixpkgs.
+downloading it — about 7 GB of ISO holding an 18.3 GB closure — so an
+install is a store copy and an activation, not a download. Unplug the cable and
+it still works; `checks.install-iso` proves that by installing with no network
+device present at all. `#iso-net` trades exactly this away: it fetches the same
+closure from `nixarchy.cachix.org` instead, which is why it is about 2 GB
+rather than 7, and why it stops at a Wi-Fi prompt on a machine with no cable.
+The 68 selectable apps are the exception, and are meant to be: they come from the Install
+menu after first boot, from your own nixpkgs.
 
 **You can answer the questions ahead of time.** `nixarchy-install --answers
 <file>` takes every answer from a file and asks nothing, which is how the VM

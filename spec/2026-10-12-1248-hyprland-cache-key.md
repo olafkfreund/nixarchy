@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1248
 intent: intent/2026-10-12-1248-hyprland-cache-key.md
 ---

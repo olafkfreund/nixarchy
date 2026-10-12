@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1246
 spec: spec/2026-10-12-1246-gliff-getting-started.md
 ---

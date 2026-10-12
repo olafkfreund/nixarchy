@@ -115,8 +115,12 @@ What this buys, and what it costs, measured rather than assumed:
 | | hyprwm's flake | nixpkgs |
 |---|---|---|
 | speed to a fix | their branch, same day | nixpkgs' packaging lag |
-| built or fetched | **fetched** — `hyprland.cachix.org` | fetched — `cache.nixos.org` |
+| built or fetched | **fetched** — `hyprland.cachix.org`, and `nixarchy.cachix.org` as a second source | fetched — `cache.nixos.org` |
 | inputs fetched at update | **~60**, including a second nixpkgs | none |
+
+Until #1248 the key for hyprwm's cache was wrong, so Hyprland came from
+nixarchy.cachix.org or was built; `checks.cache-keys` now verifies the key
+against a real signature.
 
 That last row is the real cost. Evaluating this input pulls hyprwm's whole
 build graph — aquamarine, hyprutils, hyprlang, hyprtoolkit, xdph and a

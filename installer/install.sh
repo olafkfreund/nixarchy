@@ -48,7 +48,7 @@ NIX_FLAGS=(--extra-experimental-features "nix-command flakes")
 # these the first install compiles Hyprland from source. Keys copied from
 # nix.settings in modules/nixos.nix -- do not retype them.
 SUBSTITUTERS="https://nixarchy.cachix.org https://hyprland.cachix.org"
-TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
+TRUSTED_KEYS="nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
 
 # ...unless we are the offline image, which carries the whole closure.
 #

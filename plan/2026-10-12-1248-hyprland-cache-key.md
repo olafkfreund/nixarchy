@@ -201,3 +201,29 @@ list will confirm it.
 Revert the squash commit. The old key is inert: it verifies nothing, and
 nixarchy.cachix.org keeps serving Hyprland. Rolling back loses nothing but
 the second source.
+
+## Deviations recorded during implementation
+
+- **Step 4, the grep output.** It is written to `$(mktemp -d)`, not the
+  source tree, because the store copy is read-only. The first build failed
+  with `hits: Permission denied`.
+- **Step 4, the copies-agree check, after the Opus review.**
+  - **Scope.** It runs over every cache name the grep finds, not just
+    `hyprland` and `nixarchy`. That is the approved decision ("every
+    `<cache>.cachix.org-1:` key … one distinct value per cache"); the
+    first version narrowed it, and so missed `devenv`'s two copies.
+  - **Unreadable keys.** A line containing `cachix.org-1:` that the strict
+    pattern cannot read now fails as a key the check cannot compare. A
+    one-character typo would otherwise have been invisible. Only this
+    check's own source and the fixtures' `Sig` lines are exempt.
+  - **Files scanned.** The source is the whole tree minus `intent/`,
+    `spec/` and `plan/`, rather than a list of directories, so a future
+    copy in `docs/manual/` or `README.md` is seen.
+- **Step 6.** The coder's guard blocks `git checkout`, so the session model
+  ran the proof. After the review fixes it was re-run with two more breaks:
+  - **(e)** One devenv copy changed: fails with "devenv: the tree disagrees
+    with itself", naming both files.
+  - **(f)** The Hyprland key in `installer/vm.nix` one character short:
+    fails with "a cachix key this check cannot read".
+- **Step 7.** `flake.md` says Hyprland "came from nixarchy.cachix.org or was
+  built", not "came only from": any path our cache had evicted was built.

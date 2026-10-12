@@ -9,7 +9,7 @@
     ];
     extra-trusted-public-keys = [
       "nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM="
-      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE="
+      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
     ];
   };
 
@@ -2380,6 +2380,10 @@
             services = import ./data/services.nix;
             doc = ./docs/manual/configuration.md;
           };
+
+          # The Hyprland substituter key was wrong from the first commit and nothing
+          # noticed, because our cache served the same paths (#1248).
+          cache-keys = import ./tests/cache-keys.nix { pkgs = pkgsFor.${system}; };
 
           # A keep-loaded plugin lost its shell API at the first shell.json
           # change, because manifestHasKind tested kinds with Array.isArray and a

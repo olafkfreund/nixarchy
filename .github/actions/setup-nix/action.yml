@@ -43,10 +43,11 @@ runs:
         # actually applies.
         #
         # The store path nixarchy uses is byte-identical to the one hyprwm
-        # publish -- verified, not assumed -- so with this the compositor is a
-        # download.
+        # publish. The download came from nixarchy.cachix.org until #1248,
+        # because the key for hyprwm's cache was wrong; checks.cache-keys holds
+        # it now.
         extra-conf: |
           accept-flake-config = true
           extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org
-          extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIITemDosxrE9/Kb+PfYvE=
+          extra-trusted-public-keys = nixarchy.cachix.org-1:05JOuIlsQOWY2/5DQMq7JEA1hwlhgvmMWowMfka8mMM= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc=
           stalled-download-timeout = 60

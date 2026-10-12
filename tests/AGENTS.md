@@ -1298,6 +1298,17 @@ heading. And the break that proves it should pick the item most likely to be
 satisfied by something else: the one that also appears elsewhere, not the
 first one that comes to hand.
 
+## A trust key is checked by a signature, not by comparing it with itself
+
+A substituter key that is wrong stays silent when another cache serves the
+same paths: the Hyprland key was wrong from the first commit (#1248) and no
+build failed, because nixarchy.cachix.org held the same store paths under its
+own signature. Six copies of the key agreeing with each other proved nothing,
+so `cache-keys` also verifies a committed narinfo's `Sig` with the key found in
+the tree. A narinfo does not expire, which a live fetch would. Changing a key
+means refreshing the fixture in `tests/fixtures/cache-keys/` from the new
+cache.
+
 ## The cheap ones, which is where new checks usually belong
 
 `installer-ui`, `installer-wizard`, `installer-refusal`, `installer-lock`,

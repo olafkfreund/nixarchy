@@ -547,23 +547,25 @@ jobs:
 
           # GITHUB_TOKEN can never push commits that touch .github/workflows
           # (#1251), so this uses BUMP_TOKEN; the empty extraheader drops the
-          # one actions/checkout set, which would otherwise win over the URL.
+          # one actions/checkout set, which would otherwise win. The helper
+          # reads the token from the environment, so it is never in argv.
           push_release() {
             if [ -n "${PUSH_TOKEN:-}" ]; then
-              git -c http.https://github.com/.extraheader= push \
-                "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              # shellcheck disable=SC2016 # expanded by the helper's shell
+              git -c http.https://github.com/.extraheader= -c credential.helper= \
+                -c credential.helper='!f() { echo username=x-access-token; echo "password=$PUSH_TOKEN"; }; f' \
+                push "https://github.com/${GITHUB_REPOSITORY}.git" \
                 "$commit:refs/heads/release" && return 0
+              why="If the reason above names workflows, BUMP_TOKEN needs Contents and Workflows write on this repository (#1251)."
             else
               git push origin "$commit:refs/heads/release" && return 0
+              why="BUMP_TOKEN is not set, so this pushed with GITHUB_TOKEN, which cannot push commits that touch workflows (#1251)."
             fi
-            echo "::error::The release published, but the release branch push was" \
-                 "refused. If the reason above names workflows, BUMP_TOKEN needs" \
-                 "Contents and Workflows write on this repository (#1251)."
+            echo "::error::The release published, but the release branch push was refused. $why"
             {
               echo "**The release published; the release branch was not moved.**"
               echo
-              echo "The push was refused. If the reason names workflows, BUMP_TOKEN"
-              echo "needs Contents and Workflows write (#1251). By hand:"
+              echo "$why By hand:"
               echo "\`git push origin $commit:refs/heads/release\`"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1

@@ -53,3 +53,22 @@ permission. Nothing else in the job changes.
 ## Rollback
 
 Revert the commit. The step goes back to `GITHUB_TOKEN`.
+
+## Deviations recorded during implementation
+
+From the Opus review:
+
+- **The token goes through a credential helper,** not the push URL. The
+  helper is `-c credential.helper=` to reset, then a `!f()` helper that
+  echoes `password=$PUSH_TOKEN` from the environment. A URL token sits in
+  `git push`'s argv, which any local user on the self-hosted runner can read
+  in `/proc/<pid>/cmdline`. Re-proved with the same probe: without the
+  header reset, "Authentication failed"; with it, the probe branch was
+  pushed, and the token does not appear in `GIT_TRACE`. The probe branch
+  was deleted afterwards.
+- **When `BUMP_TOKEN` is empty,** the error says so, instead of blaming the
+  token's permissions.
+- **Noted in the PR, not changed:** a push made with a PAT triggers
+  workflows, which a `GITHUB_TOKEN` push never does. Today only
+  `copilot-setup-steps.yml` has an `on: push` with no branch filter, and
+  only for changes to itself.

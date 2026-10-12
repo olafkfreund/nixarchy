@@ -540,18 +540,43 @@ jobs:
       - name: Move the release branch to this tag
         env:
           TAG: ${{ steps.version.outputs.tag }}
+          PUSH_TOKEN: ${{ secrets.BUMP_TOKEN }}
         run: |
           git fetch -q origin refs/heads/release:refs/remotes/origin/release || true
           commit=$(git rev-parse "refs/tags/$TAG^{}")
 
+          # GITHUB_TOKEN can never push commits that touch .github/workflows
+          # (#1251), so this uses BUMP_TOKEN; the empty extraheader drops the
+          # one actions/checkout set, which would otherwise win over the URL.
+          push_release() {
+            if [ -n "${PUSH_TOKEN:-}" ]; then
+              git -c http.https://github.com/.extraheader= push \
+                "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+                "$commit:refs/heads/release" && return 0
+            else
+              git push origin "$commit:refs/heads/release" && return 0
+            fi
+            echo "::error::The release published, but the release branch push was" \
+                 "refused. If the reason above names workflows, BUMP_TOKEN needs" \
+                 "Contents and Workflows write on this repository (#1251)."
+            {
+              echo "**The release published; the release branch was not moved.**"
+              echo
+              echo "The push was refused. If the reason names workflows, BUMP_TOKEN"
+              echo "needs Contents and Workflows write (#1251). By hand:"
+              echo "\`git push origin $commit:refs/heads/release\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
           # No release branch yet is the first release, and pushing is right.
           if ! git rev-parse -q --verify refs/remotes/origin/release >/dev/null; then
-            git push origin "$commit:refs/heads/release"
+            push_release
             exit 0
           fi
 
           if git merge-base --is-ancestor refs/remotes/origin/release "$commit"; then
-            git push origin "$commit:refs/heads/release"
+            push_release
             echo "release branch moved to $TAG" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi

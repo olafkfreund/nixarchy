@@ -309,7 +309,7 @@ Steps, in order, and the first three are refusals:
 6. **Write the release notes** — derived, via `nix run .#release-notes`
 7. **Publish**
 8. **The release attached everything it promised** — compares what was built against what `SHA256SUMS` names
-9. **Move the release branch to this tag** — this is what `nixarchy update` follows, so cutting a tag is what delivers updates
+9. **Move the release branch to this tag** — this is what `nixarchy update` follows, so cutting a tag is what delivers updates. It pushes with `BUMP_TOKEN`, which needs Contents and Workflows write: `GITHUB_TOKEN` can never push commits that touch `.github/workflows/`, and most releases carry one (#1251)
 10. **Remove the split copies**
 
 ## `wiki.yml` — publishes these pages

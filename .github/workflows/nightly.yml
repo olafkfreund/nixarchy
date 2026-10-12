@@ -254,7 +254,11 @@ jobs:
     runs-on: ubuntu-latest
     # 20, not 10: the entries probe evaluates both system toplevels, about two
     # minutes on a warm p620 and several on a cold hosted runner (#697).
-    timeout-minutes: 20
+    # 35, not 20: the proofs probe evaluates every generated check, and four
+    # of them (generate-config-surface, install-seed-shape, iso-source,
+    # config-warnings) took 9.5 of its 16.6 minutes on 2026-10-12. It grew
+    # from 8.6 minutes in a week and crossed 20 that night (#1241).
+    timeout-minutes: 35
     outputs:
       entries-missing: ${{ steps.entries.outputs.missing }}
       proofs-missing: ${{ steps.proofs.outputs.missing }}

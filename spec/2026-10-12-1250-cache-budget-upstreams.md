@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1250
 intent: intent/2026-10-12-1250-cache-budget-upstreams.md
 ---

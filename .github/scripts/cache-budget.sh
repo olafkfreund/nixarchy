@@ -4,8 +4,10 @@
 #
 #   cache-budget.sh [installable...]     default: every cache-allowlist.sh entry
 #
-# Cost is the UNION of the entries' closures, minus every path an upstream
-# cache already serves -- Cachix does not store those -- summed by NAR size.
+# Cost is the UNION of the entries' closures, minus every path cache.nixos.org
+# already serves -- `cachix push` skips those -- summed by NAR size. Only that
+# one: hyprland.cachix.org's paths ARE pushed and stored, nine hyprwm builds
+# and 75.3 MiB of the shipped Hyprland's closure on 2026-10-12 (#1250).
 # A union, because the entries share most of their closures (both toplevels,
 # all five KVM runners' QEMU) and adding them up per entry would count those
 # several times over.
@@ -18,7 +20,7 @@ set -uo pipefail
 
 here=$(dirname "$0")
 budget_mib=${CACHE_BUDGET_MIB:-2560}
-upstreams=${UPSTREAM_CACHES:-https://cache.nixos.org https://hyprland.cachix.org}
+upstreams=${UPSTREAM_CACHES:-https://cache.nixos.org}
 jobs=${LOOKUP_JOBS:-16}
 
 if [ $# -gt 0 ]; then

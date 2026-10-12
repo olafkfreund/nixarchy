@@ -12,11 +12,12 @@
 #
 # An entry belongs here only if someone downloads it AND would otherwise build
 # it. Both halves matter: cache-budget.sh already subtracts everything
-# cache.nixos.org and hyprland.cachix.org serve, so anything reaching the budget
-# is something upstream will not serve -- but "unfree, so Hydra will not build
-# it" and "expensive to build" are different claims, and only the second is a
-# reason to pay for it here. A prebuilt binary is a download either way, so
-# caching it makes this a slower second mirror (#725). Add the reason beside it.
+# cache.nixos.org serves, so anything reaching the budget is something Hydra
+# will not serve (hyprwm's own builds are counted: the push stores them, #1250)
+# -- but "unfree, so Hydra will not build it" and "expensive to build" are
+# different claims, and only the second is a reason to pay for it here. A
+# prebuilt binary is a download either way, so caching it makes this a slower
+# second mirror (#725). Add the reason beside it.
 #
 # One exception, for availability rather than build cost (#788, #800): the box
 # checks' pinned base images. They are a download either way, but Docker Hub is

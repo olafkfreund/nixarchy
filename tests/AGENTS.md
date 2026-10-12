@@ -609,6 +609,21 @@ side of the port the script is on.
 whole bug. `checks.session` boots a desktop but does not rebuild under one.
 Checked by hand on p620.
 
+`checks.sleep-lock-generation` additionally runs the packaged sleep monitor,
+sleep-lock helper and `omarchy-shell` against a real Quickshell with a headless
+lock-state fixture. It varies the caller's tree independently of the running
+shell, including keeping a monitor alive across a shell replacement. The
+fixture acknowledges lock requests; it does not secure a compositor or suspend
+a machine. Real session-lock behaviour remains `checks.session`'s territory.
+
+This caught a hole in the stub above: it accepted `qs ipc -n -i <id>`, but
+Quickshell rejects `--newest` (a config-selection option) together with an
+instance ID. Thus the instance fallback passed the stubbed check while every
+real call through it failed. Keep the real CLI boundary in this check; adding
+the same restriction to a stub alone would only cover the restriction we
+already know about. The monitor itself exits zero even when locking fails, so
+the check asserts both the fixture's secure state and no failure notification.
+
 ## A PATH stub loses to runtimeInputs, and it has now cost three attempts
 
 `writeShellApplication` **prepends `runtimeInputs` to the caller's PATH**, so a

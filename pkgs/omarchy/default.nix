@@ -2012,7 +2012,8 @@ stdenvNoCC.mkDerivation {
                     ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
                     ipcNew=$(printf '%s\n' \
                       '# nixarchy patch (#963): resolve the instance before calling.' \
-                      'qs_sel=(-p "$OMARCHY_PATH/shell")' \
+                      '# --newest is a config selector; qs rejects it together with --id.' \
+                      'qs_sel=(-n -p "$OMARCHY_PATH/shell")' \
                       'if ! timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call __nixarchy_probe __nixarchy_probe >/dev/null 2>&1; then' \
                       '  qs_listing=$(qs list --all 2>/dev/null) || qs_listing=""' \
                       '  qs_ids=()' \
@@ -2038,7 +2039,7 @@ stdenvNoCC.mkDerivation {
                       '    qs_sel=(-i "''${qs_ids[0]}")' \
                       '  fi' \
                       'fi' \
-                      'output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n "''${qs_sel[@]}" call -- "$@" 2>/dev/null)')
+                      'output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc "''${qs_sel[@]}" call -- "$@" 2>/dev/null)')
                     substituteInPlace "$shellBin" --replace-fail "$ipcOld" "$ipcNew"
 
                     # Any length or order change in a bar region -- one icon moved, one dragged

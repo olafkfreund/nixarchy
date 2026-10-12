@@ -2524,6 +2524,11 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          sleep-lock-generation = import ./tests/sleep-lock-generation.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # The proof push: a killed job keeps what it proved, a result too
           # large to BE a proof is skipped rather than failed, and a push that
           # genuinely fails still exits non-zero. All three were false on

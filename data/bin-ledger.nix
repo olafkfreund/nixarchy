@@ -574,7 +574,7 @@
   };
   "omarchy-shell" = {
     class = "patch";
-    reason = "It found the running Quickshell instance by config path, which on Arch is the stable /usr/share/omarchy and here is a store path that moves on every rebuild -- so after a redeploy the caller held the new one, the shell had registered under the old one, and every IPC call missed silently (#963). The patch tries the caller's path first, so a machine that has not rebuilt since login is untouched, and falls back to resolving the instance id from `qs list --all`.";
+    reason = "It found the running Quickshell instance by config path, which on Arch is the stable /usr/share/omarchy and here is a store path that moves on every rebuild -- so after a redeploy the caller held the new one, the shell had registered under the old one, and every IPC call missed silently (#963). The patch tries the caller's path first, so a machine that has not rebuilt since login is untouched, and falls back to resolving the instance id from `qs list --all`. The --newest flag belongs only to path selection: Quickshell rejects it together with an instance ID, including on the lock-before-suspend path.";
   };
   "omarchy-shell-config" = {
     class = "patch";

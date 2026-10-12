@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1251
 spec: spec/2026-10-12-1251-release-push-token.md
 ---

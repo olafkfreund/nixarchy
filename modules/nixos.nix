@@ -1889,15 +1889,9 @@ in
           partOf = [ "graphical-session.target" ];
           wantedBy = [ "graphical-session.target" ];
           path = [ "/run/current-system/sw" ];
-          # Upstream also has ConditionEnvironment=OMARCHY_PATH, which checks the
-          # user manager's environment -- true here only because uwsm imports
-          # what omarchy-session exported. The store path is known at build
-          # time, so it is passed in below instead and the condition dropped;
-          # WAYLAND_DISPLAY is what actually proves a graphical session.
+          # The installed generation may differ from the live desktop.
+          # Inherit its display; IPC resolves the live shell independently.
           unitConfig.ConditionEnvironment = "WAYLAND_DISPLAY";
-          # omarchy-system-sleep-monitor resolves its companion
-          # omarchy-system-sleep-lock through $OMARCHY_PATH, not through PATH.
-          environment.OMARCHY_PATH = cfg.tree;
           serviceConfig = {
             Type = "simple";
             ExecStart = "${cfg.package}/bin/omarchy-system-sleep-monitor";

@@ -531,7 +531,7 @@
   };
   "omarchy-restart-shell" = {
     class = "patch";
-    reason = "The relaunch goes through `hyprctl dispatch exec_cmd`, and Hyprland spawns that child with its own login-time environment -- so after a rebuild the shell came back up on the OLD omarchy tree and generated menu data only took effect at the next re-login (#982). The launch now reads the tree from /run/current-system/etc/set-environment and passes it explicitly. Only the launch: the kill keeps the session value, because the running shell registered under the login-time path and killing by the new one would leave two shells.";
+    reason = "Resolve the running tree before stopping the shell, then launch the current-system tree through its absolute launcher path. Neither stopping nor relaunching depends on an inherited OMARCHY_PATH or PATH. Keep the bounded teardown and readiness waits (#953).";
     allow = "systemctl-user";
   };
   "omarchy-restart-trackpad" = {
@@ -574,7 +574,7 @@
   };
   "omarchy-shell" = {
     class = "patch";
-    reason = "It found the running Quickshell instance by config path, which on Arch is the stable /usr/share/omarchy and here is a store path that moves on every rebuild -- so after a redeploy the caller held the new one, the shell had registered under the old one, and every IPC call missed silently (#963). The patch tries the caller's path first, so a machine that has not rebuilt since login is untouched, and falls back to resolving the instance id from `qs list --all`. The --newest flag belongs only to path selection: Quickshell rejects it together with an instance ID, including on the lock-before-suspend path.";
+    reason = "Resolve the live shell by PID on the caller’s Wayland display through nixarchy-shell-session, independent of stale or collected caller trees. Refuse ambiguous instances rather than sending IPC to an arbitrary shell.";
   };
   "omarchy-shell-config" = {
     class = "patch";
@@ -721,5 +721,21 @@
     class = "vendor";
     reason = "Vendored unchanged, and the modprobe match is prose: the two `sudo modprobe kvm-*` lines are inside the help text printed when KVM is unavailable, which comment-stripping cannot see. modules/nixos.nix loads the KVM modules declaratively.";
     allow = "modprobe";
+  };
+  "nixarchy-shell-session" = {
+    class = "new";
+    reason = "Resolve the live Quickshell process on the selected Wayland display and publish its tree and PATH to Hyprland, D-Bus and the systemd user manager.";
+  };
+  "omarchy-launch-shell" = {
+    class = "patch";
+    reason = "Synchronize the desktop environment after each supervised shell launch, including automatic relaunches.";
+  };
+  "omarchy-system-sleep-monitor" = {
+    class = "patch";
+    reason = "Use the packaged lock helper and re-execute the monitor itself instead of following an inherited tree across rebuilds.";
+  };
+  "omarchy-system-sleep-lock" = {
+    class = "patch";
+    reason = "Use the packaged IPC helper so a long-lived monitor can lock a shell from either generation without following stale PATH entries.";
   };
 }

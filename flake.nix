@@ -2524,6 +2524,14 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          shell-session-launch = import ./tests/shell-session-launch.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+          shell-session = import ./tests/shell-session.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
           sleep-lock-generation = import ./tests/sleep-lock-generation.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

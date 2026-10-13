@@ -2264,6 +2264,13 @@ in
       };
     };
 
+    # A switch must preserve the live generation until the user restarts it.
+    home.activation.nixarchySyncSession = lib.hm.dag.entryAfter [ "reloadSystemd" "nixarchySeed" ] ''
+      if ${pkgs.systemd}/bin/systemctl --user is-active --quiet graphical-session.target; then
+        run ${cfg.package}/bin/nixarchy-shell-session sync --if-running
+      fi
+    '';
+
     # No systemd unit for the shell. Upstream starts it from Hyprland itself:
     #
     #   default/hypr/autostart.lua

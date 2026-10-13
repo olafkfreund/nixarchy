@@ -1960,6 +1960,15 @@ stdenvNoCC.mkDerivation {
                       "$(printf '%s\n' 'set_terminal_size() {' "$(cat ${./text-size-managed-guard.sh})")"
 
                     restartBin=$out/share/omarchy/bin/omarchy-restart-shell
+                    substituteInPlace "$out/share/omarchy/bin/omarchy-launch-shell" \
+                      --replace-fail 'run_shell() {' \
+                      $'run_shell() {\n  export PATH="$OMARCHY_PATH/bin:$PATH"' \
+                      --replace-fail '  shell_pid=$!' \
+                      "$(printf '%s\n' '  shell_pid=$!' \
+                        "  $out/bin/nixarchy-shell-session sync --pid \"\$shell_pid\" --wait 10 || logger -t omarchy-shell 'Could not synchronize the desktop environment'")"
+                    substituteInPlace "$restartBin" \
+                      --replace-fail 'session_omarchy_path=$(systemctl --user show-environment 2>/dev/null | sed -n '"'"'s/^OMARCHY_PATH=//p'"'"' | tail -n 1)' \
+                      "session_omarchy_path=\$($out/bin/nixarchy-shell-session tree --if-running) || exit 1"
                     relaunchOld="hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null"
                     relaunchNew=$(printf '%s\n' \
                       '# nixarchy patch (#982): relaunch on the CURRENT tree.' \
@@ -1969,7 +1978,7 @@ stdenvNoCC.mkDerivation {
                       '  # printf, not escaped quotes: this string crosses a Nix'"'"'"'"'"'"'"'"' '"'"'"'"'"'"'"'"' string,' \
                       '  # a shell string and hyprctl'"'"'"'"'"'"'"'"'s own parser, and a backslash means' \
                       '  # something different in each. printf has no backslashes to lose.' \
-                      '  hyprctl dispatch "$(printf '"'"'hl.dsp.exec_cmd("env OMARCHY_PATH=%s omarchy-launch-shell")'"'"' "$nixarchy_tree")" >/dev/null' \
+                      '  hyprctl dispatch "$(printf '"'"'hl.dsp.exec_cmd("env OMARCHY_PATH=%s %s/bin/omarchy-launch-shell")'"'"' "$nixarchy_tree" "$nixarchy_tree")" >/dev/null' \
                       'else' \
                       "  hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null" \
                       'fi')
@@ -2011,36 +2020,31 @@ stdenvNoCC.mkDerivation {
                     shellBin=$out/share/omarchy/bin/omarchy-shell
                     ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
                     ipcNew=$(printf '%s\n' \
-                      '# nixarchy patch (#963): resolve the instance before calling.' \
-                      '# --newest is a config selector; qs rejects it together with --id.' \
-                      'qs_sel=(-n -p "$OMARCHY_PATH/shell")' \
-                      'if ! timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call __nixarchy_probe __nixarchy_probe >/dev/null 2>&1; then' \
-                      '  qs_listing=$(qs list --all 2>/dev/null) || qs_listing=""' \
-                      '  qs_ids=()' \
-                      '  qs_id=""' \
-                      '  while IFS= read -r qs_line; do' \
-                      '    case $qs_line in' \
-                      '      Instance\ *:) qs_id=''${qs_line#Instance }; qs_id=''${qs_id%:} ;;' \
-                      '      *Config\ path:*/shell/shell.qml)' \
-                      '        [[ -n $qs_id ]] && qs_ids+=("$qs_id"); qs_id="" ;;' \
-                      '    esac' \
-                      '  done <<< "$qs_listing"' \
-                      '  # A parse that finds no Instance lines at all is a qs whose' \
-                      '  # output format moved, not a machine with no shell. Reporting' \
-                      '  # "not running" there would restore exactly the silent failure' \
-                      '  # this patch exists to remove, so refuse instead.' \
-                      '  if [[ -n $qs_listing && ! $qs_listing =~ Instance ]]; then' \
-                      '    fail "cannot read qs list output; omarchy-shell cannot find the shell"' \
-                      '  fi' \
-                      '  if (( ''${#qs_ids[@]} > 1 )); then' \
-                      '    fail "more than one omarchy shell is running (''${qs_ids[*]}); refusing to guess"' \
-                      '  fi' \
-                      '  if (( ''${#qs_ids[@]} == 1 )); then' \
-                      '    qs_sel=(-i "''${qs_ids[0]}")' \
-                      '  fi' \
-                      'fi' \
-                      'output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc "''${qs_sel[@]}" call -- "$@" 2>/dev/null)')
+                      'session_pid=$(timeout --kill-after=1s "$ipc_timeout" @session@ pid 2>/dev/null) || fail "cannot resolve the running Omarchy shell"' \
+                      'output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc --pid "$session_pid" call -- "$@" 2>/dev/null)')
+                    ipcNew="''${ipcNew//@session@/$out/bin/nixarchy-shell-session}"
+                    # A collected caller tree must not block live-instance discovery.
+                    substituteInPlace "$shellBin" \
+                      --replace-fail '[[ -n ''${OMARCHY_PATH:-} ]] || fail "OMARCHY_PATH is not set"' ':' \
+                      --replace-fail '[[ -f $OMARCHY_PATH/shell/shell.qml ]] || fail "omarchy-shell config not found: $OMARCHY_PATH/shell/shell.qml"' ':'
                     substituteInPlace "$shellBin" --replace-fail "$ipcOld" "$ipcNew"
+                    # Use the same display resolver for desktop and SSH callers;
+                    # choosing the newest socket can target an unrelated session.
+                    displayOld=$(sed -n '/^if \[\[ -z \''${WAYLAND_DISPLAY:-}/,/^fi$/p' "$shellBin")
+                    [[ -n $displayOld ]] || { echo "Missing upstream display discovery" >&2; exit 1; }
+                    substituteInPlace "$shellBin" --replace-fail "$displayOld" ':'
+
+
+                    # A monitor surviving a rebuild must use its own helpers,
+                    # whose IPC resolver can reach either shell generation.
+                    substituteInPlace "$out/share/omarchy/bin/omarchy-system-sleep-monitor" \
+                      --replace-fail 'sleep_lock="$OMARCHY_PATH/bin/omarchy-system-sleep-lock"' \
+                      "sleep_lock=\"$out/bin/omarchy-system-sleep-lock\"" \
+                      --replace-fail 'sleep_monitor="$OMARCHY_PATH/bin/omarchy-system-sleep-monitor"' \
+                      'sleep_monitor="$(readlink -f "$0")"'
+                    substituteInPlace "$out/share/omarchy/bin/omarchy-system-sleep-lock" \
+                      --replace-fail '"$seconds" omarchy-shell "$@"' \
+                      "\"\$seconds\" $out/bin/omarchy-shell \"\$@\""
 
                     # Any length or order change in a bar region -- one icon moved, one dragged
                     # into a Bar Folder, one widget put or removed -- rebuilt every widget in that

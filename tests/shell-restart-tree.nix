@@ -50,7 +50,7 @@ pkgs.runCommand "nixarchy-shell-restart-tree"
     # 2. It passes it explicitly, because Hyprland's exec_cmd child inherits
     #    Hyprland's login-time environment and nothing can change that from
     #    outside for a running instance.
-    grep -q 'env OMARCHY_PATH=%s omarchy-launch-shell' "$restart" \
+    grep -q 'env OMARCHY_PATH=%s %s/bin/omarchy-launch-shell' "$restart" \
       || fail "the relaunch does not pass OMARCHY_PATH into the exec_cmd child"
 
     # 3. It falls back to today's behaviour when the generated file names no
@@ -59,11 +59,9 @@ pkgs.runCommand "nixarchy-shell-restart-tree"
     grep -q "hl.dsp.exec_cmd(\"omarchy-launch-shell\")" "$restart" \
       || fail "the fallback to the unmodified relaunch is gone"
 
-    # 4. The KILL still uses the session value. The running shell registered
-    #    under the login-time path, so killing by the new one finds nothing and
-    #    leaves two shells. This asymmetry is the point of the change.
-    grep -q 'session_omarchy_path=$(systemctl --user show-environment' "$restart" \
-      || fail "the kill no longer resolves through the session, so it may miss the running shell"
+    # 4. Resolve the live shell rather than the manager’s inherited generation.
+    grep -q 'nixarchy-shell-session tree --if-running' "$restart" \
+      || fail "the kill no longer resolves the live shell"
 
     mkdir -p $out
     echo "shell restart tree: 4 cases asserted (static; see the comment)"

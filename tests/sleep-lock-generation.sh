@@ -78,6 +78,8 @@ consume "$old_tree" "matching generation"
 qs ipc -p "$running_tree/shell" call lock reset
 consume "$new_tree" "new service tree with the old shell still running"
 consume "$new_tree" "already-secure shell with a different service tree"
+qs ipc -p "$running_tree/shell" call lock reset
+consume /collected-tree "collected caller tree"
 
 # Hold a real monitor process across a shell replacement, without changing its
 # environment. Its next event must find the new shell, not its startup tree.

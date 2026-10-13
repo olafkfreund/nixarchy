@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+# nixarchy:new
+# omarchy:summary=Resolve and synchronize the running Omarchy session
+# omarchy:hidden=true
+"""Runtime identity belongs to the live shell, not to a caller's generation."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+
+class SessionError(Exception):
+    pass
+
+
+def run(args, **kwargs):
+    return subprocess.check_output(args, text=True, timeout=2, **kwargs).strip()
+
+
+def process_environment(pid):
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    return dict(entry.decode().split("=", 1) for entry in entries if b"=" in entry)
+
+
+def display_environment():
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return dict(os.environ)
+    # SSH has no display; systemd is only a display locator, never a tree locator.
+    lines = run(["systemctl", "--user", "show-environment"]).splitlines()
+    return dict(line.split("=", 1) for line in lines if "=" in line)
+
+
+def resolve(display, expected_pid=None):
+    if not display:
+        raise SessionError("no Wayland session; refusing to select another display")
+    records = json.loads(run(["qs", "list", "--all", "--json"]))
+    matches = []
+    for record in records:
+        path = Path(record["config_path"])
+        if path.name != "shell.qml" or path.parent.name != "shell":
+            continue
+        tree = path.parent.parent
+        if not (tree / "bin/omarchy-system-sleep-lock").is_file():
+            continue
+        env = process_environment(int(record["pid"]))
+        if env is None or env.get("WAYLAND_DISPLAY") != display:
+            continue
+        matches.append((record, tree, env))
+    if len(matches) > 1:
+        raise SessionError("more than one Omarchy shell on this display; refusing to guess")
+    if not matches:
+        return None
+    session = matches[0]
+    if expected_pid is not None and session[0]["pid"] != expected_pid:
+        return None
+    return session
+
+
+def session_path(tree, path):
+    entries = []
+    for entry in path.split(":"):
+        # Keep user tools and system profiles; remove only Omarchy tree/bin entries.
+        if entry and (Path(entry).parent / "shell/shell.qml").is_file():
+            continue
+        if entry not in entries:
+            entries.append(entry)
+    return ":".join([str(tree / "bin"), *entries])
+
+
+def synchronize(session):
+    _, tree, env = session
+    instance = env.get("HYPRLAND_INSTANCE_SIGNATURE")
+    if not instance:
+        raise SessionError("the shell has no Hyprland instance; nothing was changed")
+    values = {"OMARCHY_PATH": str(tree), "PATH": session_path(tree, env["PATH"])}
+    code = "; ".join(f"hl.env({json.dumps(k)}, {json.dumps(v)})" for k, v in values.items())
+    reply = run(["hyprctl", "-i", instance, "eval", code])
+    if reply != "ok":
+        raise SessionError(f"Hyprland refused the environment update: {reply}")
+    # Lua modules cache paths too. Reload configuration without re-running
+    # autostart, so future reloads/bindings cannot restore the previous tree.
+    reply = run(["hyprctl", "-i", instance, "reload", "config-only"])
+    if reply != "ok":
+        raise SessionError(f"Hyprland refused the configuration reload: {reply}")
+    run(["dbus-update-activation-environment", "--systemd", *[f"{k}={v}" for k, v in values.items()]])
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=["pid", "tree", "sync"])
+    parser.add_argument("--if-running", action="store_true")
+    parser.add_argument("--pid", type=int)
+    parser.add_argument("--wait", type=float, default=0)
+    args = parser.parse_args()
+    env = display_environment()
+    deadline = time.monotonic() + args.wait
+    while True:
+        session = resolve(env.get("WAYLAND_DISPLAY"), args.pid)
+        if session is not None or time.monotonic() >= deadline:
+            break
+        time.sleep(0.1)
+    if session is None:
+        if args.if_running:
+            return
+        raise SessionError("Omarchy shell is not running on this display")
+    if args.action == "sync":
+        synchronize(session)
+    elif args.action == "pid":
+        print(session[0]["pid"])
+    else:
+        print(session[1])
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (SessionError, subprocess.SubprocessError, OSError, ValueError, KeyError) as error:
+        print(f"nixarchy-shell-session: {error}", file=sys.stderr)
+        sys.exit(1)

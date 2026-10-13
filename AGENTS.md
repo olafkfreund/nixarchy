@@ -1171,6 +1171,14 @@ thing and meant another. None of them was a bug in this repo.
   collections instead of ~14. The tell was a run whose live heap was *larger*
   and still fast. When a timing changes, diff the toolchain lines of a fast
   and a slow log (`grep -o 'nix-installer v[0-9.]*'`) before the code (#1150).
+- **`2>/dev/null` does not make a tool's stdout machine-readable.**
+  Quickshell 0.3.2 prints Qt's "locale is not UTF-8" warning on **stdout**,
+  ahead of `qs list --json` and of every `qs ipc` reply. A build sandbox and
+  `su user -c` both run in the C locale, so the shell resolver fed that
+  warning to `jq`, and the nixpkgs bump in #1257 went red in three checks that
+  had nothing to do with the bump's app list. Give a parsed call its own
+  `LC_ALL=C.UTF-8` rather than exporting it for a whole check: the check must
+  still run the product in the locale a user's script would have.
 
 ## 14. Coexist with the user's own config
 

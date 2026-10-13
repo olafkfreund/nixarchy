@@ -51,7 +51,7 @@ start_shell() {
   qs -p "$running_tree/shell" > shell.log 2>&1 &
   shell_pid=$!
   for ((attempt = 0; attempt < 100; attempt++)); do
-    if timeout 1s qs ipc -p "$running_tree/shell" call lock status > status.json 2>/dev/null; then
+    if LC_ALL=C.UTF-8 timeout 1s qs ipc -p "$running_tree/shell" call lock status > status.json 2>/dev/null; then
       if jq -e '.secure == false' status.json >/dev/null; then return; fi
     fi
     kill -0 "$shell_pid" 2>/dev/null || fail "fixture exited during startup"
@@ -60,7 +60,7 @@ start_shell() {
   fail "fixture did not become ready"
 }
 assert_locked() {
-  timeout 2s qs ipc -p "$running_tree/shell" call lock status > status.json
+  LC_ALL=C.UTF-8 timeout 2s qs ipc -p "$running_tree/shell" call lock status > status.json
   jq -e '.secure == true' status.json >/dev/null || fail "$1: the running shell received no lock request"
   [[ ! -e $HOME/notifications ]] || fail "$1: the helper failed to acknowledge the secure lock"
   echo "PASS: $1"

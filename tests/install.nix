@@ -362,6 +362,15 @@ pkgs.testers.runNixOSTest {
     import time
     import subprocess
     started = time.time()
+
+    # The firmware's boot menu reaches the backdoor socket, which satisfies the
+    # driver's 5-minute shell_ready() check; a guest that then freezes leaves
+    # connect() blocked in recv() with no timeout, up to globalTimeout (#1260).
+    def boot(machine):
+        machine.start()
+        machine.wait_for_console_text(r"Reached target Multi-User System", timeout=900)
+        machine.wait_for_unit("multi-user.target")
+
     # execute, not succeed. The dashboard sends every phase to a log file and
     # keeps the screen for the progress bar, so a failed install prints nothing
     # but the palette escapes -- and a test that asserts on that has no idea
@@ -585,8 +594,7 @@ pkgs.testers.runNixOSTest {
     target = create_owned_machine(
         "${targetCommand}" + f" -drive file={disk},if=virtio,werror=report",
         name="target")
-    target.start()
-    target.wait_for_unit("multi-user.target")
+    boot(target)
     print("the installed disk booted on its own bootloader")
 
     # Free space on a fresh install of the smallest supported disk (#708). The
@@ -891,8 +899,7 @@ pkgs.testers.runNixOSTest {
     print("the reset staged a request and changed nothing")
 
     target.shutdown()
-    target.start()
-    target.wait_for_unit("multi-user.target")
+    boot(target)
 
     # Result= alone is not enough: a unit skipped by ConditionPathExists also
     # reports Result=success, so asserting only that would pass on a machine

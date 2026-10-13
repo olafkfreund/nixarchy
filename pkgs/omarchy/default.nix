@@ -24,6 +24,7 @@
   socat,
   systemd,
   glib,
+  dbus,
   xdg-utils,
   libnotify,
   # Wayland / Hyprland session
@@ -203,6 +204,7 @@ let
     socat
     systemd
     glib
+    dbus
     xdg-utils
     libnotify
     hyprland

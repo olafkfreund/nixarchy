@@ -899,8 +899,6 @@ pkgs.testers.runNixOSTest {
     print("the reset staged a request and changed nothing")
 
     target.shutdown()
-    target.start()
-    target.send_monitor_command("stop")  # BREAK (#1260 proof): freeze the guest
     boot(target)
 
     # Result= alone is not enough: a unit skipped by ConditionPathExists also

@@ -2023,9 +2023,10 @@ stdenvNoCC.mkDerivation {
 
                     shellBin=$out/share/omarchy/bin/omarchy-shell
                     ipcOld='output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc -n -p "$OMARCHY_PATH/shell" call -- "$@" 2>/dev/null)'
+                    # LC_ALL: quickshell 0.3.2 writes a non-UTF-8 locale warning into the reply on stdout.
                     ipcNew=$(printf '%s\n' \
                       'session_pid=$(timeout --kill-after=1s "$ipc_timeout" @session@ pid 2>/dev/null) || fail "cannot resolve the running Omarchy shell"' \
-                      'output=$(timeout --kill-after=1s "$ipc_timeout" qs ipc --pid "$session_pid" call -- "$@" 2>/dev/null)')
+                      'output=$(LC_ALL=C.UTF-8 timeout --kill-after=1s "$ipc_timeout" qs ipc --pid "$session_pid" call -- "$@" 2>/dev/null)')
                     ipcNew="''${ipcNew//@session@/$out/bin/nixarchy-shell-session}"
                     # A collected caller tree must not block live-instance discovery.
                     substituteInPlace "$shellBin" \

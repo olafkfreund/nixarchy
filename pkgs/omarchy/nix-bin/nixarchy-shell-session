@@ -6,7 +6,8 @@
 set -euo pipefail
 
 fail() { echo "nixarchy-shell-session: $*" >&2; exit 1; }
-run() { timeout --kill-after=1s 2s "$@"; }
+# Quickshell 0.3.2 prints a non-UTF-8 locale warning on STDOUT, ahead of --json.
+run() { LC_ALL=C.UTF-8 timeout --kill-after=1s 2s "$@"; }
 
 action=${1:-}
 case $action in pid|tree|sync) shift ;; *) fail 'usage: nixarchy-shell-session {pid|tree|sync} [--if-running] [--pid PID] [--wait SECONDS]' ;; esac

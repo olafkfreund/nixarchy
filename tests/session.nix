@@ -2557,5 +2557,15 @@ pkgs.testers.runNixOSTest {
         "restart (counts above) -- panelEntryModel should have kept its Loader:\n"
         + journal)
 
+    # A QML engine that resolves a singleton to the wrong type (omarchy#14811,
+    # Qt 6.12.0) leaves the shell running with every surface black or
+    # uncoloured; only these lines say so. None appear on Qt 6.11.2.
+    qml_errors = [
+        line for line in machine.succeed(
+            "journalctl -b -t omarchy-shell --no-pager -o cat").splitlines()
+        if "TypeError" in line or "Unable to assign [undefined]" in line]
+    assert not qml_errors, (
+        "the shell logged QML type errors this boot:\n" + "\n".join(qml_errors[:40]))
+
   '';
 }

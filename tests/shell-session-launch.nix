@@ -5,6 +5,7 @@ pkgs.runCommand "nixarchy-shell-session-launch"
       pkgs.bash
       pkgs.coreutils
       pkgs.gnugrep
+      pkgs.jq
       omarchy.quickshell
     ];
   }

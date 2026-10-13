@@ -725,6 +725,7 @@
   "nixarchy-shell-session" = {
     class = "new";
     reason = "Resolve the live Quickshell process on the selected Wayland display and publish its tree and PATH to Hyprland, D-Bus and the systemd user manager.";
+    allow = "systemctl-user";
   };
   "omarchy-launch-shell" = {
     class = "patch";

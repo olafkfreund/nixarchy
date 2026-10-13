@@ -1,129 +1,117 @@
-#!/usr/bin/env python3
+#!/usr/bin/env bash
 # nixarchy:new
 # omarchy:summary=Resolve and synchronize the running Omarchy session
 # omarchy:hidden=true
-"""Runtime identity belongs to the live shell, not to a caller's generation."""
+# Runtime identity belongs to the live shell, not a caller's generation.
+set -euo pipefail
 
-import argparse
-import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import time
+fail() { echo "nixarchy-shell-session: $*" >&2; exit 1; }
+run() { timeout --kill-after=1s 2s "$@"; }
 
+action=${1:-}
+case $action in pid|tree|sync) shift ;; *) fail 'usage: nixarchy-shell-session {pid|tree|sync} [--if-running] [--pid PID] [--wait SECONDS]' ;; esac
+if_running=0
+expected_pid=
+wait_seconds=0
+while (($#)); do
+  case $1 in
+    --if-running) if_running=1; shift ;;
+    --pid|--wait)
+      option=$1
+      (($# >= 2)) && [[ $2 =~ ^[0-9]+$ ]] || fail "$option requires a nonnegative integer"
+      if [[ $option == --pid ]]; then expected_pid=$2; else wait_seconds=$((10#$2)); fi
+      shift 2 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
 
-class SessionError(Exception):
-    pass
+display=${WAYLAND_DISPLAY:-}
+if [[ -z $display ]]; then
+  # SSH has no display. The manager locates the display, never the tree.
+  manager_env=$(run systemctl --user show-environment) || fail 'cannot read the session environment'
+  while IFS= read -r entry; do
+    case $entry in WAYLAND_DISPLAY=*) display=${entry#*=} ;; esac
+  done <<< "$manager_env"
+fi
+[[ -n $display ]] || fail 'no Wayland session; refusing to select another display'
 
+resolve() {
+  local listing records pid config tree entry process_display process_instance process_path
+  local -a fields
+  selected_pid='' selected_tree='' selected_instance='' selected_path=''
+  listing=$(run qs list --all --json) || fail 'cannot list Quickshell instances'
+  # Quickshell 0.3.1 prints this non-JSON sentinel even with --json.
+  [[ $listing != 'No running instances.' ]] || listing='[]'
+  records=$(jq -ce '
+    if type == "array" and all(.[];
+      (.config_path | type == "string") and
+      (.pid | type == "number" and . > 0 and . == floor))
+    then . else error("invalid instance list") end
+  ' <<< "$listing") || fail 'cannot read Quickshell instance list'
+  mapfile -d '' -t fields < <(jq -j '.[] | .pid, "\u0000", .config_path, "\u0000"' <<< "$records")
+  for ((index=0; index<${#fields[@]}; index+=2)); do
+    pid=${fields[index]}
+    config=${fields[index+1]}
+    [[ $config == */shell/shell.qml ]] || continue
+    tree=${config%/shell/shell.qml}
+    [[ -f $tree/bin/omarchy-system-sleep-lock ]] || continue
+    process_display='' process_instance='' process_path=''
+    # Read NUL-delimited values literally; never source or eval /proc data.
+    if ! {
+      while IFS= read -r -d '' entry; do
+        case $entry in
+          WAYLAND_DISPLAY=*) process_display=${entry#*=} ;;
+          HYPRLAND_INSTANCE_SIGNATURE=*) process_instance=${entry#*=} ;;
+          PATH=*) process_path=${entry#*=} ;;
+        esac
+      done < "/proc/$pid/environ"
+    } 2>/dev/null; then
+      continue
+    fi
+    [[ $process_display == "$display" ]] || continue
+    [[ -z $selected_pid ]] || fail 'more than one Omarchy shell on this display; refusing to guess'
+    selected_pid=$pid selected_tree=$tree selected_instance=$process_instance selected_path=$process_path
+  done
+  if [[ -n $expected_pid && $selected_pid != "$expected_pid" ]]; then selected_pid=; fi
+}
 
-def run(args, **kwargs):
-    return subprocess.check_output(args, text=True, timeout=2, **kwargs).strip()
+deadline=$((SECONDS + wait_seconds))
+while :; do
+  resolve
+  if [[ -n $selected_pid ]] || ((SECONDS >= deadline)); then break; fi
+  sleep 0.1
+done
+if [[ -z $selected_pid ]]; then
+  ((if_running)) && exit 0
+  fail 'Omarchy shell is not running on this display'
+fi
+case $action in
+  pid) printf '%s\n' "$selected_pid"; exit 0 ;;
+  tree) printf '%s\n' "$selected_tree"; exit 0 ;;
+esac
 
-
-def process_environment(pid):
-    try:
-        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
-    except (FileNotFoundError, ProcessLookupError):
-        return None
-    return dict(entry.decode().split("=", 1) for entry in entries if b"=" in entry)
-
-
-def display_environment():
-    if os.environ.get("WAYLAND_DISPLAY"):
-        return dict(os.environ)
-    # SSH has no display; systemd is only a display locator, never a tree locator.
-    lines = run(["systemctl", "--user", "show-environment"]).splitlines()
-    return dict(line.split("=", 1) for line in lines if "=" in line)
-
-
-def resolve(display, expected_pid=None):
-    if not display:
-        raise SessionError("no Wayland session; refusing to select another display")
-    listing = run(["qs", "list", "--all", "--json"])
-    # Quickshell 0.3.1 prints this non-JSON sentinel even with --json.
-    # Treat it as empty so a launch hook can wait for instance registration.
-    records = [] if listing == "No running instances." else json.loads(listing)
-    matches = []
-    for record in records:
-        path = Path(record["config_path"])
-        if path.name != "shell.qml" or path.parent.name != "shell":
-            continue
-        tree = path.parent.parent
-        if not (tree / "bin/omarchy-system-sleep-lock").is_file():
-            continue
-        env = process_environment(int(record["pid"]))
-        if env is None or env.get("WAYLAND_DISPLAY") != display:
-            continue
-        matches.append((record, tree, env))
-    if len(matches) > 1:
-        raise SessionError("more than one Omarchy shell on this display; refusing to guess")
-    if not matches:
-        return None
-    session = matches[0]
-    if expected_pid is not None and session[0]["pid"] != expected_pid:
-        return None
-    return session
-
-
-def session_path(tree, path):
-    entries = []
-    for entry in path.split(":"):
-        # Keep user tools and system profiles; remove only Omarchy tree/bin entries.
-        if entry and (Path(entry).parent / "shell/shell.qml").is_file():
-            continue
-        if entry not in entries:
-            entries.append(entry)
-    return ":".join([str(tree / "bin"), *entries])
-
-
-def synchronize(session):
-    _, tree, env = session
-    instance = env.get("HYPRLAND_INSTANCE_SIGNATURE")
-    if not instance:
-        raise SessionError("the shell has no Hyprland instance; nothing was changed")
-    values = {"OMARCHY_PATH": str(tree), "PATH": session_path(tree, env["PATH"])}
-    code = "; ".join(f"hl.env({json.dumps(k)}, {json.dumps(v)})" for k, v in values.items())
-    reply = run(["hyprctl", "-i", instance, "eval", code])
-    if reply != "ok":
-        raise SessionError(f"Hyprland refused the environment update: {reply}")
-    # Lua modules cache paths too. Reload configuration without re-running
-    # autostart, so future reloads/bindings cannot restore the previous tree.
-    reply = run(["hyprctl", "-i", instance, "reload", "config-only"])
-    if reply != "ok":
-        raise SessionError(f"Hyprland refused the configuration reload: {reply}")
-    run(["dbus-update-activation-environment", "--systemd", *[f"{k}={v}" for k, v in values.items()]])
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["pid", "tree", "sync"])
-    parser.add_argument("--if-running", action="store_true")
-    parser.add_argument("--pid", type=int)
-    parser.add_argument("--wait", type=float, default=0)
-    args = parser.parse_args()
-    env = display_environment()
-    deadline = time.monotonic() + args.wait
-    while True:
-        session = resolve(env.get("WAYLAND_DISPLAY"), args.pid)
-        if session is not None or time.monotonic() >= deadline:
-            break
-        time.sleep(0.1)
-    if session is None:
-        if args.if_running:
-            return
-        raise SessionError("Omarchy shell is not running on this display")
-    if args.action == "sync":
-        synchronize(session)
-    elif args.action == "pid":
-        print(session[0]["pid"])
-    else:
-        print(session[1])
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (SessionError, subprocess.SubprocessError, OSError, ValueError, KeyError) as error:
-        print(f"nixarchy-shell-session: {error}", file=sys.stderr)
-        sys.exit(1)
+[[ -n $selected_instance ]] || fail 'the shell has no Hyprland instance; nothing was changed'
+# Keep user tools and profiles, remove old tree/bin entries, and deduplicate.
+new_path=$selected_tree/bin
+rest=$selected_path
+seen=("$new_path")
+while :; do
+  entry=${rest%%:*}
+  if [[ -z $entry || ! -f ${entry%/*}/shell/shell.qml ]]; then
+    duplicate=0
+    for previous in "${seen[@]}"; do
+      if [[ $previous == "$entry" ]]; then duplicate=1; break; fi
+    done
+    if ((!duplicate)); then new_path+=":$entry"; seen+=("$entry"); fi
+  fi
+  [[ $rest == *:* ]] || break
+  rest=${rest#*:}
+done
+code=$(jq -nr --arg tree "$selected_tree" --arg path "$new_path" \
+  '"hl.env(\"OMARCHY_PATH\", " + ($tree | tojson) + "); hl.env(\"PATH\", " + ($path | tojson) + ")"')
+reply=$(run hyprctl -i "$selected_instance" eval "$code") || fail 'could not update Hyprland environment'
+[[ $reply == ok ]] || fail "Hyprland refused the environment update: $reply"
+# Refresh cached Lua paths without rerunning autostart.
+reply=$(run hyprctl -i "$selected_instance" reload config-only) || fail 'could not reload Hyprland configuration'
+[[ $reply == ok ]] || fail "Hyprland refused the configuration reload: $reply"
+run dbus-update-activation-environment --systemd "OMARCHY_PATH=$selected_tree" "PATH=$new_path"

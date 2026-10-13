@@ -938,7 +938,14 @@
           # paid. On unstable the branch is not taken and nothing about the
           # package changes.
           quickshell =
-            if lib.versionAtLeast final.quickshell.version "0.3.1" then
+            # 0.3.2's WlSessionLock::unlock() asks isLocked() after releasing the
+            # lock, so lockStateChanged never fires and the lock screen's `locked`
+            # stays true: every later lock request is a silent no-op. checks.session.
+            if final.quickshell.version == "0.3.2" then
+              final.quickshell.overrideAttrs (old: {
+                patches = (old.patches or [ ]) ++ [ ./pkgs/quickshell/unlock-signal.patch ];
+              })
+            else if lib.versionAtLeast final.quickshell.version "0.3.1" then
               final.quickshell
             else
               final.quickshell.overrideAttrs (_: rec {

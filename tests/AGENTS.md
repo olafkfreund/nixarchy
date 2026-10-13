@@ -1356,6 +1356,15 @@ a live shell, sees that.
 
 ## Working here
 
+- **`machine: output:` is the whole command's stdout, not the probe's.**
+  `session`'s unlock check is `out=$(… lock status); python3 -c … <<<"$out"`,
+  and on failure the driver printed an empty `output:`. That reads as "lock
+  status answered nothing", and it sent #1257's diagnosis after IPC for an
+  hour. The empty line was python's, which prints nothing; the real reply was
+  `{"locked":true,"sessionLocked":false,…}`, a stale binding after Quickshell
+  0.3.2 stopped emitting `lockStateChanged` on unlock. When a filtered
+  assertion fails, print the unfiltered reply before guessing at it.
+
 - **Dynamic VMs need bounded cleanup on failure (#714).** The pinned driver's
   `create_machine` does not register its result. `shutdown()` waits on the
   process without a timeout, `release()` joins the non-daemon serial reader

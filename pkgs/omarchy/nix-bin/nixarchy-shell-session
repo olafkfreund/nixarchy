@@ -40,7 +40,10 @@ def display_environment():
 def resolve(display, expected_pid=None):
     if not display:
         raise SessionError("no Wayland session; refusing to select another display")
-    records = json.loads(run(["qs", "list", "--all", "--json"]))
+    listing = run(["qs", "list", "--all", "--json"])
+    # Quickshell 0.3.1 prints this non-JSON sentinel even with --json.
+    # Treat it as empty so a launch hook can wait for instance registration.
+    records = [] if listing == "No running instances." else json.loads(listing)
     matches = []
     for record in records:
         path = Path(record["config_path"])

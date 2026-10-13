@@ -1969,6 +1969,8 @@ stdenvNoCC.mkDerivation {
                       "$(printf '%s\n' '  shell_pid=$!' \
                         "  $out/bin/nixarchy-shell-session sync --pid \"\$shell_pid\" --wait 10 || logger -t omarchy-shell 'Could not synchronize the desktop environment'")"
                     substituteInPlace "$restartBin" \
+                      --replace-fail 'omarchy-shell lock' "$out/bin/omarchy-shell lock" \
+                      --replace-fail 'omarchy-shell shell ping' "$out/bin/omarchy-shell shell ping" \
                       --replace-fail 'session_omarchy_path=$(systemctl --user show-environment 2>/dev/null | sed -n '"'"'s/^OMARCHY_PATH=//p'"'"' | tail -n 1)' \
                       "session_omarchy_path=\$($out/bin/nixarchy-shell-session tree --if-running) || exit 1"
                     relaunchOld="hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null"

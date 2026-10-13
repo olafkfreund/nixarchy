@@ -60,6 +60,10 @@ class SessionTests(unittest.TestCase):
         with self.assertRaises(session.SessionError):
             self.resolve(display=None)
 
+    def test_no_instances_sentinel(self):
+        with patch.object(session, "run", return_value="No running instances."):
+            self.assertIsNone(session.resolve("wayland-1"))
+
     def test_publish_consistently(self):
         with patch.object(session, "run", return_value="ok") as run:
             session.synchronize((self.record, self.new, self.env))

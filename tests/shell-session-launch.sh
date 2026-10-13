@@ -13,7 +13,7 @@ ShellRoot {
     }
 }
 QML
-printf '#!%s\nshift 3\nexec "$@"\n' "$TEST_BASH" > stub/systemd-cat
+printf '#!%s\nshift 3\nsleep 0.3\nexec "$@"\n' "$TEST_BASH" > stub/systemd-cat
 printf '#!%s\nprintf "%%s\\n" "$*" >> "$HOME/hypr-env"\necho ok\n' "$TEST_BASH" > stub/hyprctl
 printf '#!%s\nprintf "%%s\\n" "$@" > "$HOME/dbus-env"\n' "$TEST_BASH" > stub/dbus-update-activation-environment
 chmod +x stub/*

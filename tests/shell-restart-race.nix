@@ -29,7 +29,11 @@ pkgs.runCommand "nixarchy-shell-restart-race"
     ];
   }
   ''
-    patched=${omarchy}/share/omarchy/bin/omarchy-restart-shell
+    # Keep this harness focused on teardown timing. Replace only the absolute
+    # IPC dependency with our readiness stub; real IPC is checked separately.
+    patched=$TMPDIR/restart
+    sed 's|${omarchy}/bin/omarchy-shell|omarchy-shell|g' \
+      ${omarchy}/share/omarchy/bin/omarchy-restart-shell > "$patched"
     upstream=${omarchySrc}/bin/omarchy-restart-shell
     [ -f "$patched" ] && [ -f "$upstream" ] || { echo "restart script missing ($patched, $upstream)" >&2; exit 1; }
 

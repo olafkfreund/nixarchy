@@ -63,6 +63,11 @@ pkgs.runCommand "nixarchy-shell-restart-tree"
     grep -q 'nixarchy-shell-session tree --if-running' "$restart" \
       || fail "the kill no longer resolves the live shell"
 
+    # The restart process itself can still have an old tree at the front of
+    # PATH, even after the replacement shell has synchronized the compositor.
+    grep -Fq '${omarchy}/bin/omarchy-shell shell ping' "$restart" \
+      || fail "readiness can select an older IPC helper through PATH"
+
     mkdir -p $out
-    echo "shell restart tree: 4 cases asserted (static; see the comment)"
+    echo "shell restart tree: 5 cases asserted (static; see the comment)"
   ''

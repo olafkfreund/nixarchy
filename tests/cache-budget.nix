@@ -50,6 +50,7 @@ pkgs.runCommand "nixarchy-cache-budget"
       ".#other":  { "/nix/store/bbb-other": $((20 * MiB)), "/nix/store/shared-qemu": $((400 * MiB)) },
       ".#twin":   { "/nix/store/ccc-twin":  $((5 * MiB)),  "/nix/store/shared-qemu": $((400 * MiB)) },
       ".#huge":   { "/nix/store/ddd-huge":  $((3000 * MiB)) },
+      ".#flaky":  { "/nix/store/hhh-flaky": $((7 * MiB)) },
       ".#checks.x86_64-linux.lonely":  { "/nix/store/eee-lonely": 96 },
       ".#checks.x86_64-linux.clingy":  { "/nix/store/fff-clingy": 200, "/nix/store/ggg-dep": 4096 }
     }
@@ -68,6 +69,7 @@ pkgs.runCommand "nixarchy-cache-budget"
       "build --keep-going") exit 0 ;;
       "eval --raw") jq -r --arg k "\$3" '.[\$k] | keys_unsorted[0]' "\$store" ;;
       "path-info -r")
+        [ "\$4" = .#flaky ] && exit 1
         if [ "\$3" = --json ]; then closure_of "\$4" | jq -c 'map_values({ narSize: . })'
         else closure_of "\$3" | jq -r 'keys[]'; fi ;;
       path-info*) closure_of "\$2" | grep -q . ;;
@@ -124,6 +126,16 @@ pkgs.runCommand "nixarchy-cache-budget"
       ok "over budget fails, naming the entry that grew"
     else
       bad "over budget failed without naming the entry:"; printf '%s\n' "$got"
+    fi
+
+    # (b2) An entry whose closure cannot be read must fail the budget, not
+    # pass as if it cost nothing. `build --no-link` still succeeds for it.
+    if got=$(bash $budget .#small .#flaky 2>&1); then
+      bad "an entry whose closure could not be read passed the budget"
+    elif grep -q '\.#flaky' <<<"$got"; then
+      ok "an unreadable closure fails the budget, naming the entry"
+    else
+      bad "an unreadable closure failed without naming the entry:"; printf '%s\n' "$got"
     fi
 
     export CACHIX_AUTH_TOKEN=stub

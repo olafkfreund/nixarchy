@@ -316,14 +316,18 @@ allowlisted_files() {
 # ---------------------------------------------------------------------------
 
 credential_hits() {
-  local rel line inc target inside r
-  local -a roots=()
+  local rel line inc exc target inside r
+  local -a roots=() xroots=()
   inc=$(includes) || return 1
+  exc=$(excludes) || return 1
   # realpath -m on the roots too: a $HOME that is itself a symlink must not make
   # every link look external.
   while IFS= read -r line; do
     [[ -n $line ]] && roots+=("$(realpath -m -- "$home_root/${line%/}")")
   done <<< "$inc"
+  while IFS= read -r line; do
+    [[ -n $line ]] && xroots+=("$(realpath -m -- "$home_root/${line%/}")")
+  done <<< "$exc"
   for rel in "${files[@]}"; do
     # cp -L copies what a link points at. A link whose target is outside the
     # list (and not the store) would carry that file in unreviewed.
@@ -332,6 +336,8 @@ credential_hits() {
       inside=false
       [[ $target == /nix/store/* ]] && inside=true
       for r in "${roots[@]}"; do [[ $target == "$r" || $target == "$r"/* ]] && inside=true; done
+      # An excluded path inside a root (the clipboard history) is still outside.
+      for r in "${xroots[@]}"; do [[ $target == "$r" || $target == "$r"/* ]] && inside=false; done
       [[ $inside == true ]] || { echo "$rel  (a link to $target, outside the backup list)"; continue; }
     fi
     case "${rel##*/}" in
@@ -384,7 +390,7 @@ if [[ $mode == restore ]]; then
       fail "Could not clone $url"
       exit 1
     fi
-    : > "$REPO/.git/nixarchy-home-backup"
+    : > "$MARKER" || { fail "Could not mark $REPO as this backup's repository"; exit 1; }
     ok "cloned"
   elif has_remote; then
     step "Fetching the latest backup"

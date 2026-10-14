@@ -322,7 +322,7 @@ Green: `apply-detach-interface` passes.
 |---|---|
 | `home-backup-restore` | green, with 6 new backup cases; red on today's code for foreign-dir, foreign-git, link-out |
 | `config-repo-ownership` | green, with 3 new cases; red today for secrets-mixed |
-| `cache-budget` | green (a)–(g); red today for (g) |
+| `cache-budget` | green (a)–(h) and (b2); red today for (b2) |
 | `apply-detach-interface` | green; red today for the empty-`Result` split |
 | `nix fmt -- --ci`, statix, deadnix | clean |
 
@@ -340,3 +340,16 @@ The plan has more than three file-editing steps, so per the managed policy,
 steps 1–6 go to one `coder` agent (step 1 first, then each later step by
 `SendMessage`). A fresh `opus` reviewer, given this plan and `git diff`,
 reviews afterwards. Steps 7 and 8 stay with the session model.
+
+## Deviations found in review
+
+A fresh `opus` review of the diff (2026-10-14) found two gaps, now fixed:
+
+- Step 4b: a link into an **excluded** path inside an include root (for example
+  the clipboard history) passed as inside the list. `credential_hits` now treats
+  any excluded subtree as outside. Covered by `backup-link-excluded`.
+- Step 5a: only the `--status` reader was exercised. The `--log` reader is now
+  run as well, proven red with that one line put back to a tab.
+
+Also: the restore marker write uses `$MARKER` and is checked, and
+`cache-budget.sh` notes that its guard depends on `pipefail`.

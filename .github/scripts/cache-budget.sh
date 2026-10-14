@@ -42,6 +42,7 @@ for e in "${entries[@]}"; do
     tail -5 "$work/build.log" >&2
     exit 2
   fi
+  # pipefail is what makes the || below see a failed nix: jq exits 0 on empty input.
   nix path-info -r --json "$e" 2>/dev/null |
     jq -r --arg e "$e" 'to_entries[] | [.key, (.value.narSize | tostring), $e] | @tsv' \
       >>"$work/paths.tsv" ||

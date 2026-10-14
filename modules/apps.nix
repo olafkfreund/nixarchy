@@ -3443,6 +3443,8 @@ in
                   # reads Result=success ExecMainStatus=0. Reading Result first
                   # answers "succeeded" for a rebuild that never happened, which
                   # is the one wrong answer that matters.
+                  # Separator \037, not tab: `read` collapses empty tab-separated fields, and
+                  # any field here may be empty (AGENTS.md 13).
                   rebuild_state() {
                     local sub res code inv key value props
                     props=$(systemctl --user show -p SubState -p Result -p ExecMainStatus -p InvocationID nixarchy-rebuild 2>/dev/null) || true
@@ -3464,16 +3466,16 @@ in
                     # above already warns about: an answer about a run that is
                     # not the one being asked about.
                     if [ -z "$sub" ] || [ "$sub" = dead ]; then
-                      printf 'none\t\t\t\n'
+                      printf 'none\037\037\037\n'
                       return
                     fi
                     case "$sub" in
-                      running | start*) printf 'running\t%s\t%s\t%s\n' "$res" "$code" "$inv" ;;
+                      running | start*) printf 'running\037%s\037%s\037%s\n' "$res" "$code" "$inv" ;;
                       *)
                         if [ "$res" = success ] && [ "''${code:-0}" = 0 ]; then
-                          printf 'succeeded\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                          printf 'succeeded\037%s\037%s\037%s\n' "$res" "$code" "$inv"
                         else
-                          printf 'failed\t%s\t%s\t%s\n' "$res" "$code" "$inv"
+                          printf 'failed\037%s\037%s\037%s\n' "$res" "$code" "$inv"
                         fi
                         ;;
                     esac
@@ -3481,7 +3483,7 @@ in
 
                   # Queries act and exit: they are not an apply.
                   if [ -n "$status" ]; then
-                    IFS=$'\t' read -r st res code inv < <(rebuild_state)
+                    IFS=$'\037' read -r st res code inv < <(rebuild_state)
                     if [ "$st" != failed ]; then
                       code=0
                     else
@@ -3509,7 +3511,7 @@ in
 
                   if [ -n "$wantlog" ]; then
                     if [ -z "$invocation" ]; then
-                      IFS=$'\t' read -r _ _ _ invocation < <(rebuild_state)
+                      IFS=$'\037' read -r _ _ _ invocation < <(rebuild_state)
                     fi
                     # That run, not everything the unit ever did.
                     # --no-pager and -o cat: a caller reading this is a script

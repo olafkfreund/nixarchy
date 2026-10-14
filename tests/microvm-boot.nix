@@ -163,10 +163,12 @@ pkgs.testers.runNixOSTest {
     modes = machine.succeed("${agentDevSsh} stat -c %a /mnt/agent-policy /mnt/agent-policy/allow-hosts").split()
     assert modes == ["777", "666"], modes
     before = machine.succeed(f"sha256sum {policy}").split()[0]
-    machine.fail("${agentDevSsh} 'echo evil.example >> /mnt/agent-policy/allow-hosts'")
-    machine.fail("${agentDevSsh} mv /mnt/agent-policy/allow-hosts /mnt/agent-policy/renamed")
+    # Negate inside the guest, not with machine.fail: ssh that cannot connect
+    # exits 255, and machine.fail would read that as the write being refused.
+    machine.succeed("${agentDevSsh} '! echo evil.example >> /mnt/agent-policy/allow-hosts'")
+    machine.succeed("${agentDevSsh} '! mv /mnt/agent-policy/allow-hosts /mnt/agent-policy/renamed'")
     machine.succeed(f"ln -s /mnt/agent-policy/allow-hosts {share}/policy-link")
-    machine.fail("${agentDevSsh} 'echo evil.example >> /mnt/host/policy-link'")
+    machine.succeed("${agentDevSsh} '! echo evil.example >> /mnt/host/policy-link'")
     assert machine.succeed(f"sha256sum {policy}").split()[0] == before
     machine.succeed(f"chmod 0750 {policy.rsplit('/', 1)[0]} && chmod 0644 {policy}")
 
@@ -181,7 +183,7 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("${agentRootSsh} true", timeout=1200)
     journal = machine.succeed("${agentRootSsh} journalctl -u nixarchy-agent-allowlist -b --no-pager")
     assert "allow-hosts: cannot read /mnt/agent-policy/allow-hosts" in journal, journal
-    machine.fail("${agentRootSsh} systemctl is-active --quiet tinyproxy")
+    machine.succeed("${agentRootSsh} '! systemctl is-active --quiet tinyproxy'")
     machine.succeed(f"chmod 0644 {policy}")
   '';
 }

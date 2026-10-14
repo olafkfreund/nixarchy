@@ -171,9 +171,10 @@ pkgs.runCommand "nixarchy-home-backup-restore"
       repo=$TMPDIR/$1/repo
       flake=$TMPDIR/$1/flake
       log=$TMPDIR/$1/log
-      mkdir -p "$home/.config/omarchy" "$flake"
+      mkdir -p "$home/.local/state/omarchy" "$flake"
       touch "$flake/.nixarchy-url"
-      printf '{}\n' > "$home/.config/omarchy/shell.json"
+      # Not shell.json: build.yml refuses any write to it in the tree (#847).
+      printf 'theme\n' > "$home/.local/state/omarchy/theme.name"
       HOME=$home git config --global user.name tester
       HOME=$home git config --global user.email tester@example.invalid
     }
@@ -215,13 +216,13 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     HOME=$home NIXARCHY_FLAKE=$flake bash ${script} backup > "$log" 2>&1 \
       || fail "$case_name: upgrade of an unmarked default repository failed: $(cat "$log")"
     test -e "$repo/.git/nixarchy-home-backup" || fail "$case_name: marker missing"
-    HOME=$home git -C "$repo" ls-files --error-unmatch .config/omarchy/shell.json >/dev/null 2>&1 || fail "$case_name: shell.json not committed"
+    HOME=$home git -C "$repo" ls-files --error-unmatch .local/state/omarchy/theme.name >/dev/null 2>&1 || fail "$case_name: theme.name not committed"
 
     case_name=backup-fresh
     bsetup "$case_name"
     backup || fail "$case_name: fresh backup failed: $(cat "$log")"
     test -e "$repo/.git/nixarchy-home-backup" || fail "$case_name: marker missing"
-    HOME=$home git -C "$repo" ls-files --error-unmatch .config/omarchy/shell.json >/dev/null 2>&1 || fail "$case_name: shell.json not committed"
+    HOME=$home git -C "$repo" ls-files --error-unmatch .local/state/omarchy/theme.name >/dev/null 2>&1 || fail "$case_name: theme.name not committed"
 
     case_name=backup-link-out
     bsetup "$case_name"

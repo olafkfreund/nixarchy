@@ -52,8 +52,12 @@ jobs:
           # Authenticated, and refuses an empty answer: a 403 once made `latest`
           # empty, and the sed below pinned upstream's default branch.
           latest=$(gh api repos/basecamp/omarchy/releases/latest --jq .tag_name)
-          [[ "$latest" =~ ^v[0-9] ]] || { echo "::error::no release tag from the API: '$latest'"; exit 1; }
+          # Anchored on both ends: these values are pasted into later run:
+          # blocks as expressions, so a tag like v5$(id) would run as shell (#1268).
+          tag='^v[0-9]+(\.[0-9]+)*(-[A-Za-z0-9.]+)?$'
+          [[ "$latest" =~ $tag ]] || { echo "::error::no release tag from the API: '$latest'"; exit 1; }
           current=$(grep -oE 'github:basecamp/omarchy/[^"]+' flake.nix | cut -d/ -f3)
+          [[ "$current" =~ $tag ]] || { echo "::error::flake.nix pins omarchy at '$current', not a release tag"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           # The version being left behind, for the package delta below.
           echo "current=$current" >> "$GITHUB_OUTPUT"

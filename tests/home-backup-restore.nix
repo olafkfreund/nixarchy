@@ -244,6 +244,37 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     if grep -rq --exclude-dir=.git clipboard-body-xyz "$repo"; then fail "$case_name: the excluded file was copied through a link"; fi
     grep -q 'clip.json.*outside the backup list' "$log" || fail "$case_name: the link was not put to the credential review: $(cat "$log")"
 
+    # #1270: an allowlist directory that is itself a symlink (stow's layout).
+    case_name=backup-dir-link
+    bsetup "$case_name"
+    mkdir -p "$home/dotfiles/hypr" "$home/.config"
+    printf 'bind\n' > "$home/dotfiles/hypr/hyprland.conf"
+    ln -s "$home/dotfiles/hypr" "$home/.config/hypr"
+    backup || fail "$case_name: backup failed: $(cat "$log")"
+    HOME=$home git -C "$repo" ls-files --error-unmatch .config/hypr/hyprland.conf >/dev/null 2>&1 || fail "$case_name: a file under a symlinked entry was not committed: $(cat "$log")"
+    if grep -q 'outside the backup list' "$log"; then fail "$case_name: the linked directory's own files were flagged: $(cat "$log")"; fi
+    grep -q '\.config/hypr.*->' "$log" || fail "$case_name: the listing did not show where the entry points: $(cat "$log")"
+
+    case_name=backup-dir-link-inner
+    bsetup "$case_name"
+    mkdir -p "$home/dotfiles/hypr" "$home/.config" "$home/.aws"
+    printf 'bind\n' > "$home/dotfiles/hypr/hyprland.conf"
+    printf 'aws-key-xyz\n' > "$home/.aws/credentials"
+    ln -s "$home/.aws/credentials" "$home/dotfiles/hypr/secret.conf"
+    ln -s "$home/dotfiles/hypr" "$home/.config/hypr"
+    backup || fail "$case_name: declining the review should still exit 0: $(cat "$log")"
+    if HOME=$home git -C "$repo" rev-parse HEAD >/dev/null 2>&1; then fail "$case_name: a link out of a linked directory was committed: $(cat "$log")"; fi
+    if grep -rq --exclude-dir=.git aws-key-xyz "$repo"; then fail "$case_name: the credential was copied"; fi
+    grep -q 'secret.conf.*outside the backup list' "$log" || fail "$case_name: the inner link was not put to the credential review: $(cat "$log")"
+
+    case_name=backup-dir-link-store
+    bsetup "$case_name"
+    mkdir -p "$home/.config"
+    ln -s ${pkgs.hello}/bin "$home/.config/hypr"
+    backup || fail "$case_name: backup failed: $(cat "$log")"
+    HOME=$home git -C "$repo" ls-files --error-unmatch .config/hypr/hello >/dev/null 2>&1 || fail "$case_name: a store directory's file was not committed: $(cat "$log")"
+    if grep -q 'outside the backup list' "$log"; then fail "$case_name: a store directory was flagged: $(cat "$log")"; fi
+
     case_name=backup-link-store
     bsetup "$case_name"
     mkdir -p "$home/.config/hypr"

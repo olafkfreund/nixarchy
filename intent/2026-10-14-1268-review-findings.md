@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1268
 author: olafkfreund
 ---
@@ -103,3 +103,12 @@ and passes on the fix, at the cheapest layer that can reach it.
 2. Item 5: in this batch, or a separate PR?
 3. One PR for everything, or one per group (data-loss/secrets, CI, low),
    following #1098's pattern?
+
+## Decisions at approval
+
+Approved by the owner on 2026-10-14 without answers to the open questions,
+so the defaults are recorded here:
+
+1. Item 1: a marker written on `git init`; any other non-empty target is refused.
+2. Item 5: a separate PR, so a human-merge gate does not hold the data-loss fixes.
+3. One PR for everything else.

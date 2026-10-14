@@ -5706,13 +5706,13 @@ pkgs.runCommand "nixarchy-options"
         #
         # nixarchy-config-repo's secret_scan reads *.nix, and a secret store is
         # YAML -- so `nixarchy secret` opens a path the existing scan cannot
-        # see. The new guard keys on sops' own ENC[AES256_GCM marker, and THAT
+        # see. The guard checks every value for sops' own ENC[ prefix (#1268), and THAT
         # is the half worth checking rather than asserting: if sops ever
         # changed how it wraps a value, the guard would quietly pass every
         # encrypted file AND every plaintext one. The store encrypted above is
         # real sops output, so this varies with the thing it is about.
         repobin="$vm/sw/bin/nixarchy-config-repo"
-        grep -qF 'ENC\[AES256_GCM' "$repobin" || {
+        grep -qF '!~ /^ENC\[/' "$repobin" || {
           echo "::error::nixarchy-config-repo no longer looks for an unencrypted" >&2
           echo "  secret store, so 'nixarchy config repo' would commit and push" >&2
           echo "  a plaintext secrets.yaml (#611 added the path; the *.nix grep" >&2

@@ -215,13 +215,13 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     HOME=$home NIXARCHY_FLAKE=$flake bash ${script} backup > "$log" 2>&1 \
       || fail "$case_name: upgrade of an unmarked default repository failed: $(cat "$log")"
     test -e "$repo/.git/nixarchy-home-backup" || fail "$case_name: marker missing"
-    HOME=$home git -C "$repo" ls-files | grep -qx '.config/omarchy/shell.json' || fail "$case_name: shell.json not committed"
+    HOME=$home git -C "$repo" ls-files --error-unmatch .config/omarchy/shell.json >/dev/null 2>&1 || fail "$case_name: shell.json not committed"
 
     case_name=backup-fresh
     bsetup "$case_name"
     backup || fail "$case_name: fresh backup failed: $(cat "$log")"
     test -e "$repo/.git/nixarchy-home-backup" || fail "$case_name: marker missing"
-    HOME=$home git -C "$repo" ls-files | grep -qx '.config/omarchy/shell.json' || fail "$case_name: shell.json not committed"
+    HOME=$home git -C "$repo" ls-files --error-unmatch .config/omarchy/shell.json >/dev/null 2>&1 || fail "$case_name: shell.json not committed"
 
     case_name=backup-link-out
     bsetup "$case_name"

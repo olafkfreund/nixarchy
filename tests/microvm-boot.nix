@@ -54,8 +54,10 @@ let
   # the first call exited before it could eat anything, the second hung for
   # twelve minutes on `mount`).
   ssh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${toString sshPort} dev@localhost";
-  agentDevSsh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p ${toString agentSshPort} dev@localhost";
-  agentRootSsh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p ${toString agentSshPort} root@localhost";
+  # 30, not 3: a TCG guest still finishing boot can take longer than 3 s to
+  # send its banner, so a call right after the readiness probe raced it (#1264).
+  agentDevSsh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 -p ${toString agentSshPort} dev@localhost";
+  agentRootSsh = "ssh -n -i /root/snakeoil -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 -p ${toString agentSshPort} root@localhost";
 in
 pkgs.testers.runNixOSTest {
   name = "nixarchy-microvm-boot";

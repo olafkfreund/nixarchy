@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1270
 author: olafkfreund
 ---
@@ -68,3 +68,11 @@ reports success while silently backing up nothing from an entry that exists.
    is about. Recommendation: treat the directory's own resolved target as an
    include root, so its files pass, while a link *inside* it that leads
    elsewhere still prompts.
+
+## Decisions at approval
+
+Approved by the owner on 2026-10-14 with the recommendations:
+
+1. Follow a symlinked allowlist directory.
+2. Its resolved target counts as an include root, so its files pass; a link
+   *inside* it that leads elsewhere still goes to the credential review.

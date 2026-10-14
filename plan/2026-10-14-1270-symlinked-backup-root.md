@@ -90,9 +90,9 @@ red line in the body.
   while IFS= read -r e; do
     [[ -n $e ]] || continue
     if [[ -L $HOME/${e%/} ]]; then
-      say "    $e  ->  $(realpath -m -- "$HOME/${e%/}")"
+      printf '    %s  ->  %s\n' "$e" "$(realpath -m -- "$HOME/${e%/}")"
     else
-      say "    $e"
+      printf '    %s\n' "$e"
     fi
   done <<< "$(includes)"
   ```
@@ -101,8 +101,8 @@ red line in the body.
   today too. Keep it as a here-string from `$(includes)`, not
   `< <(includes)`, so a failure isn't hidden further. The list was already
   read successfully a few lines above via `allowlisted_files`.
-  `say` is `echo -e`. A path containing a backslash sequence would be
-  interpreted, so use `printf '    %s  ->  %s\n'` for both branches.
+  `printf`, not `say`: `say` is `echo -e`, which would interpret a
+  backslash in a path.
 - Build `home-backup-restore` green into `/mnt/data/vmtest/1270-green.log`.
   Then build `grep-q-pipefail`, then run `nix fmt -- --ci`, statix and
   deadnix.

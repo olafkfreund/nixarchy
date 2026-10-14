@@ -233,6 +233,16 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     if grep -rq --exclude-dir=.git aws-credential-body-xyz "$repo"; then fail "$case_name: the linked credential was copied into the repository"; fi
     grep -q 'hyprland.conf.*outside the backup list' "$log" || fail "$case_name: the link was not put to the credential review: $(cat "$log")"
 
+    case_name=backup-link-excluded
+    bsetup "$case_name"
+    mkdir -p "$home/.local/state/omarchy" "$home/.config/hypr"
+    printf 'clipboard-body-xyz\n' > "$home/.local/state/omarchy/clipboard-history.json"
+    ln -s "$home/.local/state/omarchy/clipboard-history.json" "$home/.config/hypr/clip.json"
+    backup || fail "$case_name: declining the review should still exit 0: $(cat "$log")"
+    if HOME=$home git -C "$repo" rev-parse HEAD >/dev/null 2>&1; then fail "$case_name: a link to an excluded file was committed: $(cat "$log")"; fi
+    if grep -rq --exclude-dir=.git clipboard-body-xyz "$repo"; then fail "$case_name: the excluded file was copied through a link"; fi
+    grep -q 'clip.json.*outside the backup list' "$log" || fail "$case_name: the link was not put to the credential review: $(cat "$log")"
+
     case_name=backup-link-store
     bsetup "$case_name"
     mkdir -p "$home/.config/hypr"

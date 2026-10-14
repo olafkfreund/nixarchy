@@ -160,6 +160,16 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
       echo "st=$st code=$code inv=$inv"
     )
     [ "$got" = "st=failed code=42 inv=abc" ] || fail "rebuild_state lost an empty field: $got"
+    # The --log reader takes the same output, and the same trap.
+    logreader=$(grep -m1 'read -r _ _ _ invocation' "$apply")
+    [ -n "$logreader" ] || fail "could not find the --log reader line in the shipped script"
+    got=$(
+      systemctl() { printf '%s\n' SubState=failed Result= ExecMainStatus=42 InvocationID=abc; }
+      eval "$fn"
+      eval "$logreader"
+      echo "invocation=$invocation"
+    )
+    [ "$got" = "invocation=abc" ] || fail "the --log reader lost an empty field: $got"
 
     mkdir -p $out
     echo "apply detach interface: 6 cases asserted (--status is unreachable here)"

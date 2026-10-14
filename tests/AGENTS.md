@@ -653,8 +653,9 @@ another observable -- the script's own output, or a file it writes.
 **What `apply-detach-interface` therefore does not cover:** `--status`'s
 mapping, including the `none`-not-`succeeded` case that the whole feature
 exists for (a unit that never ran reads `Result=success ExecMainStatus=0`).
-Only `--expect-sha256` is asserted, because it touches the file system rather
-than systemd.
+`--expect-sha256` is asserted because it touches the file system rather than
+systemd, and `rebuild_state`'s field split is asserted by evaluating the
+shipped function and its reader line with a shell-function `systemctl`.
 
 ## wait_for_console_text rescans its whole buffer, once per arriving line
 

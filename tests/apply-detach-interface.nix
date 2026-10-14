@@ -54,8 +54,11 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     # the identical trap with `nh` earlier the same day.
     #
     # So what is asserted below is --expect-sha256, which touches only the file
-    # system. The `none`-not-`succeeded` mapping -- the trap the whole status
-    # feature exists for -- is unverified here and says so in tests/AGENTS.md.
+    # system, plus the field split of rebuild_state (case 8), which is reached
+    # by evaluating the shipped function and its reader line with a shell
+    # function for systemctl (a function beats PATH). The `none`-not-`succeeded`
+    # mapping -- the trap the whole status feature exists for -- is still
+    # unverified here and says so in tests/AGENTS.md.
 
     # 4. A matching --expect-sha256 proceeds past the check.
     have=$(sha256sum <"$HOME/.config/nixarchy/apps.nix" | cut -d' ' -f1)
@@ -142,6 +145,22 @@ pkgs.runCommand "nixarchy-apply-detach-interface"
     grep -q 'jscope=(-n 200)' "$apply" \
       || fail "--log is not capped when there is no invocation to scope it"
 
+    # 8. rebuild_state's fields survive `read` when one is empty (#1268).
+    #    Result= is empty here; a tab IFS collapses the empty field and shifts
+    #    ExecMainStatus into Result and InvocationID into ExecMainStatus.
+    #    Both halves are the script's own text, so neither can drift unseen.
+    fn=$(sed -n '/^ *rebuild_state() {$/,/^ *}$/p' "$apply")
+    [ -n "$fn" ] && [[ $fn == *'}' ]] || fail "could not extract rebuild_state from the shipped script"
+    reader=$(grep -m1 'read -r st res code inv' "$apply")
+    [ -n "$reader" ] || fail "could not find the --status reader line in the shipped script"
+    got=$(
+      systemctl() { printf '%s\n' SubState=failed Result= ExecMainStatus=42 InvocationID=abc; }
+      eval "$fn"
+      eval "$reader"
+      echo "st=$st code=$code inv=$inv"
+    )
+    [ "$got" = "st=failed code=42 inv=abc" ] || fail "rebuild_state lost an empty field: $got"
+
     mkdir -p $out
-    echo "apply detach interface: 5 cases asserted (--status is unreachable here)"
+    echo "apply detach interface: 6 cases asserted (--status is unreachable here)"
   ''

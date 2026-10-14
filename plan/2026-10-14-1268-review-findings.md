@@ -79,7 +79,7 @@ interpolation).
   back up.
 - Case `backup-foreign-dir`: `$repo` holds `keep.txt` and no `.git`. Expect
   the run to fail, `keep.txt` to be byte-identical, `$repo/.git` to be
-  absent, and the log to name `nixarchy-home-backup` (the adopt command).
+  absent, and the log to say `refusing to empty it` (no adopt command here: with no `.git` there is nothing to adopt, so the message says to choose an empty or new directory; the adopt command is asserted in `backup-foreign-git`).
   **Red today:** `keep.txt` is deleted.
 - Case `backup-foreign-git`: `$repo` is a `git init`ed repo with a commit and
   an uncommitted `wip.txt`. Expect refusal, with `wip.txt` intact. **Red

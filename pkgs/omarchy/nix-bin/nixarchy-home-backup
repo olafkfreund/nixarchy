@@ -30,7 +30,9 @@
 set -uo pipefail
 
 FLAKE=${NIXARCHY_FLAKE:-/etc/nixos}
-REPO=${NIXARCHY_HOME_BACKUP_REPO:-$HOME/.local/share/nixarchy/home-backup}
+DEFAULT_REPO=$HOME/.local/share/nixarchy/home-backup
+REPO=${NIXARCHY_HOME_BACKUP_REPO:-$DEFAULT_REPO}
+MARKER=$REPO/.git/nixarchy-home-backup
 USER_LIST=$HOME/.config/omarchy/backup.list
 home_root=${HOME%/}
 [[ -n $home_root ]] || home_root=/
@@ -366,6 +368,7 @@ if [[ $mode == restore ]]; then
       fail "Could not clone $url"
       exit 1
     fi
+    : > "$REPO/.git/nixarchy-home-backup"
     ok "cloned"
   elif has_remote; then
     step "Fetching the latest backup"
@@ -496,10 +499,25 @@ fi
 
 # ---- 1. the repository ----------------------------------------------------
 
-if [[ ! -d $REPO/.git ]]; then
+# Ownership is a marker inside .git, because step 3 empties $REPO and
+# $NIXARCHY_HOME_BACKUP_REPO can point at any directory the user has.
+if [[ -e $MARKER ]]; then
+  :
+elif [[ -d $REPO/.git && ${REPO%/} == "$DEFAULT_REPO" ]]; then
+  : > "$MARKER" # a repository from before the marker existed
+elif [[ -e $REPO && ! -d $REPO ]] || [[ -d $REPO && -n $(find "$REPO" -mindepth 1 -maxdepth 1 -print -quit) ]]; then
+  fail "$REPO already exists and was not created by this backup; refusing to empty it."
+  if [[ -d $REPO/.git ]]; then
+    say "  If it is yours to empty, adopt it: \033[1mtouch \"$REPO/.git/nixarchy-home-backup\"\033[0m"
+  else
+    say "  Choose an empty or new directory for NIXARCHY_HOME_BACKUP_REPO."
+  fi
+  exit 1
+else
   step "Creating the repository"
   mkdir -p "$REPO"
   command git init -q -b main "$REPO" || { fail "Could not create $REPO"; exit 1; }
+  : > "$MARKER"
   ok "$REPO"
 fi
 
@@ -548,10 +566,11 @@ fi
 step "Copying files in"
 
 # Emptied first, so a path removed from the allowlist stops being backed up
-# rather than lingering in the repository forever. Guarded on .git existing:
+# rather than lingering in the repository forever. Guarded on ownership:
 # this is an rm -rf built from a variable, and $REPO comes from the
-# environment.
-[[ -d $REPO/.git ]] || { fail "$REPO is not a git repository; refusing to empty it."; exit 1; }
+# environment. The guard tests ownership, not .git, because this script
+# creates .git itself.
+[[ -e $MARKER ]] || { fail "$REPO was not created by this backup; refusing to empty it."; exit 1; }
 find "$REPO" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
 
 # Modes are kept, then forced writable -- not dropped. git records exactly one

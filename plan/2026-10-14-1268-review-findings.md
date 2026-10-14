@@ -189,7 +189,7 @@ Green: `config-repo-ownership` passes, all old cases included.
 - In the stub's `"path-info -r")` branch (`:70`), first line:
   `[ "\$4" = .#flaky ] && exit 1`. `build --no-link` still succeeds for
   it.
-- Case (g), after (b): `bash $budget .#small .#flaky` must exit non-zero
+- Case (b2) (the file already has a (g)), after (b): `bash $budget .#small .#flaky` must exit non-zero
   and print `.#flaky`. **Red today:** it passes at 10 MiB.
 
 **3b. Fix**, `.github/scripts/cache-budget.sh:45-47`: append to the

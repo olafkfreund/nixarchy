@@ -44,7 +44,8 @@ for e in "${entries[@]}"; do
   fi
   nix path-info -r --json "$e" 2>/dev/null |
     jq -r --arg e "$e" 'to_entries[] | [.key, (.value.narSize | tostring), $e] | @tsv' \
-      >>"$work/paths.tsv"
+      >>"$work/paths.tsv" ||
+    { echo "::error::could not read the closure of $e, so its cost cannot be measured" >&2; exit 2; }
 done
 
 # One lookup per distinct path, in parallel: the union of the allowlist is

@@ -3,10 +3,13 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
   {
     nativeBuildInputs = [
       pkgs.bash
+      pkgs.age
       pkgs.coreutils
+      pkgs.gawk
       pkgs.git
       pkgs.gnugrep
       pkgs.gnused
+      pkgs.sops
     ];
   }
   ''
@@ -17,7 +20,7 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
     chmod +x "$TMPDIR/config-repo"
     touch "$TMPDIR/managed"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
-      '[[ $1 == confirm ]]' > "$bin/gum"
+      '[[ $1 == confirm && $* != *anyway* ]]' > "$bin/gum"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
       '[[ $1 == mark ]]' > "$bin/omarchy-done"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
@@ -97,6 +100,49 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
     grep -Fxq '    sudo git push' "$root/plain" || fail "legacy hint did not show sudo git push"
     echo "config repo suggests sudo git for legacy metadata"
     echo "config repo elevates only for an unwritable legacy flake"
+
+    # A real sops file, so the fixture is sops' own output rather than a guess.
+    mkdir -p "$TMPDIR/fix/hosts/alpha"
+    (
+      cd "$TMPDIR/fix"
+      age-keygen -o alpha.key 2>/dev/null
+      printf '%s\n' \
+        'creation_rules:' \
+        '  - path_regex: hosts/alpha/secrets\.yaml$' \
+        '    age: '"$(age-keygen -y alpha.key)" > .sops.yaml
+      printf '%s\n' 'hypr-rdp-password: s3cret-value' > hosts/alpha/secrets.yaml
+      SOPS_AGE_KEY_FILE=alpha.key sops -e -i hosts/alpha/secrets.yaml
+    ) || fail "could not generate the sops fixture"
+    grep -q 'ENC\[AES256_GCM' "$TMPDIR/fix/hosts/alpha/secrets.yaml" || fail "sops fixture is not encrypted"
+
+    setup secrets-encrypted github.com
+    export SUDO_MODE=deny
+    mkdir -p "$NIXARCHY_FLAKE/hosts/alpha"
+    cp "$TMPDIR/fix/hosts/alpha/secrets.yaml" "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
+    run_case || fail "encrypted secrets fixture failed: $(cat "$root/output")"
+    git -C "$NIXARCHY_FLAKE" rev-parse HEAD >/dev/null 2>&1 || fail "encrypted secrets file was not committed: $(cat "$root/output")"
+    if grep -q 'NOT encrypted' "$root/output"; then fail "sops-encrypted file was called plaintext"; fi
+
+    setup secrets-mixed github.com
+    export SUDO_MODE=deny
+    mkdir -p "$NIXARCHY_FLAKE/hosts/alpha"
+    cp "$TMPDIR/fix/hosts/alpha/secrets.yaml" "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
+    chmod u+w "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
+    printf 'extra-token: plain-value-123\n' >> "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
+    run_case || true
+    grep -q 'NOT encrypted' "$root/output" || fail "partly plaintext secrets file was not flagged: $(cat "$root/output")"
+    grep -q 'extra-token' "$root/output" || fail "plaintext key was not named: $(cat "$root/output")"
+    if grep -q 'plain-value-123' "$root/output"; then fail "the plaintext value was printed"; fi
+    if git -C "$NIXARCHY_FLAKE" rev-parse HEAD >/dev/null 2>&1; then fail "partly plaintext secrets file was committed"; fi
+
+    setup secrets-plain github.com
+    export SUDO_MODE=deny
+    mkdir -p "$NIXARCHY_FLAKE/hosts/alpha"
+    printf 'hypr-rdp-password: s3cret-value\n' > "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
+    run_case || true
+    grep -q 'NOT encrypted' "$root/output" || fail "plaintext secrets file was not flagged: $(cat "$root/output")"
+    if git -C "$NIXARCHY_FLAKE" rev-parse HEAD >/dev/null 2>&1; then fail "plaintext secrets file was committed"; fi
+    echo "config repo checks every secrets value, not the file"
 
     setup mixed github.com
     export SUDO_MODE=deny

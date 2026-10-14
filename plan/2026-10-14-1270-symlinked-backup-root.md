@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1270
 spec: spec/2026-10-14-1270-symlinked-backup-root.md
 ---

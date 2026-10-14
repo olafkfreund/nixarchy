@@ -150,7 +150,9 @@ already in the runtime list (`pkgs/omarchy/default.nix:20,200`).
 ```bash
 first_plain() { # prints the first unencrypted key, or a reason; nothing when the file is sops-clean
   awk '
-    /^sops:/ { meta = 1; exit }
+    /^sops:/ { meta = 1; insops = 1; next }
+    insops && /^[^[:space:]#]/ { insops = 0 }
+    insops { next }
     /^[[:space:]]*(#|$)/ { next }
     {
       line = $0; sub(/^[[:space:]]*(- )*/, "", line); key = ""
@@ -161,6 +163,8 @@ first_plain() { # prints the first unencrypted key, or a reason; nothing when th
     END { if (!found && !meta) print "no sops metadata" }' "$1"
 }
 ```
+
+(Deviation: sops writes its `sops:` block at the end of the file and the mixed fixture appends after it, so the block is skipped up to the next top-level key instead of ending the scan with `exit`.)
 
 Then, per file: `why=$(first_plain "$f")` and
 `[[ -n $why ]] && plain+="    ${f#"$FLAKE"/}  ($why)"$'\n'`. This also drops

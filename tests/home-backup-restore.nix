@@ -223,6 +223,24 @@ pkgs.runCommand "nixarchy-home-backup-restore"
     test -e "$repo/.git/nixarchy-home-backup" || fail "$case_name: marker missing"
     HOME=$home git -C "$repo" ls-files | grep -qx '.config/omarchy/shell.json' || fail "$case_name: shell.json not committed"
 
+    case_name=backup-link-out
+    bsetup "$case_name"
+    mkdir -p "$home/.aws" "$home/.config/hypr"
+    printf 'aws-credential-body-xyz\n' > "$home/.aws/credentials"
+    ln -s "$home/.aws/credentials" "$home/.config/hypr/hyprland.conf"
+    backup || fail "$case_name: declining the review should still exit 0: $(cat "$log")"
+    if HOME=$home git -C "$repo" rev-parse HEAD >/dev/null 2>&1; then fail "$case_name: a link out of the list was committed: $(cat "$log")"; fi
+    if grep -rq --exclude-dir=.git aws-credential-body-xyz "$repo"; then fail "$case_name: the linked credential was copied into the repository"; fi
+    grep -q 'hyprland.conf.*outside the backup list' "$log" || fail "$case_name: the link was not put to the credential review: $(cat "$log")"
+
+    case_name=backup-link-store
+    bsetup "$case_name"
+    mkdir -p "$home/.config/hypr"
+    ln -s ${pkgs.bash}/bin/bash "$home/.config/hypr/hyprland.conf"
+    backup || fail "$case_name: backup failed: $(cat "$log")"
+    if grep -q 'outside the backup list' "$log"; then fail "$case_name: a link into the store was flagged: $(cat "$log")"; fi
+    test -f "$repo/.config/hypr/hyprland.conf" || fail "$case_name: the linked file was not copied"
+
     echo "home backup restore limits paths and reports failed copies (#1080)"
     touch "$out"
   ''

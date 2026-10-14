@@ -316,8 +316,24 @@ allowlisted_files() {
 # ---------------------------------------------------------------------------
 
 credential_hits() {
-  local rel
+  local rel line inc target inside r
+  local -a roots=()
+  inc=$(includes) || return 1
+  # realpath -m on the roots too: a $HOME that is itself a symlink must not make
+  # every link look external.
+  while IFS= read -r line; do
+    [[ -n $line ]] && roots+=("$(realpath -m -- "$home_root/${line%/}")")
+  done <<< "$inc"
   for rel in "${files[@]}"; do
+    # cp -L copies what a link points at. A link whose target is outside the
+    # list (and not the store) would carry that file in unreviewed.
+    if [[ -L $HOME/$rel ]]; then
+      target=$(realpath -- "$HOME/$rel") || target=unresolvable
+      inside=false
+      [[ $target == /nix/store/* ]] && inside=true
+      for r in "${roots[@]}"; do [[ $target == "$r" || $target == "$r"/* ]] && inside=true; done
+      [[ $inside == true ]] || { echo "$rel  (a link to $target, outside the backup list)"; continue; }
+    fi
     case "${rel##*/}" in
       # gh/glab, the agent credential files, ssh and TLS key material, dotenv.
       hosts.yml | auth.json | credentials.json | .credentials.json | \
@@ -543,7 +559,8 @@ fi
 
 step "Checking the allowlist for credentials"
 
-hits=$(credential_hits | head -20)
+hits=$(credential_hits) || { fail "Could not scan the allowlist for credentials."; exit 1; }
+hits=$(head -20 <<< "$hits")
 if [[ -n $hits ]]; then
   warn "These are on the allowlist and look like secrets:\n"
   echo "$hits" | sed 's/^/    /'

@@ -243,7 +243,7 @@ has_remote()  { [[ -n $(git remote 2>/dev/null) ]]; }
 # ---------------------------------------------------------------------------
 
 allowlisted_files() {
-  local entry ex rel path root=${1:-$home_root} parts current matches entries exclusions
+  local entry ex rel path root=${1:-$home_root} parts current matches entries exclusions start
   root=${root%/}
   [[ -n $root ]] || root=/
   entries=$(includes) || return 1
@@ -275,7 +275,11 @@ allowlisted_files() {
     # -xtype f rather than -type l: a symlink whose target is gone would break
     # the copy, and ~/.config is full of them (btop's current.theme dangles
     # until the first theme is set).
-    if ! find -P "$root/$entry" \( -type f -o -xtype f \) -print0 > "$matches"; then
+    start=$root/$entry
+    # A symlinked entry is walked through (#1270): the trailing slash makes
+    # find -P resolve the starting point, and only that one link.
+    [[ $root == "$home_root" && -L $start && -d $start ]] && start=$start/
+    if ! find -P "$start" \( -type f -o -xtype f \) -print0 > "$matches"; then
       rm -f "$matches"
       return 1
     fi
@@ -497,7 +501,14 @@ fi
 
 bytes=$(cd "$HOME" && du -cb -- "${files[@]}" 2>/dev/null | tail -1 | cut -f1)
 say "  ${#files[@]} files, $(numfmt --to=iec --suffix=B "${bytes:-0}")\n"
-includes | sed 's/^/    /'
+while IFS= read -r e; do
+  [[ -n $e ]] || continue
+  if [[ -L $HOME/${e%/} ]]; then
+    printf '    %s  ->  %s\n' "$e" "$(realpath -m -- "$HOME/${e%/}")"
+  else
+    printf '    %s\n' "$e"
+  fi
+done <<< "$(includes)"
 
 say "\n  \033[2mNot ~/.config wholesale: that is where gh's token, your agent's"
 say "  credentials and your browser sessions live. This is a list, and you"

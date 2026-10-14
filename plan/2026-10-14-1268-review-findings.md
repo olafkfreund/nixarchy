@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1268
 spec: spec/2026-10-14-1268-review-findings.md
 ---

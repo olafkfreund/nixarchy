@@ -2193,6 +2193,14 @@
             inherit (self.packages.${system}) doctor;
           };
 
+          # The Omarchy-channel line (#1278): stable, edge, dev and custom
+          # flakes, and a machine where nixarchy-channel is not installed.
+          doctor-channel = import ./tests/doctor-channel.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # The dynamic-link check, against binaries built broken on purpose.
           # No CI machine keeps a wheel missing libGL in ~/.local/bin, so
           # these branches exist nowhere else -- see tests/doctor-ldd.nix.

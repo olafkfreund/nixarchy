@@ -24,6 +24,7 @@ pkgs.runCommand "nixarchy-channel"
       pkgs.gnugrep
       pkgs.gnused
       pkgs.coreutils
+      pkgs.jq
     ];
   }
   ''
@@ -353,6 +354,46 @@ pkgs.runCommand "nixarchy-channel"
       diff via-nixarchy/flake.nix via-upstream/flake.nix | sed 's/^/          | /'
       fails=$((fails + 1))
     fi
+
+    # nixarchy-version says which Omarchy channel, when it is not the release one.
+    for c in stable edge dev; do
+      mk "ver-$c"
+      case "$c" in
+        edge) echo y | NIXARCHY_FLAKE=$PWD/ver-$c $ch omarchy edge >/dev/null 2>&1 || true ;;
+        dev) echo y | NIXARCHY_FLAKE=$PWD/ver-$c $ch omarchy dev "$co" >/dev/null 2>&1 || true ;;
+      esac
+      r=$(PATH=$bindir:$PATH NIXARCHY_FLAKE=$PWD/ver-$c "$bindir/nixarchy-version" 2>&1 || true)
+      first=$(printf '%s\n' "$r" | head -1)
+      case "$c" in
+        stable) if <<<"$first" grep -q '(' ; then echo "  FAILED  nixarchy-version marks the stable channel: $first"; fails=$((fails + 1)); else echo "  ok      nixarchy-version says nothing extra on stable"; fi ;;
+        *) if <<<"$first" grep -qF "($c)"; then echo "  ok      nixarchy-version says ($c)"; else echo "  FAILED  nixarchy-version on $c printed '$first'"; fails=$((fails + 1)); fi ;;
+      esac
+    done
+
+    # omarchy-update moves the dev checkout with nixarchy: `-U nixarchy` alone
+    # leaves it where the lock last saw it, and the machine rebuilds what it
+    # already had. nh and the branch guard are stubs that record or pass; the
+    # real nixarchy-channel on PATH decides the channel from the fixture.
+    mkdir -p upd-bin
+    printf '#!/bin/sh\nexit 0\n' > upd-bin/nixarchy-branch-guard
+    printf '#!/bin/sh\necho "$*" >> "$NH_CALLS"\n' > upd-bin/nh
+    chmod +x upd-bin/nixarchy-branch-guard upd-bin/nh
+    # A lock with the root inputs omarchy-update looks for, not frozen.
+    printf '%s\n' '{"nodes":{"root":{"inputs":{"nixarchy":"nixarchy","omarchy":"omarchy"}},"nixarchy":{"original":{"type":"github"}},"omarchy":{}},"root":"root","version":7}' > upd.lock
+    updated() { # updated <dir> [flag] -> the arguments nh was called with
+      cp upd.lock "$1/flake.lock"
+      : > "$PWD/nh.calls"
+      echo y | NH_CALLS=$PWD/nh.calls PATH=$PWD/upd-bin:$bindir:$PATH NIXARCHY_FLAKE=$PWD/$1 \
+        bash "$bindir/omarchy-update" ''${2:-} >/dev/null 2>&1 || true
+      cat "$PWD/nh.calls"
+    }
+    r=$(updated ver-dev --nixarchy)
+    want "dev: --nixarchy also updates the omarchy input"  "$r" '--update-input nixarchy --update-input omarchy'
+    r=$(updated ver-dev --system)
+    wantnot "dev: --system leaves omarchy alone"           "$r" 'omarchy'
+    r=$(updated ver-edge --nixarchy)
+    want "edge: --nixarchy still updates nixarchy"         "$r" '--update-input nixarchy'
+    wantnot "edge: and does not name omarchy"              "$r" 'omarchy'
 
     # A floor. Every assertion above fails identically if the command printed
     # nothing at all, which reads as every rule being wrong rather than as the

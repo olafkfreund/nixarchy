@@ -502,3 +502,5 @@ fresh Opus agent given only this plan and the `git diff`.
     wait moved out).
   - **`weekly.yml`.** The edge boot runs under `!cancelled()`, so a red main
     boot does not hide it.
+- **Step 10.** No existing doctor check could run the channel block offline, so `tests/doctor-channel.nix` is new, modelled on `doctor-wireless` and registered in `flake.nix`. The `nixarchy-version` and `omarchy-update` cases went into `tests/channel.nix`. The doctor has no info colour, so dev is printed `$dim`.
+- **Step 11.** nh 4.4.2 takes `--update-input` twice, so dev adds `--update-input omarchy` to nh itself. No separate `nix flake update` is needed.

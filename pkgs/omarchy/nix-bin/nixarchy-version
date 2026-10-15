@@ -34,5 +34,17 @@ case "${1:-}" in
     ;;
 esac
 
-printf 'Omarchy   %s\n' '@omarchyversion@'
+# Which Omarchy channel, when it is not the release one. Asked of
+# nixarchy-channel if it is on PATH; this script otherwise has no runtime
+# dependency, and the build runs it where nothing is.
+om_chan=""
+if command -v nixarchy-channel >/dev/null 2>&1; then
+  om_chan=$(nixarchy-channel omarchy --current 2>/dev/null || true)
+fi
+case "$om_chan" in
+  edge | dev) om_suffix=" ($om_chan)" ;;
+  *) om_suffix="" ;;
+esac
+
+printf 'Omarchy   %s%s\n' '@omarchyversion@' "$om_suffix"
 printf 'nixarchy  %s  %s\n' '@nixarchyrev@' '@nixarchydate@'

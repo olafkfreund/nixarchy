@@ -2325,9 +2325,9 @@ let
     delayTheirs = beside.system.autoUpgrade.randomizedDelaySec;
     # No url at all must reach fleet's own assertion, not nix's "used but not
     # defined" (#1274). Forcing the assertions is what throws without a default.
-    noUrlRefused = builtins.any (a: !a.assertion && pkgs.lib.hasInfix "fleet.url is empty" a.message) (
-      configWith { fleet.enable = true; }
-    ).assertions;
+    noUrlRefused =
+      builtins.any (a: !a.assertion && pkgs.lib.hasInfix "fleet.url is empty" a.message)
+        (configWith { fleet.enable = true; }).assertions;
   };
 
   # ---- the single-machine unattended update, both ways -------------------

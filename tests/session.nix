@@ -839,8 +839,9 @@ pkgs.testers.runNixOSTest {
     # The rows' own action strings, read out of the menu this machine
     # generated, so the probe runs exactly what a click runs (marker included).
     import base64
-    menu_text = machine.succeed(
-        ". /etc/set-environment; cat \"$OMARCHY_PATH/default/omarchy/omarchy-menu.jsonc\"")
+    # OMARCHY_PATH is a login-session variable, as the #210 block above reads it.
+    menu_tree = machine.succeed("su - omarchy -c 'echo $OMARCHY_PATH'").strip()
+    menu_text = machine.succeed(f"cat {menu_tree}/default/omarchy/omarchy-menu.jsonc")
     rows = json.loads("\n".join(
         l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
     def click(row):

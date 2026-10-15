@@ -1997,6 +1997,9 @@
             # of it that could break here is the writable ~/.config/omarchy the
             # seed creates.
             "plugin"
+            # The boot splash's positions all live in layout(), redone when a
+            # display appears late. See tests/plymouth-layout.nix and #1285.
+            "plymouth-layout"
             # A previewed config's desktop actually renders: the vmVariant
             # gains the software-GL fallbacks and sizing, only when nixarchy
             # is on, all of it overridable. See tests/preview-variant.nix

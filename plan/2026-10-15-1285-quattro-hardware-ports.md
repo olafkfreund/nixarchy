@@ -165,4 +165,13 @@ and the splash goes back to centring once. Nothing else depends on either.
   three evaluations. Red proofs ran by eval: with the gates set to `true`,
   `fprintdResume` reports `off=true`; with `mkDefault` dropped, the user-wins
   fixture fails on conflicting definitions.
+- **Step 3.**
+  - `message_sprite`'s constant `SetPosition(10, 10, 10000)` moved into
+    `layout()`, with the sprite created just before it, so no positioning
+    call stays at top level. Upstream leaves that one at top level.
+  - The lock's size moved from top-level locals to `lock.height` and
+    `lock.width`, as upstream has, so that `layout()` can read them.
+  - `bullet.x` and `bullet.y` are gone; nothing else read them.
+- **Step 4.** The check's logic is in `tests/plymouth-layout.py`, which
+  `tests/plymouth-layout.nix` runs.
 

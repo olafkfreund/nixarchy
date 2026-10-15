@@ -564,6 +564,12 @@ counter -- three bad unlocks would lock a user out of their own screen
 for good. Upstream's deny=10 needs the raw `rules` interface, and a
 lockout is a worse failure than the logging it would buy.
 
+With `services.fprintd.enable`, the module also restarts fprintd on resume
+(`powerManagement.resumeCommands`, fprintd#173: the reader handle goes stale
+across suspend) and caps its stop at 3s (`mkDefault`; a stale handle can make
+it ignore SIGTERM). Both are gated on fprintd being on, and nixarchy never
+turns it on (#1285).
+
 <a id="omarchy-path-default-systemd-user-which-upstream-i"></a>
 
 ### $OMARCHY_PATH/default/systemd/user/, which upstream installs into

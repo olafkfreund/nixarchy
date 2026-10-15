@@ -150,3 +150,19 @@ the diff against this plan.
 
 Revert the merge. fprintd goes back to staying wedged after some resumes,
 and the splash goes back to centring once. Nothing else depends on either.
+
+## Deviations recorded during implementation
+
+- **Step 1.** `TimeoutStopSec` is added through `lib.optionalAttrs
+  config.services.fprintd.enable` on the `systemd.services` attrset, not
+  `lib.mkIf`. A `mkIf` on an `attrsOf` entry still creates a stub
+  `fprintd.service` when fprintd is off; the eval showed it, and the PAM
+  block's own comment says the same. Because `services = { … } //
+  optionalAttrs …` cannot merge with a dotted `services.avahi-daemon`, the
+  avahi block (#1276) moved, unchanged, into the `services` literal.
+- **Step 2.** The cases are `fprintdResume` and `fprintdStopTimeoutUserWins`,
+  through `extendModules` on the existing `adopter` and `modeAOff`, which is
+  three evaluations. Red proofs ran by eval: with the gates set to `true`,
+  `fprintdResume` reports `off=true`; with `mkDefault` dropped, the user-wins
+  fixture fails on conflicting definitions.
+

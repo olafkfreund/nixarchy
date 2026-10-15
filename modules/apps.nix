@@ -819,6 +819,44 @@ let
           description = "The panel is off: what you have created, in a terminal";
         };
       }
+      # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
+      //
+        lib.optionalAttrs
+          (
+            cfg.enable
+            && (
+              if cfg.user != null then
+                config.home-manager.users.${cfg.user}.programs.nixarchy.defaultPlugins.menu or true
+              else
+                true
+            )
+          )
+          {
+            # Run directly, as upstream's setup.default.agent.* rows do; nothing
+            # here writes shell.json (#847), the shell's own verbs do.
+            "setup.default.menu" = {
+              icon = "󰍜";
+              label = "Menu";
+              title = "Default Menu";
+              description = "Omarchy's own menu, or nixarchy's Raycast-style one";
+            };
+            "setup.default.menu.omarchy" = {
+              # Omarchy's own glyph, from its icon font, as Update ▸ Omarchy wears.
+              icon = "";
+              iconFont = "omarchy";
+              label = "Omarchy";
+              action = "omarchy-plugin-disable nixarchy.menu";
+              checked = "! nixarchy-plugin --enabled nixarchy.menu";
+              description = "Use Omarchy's own menu";
+            };
+            "setup.default.menu.nixarchy" = {
+              icon = "󱄅";
+              label = "Nixarchy";
+              action = "omarchy-plugin-enable nixarchy.menu";
+              checked = "nixarchy-plugin --enabled nixarchy.menu";
+              description = "Use nixarchy-menu, which replaces Omarchy's";
+            };
+          }
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: app:

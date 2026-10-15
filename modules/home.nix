@@ -256,7 +256,11 @@ let
           echo "nixarchy: $conf is a symlink; declare ${what} in Home Manager or make the file user-owned" >&2
         else
           [ -s "$conf" ] || echo '{}' > "$conf"
-          tmp=$(${pkgs.coreutils}/bin/mktemp)
+          # Beside the file, so the mv is an atomic rename on one filesystem
+          # rather than a copy from /tmp, and with the file's own mode rather
+          # than mktemp's 0600 (#1276).
+          tmp=$(${pkgs.coreutils}/bin/mktemp "$conf.XXXXXX")
+          ${pkgs.coreutils}/bin/chmod --reference="$conf" "$tmp"
           if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$conf" ${json} > "$tmp"; then
             run mv "$tmp" "$conf"
           else
@@ -1209,8 +1213,12 @@ in
                     # Reconcile, never relink: the shell reloads every plugin on any
                     # change in this directory, so a link whose target is already right
                     # is left alone (#710). Only a missing or changed link is written.
-                    run rm -f "${staging}"
-                    : > "${staging}"
+                    # A dry run computes the same reconcile into a throwaway file and writes
+                    # nothing of ours (#1276).
+                    nixarchy_staging="${staging}"
+                    if [[ -v DRY_RUN ]]; then nixarchy_staging=$(${pkgs.coreutils}/bin/mktemp); fi
+                    run rm -f "$nixarchy_staging"
+                    : > "$nixarchy_staging"
                     ${lib.concatMapStringsSep "
         " (drv: ''
                       id=$(cat ${drv}/id)
@@ -1228,12 +1236,12 @@ in
                         # lines, so "!id" never matches a bare "id" and a shadowed
                         # plugin is never removed -- already what this branch wants.
                         ourver=$(cat ${drv}/version 2>/dev/null || echo "?")
-                        printf '!%s\t%s\n' "$id" "$ourver" >> "${staging}"
+                        printf '!%s\t%s\n' "$id" "$ourver" >> "$nixarchy_staging"
                       else
                         if [ "$(readlink "${dir}/$id")" != "$target" ]; then
                           run ln -sfn "$target" "${dir}/$id"
                         fi
-                        echo "$id" >> "${staging}"
+                        echo "$id" >> "$nixarchy_staging"
                       fi
                     '') (lib.attrValues validatedPlugins)}
                     # A plugin dropped from the configuration goes away. Guarded on
@@ -1242,7 +1250,7 @@ in
                     if [ -e "${manifest}" ]; then
                       while IFS= read -r stale; do
                         [ -n "$stale" ] || continue
-                        if ! grep -qxF "$stale" "${staging}" && [ -L "${dir}/$stale" ]; then
+                        if ! grep -qxF "$stale" "$nixarchy_staging" && [ -L "${dir}/$stale" ]; then
                           run rm -f "${dir}/$stale"
                         fi
                       done < "${manifest}"
@@ -1257,13 +1265,14 @@ in
                     # An empty file in a user's plugins directory still means nothing
                     # to them, so nothing declared is still no manifest. Hidden names
                     # are ignored by the shell's watcher.
-                    if [ ! -s "${staging}" ]; then
-                      run rm -f "${manifest}" "${staging}"
-                    elif cmp -s "${staging}" "${manifest}"; then
-                      rm -f "${staging}"
+                    if [ ! -s "$nixarchy_staging" ]; then
+                      run rm -f "${manifest}" "$nixarchy_staging"
+                    elif cmp -s "$nixarchy_staging" "${manifest}"; then
+                      rm -f "$nixarchy_staging"
                     else
-                      run mv "${staging}" "${manifest}"
+                      run mv "$nixarchy_staging" "${manifest}"
                     fi
+                    if [[ -v DRY_RUN ]]; then rm -f "$nixarchy_staging"; fi
                   ''
                 }
 
@@ -1400,10 +1409,16 @@ in
         run mkdir -p "$(dirname "$agentfile")"
 
         # Temp file and move, so an interrupted activation cannot leave the
-        # menu reading half an agent name and launching nothing.
-        tmp=$(${pkgs.coreutils}/bin/mktemp)
-        printf '%s\n' ${lib.escapeShellArg defaultAgent} > "$tmp"
-        run mv "$tmp" "$agentfile"
+        # menu reading half an agent name and launching nothing. Beside the
+        # file so the move is a rename, and not at all on a dry run (#1276).
+        if [[ -v DRY_RUN ]]; then
+          echo "nixarchy: would set the default agent to "${lib.escapeShellArg defaultAgent}
+        else
+          tmp=$(${pkgs.coreutils}/bin/mktemp "$agentfile.XXXXXX")
+          printf '%s\n' ${lib.escapeShellArg defaultAgent} > "$tmp"
+          [ ! -e "$agentfile" ] || ${pkgs.coreutils}/bin/chmod --reference="$agentfile" "$tmp"
+          ${pkgs.coreutils}/bin/mv "$tmp" "$agentfile"
+        fi
       ''
     );
 
@@ -2188,7 +2203,15 @@ in
           })
 
           mkdir -p "$state"
-          list=$(omarchy-plugin-list --json 2>/dev/null) || list='[]'
+          # An unreadable list is not an empty one: read as "nothing enabled",
+          # rivals were never turned off before ours went on. Stop, and the
+          # once-markers make the next login try again (#1276).
+          if ! list=$(omarchy-plugin-list --json 2>/dev/null) ||
+            ! jq -e 'type == "array"' <<<"$list" >/dev/null 2>&1; then
+            echo "could not read the plugin list; trying again at next login" |
+              systemd-cat -t nixarchy-default-plugins
+            exit 0
+          fi
           for id in "''${todo[@]}"; do
             # A real directory here is a hand install, and activation leaves
             # it in place of ours (see the plugins activation above).

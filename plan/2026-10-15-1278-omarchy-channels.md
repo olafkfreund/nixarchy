@@ -454,18 +454,51 @@ fresh Opus agent given only this plan and the `git diff`.
   so without that the ancestor test's red proof stayed green. The ancestor
   test is kept for its message.
 - **Step 2:**
-  - **The briefings.** They go to the step summary and step outputs. The
-    rolling issue carries a one-line `edge-sig:` and the run link, because
-    the briefings can be large.
+  - **The briefings.** They go to the step summary only, not to step or job
+    outputs. The rolling issue carries a one-line `edge-sig:` and the run link,
+    because the briefings can be large.
   - **The label.** `report` runs `gh label create omarchy-edge --force`, as
     `weekly.yml` already does for its own label. It no longer asks the owner
     to create it by hand.
-  - **The self-hosted `verify` job.** Its runner shell has no `gh` or `git`,
-    so it takes both from `nix run`/`nix shell --inputs-from .`.
-    `actions: read` is added for `gh run list`.
-  - **A cancelled job.** `report` treats one as a failure, since a timeout
-    reports as cancelled.
+  - **The self-hosted `verify` job.** p620's runner PATH has `git`, `gh` and
+    `jq`, so `verify` calls `edge-promote.sh` directly. `actions: read` is
+    added for `gh run list`, which now runs in `wait-idle`.
+  - **A cancelled job.** `report` treats a cancelled job *result* as a
+    failure, since a timeout reports as cancelled. It runs under
+    `!cancelled()`, not `always()`, so a superseded run files nothing. If
+    `verify` did not succeed, `report` asks the remote whether `edge` already
+    equals the candidate and treats a match as promoted: a cancel after the
+    push but before `promoted=true` must not report a failure.
   - **Checkouts.** Both use `secrets.NIXARCHY_EDGE_TOKEN || github.token`.
     `GITHUB_TOKEN` cannot push commits that change `.github/workflows`, and
     merging `main` into edge carries those. The PR asks the owner for that
-    secret: a token with the workflows scope.
+    secret: a token with the workflows scope. The `edge-candidate` push names
+    it in its error.
+  - **Merging main.** `omarchy.yml` rewrites the Omarchy url,
+    `omarchyVersion` and the omarchy node of `flake.lock` on `main`, and edge
+    rewrites the same lines, so every bump would conflict. Before the merge
+    (when `main` is not already an ancestor) `prepare` restores those two
+    lines and `flake.lock` to their values at the merge base, in a commit
+    `Edge: unpin Omarchy before merging main`; the pin step re-pins and
+    re-locks afterwards. This assumes edge's `flake.lock` differs from main's
+    only in the omarchy node: a carry commit that adds a flake input makes the
+    merge conflict loudly, which is the right failure.
+  - **Where a run starts.** From `origin/edge`; when `edge` does not exist,
+    from `origin/edge-candidate` if it exists (it holds the seeded carries),
+    else `origin/main`. A new `workflow_dispatch` input `from_candidate`
+    (default false) starts from `edge-candidate` even when `edge` exists: it
+    is the only recovery from a merge conflict, since the next scheduled run
+    starts from `edge` again and conflicts again. The skip rule only applies
+    when starting from `edge` and `edge` exists, so an unpublished candidate
+    is never skipped.
+  - **`wait-idle`.** The idle wait is its own hosted job (200 min timeout,
+    `--limit 50`), so three hours of sleeping do not hold a VM runner.
+    `verify` needs it, and `report` names `wait-idle: <result>` when it fails.
+  - **Failure names.** `failed=` is written for `start`, `merge-conflict`,
+    `unpin`, `quattro-sha`, `pin-copies-disagree`, `flake-update`, the red
+    checks (all of them, space separated), and `candidate-push`.
+  - **`verify`.** It checks out the candidate SHA, so what is booted is
+    exactly what is promoted. `timeout-minutes` is 240 (three VM builds; the
+    wait moved out).
+  - **`weekly.yml`.** The edge boot runs under `!cancelled()`, so a red main
+    boot does not hide it.

@@ -7,10 +7,10 @@ name: omarchy-edge
 # only ever moves to a commit whose gates passed. The work happens on a scratch
 # ref, `edge-candidate`; edge-promote.sh is the one thing that moves `edge`.
 #
-#   prepare  merge main, pin quattro, build, brief      (hosted)
-#   verify   wait for an idle CI, boot the VM checks,
-#            then promote                               (self-hosted)
-#   report   one rolling issue labelled omarchy-edge    (hosted)
+#   prepare    merge main, pin quattro, build, brief    (hosted)
+#   wait-idle  wait for an idle CI                      (hosted)
+#   verify     boot the VM checks, then promote         (self-hosted)
+#   report     one rolling issue labelled omarchy-edge  (hosted)
 #
 # Nothing here pushes to cachix: the free tier is full of what users download,
 # and edge closures are not that (CLAUDE.md section 6).
@@ -20,11 +20,16 @@ on:
     # After omarchy.yml's 04:00 release bump, so a merged bump is in this run.
     - cron: "0 6 * * *"
   workflow_dispatch:
+    inputs:
+      from_candidate:
+        description: "Start from edge-candidate instead of edge (after resolving a merge conflict by hand)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   issues: write
-  # verify lists runs to wait for an idle CI.
+  # wait-idle lists runs to wait for an idle CI.
   actions: read
 
 # A newer run replaces an older one: only the current main and quattro matter,
@@ -43,7 +48,7 @@ jobs:
       skip: ${{ steps.pin.outputs.skip }}
       expected: ${{ steps.start.outputs.expected }}
       candidate: ${{ steps.candidate.outputs.sha }}
-      failed: ${{ steps.build.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed }}
+      failed: ${{ steps.build.outputs.failed || steps.candidate.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed || steps.start.outputs.failed }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -64,25 +69,41 @@ jobs:
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Start from edge, or from main on the first publish
+      - name: Choose where to start
         id: start
+        env:
+          FROM_CANDIDATE: ${{ inputs.from_candidate }}
         run: |
           set -euo pipefail
+          trap 'echo "failed=start" >> "$GITHUB_OUTPUT"' ERR
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          # Captured first, then split: a failed ls-remote must not read as an
-          # edge that does not exist.
+          # Captured first, then split: a failed ls-remote must not read as a
+          # branch that does not exist.
           listing=$(git ls-remote origin refs/heads/edge)
           expected=${listing%%$'\t'*}
-          if [ -n "$expected" ]; then
+          [ -n "$expected" ] || expected=none
+          listing=$(git ls-remote origin refs/heads/edge-candidate)
+          have_candidate=${listing%%$'\t'*}
+
+          # The first publish starts from edge-candidate when there is one: that
+          # is where the seeded carry commits live. Otherwise from_candidate is
+          # the way back in after a merge conflict was resolved by hand.
+          if [ "$FROM_CANDIDATE" = true ] && [ -z "$have_candidate" ]; then
+            echo "::error::from_candidate was set but there is no edge-candidate branch"
+            exit 1
+          fi
+          if [ -n "$have_candidate" ] && { [ "$FROM_CANDIDATE" = true ] || [ "$expected" = none ]; }; then
+            start=origin/edge-candidate
+          elif [ "$expected" != none ]; then
             start=origin/edge
           else
-            expected=none
             start=origin/main
           fi
           echo "expected=$expected" >> "$GITHUB_OUTPUT"
-          git checkout -q -B candidate "$start"
+          echo "start=$start" >> "$GITHUB_OUTPUT"
+          git switch -q -C candidate "$start"
 
           # Read BEFORE the merge: the skip rule asks what edge already has.
           have=$(grep -oE 'github:basecamp/omarchy/[0-9a-f]{40}' flake.nix | cut -d/ -f3 || true)
@@ -96,16 +117,47 @@ jobs:
 
       - name: Merge main
         id: merge
+        env:
+          MAIN_IN: ${{ steps.start.outputs.main_in }}
         run: |
           set -uo pipefail
+          fail() {
+            echo "failed=$1" >> "$GITHUB_OUTPUT"
+            echo "::error::$2"
+            exit 1
+          }
+
+          if [ "$MAIN_IN" != true ]; then
+            # omarchy.yml rewrites the Omarchy url, omarchyVersion and the
+            # omarchy node of flake.lock on main; edge rewrote the same lines,
+            # so every Omarchy bump would conflict. Put edge's pin back to what
+            # it was where the histories split, so that only main changes those
+            # lines. The pin step re-pins and re-locks afterwards.
+            #
+            # This assumes edge's flake.lock differs from main's only in the
+            # omarchy node. A carry commit that adds a flake INPUT breaks that,
+            # and the merge then conflicts on flake.lock -- loudly, which is the
+            # right failure.
+            base=$(git merge-base HEAD origin/main) || fail merge-base "no merge base between edge and main"
+            old_url=$(git show "$base:flake.nix" | sed -nE 's|.*github:basecamp/omarchy/([^"]*)".*|\1|p' | head -1)
+            old_ver=$(git show "$base:flake.nix" | sed -nE 's|.*omarchyVersion = "([^"]*)".*|\1|p' | head -1)
+            [ -n "$old_url" ] && [ -n "$old_ver" ] || fail unpin "could not read the Omarchy pin at the merge base $base"
+            sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/$old_url|" flake.nix
+            sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$old_ver\"|" flake.nix
+            git restore --source="$base" -- flake.lock
+            git add flake.nix flake.lock
+            git diff --cached --quiet || git commit -q -m "Edge: unpin Omarchy before merging main"
+          fi
+
           # A merge, never a rebase: edge only fast-forwards, and a rebase would
           # rewrite commits users' locks already name.
           if ! git merge --no-edit origin/main; then
             files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
-            echo "failed=merge-conflict: $files" >> "$GITHUB_OUTPUT"
             echo "::error::merging main into edge conflicts in: $files"
-            echo "::error::resolve it on a branch off edge and push that to edge-candidate by hand"
-            exit 1
+            echo "::error::the next run starts from origin/edge again, so it will conflict again."
+            echo "::error::resolve the merge on a branch off edge, push that branch to edge-candidate,"
+            echo "::error::then re-run this workflow with from_candidate=true."
+            fail "merge-conflict: $files" "merge of main failed"
           fi
 
       - name: Find the newest quattro commit
@@ -114,13 +166,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HAVE: ${{ steps.start.outputs.have }}
           MAIN_IN: ${{ steps.start.outputs.main_in }}
+          START: ${{ steps.start.outputs.start }}
+          EXPECTED: ${{ steps.start.outputs.expected }}
         run: |
           set -euo pipefail
           # Authenticated, and refuses anything but a full SHA: a 403 once made
           # the answer empty and the sed pinned upstream's default branch
           # (omarchy.yml). The SHA is pasted into later steps' shell, so the
           # 40-hex test is also what makes that safe.
-          sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha)
+          sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
+            { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"
             echo "::error::no commit SHA from the API for quattro: '$sha'"
@@ -128,7 +183,9 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-          if [ "$sha" = "$HAVE" ] && [ "$MAIN_IN" = true ]; then
+          # Only when edge exists and we started from it: a candidate that was
+          # never promoted has not been published, however current it looks.
+          if [ "$START" = origin/edge ] && [ "$EXPECTED" != none ] && [ "$sha" = "$HAVE" ] && [ "$MAIN_IN" = true ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "edge already has quattro $sha and all of main; nothing to do" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -150,7 +207,7 @@ jobs:
             echo "::error::  literal    $lit_ver (wanted $ver)"
             exit 1
           fi
-          nix flake update omarchy
+          nix flake update omarchy || { echo "failed=flake-update" >> "$GITHUB_OUTPUT"; exit 1; }
           echo "omarchy quattro $sha as $ver, and both copies in flake.nix agree" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Each build on its own, and the step fails at the end naming every red
@@ -187,7 +244,6 @@ jobs:
       - name: Briefing - what packages edge adds and drops
         if: ${{ !cancelled() && steps.pin.outputs.skip == 'false' }}
         continue-on-error: true
-        id: delta
         env:
           NEW: ${{ steps.pin.outputs.sha }}
         run: |
@@ -211,12 +267,10 @@ jobs:
             fi
           } > "$RUNNER_TEMP/delta.md"
           cat "$RUNNER_TEMP/delta.md" >> "$GITHUB_STEP_SUMMARY"
-          { echo "delta<<DELTA_EOF"; cat "$RUNNER_TEMP/delta.md"; echo "DELTA_EOF"; } >> "$GITHUB_OUTPUT"
 
       - name: Briefing - what edge changes in the seeded ~/.config tree
         if: ${{ !cancelled() && steps.pin.outputs.skip == 'false' }}
         continue-on-error: true
-        id: config
         env:
           NEW: ${{ steps.pin.outputs.sha }}
         run: |
@@ -238,12 +292,10 @@ jobs:
             fi
           } > "$RUNNER_TEMP/config.md"
           cat "$RUNNER_TEMP/config.md" >> "$GITHUB_STEP_SUMMARY"
-          { echo "config<<CONFIG_EOF"; cat "$RUNNER_TEMP/config.md"; echo "CONFIG_EOF"; } >> "$GITHUB_OUTPUT"
 
       - name: Briefing - which files this port patches that edge touched
         if: ${{ !cancelled() && steps.pin.outputs.skip == 'false' }}
         continue-on-error: true
-        id: patched
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW: ${{ steps.pin.outputs.sha }}
@@ -275,7 +327,6 @@ jobs:
             fi
           } > "$RUNNER_TEMP/patched.md"
           cat "$RUNNER_TEMP/patched.md" >> "$GITHUB_STEP_SUMMARY"
-          { echo "patched<<PATCHED_EOF"; cat "$RUNNER_TEMP/patched.md"; echo "PATCHED_EOF"; } >> "$GITHUB_OUTPUT"
 
       - name: Publish the candidate
         id: candidate
@@ -289,40 +340,32 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           # --force, and only here: edge-candidate is a scratch ref that nobody
           # follows, rewritten every run. `edge` itself is never forced.
-          git push --force origin HEAD:refs/heads/edge-candidate
+          git push --force origin HEAD:refs/heads/edge-candidate || {
+            echo "failed=candidate-push" >> "$GITHUB_OUTPUT"
+            echo "::error::could not push edge-candidate. If main changed a file under .github/workflows,"
+            echo "::error::GITHUB_TOKEN cannot push it: add a token with the workflows scope as NIXARCHY_EDGE_TOKEN"
+            exit 1
+          }
 
-  verify:
+  # Its own hosted job: three hours of sleeping must not hold a VM runner.
+  wait-idle:
     needs: prepare
     if: needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true'
-    # The VM runners, labels as install-check.yml's `runner` output gives them.
-    runs-on: [self-hosted, nixos, kvm, big]
-    # 3 h of waiting for an idle CI, then three VM builds.
-    timeout-minutes: 420
-    outputs:
-      failed: ${{ steps.vms.outputs.failed }}
-      promoted: ${{ steps.promote.outputs.promoted }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.prepare.outputs.candidate }}
-          fetch-depth: 0
-          # The promote pushes edge: same token rule as prepare.
-          token: ${{ secrets.NIXARCHY_EDGE_TOKEN || github.token }}
-
       # The VM tier rule (CLAUDE.md section 6): a VM check runs only with
-      # nothing in flight, or it starves somebody's install. A self-hosted
-      # step's shell has only what the environment carries, so gh comes from
-      # nix.
+      # nothing in flight, or it starves somebody's install.
       - name: Wait for an idle CI
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 10800))
           while :; do
-            busy=$(nix run --inputs-from . nixpkgs#gh -- run list --limit 20 \
-              --json status,databaseId \
+            busy=$(gh run list --limit 50 --json status,databaseId \
               --jq "[.[] | select(.status != \"completed\" and .databaseId != $RUN_ID)] | length") ||
               { echo "::error::cannot list workflow runs"; exit 1; }
             [ "$busy" = 0 ] && break
@@ -334,6 +377,26 @@ jobs:
             sleep 300
           done
           echo "CI is idle"
+
+  verify:
+    needs: [prepare, wait-idle]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true'
+    # The VM runners, labels as install-check.yml's `runner` output gives them.
+    runs-on: [self-hosted, nixos, kvm, big]
+    # Three VM builds, each ~10-20 minutes warm; the wait is in wait-idle.
+    timeout-minutes: 240
+    outputs:
+      failed: ${{ steps.vms.outputs.failed }}
+      promoted: ${{ steps.promote.outputs.promoted }}
+    steps:
+      # The candidate SHA, not the branch: what is booted is exactly what is
+      # promoted, even if edge-candidate is rewritten meanwhile.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.candidate }}
+          fetch-depth: 0
+          # The promote pushes edge: same token rule as prepare.
+          token: ${{ secrets.NIXARCHY_EDGE_TOKEN || github.token }}
 
       - name: Boot the VM checks, each separately
         id: vms
@@ -358,8 +421,7 @@ jobs:
           EXPECTED: ${{ needs.prepare.outputs.expected }}
         run: |
           set -euo pipefail
-          nix shell --inputs-from . nixpkgs#git -c \
-            bash .github/scripts/edge-promote.sh origin "$CANDIDATE" "$EXPECTED"
+          bash .github/scripts/edge-promote.sh origin "$CANDIDATE" "$EXPECTED"
           echo "promoted=true" >> "$GITHUB_OUTPUT"
           echo "edge is now $CANDIDATE" >> "$GITHUB_STEP_SUMMARY"
 
@@ -367,8 +429,11 @@ jobs:
   # read or write the issue it must fail the run, or a broken edge fails
   # nightly in silence (CLAUDE.md section 4).
   report:
-    needs: [prepare, verify]
-    if: always()
+    needs: [prepare, wait-idle, verify]
+    # Not always(): that would also run after a cancel, and a superseded run
+    # would file a failure. A job that TIMED OUT still reports cancelled as its
+    # result, and !cancelled() runs for it, so it is treated as a failure below.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -377,7 +442,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PREPARE: ${{ needs.prepare.result }}
+          WAIT: ${{ needs.wait-idle.result }}
           VERIFY: ${{ needs.verify.result }}
+          CANDIDATE: ${{ needs.prepare.outputs.candidate }}
           SKIP: ${{ needs.prepare.outputs.skip }}
           PREPARE_FAILED: ${{ needs.prepare.outputs.failed }}
           VERIFY_FAILED: ${{ needs.verify.outputs.failed }}
@@ -388,6 +455,13 @@ jobs:
           # A plain variable, never `read` into fields: --jq renders null as
           # nothing, and a whitespace IFS drops the empty field (section 13).
           num=$(gh issue list --label omarchy-edge --state open --json number --jq '.[0].number // empty')
+
+          # A cancel after edge-promote pushed but before it wrote promoted=true
+          # would report a failure for a promoted edge. Ask the remote.
+          if [ "$PROMOTED" != true ] && [ -n "$CANDIDATE" ] && [ "$VERIFY" != success ]; then
+            current=$(gh api "repos/$GH_REPO/git/ref/heads/edge" --jq .object.sha 2>/dev/null || true)
+            [ "$current" != "$CANDIDATE" ] || PROMOTED=true
+          fi
 
           if [ "$PROMOTED" = true ]; then
             if [ -n "$num" ]; then
@@ -401,10 +475,12 @@ jobs:
             exit 0
           fi
 
-          # A cancelled job here is a timeout, not a person: a cancelled
-          # workflow does not run this job at all.
+          # A cancelled job result here is a timeout, not a person: a cancelled
+          # workflow does not reach this job.
           if [ "$PREPARE" != success ]; then
             sig="prepare: ${PREPARE_FAILED:-$PREPARE}"
+          elif [ "$WAIT" != success ]; then
+            sig="wait-idle: $WAIT"
           elif [ "$VERIFY" != success ]; then
             sig="verify: ${VERIFY_FAILED:-$VERIFY}"
           else

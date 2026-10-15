@@ -118,6 +118,8 @@ jobs:
       # pairing a stable-nixpkgs user on the edge channel runs (#1278). Skipped
       # until edge exists.
       - name: Boot a session on nixos-26.05 with edge
+        # A red main boot above must not hide this one.
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           listing=$(git ls-remote origin refs/heads/edge)

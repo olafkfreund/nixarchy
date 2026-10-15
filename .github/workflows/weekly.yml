@@ -113,3 +113,24 @@ jobs:
           nix build .#checks.x86_64-linux.session --print-build-logs \
             --override-input nixpkgs "$(locked nixpkgs-stable)" \
             --override-input home-manager "$(locked home-manager-stable)"
+
+      # The same boot on `edge`: 26.05 plus the Omarchy quattro branch is the
+      # pairing a stable-nixpkgs user on the edge channel runs (#1278). Skipped
+      # until edge exists.
+      - name: Boot a session on nixos-26.05 with edge
+        run: |
+          set -euo pipefail
+          listing=$(git ls-remote origin refs/heads/edge)
+          if [ -z "$listing" ]; then
+            echo "::notice::no edge branch yet; skipping"
+            exit 0
+          fi
+          git fetch -q origin refs/heads/edge
+          git worktree add --detach "$RUNNER_TEMP/edge" FETCH_HEAD
+          cd "$RUNNER_TEMP/edge"
+          locked() {
+            jq -r --arg n "$1" '.nodes[.nodes.root.inputs[$n]].locked | "github:\(.owner)/\(.repo)/\(.rev)"' flake.lock
+          }
+          nix build .#checks.x86_64-linux.session --print-build-logs \
+            --override-input nixpkgs "$(locked nixpkgs-stable)" \
+            --override-input home-manager "$(locked home-manager-stable)"

@@ -446,3 +446,26 @@ fresh Opus agent given only this plan and the `git diff`.
   says how to edit the one line back by hand.
 - **Per machine:** `nixarchy-channel omarchy stable`, or restore
   `flake.nix.pre-channel`, or boot the previous generation.
+
+## Deviations recorded during implementation
+
+- **Step 1.** The refusal cases assert the script's own reason on stderr, not
+  only its exit status. git's plain push already refuses a non-fast-forward,
+  so without that the ancestor test's red proof stayed green. The ancestor
+  test is kept for its message.
+- **Step 2:**
+  - **The briefings.** They go to the step summary and step outputs. The
+    rolling issue carries a one-line `edge-sig:` and the run link, because
+    the briefings can be large.
+  - **The label.** `report` runs `gh label create omarchy-edge --force`, as
+    `weekly.yml` already does for its own label. It no longer asks the owner
+    to create it by hand.
+  - **The self-hosted `verify` job.** Its runner shell has no `gh` or `git`,
+    so it takes both from `nix run`/`nix shell --inputs-from .`.
+    `actions: read` is added for `gh run list`.
+  - **A cancelled job.** `report` treats one as a failure, since a timeout
+    reports as cancelled.
+  - **Checkouts.** Both use `secrets.NIXARCHY_EDGE_TOKEN || github.token`.
+    `GITHUB_TOKEN` cannot push commits that change `.github/workflows`, and
+    merging `main` into edge carries those. The PR asks the owner for that
+    secret: a token with the workflows scope.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1283
 intent: intent/2026-10-15-1283-stock-menu-default.md
 ---

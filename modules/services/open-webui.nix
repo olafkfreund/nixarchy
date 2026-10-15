@@ -63,16 +63,17 @@ in
 
       # An attrset, so plain assignment: mkDefault on a merging type is
       # dropped before the merge, and a user adding one variable of their own
-      # would take the base URL with it.
+      # would take the base URL with it. Each VALUE is mkDefault, so a user
+      # setting the same key wins instead of conflicting (#1274).
       #
       # The three telemetry keys are upstream's option DEFAULT, restated
       # because defining this option replaces that default outright. Dropping
       # them here would be nixarchy turning analytics on for somebody.
       environment = {
-        OLLAMA_API_BASE_URL = ollamaUrl;
-        SCARF_NO_ANALYTICS = "True";
-        DO_NOT_TRACK = "True";
-        ANONYMIZED_TELEMETRY = "False";
+        OLLAMA_API_BASE_URL = lib.mkDefault ollamaUrl;
+        SCARF_NO_ANALYTICS = lib.mkDefault "True";
+        DO_NOT_TRACK = lib.mkDefault "True";
+        ANONYMIZED_TELEMETRY = lib.mkDefault "False";
       };
     };
 

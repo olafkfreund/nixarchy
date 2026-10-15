@@ -2094,6 +2094,18 @@ let
       on = (webuiOn.services.open-webui.environment.ANONYMIZED_TELEMETRY or "") == "False";
       off = webuiOff.services.open-webui.environment ? OLLAMA_API_BASE_URL;
     };
+    webuiBeside = {
+      on = webuiBeside.on == "http://remote:11434";
+      off = webuiBeside.off == "http://remote:11434";
+    };
+    tailscaleTrust = {
+      on = builtins.elem "ts0" tailscaleTrustIface.on;
+      off = builtins.elem "ts0" tailscaleTrustIface.off;
+    };
+    fleetDelayBeside = {
+      on = fleet.delayTheirs == "10min";
+      off = fleet.on.system.autoUpgrade.randomizedDelaySec == "10min";
+    };
 
     # sops-nix is imported by every nixarchy machine and must do nothing
     # until a secret is declared. See sopsOff/sopsOn below for why this is
@@ -2295,6 +2307,13 @@ let
         url = "github:me/config";
       };
     };
+    beside = configBeside {
+      programs.nixarchy.fleet = {
+        enable = true;
+        url = "github:me/config";
+      };
+      system.autoUpgrade.randomizedDelaySec = "10min";
+    };
     onWhenAsked = on.system.autoUpgrade.enable;
     url = on.system.autoUpgrade.flake;
     # A laptop asleep at 03:00 never catches up without this.
@@ -2303,6 +2322,12 @@ let
     # upgrade that starts failing must leave a mark, or the fleet stops
     # converging and looks exactly like a fleet that is up to date.
     onFailure = on.systemd.services.nixos-upgrade.unitConfig.OnFailure or "";
+    delayTheirs = beside.system.autoUpgrade.randomizedDelaySec;
+    # No url at all must reach fleet's own assertion, not nix's "used but not
+    # defined" (#1274). Forcing the assertions is what throws without a default.
+    noUrlRefused = builtins.any (a: !a.assertion && pkgs.lib.hasInfix "fleet.url is empty" a.message) (
+      configWith { fleet.enable = true; }
+    ).assertions;
   };
 
   # ---- the single-machine unattended update, both ways -------------------
@@ -2930,6 +2955,28 @@ let
       host = "::1";
     };
   };
+  webuiBeside = rec {
+    on =
+      (configBeside {
+        programs.nixarchy = {
+          localAi = {
+            enable = true;
+            allowCpu = true;
+          };
+          services.open-webui.enable = true;
+        };
+        services.open-webui.environment.OLLAMA_API_BASE_URL = "http://remote:11434";
+      }).services.open-webui.environment.OLLAMA_API_BASE_URL or "";
+    off = webuiOn.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
+  };
+  tailscaleTrustIface = rec {
+    on =
+      (configBeside {
+        programs.nixarchy.services.tailscale.enable = true;
+        services.tailscale.interfaceName = "ts0";
+      }).networking.firewall.trustedInterfaces;
+    off = defaultMachine.networking.firewall.trustedInterfaces;
+  };
   localAiIpv6 = configBeside {
     programs.nixarchy.localAi = {
       enable = true;
@@ -3224,6 +3271,8 @@ pkgs.runCommand "nixarchy-options"
     fleetUrl = fleet.url;
     fleetPersistent = pkgs.lib.boolToString fleet.persistent;
     fleetOnFailure = fleet.onFailure;
+    fleetDelayTheirs = fleet.delayTheirs;
+    fleetNoUrlRefused = pkgs.lib.boolToString fleet.noUrlRefused;
     referencePassword = if referencePassword == null then "" else referencePassword;
     autoUpdateOff = pkgs.lib.boolToString autoUpdate.offByDefault;
     autoUpdateOn = pkgs.lib.boolToString autoUpdate.onWhenAsked;
@@ -3291,9 +3340,11 @@ pkgs.runCommand "nixarchy-options"
     modelsRule = pkgs.lib.concatStringsSep " | " aiModels.systemd.tmpfiles.rules;
     modelsOwner = aiModels.services.ollama.user;
     webuiBaseUrl = webuiOn.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
+    webuiBaseUrlTheirs = webuiBeside.on;
     webuiIpv6BaseUrl = webuiIpv6.services.open-webui.environment.OLLAMA_API_BASE_URL or "";
     localAiIpv6Endpoint = localAiIpv6.programs.nixarchy.localAi.resolved.endpoint;
     webuiDefaultOff = pkgs.lib.boolToString webuiOff.services.open-webui.enable;
+    tailscaleTrustedInterfaces = pkgs.lib.concatStringsSep " " tailscaleTrustIface.on;
     dockerGroups = pkgs.lib.concatStringsSep " " dockerGroups;
     dockerRootedGroups = pkgs.lib.concatStringsSep " " dockerRootedGroups;
     dockerRootlessDefault = pkgs.lib.boolToString dockerRootlessDefault;
@@ -3653,7 +3704,18 @@ pkgs.runCommand "nixarchy-options"
             echo "Open WebUI or local AI did not bracket bare IPv6, or WebUI did not stay off by default: $webuiIpv6BaseUrl / $localAiIpv6Endpoint" >&2
             exit 1
           }
-          echo "Open WebUI brackets IPv6 and stays off by default"
+          [ "$webuiBaseUrlTheirs" = "http://remote:11434" ] || {
+            echo "Open WebUI overrode a base URL the user had already set: $webuiBaseUrlTheirs" >&2
+            exit 1
+          }
+          case " $tailscaleTrustedInterfaces " in
+            *" ts0 "*) ;;
+            *)
+              echo "tailscale trustInterface did not follow services.tailscale.interfaceName: $tailscaleTrustedInterfaces" >&2
+              exit 1
+              ;;
+          esac
+          echo "Open WebUI brackets IPv6, yields OLLAMA_API_BASE_URL, and stays off by default"
 
           case " $dockerGroups " in
             *" docker "*)
@@ -4494,6 +4556,14 @@ pkgs.runCommand "nixarchy-options"
           echo "the upgrade timer is not persistent; a laptop asleep at the hour never catches up" >&2
           exit 1
         }
+        test "$fleetNoUrlRefused" = true || {
+          echo "fleet.enable with no url did not reach fleet's own assertion" >&2
+          exit 1
+        }
+        test "$fleetDelayTheirs" = "10min" || {
+          echo "fleet overrode a randomizedDelaySec the user had already set: got '$fleetDelayTheirs'" >&2
+          exit 1
+        }
         case "$fleetOnFailure" in
           *nixarchy-upgrade-failed*) ;;
           *)
@@ -5099,6 +5169,13 @@ pkgs.runCommand "nixarchy-options"
         au "$PWD/au-committed" || { echo "auto-update refused a committed flake whose only change is flake.lock:" >&2; cat au.out >&2; exit 1; }
         echo '{ edited = true; }' > au-committed/flake.nix
         if au "$PWD/au-committed"; then echo "auto-update rebuilt a committed flake with an uncommitted edit" >&2; exit 1; fi
+        # A linked worktree's .git is a FILE, and a `-d` test skipped the whole
+        # dirty-tree guard there (#1274).
+        git -C au-committed checkout -q -- flake.nix
+        git -C au-committed worktree add -q "$PWD/au-linked" 2>/dev/null
+        [ -f au-linked/.git ] || { echo "the fixture worktree has no .git file" >&2; exit 1; }
+        echo '{ edited = true; }' > au-linked/flake.nix
+        if au "$PWD/au-linked"; then echo "auto-update rebuilt a linked worktree with an uncommitted edit" >&2; exit 1; fi
         echo "auto-update rebuilds an installed flake and its own lock edit, and refuses real edits"
 
         # ---- the home seed keeps edits and reports failures ----

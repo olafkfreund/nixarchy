@@ -40,13 +40,16 @@ in
 
     url = lib.mkOption {
       type = lib.types.str;
+      default = "";
       example = "github:me/config";
       description = ''
         The flake to pull from. Anything nixos-rebuild --flake accepts.
 
-        No default. A fleet URL is a decision about where this machine's
-        configuration lives, and a default would be a guess at somebody's
-        repository that fails at the first timer rather than at evaluation.
+        Empty by default, and an empty URL is refused at evaluation. A fleet
+        URL is a decision about where this machine's configuration lives, and
+        a guessed default would fail at the first timer instead. Empty rather
+        than absent so the refusal is this module's sentence, not nix's
+        "used but not defined".
       '';
     };
 
@@ -66,9 +69,9 @@ in
     ];
 
     system.autoUpgrade = {
-      enable = true;
-      flake = cfg.url;
-      inherit (cfg) dates;
+      enable = lib.mkDefault true;
+      flake = lib.mkDefault cfg.url;
+      dates = lib.mkDefault cfg.dates;
 
       # --refresh, or a flakeref that names a branch is resolved from whatever
       # is already in the evaluation cache and the machine "upgrades" to what
@@ -85,7 +88,7 @@ in
       # Spread a fleet out. Fifty machines waking at 03:00 to build the same
       # closure is fifty times the load on whatever they are pulling from, for
       # no gain to any of them.
-      randomizedDelaySec = "45min";
+      randomizedDelaySec = lib.mkDefault "45min";
     };
 
     # The failure mode this option exists to survive.
@@ -112,7 +115,7 @@ in
       };
       script = ''
         printf '%s upgrade from %s failed\n' \
-          "$(${pkgs.coreutils}/bin/date -Is)" "${cfg.url}" \
+          "$(${pkgs.coreutils}/bin/date -Is)" ${lib.escapeShellArg cfg.url} \
           >> /var/lib/nixarchy/upgrade-failed
       '';
     };

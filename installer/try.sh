@@ -442,15 +442,18 @@ main() {
     say "  (evaluating -- takes a minute or two the first time) ..."
     local dry plan
     dry=$(mktemp)
-    trap 'rm -f "$dry"' EXIT
+    # Removed by hand, not by an EXIT trap: the success path execs qemu, and
+    # an exec'd shell never runs its EXIT trap (#1274).
     if ! nix build --dry-run \
       --extra-experimental-features 'nix-command flakes' \
       "$ref#$attr" >"$dry" 2>&1; then
       say "evaluating the installer image failed. nix said:"
       sed 's/^/  | /' "$dry" >&2
+      rm -f "$dry"
       exit 1
     fi
     plan=$(classify_plan "$dry")
+    rm -f "$dry"
     case "$plan" in
       build*)
         say "the image for this exact commit is not in a binary cache -- images"

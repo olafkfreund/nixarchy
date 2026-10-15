@@ -258,9 +258,15 @@ pkgs.runCommand "nixarchy-try-preflight" { } ''
       *) echo "$PWD/fixture" ;;
     esac
   }
-  ( main --vnc ) >main.out 2>&1
+  # Its own TMPDIR, so a temp file the run leaves behind is visible: the
+  # success path execs QEMU, and an exec'd shell never runs an EXIT trap (#1274).
+  mkdir tmp-main
+  ( TMPDIR=$PWD/tmp-main main --vnc ) >main.out 2>&1
   grep -Fx 'virtio-blk-pci,drive=hd0,serial=nixarchy-try-target,bootindex=1' qemu-args >/dev/null \
     && ok "install passes the target serial to QEMU" || no "install lost the target serial"
+  [ -z "$(ls -A tmp-main)" ] \
+    && ok "the dry-run's temp file is gone once QEMU is exec'd" \
+    || no "the dry-run's temp file outlived the exec: $(ls -A tmp-main)"
 
   exit $fails
   EOF

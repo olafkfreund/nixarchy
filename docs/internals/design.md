@@ -491,9 +491,13 @@ someone would miss it:
    changed files, `omarchy commands --check` passed at 441 commands, and
    `vm-toplevel`, `options`, `integration` and `session` were all green. Two
    checks -- `coexist` and `plugin`, the two that launch through the session's
-   own `.desktop` -- came up to a black desktop. That cause was not chased down,
-   because the answer did not depend on it and guessing at one would be worse
-   than saying so. The guards work; the branch is not somewhere to go.
+   own `.desktop` -- came up to a black desktop. The cause, found when the edge
+   channel was first seeded (#1278): `quattro`'s default theme ships a WebP
+   wallpaper, and nixpkgs' quickshell carries no `qt6.qtimageformats`, so the
+   background never decoded. `session` stayed green only because its own
+   backgrounds are JPEGs. #1284 gave the shell the decoder, and a check that
+   decodes a WebP through the shell's own plugin path. The guards work; and
+   `quattro` is now somewhere to go, as the edge channel (#1278).
 2. **The installer will not resize a partition, and there is no Secure Boot and
    no graphical installer.** Each is a decision rather than a gap. It does
    install into free space beside another operating system -- see

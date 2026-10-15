@@ -160,6 +160,59 @@ pkgs.runCommand "nixarchy-bus-mcp" { nativeBuildInputs = [ python ]; } ''
     exit 1
   fi
 
+  # A first read with no mark must be the NEWEST page, oldest first, and leave
+  # a mark at the live end. /messages with dir=f and no `from` starts at the
+  # room's creation, which is what a fresh session used to get (#1274).
+  cat > firstread.py <<'PY'
+  import importlib.util, json, sys
+  import httpx
+
+  rooms = []
+  events = {n: {"sender": "@a:x", "origin_server_ts": n, "event_id": f"$e{n}",
+                "content": {"body": f"m{n}"}} for n in (1, 2, 3, 4)}
+
+  def handler(req):
+      path = req.url.path
+      if "/directory/room/" in path:
+          return httpx.Response(200, json={"room_id": "!r:x"})
+      if "/join/" in path:
+          return httpx.Response(200, json={"room_id": "!r:x"})
+      if path.endswith("/messages"):
+          q = dict(req.url.params)
+          rooms.append(q)
+          if q.get("dir") == "b" and "from" not in q:
+              return httpx.Response(200, json={"chunk": [events[3], events[2]],
+                                               "start": "s_live", "end": "s_older"})
+          if q.get("dir") == "f" and q.get("from") == "s_live":
+              return httpx.Response(200, json={"chunk": [events[4]], "end": "s_after"})
+          return httpx.Response(200, json={"chunk": [events[1], events[2]], "end": "s_wrong"})
+      return httpx.Response(404, json={})
+
+  class Mock(httpx.Client):
+      def __init__(self, **kw):
+          super().__init__(transport=httpx.MockTransport(handler), **kw)
+
+  spec = importlib.util.spec_from_file_location("bus", sys.argv[1])
+  bus = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(bus)
+  bus.httpx.Client = Mock
+
+  first = [m["text"] for m in json.loads(bus.read_new(room="#r", limit=2))]
+  second = [m["text"] for m in json.loads(bus.read_new(room="#r", limit=2))]
+  errs = []
+  if first != ["m2", "m3"]:
+      errs.append(f"first read returned {first}, want the newest two oldest first: ['m2', 'm3'] (sent {rooms[0]})")
+  if second != ["m4"]:
+      errs.append(f"second read returned {second}, want ['m4'] (sent {rooms[-1]})")
+  for e in errs:
+      print("  FAILED  " + e)
+  if errs:
+      sys.exit(1)
+  print("  ok      a first read is the newest page, and the next continues from it")
+  PY
+  echo "== read_new's first page"
+  python3 firstread.py agent_bus_mcp.py
+
   # Prove the comparator can fail (AGENTS.md 1): rename a tool the way a
   # bad re-vendor would and demand the same comparison reject it.
   echo "== the same comparison, against a tampered copy"

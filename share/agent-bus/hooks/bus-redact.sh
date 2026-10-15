@@ -43,10 +43,12 @@ command -v jq >/dev/null 2>&1 || exit 0
 text=$(jq -r '.tool_input.text // empty' <<<"$payload" 2>/dev/null) || exit 0
 [ -n "$text" ] || exit 0
 
-# A missing room means the server default applies; resolve it the way
-# agent_bus_mcp.py does -- AGENT_BUS_ROOM, then #agents.
+# A missing room means the server default applies, and the server's default
+# lives in the MCP server's own environment, which this hook does not inherit
+# (ONBOARDING sets AGENT_BUS_ROOM there only). So the hook's AGENT_BUS_ROOM
+# counts when set, and no room at all is unknown -- strict (#1274).
 room=$(jq -r '.tool_input.room // empty' <<<"$payload" 2>/dev/null) || room=""
-[ -n "$room" ] || room="${AGENT_BUS_ROOM:-#agents}"
+[ -n "$room" ] || room="${AGENT_BUS_ROOM:-}"
 
 refuse() {
   echo "bus-redact: blocked -- this message contains $1." >&2

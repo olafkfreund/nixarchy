@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1278
 intent: intent/2026-10-15-1278-omarchy-channels.md
 ---

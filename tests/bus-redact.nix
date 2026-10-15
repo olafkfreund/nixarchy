@@ -80,9 +80,13 @@ pkgs.runCommand "nixarchy-bus-redact" { nativeBuildInputs = [ pkgs.jq ]; } ''
   t allow "nix store hash"              "$PUB"  "/nix/store/v3xi7xb3n38a48psm23lcf2nfyjk6jsk-obs-studio-32.2.1 failed"
   t allow "ordinary lesson"             "$PUB"  "systemd EnvironmentFile needs the - marker and RuntimeDirectory="
 
-  # A missing room means the server default applies, resolved as the server
-  # resolves it: AGENT_BUS_ROOM, then #agents.
-  t allow "no room, no env -> #agents rules"  "" "host 192.168.1.34 is fine here"
+  # A missing room means the server default applies, and that default lives
+  # in the MCP server's environment, not the hook's. With none here the room
+  # is unknown, so strict: this case used to read allow, mirroring the
+  # server's fallback, and let a private address into the public room (#1274).
+  t block "no room, no env -> unknown, strict"  "" "host 192.168.1.34 leaks here"
+  AGENT_BUS_ROOM="#agents" \
+    t allow "no room, env says #agents -> #agents rules" "" "host 192.168.1.34 is fine here"
   AGENT_BUS_ROOM="#nixarchy-agents" \
     t block "no room, env says public -> strict" "" "host 192.168.1.34 leaks here"
 

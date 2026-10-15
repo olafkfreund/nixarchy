@@ -139,7 +139,7 @@ in
             # unfinished edit, and rebuilding it unattended deploys that edit.
             # Reported rather than ignored: an unattended job that stops working
             # and says nothing looks exactly like one that is up to date.
-            if [ -d "$flake/.git" ]; then
+            if [ -e "$flake/.git" ]; then
               # The installer stages and never commits, so with no HEAD the index
               # is the baseline (git diff HEAD there exits 128, read as dirty).
               if git -C "$flake" rev-parse -q --verify HEAD >/dev/null; then

@@ -338,6 +338,37 @@ def _retry_joined(client: httpx.Client, room_id: str, call):
     return r
 
 
+def _page(client: httpx.Client, room_id: str, key: str, limit: int) -> list[dict[str, Any]]:
+    """The messages after `key`'s mark, oldest first, advancing the mark.
+
+    With no mark yet, the newest `limit`: /messages with dir=f and no `from`
+    starts at the room's creation, so a fresh session read six-week-old
+    history as "recent" and paged forward from there (#1274).
+    """
+    cursor = _get_cursor(key, room_id)
+    params: dict[str, Any] = {"limit": limit, "filter": MESSAGE_FILTER}
+    if cursor:
+        params.update({"dir": "f", "from": cursor})
+    else:
+        params["dir"] = "b"
+    # Join up front rather than reacting to a 403: /messages answers a
+    # non-member with 200 and an empty chunk, so _retry_joined never fires
+    # and a session that reads before it posts sees an empty room forever.
+    # /join is idempotent, so this costs one call and nothing else.
+    _join(client, room_id)
+    r = client.get(f"/rooms/{quote(room_id, safe='')}/messages", params=params)
+    r.raise_for_status()
+    payload = r.json()
+    chunk = payload.get("chunk", [])
+    # Backwards, `start` is the live end, where the next forward read begins.
+    # Forwards, `end` is absent once nothing follows: keep the old mark so the
+    # next call does not re-read the room from the beginning.
+    mark = payload.get("end") if cursor else payload.get("start")
+    if mark:
+        _set_cursor(key, room_id, mark)
+    return chunk if cursor else chunk[::-1]
+
+
 def _format(event: dict[str, Any]) -> dict[str, Any]:
     content = event.get("content", {})
     return {
@@ -409,30 +440,9 @@ def read_new(
     """
     name = _name_for(agent)
     with _client(name) as client:
-        room_id = _resolve(client, room)
-        params: dict[str, Any] = {
-            "dir": "f",
-            "limit": limit,
-            "filter": MESSAGE_FILTER,
-        }
-        cursor = _get_cursor(name, room_id)
-        if cursor:
-            params["from"] = cursor
-        # Join up front rather than reacting to a 403: /messages answers a
-        # non-member with 200 and an empty chunk, so _retry_joined never fires
-        # and a session that reads before it posts sees an empty room forever.
-        # /join is idempotent, so this costs one call and nothing else.
-        _join(client, room_id)
-        r = client.get(f"/rooms/{quote(room_id, safe='')}/messages", params=params)
-        r.raise_for_status()
-        payload = r.json()
+        chunk = _page(client, _resolve(client, room), name, limit)
 
-    # `end` is absent once there is nothing further; keep the old mark so the
-    # next call does not re-read the room from the beginning.
-    if payload.get("end"):
-        _set_cursor(name, room_id, payload["end"])
-
-    messages = [_format(e) for e in payload.get("chunk", [])]
+    messages = [_format(e) for e in chunk]
     if not messages:
         return f"nothing new in {room}"
     return json.dumps(messages, indent=2)
@@ -500,26 +510,15 @@ def peek(room: str = DEFAULT_ROOM, limit: int = 50) -> list[dict[str, Any]]:
     """
     name = SESSION_NAME
     with _client(name) as client:
-        room_id = _resolve(client, room)
-        params: dict[str, Any] = {"dir": "f", "limit": limit, "filter": MESSAGE_FILTER}
-        cursor = _get_cursor(name + "\0peek", room_id)
-        if cursor:
-            params["from"] = cursor
-        _join(client, room_id)
-        r = client.get(f"/rooms/{quote(room_id, safe='')}/messages", params=params)
-        r.raise_for_status()
-        payload = r.json()
+        chunk = _page(client, _resolve(client, room), name + "\0peek", limit)
         user_id, _ = _identity(name)
-
-    if payload.get("end"):
-        _set_cursor(name + "\0peek", room_id, payload["end"])
 
     # The bare session name, because it is a substring of every form a mention
     # actually takes: `@agent-p620-7c78fc:...`, a bare `p620-7c78fc`, and any
     # subagent namespaced beneath it.
     return [
         m
-        for m in (_format(e) for e in payload.get("chunk", []))
+        for m in (_format(e) for e in chunk)
         if name in m["text"] and m["from"] != user_id
     ]
 

@@ -26,7 +26,7 @@
 # A runCommand and not a VM: the function is shell, the inputs are strings, and
 # the 25-minute install check cannot see this case at all -- it installs onto a
 # machine whose store fits, which is the only shape that does not fail.
-pkgs.runCommand "nixarchy-installer-store-space" { } ''
+pkgs.runCommand "nixarchy-installer-store-space" { nativeBuildInputs = [ pkgs.gptfdisk ]; } ''
     # The function on its own. Extracting it rather than sourcing install.sh,
     # which runs a wizard when sourced.
     sed -n '/^check_store_space()/,/^}/p' ${installScript} > f.sh
@@ -446,7 +446,7 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   }
 
   pf_line=$(grep -n 'preflight_build || exit 1' ${installScript} | cut -d: -f1 | head -1 || true)
-  fmt_line=$(grep -n '^    format_disk &&' ${installScript} | cut -d: -f1 | head -1 || true)
+  fmt_line=$(grep -n '^[[:space:]]*format_disk &&' ${installScript} | cut -d: -f1 | head -1 || true)
   [ -n "$pf_line" ] || { echo "main() no longer calls preflight_build" >&2; exit 1; }
   [ -n "$fmt_line" ] && [ "$pf_line" -lt "$fmt_line" ] || {
     echo "preflight_build does not run before format_disk; #300 is back" >&2; exit 1;
@@ -719,6 +719,27 @@ pkgs.runCommand "nixarchy-installer-store-space" { } ''
   EOF
   bash pfst.sh
   echo "partition_free_space names sgdisk when sgdisk is what failed"
+
+  truncate -s 64M disk.img
+  if (
+    . ./pfs.sh
+    device=$PWD/disk.img free_start=2048 free_end=999999999 free_why=""
+    encrypt=false FREE_ESP_MIB=1
+    free_space_possible() { return 0; }
+    check_disks() { return 0; }
+    blockdev() { echo 512; }
+    partition_free_space
+  ) >atomic.out 2>&1; then
+    echo "  FAILED  impossible root range was accepted" >&2; exit 1
+  fi
+  sgdisk -p disk.img >table
+  if grep -Eq '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+' table; then
+    echo "  FAILED  failed root creation left an ESP entry" >&2; exit 1
+  fi
+  grep -q 'Nothing was written' atomic.out || {
+    echo "  FAILED  sgdisk refusal did not say nothing was written" >&2; exit 1
+  }
+  echo "failed root creation leaves no partition entry"
 
   # ------------------------------------------------------------------------
   # Escape at a prompt must say what happened, not black-screen (#240).

@@ -9,13 +9,18 @@ pkgs.runCommand "nixarchy-installer-answers"
       pkgs.gnugrep
       pkgs.gnused
       pkgs.diffutils
+      pkgs.mkpasswd
     ];
   }
   ''
     sed -n '/^read_answers()/,/^}/p' ${installScript} > ra.sh
     grep -q '^read_answers()' ra.sh || { echo "read_answers is not in install.sh any more" >&2; exit 1; }
+    sed -n '/^sha512_matches()/,/^}/p' ${installScript} >> ra.sh
+    grep -q '^sha512_matches()' ra.sh || { echo "sha512_matches is not in install.sh any more" >&2; exit 1; }
     sed -n '/^resolve_answers()/,/^}/p' ${installScript} > rs.sh
     grep -q '^resolve_answers()' rs.sh || { echo "resolve_answers is not in install.sh any more" >&2; exit 1; }
+    sed -n '/^validate_answers()/,/^}/p' ${installScript} > va.sh
+    grep -q '^validate_answers()' va.sh || { echo "validate_answers is not in install.sh any more" >&2; exit 1; }
 
     fails=0
     failed() { echo "  FAILED  $1"; fails=$((fails + 1)); }
@@ -60,6 +65,77 @@ pkgs.runCommand "nixarchy-installer-answers"
       failed "a3 refused for the wrong reason: $(cat a3.out)"
     fi
 
+    printf '%s\n' 'password=same' 'recovery_passphrase=same' > a4
+    if ( . ./ra.sh; read_answers a4 ) > a4.out 2>&1; then
+      failed "equal password and recovery_passphrase were accepted"
+    elif grep -q 'must differ' a4.out; then
+      ok "equal password and recovery_passphrase are refused"
+    else
+      failed "equal plaintexts refused for the wrong reason: $(cat a4.out)"
+    fi
+
+    hash=$(printf '%s' same | mkpasswd -m sha-512 -S testsalt -s)
+    printf '%s\n' "password_hash=$hash" 'recovery_passphrase=same' > a5
+    if ( . ./ra.sh; read_answers a5 ) > a5.out 2>&1; then
+      failed "recovery_passphrase reused password_hash"
+    elif grep -q 'must differ' a5.out; then
+      ok "recovery_passphrase cannot reuse a SHA-512 password_hash"
+    else
+      failed "mixed hash refused for the wrong reason: $(cat a5.out)"
+    fi
+    printf '%s\n' 'password=same' "recovery_hash=$hash" > a6
+    if ( . ./ra.sh; read_answers a6 ) > a6.out 2>&1; then
+      failed "password reused recovery_hash"
+    elif grep -q 'must differ' a6.out; then
+      ok "password cannot reuse a SHA-512 recovery_hash"
+    else
+      failed "reverse mixed hash refused for the wrong reason: $(cat a6.out)"
+    fi
+    rounds_hash=$(printf '%s' same | mkpasswd -m sha-512 -S testsalt -R 10000 -s)
+    printf '%s\n' "password_hash=$rounds_hash" 'recovery_passphrase=same' > a7
+    if ( . ./ra.sh; read_answers a7 ) > a7.out 2>&1; then
+      failed "recovery_passphrase reused a password_hash with explicit rounds"
+    elif grep -q 'must differ' a7.out; then
+      ok "SHA-512 hashes with explicit rounds are checked"
+    else
+      failed "rounds hash refused for the wrong reason: $(cat a7.out)"
+    fi
+    # A valid $6$ whose salt mkpasswd will not take must refuse, not read as
+    # "no match" and let a reused passphrase through (#1274 review).
+    printf '%s\n' 'password_hash=$6$abc$x' 'recovery_passphrase=same' > a8
+    if ( . ./ra.sh; read_answers a8 ) > a8.out 2>&1; then
+      failed "a short-salt password_hash skipped the reuse check"
+    elif grep -q 'cannot be checked' a8.out; then
+      ok "a salt mkpasswd cannot re-derive is refused, not passed"
+    else
+      failed "short salt refused for the wrong reason: $(cat a8.out)"
+    fi
+
+    (
+      . ./va.sh
+      function [() { if builtin [ "$1" = ! ] && builtin [ "$2" = -b ]; then return 1; fi; builtin [ "$@"; }
+      boot_medium() { echo /dev/installer-medium; }
+      lsblk() { echo disk; }
+      disk_under_floor() { return 1; }
+      free_space_possible() { return 0; }
+      validate_hostname() { return 0; }
+      validate_username() { return 0; }
+      validate_timezone() { return 0; }
+      validate_keymap() { return 0; }
+      from_host_exists=false device=/dev/installer-medium disk_mode=whole encrypt=no
+      hostname=box username=user password_hash='$6$test$hash' recovery_hash=
+      timezone=UTC keymap=us build_store_choice=auto
+      validate_answers
+    ) > boot.out 2>&1 && failed "the boot medium was accepted as the install device"
+    if grep -q 'medium this installer booted from' boot.out; then ok "the boot medium is refused"; else failed "boot medium refusal gave: $(cat boot.out)"; fi
+
+    (
+      . ./va.sh
+      from_host_exists=true password_hash=oops disk_mode=whole
+      validate_answers
+    ) > from.out 2>&1 && failed "--from accepted a plaintext password_hash"
+    if grep -q 'not a crypt(3) hash' from.out; then ok "--from refuses a non-hash password_hash"; else failed "--from refusal gave: $(cat from.out)"; fi
+
     # A read that refuses the file must not leave the fetched copy behind.
     rm -f fetched-path
     (
@@ -80,6 +156,51 @@ pkgs.runCommand "nixarchy-installer-answers"
     sed -n '/^connect_wifi()/,/^}/p' ${installScript} > cw.sh
     grep -q 'nmcli --ask device wifi connect "$ssid"' cw.sh || failed "connect_wifi no longer pipes the password to nmcli --ask"
     if grep -q 'password "$pw"' cw.sh; then failed "connect_wifi puts the Wi-Fi password on nmcli's command line"; fi
+
+    sed -n '/^install_attempts()/,/^}/p' ${installScript} > ia.sh
+    sed -n '/^install_once()/,/^}/p' ${installScript} | sed 's@/run/nixarchy-install@./state@g' > io.sh
+    sed -n '/^write_password_hash()/,/^}/p' ${installScript} | sed 's@/mnt/var/lib/nixarchy@./hash-target@g' > ph.sh
+    grep -q '^install_attempts()' ia.sh || failed "install_attempts is missing"
+    grep -q '^install_once()' io.sh || failed "install_once is missing"
+    grep -q '^write_password_hash()' ph.sh || failed "write_password_hash is missing"
+
+    if (
+      . ./ia.sh
+      . ./io.sh
+      log=install.log; : > "$log"
+      ui_dashboard_start() { :; }
+      ui_dashboard_stop() { :; }
+      ui_failed() { return 3; }
+      sleep() { :; }
+      format_disk() { echo format >> phases; }
+      run_install() { echo install >> phases; }
+      # chown_flake_dir is the post-install phase that can fail: the other two
+      # always return 0. It fails once, as a person retrying would see it.
+      chown_flake_dir() { echo chown >> phases; [ "$(grep -c '^chown$' phases)" -eq 2 ]; }
+      carry_network_profiles() { echo profiles >> phases; }
+      take_factory_snapshot() { echo snapshot >> phases; }
+      for phase in verify_subvolume_mounts generate_hardware_config install_flake_dir write_password_hash write_hostname; do
+        eval "$phase() { :; }"
+      done
+      install_attempts
+    ) > retry.out 2>&1; then retry_rc=0; else retry_rc=$?; fi
+    if [ "$retry_rc" -eq 0 ] && [ "$(grep -c '^format$' phases)" -eq 1 ] &&
+      [ "$(grep -c '^install$' phases)" -eq 1 ] && [ "$(grep -c '^chown$' phases)" -eq 2 ] &&
+      [ "$(grep -c '^snapshot$' phases)" -eq 1 ]; then
+      ok "a retry after a successful install repeats only the post-install phases"
+    else
+      failed "a retry after a successful install reran: $(tr '\n' ' ' < phases) $(cat retry.out)"
+    fi
+
+    if (
+      . ./ph.sh
+      mkdir -p hash-target/password.hash
+      chmod() { :; }
+      chown() { :; }
+      password_hash='$6$test$hash' recovery_hash=
+      write_password_hash
+    ) > hash-write.out 2>&1; then failed "an unwritable password hash target reported success"
+    else ok "an unwritable password hash target fails with no recovery hash"; fi
 
     [ "$fails" = 0 ] || { echo "$fails case(s) failed (#1079)" >&2; exit 1; }
     touch $out

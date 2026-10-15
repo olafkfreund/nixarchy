@@ -58,7 +58,7 @@ in
       (lib.mkIf svc.trustInterface {
         # Lists, so plain assignment. mkDefault here would drop both entirely
         # the moment the user trusts an interface or opens a port of their own.
-        networking.firewall.trustedInterfaces = [ "tailscale0" ];
+        networking.firewall.trustedInterfaces = [ config.services.tailscale.interfaceName ];
         networking.firewall.allowedUDPPorts = [ config.services.tailscale.port ];
       })
     ]

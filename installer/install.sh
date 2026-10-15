@@ -1261,8 +1261,36 @@ resolve_answers() {
   # session, including inside the shell the failure screen offers.
 }
 
+# Whether a plaintext secret is the one a SHA-512 crypt hash was made from:
+# re-hash it with that hash's own salt and rounds, since two salted hashes of
+# one secret never compare equal (#1274). The plaintext reaches mkpasswd on
+# stdin, never its argv (#1079).
+# A $6$ salt mkpasswd will not take (it wants 8 to 16 bytes) is refused here,
+# naming the key in $3: answering "no match" would let the reuse through.
+# shortcut: only $6$ is re-derived; any other format answers "no match" and
+# keeps validate_answers' plain equality check. Add a verifier if the
+# installer starts producing one.
+sha512_matches() {
+  local plain=$1 hash=$2 salt rounds="" opts out
+  case $hash in \$6\$*) ;; *) return 1 ;; esac
+  salt=${hash#\$6\$}
+  if [[ $salt = rounds=* ]]; then
+    rounds=${salt%%\$*}
+    rounds=${rounds#rounds=}
+    salt=${salt#*\$}
+  fi
+  salt=${salt%%\$*}
+  opts=(-m sha-512 -S "$salt")
+  [ -z "$rounds" ] || opts+=(-R "$rounds")
+  out=$(printf '%s' "$plain" | mkpasswd "${opts[@]}" -s 2>/dev/null) || {
+    echo "nixarchy-install: answers: $3: its salt is not 8 to 16 characters, so reuse cannot be checked -- make it with mkpasswd -m sha-512" >&2
+    exit 2
+  }
+  [ "$out" = "$hash" ]
+}
+
 read_answers() {
-  local file=$1 line key value lineno=0 password=""
+  local file=$1 line key value lineno=0 password="" recovery_passphrase=""
   [ -r "$file" ] || {
     echo "nixarchy-install: answers: cannot read $file" >&2
     exit 2
@@ -1316,7 +1344,7 @@ read_answers() {
       password_hash) password_hash=$value ;;
       build_store) build_store_choice=$value ;;
       recovery_hash) recovery_hash=$value ;;
-      recovery_passphrase) recovery_hash=$(printf '%s' "$value" | mkpasswd -m sha-512 -s) ;;
+      recovery_passphrase) recovery_passphrase=$value ;;
       timezone) timezone=$value ;;
       keymap) keymap=$value ;;
       *)
@@ -1333,9 +1361,25 @@ read_answers() {
   esac
 
   # Hashing here rather than in validation keeps the plaintext's life short.
+  if [ -n "$password" ] && [ -n "$password_hash" ]; then
+    echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
+    exit 2
+  fi
+  if [ -n "$recovery_passphrase" ]; then
+    if [ -n "$password" ] && [ "$password" = "$recovery_passphrase" ]; then
+      echo "nixarchy-install: answers: recovery_passphrase: must differ from password -- it is stored unencrypted on the ESP" >&2
+      exit 2
+    fi
+    if sha512_matches "$recovery_passphrase" "$password_hash" password_hash; then
+      echo "nixarchy-install: answers: recovery_passphrase: must differ from password_hash -- it is stored unencrypted on the ESP" >&2
+      exit 2
+    fi
+    recovery_hash=$(printf '%s' "$recovery_passphrase" | mkpasswd -m sha-512 -s)
+    unset recovery_passphrase
+  fi
   if [ -n "$password" ]; then
-    if [ -n "$password_hash" ]; then
-      echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
+    if sha512_matches "$password" "$recovery_hash" recovery_hash; then
+      echo "nixarchy-install: answers: recovery_hash: must differ from password -- it is stored unencrypted on the ESP" >&2
       exit 2
     fi
     password_hash=$(printf '%s' "$password" | mkpasswd -m sha-512 -s)
@@ -1359,6 +1403,10 @@ validate_answers() {
     # rather than silently dropped.
     [ "$disk_mode" = whole ] ||
       problems+=("disk_mode: --host names a machine the repository already describes; it decides the disk")
+    case $password_hash in
+      "" | '$'*) ;;
+      *) problems+=("password_hash: not a crypt(3) hash (should start with \$)") ;;
+    esac
     if [ ${#problems[@]} -gt 0 ]; then
       printf 'nixarchy-install: answers: %s\n' "${problems[@]}" >&2
       exit 2
@@ -1366,7 +1414,7 @@ validate_answers() {
     return 0
   fi
 
-  local problems=() why
+  local problems=() why boot
 
   # Collected rather than reported one at a time: a test author should not have
   # to fix the same file eight times to learn what it is missing.
@@ -1384,10 +1432,16 @@ validate_answers() {
     elif [ "$(lsblk -dno TYPE "$device" 2>/dev/null)" != "disk" ]; then
       # A partition here would be formatted as though it were the whole disk.
       problems+=("device: $device is not a whole disk")
-    elif disk_under_floor "$device"; then
-      # The interactive menu never offers such a disk; unattended must not
-      # install onto one either (#708).
-      problems+=("device: $device is under ${MIN_DISK_GIB} GiB")
+    else
+      boot=$(boot_medium)
+      if [ -n "$boot" ] && [ "$(readlink -f "$device")" = "$(readlink -f "$boot")" ]; then
+        problems+=("device: $device is the medium this installer booted from")
+      fi
+      if disk_under_floor "$device"; then
+        # The interactive menu never offers such a disk; unattended must not
+        # install onto one either (#708).
+        problems+=("device: $device is under ${MIN_DISK_GIB} GiB")
+      fi
     fi
   fi
 
@@ -1578,7 +1632,7 @@ finish_clone() {
 # as --from's own warning in main() already treats it.
 confirm_repo_disks() {
   [ "$from_host_exists" = true ] || return 0
-  local devs dev real boot line
+  local devs dev real boot line parent seen prior
   devs=$(nix "${NIX_FLAGS[@]}" eval --raw \
     "$work#nixosConfigurations.$hostname.config.disko.devices.disk" \
     --apply 'd: builtins.concatStringsSep "\n" (map (x: x.device) (builtins.attrValues d))') || {
@@ -1595,7 +1649,28 @@ confirm_repo_disks() {
   echo "$from_repo's $hostname will ERASE:"
   disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   while IFS= read -r dev; do
-    real=$(readlink -f "$dev")
+    # readlink -f fails outright when the link's directory is absent, as
+    # /dev/disk/by-partlabel is on a machine with no labelled partition.
+    real=$(readlink -f "$dev") || {
+      echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
+      return 1
+    }
+    if [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" = part ]; then
+      parent=$(lsblk -no PKNAME "$real" 2>/dev/null) && [ -n "$parent" ] || {
+        echo "nixarchy-install: $dev has no parent disk on this machine. Nothing was written." >&2
+        return 1
+      }
+      dev="/dev/$parent"
+      real=$(readlink -f "$dev") || {
+        echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
+        return 1
+      }
+    fi
+    seen=false
+    for prior in "${disk_reals[@]}"; do
+      [ "$prior" != "$real" ] || { seen=true; break; }
+    done
+    [ "$seen" = false ] || continue
     if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
       echo "nixarchy-install: $dev is the medium this installer booted from. Nothing was written." >&2
       return 1
@@ -1702,16 +1777,13 @@ partition_free_space() {
   # disk that has somebody else's OS on it.
   check_disks || return 1
   sgdisk --new=0:"$free_start":"$esp_end" \
-    --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev" || {
-    echo "nixarchy-install: sgdisk could not create the ESP on $dev (exit $?)." >&2
-    echo "  Nothing was formatted. Check the partition table before retrying." >&2
-    return 1
-  }
-  sgdisk --new=0:"$root_start":"$free_end" \
+    --typecode=0:EF00 --change-name=0:nixarchy-esp \
+    --new=0:"$root_start":"$free_end" \
     --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev" || {
-    echo "nixarchy-install: sgdisk could not create the root partition on $dev (exit $?)." >&2
-    echo "  The ESP entry was created; nothing was formatted. Check the" >&2
-    echo "  partition table before retrying." >&2
+    echo "nixarchy-install: sgdisk could not create the partitions on $dev (exit $?)." >&2
+    # One call, so a failure saves nothing: sgdisk says "Error encountered; not
+    # saving changes" and a retry finds the table as it was (#1274).
+    echo "  Nothing was written; the partition table is as it was." >&2
     return 1
   }
 
@@ -2192,10 +2264,10 @@ write_hostname() {
 
 write_password_hash() {
   ( umask 077
-    mkdir -p /mnt/var/lib/nixarchy
-    printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash )
-  chmod 0600 /mnt/var/lib/nixarchy/password.hash
-  chown 0:0 /mnt/var/lib/nixarchy/password.hash
+    mkdir -p /mnt/var/lib/nixarchy || return 1
+    printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash || return 1 ) || return 1
+  chmod 0600 /mnt/var/lib/nixarchy/password.hash || return 1
+  chown 0:0 /mnt/var/lib/nixarchy/password.hash || return 1
 
   # The recovery passphrase, as a whole shadow line, because that is what
   # boot.initrd.secrets appends over the initrd's /etc/shadow.
@@ -2208,9 +2280,9 @@ write_password_hash() {
   # supportsInitrdSecrets, so the value is never copied into the store either.
   if [ -n "$recovery_hash" ]; then
     ( umask 077
-      printf 'root:%s:::::::\n' "$recovery_hash" >/mnt/var/lib/nixarchy/initrd-shadow )
-    chmod 0600 /mnt/var/lib/nixarchy/initrd-shadow
-    chown 0:0 /mnt/var/lib/nixarchy/initrd-shadow
+      printf 'root:%s:::::::\n' "$recovery_hash" >/mnt/var/lib/nixarchy/initrd-shadow || return 1 ) || return 1
+    chmod 0600 /mnt/var/lib/nixarchy/initrd-shadow || return 1
+    chown 0:0 /mnt/var/lib/nixarchy/initrd-shadow || return 1
   fi
 }
 
@@ -3217,6 +3289,7 @@ main() {
 # Uses main's locals (log, target_log, started, rc, elapsed).
 install_attempts() {
   local choice_rc
+  local installed=false
   while :; do
     rc=0
     target_log=""
@@ -3283,13 +3356,15 @@ install_once() {
   # Chaining stops at the first failure and hands its status out, which is what
   # `|| rc=$?` was always meant to receive.
   {
-    format_disk &&
-      verify_subvolume_mounts &&
-      generate_hardware_config &&
-      install_flake_dir &&
-      write_password_hash &&
-      write_hostname &&
-      run_install &&
+    if [ "$installed" = false ]; then
+      format_disk &&
+        verify_subvolume_mounts &&
+        generate_hardware_config &&
+        install_flake_dir &&
+        write_password_hash &&
+        write_hostname &&
+        run_install && installed=true
+    fi &&
       chown_flake_dir &&
       carry_network_profiles &&
       take_factory_snapshot

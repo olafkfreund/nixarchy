@@ -181,7 +181,7 @@ pkgs.runCommand "nixarchy-installer-from-repo"
     # reach the named refusal rather than kill the script mid-pipe.
     clone_line=$(grep -n '^    clone_repo$' ${installScript} | cut -d: -f1 | head -1 || true)
     finish_line=$(grep -n '^    finish_clone$' ${installScript} | cut -d: -f1 | head -1 || true)
-    fmt_line=$(grep -n '^    format_disk &&' ${installScript} | cut -d: -f1 | head -1 || true)
+    fmt_line=$(grep -n '^[[:space:]]*format_disk &&' ${installScript} | cut -d: -f1 | head -1 || true)
     [ -n "$clone_line" ] || { echo "main() no longer calls clone_repo" >&2; exit 1; }
     [ -n "$finish_line" ] || { echo "main() no longer calls finish_clone" >&2; exit 1; }
     [ -n "$fmt_line" ] && [ "$clone_line" -lt "$finish_line" ] && [ "$finish_line" -lt "$fmt_line" ] || {
@@ -239,7 +239,7 @@ pkgs.runCommand "nixarchy-installer-from-repo"
         NIX_FLAGS=()
         work=/w hostname=alpha from_repo=file:///r from_host_exists=true
         answers_file=$ANSWERS
-        nix() { printf '%s\n' /dev/disk/by-id/fake-a; }
+        nix() { printf '%s\n' "''${DEVS:-/dev/disk/by-id/fake-a}"; }
         boot_medium() { printf '%s\n' "$BOOT"; }
         # #1084 deviation: the by-id path resolves to $DISK; anything else
         # (the boot medium's own path) is already canonical and echoes back
@@ -248,13 +248,17 @@ pkgs.runCommand "nixarchy-installer-from-repo"
         readlink() {
           case "$2" in
             /dev/disk/by-id/fake-a) printf '%s\n' "$DISK" ;;
+            /dev/disk/by-partlabel/fake-a) printf '%s\n' /dev/vdb1 ;;
+            /dev/disk/by-partlabel/fake-b) printf '%s\n' /dev/vdb2 ;;
+            /dev/disk/by-partlabel/no-dir) return 1 ;;
             *) printf '%s\n' "$2" ;;
           esac
         }
         lsblk() {
           [ "$DISK" = /dev/gone ] && return 1
           case "$2" in
-            TYPE) echo disk ;;
+            TYPE) case "$3" in /dev/vdb1 | /dev/vdb2) echo part ;; *) echo disk ;; esac ;;
+            PKNAME) echo vdb ;;
             WWN) echo wwn-1076 ;;
             SERIAL) echo SERIAL-1076 ;;
             NAME,SIZE,MODEL,SERIAL) echo 'vdb 64G QEMU_HARDDISK SERIAL-1076' ;;
@@ -264,6 +268,9 @@ pkgs.runCommand "nixarchy-installer-from-repo"
         ui_gum_pad() { echo 0; }
         gum() { touch "$HOME/gum-called"; return "$GUM_RC"; }
         confirm_repo_disks
+        rc=$?
+        printf '%s\n' "''${disk_paths[@]}" > "$HOME/recorded-$1"
+        return "$rc"
       ) > "crd-$1.out" 2>&1; then got=ok; else got=refuse; fi
       [ "$got" = "$2" ] || failed "confirm_repo_disks $1: wanted $2, got $got"
     }
@@ -274,6 +281,20 @@ pkgs.runCommand "nixarchy-installer-from-repo"
     [ ! -e gum-called ] || failed "confirm_repo_disks prompted under an answers file"
     ANSWERS=/a GUM_RC=0 DISK=/dev/gone BOOT=/dev/sdz crd missing refuse
     ANSWERS=/a GUM_RC=0 DISK=/dev/sdz BOOT=/dev/sdz crd boot-medium refuse
+    DEVS=$'/dev/disk/by-partlabel/fake-a\n/dev/disk/by-partlabel/fake-b' \
+      ANSWERS=/a GUM_RC=0 DISK=/dev/vdb BOOT=/dev/sdz crd shared-parent ok
+    [ "$(cat recorded-shared-parent)" = /dev/vdb ] ||
+      failed "two repo partitions did not record their parent disk exactly once"
+    grep -q '  /dev/vdb  ' crd-shared-parent.out ||
+      failed "the erase warning did not name the parent disk"
+    DEVS=/dev/disk/by-partlabel/fake-a \
+      ANSWERS=/a GUM_RC=0 DISK=/dev/vdb BOOT=/dev/vdb crd partition-on-boot-medium refuse
+    # readlink -f fails when /dev/disk/by-partlabel itself is absent; that must
+    # refuse with its sentence, not exit after a bare "will ERASE:" header.
+    DEVS=/dev/disk/by-partlabel/no-dir \
+      ANSWERS=/a GUM_RC=0 DISK=/dev/vdb BOOT=/dev/sdz crd partlabel-dir-missing refuse
+    grep -q 'not a disk on this machine' crd-partlabel-dir-missing.out ||
+      failed "an unresolvable partlabel refused without saying why: $(cat crd-partlabel-dir-missing.out)"
     fc=$(grep -n '^    finish_clone$' main.sh | cut -d: -f1 | head -1 || true)
     cr=$(grep -n '^  confirm_repo_disks || exit 1$' main.sh | cut -d: -f1 | head -1 || true)
     pb=$(grep -n '^  preflight_build || exit 1$' main.sh | cut -d: -f1 | head -1 || true)

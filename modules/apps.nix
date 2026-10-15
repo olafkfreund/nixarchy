@@ -1512,7 +1512,7 @@ in
                   code="''${1:?usage: nixarchy-language-select <code|null>}"
 
                   case "$code" in
-                    *[!A-Za-z0-9_-]* | "")
+                    *[!A-Za-z0-9_-]*)
                       echo "nixarchy: '$code' is not a language code" >&2
                       exit 2
                       ;;

@@ -1869,6 +1869,8 @@
             "apply-imports"
             "apply-staging"
             "home-activation-writes"
+            "language-locale"
+            "language-select"
             # data/bin-ledger.nix, held to its own claim. Also the home of the
             # pacman allowlist that used to live inline in build.yml. See
             # tests/bin-ledger.nix and #447.

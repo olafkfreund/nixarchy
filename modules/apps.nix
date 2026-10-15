@@ -1368,7 +1368,10 @@ in
                       # the moment somebody uncomments one, because that is content
                       # after the final `}`. Which is the same trap the full-path
                       # rewrite above exists to avoid, one line further down.
-                      close=$(grep -n "^}" "$user" | tail -1 | cut -d: -f1)
+                      # `|| true`: no match is the case handled below, and under
+                      # errexit and pipefail it used to end the script there, in
+                      # silence, before the explanation (#1276).
+                      close=$(grep -n "^}" "$user" | tail -1 | cut -d: -f1 || true)
                       if [ -z "$close" ]; then
                         echo "  $user has no closing brace on its own line;" >&2
                         echo "  add these by hand rather than let this guess:" >&2
@@ -1376,7 +1379,7 @@ in
                         refused=true
                         continue
                       fi
-                      tmp=$(mktemp)
+                      tmp=$(mktemp "$user.XXXXXX")
                       head -n "$((close - 1))" "$user" >"$tmp"
                       {
                         echo ""
@@ -1384,8 +1387,8 @@ in
                         printf '%s' "$rows"
                       } >>"$tmp"
                       tail -n "+$close" "$user" >>"$tmp"
-                      cat "$tmp" >"$user"
-                      rm -f "$tmp"
+                      chmod --reference="$user" "$tmp"
+                      mv "$tmp" "$user"
                       echo "  appended to $user"
                     fi
                   done
@@ -1406,6 +1409,7 @@ in
                     echo "commented-out lines. Nothing you have written changes:"
                     echo "only new lines, at the end, under a dated heading."
                   fi
+                  [ "$refused" = false ]
                 '';
               })
 
@@ -1557,21 +1561,22 @@ in
                     [ -n "$row" ] || fail "no app '$id' in $file or in the catalogue"
                     grep -q '^[[:space:]]*programs\.nixarchy\.apps = {' "$file" ||
                       fail "$file has no 'programs.nixarchy.apps = {' line; run nixarchy-catalogue-diff --add"
-                    tmp=$(mktemp)
+                    tmp=$(mktemp "$file.XXXXXX")
                     awk -v row="$row" '{ print } !done && /^[[:space:]]*programs\.nixarchy\.apps = \{/ { print row; done = 1 }' \
                       "$file" >"$tmp"
-                    cat "$tmp" >"$file"
-                    rm -f "$tmp"
+                    chmod --reference="$file" "$tmp"
+                    mv "$tmp" "$file"
                     echo "added $id's row from the current catalogue to $file"
                   fi
 
-                  if grep -q "^[[:space:]]*$id\.enable" "$file"; then
+                  if grep -qE "^[[:space:]]*$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
                     echo "$id is already enabled; run nixarchy-apply to build it"
                     exit 0
                   fi
 
                   # Strip one leading '# ' from the marked line, nothing else.
                   sed -i -E "/#@ $id([[:space:]]|\$)/ s/^([[:space:]]*)# ?/\1/" "$file"
+                  sed -i -E "/#@ $id([[:space:]]|\$)/ s/(\.enable[[:space:]]*=[[:space:]]*)false/\1true/" "$file"
 
                   # A menu pick runs with no terminal attached, so stdout goes
                   # nowhere and the pick looks like it did nothing at all. Say so
@@ -1608,6 +1613,13 @@ in
                   file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/apps.nix"
                   id="''${1:?usage: nixarchy-app-disable <app-id>}"
 
+                  case "$id" in
+                    *[!a-z0-9_-]* | "")
+                      echo "nixarchy: '$id' is not an app id" >&2
+                      exit 2
+                      ;;
+                  esac
+
                   [ -f "$file" ] || { echo "no $file" >&2; exit 1; }
 
                   if ! grep -qE "#@ $id([[:space:]]|\$)" "$file"; then
@@ -1615,7 +1627,7 @@ in
                     exit 1
                   fi
 
-                  if ! grep -qE "^[[:space:]]*$id\.enable" "$file"; then
+                  if ! grep -qE "^[[:space:]]*$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
                     echo "$id is not enabled"
                     exit 0
                   fi
@@ -2231,6 +2243,7 @@ in
                   }
 
                   added=()
+                  redirected=false
                   missed=()
                   unfree_hits=()
                   to_eval=()
@@ -2255,6 +2268,7 @@ in
                     app=$(awk -F'\t' -v a="$attr" '$1 == a { print $2; exit }' "$table")
                     if [ -n "$app" ]; then
                       report+=("$attr"$'\t'"curated"$'\t'"an Omarchy app -- enable it that way:  nixarchy-app-enable $app")
+                      redirected=true
                       continue
                     fi
 
@@ -2427,6 +2441,7 @@ in
 
                   if [ ''${#added[@]} -eq 0 ]; then
                     open_missed
+                    [ "$redirected" = false ] || exit 1
                     exit 0
                   fi
 
@@ -3045,8 +3060,7 @@ in
                       [ -n "$id" ] || continue
                       # In the catalogue? Then it has been checked, and the normal
                       # writer handles it.
-                      if grep -qE "^flatpak\t[^\t]+\t" "$index" &&
-                         awk -F'\t' -v i="$id" '$1=="flatpak" && $2==i {found=1} END {exit !found}' "$index"; then
+                      if awk -F'\t' -v i="$id" '$1=="flatpak" && $2==i {found=1} END {exit !found}' "$index"; then
                         nixarchy-service-enable "$id" && changed=1
                         continue
                       fi
@@ -3368,6 +3382,7 @@ in
                   pkgs.gnugrep
                   pkgs.git
                   pkgs.gnused
+                  pkgs.util-linux # flock holds the copy, stage and switch together
                   # nh rather than nixos-rebuild: a progress view that says what is
                   # building and how far along it is, and a package diff against the
                   # running generation once it lands. Both matter more here than
@@ -3627,6 +3642,23 @@ in
                   # itself is told apart from a new pick -- and kept, not overwritten.
                   applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
                   mkdir -p "$applied"
+                  exec 9>"$applied/lock"
+                  flock -n 9 || {
+                    echo "nixarchy-apply: another apply is running; waiting for it to finish..." >&2
+                    flock 9
+                  }
+
+                  copy_into_flake() {
+                    local src=$1 dst=$2 tmp
+                    tmp=$(mktemp "$dst.XXXXXX")
+                    cp "$src" "$tmp" || { rm -f "$tmp"; return 1; }
+                    if [ -f "$dst" ]; then
+                      chmod --reference="$dst" "$tmp" || { rm -f "$tmp"; return 1; }
+                    else
+                      chmod --reference="$src" "$tmp" || { rm -f "$tmp"; return 1; }
+                    fi
+                    mv "$tmp" "$dst" || { rm -f "$tmp"; return 1; }
+                  }
                   # flatsnap: written by the nixarchy-flatsnap plugin (#904). Like the
                   # others it is copied only when it exists, so a machine without
                   # the plugin imports exactly what it did before.
@@ -3642,7 +3674,8 @@ in
                   # was built unchecked, which is the guarantee this flag exists
                   # to give. No shared lock is needed for this: the caller's file
                   # can change freely afterwards, and what is built is still what
-                  # it pinned.
+                  # it pinned. The apply lock above serialises concurrent applies,
+                  # not edits to the caller's file.
                   pinned=$(mktemp -d)
                   trap 'rm -rf "$pinned"' EXIT
                   for pair in ''${expect+"''${expect[@]}"}; do
@@ -3663,6 +3696,24 @@ in
                       exit 4
                     fi
                   done
+
+                  # A draft is the user's package code. Refuse a changed flake
+                  # copy before writing any selection file or starting a switch.
+                  if [ -d "$srcdir/packages" ]; then
+                    for src in "$srcdir"/packages/*.nix; do
+                      [ -f "$src" ] || continue
+                      dst="$base/nixarchy/packages/$(basename "$src")"
+                      record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
+                      # No record means no apply has written it yet (as on the first
+                      # apply after this check arrived): not evidence of an edit,
+                      # the same rule the selection files follow below.
+                      if [ -f "$dst" ] && [ -f "$record" ] && ! diff -q "$src" "$dst" >/dev/null &&
+                         ! sha256sum <"$dst" | cmp -s - "$record"; then
+                        echo "nixarchy: $dst was edited in the flake; move your changes into $src before applying." >&2
+                        exit 1
+                      fi
+                    done
+                  fi
 
                   for part in apps services advanced flatsnap; do
                     # The snapshot, for a part the caller pinned: the bytes that
@@ -3692,7 +3743,7 @@ in
                       echo "  Your version is kept at $kept -- move the change into"
                       echo "  $srcmsg, which is the file apply copies from."
                     fi
-                    cp "$src" "$dst"
+                    copy_into_flake "$src" "$dst"
                     sha256sum <"$dst" >"$record"
                     copied="$copied $part"
                   done
@@ -3710,9 +3761,13 @@ in
                       [ -f "$src" ] || continue
                       dst="$base/nixarchy/packages/$(basename "$src")"
                       if [ -f "$dst" ] && diff -q "$src" "$dst" >/dev/null; then
+                        record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
+                        sha256sum <"$dst" >"$record"
                         continue
                       fi
-                      cp "$src" "$dst"
+                      copy_into_flake "$src" "$dst"
+                      record="$applied/$(printf '%s' "$dst" | sha256sum | cut -c1-16)"
+                      sha256sum <"$dst" >"$record"
                       copied="$copied packages/$(basename "$src")"
                     done
                   fi
@@ -3720,6 +3775,7 @@ in
                   # Only what exists is imported. A machine seeded before
                   # services.nix existed has two files, not three, and a stub
                   # importing a path that is not there fails to evaluate.
+                  tmp=$(mktemp "$dest.XXXXXX")
                   {
                     echo "# Generated by nixarchy-apply. Do not edit -- your files"
                     echo "# are ~/.config/nixarchy/{apps,services,advanced,flatsnap}.nix and"
@@ -3727,7 +3783,13 @@ in
                     echo "{"
                     echo "  imports = [$imports ];"
                     echo "}"
-                  } >"$dest"
+                  } >"$tmp"
+                  if [ -f "$dest" ]; then
+                    chmod --reference="$dest" "$tmp"
+                  else
+                    chmod --reference="$file" "$tmp"
+                  fi
+                  mv "$tmp" "$dest"
 
                   if [ -n "$copied" ]; then
                     echo "copied ->$copied"

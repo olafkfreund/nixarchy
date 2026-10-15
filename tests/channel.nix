@@ -187,6 +187,154 @@ pkgs.runCommand "nixarchy-channel"
     want "and back to unstable"         "$f" 'nixos-unstable'
     wantnot "the override is removed"   "$f" 'release-25.11'
 
+    # ---- The Omarchy axis (#1278) -------------------------------------------
+    #
+    # Two choices that must never touch each other's lines. The walk below
+    # visits all six pairings of {unstable, stable} x {stable, edge, dev} in
+    # sequence on ONE file, and after every step asserts that the axis it did not
+    # move is byte-identical in the lines it owns -- a rewrite that matched a
+    # line it should not have owned would otherwise pass every per-axis case.
+    fp_np() { grep -E '^[[:space:]]*(nixpkgs\.url|inputs\.home-manager\.url)[[:space:]]*=' "$1/flake.nix" || true; }
+    fp_om() { { grep -vE '^[[:space:]]*#' "$1/flake.nix" | grep -E 'olafkfreund/nixarchy|omarchy|flake = false' || true; }; }
+    co=$PWD/checkout
+    mkdir -p "$co/.git" "$co/bin" "$co/default" "$co/shell"
+    co2=$PWD/checkout2
+    mkdir -p "$co2/.git" "$co2/bin" "$co2/default" "$co2/shell"
+
+    mk walk
+    cp walk/flake.nix walk-original.nix
+    exp_np=unstable
+    exp_om=stable
+    exp_co=""
+    check_state() {
+      local label=$1 np om
+      np=$(NIXARCHY_FLAKE=$PWD/walk $ch --current 2>&1 || true)
+      om=$(NIXARCHY_FLAKE=$PWD/walk $ch omarchy --current 2>&1 || true)
+      # Where dev points is part of the state: a rewrite of the wrong url line
+      # can leave --current at dev while the checkout is not the one asked for.
+      if [ "$exp_om" = dev ] && ! grep -qxF "      url = \"git+file://$exp_co\";" walk/flake.nix; then
+        np=$np-and-omarchy-not-pointing-at-$exp_co
+      fi
+      if [ "$np" = "$exp_np" ] && [ "$om" = "$exp_om" ]; then
+        echo "  ok      $label: nixpkgs=$np omarchy=$om"
+      else
+        echo "  FAILED  $label: nixpkgs=$np (wanted $exp_np) omarchy=$om (wanted $exp_om)"
+        fails=$((fails + 1))
+      fi
+    }
+    check_state "start"
+    # axis, then the command's arguments; the expected state is updated first so
+    # that check_state reads what the step was meant to leave behind.
+    walk_step() {
+      local axis=$1 np_b om_b
+      shift
+      np_b=$(fp_np walk)
+      om_b=$(fp_om walk)
+      if [ "$axis" = om ]; then
+        echo y | NIXARCHY_FLAKE=$PWD/walk $ch omarchy "$@" >/dev/null 2>&1 || true
+        exp_om=$1
+        [ "$1" != dev ] || exp_co=$2
+        if [ "$(fp_np walk)" = "$np_b" ]; then echo "  ok      omarchy $*: the nixpkgs lines are untouched"
+        else echo "  FAILED  omarchy $* changed a nixpkgs line"; fails=$((fails + 1)); fi
+      else
+        echo y | NIXARCHY_FLAKE=$PWD/walk $ch "$@" >/dev/null 2>&1 || true
+        exp_np=$1
+        if [ "$(fp_om walk)" = "$om_b" ]; then echo "  ok      $*: the omarchy lines are untouched"
+        else echo "  FAILED  $* changed an omarchy line"; fails=$((fails + 1)); fi
+      fi
+      check_state "after $axis $*"
+    }
+    walk_step om edge
+    walk_step om dev "$co"
+    walk_step om dev "$co2"
+    walk_step np stable 25.11
+    walk_step om edge
+    walk_step om stable
+    walk_step np unstable
+
+    # Leaving dev removes BOTH lines, not just the url.
+    mk leave
+    echo y | NIXARCHY_FLAKE=$PWD/leave $ch omarchy dev "$co" >/dev/null 2>&1 || true
+    f=$(cat leave/flake.nix)
+    want "dev adds the follows inside the nixarchy block" "$f" 'inputs.omarchy.follows = "omarchy";'
+    want "and a top-level omarchy that is not a flake"  "$f" 'url = "git+file://'"$co"'";'
+    echo y | NIXARCHY_FLAKE=$PWD/leave $ch omarchy stable >/dev/null 2>&1 || true
+    f=$(cat leave/flake.nix)
+    wantnot "leaving dev removes the follows"   "$f" 'inputs.omarchy.follows'
+    wantnot "and the omarchy input"             "$f" 'git+file'
+    wantnot "and its flake = false"             "$f" 'flake = false'
+    # Everything but those lines is back to what the installer wrote.
+    if [ "$(cat leave/flake.nix)" = "$(cat walk-original.nix)" ]; then echo "  ok      stable -> dev -> stable is byte-identical to the start"
+    else echo "  FAILED  stable -> dev -> stable left a difference"; diff walk-original.nix leave/flake.nix | sed 's/^/          | /'; fails=$((fails + 1)); fi
+
+    # Refusals leave the file alone: a custom nixarchy input, an rc channel, a
+    # checkout that is not one, a foreign omarchy input, an unsafe path.
+    refuses() {
+      local name=$1 dir=$2 want_text=$3 b a r
+      shift 3
+      b=$(cksum < "$dir/flake.nix")
+      r=$(echo y | NIXARCHY_FLAKE=$PWD/$dir $ch "$@" 2>&1 || true)
+      a=$(cksum < "$dir/flake.nix")
+      if [ "$b" = "$a" ] && [ ! -e "$dir/flake.nix.pre-channel" ] && <<<"$r" grep -qF -- "$want_text"; then
+        echo "  ok      $name"
+      else
+        echo "  FAILED  $name (file changed: $([ "$b" = "$a" ] && echo no || echo YES); wanted /$want_text/)"
+        printf '%s\n' "$r" | sed 's/^/          | /'
+        fails=$((fails + 1))
+      fi
+    }
+    mk custom-om
+    sed -i 's|github:olafkfreund/nixarchy/release|github:someone/their-fork|' custom-om/flake.nix
+    r=$(NIXARCHY_FLAKE=$PWD/custom-om $ch omarchy --current 2>&1 || true)
+    if [ "$r" = custom ]; then echo "  ok      a nixarchy input of your own reads as custom"
+    else echo "  FAILED  custom read as '$r'"; fails=$((fails + 1)); fi
+    refuses "a custom nixarchy input is refused, not rewritten" custom-om 'not one of the three channels' omarchy edge
+    r=$(NIXARCHY_FLAKE=$PWD/custom-om $ch --current 2>&1 || true)
+    if [ "$r" = unstable ]; then echo "  ok      and the nixpkgs axis still reads unstable"
+    else echo "  FAILED  nixpkgs axis read '$r' beside a custom nixarchy"; fails=$((fails + 1)); fi
+
+    mk refuse
+    refuses "rc is refused"                      refuse 'rc channel is not available' omarchy rc
+    mkdir -p nogit/bin nogit/default nogit/shell
+    refuses "a dev path with no .git is refused" refuse 'no .git' omarchy dev "$PWD/nogit"
+    mkdir -p notomarchy/.git
+    refuses "a dev path that is not Omarchy is refused" refuse 'does not look like Omarchy' omarchy dev "$PWD/notomarchy"
+    refuses "a dev path that does not exist is refused" refuse 'is not a directory' omarchy dev "$PWD/nowhere"
+    mkdir -p "$PWD/un safe/.git" "$PWD/un safe/bin" "$PWD/un safe/default" "$PWD/un safe/shell"
+    refuses "a path with a space is refused"     refuse 'Refusing' omarchy dev "$PWD/un safe"
+    refuses "a path only means something with dev" refuse 'only means something with' omarchy edge "$co"
+
+    mk foreign
+    awk '{ print } /^    nixarchy = [{]$/ { inside = 1 } inside && /^    [}];$/ { print "    omarchy = {"; print "      url = \"github:basecamp/omarchy/v4.0.4\";"; print "      flake = false;"; print "    };"; inside = 0 }' foreign/flake.nix > foreign/new
+    mv foreign/new foreign/flake.nix
+    refuses "someone else's top-level omarchy input is not overwritten" foreign 'not one of the three channels' omarchy dev "$co"
+
+    # A failed re-lock keeps the rewrite and tells you how to undo it; the
+    # backup is the file as it was. The sandbox has no network, so every re-lock
+    # here fails, which is the case being asserted.
+    mk relock
+    cp relock/flake.nix relock-original.nix
+    r=$(echo y | NIXARCHY_FLAKE=$PWD/relock $ch omarchy edge 2>&1 || true)
+    want "a failed re-lock says how to restore" "$r" 'Restore with:'
+    want "and says it re-locked nixarchy only"  "$r" 'Re-locking: nixarchy$'
+    if cmp -s relock/flake.nix.pre-channel relock-original.nix; then echo "  ok      the backup is the file as it was"
+    else echo "  FAILED  the backup differs from the original"; fails=$((fails + 1)); fi
+    mk relock-dev
+    r=$(echo y | NIXARCHY_FLAKE=$PWD/relock-dev $ch omarchy dev "$co" 2>&1 || true)
+    want "dev re-locks omarchy as well"         "$r" 'Re-locking: nixarchy omarchy$'
+
+    # Declining writes nothing.
+    mk decline-om
+    b=$(cksum < decline-om/flake.nix)
+    echo n | NIXARCHY_FLAKE=$PWD/decline-om $ch omarchy dev "$co" >/dev/null 2>&1 || true
+    if [ "$b" = "$(cksum < decline-om/flake.nix)" ] && [ ! -e decline-om/flake.nix.pre-channel ]; then echo "  ok      declining the omarchy switch changes nothing"
+    else echo "  FAILED  declining the omarchy switch wrote something"; fails=$((fails + 1)); fi
+
+    # A reshaped flake reports custom on both axes rather than failing.
+    r=$(NIXARCHY_FLAKE=$PWD/reshaped $ch --current 2>&1 || true)
+    if [ "$r" = custom ]; then echo "  ok      a reshaped flake reads as custom for nixpkgs"
+    else echo "  FAILED  reshaped nixpkgs read '$r'"; fails=$((fails + 1)); fi
+
     # A floor. Every assertion above fails identically if the command printed
     # nothing at all, which reads as every rule being wrong rather than as the
     # binary being missing.

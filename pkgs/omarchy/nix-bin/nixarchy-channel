@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
 # nixarchy:new
-# omarchy:summary=Follow stable or unstable nixpkgs
-# omarchy:args=[stable [RELEASE] | unstable]
+# omarchy:summary=Follow stable or unstable nixpkgs, and stable, edge or your own Omarchy
+# omarchy:args=[stable [RELEASE] | unstable | --current | omarchy [stable | edge | dev [PATH] | --current]]
 # omarchy:examples=nixarchy channel
 # omarchy:examples=nixarchy channel stable
 # omarchy:examples=nixarchy channel stable 25.05
+# omarchy:examples=nixarchy channel omarchy edge
+# omarchy:examples=nixarchy channel omarchy dev ~/omarchy
 
 # The generated flake already documents how to follow stable nixpkgs -- as
 # PROSE telling you to hand-edit two inputs. The second one is the half people
@@ -33,11 +35,247 @@ red() { printf "\033[0;31m%s\033[0m\n" "$1"; }
 dim() { printf "\033[0;90m%s\033[0m\n" "$1"; }
 bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 
+# ## The Omarchy axis
+#
+# Which Omarchy you run is a different question from which nixpkgs, and it is
+# answered on different lines: `nixarchy.url` (and, for a checkout of your own,
+# a top-level `omarchy` input) here, `nixpkgs.url` and the home-manager override
+# in the nixpkgs half below. Neither half ever edits the other's lines.
+#
+# Read from flake.nix, never from the lock or a state file: the file is what the
+# next rebuild will resolve. A shape this did not write is `custom`, and is
+# refused rather than rewritten.
+if [ "${1:-}" = omarchy ]; then
+  shift
+  o_target="${1:-}"
+  o_path_arg="${2:-}"
+  o_release_url="github:olafkfreund/nixarchy/release"
+  o_edge_url="github:olafkfreund/nixarchy/edge"
+
+  o_usage() {
+    echo "Usage: nixarchy channel omarchy [stable | edge | dev [PATH] | --current]"
+    echo "  (no argument)  report which Omarchy this machine follows"
+    echo "  stable         the release branch (what installed machines follow)"
+    echo "  edge           the edge branch: Omarchy's quattro branch, published when its checks pass"
+    echo "  dev [PATH]     edge, with Omarchy itself taken from your checkout (default ~/omarchy)"
+    echo "  --current      print stable, edge, dev or custom and nothing else"
+  }
+
+  case "$o_target" in
+    "" | stable | edge | dev | --current) ;;
+    rc) red "The rc channel is not available on Nixarchy."; exit 1 ;;
+    -h | --help) o_usage; exit 0 ;;
+    *) o_usage >&2; exit 1 ;;
+  esac
+  if [ -n "$o_path_arg" ] && [ "$o_target" != dev ]; then
+    red "A path only means something with 'dev'."; exit 1
+  fi
+
+  [ -f "$nixfile" ] || { red "No $nixfile."; exit 1; }
+
+  # Everything this decides on, in one pass. Anchored on whole lines: the
+  # template carries COMMENTED examples of neighbouring inputs, and a loose
+  # match would read a comment as a setting. A line is either inside the
+  # `nixarchy = {` block, or the top-level `omarchy = {` block, or ignored.
+  o_facts() {
+    awk '
+      function quoted(s) { sub(/^[^"]*"/, "", s); sub(/".*$/, "", s); return s }
+      /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { nb++; inn = 1; next }
+      inn && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ { nu++; nurl = quoted($0) }
+      inn && /^[[:space:]]*inputs[.]omarchy[.]follows[[:space:]]*=[[:space:]]*"omarchy";[[:space:]]*$/ { fol++ }
+      inn && /^[[:space:]]*[}];[[:space:]]*$/ { inn = 0 }
+      /^[[:space:]]*omarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { ob++; ino = 1; next }
+      ino && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ { ourl = quoted($0) }
+      ino && /^[[:space:]]*flake[[:space:]]*=[[:space:]]*false;[[:space:]]*$/ { ofl++ }
+      ino && /^[[:space:]]*[}];[[:space:]]*$/ { ino = 0 }
+      END {
+        print "nb=" nb + 0; print "nu=" nu + 0; print "fol=" fol + 0
+        print "ob=" ob + 0; print "ofl=" ofl + 0
+        print "nurl=" nurl; print "ourl=" ourl
+      }' "$nixfile"
+  }
+  # Split on the first = only; read keeps an empty value because = is not
+  # whitespace, so a url that is absent does not shift the fields.
+  o_nb=0 o_nu=0 o_fol=0 o_ob=0 o_ofl=0 o_nurl="" o_ourl=""
+  o_out=$(o_facts) || { red "Could not read $nixfile."; exit 1; }
+  while IFS='=' read -r k v; do
+    case "$k" in
+      nb) o_nb=$v ;; nu) o_nu=$v ;; fol) o_fol=$v ;; ob) o_ob=$v ;; ofl) o_ofl=$v ;;
+      nurl) o_nurl=$v ;; ourl) o_ourl=$v ;;
+    esac
+  done <<<"$o_out"
+
+  if [ "$o_nb" != 1 ] || [ "$o_nu" != 1 ] || [ "$o_ob" -gt 1 ]; then
+    o_current=custom
+  elif [ "$o_ob" = 1 ]; then
+    case "$o_ourl" in
+      git+file://*) if [ "$o_ofl" = 1 ] && [ "$o_fol" = 1 ]; then o_current=dev; else o_current=custom; fi ;;
+      *) o_current=custom ;;
+    esac
+  elif [ "$o_fol" != 0 ]; then
+    o_current=custom
+  else
+    case "$o_nurl" in
+      "$o_edge_url") o_current=edge ;;
+      "$o_release_url" | github:olafkfreund/nixarchy) o_current=stable ;;
+      *) o_current=custom ;;
+    esac
+  fi
+
+  if [ "$o_target" = --current ]; then echo "$o_current"; exit 0; fi
+
+  if [ -z "$o_target" ]; then
+    bold "This machine follows Omarchy: $o_current"
+    echo "  nixarchy   $o_nurl"
+    [ "$o_current" != dev ] || echo "  omarchy    ${o_ourl#git+file://}"
+    echo
+    case "$o_current" in
+      stable) dim "The release branch: what has been through a human's release." ;;
+      edge) dim "Omarchy's quattro branch, published when its checks pass. Newer, less settled." ;;
+      dev) dim "Your own checkout. Only COMMITTED changes in it are built." ;;
+      custom) dim "None of the three -- the nixarchy input points somewhere of your own." ;;
+    esac
+    exit 0
+  fi
+
+  if [ "$o_current" = custom ]; then
+    red "The nixarchy input in $nixfile is not one of the three channels:"
+    echo "  nixarchy.url  $o_nurl"
+    echo
+    echo "Switching would discard a choice made deliberately, so it is not done"
+    echo "for you. Edit that input yourself if you want a channel back."
+    exit 1
+  fi
+
+  o_dev_path=""
+  if [ "$o_target" = dev ]; then
+    o_p="${o_path_arg:-$HOME/omarchy}"
+    o_dev_path=$(cd "$o_p" 2>/dev/null && pwd -P) || { red "$o_p is not a directory."; exit 1; }
+    # The path is pasted into flake.nix through awk, so what it may contain is
+    # decided here rather than escaped there.
+    case "$o_dev_path" in
+      *[!A-Za-z0-9._/@+-]*) red "Refusing $o_dev_path: use a path of letters, digits and . _ / @ + - only."; exit 1 ;;
+    esac
+    [ -e "$o_dev_path/.git" ] || { red "$o_dev_path is not a git checkout (no .git)."; exit 1; }
+    for d in bin default shell; do
+      [ -d "$o_dev_path/$d" ] || { red "$o_dev_path does not look like Omarchy: no $d/ directory."; exit 1; }
+    done
+    if [ "$o_current" != dev ] && [ "$o_ob" != 0 ]; then
+      red "$nixfile already has a top-level omarchy input that is not this command's."
+      echo "Remove or rename it, or point it at your checkout yourself."
+      exit 1
+    fi
+    if [ "$o_current" = dev ] && [ "$o_ourl" = "git+file://$o_dev_path" ]; then
+      echo "Already following your checkout at $o_dev_path. Nothing to do."; exit 0
+    fi
+  elif [ "$o_target" = "$o_current" ]; then
+    echo "Already following $o_target. Nothing to do."; exit 0
+  fi
+
+  [ -w "$nixfile" ] || { red "$nixfile is not writable by $USER."; echo; echo "  chown it to yourself, or run omarchy update which offers to."; exit 1; }
+
+  case "$o_target" in
+    stable) o_new_url="$o_release_url" ;;
+    *) o_new_url="$o_edge_url" ;;
+  esac
+
+  bold "Switching Omarchy from $o_current to $o_target."
+  echo "  nixarchy   $o_nurl"
+  echo "          -> $o_new_url"
+  if [ "$o_target" = dev ]; then
+    echo "  omarchy -> your checkout at $o_dev_path"
+    echo
+    dim "Only COMMITTED changes in that checkout are built."
+    # git is not a runtime dependency of this package, so the warning is a
+    # courtesy when it is there and silent when it is not.
+    if command -v git >/dev/null 2>&1 && [ -n "$(git -C "$o_dev_path" status --porcelain 2>/dev/null || true)" ]; then
+      red "That checkout has uncommitted changes; they will not be built."
+    fi
+  fi
+  if [ "$o_target" != stable ]; then
+    echo
+    red "This is newer than what a release has been through."
+    echo "A failed rebuild changes nothing and a bad activation is one rollback away."
+  fi
+  echo
+  printf "Rewrite %s? [y/N] " "$nixfile"
+  read -r reply
+  case "$reply" in [yY]*) ;; *) echo "Nothing changed."; exit 0 ;; esac
+
+  cp "$nixfile" "$nixfile.pre-channel"
+  o_before=$(cksum < "$nixfile")
+
+  o_want_follows=0
+  [ "$o_target" != dev ] || o_want_follows=1
+  # Only lines inside the nixarchy block, and the top-level omarchy block, are
+  # touched; every other line is printed back as it came.
+  awk -v newurl="$o_new_url" -v want_follows="$o_want_follows" -v devpath="$o_dev_path" -v has_om="$o_ob" '
+    function indent(s) { sub(/[^[:space:]].*$/, "", s); return s }
+    /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { inn = 1; print; next }
+    inn && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ {
+      line = $0; sub(/"[^"]*"/, "\"" newurl "\"", line); print line
+      if (want_follows) print indent($0) "inputs.omarchy.follows = \"omarchy\";"
+      next
+    }
+    inn && /^[[:space:]]*inputs[.]omarchy[.]follows[[:space:]]*=/ { next }
+    inn && /^[[:space:]]*[}];[[:space:]]*$/ {
+      inn = 0; print
+      if (devpath != "" && !has_om) {
+        ws = indent($0)
+        print ws "omarchy = {"
+        print ws "  url = \"git+file://" devpath "\";"
+        print ws "  flake = false;"
+        print ws "};"
+      }
+      next
+    }
+    /^[[:space:]]*omarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { ino = 1; if (devpath == "") { skip = 1; next } print; next }
+    ino && skip { if ($0 ~ /^[[:space:]]*[}];/) { ino = 0; skip = 0 } next }
+    ino && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ {
+      line = $0; sub(/"[^"]*"/, "\"git+file://" devpath "\"", line); print line; next
+    }
+    ino && /^[[:space:]]*[}];/ { ino = 0 }
+    { print }
+  ' "$nixfile" > "$nixfile.new"
+  cat "$nixfile.new" > "$nixfile"
+  rm -f "$nixfile.new"
+
+  # Checksummed, not trusted: an awk that matched nothing exits 0.
+  if [ "$o_before" = "$(cksum < "$nixfile")" ]; then
+    red "Nothing in $nixfile changed."
+    echo "The lines are not the shape this expected, so it has not guessed."
+    mv "$nixfile.pre-channel" "$nixfile"
+    exit 1
+  fi
+
+  echo
+  echo "Rewrote $nixfile (previous copy: $nixfile.pre-channel)"
+  echo
+
+  # nixarchy moved; omarchy joined or left with it. Nothing else is re-locked.
+  o_inputs=(nixarchy)
+  [ "$o_target" != dev ] || o_inputs+=(omarchy)
+  echo "Re-locking: ${o_inputs[*]}"
+  if ! nix flake update "${o_inputs[@]}" --flake "$flake"; then
+    red "Re-locking failed. $nixfile is rewritten; the lock is not."
+    echo "Restore with:  mv $nixfile.pre-channel $nixfile"
+    exit 1
+  fi
+
+  echo
+  bold "Locked. Now rebuild:"
+  dim "  nh os switch"
+  exit 0
+fi
+
 usage() {
-  echo "Usage: nixarchy channel [stable [RELEASE] | unstable]"
+  echo "Usage: nixarchy channel [stable [RELEASE] | unstable | --current]"
+  echo "       nixarchy channel omarchy [stable | edge | dev [PATH] | --current]"
   echo "  (no argument)  report which one this machine follows"
   echo "  stable         nixos-<latest release>, home-manager release-<same>"
   echo "  unstable       nixos-unstable, home-manager as nixarchy pins it"
+  echo "  --current      print stable, unstable or custom and nothing else"
+  echo "  omarchy ...    which Omarchy to run: a separate choice (omarchy --help)"
 }
 
 target="${1:-}"
@@ -48,7 +286,7 @@ target="${1:-}"
 # network when you already know the answer.
 want_release="${2:-}"
 case "$target" in
-  "" | stable | unstable) ;;
+  "" | stable | unstable | --current) ;;
   -h | --help) usage; exit 0 ;;
   *) usage >&2; exit 1 ;;
 esac
@@ -67,6 +305,7 @@ fi
 # it is about to become.
 current_url=$(sed -nE "s/^[[:space:]]*nixpkgs\.url[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p" "$nixfile" | head -1)
 if [ -z "$current_url" ]; then
+  [ "$target" != --current ] || { echo custom; exit 0; }
   red "Cannot find the nixpkgs.url line in $nixfile."
   echo
   echo "This flake has been reshaped, so it is not mine to rewrite."
@@ -79,6 +318,8 @@ case "$current_url" in
   *nixos-[0-9][0-9].[0-9][0-9]*) current=stable ;;
   *) current=custom ;;
 esac
+
+[ "$target" != --current ] || { echo "$current"; exit 0; }
 
 # Anchored, because the template carries a COMMENTED example of this very
 # line as the prose telling you to add it by hand. An unanchored match finds

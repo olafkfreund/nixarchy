@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1289
 spec: spec/2026-10-15-1289-language-switching.md
 ---

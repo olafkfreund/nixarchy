@@ -1111,6 +1111,26 @@ in
       };
     };
 
+    menu.default = lib.mkOption {
+      type = lib.types.enum [
+        "omarchy"
+        "nixarchy"
+      ];
+      default = "omarchy";
+      example = "nixarchy";
+      description = ''
+        Which menu is on at the first login. `"omarchy"` keeps Omarchy's own
+        menu and installs nixarchy-menu without turning it on; `"nixarchy"`
+        turns nixarchy-menu on, once, in its place. Switch either way later
+        from Setup > Defaults > Menu.
+
+        This only decides the first login: a machine that already has
+        nixarchy-menu on keeps it. Setting
+        `programs.nixarchy.defaultPlugins.menu = false` removes nixarchy-menu
+        entirely, whatever this says.
+      '';
+    };
+
     menu.extraEntries = lib.mkOption {
       type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
       default = { };

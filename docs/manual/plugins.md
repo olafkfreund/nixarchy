@@ -37,7 +37,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Runtime themes](#runtime-themes) | switch the active palette across supported applications without a rebuild | **on by default** | Setup ▸ Themes <!-- io.github.nobledoodle.omarchroma --> |
-| [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **on by default** | Super+Space, and every Omarchy menu binding <!-- nixarchy.menu --> |
+| [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **installed, off by default** | Setup ▸ Defaults ▸ Menu ▸ Nixarchy <!-- nixarchy.menu --> |
 | [Hyprforge](#hyprforge) | every Hyprland setting, previewed live on your real windows | **on by default** | Super+Space ▸ Hyprforge <!-- aziz.hyprforge --> |
 | [Gliff-Manager](#gliff-manager) | your gliff machines: ready or not, headless or mirror, connect | **on wherever nixarchy installs gliff** | the bar, or Setup ▸ Remote desktop ▸ Manage gliff machines <!-- nixarchy.gliff-manager --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
@@ -374,7 +374,7 @@ Turn it off with `programs.nixarchy.defaultPlugins.omatheme = false;`.
 
 ## Menu
 
-[nixarchy-menu](https://github.com/olafkfreund/nixarchy-menu) · **on by default**
+[nixarchy-menu](https://github.com/olafkfreund/nixarchy-menu) · **installed, off by default**
 
 **What it solves.** Omarchy's menu is a tree you walk: Install, then a
 submenu, then a row. That is fast once you know where a thing lives and slow
@@ -387,15 +387,19 @@ rather than adding a second button, and nixarchy turns any other clone of the
 same menu off before enabling it -- two plugins claiming the menu is a fight
 the first one alphabetically wins, silently.
 
-**It is on by default** (#1052), from the first login that has it. To go back
-to the stock Omarchy menu, turn it off in Setup ▸ Plugins, or stop nixarchy
-installing it:
+**It is installed but off** (#1283): a new machine starts on Omarchy's own
+menu. Switch at any time, with no rebuild, in **Setup ▸ Defaults ▸ Menu**:
+*Nixarchy* turns the palette on, and *Omarchy* turns it off and puts the stock
+menu back in its place. A machine that already had it on keeps it until you
+switch.
+
+To start new machines on the palette, or to stop nixarchy installing it:
 
 ```nix
-programs.nixarchy.defaultPlugins.menu = false;
+programs.nixarchy.menu.default = "nixarchy";    # turned on at first login
+programs.nixarchy.defaultPlugins.menu = false;  # not installed at all
 ```
-
-Either way the stock menu comes back in its place. The search
+ The search
 terms the palette matches come from nixarchy's own menu data (#961), so the
 Ask topics answer to symptoms -- "slow", "hacked", "disk full" -- rather than
 only to their labels.

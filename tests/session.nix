@@ -816,6 +816,41 @@ pkgs.testers.runNixOSTest {
     assert reply == "ok", f"#1070: dismiss answered {reply!r}; omarchy-menu close would fall back to hide, and to voice"
     print("summoning the menu opens one (#1069)")
 
+    # ---- the menu switch: Omarchy's by default, nixarchy-menu one click away (#1283)
+    # The two Setup > Defaults > Menu rows run exactly these commands. Each
+    # direction must leave one menu loaded, and Super+Space's summon must
+    # still draw it.
+    def menus():
+        plugins = json.loads(machine.succeed(on_desktop(
+            "OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json")))
+        on = {p["id"]: p["enabled"] for p in plugins}
+        return on.get("omarchy.menu"), on.get("nixarchy.menu")
+    def summon_draws(why):
+        machine.wait_until_succeeds(on_desktop("omarchy-menu summon install"), timeout=60)
+        for _ in range(30):
+            if "namespace: omarchy-menu" in machine.succeed(on_desktop("hyprctl layers")):
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError(f"#1283: no omarchy-menu layer {why}")
+        machine.succeed(on_desktop("omarchy-menu close"))
+    stock, nix = menus()
+    assert stock and not nix, (
+        f"#1283: a new machine should start on Omarchy's menu with nixarchy-menu "
+        f"installed and off; omarchy.menu={stock} nixarchy.menu={nix}")
+    machine.succeed(on_desktop("omarchy-plugin-enable nixarchy.menu"))
+    stock, nix = menus()
+    assert nix and not stock, (
+        f"#1283: the Nixarchy row left omarchy.menu={stock} nixarchy.menu={nix}")
+    summon_draws("after switching to nixarchy-menu")
+    machine.succeed(on_desktop("omarchy-plugin-disable nixarchy.menu"))
+    stock, nix = menus()
+    assert stock and not nix, (
+        f"#1283: the Omarchy row left omarchy.menu={stock} nixarchy.menu={nix} -- "
+        "disabling the clone must restore the stock menu")
+    summon_draws("after switching back to Omarchy's menu")
+    print("the menu switch goes both ways and always leaves a menu (#1283)")
+
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
     # Not a real switch: this VM is offline and cannot evaluate its flake. A
     # detach at a missing flake still proves the unit, its kept result and its

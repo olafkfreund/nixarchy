@@ -1854,8 +1854,9 @@ in
           serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/rm -f /run/avahi-daemon/pid";
         };
       }
-      # A stale device handle after resume can make fprintd ignore SIGTERM, so
-      # the restart above would wait the default 90s. optionalAttrs, not mkIf:
+      # A stale device handle after resume can make fprintd ignore SIGTERM, and
+      # the restart above then waits out the stop timeout; upstream's 3 s keeps
+      # the reader's return quick whatever the global default. optionalAttrs, not mkIf:
       # mkIf on an attrsOf entry still defines a unit with no ExecStart.
       // lib.optionalAttrs config.services.fprintd.enable {
         fprintd.serviceConfig.TimeoutStopSec = lib.mkDefault "3s";

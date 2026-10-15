@@ -125,3 +125,10 @@ diff against this plan.
 ## Rollback
 
 Revert the merge. WebP backgrounds go black again; nothing else changes.
+
+## Deviations recorded during implementation
+
+- **Step 2: reading the plugin path.** `bin/quickshell` is a compiled makeCWrapper. The check greps the `--prefix QT_PLUGIN_PATH` entries out of it and refuses when it finds none.
+- **Step 2: the error branch.** `Image` has no `errorString`, so that branch prints the status, and Qt logs the decode error itself.
+- **Step 2: environment.** `QT_FORCE_STDERR_LOGGING=1` is needed for `console.log` to reach the build log. `QML_IMPORT_PATH` and `FONTCONFIG_FILE` are set as `tests/bar-keyed-sync.nix` sets them.
+- **Step 2: the red proof** removed `qt6.qtimageformats` from the outer override, leaving the override applied but empty, rather than removing the override. That is the same property: no decoder.

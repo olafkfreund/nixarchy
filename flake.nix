@@ -937,23 +937,30 @@
           # to your own machine, and it would be read months before it is
           # paid. On unstable the branch is not taken and nothing about the
           # package changes.
+          # qtimageformats is the WebP/TIFF decoder; without it a WebP background
+          # renders black ("Unsupported image format", #1284).
           quickshell =
-            # 0.3.2's WlSessionLock::unlock() asks isLocked() after releasing the
-            # lock, so lockStateChanged never fires and the lock screen's `locked`
-            # stays true: every later lock request is a silent no-op. checks.session.
-            if final.quickshell.version == "0.3.2" then
-              final.quickshell.overrideAttrs (old: {
-                patches = (old.patches or [ ]) ++ [ ./pkgs/quickshell/unlock-signal.patch ];
-              })
-            else if lib.versionAtLeast final.quickshell.version "0.3.1" then
-              final.quickshell
-            else
-              final.quickshell.overrideAttrs (_: rec {
-                version = "0.3.1";
-                src = final.fetchzip {
-                  url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v${version}.tar.gz";
-                  hash = "sha256-CLX2Zp5i5BuLbOxNOkwRd9YY84IOrACNxBV79o9/F9Y=";
-                };
+            (
+              # 0.3.2's WlSessionLock::unlock() asks isLocked() after releasing the
+              # lock, so lockStateChanged never fires and the lock screen's `locked`
+              # stays true: every later lock request is a silent no-op. checks.session.
+              if final.quickshell.version == "0.3.2" then
+                final.quickshell.overrideAttrs (old: {
+                  patches = (old.patches or [ ]) ++ [ ./pkgs/quickshell/unlock-signal.patch ];
+                })
+              else if lib.versionAtLeast final.quickshell.version "0.3.1" then
+                final.quickshell
+              else
+                final.quickshell.overrideAttrs (_: rec {
+                  version = "0.3.1";
+                  src = final.fetchzip {
+                    url = "https://git.outfoxxed.me/quickshell/quickshell/archive/refs/tags/v${version}.tar.gz";
+                    hash = "sha256-CLX2Zp5i5BuLbOxNOkwRd9YY84IOrACNxBV79o9/F9Y=";
+                  };
+                })
+            ).overrideAttrs
+              (old: {
+                buildInputs = (old.buildInputs or [ ]) ++ [ final.qt6.qtimageformats ];
               });
           # The screensaver's text-effects engine, packaged in this repo rather
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
@@ -2020,6 +2027,8 @@
             # it can still see them. See tests/review-pins.nix.
             "review-pins"
             "session-journal-race"
+            # A WebP loads through the plugin path the shell is launched with (#1284).
+            "shell-image-formats"
             # data/skill-parity.nix, held to upstream's own SKILL.md. See
             # tests/skill-parity.nix and #643.
             "skill-parity"

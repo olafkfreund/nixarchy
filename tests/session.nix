@@ -813,8 +813,9 @@ pkgs.testers.runNixOSTest {
         time.sleep(1)
     else:
         raise AssertionError("#1069: the menu did not close on Escape, and would sit over every later section")
-    reply = machine.succeed(on_desktop("omarchy-shell shell call omarchy.menu dismiss '{}'")).strip()
-    assert reply == "ok", f"#1070: dismiss answered {reply!r}; omarchy-menu close would fall back to hide, and to voice"
+    # dismiss is nixarchy-menu's own close (#1070); the stock menu, the default
+    # since #1283, has none and omarchy-menu close falls back to hide. It is
+    # asserted in the #1283 probe below, while nixarchy-menu is the one on.
     print("summoning the menu opens one (#1069)")
 
     # ---- the menu switch: Omarchy's by default, nixarchy-menu one click away (#1283)
@@ -864,6 +865,10 @@ pkgs.testers.runNixOSTest {
         f"#1283: the Nixarchy row left no restore marker ({marked!r}); removing "
         "nixarchy-menu later would leave no menu")
     summon_draws("after switching to nixarchy-menu")
+    # #1070: nixarchy-menu's own close, so a scripted close never starts voice.
+    machine.succeed(on_desktop("omarchy-menu summon install"))
+    reply = machine.succeed(on_desktop("omarchy-shell shell call omarchy.menu dismiss '{}'")).strip()
+    assert reply == "ok", f"#1070: dismiss answered {reply!r} with nixarchy-menu on; omarchy-menu close would fall back to hide, and to voice"
     click("setup.default.menu.omarchy")
     stock, nix = menus()
     assert stock and not nix, (

@@ -250,6 +250,7 @@ pkgs.runCommand "nixarchy-installer-from-repo"
             /dev/disk/by-id/fake-a) printf '%s\n' "$DISK" ;;
             /dev/disk/by-partlabel/fake-a) printf '%s\n' /dev/vdb1 ;;
             /dev/disk/by-partlabel/fake-b) printf '%s\n' /dev/vdb2 ;;
+            /dev/disk/by-partlabel/no-dir) return 1 ;;
             *) printf '%s\n' "$2" ;;
           esac
         }
@@ -288,6 +289,12 @@ pkgs.runCommand "nixarchy-installer-from-repo"
       failed "the erase warning did not name the parent disk"
     DEVS=/dev/disk/by-partlabel/fake-a \
       ANSWERS=/a GUM_RC=0 DISK=/dev/vdb BOOT=/dev/vdb crd partition-on-boot-medium refuse
+    # readlink -f fails when /dev/disk/by-partlabel itself is absent; that must
+    # refuse with its sentence, not exit after a bare "will ERASE:" header.
+    DEVS=/dev/disk/by-partlabel/no-dir \
+      ANSWERS=/a GUM_RC=0 DISK=/dev/vdb BOOT=/dev/sdz crd partlabel-dir-missing refuse
+    grep -q 'not a disk on this machine' crd-partlabel-dir-missing.out ||
+      failed "an unresolvable partlabel refused without saying why: $(cat crd-partlabel-dir-missing.out)"
     fc=$(grep -n '^    finish_clone$' main.sh | cut -d: -f1 | head -1 || true)
     cr=$(grep -n '^  confirm_repo_disks || exit 1$' main.sh | cut -d: -f1 | head -1 || true)
     pb=$(grep -n '^  preflight_build || exit 1$' main.sh | cut -d: -f1 | head -1 || true)

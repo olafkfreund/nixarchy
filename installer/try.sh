@@ -442,8 +442,10 @@ main() {
     say "  (evaluating -- takes a minute or two the first time) ..."
     local dry plan
     dry=$(mktemp)
-    # Removed by hand, not by an EXIT trap: the success path execs qemu, and
-    # an exec'd shell never runs its EXIT trap (#1274).
+    # The trap covers an interrupt during the dry-run; the explicit rm below
+    # covers the success path, which execs qemu, and an exec'd shell never
+    # runs its EXIT trap (#1274).
+    trap 'rm -f "$dry"' EXIT
     if ! nix build --dry-run \
       --extra-experimental-features 'nix-command flakes' \
       "$ref#$attr" >"$dry" 2>&1; then

@@ -1265,11 +1265,13 @@ resolve_answers() {
 # re-hash it with that hash's own salt and rounds, since two salted hashes of
 # one secret never compare equal (#1274). The plaintext reaches mkpasswd on
 # stdin, never its argv (#1079).
+# A $6$ salt mkpasswd will not take (it wants 8 to 16 bytes) is refused here,
+# naming the key in $3: answering "no match" would let the reuse through.
 # shortcut: only $6$ is re-derived; any other format answers "no match" and
 # keeps validate_answers' plain equality check. Add a verifier if the
 # installer starts producing one.
 sha512_matches() {
-  local plain=$1 hash=$2 salt rounds="" opts
+  local plain=$1 hash=$2 salt rounds="" opts out
   case $hash in '$6$'*) ;; *) return 1 ;; esac
   salt=${hash#\$6\$}
   if [[ $salt = rounds=* ]]; then
@@ -1280,7 +1282,11 @@ sha512_matches() {
   salt=${salt%%\$*}
   opts=(-m sha-512 -S "$salt")
   [ -z "$rounds" ] || opts+=(-R "$rounds")
-  [ "$(printf '%s' "$plain" | mkpasswd "${opts[@]}" -s)" = "$hash" ]
+  out=$(printf '%s' "$plain" | mkpasswd "${opts[@]}" -s 2>/dev/null) || {
+    echo "nixarchy-install: answers: $3: its salt is not 8 to 16 characters, so reuse cannot be checked -- make it with mkpasswd -m sha-512" >&2
+    exit 2
+  }
+  [ "$out" = "$hash" ]
 }
 
 read_answers() {
@@ -1364,7 +1370,7 @@ read_answers() {
       echo "nixarchy-install: answers: recovery_passphrase: must differ from password -- it is stored unencrypted on the ESP" >&2
       exit 2
     fi
-    if sha512_matches "$recovery_passphrase" "$password_hash"; then
+    if sha512_matches "$recovery_passphrase" "$password_hash" password_hash; then
       echo "nixarchy-install: answers: recovery_passphrase: must differ from password_hash -- it is stored unencrypted on the ESP" >&2
       exit 2
     fi
@@ -1372,7 +1378,7 @@ read_answers() {
     unset recovery_passphrase
   fi
   if [ -n "$password" ]; then
-    if sha512_matches "$password" "$recovery_hash"; then
+    if sha512_matches "$password" "$recovery_hash" recovery_hash; then
       echo "nixarchy-install: answers: recovery_hash: must differ from password -- it is stored unencrypted on the ESP" >&2
       exit 2
     fi
@@ -1643,14 +1649,22 @@ confirm_repo_disks() {
   echo "$from_repo's $hostname will ERASE:"
   disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   while IFS= read -r dev; do
-    real=$(readlink -f "$dev") || return 1
+    # readlink -f fails outright when the link's directory is absent, as
+    # /dev/disk/by-partlabel is on a machine with no labelled partition.
+    real=$(readlink -f "$dev") || {
+      echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
+      return 1
+    }
     if [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" = part ]; then
       parent=$(lsblk -no PKNAME "$real" 2>/dev/null) && [ -n "$parent" ] || {
         echo "nixarchy-install: $dev has no parent disk on this machine. Nothing was written." >&2
         return 1
       }
       dev="/dev/$parent"
-      real=$(readlink -f "$dev") || return 1
+      real=$(readlink -f "$dev") || {
+        echo "nixarchy-install: $dev is not a disk on this machine. Nothing was written." >&2
+        return 1
+      }
     fi
     seen=false
     for prior in "${disk_reals[@]}"; do

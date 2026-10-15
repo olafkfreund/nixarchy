@@ -100,6 +100,16 @@ pkgs.runCommand "nixarchy-installer-answers"
     else
       failed "rounds hash refused for the wrong reason: $(cat a7.out)"
     fi
+    # A valid $6$ whose salt mkpasswd will not take must refuse, not read as
+    # "no match" and let a reused passphrase through (#1274 review).
+    printf '%s\n' 'password_hash=$6$abc$x' 'recovery_passphrase=same' > a8
+    if ( . ./ra.sh; read_answers a8 ) > a8.out 2>&1; then
+      failed "a short-salt password_hash skipped the reuse check"
+    elif grep -q 'cannot be checked' a8.out; then
+      ok "a salt mkpasswd cannot re-derive is refused, not passed"
+    else
+      failed "short salt refused for the wrong reason: $(cat a8.out)"
+    fi
 
     (
       . ./va.sh

@@ -198,3 +198,29 @@ seen red with its fix reverted. CI runs `options`, `install`, `free-space`,
 Revert the PR's squash commit. Nothing is deployed and no state format
 changes. The bus cursor table is unchanged, since `start` and `end` are both
 ordinary pagination tokens.
+
+## Deviations recorded at review (step 7)
+
+A fresh Opus review of the diff against this plan found no blocking defect
+and three small ones, all fixed here with a case each, seen red first:
+
+- **`confirm_repo_disks`** (step 3): `readlink -f` fails outright when
+  `/dev/disk/by-partlabel` does not exist, and step 3's `|| return 1` exited
+  after a bare "will ERASE:" header. It now says "not a disk on this
+  machine", as it did before step 3.
+- **`sha512_matches`** (step 1): mkpasswd refuses a `$6$` salt outside 8–16
+  bytes (measured), which read as "no match" and let a reused passphrase
+  through. Such a hash is now refused with the key named.
+- **`try.sh`** (step 6): the EXIT trap is back *beside* the explicit `rm`,
+  reversing "no trap": the trap covers a Ctrl-C during the dry-run, and the
+  `rm` covers the exec path.
+
+Also outside the steps as written:
+
+- `tests/options.nix` gained two cases step 4 named under Verification but
+  agy did not add: an unset `fleet.url` reaching the assertion, and a linked
+  worktree run through the real auto-update script.
+- `tests/installer-from-repo.nix:184` and `tests/installer-store-space.nix:449`
+  located `format_disk` by its exact indentation, which step 2 deepened.
+  They were retargeted to any indentation. The property they guard (the
+  preflight and the clone happen before the format) is unchanged.

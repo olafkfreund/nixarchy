@@ -4,13 +4,15 @@ title: Stable or unstable
 
 # Stable or unstable
 
-This page is about which **nixpkgs** your machine uses. Which **nixarchy** it
-runs is a separate question: every installed machine follows nixarchy's
-`release` branch, which moves only when a release is cut. See
-[Releases](https://github.com/olafkfreund/nixarchy#releases).
+A machine makes two separate choices here, and this page covers both:
 
-Omarchy lets you pick a release channel. So does nixarchy — **Update ▸ Channel**
-in the menu, or:
+- **which nixpkgs** it builds on, stable or unstable. That is _Update ▸ Nixpkgs_,
+  and most of this page;
+- **which Omarchy** it runs: stable, edge or your own checkout. That is
+  _Update ▸ Channel_; see [Omarchy: stable, edge or your own
+  checkout](#omarchy-stable-edge-or-your-own-checkout).
+
+Any pairing works, and switching one never moves the other. For nixpkgs:
 
 ```
 nixarchy channel              # which one this machine follows
@@ -95,13 +97,48 @@ already using, and prints the two lines you need to add to your own `flake.nix`
 evaluated with, so `services.foo.enable` cannot be taken from the other
 channel. Only packages cross.
 
+## Omarchy: stable, edge or your own checkout
+
+```
+nixarchy channel omarchy              # which one this machine runs
+nixarchy channel omarchy stable       # the release Omarchy, the default
+nixarchy channel omarchy edge         # Omarchy's quattro branch, tested here first
+nixarchy channel omarchy dev ~/omarchy  # your own Omarchy checkout
+```
+
+**Stable** is what every machine starts on: Omarchy's latest release, behind
+nixarchy's `release` branch.
+
+**Edge** is Omarchy's development branch, `quattro`. It is the next release
+before it is one. Your flake follows nixarchy's `edge` branch instead of
+`release`. That branch moves at most once a day, and **only after the
+desktop boots and its checks pass** with that day's `quattro`. So edge can
+stand still for a while, but it does not move to something broken.
+`nixarchy version` shows the date it was cut. Features edge carries without a
+NixOS port yet are listed in
+[#1280](https://github.com/olafkfreund/nixarchy/issues/1280).
+
+**Dev** builds Omarchy from your own git checkout, for working on Omarchy
+itself. nixarchy's NixOS patches are applied to it, so a change of yours that
+moves something nixarchy patches fails the rebuild and says where. Two
+things to know:
+
+- **Commit, then update.** The checkout is locked by commit, so uncommitted
+  edits are not built. After a commit, `omarchy update --nixarchy` picks it up.
+- Dev uses the **edge** branch's patch set, the one closest to Omarchy's
+  development branch.
+
+To go back, run `nixarchy channel omarchy stable`. The previous `flake.nix` is
+kept as `flake.nix.pre-channel`, and the previous generation is still in the
+boot menu.
+
 ## Checking where you are
 
 ```
 nixarchy doctor
 ```
 
-reports which channel the machine follows, says plainly that nixarchy is tested
+reports which nixpkgs channel and which Omarchy channel the machine follows, says plainly that nixarchy is tested
 against unstable if you are on stable, and counts any packages you have taken
 from the other channel — because a duplicated closure is invisible until a disk
 fills.

@@ -941,8 +941,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    i18n.extraLocales = lib.mkIf (cfg.language != null) [ "${registry.${cfg.language}.locale}/UTF-8" ];
-
     assertions = [
       {
         # removeAttrs ignores a name that is not there, so a typo would leave
@@ -2204,10 +2202,15 @@ in
       liberation_ttf
     ]);
 
-    # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
-    i18n.inputMethod = {
-      enable = lib.mkOverride 1250 true;
-      type = lib.mkOverride 1250 "fcitx5";
+    i18n = {
+      # programs.nixarchy.language (#1289): the one locale Setup > Language needs.
+      extraLocales = lib.mkIf (cfg.language != null) [ "${registry.${cfg.language}.locale}/UTF-8" ];
+
+      # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
+      inputMethod = {
+        enable = lib.mkOverride 1250 true;
+        type = lib.mkOverride 1250 "fcitx5";
+      };
     };
 
     # Why: modules/AGENTS.md#fcitx5-says-this-itself-in-a-notification-on-every

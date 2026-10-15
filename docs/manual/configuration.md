@@ -342,6 +342,39 @@ devices.
 `browserThemeUser` is deliberately *not* defaulted from it: naming the desktop
 user should not silently hand them the browsers' policy directories.
 
+## Language
+
+```nix
+programs.nixarchy.language = "da";
+```
+
+Omarchy releases newer than v4.0.4 have **Setup ▸ Language**, which switches
+the interface and the session's `LANG` together. On Arch it builds a missing
+locale on the spot. NixOS cannot: the locales a machine has are fixed when
+the system is built.
+
+So the first time you pick a language whose locale is not built yet,
+nixarchy records the choice instead. Then:
+
+1. Apply it with `nixarchy-apply`, or **Install ▸ Apply changes**.
+2. Pick the language again. This time it switches at once.
+
+Picking a language you have already applied needs no rebuild.
+
+The choice is one line in `~/.config/nixarchy/services.nix`, and
+`nixarchy-language-select` is the command that writes it:
+
+```sh
+nixarchy-language-select da     # record Danish
+nixarchy-language-select null   # back to the default set of locales
+```
+
+On your own flake, set the option directly, as above. It accepts the codes
+in Omarchy's own language list. On v4.0.4, which has no list, only `null` is
+accepted. It adds one locale through `i18n.extraLocales`, next to any you add
+yourself, and leaves `i18n.defaultLocale` alone: `LANG` stays a per-user
+setting, as it is upstream.
+
 ## The boot splash and the login screen
 
 Two different screens, with two very different answers.

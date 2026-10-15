@@ -335,6 +335,25 @@ pkgs.runCommand "nixarchy-channel"
     if [ "$r" = custom ]; then echo "  ok      a reshaped flake reads as custom for nixpkgs"
     else echo "  FAILED  reshaped nixpkgs read '$r'"; fails=$((fails + 1)); fi
 
+    # Upstream's own commands hand over to nixarchy-channel (they read pacman,
+    # which is not here). They find it on PATH, as they find every other
+    # omarchy-* command, and are held to producing the same file.
+    bindir=${omarchy}/share/omarchy/bin
+    r=$(PATH=$bindir:$PATH NIXARCHY_FLAKE=$PWD/plain "$bindir/omarchy-channel-current" 2>&1 || true)
+    if [ "$r" = stable ]; then echo "  ok      omarchy-channel-current prints stable on the fixture"
+    else echo "  FAILED  omarchy-channel-current printed '$r', wanted stable"; fails=$((fails + 1)); fi
+    mk via-upstream
+    mk via-nixarchy
+    echo y | PATH=$bindir:$PATH NIXARCHY_FLAKE=$PWD/via-upstream "$bindir/omarchy-channel-set" edge >/dev/null 2>&1 || true
+    echo y | NIXARCHY_FLAKE=$PWD/via-nixarchy $ch omarchy edge >/dev/null 2>&1 || true
+    if ! cmp -s via-nixarchy/flake.nix walk-original.nix && cmp -s via-upstream/flake.nix via-nixarchy/flake.nix; then
+      echo "  ok      omarchy-channel-set edge writes what nixarchy-channel omarchy edge writes"
+    else
+      echo "  FAILED  omarchy-channel-set edge differs from nixarchy-channel omarchy edge (or neither wrote)"
+      diff via-nixarchy/flake.nix via-upstream/flake.nix | sed 's/^/          | /'
+      fails=$((fails + 1))
+    fi
+
     # A floor. Every assertion above fails identically if the command printed
     # nothing at all, which reads as every rule being wrong rather than as the
     # binary being missing.

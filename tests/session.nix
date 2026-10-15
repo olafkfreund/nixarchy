@@ -1742,7 +1742,6 @@ pkgs.testers.runNixOSTest {
                "omarchy-refresh-plymouth", "omarchy-refresh-sddm",
                "omarchy-provision-owner", "omarchy-provision-user",
                "omarchy-apply-hardware", "omarchy-apply-system",
-               "omarchy-channel-set", "omarchy-channel-current",
                "omarchy-dns", "omarchy-hibernation-setup",
                "omarchy-toggle-hybrid-gpu",
                # Tries /usr/bin/omarchy-windows-vm as the first candidate for a

@@ -220,6 +220,14 @@ let
   # add, and a nixarchy alias for a one-line toggle would only be a second
   # vocabulary to unlearn the moment they read anyone else's configuration.
   serviceCatalogue = import ../data/services.nix;
+
+  # Omarchy's language registry (#1289); `{}` on v4.0.4, which has none.
+  languageRegistry = pkgs.writeText "nixarchy-languages.json" (
+    let
+      f = "${inputs.omarchy}/default/i18n/locales.json";
+    in
+    if builtins.pathExists f then builtins.readFile f else "{}"
+  );
   flatpakCatalogue = import ../data/flatpaks.nix;
 
   # Why: modules/AGENTS.md#flatpaks-go-in-services-nix-rather-than-a-fourth-f
@@ -1486,6 +1494,65 @@ in
                   fi
                   echo "enabled $id in $file ($queued queued)"
                   echo "run 'nixarchy-apply' when you have picked everything you want"
+                '';
+              })
+
+              (pkgs.writeShellApplication {
+                name = "nixarchy-language-select";
+                runtimeInputs = [
+                  pkgs.gawk
+                  pkgs.gnugrep
+                  pkgs.coreutils
+                  pkgs.jq
+                ];
+                text = ''
+                  file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+                  # Test seam: the baked registry is empty on Omarchy v4.0.4.
+                  registry="''${NIXARCHY_LANGUAGE_REGISTRY:-${languageRegistry}}"
+                  code="''${1:?usage: nixarchy-language-select <code|null>}"
+
+                  case "$code" in
+                    *[!A-Za-z0-9_-]* | "")
+                      echo "nixarchy: '$code' is not a language code" >&2
+                      exit 2
+                      ;;
+                  esac
+
+                  if [ "$code" != null ] && ! jq -e --arg c "$code" 'has($c)' "$registry" >/dev/null; then
+                    echo "nixarchy: unknown language '$code'; known codes:" >&2
+                    jq -r 'keys | join(" ")' "$registry" >&2
+                    exit 2
+                  fi
+
+                  [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+                  # A commented-out line does not count as live.
+                  live='^[[:space:]]*[^#[:space:]].*#@ language([[:space:]]|$)'
+                  if [ "$code" = null ]; then
+                    clear=1
+                  else
+                    clear=0
+                  fi
+                  if [ "$clear" = 0 ] && ! grep -qE "$live" "$file" && ! grep -qE '^\{[[:space:]]*$' "$file"; then
+                    echo "nixarchy: $file has no opening '{' line to add the language under" >&2
+                    exit 1
+                  fi
+
+                  tmp=$(mktemp "$file.XXXXXX")
+                  awk -v live="$live" -v clear="$clear" -v new="  programs.nixarchy.language = \"$code\";  #@ language" '
+                    $0 ~ live { if (!clear && !done) print new; done = 1; next }
+                    { print }
+                    !clear && !done && /^\{[[:space:]]*$/ { print new; done = 1 }
+                  ' "$file" >"$tmp"
+                  chmod --reference="$file" "$tmp"
+                  mv "$tmp" "$file"
+
+                  if [ "$clear" = 1 ]; then
+                    echo "cleared the language in $file"
+                  else
+                    echo "set the language to $code in $file"
+                  fi
+                  echo "run 'nixarchy-apply' to build it, then pick the language again in Setup > Language"
                 '';
               })
 

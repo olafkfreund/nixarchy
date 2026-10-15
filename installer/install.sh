@@ -2240,10 +2240,10 @@ write_hostname() {
 
 write_password_hash() {
   ( umask 077
-    mkdir -p /mnt/var/lib/nixarchy
-    printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash )
-  chmod 0600 /mnt/var/lib/nixarchy/password.hash
-  chown 0:0 /mnt/var/lib/nixarchy/password.hash
+    mkdir -p /mnt/var/lib/nixarchy || return 1
+    printf '%s\n' "$password_hash" >/mnt/var/lib/nixarchy/password.hash || return 1 ) || return 1
+  chmod 0600 /mnt/var/lib/nixarchy/password.hash || return 1
+  chown 0:0 /mnt/var/lib/nixarchy/password.hash || return 1
 
   # The recovery passphrase, as a whole shadow line, because that is what
   # boot.initrd.secrets appends over the initrd's /etc/shadow.
@@ -2256,9 +2256,9 @@ write_password_hash() {
   # supportsInitrdSecrets, so the value is never copied into the store either.
   if [ -n "$recovery_hash" ]; then
     ( umask 077
-      printf 'root:%s:::::::\n' "$recovery_hash" >/mnt/var/lib/nixarchy/initrd-shadow )
-    chmod 0600 /mnt/var/lib/nixarchy/initrd-shadow
-    chown 0:0 /mnt/var/lib/nixarchy/initrd-shadow
+      printf 'root:%s:::::::\n' "$recovery_hash" >/mnt/var/lib/nixarchy/initrd-shadow || return 1 ) || return 1
+    chmod 0600 /mnt/var/lib/nixarchy/initrd-shadow || return 1
+    chown 0:0 /mnt/var/lib/nixarchy/initrd-shadow || return 1
   fi
 }
 
@@ -3265,6 +3265,7 @@ main() {
 # Uses main's locals (log, target_log, started, rc, elapsed).
 install_attempts() {
   local choice_rc
+  local installed=false
   while :; do
     rc=0
     target_log=""
@@ -3331,13 +3332,15 @@ install_once() {
   # Chaining stops at the first failure and hands its status out, which is what
   # `|| rc=$?` was always meant to receive.
   {
-    format_disk &&
-      verify_subvolume_mounts &&
-      generate_hardware_config &&
-      install_flake_dir &&
-      write_password_hash &&
-      write_hostname &&
-      run_install &&
+    if [ "$installed" = false ]; then
+      format_disk &&
+        verify_subvolume_mounts &&
+        generate_hardware_config &&
+        install_flake_dir &&
+        write_password_hash &&
+        write_hostname &&
+        run_install && installed=true
+    fi &&
       chown_flake_dir &&
       carry_network_profiles &&
       take_factory_snapshot

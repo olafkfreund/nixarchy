@@ -19,6 +19,11 @@ Claude reviews each diff, runs its check and commits.
 - Retry: an in-memory `installed=true` is set when `run_install` returns 0.
   When it is set, a retry runs only `chown_flake_dir && carry_network_profiles
   && take_factory_snapshot`. Each must survive a second run.
+  *Found in step 2:* none needed a change. `carry_network_profiles` and
+  `take_factory_snapshot` always return 0, so only `chown_flake_dir`, an
+  idempotent chown, can send a person to the retry, and it fails before the
+  snapshot exists. The check's stub fails `chown_flake_dir` once for that
+  reason.
 - Recovery reuse: compare plaintext in `read_answers` before hashing. For a
   mixed plaintext and `$6$` hash, re-hash with the hash's salt via
   `mkpasswd -m sha-512 -S <salt> -s` (stdin, never argv). Other formats get a

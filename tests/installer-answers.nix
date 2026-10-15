@@ -147,6 +147,51 @@ pkgs.runCommand "nixarchy-installer-answers"
     grep -q 'nmcli --ask device wifi connect "$ssid"' cw.sh || failed "connect_wifi no longer pipes the password to nmcli --ask"
     if grep -q 'password "$pw"' cw.sh; then failed "connect_wifi puts the Wi-Fi password on nmcli's command line"; fi
 
+    sed -n '/^install_attempts()/,/^}/p' ${installScript} > ia.sh
+    sed -n '/^install_once()/,/^}/p' ${installScript} | sed 's@/run/nixarchy-install@./state@g' > io.sh
+    sed -n '/^write_password_hash()/,/^}/p' ${installScript} | sed 's@/mnt/var/lib/nixarchy@./hash-target@g' > ph.sh
+    grep -q '^install_attempts()' ia.sh || failed "install_attempts is missing"
+    grep -q '^install_once()' io.sh || failed "install_once is missing"
+    grep -q '^write_password_hash()' ph.sh || failed "write_password_hash is missing"
+
+    if (
+      . ./ia.sh
+      . ./io.sh
+      log=install.log; : > "$log"
+      ui_dashboard_start() { :; }
+      ui_dashboard_stop() { :; }
+      ui_failed() { return 3; }
+      sleep() { :; }
+      format_disk() { echo format >> phases; }
+      run_install() { echo install >> phases; }
+      # chown_flake_dir is the post-install phase that can fail: the other two
+      # always return 0. It fails once, as a person retrying would see it.
+      chown_flake_dir() { echo chown >> phases; [ "$(grep -c '^chown$' phases)" -eq 2 ]; }
+      carry_network_profiles() { echo profiles >> phases; }
+      take_factory_snapshot() { echo snapshot >> phases; }
+      for phase in verify_subvolume_mounts generate_hardware_config install_flake_dir write_password_hash write_hostname; do
+        eval "$phase() { :; }"
+      done
+      install_attempts
+    ) > retry.out 2>&1; then retry_rc=0; else retry_rc=$?; fi
+    if [ "$retry_rc" -eq 0 ] && [ "$(grep -c '^format$' phases)" -eq 1 ] &&
+      [ "$(grep -c '^install$' phases)" -eq 1 ] && [ "$(grep -c '^chown$' phases)" -eq 2 ] &&
+      [ "$(grep -c '^snapshot$' phases)" -eq 1 ]; then
+      ok "a retry after a successful install repeats only the post-install phases"
+    else
+      failed "a retry after a successful install reran: $(tr '\n' ' ' < phases) $(cat retry.out)"
+    fi
+
+    if (
+      . ./ph.sh
+      mkdir -p hash-target/password.hash
+      chmod() { :; }
+      chown() { :; }
+      password_hash='$6$test$hash' recovery_hash=
+      write_password_hash
+    ) > hash-write.out 2>&1; then failed "an unwritable password hash target reported success"
+    else ok "an unwritable password hash target fails with no recovery hash"; fi
+
     [ "$fails" = 0 ] || { echo "$fails case(s) failed (#1079)" >&2; exit 1; }
     touch $out
   ''

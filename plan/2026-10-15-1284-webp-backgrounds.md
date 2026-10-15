@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1284
 spec: spec/2026-10-15-1284-webp-backgrounds.md
 ---

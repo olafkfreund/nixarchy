@@ -1261,8 +1261,30 @@ resolve_answers() {
   # session, including inside the shell the failure screen offers.
 }
 
+# Whether a plaintext secret is the one a SHA-512 crypt hash was made from:
+# re-hash it with that hash's own salt and rounds, since two salted hashes of
+# one secret never compare equal (#1274). The plaintext reaches mkpasswd on
+# stdin, never its argv (#1079).
+# shortcut: only $6$ is re-derived; any other format answers "no match" and
+# keeps validate_answers' plain equality check. Add a verifier if the
+# installer starts producing one.
+sha512_matches() {
+  local plain=$1 hash=$2 salt rounds="" opts
+  case $hash in '$6$'*) ;; *) return 1 ;; esac
+  salt=${hash#\$6\$}
+  if [[ $salt = rounds=* ]]; then
+    rounds=${salt%%\$*}
+    rounds=${rounds#rounds=}
+    salt=${salt#*\$}
+  fi
+  salt=${salt%%\$*}
+  opts=(-m sha-512 -S "$salt")
+  [ -z "$rounds" ] || opts+=(-R "$rounds")
+  [ "$(printf '%s' "$plain" | mkpasswd "${opts[@]}" -s)" = "$hash" ]
+}
+
 read_answers() {
-  local file=$1 line key value lineno=0 password=""
+  local file=$1 line key value lineno=0 password="" recovery_passphrase=""
   [ -r "$file" ] || {
     echo "nixarchy-install: answers: cannot read $file" >&2
     exit 2
@@ -1316,7 +1338,7 @@ read_answers() {
       password_hash) password_hash=$value ;;
       build_store) build_store_choice=$value ;;
       recovery_hash) recovery_hash=$value ;;
-      recovery_passphrase) recovery_hash=$(printf '%s' "$value" | mkpasswd -m sha-512 -s) ;;
+      recovery_passphrase) recovery_passphrase=$value ;;
       timezone) timezone=$value ;;
       keymap) keymap=$value ;;
       *)
@@ -1333,9 +1355,25 @@ read_answers() {
   esac
 
   # Hashing here rather than in validation keeps the plaintext's life short.
+  if [ -n "$password" ] && [ -n "$password_hash" ]; then
+    echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
+    exit 2
+  fi
+  if [ -n "$recovery_passphrase" ]; then
+    if [ -n "$password" ] && [ "$password" = "$recovery_passphrase" ]; then
+      echo "nixarchy-install: answers: recovery_passphrase: must differ from password -- it is stored unencrypted on the ESP" >&2
+      exit 2
+    fi
+    if sha512_matches "$recovery_passphrase" "$password_hash"; then
+      echo "nixarchy-install: answers: recovery_passphrase: must differ from password_hash -- it is stored unencrypted on the ESP" >&2
+      exit 2
+    fi
+    recovery_hash=$(printf '%s' "$recovery_passphrase" | mkpasswd -m sha-512 -s)
+    unset recovery_passphrase
+  fi
   if [ -n "$password" ]; then
-    if [ -n "$password_hash" ]; then
-      echo "nixarchy-install: answers: password: give password or password_hash, not both" >&2
+    if sha512_matches "$password" "$recovery_hash"; then
+      echo "nixarchy-install: answers: recovery_hash: must differ from password -- it is stored unencrypted on the ESP" >&2
       exit 2
     fi
     password_hash=$(printf '%s' "$password" | mkpasswd -m sha-512 -s)
@@ -1359,6 +1397,10 @@ validate_answers() {
     # rather than silently dropped.
     [ "$disk_mode" = whole ] ||
       problems+=("disk_mode: --host names a machine the repository already describes; it decides the disk")
+    case $password_hash in
+      "" | '$'*) ;;
+      *) problems+=("password_hash: not a crypt(3) hash (should start with \$)") ;;
+    esac
     if [ ${#problems[@]} -gt 0 ]; then
       printf 'nixarchy-install: answers: %s\n' "${problems[@]}" >&2
       exit 2
@@ -1366,7 +1408,7 @@ validate_answers() {
     return 0
   fi
 
-  local problems=() why
+  local problems=() why boot
 
   # Collected rather than reported one at a time: a test author should not have
   # to fix the same file eight times to learn what it is missing.
@@ -1384,10 +1426,16 @@ validate_answers() {
     elif [ "$(lsblk -dno TYPE "$device" 2>/dev/null)" != "disk" ]; then
       # A partition here would be formatted as though it were the whole disk.
       problems+=("device: $device is not a whole disk")
-    elif disk_under_floor "$device"; then
-      # The interactive menu never offers such a disk; unattended must not
-      # install onto one either (#708).
-      problems+=("device: $device is under ${MIN_DISK_GIB} GiB")
+    else
+      boot=$(boot_medium)
+      if [ -n "$boot" ] && [ "$(readlink -f "$device")" = "$(readlink -f "$boot")" ]; then
+        problems+=("device: $device is the medium this installer booted from")
+      fi
+      if disk_under_floor "$device"; then
+        # The interactive menu never offers such a disk; unattended must not
+        # install onto one either (#708).
+        problems+=("device: $device is under ${MIN_DISK_GIB} GiB")
+      fi
     fi
   fi
 

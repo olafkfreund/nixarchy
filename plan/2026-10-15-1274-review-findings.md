@@ -23,6 +23,9 @@ Claude reviews each diff, runs its check and commits.
   mixed plaintext and `$6$` hash, re-hash with the hash's salt via
   `mkpasswd -m sha-512 -S <salt> -s` (stdin, never argv). Other formats get a
   `shortcut:` comment and keep the equality test.
+  *Deviation (step 1):* `$6$rounds=N$` is re-derived too (`-R N`), since the
+  repo's own hashes use it, and both directions share one top-level helper,
+  `sha512_matches`. The check extracts it beside `read_answers`.
 - `write_password_hash`: every write, chmod and chown `|| return 1`.
 - `--from` free-space: a `part` maps to its parent through
   `lsblk -no PKNAME`. Deduplicate, then boot-medium test and `remember_disk`

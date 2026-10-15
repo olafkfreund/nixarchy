@@ -299,6 +299,26 @@ pkgs.runCommand "nixarchy-menu-verbs"
       exit 1
     }
 
+    # The Default Menu switch (#1283): each row runs the verb that puts its own
+    # menu in charge, and says which one is on. Swapped actions would make a
+    # row turn on the menu it is not labelled with.
+    rows=$(grep -v '^[[:space:]]*//' ${menu})
+    row() { jq -r --arg id "$1" --arg k "$2" '.[$id][$k] // ""' <<<"$rows"; }
+    test "$(row setup.default.menu.omarchy action)" = "omarchy-plugin-disable nixarchy.menu" || {
+      echo "ERROR: setup.default.menu.omarchy does not run omarchy-plugin-disable nixarchy.menu" >&2
+      fail=1
+    }
+    test "$(row setup.default.menu.nixarchy action)" = "omarchy-plugin-enable nixarchy.menu" || {
+      echo "ERROR: setup.default.menu.nixarchy does not run omarchy-plugin-enable nixarchy.menu" >&2
+      fail=1
+    }
+    for id in setup.default.menu.omarchy setup.default.menu.nixarchy; do
+      test -n "$(row "$id" checked)" || {
+        echo "ERROR: $id has no checked" >&2
+        fail=1
+      }
+    done
+
     test "$fail" -eq 0
     echo "every menu row names a subcommand its CLI has"
     touch $out

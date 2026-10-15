@@ -42,6 +42,21 @@ let
       })
     ]
   );
+  # A solid yellow WebP for the #1284 probe: a background the shell can
+  # only draw with Qt's WebP decoder, in a colour avg() cannot mistake.
+  webpBackground =
+    pkgs.runCommand "webp-background"
+      {
+        nativeBuildInputs = [
+          pkgs.libwebp
+          pkgs.imagemagick
+        ];
+      }
+      ''
+        mkdir -p $out
+        magick -size 1920x1080 xc:'#FFFF00' bg.png
+        cwebp -quiet bg.png -o $out/yellow.webp
+      '';
   # #1153: a tiny synthetic video background. A flat colour alternating red
   # then blue, not testsrc -- testsrc's bars barely move the whole-screen
   # average frame to frame, so the probe below could not tell a decoded
@@ -2474,6 +2489,36 @@ pkgs.testers.runNixOSTest {
         f"owe did not hand the still back after the lock test: {status}, {background}")
     machine.sleep(3)  # the shell's own debounced save of shell.json
     print("owe: restored the original still, and the shell has it back")
+
+    # ---- a WebP background draws (#1284) -----------------------------------
+    # nixpkgs' quickshell carries no qtimageformats. Without it the shell keeps
+    # the PREVIOUS background (the reveal waits for a decode that never comes),
+    # or black at boot, with only "Unsupported image format" in the shell log.
+    # Every other background in this check is a JPEG, so nothing else decodes
+    # one. A still goes to the shell (owe hands stills back), so this is the
+    # shell's own decoder on screen.
+    machine.screenshot("webp-before")
+    before = avg(os.path.join(os.environ["out"], "webp-before.png"))
+    aim("omarchy-theme-bg-set ${webpBackground}/yellow.webp")
+    # Yellow is >400 from every lumon still and 510 from black, so neither the
+    # previous wallpaper nor a black screen can pass for it.
+    want = (0xFF, 0xFF, 0x00)
+    delta = None
+    for attempt in range(12):
+        machine.sleep(5)
+        machine.screenshot("webp-background")
+        s_r, s_g, s_b = avg(os.path.join(os.environ["out"], "webp-background.png"))
+        delta = abs(s_r - want[0]) + abs(s_g - want[1]) + abs(s_b - want[2])
+        print(f"webp attempt {attempt}: screen #{s_r:02X}{s_g:02X}{s_b:02X} delta {delta}")
+        if delta < 120:
+            break
+    moved = sum(abs(a - b) for a, b in zip((s_r, s_g, s_b), before))
+    assert delta is not None and delta < 120 and moved > 120, (
+        f"#1284: a WebP background never drew (moved {moved} from the previous screen) (delta {delta} after 60s); check the "
+        "shell log for 'Unsupported image format' -- the shell's Qt has no WebP decoder")
+    aim(f"omarchy-theme-bg-set {original_background}")
+    machine.sleep(3)
+    print("a WebP background draws (#1284)")
 
     # ---- writing shell.json under a running shell, and getting back (#847) --
     #

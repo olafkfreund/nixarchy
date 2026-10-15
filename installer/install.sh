@@ -1272,7 +1272,7 @@ resolve_answers() {
 # installer starts producing one.
 sha512_matches() {
   local plain=$1 hash=$2 salt rounds="" opts out
-  case $hash in '$6$'*) ;; *) return 1 ;; esac
+  case $hash in \$6\$*) ;; *) return 1 ;; esac
   salt=${hash#\$6\$}
   if [[ $salt = rounds=* ]]; then
     rounds=${salt%%\$*}

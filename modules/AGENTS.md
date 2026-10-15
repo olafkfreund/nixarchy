@@ -1035,6 +1035,13 @@ How, and why this way:
   machine with nixarchy off get nothing. tests/options.nix asserts both,
   because `modeAInert` compares NixOS closures and cannot see a Home Manager
   default.
+- **The menu is the one default installed but left off (#1283).** Omarchy's
+  own menu is the first-login default; `menu.default = "nixarchy"` turns
+  nixarchy-menu on. Only the hook's enable-once list (`enableOnceIds`) drops
+  it: `declared`, the gone-clone restore and `placement` keep `defaultIds`, so
+  a user who switches to it through Setup > Defaults > Menu is still placed
+  and restored correctly. The hook never disables, so existing machines keep
+  their choice.
 - **The id is asserted for defaults only.** Menu rows and binds name a
   default by id, so the build fails if a pin's manifest id stops matching.
   Plugins you declare keep free attribute names (the option installs under

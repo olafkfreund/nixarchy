@@ -231,7 +231,10 @@ jobs:
             fi
           }
           try omarchy nix build .#omarchy --print-build-logs
-          for c in menu-verbs bin-ledger skill-parity panel-loaders review-pins stable-eval options; do
+          # Not options: it peaks near 11.5 GB, and beside the quickshell build
+          # edge needs it lost a 16 GB hosted runner mid-run (#1278). It runs in
+          # verify, on p620, after the idle wait (CLAUDE.md section 6).
+          for c in menu-verbs bin-ledger skill-parity panel-loaders review-pins stable-eval; do
             try "$c" nix build ".#checks.x86_64-linux.$c" --print-build-logs
           done
           echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
@@ -398,12 +401,12 @@ jobs:
           # The promote pushes edge: same token rule as prepare.
           token: ${{ secrets.NIXARCHY_EDGE_TOKEN || github.token }}
 
-      - name: Boot the VM checks, each separately
+      - name: Evaluate options, then boot the VM checks, each separately
         id: vms
         run: |
           set -uo pipefail
           failed=""
-          for c in session coexist plugin; do
+          for c in options session coexist plugin; do
             echo "::group::$c"
             if nix build ".#checks.x86_64-linux.$c" --print-build-logs; then echo "::endgroup::"; else
               echo "::endgroup::"

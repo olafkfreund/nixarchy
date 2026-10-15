@@ -819,6 +819,47 @@ let
           description = "The panel is off: what you have created, in a terminal";
         };
       }
+      # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
+      //
+        lib.optionalAttrs
+          (
+            cfg.enable
+            && (
+              if cfg.user != null then
+                config.home-manager.users.${cfg.user}.programs.nixarchy.defaultPlugins.menu or true
+              else
+                true
+            )
+          )
+          {
+            # Run directly, as upstream's setup.default.agent.* rows do; nothing
+            # here writes shell.json (#847), the shell's own verbs do.
+            "setup.default.menu" = {
+              icon = "󰍜";
+              label = "Menu";
+              title = "Default Menu";
+              description = "Omarchy's own menu, or nixarchy's Raycast-style one";
+            };
+            "setup.default.menu.omarchy" = {
+              # Omarchy's own glyph, from its icon font, as Update ▸ Omarchy wears.
+              icon = "";
+              iconFont = "omarchy";
+              label = "Omarchy";
+              action = "omarchy-plugin-disable nixarchy.menu";
+              checked = "! nixarchy-plugin --enabled nixarchy.menu";
+              description = "Use Omarchy's own menu";
+            };
+            "setup.default.menu.nixarchy" = {
+              icon = "󱄅";
+              label = "Nixarchy";
+              # The marker is the hook's own record (modules/home.nix): without it,
+              # removing nixarchy-menu later (defaultPlugins.menu = false) never
+              # restores omarchy.menu, and the machine has no menu at all.
+              action = "omarchy-plugin-enable nixarchy.menu && s=\${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/enabled-once && mkdir -p \"$s\" && echo omarchy.menu > \"$s/nixarchy.menu\"";
+              checked = "nixarchy-plugin --enabled nixarchy.menu";
+              description = "Use nixarchy-menu, which replaces Omarchy's";
+            };
+          }
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: app:
@@ -1109,6 +1150,26 @@ in
           that twice is a second full desktop nobody asked for.
         '';
       };
+    };
+
+    menu.default = lib.mkOption {
+      type = lib.types.enum [
+        "omarchy"
+        "nixarchy"
+      ];
+      default = "omarchy";
+      example = "nixarchy";
+      description = ''
+        Which menu is on at the first login. `"omarchy"` keeps Omarchy's own
+        menu and installs nixarchy-menu without turning it on; `"nixarchy"`
+        turns nixarchy-menu on, once, in its place. Switch either way later
+        from Setup > Defaults > Menu.
+
+        This only decides the first login: a machine that already has
+        nixarchy-menu on keeps it. Setting
+        `programs.nixarchy.defaultPlugins.menu = false` removes nixarchy-menu
+        entirely, whatever this says.
+      '';
     };
 
     menu.extraEntries = lib.mkOption {

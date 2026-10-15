@@ -488,6 +488,10 @@ let
     (osConfig.programs.nixarchy.enable or false) && p.gate && (cfg.defaultPlugins.${name} or true)
   ) cfg.defaultPluginSet;
   defaultIds = lib.mapAttrsToList (_: p: p.id) resolvedDefaults;
+  # Installed is not turned on: nixarchy-menu stays off unless asked for (#1283).
+  enableOnceIds = builtins.filter (
+    id: !(id == "nixarchy.menu" && (osConfig.programs.nixarchy.menu.default or "omarchy") == "omarchy")
+  ) defaultIds;
 
   # Why: modules/AGENTS.md#each-declared-plugin-checked-at-build-time-against
   validatedPlugins = lib.mapAttrs (
@@ -765,9 +769,11 @@ in
         Boxes is on,
         microvms always, dev environments when the devenv service is on, and
         the Plugin Browser (Setup > Plugins > Add Plugin), `menu`
-        (nixarchy-menu, which replaces the Omarchy menu; `false` brings the
-        stock menu back) and `hyprforge` (Hyprforge, a Hyprland settings
-        studio) always. A name left out counts as on.
+        (nixarchy-menu, installed but turned on only when
+        `programs.nixarchy.menu.default = "nixarchy"`; `false` removes it)
+        and `hyprforge` (Hyprforge, a Hyprland settings studio) always. A
+        name left out counts as on: installed and, for all but the menu,
+        turned on.
 
         Each is turned on once, at the first login that has it, and a marker
         in ~/.local/state/nixarchy/enabled-once records that. Turn one off in
@@ -1950,8 +1956,9 @@ in
           src = inputs.nixarchy-flatsnap.packages.${pkgs.stdenv.hostPlatform.system}.default;
         };
         # nixarchy-menu, the Raycast-style replacement for the Omarchy menu
-        # (#946), on by default (#1052); `defaultPlugins.menu = false` restores
-        # the stock menu. It is a clone of
+        # (#946), installed by default but turned on only when
+        # `menu.default = "nixarchy"` (#1283); `defaultPlugins.menu = false`
+        # removes it. It is a clone of
         # omarchy.menu, so it keeps that plugin's bar slot (placement "") and
         # the hook below turns any other omarchy.menu clone off before it.
         # voxtype is optional; the plugin finds it on PATH when present.
@@ -2155,7 +2162,7 @@ in
           export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
 
           todo=()
-          for id in ${lib.escapeShellArgs defaultIds}; do
+          for id in ${lib.escapeShellArgs enableOnceIds}; do
             [ -e "$state/$id" ] || todo+=("$id")
           done
           plugins="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"

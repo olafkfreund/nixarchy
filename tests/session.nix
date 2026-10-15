@@ -781,10 +781,11 @@ pkgs.testers.runNixOSTest {
     machine.succeed(on_desktop("hyprctl reload"))
 
     # ---- summoning the menu opens one (#1069) ------------------------------
-    # nixarchy-menu replaces omarchy.menu, and loads MenuModel.js from the
-    # system profile; when that path was missing the palette never loaded and
-    # Super+Space opened nothing, with the stock menu already disabled.
-    # Whichever menu is enabled answers omarchy.menu, and draws this layer.
+    # Omarchy's own menu by default since #1283. nixarchy-menu, when switched
+    # on, loads MenuModel.js from the system profile; when that path was
+    # missing its palette never loaded and Super+Space opened nothing, with
+    # the stock menu already disabled. Whichever menu is enabled answers
+    # omarchy.menu and draws this layer; the #1283 probe below covers both.
     # Retried (#1203): after the reload above, Quickshell rebuilds its windows
     # and IPC can miss the client's 2 s timeout. Safe: summon is idempotent.
     try:
@@ -834,16 +835,36 @@ pkgs.testers.runNixOSTest {
         else:
             raise AssertionError(f"#1283: no omarchy-menu layer {why}")
         machine.succeed(on_desktop("omarchy-menu close"))
+    # The rows' own action strings, read out of the menu this machine
+    # generated, so the probe runs exactly what a click runs (marker included).
+    import base64
+    menu_text = machine.succeed(
+        ". /etc/set-environment; cat \"$OMARCHY_PATH/default/omarchy/omarchy-menu.jsonc\"")
+    rows = json.loads("\n".join(
+        l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
+    def click(row):
+        action = rows[row]["action"]
+        b64 = base64.b64encode(action.encode()).decode()
+        machine.succeed(f"echo {b64} | base64 -d > /tmp/row.sh && chmod 755 /tmp/row.sh")
+        machine.succeed(on_desktop("OMARCHY_SHELL_IPC_TIMEOUT=30s bash /tmp/row.sh"))
+    marker = "/home/omarchy/.local/state/nixarchy/enabled-once/nixarchy.menu"
     stock, nix = menus()
     assert stock and not nix, (
         f"#1283: a new machine should start on Omarchy's menu with nixarchy-menu "
         f"installed and off; omarchy.menu={stock} nixarchy.menu={nix}")
-    machine.succeed(on_desktop("omarchy-plugin-enable nixarchy.menu"))
+    machine.fail(f"test -e {marker}")
+    # 30 s, as the post-boot hook gives it: enabling reloads plugins, which
+    # can outlast upstream's 2 s IPC budget.
+    click("setup.default.menu.nixarchy")
     stock, nix = menus()
     assert nix and not stock, (
         f"#1283: the Nixarchy row left omarchy.menu={stock} nixarchy.menu={nix}")
+    marked = machine.succeed(f"cat {marker}").strip()
+    assert marked == "omarchy.menu", (
+        f"#1283: the Nixarchy row left no restore marker ({marked!r}); removing "
+        "nixarchy-menu later would leave no menu")
     summon_draws("after switching to nixarchy-menu")
-    machine.succeed(on_desktop("omarchy-plugin-disable nixarchy.menu"))
+    click("setup.default.menu.omarchy")
     stock, nix = menus()
     assert stock and not nix, (
         f"#1283: the Omarchy row left omarchy.menu={stock} nixarchy.menu={nix} -- "

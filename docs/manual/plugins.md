@@ -383,9 +383,11 @@ let it find the row.
 
 **What it does.** Replaces the Omarchy menu with a Raycast-style palette over
 the same rows. It is a clone of `omarchy.menu`, so it takes that plugin's slot
-rather than adding a second button, and nixarchy turns any other clone of the
-same menu off before enabling it -- two plugins claiming the menu is a fight
-the first one alphabetically wins, silently.
+rather than adding a second button. When nixarchy turns it on at first login
+(`menu.default = "nixarchy"`), it first turns off any other clone of the same
+menu, because two plugins claiming the menu is a fight the first one
+alphabetically wins, silently. The Setup row does not: if you have another menu
+clone on, turn that off first.
 
 **It is installed but off** (#1283): a new machine starts on Omarchy's own
 menu. Switch at any time, with no rebuild, in **Setup ▸ Defaults ▸ Menu**:
@@ -393,13 +395,20 @@ menu. Switch at any time, with no rebuild, in **Setup ▸ Defaults ▸ Menu**:
 menu back in its place. A machine that already had it on keeps it until you
 switch.
 
-To start new machines on the palette, or to stop nixarchy installing it:
+To start new machines on the palette, in your NixOS configuration:
 
 ```nix
 programs.nixarchy.menu.default = "nixarchy";    # turned on at first login
-programs.nixarchy.defaultPlugins.menu = false;  # not installed at all
 ```
- The search
+
+To stop nixarchy installing it at all, in the user's Home Manager
+configuration (`home-manager.users.<you>`):
+
+```nix
+programs.nixarchy.defaultPlugins.menu = false;
+```
+
+The search
 terms the palette matches come from nixarchy's own menu data (#961), so the
 Ask topics answer to symptoms -- "slow", "hacked", "disk full" -- rather than
 only to their labels.

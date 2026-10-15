@@ -852,7 +852,10 @@ let
             "setup.default.menu.nixarchy" = {
               icon = "󱄅";
               label = "Nixarchy";
-              action = "omarchy-plugin-enable nixarchy.menu";
+              # The marker is the hook's own record (modules/home.nix): without it,
+              # removing nixarchy-menu later (defaultPlugins.menu = false) never
+              # restores omarchy.menu, and the machine has no menu at all.
+              action = "omarchy-plugin-enable nixarchy.menu && s=\${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/enabled-once && mkdir -p \"$s\" && echo omarchy.menu > \"$s/nixarchy.menu\"";
               checked = "nixarchy-plugin --enabled nixarchy.menu";
               description = "Use nixarchy-menu, which replaces Omarchy's";
             };

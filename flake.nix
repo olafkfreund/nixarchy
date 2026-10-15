@@ -348,7 +348,7 @@
       inputs.nix-flatpak.follows = "nix-flatpak";
     };
 
-    # Why: docs/internals/flake.md#nixarchy-menu-on-by-default-946-1052
+    # Why: docs/internals/flake.md#nixarchy-menu-installed-and-off-by-default-946-1052-1283
     # A commit on main (no tags); bump it the way that page says. Its only
     # inputs are these two, so it adds nothing to the lock but itself.
     nixarchy-menu = {

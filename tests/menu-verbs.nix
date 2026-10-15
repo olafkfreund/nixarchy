@@ -308,16 +308,24 @@ pkgs.runCommand "nixarchy-menu-verbs"
       echo "ERROR: setup.default.menu.omarchy does not run omarchy-plugin-disable nixarchy.menu" >&2
       fail=1
     }
-    test "$(row setup.default.menu.nixarchy action)" = "omarchy-plugin-enable nixarchy.menu" || {
-      echo "ERROR: setup.default.menu.nixarchy does not run omarchy-plugin-enable nixarchy.menu" >&2
+    # Enable, then the enabled-once marker the hook's restore needs (#1283).
+    nix_action=$(row setup.default.menu.nixarchy action)
+    case "$nix_action" in
+      "omarchy-plugin-enable nixarchy.menu && "*enabled-once*'echo omarchy.menu > '*) ;;
+      *) false ;;
+    esac || {
+      echo "ERROR: setup.default.menu.nixarchy does not enable nixarchy.menu and record its marker: $nix_action" >&2
       fail=1
     }
-    for id in setup.default.menu.omarchy setup.default.menu.nixarchy; do
-      test -n "$(row "$id" checked)" || {
-        echo "ERROR: $id has no checked" >&2
-        fail=1
-      }
-    done
+    # Exact, so swapping the two check marks cannot pass.
+    test "$(row setup.default.menu.omarchy checked)" = '! nixarchy-plugin --enabled nixarchy.menu' || {
+      echo "ERROR: setup.default.menu.omarchy is not checked when nixarchy-menu is off" >&2
+      fail=1
+    }
+    test "$(row setup.default.menu.nixarchy checked)" = 'nixarchy-plugin --enabled nixarchy.menu' || {
+      echo "ERROR: setup.default.menu.nixarchy is not checked when nixarchy-menu is on" >&2
+      fail=1
+    }
 
     test "$fail" -eq 0
     echo "every menu row names a subcommand its CLI has"

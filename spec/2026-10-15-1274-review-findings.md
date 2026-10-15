@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1274
 intent: intent/2026-10-15-1274-review-findings.md
 ---

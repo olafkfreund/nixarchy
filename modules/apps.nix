@@ -1518,6 +1518,10 @@ in
                       ;;
                   esac
 
+                  if [ "$code" != null ] && [ "$(jq length "$registry")" = 0 ]; then
+                    echo "nixarchy: this Omarchy release has no language list (Setup > Language arrives after v4.0.4)" >&2
+                    exit 2
+                  fi
                   if [ "$code" != null ] && ! jq -e --arg c "$code" 'has($c)' "$registry" >/dev/null; then
                     echo "nixarchy: unknown language '$code'; known codes:" >&2
                     jq -r 'keys | join(" ")' "$registry" >&2
@@ -1533,26 +1537,33 @@ in
                   else
                     clear=0
                   fi
-                  if [ "$clear" = 0 ] && ! grep -qE "$live" "$file" && ! grep -qE '^\{[[:space:]]*$' "$file"; then
-                    echo "nixarchy: $file has no opening '{' line to add the language under" >&2
+                  # Before the module's last closing brace, as nixarchy-catalogue-diff
+                  # adds rows: the first `{` may open a multi-line argument set.
+                  close=$(grep -n '^}' "$file" | tail -1 | cut -d: -f1 || true)
+                  if [ "$clear" = 0 ] && ! grep -qE "$live" "$file" && [ -z "$close" ]; then
+                    echo "nixarchy: $file has no closing brace on its own line; add this by hand:" >&2
+                    echo "  programs.nixarchy.language = \"$code\";  #@ language" >&2
                     exit 1
                   fi
 
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'rm -f "$tmp"' EXIT
                   tmp=$(mktemp "$file.XXXXXX")
-                  awk -v live="$live" -v clear="$clear" -v new="  programs.nixarchy.language = \"$code\";  #@ language" '
+                  awk -v live="$live" -v clear="$clear" -v at="$close" -v new="  programs.nixarchy.language = \"$code\";  #@ language" '
                     $0 ~ live { if (!clear && !done) print new; done = 1; next }
+                    !clear && !done && NR == at { print new; done = 1 }
                     { print }
-                    !clear && !done && /^\{[[:space:]]*$/ { print new; done = 1 }
                   ' "$file" >"$tmp"
                   chmod --reference="$file" "$tmp"
                   mv "$tmp" "$file"
 
                   if [ "$clear" = 1 ]; then
-                    echo "cleared the language in $file"
+                    echo "cleared the language in $file; run 'nixarchy-apply' to build it"
                   else
                     echo "set the language to $code in $file"
+                    echo "run 'nixarchy-apply' to build it, then pick the language again in Setup > Language"
                   fi
-                  echo "run 'nixarchy-apply' to build it, then pick the language again in Setup > Language"
                 '';
               })
 

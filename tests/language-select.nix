@@ -61,6 +61,20 @@ pkgs.runCommand "nixarchy-language-select"
     "$sel" null >/dev/null
     grep -qF '# programs.nixarchy.language = "fr";' "$file" || bad 'null removed the commented line'
 
+    # A multi-line argument set: the line goes in the body, not the arguments.
+    printf '%s\n' '{' '  pkgs,' '  ...' '}:' '{' '  services.x.enable = true; #@ x' '}' > "$file"
+    "$sel" da >/dev/null || bad 'select da under a multi-line header failed'
+    test "$(sed -n 2p "$file")" = '  pkgs,' || bad 'the line went into the argument set'
+    test "$(tail -n 2 "$file" | head -n 1)" = '  programs.nixarchy.language = "da";  #@ language' || bad 'the line is not just before the closing brace'
+
+    # Every write leaves no temp file beside services.nix.
+    test "$(find "$XDG_CONFIG_HOME/nixarchy" -name 'services.nix.*' | wc -l)" = 0 || bad 'a temp file was left behind'
+
+    # An empty registry (Omarchy v4.0.4) refuses every code.
+    printf '%s\n' '{}' > empty.json
+    rc=0; NIXARCHY_LANGUAGE_REGISTRY=$PWD/empty.json "$sel" da >/dev/null 2>&1 || rc=$?
+    test "$rc" -eq 2 || bad "an empty registry exited $rc, not 2"
+
     # Refusals leave the file byte-identical and exit 2.
     fresh '  programs.nixarchy.language = "da";  #@ language'
     before=$(sha256sum < "$file")

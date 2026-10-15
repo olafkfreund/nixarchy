@@ -142,6 +142,24 @@ spec: spec/2026-10-15-1289-language-switching.md
    - Update `docs/manual/omarchy-channels.md`'s edge note, and close
      #1280's language item.
 
+## Deviations recorded during implementation
+
+- **Step 2, insert point:** the line goes before the module's last closing
+  brace, using `nixarchy-catalogue-diff --add`'s logic. The first version
+  inserted after the first lone `{`, which a multi-line argument header
+  turns into the argument set (found in review).
+- **Step 2, extra:**
+  - an EXIT trap removes a temp file left by a failed write;
+  - an empty registry (v4.0.4) gets its own refusal message.
+- **Step 2, test seam:** `NIXARCHY_LANGUAGE_REGISTRY` overrides the baked
+  registry, because the stable registry is empty.
+- **Step 3:** the null-by-default and Mode A cases live in
+  `tests/language-locale.nix`, not `tests/options.nix`.
+  `checks.options` could not be built while CI was busy, and the new check
+  evaluates the same property over a stub registry.
+- **Step 1:** the locale line sits inside nixos.nix's existing `i18n = { }`
+  block, because statix refused a third top-level `i18n` key.
+
 ## Tests
 
 | Command | Expected |

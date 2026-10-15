@@ -1601,3 +1601,12 @@ on the rendered-template side it compares against. Passed through
 same Nix values both sides import, not a second encoding of them to keep
 in step.
 
+
+## A refusal another layer also makes is invisible to the exit status (#1278)
+
+`tests/edge-promote.nix` first asserted only that a diverged candidate was
+refused, and stayed green with the script's ancestor test deleted: git's own
+plain push rejects a non-fast-forward, so the refusal happened anyway, one
+layer down. When a guard duplicates a refusal the tool already makes, assert
+the guard's own reason (`not a fast-forward` on stderr), not only that
+something failed -- otherwise the red proof for the guard cannot go red.

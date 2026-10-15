@@ -502,3 +502,10 @@ fresh Opus agent given only this plan and the `git diff`.
     wait moved out).
   - **`weekly.yml`.** The edge boot runs under `!cancelled()`, so a red main
     boot does not hide it.
+- **Step 6, first publish run (38778732342).** `prepare` was cancelled after
+  11 minutes, during `options`, while the hosted runner was also compiling
+  quickshell. That build is uncached, because the edge carry adds
+  `qtimageformats` to it. `options` moved to `verify`, on p620, after the
+  idle wait: the §6 tier `options` belongs in anyway. The same run's
+  `bin-ledger` red was a missing carry on edge, fixed there.
+

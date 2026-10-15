@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1285
 spec: spec/2026-10-15-1285-quattro-hardware-ports.md
 ---

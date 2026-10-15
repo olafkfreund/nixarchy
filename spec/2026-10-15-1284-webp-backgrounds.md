@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1284
 intent: intent/2026-10-15-1284-webp-backgrounds.md
 ---

@@ -1079,6 +1079,19 @@ let
       # missing" instead of answering false.
       off = (loaderOff.systemd.services.avahi-daemon.serviceConfig or { }) ? ExecStartPre;
     };
+    avahiOffNoUnit =
+      let
+        avahiDisabled =
+          (adopter.extendModules {
+            modules = [ { services.avahi.enable = false; } ];
+          }).config;
+      in
+      {
+        on = adopter.config.systemd.services ? avahi-daemon;
+        off =
+          avahiDisabled.systemd.services ? avahi-daemon
+          || avahiDisabled.systemd.units ? "avahi-daemon.service";
+      };
 
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
@@ -2102,6 +2115,72 @@ let
       on = hasSops sopsOn;
       off = hasSops sopsOff;
     };
+
+    dockerProfileDefaultWins =
+      let
+        c =
+          (adopter.extendModules {
+            modules = [ { virtualisation.docker.enable = pkgs.lib.mkDefault true; } ];
+          }).config;
+        tried = builtins.tryEval (
+          c.virtualisation.docker.enable && !c.virtualisation.docker.rootless.enable
+        );
+      in
+      {
+        on = tried.success && tried.value;
+        off = defaultMachine.virtualisation.docker.enable;
+      };
+
+    themeEngineUser =
+      let
+        tried = builtins.tryEval defaultMachine.programs.nixarchyThemeEngine.user;
+      in
+      {
+        on =
+          tried.success
+          && tried.value == "omarchy"
+          && omathemeMachine.programs.nixarchyThemeEngine.user == "someone";
+        off = defaultMachine.programs.nixarchyThemeEngine.enable;
+      };
+
+    omarchyUserUnitConditions =
+      let
+        units = [
+          "omarchy-sleep-lock"
+          "omarchy-crash-watch"
+          "omarchy-recover-internal-monitor"
+          "omarchy-fcitx5"
+        ];
+        svcs = defaultMachine.systemd.user.services;
+      in
+      {
+        # The pre-session unit runs before the compositor exists, so it must
+        # carry NO session-variable gate: one would skip it at every login.
+        on = builtins.all (
+          u:
+          (svcs.${u}.unitConfig.ConditionEnvironment or "")
+          == (if u == "omarchy-recover-internal-monitor" then "" else "HYPRLAND_INSTANCE_SIGNATURE")
+          && (svcs.${u}.unitConfig.ConditionUser or "") == "!@system"
+        ) units;
+        off = builtins.any (
+          u:
+          (svcs.${u}.unitConfig.ConditionEnvironment or "") == "WAYLAND_DISPLAY"
+          || loaderOff.systemd.user.services ? ${u}
+        ) units;
+      };
+
+    flakeSafeDirectoryUsesGitConfig =
+      let
+        script = defaultMachine.system.activationScripts.nixarchyFlakeSafeDirectory;
+      in
+      {
+        on =
+          pkgs.lib.hasInfix "# Written by programs.nixarchy. Do not edit; see modules/nixos.nix." script
+          && pkgs.lib.hasInfix "git config --file /var/lib/nixarchy/gitconfig-flake.tmp safe.directory" script;
+        off =
+          pkgs.lib.hasInfix "directory = $nixarchy_flake_resolved" script
+          || loaderOff.system.activationScripts ? nixarchyFlakeSafeDirectory;
+      };
   };
 
   # Every Install row upstream offers, checked against what the selection
@@ -4087,13 +4166,21 @@ pkgs.runCommand "nixarchy-options"
         # ExecStart lines are all /usr/bin/..., so declaring them is only half
         # the job -- the paths have to be real too.
         for unit in omarchy-sleep-lock omarchy-crash-watch \
-          omarchy-recover-internal-monitor; do
+          omarchy-recover-internal-monitor omarchy-fcitx5; do
           test -e "$vm/etc/systemd/user/$unit.service" || {
             echo "$unit.service is not installed where systemd looks" >&2; exit 1; }
+          # #1276: only in a Hyprland session, never in a system user manager
+          # (the SDDM greeter), and the pre-session unit gated on nothing.
+          if [ "$unit" = omarchy-recover-internal-monitor ]; then
+            ! grep -q '^ConditionEnvironment=' "$vm/etc/systemd/user/$unit.service" || {
+              echo "$unit is gated on a session variable it runs too early to see" >&2; exit 1; }
+          else
+            grep -qx 'ConditionEnvironment=HYPRLAND_INSTANCE_SIGNATURE' "$vm/etc/systemd/user/$unit.service" || {
+              echo "$unit missing ConditionEnvironment=HYPRLAND_INSTANCE_SIGNATURE" >&2; exit 1; }
+          fi
+          grep -qx 'ConditionUser=!@system' "$vm/etc/systemd/user/$unit.service" || {
+            echo "$unit would start in a system user manager (no ConditionUser=!@system)" >&2; exit 1; }
         done
-        # #1192: not in the greeter's user manager, where it failed and restarted.
-        grep -qx 'ConditionUser=!@system' "$vm/etc/systemd/user/omarchy-crash-watch.service" || {
-          echo "omarchy-crash-watch would start in the SDDM greeter (no ConditionUser=!@system)" >&2; exit 1; }
         if test -e "$vm/etc/systemd/user/bt-agent.service" || \
           test -L "$vm/etc/systemd/user/bt-agent.service"; then
           echo "bt-agent.service must not be installed permanently" >&2

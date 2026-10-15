@@ -494,6 +494,15 @@ pkgs.testers.runNixOSTest {
     # it gives up after 5 relaunches inside one minute.
     machine.sleep(75)
 
+    # Omarchy's own user units are gated on HYPRLAND_INSTANCE_SIGNATURE so they
+    # stay out of other Wayland sessions (#1276). A gate on a variable this
+    # session never exports would leave suspend unlocked with nothing failing,
+    # so assert the two long-running ones actually came up here.
+    for unit in ["omarchy-sleep-lock", "omarchy-crash-watch"]:
+        machine.wait_until_succeeds(
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            f" systemctl --user is-active {unit}'", timeout=60)
+
     print("=========== hyprland ===========")
     print(machine.succeed("journalctl -b _UID=1000 -t Hyprland --no-pager || true"))
 

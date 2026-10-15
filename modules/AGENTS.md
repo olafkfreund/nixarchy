@@ -697,7 +697,6 @@ desktop.
 ### Docker runs rootless, and that is why there is no group
 
 ```nix
-virtualisation.docker.enable = lib.mkDefault false;
 virtualisation.docker.rootless.enable = lib.mkDefault (!config.virtualisation.docker.enable);
 ```
 

@@ -1070,7 +1070,7 @@ in
     programs = {
       nixarchyThemeEngine = {
         enable = lib.mkDefault (cfg.user != null);
-        user = lib.mkDefault (cfg.user or "omarchy");
+        user = lib.mkDefault (if cfg.user != null then cfg.user else "omarchy");
         managePlugin = false;
       };
 
@@ -1305,14 +1305,11 @@ in
         # simply has no flake to exempt.
         nixarchy_flake_resolved=$(${pkgs.coreutils}/bin/readlink -f ${lib.escapeShellArg cfg.flake} 2>/dev/null || true)
 
-        {
-          echo "# Written by programs.nixarchy. Do not edit; see modules/nixos.nix."
-          if [ -n "$nixarchy_flake_resolved" ] &&
-             [ "$nixarchy_flake_resolved" != ${lib.escapeShellArg cfg.flake} ]; then
-            echo "[safe]"
-            echo "	directory = $nixarchy_flake_resolved"
-          fi
-        } > ${safeDirInclude}.tmp
+        printf '%s\n' "# Written by programs.nixarchy. Do not edit; see modules/nixos.nix." > ${safeDirInclude}.tmp
+        if [ -n "$nixarchy_flake_resolved" ] &&
+           [ "$nixarchy_flake_resolved" != ${lib.escapeShellArg cfg.flake} ]; then
+          ${pkgs.git}/bin/git config --file ${safeDirInclude}.tmp safe.directory "$nixarchy_flake_resolved"
+        fi
 
         chmod 0644 ${safeDirInclude}.tmp
         chown root:root ${safeDirInclude}.tmp
@@ -1711,7 +1708,6 @@ in
     # account rather than the machine.
     #
     # Why: modules/AGENTS.md#docker-is-enabled-above-at-mkdefault-for-every-mac
-    virtualisation.docker.enable = lib.mkDefault false;
     virtualisation.docker.rootless = {
       # Gated on the rooted daemon being off rather than set flat, so somebody
       # who turns Docker back on gets the classic arrangement and not both --
@@ -1823,7 +1819,9 @@ in
       # on creating that directory itself and refuses when systemd got there
       # first -- "Failed to create runtime directory /run/avahi-daemon/" --
       # so it breaks avahi on every boot rather than fixing the restart.
-      services.avahi-daemon.serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/rm -f /run/avahi-daemon/pid";
+      services.avahi-daemon = lib.mkIf config.services.avahi.enable {
+        serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/rm -f /run/avahi-daemon/pid";
+      };
 
       # upstream's system.conf.d: a 5s stop timeout and a raised descriptor
       # soft limit.
@@ -1891,7 +1889,10 @@ in
           path = [ "/run/current-system/sw" ];
           # The installed generation may differ from the live desktop.
           # Inherit its display; IPC resolves the live shell independently.
-          unitConfig.ConditionEnvironment = "WAYLAND_DISPLAY";
+          unitConfig = {
+            ConditionEnvironment = "HYPRLAND_INSTANCE_SIGNATURE";
+            ConditionUser = "!@system";
+          };
           serviceConfig = {
             Type = "simple";
             ExecStart = "${cfg.package}/bin/omarchy-system-sleep-monitor";
@@ -1907,7 +1908,7 @@ in
           wantedBy = [ "graphical-session.target" ];
           path = [ "/run/current-system/sw" ];
           unitConfig = {
-            ConditionEnvironment = "WAYLAND_DISPLAY";
+            ConditionEnvironment = "HYPRLAND_INSTANCE_SIGNATURE";
             # Not in the greeter: SDDM's user manager (uid 175) also reaches
             # graphical-session.target, and the watcher fails there (#1192).
             ConditionUser = "!@system";
@@ -1930,7 +1931,13 @@ in
           before = [ "graphical-session-pre.target" ];
           wantedBy = [ "graphical-session-pre.target" ];
           path = [ "/run/current-system/sw" ];
-          unitConfig.ConditionPathExists = "%h/.local/state/omarchy/toggles/hypr/internal-monitor-disable.lua";
+          # No ConditionEnvironment: this runs BEFORE graphical-session-pre,
+          # ahead of the compositor, so no session variable exists yet and a
+          # gate on one would skip it at every login (#1276).
+          unitConfig = {
+            ConditionUser = "!@system";
+            ConditionPathExists = "%h/.local/state/omarchy/toggles/hypr/internal-monitor-disable.lua";
+          };
           serviceConfig = {
             Type = "oneshot";
             ExecStart = "${cfg.package}/bin/omarchy-hw-recover-internal-monitor";
@@ -1952,7 +1959,10 @@ in
           # manager and no compositor, and a fcitx5 started there owns the bus
           # name with no WAYLAND_DISPLAY -- the later graphical login then finds
           # the unit already active and never starts a working one.
-          unitConfig.ConditionEnvironment = "WAYLAND_DISPLAY";
+          unitConfig = {
+            ConditionEnvironment = "HYPRLAND_INSTANCE_SIGNATURE";
+            ConditionUser = "!@system";
+          };
           serviceConfig = {
             Type = "simple";
             # notificationitem duplicates the tray entry Omarchy renders itself.

@@ -48,6 +48,21 @@ let
   # video apart from a frozen poster by that alone. A screen-filling colour
   # change the probe's avg() cannot miss, and it needs no network, unlike a
   # real clip would.
+  # A solid sea-green WebP for the #1284 probe: a background the shell can
+  # only draw with Qt's WebP decoder, in a colour avg() cannot mistake.
+  webpBackground =
+    pkgs.runCommand "webp-background"
+      {
+        nativeBuildInputs = [
+          pkgs.libwebp
+          pkgs.imagemagick
+        ];
+      }
+      ''
+        mkdir -p $out
+        magick -size 1920x1080 xc:'#2E8B57' bg.png
+        cwebp -quiet bg.png -o $out/sea-green.webp
+      '';
   oweTestVideo = pkgs.runCommand "owe-test-video" { nativeBuildInputs = [ pkgs.ffmpeg ]; } ''
     mkdir -p $out
     ffmpeg -f lavfi -i color=c=red:s=640x360:r=25:d=1 \
@@ -2412,6 +2427,30 @@ pkgs.testers.runNixOSTest {
         f"owe did not hand the still back after the lock test: {status}, {background}")
     machine.sleep(3)  # the shell's own debounced save of shell.json
     print("owe: restored the original still, and the shell has it back")
+
+    # ---- a WebP background draws (#1284) -----------------------------------
+    # nixpkgs' quickshell carries no qtimageformats, and a WebP background then
+    # rendered black with only "Unsupported image format" in the shell log.
+    # Every other background in this check is a JPEG, so nothing else decodes
+    # one. A still goes to the shell (owe hands stills back), so this is the
+    # shell's own decoder on screen.
+    aim("omarchy-theme-bg-set ${webpBackground}/sea-green.webp")
+    want = (0x2E, 0x8B, 0x57)
+    delta = None
+    for attempt in range(12):
+        machine.sleep(5)
+        machine.screenshot("webp-background")
+        s_r, s_g, s_b = avg(os.path.join(os.environ["out"], "webp-background.png"))
+        delta = abs(s_r - want[0]) + abs(s_g - want[1]) + abs(s_b - want[2])
+        print(f"webp attempt {attempt}: screen #{s_r:02X}{s_g:02X}{s_b:02X} delta {delta}")
+        if delta < 120:
+            break
+    assert delta is not None and delta < 120, (
+        f"#1284: a WebP background never drew (delta {delta} after 60s); check the "
+        "shell log for 'Unsupported image format' -- the shell's Qt has no WebP decoder")
+    aim(f"omarchy-theme-bg-set {original_background}")
+    machine.sleep(3)
+    print("a WebP background draws (#1284)")
 
     # ---- writing shell.json under a running shell, and getting back (#847) --
     #

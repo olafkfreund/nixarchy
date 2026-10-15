@@ -21,12 +21,15 @@ let
   hook =
     pkgs.writeText "default-plugins"
       home.xdg.configFile."omarchy/hooks/post-boot.d/default-plugins".text;
+  # The one system activation step here: it writes a git config include.
+  safeDir = pkgs.writeText "safe-dir.sh" vm.config.system.activationScripts.nixarchyFlakeSafeDirectory;
 in
 pkgs.runCommand "nixarchy-home-activation-writes"
   {
     nativeBuildInputs = [
       pkgs.jq
       pkgs.gawk
+      pkgs.git
     ];
   }
   ''
@@ -102,6 +105,19 @@ pkgs.runCommand "nixarchy-home-activation-writes"
     [ -z "$(ls -A home/.local/state/nixarchy/enabled-once 2>/dev/null)" ] &&
       ok "and marks nothing done, so the next login retries" ||
       bad "an unreadable plugin list wrote once-markers"
+
+    # ---- the flake's safe.directory include survives git's own syntax ----
+    # A flake reached through a symlink gets its resolved path written into a
+    # git config include, and `#`, `;` and `"` are syntax there: echoed raw,
+    # git read the value up to the first `#`. Read it back the way git does.
+    real="$root/real # ; \"dir"
+    mkdir -p "$real" state
+    ln -s "$real" flake-link
+    sed -e "s|/etc/nixos|$root/flake-link|g" -e "s|/var/lib/nixarchy|$root/state|g" ${safeDir} > safe-dir.sh
+    ( chown() { :; }; . ./safe-dir.sh ) > safe-dir.out 2>&1 || bad "the include step failed: $(cat safe-dir.out)"
+    got=$(git config --file state/gitconfig-flake --get safe.directory 2>&1 || true)
+    [ "$got" = "$real" ] && ok "a flake path with git config syntax in it reads back whole" ||
+      bad "safe.directory read back as: $got"
 
     [ "$fails" = 0 ] || { echo "$fails case(s) failed (#1276)" >&2; exit 1; }
     touch $out

@@ -2206,7 +2206,9 @@ in
           # An unreadable list is not an empty one: read as "nothing enabled",
           # rivals were never turned off before ours went on. Stop, and the
           # once-markers make the next login try again (#1276).
-          if ! list=$(omarchy-plugin-list --json 2>/dev/null) ||
+          # Its own UTF-8 locale: Quickshell prints the Qt locale warning on
+          # stdout, ahead of the JSON (AGENTS.md §13).
+          if ! list=$(LC_ALL=C.UTF-8 omarchy-plugin-list --json 2>/dev/null) ||
             ! jq -e 'type == "array"' <<<"$list" >/dev/null 2>&1; then
             echo "could not read the plugin list; trying again at next login" |
               systemd-cat -t nixarchy-default-plugins

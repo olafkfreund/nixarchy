@@ -1569,7 +1569,7 @@ in
                     echo "added $id's row from the current catalogue to $file"
                   fi
 
-                  if grep -qE "^[[:space:]]*$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
+                  if grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
                     echo "$id is already enabled; run nixarchy-apply to build it"
                     exit 0
                   fi
@@ -1627,7 +1627,7 @@ in
                     exit 1
                   fi
 
-                  if ! grep -qE "^[[:space:]]*$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
+                  if ! grep -qE "^[[:space:]]*(programs\.nixarchy\.apps\.)?$id\.enable[[:space:]]*=[[:space:]]*true([[:space:]]*;|[[:space:]]*$)" "$file"; then
                     echo "$id is not enabled"
                     exit 0
                   fi
@@ -3643,14 +3643,23 @@ in
                   applied="''${XDG_STATE_HOME:-$HOME/.local/state}/nixarchy/applied"
                   mkdir -p "$applied"
                   exec 9>"$applied/lock"
-                  flock -n 9 || {
+                  # Held through this run's prompts, so a --yes run (the panel's
+                  # detached unit) must not wait on it: the other run may be
+                  # sitting at "Build and switch now?" with nobody there (#1276).
+                  if ! flock -n 9; then
+                    if [ -n "$yes" ]; then
+                      echo "nixarchy-apply: another apply is running (it may be waiting at a prompt); try again when it finishes" >&2
+                      exit 1
+                    fi
                     echo "nixarchy-apply: another apply is running; waiting for it to finish..." >&2
                     flock 9
-                  }
+                  fi
 
                   copy_into_flake() {
                     local src=$1 dst=$2 tmp
-                    tmp=$(mktemp "$dst.XXXXXX")
+                    # In the flake root, outside the `nixarchy` path staged below,
+                    # so a run killed mid-copy leaves nothing for git add to take.
+                    tmp=$(mktemp "$base/.nixarchy-copy.XXXXXX")
                     cp "$src" "$tmp" || { rm -f "$tmp"; return 1; }
                     if [ -f "$dst" ]; then
                       chmod --reference="$dst" "$tmp" || { rm -f "$tmp"; return 1; }
@@ -3787,7 +3796,7 @@ in
                   if [ -f "$dest" ]; then
                     chmod --reference="$dest" "$tmp"
                   else
-                    chmod --reference="$file" "$tmp"
+                    chmod 0644 "$tmp"
                   fi
                   mv "$tmp" "$dest"
 

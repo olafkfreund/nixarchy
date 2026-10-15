@@ -66,6 +66,14 @@ pkgs.runCommand "nixarchy-app-selection"
     "$diff" --add >/dev/null || bad 'catalogue-diff --add failed'
     grep -q '#@ brave' "$file" && test "$(stat -c %i "$file")" != "$inode" &&
       test "$(stat -c %a "$file")" = 640 || bad 'catalogue-diff did not rename with the original mode'
+    # --add writes rows as programs.nixarchy.apps.<id>; enable and disable
+    # must both recognise that form (#1276 review).
+    "$enable" brave >/dev/null 2>&1 || bad 'enable failed on a full-path row'
+    grep -qE '^[[:space:]]*programs\.nixarchy\.apps\.brave\.enable = true' "$file" ||
+      bad "enable did not turn on a full-path row: $(grep brave "$file")"
+    "$disable" brave >/dev/null 2>&1 || bad 'disable failed on a full-path row'
+    grep -qE '^[[:space:]]*#[[:space:]]*programs\.nixarchy\.apps\.brave\.enable' "$file" ||
+      bad "disable left a full-path row on: $(grep brave "$file")"
     printf '%s\n' '{ ... }: {' > "$file"
     rc=0; "$diff" --add > refuse.out 2>&1 || rc=$?
     test "$rc" -ne 0 || bad 'catalogue-diff reported success after refusing a file'
@@ -73,8 +81,9 @@ pkgs.runCommand "nixarchy-app-selection"
 
     # Every name redirected to a curated app is an unsuccessful pkg-add.
     printf '%s\n' '{ ... }: {' '}' > "$file"
-    rc=0; "$pkgadd" brave >/dev/null 2>&1 || rc=$?
+    rc=0; "$pkgadd" brave > pkgadd.out 2>&1 || rc=$?
     test "$rc" -ne 0 || bad 'pkg-add reported success for a redirected name'
+    grep -q 'curated' pkgadd.out || bad "pkg-add failed for some other reason: $(cat pkgadd.out)"
 
     # Extract the shipped Flathub function. Replace only the terminal read;
     # the query is fixed and fzf/curl stay stubbed, so this needs no network.
@@ -121,6 +130,16 @@ pkgs.runCommand "nixarchy-app-selection"
     NIXARCHY_FLAKE=$PWD/flake "$apply" --yes --no-preview >/dev/null 2>&1 &&
       grep -q 'edited at the source' flake/nixarchy/packages/sample.nix ||
       bad 'apply refused a draft edited at its source because no record existed yet'
+
+    # A --yes run (the panel's detached unit) must not wait on another apply,
+    # which may be sitting at a prompt with nobody there.
+    flock "$XDG_STATE_HOME/nixarchy/applied/lock" sleep 30 &
+    holder=$!
+    sleep 1
+    rc=0; NIXARCHY_FLAKE=$PWD/flake timeout 10 "$apply" --yes --no-preview > lock.out 2>&1 || rc=$?
+    kill "$holder" 2>/dev/null || true
+    test "$rc" -eq 1 && grep -q 'another apply is running' lock.out ||
+      bad "a --yes apply waited on (or ignored) a held lock: rc=$rc $(cat lock.out)"
 
     [ "$fails" = 0 ] || { echo "$fails case(s) failed (#1276)" >&2; exit 1; }
     echo "app-selection: every case passed"

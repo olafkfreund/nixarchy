@@ -123,7 +123,7 @@ Upstream's dev channel (*Update > Channel > Dev*, a git checkout in
 `~/omarchy`) exists here too: `nixarchy channel omarchy dev ~/omarchy`
 builds Omarchy from your checkout's committed state, with nixarchy's patches
 applied. See [Omarchy: stable, edge or your own
-checkout](channels#omarchy-stable-edge-or-your-own-checkout).
+checkout](omarchy-channels).
 
 ## Resetting your changes
 

@@ -336,6 +336,10 @@ Two lines deserve a second look:
   than setting `nixpkgs.config.allowUnfree = false` yourself, because
   `nixpkgs.config` is a free-form attribute set where two definitions of the
   same key do not resolve by priority, and yours would not win.
+- **The input's `url` also picks your Omarchy channel.** A release tag or
+  `…/release` gives stable releases; no branch follows `main`; and `…/edge`
+  runs Omarchy's development branch, built and booted here first. Switching
+  later is one line: see [Omarchy channels](omarchy-channels#on-a-nixos-machine-with-your-own-flake).
 
 ## 4. Rebuild, log out, pick Omarchy
 

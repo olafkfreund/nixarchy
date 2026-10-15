@@ -9,8 +9,7 @@ A machine makes two separate choices here, and this page covers both:
 - **which nixpkgs** it builds on, stable or unstable. That is _Update ▸ Nixpkgs_,
   and most of this page;
 - **which Omarchy** it runs: stable, edge or your own checkout. That is
-  _Update ▸ Channel_; see [Omarchy: stable, edge or your own
-  checkout](#omarchy-stable-edge-or-your-own-checkout).
+  _Update ▸ Channel_; see [Omarchy channels](omarchy-channels).
 
 Any pairing works, and switching one never moves the other. For nixpkgs:
 
@@ -99,87 +98,9 @@ channel. Only packages cross.
 
 ## Omarchy: stable, edge or your own checkout
 
-```
-nixarchy channel omarchy              # which one this machine runs
-nixarchy channel omarchy stable       # the release Omarchy, the default
-nixarchy channel omarchy edge         # Omarchy's quattro branch, tested here first
-nixarchy channel omarchy dev ~/omarchy  # your own Omarchy checkout
-```
-
-**Stable** is what every machine starts on: Omarchy's latest release, behind
-nixarchy's `release` branch.
-
-**Edge** is Omarchy's development branch, `quattro`. It is the next release
-before it is one. Your flake follows nixarchy's `edge` branch instead of
-`release`. That branch moves at most once a day, and **only after the
-desktop boots and its checks pass** with that day's `quattro`. So edge can
-stand still for a while, but it does not move to something broken.
-`nixarchy version` shows the date it was cut. Features edge carries without a
-NixOS port yet are listed in
-[#1280](https://github.com/olafkfreund/nixarchy/issues/1280).
-
-**Dev** builds Omarchy from your own git checkout, for working on Omarchy
-itself. nixarchy's NixOS patches are applied to it, so a change of yours that
-moves something nixarchy patches fails the rebuild and says where. Two
-things to know:
-
-- **Commit, then update.** Your flake follows the branch the checkout was on
-  when you switched, locked at its last commit, so uncommitted edits are not
-  built. After a commit, `omarchy update --nixarchy` picks it up. To follow a
-  different branch, run the `dev` command again from it.
-- Dev uses the **edge** branch's patch set, the one closest to Omarchy's
-  development branch.
-
-To go back, run `nixarchy channel omarchy stable`. The previous `flake.nix` is
-kept as `flake.nix.pre-channel`, and the previous generation is still in the
-boot menu.
-
-### If nixarchy is in a flake of your own
-
-The commands above edit the flake the installer wrote. If you added nixarchy to
-a NixOS flake you already had, the Omarchy channel is still one line, the
-`nixarchy` input's `url`:
-
-| your `nixarchy.url` | what you run | what the switcher reports |
-|---|---|---|
-| `github:olafkfreund/nixarchy/release` | stable, as installed machines do | stable |
-| `github:olafkfreund/nixarchy` (no branch) | **`main`**: every merge, ahead of releases | stable |
-| `github:olafkfreund/nixarchy/edge` | edge | edge |
-
-- **A bare URL follows `main`, not a release.** The switcher reports it as
-  stable, because it is not edge or dev. Running `nixarchy channel omarchy
-  stable` then says there is nothing to do. On such a machine, stable means
-  `main`.
-- **The switcher works on your flake** when the input is a block,
-  `nixarchy = { url = "…"; … };`, even with nested `inputs.* = { … };` lines
-  inside it. It rewrites only that `url` line, plus the two dev lines for dev.
-- **It refuses a flake shaped any other way and leaves it untouched.**
-  Examples: the dotted form `nixarchy.url = "…";`, a fork, or a local path.
-  Edit the line yourself then, re-lock with `nix flake update nixarchy`, and
-  rebuild:
-
-```nix
-nixarchy = {
-  url = "github:olafkfreund/nixarchy/edge";   # or …/release, or no branch for main
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-```
-
-- **For dev by hand,** add the checkout as a top-level input and point
-  nixarchy at it. Use the branch you work on, since only committed work is
-  built:
-
-```nix
-omarchy = { url = "git+file:///home/you/omarchy?ref=main"; flake = false; };
-nixarchy = {
-  url = "github:olafkfreund/nixarchy/edge";
-  inputs.omarchy.follows = "omarchy";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-```
-
-- **To try edge on one machine first,** give that host's flake (or a branch
-  of your config repo) the edge URL, and leave the others where they are.
+Which **Omarchy** you run is the other choice, and it has its own page:
+[Omarchy channels](omarchy-channels). It covers stable, edge and dev, and how
+it works on a NixOS machine with a flake of your own.
 
 ## Checking where you are
 

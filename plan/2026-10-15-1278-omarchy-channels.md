@@ -532,3 +532,13 @@ fresh Opus agent given only this plan and the `git diff`.
   A release build prints none whatever the flake says.
 - **Step 9, after review.** `rc` is no longer in the verb list the menu scan
   checks against, so a row running `nixarchy-channel omarchy rc` fails.
+- **Step 13, extended at the owner's request.** The Omarchy channel got its
+  own manual page, `docs/manual/omarchy-channels.md`, added to the sidebar,
+  `llms.txt` and the manual index. Its "On a NixOS machine with your own
+  flake" section covers the URL table, the bare URL that follows `main`, the
+  command with `NIXARCHY_FLAKE`, the switch and dev by hand, and trying edge
+  on one machine. `channels.md` keeps the nixpkgs choice and links to the
+  new page. The README gains a "Run Omarchy edge, or your own checkout"
+  section, a step 6 in "On NixOS you already run" and a row in the feature
+  table. `getting-started.md`'s flake route gains a pointer.
+

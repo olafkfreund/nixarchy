@@ -134,6 +134,53 @@ To go back, run `nixarchy channel omarchy stable`. The previous `flake.nix` is
 kept as `flake.nix.pre-channel`, and the previous generation is still in the
 boot menu.
 
+### If nixarchy is in a flake of your own
+
+The commands above edit the flake the installer wrote. If you added nixarchy to
+a NixOS flake you already had, the Omarchy channel is still one line, the
+`nixarchy` input's `url`:
+
+| your `nixarchy.url` | what you run | what the switcher reports |
+|---|---|---|
+| `github:olafkfreund/nixarchy/release` | stable, as installed machines do | stable |
+| `github:olafkfreund/nixarchy` (no branch) | **`main`**: every merge, ahead of releases | stable |
+| `github:olafkfreund/nixarchy/edge` | edge | edge |
+
+- **A bare URL follows `main`, not a release.** The switcher reports it as
+  stable, because it is not edge or dev. Running `nixarchy channel omarchy
+  stable` then says there is nothing to do. On such a machine, stable means
+  `main`.
+- **The switcher works on your flake** when the input is a block,
+  `nixarchy = { url = "…"; … };`, even with nested `inputs.* = { … };` lines
+  inside it. It rewrites only that `url` line, plus the two dev lines for dev.
+- **It refuses a flake shaped any other way and leaves it untouched.**
+  Examples: the dotted form `nixarchy.url = "…";`, a fork, or a local path.
+  Edit the line yourself then, re-lock with `nix flake update nixarchy`, and
+  rebuild:
+
+```nix
+nixarchy = {
+  url = "github:olafkfreund/nixarchy/edge";   # or …/release, or no branch for main
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+- **For dev by hand,** add the checkout as a top-level input and point
+  nixarchy at it. Use the branch you work on, since only committed work is
+  built:
+
+```nix
+omarchy = { url = "git+file:///home/you/omarchy?ref=main"; flake = false; };
+nixarchy = {
+  url = "github:olafkfreund/nixarchy/edge";
+  inputs.omarchy.follows = "omarchy";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+- **To try edge on one machine first,** give that host's flake (or a branch
+  of your config repo) the edge URL, and leave the others where they are.
+
 ## Checking where you are
 
 ```

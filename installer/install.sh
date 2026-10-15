@@ -1626,7 +1626,7 @@ finish_clone() {
 # as --from's own warning in main() already treats it.
 confirm_repo_disks() {
   [ "$from_host_exists" = true ] || return 0
-  local devs dev real boot line
+  local devs dev real boot line parent seen prior
   devs=$(nix "${NIX_FLAGS[@]}" eval --raw \
     "$work#nixosConfigurations.$hostname.config.disko.devices.disk" \
     --apply 'd: builtins.concatStringsSep "\n" (map (x: x.device) (builtins.attrValues d))') || {
@@ -1643,7 +1643,20 @@ confirm_repo_disks() {
   echo "$from_repo's $hostname will ERASE:"
   disk_paths=() disk_reals=() disk_wwns=() disk_serials=() disk_sizes=() disk_models=() disk_by_paths=()
   while IFS= read -r dev; do
-    real=$(readlink -f "$dev")
+    real=$(readlink -f "$dev") || return 1
+    if [ "$(lsblk -dnro TYPE "$real" 2>/dev/null)" = part ]; then
+      parent=$(lsblk -no PKNAME "$real" 2>/dev/null) && [ -n "$parent" ] || {
+        echo "nixarchy-install: $dev has no parent disk on this machine. Nothing was written." >&2
+        return 1
+      }
+      dev="/dev/$parent"
+      real=$(readlink -f "$dev") || return 1
+    fi
+    seen=false
+    for prior in "${disk_reals[@]}"; do
+      [ "$prior" != "$real" ] || { seen=true; break; }
+    done
+    [ "$seen" = false ] || continue
     if [ -n "$boot" ] && [ "$real" = "$boot" ]; then
       echo "nixarchy-install: $dev is the medium this installer booted from. Nothing was written." >&2
       return 1
@@ -1750,16 +1763,13 @@ partition_free_space() {
   # disk that has somebody else's OS on it.
   check_disks || return 1
   sgdisk --new=0:"$free_start":"$esp_end" \
-    --typecode=0:EF00 --change-name=0:nixarchy-esp "$dev" || {
-    echo "nixarchy-install: sgdisk could not create the ESP on $dev (exit $?)." >&2
-    echo "  Nothing was formatted. Check the partition table before retrying." >&2
-    return 1
-  }
-  sgdisk --new=0:"$root_start":"$free_end" \
+    --typecode=0:EF00 --change-name=0:nixarchy-esp \
+    --new=0:"$root_start":"$free_end" \
     --typecode=0:"$root_type" --change-name=0:nixarchy-root "$dev" || {
-    echo "nixarchy-install: sgdisk could not create the root partition on $dev (exit $?)." >&2
-    echo "  The ESP entry was created; nothing was formatted. Check the" >&2
-    echo "  partition table before retrying." >&2
+    echo "nixarchy-install: sgdisk could not create the partitions on $dev (exit $?)." >&2
+    # One call, so a failure saves nothing: sgdisk says "Error encountered; not
+    # saving changes" and a retry finds the table as it was (#1274).
+    echo "  Nothing was written; the partition table is as it was." >&2
     return 1
   }
 

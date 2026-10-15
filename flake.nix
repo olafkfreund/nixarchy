@@ -935,10 +935,10 @@
           # Hence a floor rather than a no-op or a warning. A warning is the
           # wrong instrument for this one: what it costs to ignore is access
           # to your own machine, and it would be read months before it is
-          # paid. On unstable the branch is not taken and nothing about the
-          # package changes.
-          # qtimageformats is the WebP/TIFF decoder; without it a WebP background
-          # renders black ("Unsupported image format", #1284).
+          # paid. On unstable that branch is not taken.
+          #
+          # Every branch then gains qtimageformats, Qt's WebP/TIFF decoder: without
+          # it a WebP background never draws ("Unsupported image format", #1284).
           quickshell =
             (
               # 0.3.2's WlSessionLock::unlock() asks isLocked() after releasing the

@@ -132,3 +132,14 @@ Revert the merge. WebP backgrounds go black again; nothing else changes.
 - **Step 2: the error branch.** `Image` has no `errorString`, so that branch prints the status, and Qt logs the decode error itself.
 - **Step 2: environment.** `QT_FORCE_STDERR_LOGGING=1` is needed for `console.log` to reach the build log. `QML_IMPORT_PATH` and `FONTCONFIG_FILE` are set as `tests/bar-keyed-sync.nix` sets them.
 - **Step 2: the red proof** removed `qt6.qtimageformats` from the outer override, leaving the override applied but empty, rather than removing the override. That is the same property: no decoder.
+- **Step 3, after review.** Without the decoder the shell keeps the
+  *previous* background, because its reveal waits for a decode that never
+  comes; it shows black only at boot. The probe therefore uses yellow
+  `#FFFF00`, more than 400 from every lumon still and 510 from black, not
+  sea green, which was only 162 from the previous still. It also asserts
+  the screen moved more than 120 from a screenshot taken before. The
+  restore sleeps 3 s rather than polling. The review confirmed that a
+  still-to-still switch writes nothing to `shell.json`, so the #847 block
+  after it is unaffected. The VM red proof was not run locally; the PR says
+  so.
+

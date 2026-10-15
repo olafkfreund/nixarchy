@@ -504,3 +504,31 @@ fresh Opus agent given only this plan and the `git diff`.
     boot does not hide it.
 - **Step 10.** No existing doctor check could run the channel block offline, so `tests/doctor-channel.nix` is new, modelled on `doctor-wireless` and registered in `flake.nix`. The `nixarchy-version` and `omarchy-update` cases went into `tests/channel.nix`. The doctor has no info colour, so dev is printed `$dim`.
 - **Step 11.** nh 4.4.2 takes `--update-input` twice, so dev adds `--update-input omarchy` to nh itself. No separate `nix flake update` is needed.
+- **Step 7, after review.**
+  - **Dev writes `?ref=<branch>`.** The url is
+    `git+file://<path>?ref=<branch>`, the branch read from the checkout
+    (`git symbolic-ref`, else `.git/HEAD`). Without a ref nix reads the working
+    tree as it is: a dirty tree cannot be locked, and an unlocked evaluation
+    builds the uncommitted edits (measured on Nix 2.34.8). With the ref the
+    lock is the branch's commit, so only committed work is built. A detached
+    HEAD is refused (nothing to pin), and the branch name is held to
+    `[A-Za-z0-9._/-]`. The dirty warning ignores untracked files, which do not
+    reach a branch's lock.
+  - **A failed re-lock restores the file**, as the step always said. The
+    nixpkgs path keeps its older behaviour (the rewrite stays, with a restore
+    hint). The tests put a re-locking `nix` stub on PATH, and a failing one in
+    front where the restore is asserted.
+  - **Nested blocks.** Both awks (the reader and the rewriter) count braces, so
+    the `nixarchy = {` and `omarchy = {` blocks end where their depth returns
+    to zero. A nested `inputs.disko = { ... };` no longer ends the block, and
+    `url` and `follows` are only read at depth one. A fixture with such a
+    block is compared byte for byte against an expected file built by an awk
+    that keys on indentation instead.
+  - The unreachable "top-level omarchy input that is not ours" branch is gone:
+    such an input always classifies as custom and is refused earlier.
+- **Step 10, after review.** `nixarchy-version` describes the build, not the
+  flake's intent: it adds a suffix only when the built Omarchy version starts
+  with `edge-`, ` (dev)` if the flake also names a checkout, else ` (edge)`.
+  A release build prints none whatever the flake says.
+- **Step 9, after review.** `rc` is no longer in the verb list the menu scan
+  checks against, so a row running `nixarchy-channel omarchy rc` fails.

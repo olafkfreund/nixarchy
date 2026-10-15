@@ -80,14 +80,27 @@ if [ "${1:-}" = omarchy ]; then
   o_facts() {
     awk '
       function quoted(s) { sub(/^[^"]*"/, "", s); sub(/".*$/, "", s); return s }
-      /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { nb++; inn = 1; next }
-      inn && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ { nu++; nurl = quoted($0) }
-      inn && /^[[:space:]]*inputs[.]omarchy[.]follows[[:space:]]*=[[:space:]]*"omarchy";[[:space:]]*$/ { fol++ }
-      inn && /^[[:space:]]*[}];[[:space:]]*$/ { inn = 0 }
-      /^[[:space:]]*omarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { ob++; ino = 1; next }
-      ino && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ { ourl = quoted($0) }
-      ino && /^[[:space:]]*flake[[:space:]]*=[[:space:]]*false;[[:space:]]*$/ { ofl++ }
-      ino && /^[[:space:]]*[}];[[:space:]]*$/ { ino = 0 }
+      # Braces opened minus closed on a line. A nested attrset inside the block
+      # (inputs.disko = { ... };) must not end it at its own closing line, so the
+      # block ends where the depth returns to zero. Comments carry no braces.
+      function delta(s,  t, o, c) {
+        if (s ~ /^[[:space:]]*#/) return 0
+        t = s; o = gsub(/[{]/, "", t); t = s; c = gsub(/[}]/, "", t); return o - c
+      }
+      /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ && !inn && !ino { nb++; inn = 1; nd = 1; next }
+      inn {
+        if (nd == 1 && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/) { nu++; nurl = quoted($0) }
+        if (nd == 1 && /^[[:space:]]*inputs[.]omarchy[.]follows[[:space:]]*=[[:space:]]*"omarchy";[[:space:]]*$/) fol++
+        nd += delta($0); if (nd <= 0) inn = 0
+        next
+      }
+      /^[[:space:]]*omarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ && !ino { ob++; ino = 1; od = 1; next }
+      ino {
+        if (od == 1 && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/) ourl = quoted($0)
+        if (od == 1 && /^[[:space:]]*flake[[:space:]]*=[[:space:]]*false;[[:space:]]*$/) ofl++
+        od += delta($0); if (od <= 0) ino = 0
+        next
+      }
       END {
         print "nb=" nb + 0; print "nu=" nu + 0; print "fol=" fol + 0
         print "ob=" ob + 0; print "ofl=" ofl + 0
@@ -127,7 +140,11 @@ if [ "${1:-}" = omarchy ]; then
   if [ -z "$o_target" ]; then
     bold "This machine follows Omarchy: $o_current"
     echo "  nixarchy   $o_nurl"
-    [ "$o_current" != dev ] || echo "  omarchy    ${o_ourl#git+file://}"
+    if [ "$o_current" = dev ]; then
+      o_shown=${o_ourl#git+file://}
+      echo "  omarchy    ${o_shown%%\?ref=*}"
+      case "$o_shown" in *\?ref=*) echo "  branch     ${o_shown#*\?ref=}" ;; esac
+    fi
     echo
     case "$o_current" in
       stable) dim "The release branch: what has been through a human's release." ;;
@@ -148,6 +165,7 @@ if [ "${1:-}" = omarchy ]; then
   fi
 
   o_dev_path=""
+  o_dev_url=""
   if [ "$o_target" = dev ]; then
     o_p="${o_path_arg:-$HOME/omarchy}"
     o_dev_path=$(cd "$o_p" 2>/dev/null && pwd -P) || { red "$o_p is not a directory."; exit 1; }
@@ -160,13 +178,29 @@ if [ "${1:-}" = omarchy ]; then
     for d in bin default shell; do
       [ -d "$o_dev_path/$d" ] || { red "$o_dev_path does not look like Omarchy: no $d/ directory."; exit 1; }
     done
-    if [ "$o_current" != dev ] && [ "$o_ob" != 0 ]; then
-      red "$nixfile already has a top-level omarchy input that is not this command's."
-      echo "Remove or rename it, or point it at your checkout yourself."
+    # The branch is part of the url. Without a ref, nix reads the working tree
+    # as it is: a dirty one cannot be locked at all, and an unlocked evaluation
+    # builds the uncommitted edits. With `?ref=<branch>` the lock is the
+    # branch's commit, so what is built is what is committed (measured on Nix
+    # 2.34.8). The branch comes from the checkout itself.
+    o_branch=""
+    if command -v git >/dev/null 2>&1; then
+      o_branch=$(git -C "$o_dev_path" symbolic-ref --short -q HEAD 2>/dev/null || true)
+    fi
+    if [ -z "$o_branch" ] && [ -f "$o_dev_path/.git/HEAD" ]; then
+      o_branch=$(sed -n 's|^ref: refs/heads/||p' "$o_dev_path/.git/HEAD" | head -1)
+    fi
+    if [ -z "$o_branch" ]; then
+      red "$o_dev_path has no branch checked out (a detached HEAD, or unreadable)."
+      echo "Check out a branch there first: the flake is locked to that branch's commit."
       exit 1
     fi
-    if [ "$o_current" = dev ] && [ "$o_ourl" = "git+file://$o_dev_path" ]; then
-      echo "Already following your checkout at $o_dev_path. Nothing to do."; exit 0
+    case "$o_branch" in
+      -* | *[!A-Za-z0-9._/-]*) red "Refusing the branch '$o_branch': use letters, digits and . _ / - only."; exit 1 ;;
+    esac
+    o_dev_url="git+file://$o_dev_path?ref=$o_branch"
+    if [ "$o_current" = dev ] && [ "$o_ourl" = "$o_dev_url" ]; then
+      echo "Already following your checkout at $o_dev_path (branch $o_branch). Nothing to do."; exit 0
     fi
   elif [ "$o_target" = "$o_current" ]; then
     echo "Already following $o_target. Nothing to do."; exit 0
@@ -183,12 +217,12 @@ if [ "${1:-}" = omarchy ]; then
   echo "  nixarchy   $o_nurl"
   echo "          -> $o_new_url"
   if [ "$o_target" = dev ]; then
-    echo "  omarchy -> your checkout at $o_dev_path"
+    echo "  omarchy -> your checkout at $o_dev_path, branch $o_branch"
     echo
-    dim "Only COMMITTED changes in that checkout are built."
+    dim "Only COMMITTED changes on that branch are built."
     # git is not a runtime dependency of this package, so the warning is a
     # courtesy when it is there and silent when it is not.
-    if command -v git >/dev/null 2>&1 && [ -n "$(git -C "$o_dev_path" status --porcelain 2>/dev/null || true)" ]; then
+    if command -v git >/dev/null 2>&1 && [ -n "$(git -C "$o_dev_path" status --porcelain --untracked-files=no 2>/dev/null || true)" ]; then
       red "That checkout has uncommitted changes; they will not be built."
     fi
   fi
@@ -209,32 +243,48 @@ if [ "${1:-}" = omarchy ]; then
   [ "$o_target" != dev ] || o_want_follows=1
   # Only lines inside the nixarchy block, and the top-level omarchy block, are
   # touched; every other line is printed back as it came.
-  awk -v newurl="$o_new_url" -v want_follows="$o_want_follows" -v devpath="$o_dev_path" -v has_om="$o_ob" '
+  awk -v newurl="$o_new_url" -v want_follows="$o_want_follows" -v devurl="$o_dev_url" -v has_om="$o_ob" '
     function indent(s) { sub(/[^[:space:]].*$/, "", s); return s }
-    /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { inn = 1; print; next }
-    inn && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ {
-      line = $0; sub(/"[^"]*"/, "\"" newurl "\"", line); print line
-      if (want_follows) print indent($0) "inputs.omarchy.follows = \"omarchy\";"
-      next
+    # As in the reader above: a block ends where its depth returns to zero.
+    function delta(s,  t, o, c) {
+      if (s ~ /^[[:space:]]*#/) return 0
+      t = s; o = gsub(/[{]/, "", t); t = s; c = gsub(/[}]/, "", t); return o - c
     }
-    inn && /^[[:space:]]*inputs[.]omarchy[.]follows[[:space:]]*=/ { next }
-    inn && /^[[:space:]]*[}];[[:space:]]*$/ {
-      inn = 0; print
-      if (devpath != "" && !has_om) {
-        ws = indent($0)
-        print ws "omarchy = {"
-        print ws "  url = \"git+file://" devpath "\";"
-        print ws "  flake = false;"
-        print ws "};"
+    /^[[:space:]]*nixarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ && !inn && !ino { inn = 1; nd = 1; print; next }
+    inn {
+      if (nd == 1 && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/) {
+        line = $0; sub(/"[^"]*"/, "\"" newurl "\"", line); print line
+        if (want_follows) print indent($0) "inputs.omarchy.follows = \"omarchy\";"
+        next
+      }
+      if (nd == 1 && /^[[:space:]]*inputs[.]omarchy[.]follows[[:space:]]*=/) next
+      nd += delta($0)
+      print
+      if (nd <= 0) {
+        inn = 0
+        if (devurl != "" && !has_om) {
+          ws = indent($0)
+          print ws "omarchy = {"
+          print ws "  url = \"" devurl "\";"
+          print ws "  flake = false;"
+          print ws "};"
+        }
       }
       next
     }
-    /^[[:space:]]*omarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ { ino = 1; if (devpath == "") { skip = 1; next } print; next }
-    ino && skip { if ($0 ~ /^[[:space:]]*[}];/) { ino = 0; skip = 0 } next }
-    ino && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/ {
-      line = $0; sub(/"[^"]*"/, "\"git+file://" devpath "\"", line); print line; next
+    /^[[:space:]]*omarchy[[:space:]]*=[[:space:]]*[{][[:space:]]*$/ && !ino {
+      ino = 1; od = 1
+      if (devurl == "") { skip = 1; next }
+      print; next
     }
-    ino && /^[[:space:]]*[}];/ { ino = 0 }
+    ino {
+      if (!skip && od == 1 && /^[[:space:]]*url[[:space:]]*=[[:space:]]*"/) {
+        line = $0; sub(/"[^"]*"/, "\"" devurl "\"", line); print line
+      } else if (!skip) print
+      od += delta($0)
+      if (od <= 0) { ino = 0; skip = 0 }
+      next
+    }
     { print }
   ' "$nixfile" > "$nixfile.new"
   cat "$nixfile.new" > "$nixfile"
@@ -257,8 +307,11 @@ if [ "${1:-}" = omarchy ]; then
   [ "$o_target" != dev ] || o_inputs+=(omarchy)
   echo "Re-locking: ${o_inputs[*]}"
   if ! nix flake update "${o_inputs[@]}" --flake "$flake"; then
-    red "Re-locking failed. $nixfile is rewritten; the lock is not."
-    echo "Restore with:  mv $nixfile.pre-channel $nixfile"
+    # Put it back. A flake.nix naming an input the lock does not have is a
+    # machine that cannot evaluate, and the user did not ask for that.
+    mv "$nixfile.pre-channel" "$nixfile"
+    red "Re-locking failed, so $nixfile is restored to what it was."
+    echo "Nothing changed. Check the network and try again."
     exit 1
   fi
 

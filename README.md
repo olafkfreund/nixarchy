@@ -48,7 +48,7 @@ made of, and which are on by default, is in [What works](#what-works) below.
 | **[Run the binary you just downloaded](https://olafkfreund.github.io/nixarchy/manual/python)** | `nix-ld`, `envfs` and AppImages, on by default — `nixarchy-doctor <binary>` names what is still missing |
 | **[Get this machine back](https://olafkfreund.github.io/nixarchy/manual/reinstall-image)** | `nixarchy reinstall iso` — an install image built from your own configuration |
 | **[One flake, many machines](https://olafkfreund.github.io/nixarchy/manual/many-machines)** | roll a change out to a fleet from one repository |
-| **[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)** | `Update ▸ Channel`, per machine or per package |
+| **[Stable or unstable](https://olafkfreund.github.io/nixarchy/manual/channels)** | `Update ▸ Nixpkgs` for nixpkgs, `Update ▸ Channel` for Omarchy stable, edge or your own checkout |
 | **[A toolchain per project](https://olafkfreund.github.io/nixarchy/manual/per-project-environments)** | `nixarchy dev init react`, or the panel on `Super+Alt+E` |
 | **[Your phone on the desktop](https://olafkfreund.github.io/nixarchy/manual/android)** | `nixarchy android`, mirrored or emulated |
 | **[The desktop from anywhere](https://olafkfreund.github.io/nixarchy/manual/remote-desktop)** | `gliff` between two Hyprland machines over SSH, installed by default with a bar widget that checks each machine; `hypr-rdp`, the running session over RDP |

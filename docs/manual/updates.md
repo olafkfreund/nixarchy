@@ -60,8 +60,8 @@ edge Omarchy on 26.05. Switching one never touches the other. RC is not
 offered.
 
 Both groups edit your `flake.nix` under the rule `nixarchy-unfreeze` set: only
-lines this project wrote get rewritten, and a flake you have reshaped gets the
-edit printed for you to make by hand. **[Channels](channels)** has the commands, what
+lines this project wrote get rewritten, and a flake you have reshaped is
+refused rather than guessed at. **[Channels](channels)** has the commands, what
 each channel is, and how to get back.
 
 The update-available icon next to the clock tracks the `release` branch, so it

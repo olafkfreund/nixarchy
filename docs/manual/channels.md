@@ -123,8 +123,10 @@ itself. nixarchy's NixOS patches are applied to it, so a change of yours that
 moves something nixarchy patches fails the rebuild and says where. Two
 things to know:
 
-- **Commit, then update.** The checkout is locked by commit, so uncommitted
-  edits are not built. After a commit, `omarchy update --nixarchy` picks it up.
+- **Commit, then update.** Your flake follows the branch the checkout was on
+  when you switched, locked at its last commit, so uncommitted edits are not
+  built. After a commit, `omarchy update --nixarchy` picks it up. To follow a
+  different branch, run the `dev` command again from it.
 - Dev uses the **edge** branch's patch set, the one closest to Omarchy's
   development branch.
 

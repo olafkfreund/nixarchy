@@ -120,7 +120,7 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # Omarchy channel. `omarchy` itself is a verb of the first list only if that
     # dispatch is really there, so deleting it turns the rows red.
     sed -n -e '/case "$o_target" in/,/^ *esac/p' \
-      ${omarchyPkg}/share/omarchy/bin/nixarchy-channel | verbs_from > omarchy-channel-verbs
+      ${omarchyPkg}/share/omarchy/bin/nixarchy-channel | verbs_from | grep -vx rc > omarchy-channel-verbs || true
     if grep -qF '"''${1:-}" = omarchy' ${omarchyPkg}/share/omarchy/bin/nixarchy-channel; then
       echo omarchy >> channel-verbs
     fi

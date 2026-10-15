@@ -30,6 +30,12 @@ pkgs.runCommand "nixarchy-doctor-channel" { nativeBuildInputs = [ pkgs.gnugrep ]
   mk() { mkdir -p "$1"; cat > "$1/flake.nix" < ${pkgs.writeText "flake.nix" filled}; }
   co=$PWD/checkout
   mkdir -p "$co/.git" "$co/bin" "$co/default" "$co/shell"
+  echo 'ref: refs/heads/main' > "$co/.git/HEAD"
+  # The switch re-locks, which needs a network; a stub that succeeds stands in.
+  mkdir -p lock-ok
+  printf '#!/bin/sh\nexit 0\n' > lock-ok/nix
+  chmod +x lock-ok/nix
+  export PATH=$PWD/lock-ok:$PATH
 
   mk stable
   mk edge

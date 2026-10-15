@@ -120,8 +120,10 @@ themes are read-only in the same way; put a custom theme in
 `$OMARCHY_PATH/themes/`.
 
 Upstream's dev channel (*Update > Channel > Dev*, a git checkout in
-`~/omarchy`) is a pacman concept. The equivalent is pointing the `nixarchy`
-flake input at your own fork or a local path and rebuilding.
+`~/omarchy`) exists here too: `nixarchy channel omarchy dev ~/omarchy`
+builds Omarchy from your checkout's committed state, with nixarchy's patches
+applied. See [Omarchy: stable, edge or your own
+checkout](channels#omarchy-stable-edge-or-your-own-checkout).
 
 ## Resetting your changes
 

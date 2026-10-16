@@ -9,13 +9,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omacut";
-  version = "0.5.0";
+  version = "0.7.2";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omacut";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-ANdhXYgjIqqjbt5y4LK+uGT1nxDoYguFX0xETMfdhtQ=";
+    hash = "sha256-bNu2S0BPDCjm9PQQUCSC7UGuACpP9vXbbHILlaSoI0s=";
   };
 
   # Third of the four applications Omarchy writes itself; see

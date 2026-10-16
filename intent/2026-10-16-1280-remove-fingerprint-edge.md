@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1280
 author: olafkfreund
 ---
@@ -62,5 +62,5 @@ correcting.
 
 ## Open questions
 
-- Should `remove_resume_hook` become `:`, or be kept as is? It is harmless on
-  NixOS, but keeping it means keeping the `/usr` exception. I recommend `:`.
+None. Decided at approval: `remove_resume_hook` becomes `:`, so the command
+leaves the `/usr` exceptions.

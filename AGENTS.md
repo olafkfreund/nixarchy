@@ -1179,6 +1179,16 @@ thing and meant another. None of them was a bug in this repo.
   had nothing to do with the bump's app list. Give a parsed call its own
   `LC_ALL=C.UTF-8` rather than exporting it for a whole check: the check must
   still run the product in the locale a user's script would have.
+- **A substituter in `nix.conf` is not a substituter nix asks.** CI listed
+  hyprland.cachix.org with the right key, and a comment in `build.yml` said
+  Hyprland substituted from it. It never had: `cachix use`, run by
+  cachix-action after `setup-nix`, writes a full `substituters =` line into
+  the user's `nix.conf`, and the daemon lets that replace the system list.
+  Nothing failed while our cache held the same Hyprland; the first Hyprland
+  bump compiled it from source and timed out `system` twice (#1294). The
+  measurement is the run log, not the config:
+  `grep -oE "from 'https://[^']*'" | sort | uniq -c` counts downloads per
+  cache, and a cache at zero is a cache nobody asked.
 
 ## 14. Coexist with the user's own config
 

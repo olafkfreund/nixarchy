@@ -66,6 +66,8 @@ jobs:
           # Pull only. What reaches the cache is pushed by name, from main, by
           # cachix-push.sh -- the store diff filled the free tier (#697).
           skipPush: true
+          # Why: .github/actions/setup-nix/action.yml -- `cachix use` would replace its substituters.
+          skipAddingSubstituter: true
           name: nixarchy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 

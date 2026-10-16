@@ -643,7 +643,7 @@ one `nix-snapd` and no second `nixpkgs`, and that `options` (`flatsnapIsADefault
 `flatsnapSnapd`, the menu row) and `menu-verbs` pass. The plugin's own
 `nix flake check` (a VM test and a gating eval) is its release gate.
 
-### nixarchy-menu, on by default (#946, #1052)
+### nixarchy-menu, installed and off by default (#946, #1052, #1283)
 
 ```nix
 nixarchy-menu = {
@@ -654,7 +654,14 @@ Raycast-style replacement for the Omarchy menu (id `nixarchy.menu`,
 `clonedFrom: omarchy.menu`). It hands off to every default agent, and it has
 Nixi and skill-backed help rows. nixarchy takes its `packages.<sys>.plugin`.
 
-**On by default since #1052; `defaultPlugins.menu = false` declines it.** #946
+**Installed but off since #1283; turned on at first login only with
+`programs.nixarchy.menu.default = "nixarchy"`.** The enable-once hook reads
+`enableOnceIds`, which leaves the menu out unless asked for, while install,
+the clone restore and the placement map still read every declared default.
+Setup ▸ Defaults ▸ Menu switches at runtime and writes the same enabled-once
+marker the hook would, so the restore below still works after a click. It
+was on by default from #1052 to #1283; `defaultPlugins.menu = false` still
+declines it entirely. #946
 shipped it off, through a per-entry `enableByDefault = false`: a `menu = false`
 in the `defaultPlugins` default attrset would not have survived a host setting
 `{ podman = false; }`, which replaces that attrset wholesale. With the menu on,

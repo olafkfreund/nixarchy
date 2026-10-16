@@ -1610,3 +1610,21 @@ plain push rejects a non-fast-forward, so the refusal happened anyway, one
 layer down. When a guard duplicates a refusal the tool already makes, assert
 the guard's own reason (`not a fast-forward` on stderr), not only that
 something failed -- otherwise the red proof for the guard cannot go red.
+
+## The hardware-only pair: fprintd after a real suspend, and a splash for a late display (#1285)
+
+Two fixes ported from Omarchy `quattro` have parts no layer here can show:
+
+- **fprintd after resume.** `checks.options` holds that nixarchy, on a
+  machine with `services.fprintd.enable`, adds the post-resume restart and a
+  3 s `TimeoutStopSec`, and adds neither without fprintd or in Mode A. It
+  cannot show that the restart actually un-wedges a reader: that needs a real
+  reader, a real suspend, and fprintd#173 happening. `pkgs/verify.sh` has no
+  fingerprint section to extend. By hand: enrol a finger, suspend, resume,
+  unlock with the finger.
+- **The splash re-centring.** `checks.plymouth-layout` holds the structure:
+  every positioning call lives in `layout()` or `position_bullet()`, and
+  `refresh_callback` re-runs `layout()` when the window size changes. No VM
+  grows plymouth's window mid-boot, so whether it *looks* right is a human's
+  call. By hand: boot with a Thunderbolt dock whose display comes up late
+  and watch the logo and the passphrase field land in the middle of it.

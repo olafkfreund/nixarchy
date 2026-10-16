@@ -21,6 +21,9 @@ eval "$(tr '\0' '\n' <"/proc/$pid/environ" |
   grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|HYPRLAND_INSTANCE_SIGNATURE)=' |
   sed 's/^/export /')"
 
+# nixarchy-menu is installed but off by default since #1283; these shots are of it.
+OMARCHY_SHELL_IPC_TIMEOUT=30s omarchy-plugin-enable nixarchy.menu >/dev/null
+
 menu_open() { [[ $(hyprctl layers 2>/dev/null) == *'namespace: omarchy-menu'* ]]; }
 toggle() { omarchy-shell shell toggle omarchy.menu "$@" >/dev/null 2>&1 || true; sleep 1.2; }
 close() {

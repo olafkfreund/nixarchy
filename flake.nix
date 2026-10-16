@@ -348,7 +348,7 @@
       inputs.nix-flatpak.follows = "nix-flatpak";
     };
 
-    # Why: docs/internals/flake.md#nixarchy-menu-on-by-default-946-1052
+    # Why: docs/internals/flake.md#nixarchy-menu-installed-and-off-by-default-946-1052-1283
     # A commit on main (no tags); bump it the way that page says. Its only
     # inputs are these two, so it adds nothing to the lock but itself.
     nixarchy-menu = {
@@ -2006,6 +2006,9 @@
             # of it that could break here is the writable ~/.config/omarchy the
             # seed creates.
             "plugin"
+            # The boot splash's positions all live in layout(), redone when a
+            # display appears late. See tests/plymouth-layout.nix and #1285.
+            "plymouth-layout"
             # A previewed config's desktop actually renders: the vmVariant
             # gains the software-GL fallbacks and sizing, only when nixarchy
             # is on, all of it overridable. See tests/preview-variant.nix

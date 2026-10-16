@@ -160,14 +160,12 @@ Everything is behind one key.
 
 ![The desktop, first boot](../img/desktop/desktop.jpg)
 
-**`Super + Space`** opens the menu: [nixarchy-menu](plugins#menu), a palette.
-Type what you want (an app, a command, a sum, a file) and it finds the row.
-The whole Omarchy menu is still inside it, under **Omarchy Menu**, and every
-`omarchy menu` route still lands where it did. If you would rather walk the
-tree, `programs.nixarchy.defaultPlugins.menu = false;` brings the stock menu
-back.
+**`Super + Space`** opens the menu: Omarchy's own, a tree you walk. If you
+would rather type what you want and let a palette find the row, switch to
+[nixarchy-menu](plugins#menu) in **Setup ▸ Defaults ▸ Menu**. It is installed
+already and needs no rebuild, and the whole Omarchy menu stays inside it.
 
-![Super+Space: nixarchy-menu's palette](../img/desktop/menu.jpg)
+![nixarchy-menu's palette, one switch away](../img/desktop/menu.jpg)
 
 **`Super + K`** shows every key binding, which is the faster way in if you do
 not know what you are looking for yet.

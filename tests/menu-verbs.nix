@@ -299,6 +299,34 @@ pkgs.runCommand "nixarchy-menu-verbs"
       exit 1
     }
 
+    # The Default Menu switch (#1283): each row runs the verb that puts its own
+    # menu in charge, and says which one is on. Swapped actions would make a
+    # row turn on the menu it is not labelled with.
+    rows=$(grep -v '^[[:space:]]*//' ${menu})
+    row() { jq -r --arg id "$1" --arg k "$2" '.[$id][$k] // ""' <<<"$rows"; }
+    test "$(row setup.default.menu.omarchy action)" = "omarchy-plugin-disable nixarchy.menu" || {
+      echo "ERROR: setup.default.menu.omarchy does not run omarchy-plugin-disable nixarchy.menu" >&2
+      fail=1
+    }
+    # Enable, then the enabled-once marker the hook's restore needs (#1283).
+    nix_action=$(row setup.default.menu.nixarchy action)
+    case "$nix_action" in
+      "omarchy-plugin-enable nixarchy.menu && "*enabled-once*'echo omarchy.menu > '*) ;;
+      *) false ;;
+    esac || {
+      echo "ERROR: setup.default.menu.nixarchy does not enable nixarchy.menu and record its marker: $nix_action" >&2
+      fail=1
+    }
+    # Exact, so swapping the two check marks cannot pass.
+    test "$(row setup.default.menu.omarchy checked)" = '! nixarchy-plugin --enabled nixarchy.menu' || {
+      echo "ERROR: setup.default.menu.omarchy is not checked when nixarchy-menu is off" >&2
+      fail=1
+    }
+    test "$(row setup.default.menu.nixarchy checked)" = 'nixarchy-plugin --enabled nixarchy.menu' || {
+      echo "ERROR: setup.default.menu.nixarchy is not checked when nixarchy-menu is on" >&2
+      fail=1
+    }
+
     test "$fail" -eq 0
     echo "every menu row names a subcommand its CLI has"
     touch $out

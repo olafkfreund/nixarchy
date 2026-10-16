@@ -796,10 +796,11 @@ pkgs.testers.runNixOSTest {
     machine.succeed(on_desktop("hyprctl reload"))
 
     # ---- summoning the menu opens one (#1069) ------------------------------
-    # nixarchy-menu replaces omarchy.menu, and loads MenuModel.js from the
-    # system profile; when that path was missing the palette never loaded and
-    # Super+Space opened nothing, with the stock menu already disabled.
-    # Whichever menu is enabled answers omarchy.menu, and draws this layer.
+    # Omarchy's own menu by default since #1283. nixarchy-menu, when switched
+    # on, loads MenuModel.js from the system profile; when that path was
+    # missing its palette never loaded and Super+Space opened nothing, with
+    # the stock menu already disabled. Whichever menu is enabled answers
+    # omarchy.menu and draws this layer; the #1283 probe below covers both.
     # Retried (#1203): after the reload above, Quickshell rebuilds its windows
     # and IPC can miss the client's 2 s timeout. Safe: summon is idempotent.
     try:
@@ -827,9 +828,70 @@ pkgs.testers.runNixOSTest {
         time.sleep(1)
     else:
         raise AssertionError("#1069: the menu did not close on Escape, and would sit over every later section")
-    reply = machine.succeed(on_desktop("omarchy-shell shell call omarchy.menu dismiss '{}'")).strip()
-    assert reply == "ok", f"#1070: dismiss answered {reply!r}; omarchy-menu close would fall back to hide, and to voice"
+    # dismiss is nixarchy-menu's own close (#1070); the stock menu, the default
+    # since #1283, has none and omarchy-menu close falls back to hide. It is
+    # asserted in the #1283 probe below, while nixarchy-menu is the one on.
     print("summoning the menu opens one (#1069)")
+
+    # ---- the menu switch: Omarchy's by default, nixarchy-menu one click away (#1283)
+    # The two Setup > Defaults > Menu rows run exactly these commands. Each
+    # direction must leave one menu loaded, and Super+Space's summon must
+    # still draw it.
+    def menus():
+        plugins = json.loads(machine.succeed(on_desktop(
+            "OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json")))
+        on = {p["id"]: p["enabled"] for p in plugins}
+        return on.get("omarchy.menu"), on.get("nixarchy.menu")
+    def summon_draws(why):
+        machine.wait_until_succeeds(on_desktop("omarchy-menu summon install"), timeout=60)
+        for _ in range(30):
+            if "namespace: omarchy-menu" in machine.succeed(on_desktop("hyprctl layers")):
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError(f"#1283: no omarchy-menu layer {why}")
+        machine.succeed(on_desktop("omarchy-menu close"))
+    # The rows' own action strings, read out of the menu this machine
+    # generated, so the probe runs exactly what a click runs (marker included).
+    import base64
+    # OMARCHY_PATH is a login-session variable, as the #210 block above reads it.
+    menu_tree = machine.succeed("su - omarchy -c 'echo $OMARCHY_PATH'").strip()
+    menu_text = machine.succeed(f"cat {menu_tree}/default/omarchy/omarchy-menu.jsonc")
+    rows = json.loads("\n".join(
+        l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
+    def click(row):
+        action = rows[row]["action"]
+        b64 = base64.b64encode(action.encode()).decode()
+        machine.succeed(f"echo {b64} | base64 -d > /tmp/row.sh && chmod 755 /tmp/row.sh")
+        machine.succeed(on_desktop("OMARCHY_SHELL_IPC_TIMEOUT=30s bash /tmp/row.sh"))
+    marker = "/home/omarchy/.local/state/nixarchy/enabled-once/nixarchy.menu"
+    stock, nix = menus()
+    assert stock and not nix, (
+        f"#1283: a new machine should start on Omarchy's menu with nixarchy-menu "
+        f"installed and off; omarchy.menu={stock} nixarchy.menu={nix}")
+    machine.fail(f"test -e {marker}")
+    # 30 s, as the post-boot hook gives it: enabling reloads plugins, which
+    # can outlast upstream's 2 s IPC budget.
+    click("setup.default.menu.nixarchy")
+    stock, nix = menus()
+    assert nix and not stock, (
+        f"#1283: the Nixarchy row left omarchy.menu={stock} nixarchy.menu={nix}")
+    marked = machine.succeed(f"cat {marker}").strip()
+    assert marked == "omarchy.menu", (
+        f"#1283: the Nixarchy row left no restore marker ({marked!r}); removing "
+        "nixarchy-menu later would leave no menu")
+    summon_draws("after switching to nixarchy-menu")
+    # #1070: nixarchy-menu's own close, so a scripted close never starts voice.
+    machine.succeed(on_desktop("omarchy-menu summon install"))
+    reply = machine.succeed(on_desktop("omarchy-shell shell call omarchy.menu dismiss '{}'")).strip()
+    assert reply == "ok", f"#1070: dismiss answered {reply!r} with nixarchy-menu on; omarchy-menu close would fall back to hide, and to voice"
+    click("setup.default.menu.omarchy")
+    stock, nix = menus()
+    assert stock and not nix, (
+        f"#1283: the Omarchy row left omarchy.menu={stock} nixarchy.menu={nix} -- "
+        "disabling the clone must restore the stock menu")
+    summon_draws("after switching back to Omarchy's menu")
+    print("the menu switch goes both ways and always leaves a menu (#1283)")
 
     # ---- nixarchy-apply --detach, against real systemd (#765 PR 3) ---------
     # Not a real switch: this VM is offline and cannot evaluate its flake. A

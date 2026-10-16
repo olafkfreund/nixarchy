@@ -50,6 +50,8 @@ let
     programs.nixarchy = {
       enable = true;
       flake = "/etc/nixos";
+      # The menu beat films nixarchy-menu's palette, off by default since #1283.
+      menu.default = "nixarchy";
     };
 
     boot.plymouth.enable = lib.mkForce false;

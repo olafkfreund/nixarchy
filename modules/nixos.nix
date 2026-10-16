@@ -1782,6 +1782,12 @@ in
       omarchy-lock-fingerprint.unixAuth = false;
     };
 
+    # fprintd loses the reader across suspend and stays wedged (fprintd#173);
+    # restart it on resume so the lock screen's finger works again.
+    powerManagement.resumeCommands = lib.mkIf config.services.fprintd.enable ''
+      ${config.systemd.package}/bin/systemctl --no-block try-restart fprintd.service || true
+    '';
+
     security = {
       # etc/sudoers.d/omarchy-passwd-tries.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
@@ -1819,31 +1825,6 @@ in
         "DefaultLimitNOFILE=65536:524288";
 
     systemd = {
-      # avahi-daemon cannot restart onto its own stale pid file, and a
-      # nixarchy install hits this because the check rebuilds right after the
-      # first boot (#891).
-      #
-      # The daemon creates /run/avahi-daemon itself, as root, then drops to
-      # uid 999 -- so the removal of a stale pid and the create sit on
-      # opposite sides of the privilege drop, and the second loses:
-      # "open(/run/avahi-daemon//pid): File exists". The directory is not
-      # systemd-managed, so it and the file survive any unclean exit.
-      #
-      # The `+` prefix is load-bearing and was arrived at by measurement, not
-      # by reading: the unit has ProtectSystem=strict, which leaves /run
-      # read-only, AND a CapabilityBoundingSet without CAP_DAC_OVERRIDE, so a
-      # plain ExecStartPre rm fails with Permission denied even as root. `+`
-      # runs it outside the sandbox with full privileges, which is the only
-      # form that works.
-      #
-      # RuntimeDirectory= is the obvious fix and is WRONG: the daemon insists
-      # on creating that directory itself and refuses when systemd got there
-      # first -- "Failed to create runtime directory /run/avahi-daemon/" --
-      # so it breaks avahi on every boot rather than fixing the restart.
-      services.avahi-daemon = lib.mkIf config.services.avahi.enable {
-        serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/rm -f /run/avahi-daemon/pid";
-      };
-
       # upstream's system.conf.d: a 5s stop timeout and a raised descriptor
       # soft limit.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
@@ -1868,6 +1849,38 @@ in
         update-locatedb.unitConfig.ConditionACPower = lib.mkIf config.services.locate.enable (
           lib.mkDefault true
         );
+
+        # avahi-daemon cannot restart onto its own stale pid file, and a
+        # nixarchy install hits this because the check rebuilds right after the
+        # first boot (#891).
+        #
+        # The daemon creates /run/avahi-daemon itself, as root, then drops to
+        # uid 999 -- so the removal of a stale pid and the create sit on
+        # opposite sides of the privilege drop, and the second loses:
+        # "open(/run/avahi-daemon//pid): File exists". The directory is not
+        # systemd-managed, so it and the file survive any unclean exit.
+        #
+        # The `+` prefix is load-bearing and was arrived at by measurement, not
+        # by reading: the unit has ProtectSystem=strict, which leaves /run
+        # read-only, AND a CapabilityBoundingSet without CAP_DAC_OVERRIDE, so a
+        # plain ExecStartPre rm fails with Permission denied even as root. `+`
+        # runs it outside the sandbox with full privileges, which is the only
+        # form that works.
+        #
+        # RuntimeDirectory= is the obvious fix and is WRONG: the daemon insists
+        # on creating that directory itself and refuses when systemd got there
+        # first -- "Failed to create runtime directory /run/avahi-daemon/" --
+        # so it breaks avahi on every boot rather than fixing the restart.
+        avahi-daemon = lib.mkIf config.services.avahi.enable {
+          serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/rm -f /run/avahi-daemon/pid";
+        };
+      }
+      # A stale device handle after resume can make fprintd ignore SIGTERM, and
+      # the restart above then waits out the stop timeout; upstream's 3 s keeps
+      # the reader's return quick whatever the global default. optionalAttrs, not mkIf:
+      # mkIf on an attrsOf entry still defines a unit with no ExecStart.
+      // lib.optionalAttrs config.services.fprintd.enable {
+        fprintd.serviceConfig.TimeoutStopSec = lib.mkDefault "3s";
       };
 
       # omarchy-theme-set-browser writes {"BrowserThemeColor": ...} into each

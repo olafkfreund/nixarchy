@@ -167,6 +167,32 @@ let
     };
   };
   hookText = h: h.xdg.configFile.${defaultHook}.text;
+  # The hook's enable-once loop (`for id in <ids>; do`), the one line that
+  # decides what gets turned on. The other `for id in` lines iterate arrays.
+  todoLists =
+    id: h:
+    builtins.any (
+      l:
+      pkgs.lib.hasPrefix "for id in " (pkgs.lib.trim l)
+      && !(pkgs.lib.hasInfix "[@]" l)
+      && pkgs.lib.elem id (pkgs.lib.splitString " " l)
+    ) (pkgs.lib.splitString "\n" (hookText h));
+  menuNixarchyHome = homeOn { menu.default = "nixarchy"; } { };
+  # The switch rows follow the home user's defaultPlugins.menu.
+  menuRowsWith =
+    hm:
+    configBeside {
+      programs.nixarchy.user = "someone";
+      home-manager.users.someone = {
+        imports = [ inputs.self.homeManagerModules.nixarchy ];
+        programs.nixarchy = {
+          enable = true;
+        }
+        // hm;
+      };
+    };
+  menuRowsOn = menuRowsWith { };
+  menuRowsOff = menuRowsWith { defaultPlugins.menu = false; };
   # The real nixarchy-menu entry declined (#1052).
   menuOffHome = homeOn { } { programs.nixarchy.defaultPlugins.menu = false; };
   defaultHook = "omarchy/hooks/post-boot.d/default-plugins";
@@ -1093,6 +1119,42 @@ let
           || avahiDisabled.systemd.units ? "avahi-daemon.service";
       };
 
+    # #1285: fprintd is restarted on resume and told to stop in 3s, only where
+    # fprintd is on and nixarchy is on. The two machines whose `off` must read
+    # false are nixarchy on with fprintd off, and Mode A with fprintd on.
+    fprintdResume =
+      let
+        withFprintd =
+          machine: extra:
+          (machine.extendModules {
+            modules = [ { services.fprintd.enable = true; } ] ++ extra;
+          }).config;
+        stopTimeout = c: c.systemd.services.fprintd.serviceConfig.TimeoutStopSec or null;
+        restarts = c: pkgs.lib.hasInfix "try-restart fprintd.service" c.powerManagement.resumeCommands;
+        touched = c: restarts c || stopTimeout c != null;
+        on = withFprintd adopter [ ];
+      in
+      {
+        on = restarts on && stopTimeout on == "3s";
+        off = touched adopter.config || touched (withFprintd modeAOff [ ]);
+      };
+    fprintdStopTimeoutUserWins =
+      let
+        kept =
+          (adopter.extendModules {
+            modules = [
+              {
+                services.fprintd.enable = true;
+                systemd.services.fprintd.serviceConfig.TimeoutStopSec = "10s";
+              }
+            ];
+          }).config.systemd.services.fprintd.serviceConfig.TimeoutStopSec;
+      in
+      {
+        on = kept == "10s";
+        off = kept != "10s";
+      };
+
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;
@@ -1204,13 +1266,34 @@ let
           && at ''--before "$id"'' < at loop;
         off = at loop < at ''--before "$id"'';
       };
-    # #1052: the real nixarchy-menu entry is on by default, and `false` declines it.
-    menuIsOnByDefault = {
+    # #1283 (retargets #1052's menuIsOnByDefault): the real nixarchy-menu entry
+    # is installed by default but NOT in the hook's enable-once loop; the
+    # `menu.default = "nixarchy"` machine lists it, and `false` declines it.
+    # `todoLists` reads that loop's `for id in` line, never the whole hook,
+    # because `declared=` names the menu in every state.
+    menuInstalledNotOnByDefault = {
       on =
         defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.menu"
-        && hookLists "nixarchy.menu" defaultHomeOn;
+        && hookLists "nixarchy.menu" defaultHomeOn
+        && !(todoLists "nixarchy.menu" defaultHomeOn)
+        && todoLists "nixarchy.menu" menuNixarchyHome;
       off =
         menuOffHome.programs.nixarchy.plugins ? "nixarchy.menu" || hookLists "nixarchy.menu" menuOffHome;
+    };
+    # Mode A: the option exists with nixarchy off, and neither the hook nor
+    # the switch rows appear there. The rows follow defaultPlugins.menu.
+    menuDefaultModeA = {
+      on =
+        modeAOff.config.programs.nixarchy.menu.default == "omarchy"
+        && !(defaultHome.xdg.configFile ? ${defaultHook})
+        && !(fixtureNixarchyOff.xdg.configFile ? ${defaultHook})
+        && menuSpec menuRowsOn ? "setup.default.menu.omarchy"
+        && menuSpec menuRowsOn ? "setup.default.menu.nixarchy";
+      off =
+        modeAOff.config.environment.etc ? "nixarchy/omarchy-menu.jsonc"
+        || builtins.any (pkgs.lib.hasPrefix "setup.default.menu") (
+          builtins.attrNames (menuSpec menuRowsOff)
+        );
     };
     # A plugin whose feature is off (podman, boxes) is not installed.
     defaultPluginsGate = {

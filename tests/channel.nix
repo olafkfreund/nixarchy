@@ -453,7 +453,7 @@ pkgs.runCommand "nixarchy-channel"
     sed "s|^built='.*'|built='edge-20261015-abcdef0'|" "$bindir/nixarchy-version" > version-edge-build
     grep -q "^built='edge-20261015-abcdef0'" version-edge-build || { echo "FAILED  the edge build was not made: no built= line to replace"; exit 1; }
     verline() { # verline <script> <flake dir> -> the Omarchy line
-      PATH=$bindir:$PATH NIXARCHY_FLAKE=$PWD/$2 bash "$1" 2>&1 | head -1
+      PATH=$bindir:$PATH NIXARCHY_FLAKE=$PWD/$2 bash "$1" 2>&1 | sed -n 1p  # not head: an early exit is SIGPIPE under pipefail
     }
     r=$(verline "$bindir/nixarchy-version" ver-edge)
     wantnot "a release build is not suffixed, whatever the flake says" "$r" '('

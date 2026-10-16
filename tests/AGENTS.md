@@ -1297,6 +1297,15 @@ and on an entry whose line is gone (delete it). It does not read
 reasons: an entry with a wrong reason is a review failure, not a check
 failure (see "An inventory check cannot check its own reasons" above).
 
+**`| head -N` is the same race, and nothing guards it.** `checks.channel` once
+died with `builder failed with exit code 141`, on CI only. The cause was
+`r=$(bash nixarchy-version | head -1)`: when `head` exits before the writer is
+done, the writer gets SIGPIPE, `pipefail` makes the assignment 141, and
+`set -e` ends the check. It passed five local reruns out of five (#1278).
+Take the first line with `sed -n 1p`, which reads all its input.
+`checks.grep-q-pipefail` scans only for `grep -q`; covering `head` would need
+the same allowlist for every `| head` in the tree.
+
 ## A list check must look where the item lives, not anywhere on the page
 
 `checks.docs-lists` (#1246) first did `grep -qF "$line" configuration.md`

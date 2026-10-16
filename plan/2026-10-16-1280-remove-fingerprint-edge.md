@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1280
 spec: spec/2026-10-16-1280-remove-fingerprint-edge.md
 ---

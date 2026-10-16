@@ -4,13 +4,14 @@ title: Stable or unstable
 
 # Stable or unstable
 
-This page is about which **nixpkgs** your machine uses. Which **nixarchy** it
-runs is a separate question: every installed machine follows nixarchy's
-`release` branch, which moves only when a release is cut. See
-[Releases](https://github.com/olafkfreund/nixarchy#releases).
+A machine makes two separate choices here, and this page covers both:
 
-Omarchy lets you pick a release channel. So does nixarchy — **Update ▸ Channel**
-in the menu, or:
+- **which nixpkgs** it builds on, stable or unstable. That is _Update ▸ Nixpkgs_,
+  and most of this page;
+- **which Omarchy** it runs: stable, edge or your own checkout. That is
+  _Update ▸ Channel_; see [Omarchy channels](omarchy-channels).
+
+Any pairing works, and switching one never moves the other. For nixpkgs:
 
 ```
 nixarchy channel              # which one this machine follows
@@ -95,13 +96,19 @@ already using, and prints the two lines you need to add to your own `flake.nix`
 evaluated with, so `services.foo.enable` cannot be taken from the other
 channel. Only packages cross.
 
+## Omarchy: stable, edge or your own checkout
+
+Which **Omarchy** you run is the other choice, and it has its own page:
+[Omarchy channels](omarchy-channels). It covers stable, edge and dev, and how
+it works on a NixOS machine with a flake of your own.
+
 ## Checking where you are
 
 ```
 nixarchy doctor
 ```
 
-reports which channel the machine follows, says plainly that nixarchy is tested
+reports which nixpkgs channel and which Omarchy channel the machine follows, says plainly that nixarchy is tested
 against unstable if you are on stable, and counts any packages you have taken
 from the other channel — because a duplicated closure is invisible until a disk
 fills.

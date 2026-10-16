@@ -220,6 +220,14 @@ let
   # add, and a nixarchy alias for a one-line toggle would only be a second
   # vocabulary to unlearn the moment they read anyone else's configuration.
   serviceCatalogue = import ../data/services.nix;
+
+  # Omarchy's language registry (#1289); `{}` on v4.0.4, which has none.
+  languageRegistry = pkgs.writeText "nixarchy-languages.json" (
+    let
+      f = "${inputs.omarchy}/default/i18n/locales.json";
+    in
+    if builtins.pathExists f then builtins.readFile f else "{}"
+  );
   flatpakCatalogue = import ../data/flatpaks.nix;
 
   # Why: modules/AGENTS.md#flatpaks-go-in-services-nix-rather-than-a-fourth-f
@@ -632,50 +640,67 @@ let
           description = "nh os switch --update: move every flake input forward, then rebuild";
         };
 
-        # Omarchy's release channels are a pacman repository choice, and two
-        # of its four have a meaning here (#529).
+        # Two separate choices, in two groups (#529, #1278).
         #
-        # This block used to hide all five rows, with a reason that has since
-        # stopped being true in both halves: "there is nothing to switch", and
-        # "switching nixpkgs would mean editing the user's own system flake,
-        # which nixarchy does not own". There is something to switch --
-        # nixos-26.05 or unstable -- and `nixarchy-channel` does that edit
-        # consensually, under the rule nixarchy-unfreeze set: only lines this
-        # project wrote get rewritten, a flake somebody has reshaped is theirs
-        # and gets the edit printed instead of guessed at, and nixpkgs and
-        # home-manager move together because neither project supports the
-        # mismatch.
+        # `update.channel` is WHICH OMARCHY you run: the release branch, the
+        # edge branch, or a checkout of your own. Upstream's four rows are a
+        # pacman repository choice; here they edit `nixarchy.url` in the user's
+        # flake through `nixarchy-channel omarchy`. Their check marks come from
+        # upstream's `omarchy-channel-current`, which now delegates to the same
+        # command. `rc` stays hidden: it has no meaning here, and a row that
+        # does something other than its name is the failure this menu guards
+        # against most.
         #
-        # `rc` and `dev` stay hidden. They are pacman repositories with no
-        # NixOS equivalent, and inventing a meaning for them would be worse
-        # than leaving them out -- a row that does something other than what
-        # its name says is the failure this menu has the most guards against.
-        #
-        # The children are still hidden individually: hiding a parent keeps
-        # its rows out of the menu tree, but they stay reachable through
-        # search and `omarchy menu summon`.
+        # `update.nixpkgs` is WHICH NIXPKGS: stable or unstable, with
+        # home-manager moving as its pair. It is the old Channel group, kept
+        # because it is a real choice, and it touches different lines of the
+        # flake, so the two never edit each other. The user's rule from
+        # nixarchy-unfreeze applies to both: only lines this project wrote are
+        # rewritten, and a reshaped flake gets the edit printed instead.
         "update.channel" = {
           icon = "󰓾";
           label = "Channel";
-          description = "Follow stable or unstable nixpkgs. Nixarchy is developed against unstable";
+          description = "Which Omarchy you run: stable, edge, or your own checkout. Separate from nixpkgs";
         };
         "update.channel.stable" = {
-          icon = "󰋼";
+          icon = "🟢";
           label = "Stable";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel stable";
-          description = "nixos-26.05 and the matching home-manager. Less tested here, not more";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel omarchy stable";
+          description = "The release branch: what has been through a release";
         };
         "update.channel.edge" = {
-          icon = "󰇾";
-          label = "Unstable";
-          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel unstable";
-          description = "nixos-unstable, what nixarchy is developed and tested against";
+          icon = "🟠";
+          label = "Edge";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel omarchy edge";
+          description = "Omarchy's quattro branch, published when its checks pass. Newer, less settled";
+        };
+        "update.channel.dev" = {
+          icon = "🔴";
+          label = "Dev";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel omarchy dev";
+          description = "Edge, with Omarchy taken from your checkout in ~/omarchy. Only committed changes are built";
         };
         "update.channel.rc" = {
           when = "false";
         };
-        "update.channel.dev" = {
-          when = "false";
+        "update.nixpkgs" = {
+          icon = "󰏖";
+          label = "Nixpkgs";
+          description = "Follow stable or unstable nixpkgs. Nixarchy is developed against unstable";
+        };
+        "update.nixpkgs.stable" = {
+          icon = "󰋼";
+          label = "Stable";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel stable";
+          description = "nixos-26.05 and the matching home-manager. Less tested here, not more";
+          checked = "[[ \"$(nixarchy-channel --current)\" == stable ]]";
+        };
+        "update.nixpkgs.unstable" = {
+          icon = "󰇾";
+          label = "Unstable";
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-channel unstable";
+          description = "nixos-unstable, what nixarchy is developed and tested against";
+          checked = "[[ \"$(nixarchy-channel --current)\" == unstable ]]";
         };
 
         # The Arch wiki is the wrong manual on a NixOS host. All three wear
@@ -1547,6 +1572,76 @@ in
                   fi
                   echo "enabled $id in $file ($queued queued)"
                   echo "run 'nixarchy-apply' when you have picked everything you want"
+                '';
+              })
+
+              (pkgs.writeShellApplication {
+                name = "nixarchy-language-select";
+                runtimeInputs = [
+                  pkgs.gawk
+                  pkgs.gnugrep
+                  pkgs.coreutils
+                  pkgs.jq
+                ];
+                text = ''
+                  file="''${XDG_CONFIG_HOME:-$HOME/.config}/nixarchy/services.nix"
+                  # Test seam: the baked registry is empty on Omarchy v4.0.4.
+                  registry="''${NIXARCHY_LANGUAGE_REGISTRY:-${languageRegistry}}"
+                  code="''${1:?usage: nixarchy-language-select <code|null>}"
+
+                  case "$code" in
+                    *[!A-Za-z0-9_-]*)
+                      echo "nixarchy: '$code' is not a language code" >&2
+                      exit 2
+                      ;;
+                  esac
+
+                  if [ "$code" != null ] && [ "$(jq length "$registry")" = 0 ]; then
+                    echo "nixarchy: this Omarchy release has no language list (Setup > Language arrives after v4.0.4)" >&2
+                    exit 2
+                  fi
+                  if [ "$code" != null ] && ! jq -e --arg c "$code" 'has($c)' "$registry" >/dev/null; then
+                    echo "nixarchy: unknown language '$code'; known codes:" >&2
+                    jq -r 'keys | join(" ")' "$registry" >&2
+                    exit 2
+                  fi
+
+                  [ -f "$file" ] || { echo "no $file -- log in again to have it created" >&2; exit 1; }
+
+                  # A commented-out line does not count as live.
+                  live='^[[:space:]]*[^#[:space:]].*#@ language([[:space:]]|$)'
+                  if [ "$code" = null ]; then
+                    clear=1
+                  else
+                    clear=0
+                  fi
+                  # Before the module's last closing brace, as nixarchy-catalogue-diff
+                  # adds rows: the first `{` may open a multi-line argument set.
+                  close=$(grep -n '^}' "$file" | tail -1 | cut -d: -f1 || true)
+                  if [ "$clear" = 0 ] && ! grep -qE "$live" "$file" && [ -z "$close" ]; then
+                    echo "nixarchy: $file has no closing brace on its own line; add this by hand:" >&2
+                    echo "  programs.nixarchy.language = \"$code\";  #@ language" >&2
+                    exit 1
+                  fi
+
+                  # Global, so the EXIT trap still sees it (CLAUDE.md §5).
+                  tmp=""
+                  trap 'rm -f "$tmp"' EXIT
+                  tmp=$(mktemp "$file.XXXXXX")
+                  awk -v live="$live" -v clear="$clear" -v at="$close" -v new="  programs.nixarchy.language = \"$code\";  #@ language" '
+                    $0 ~ live { if (!clear && !done) print new; done = 1; next }
+                    !clear && !done && NR == at { print new; done = 1 }
+                    { print }
+                  ' "$file" >"$tmp"
+                  chmod --reference="$file" "$tmp"
+                  mv "$tmp" "$file"
+
+                  if [ "$clear" = 1 ]; then
+                    echo "cleared the language in $file; run 'nixarchy-apply' to build it"
+                  else
+                    echo "set the language to $code in $file"
+                    echo "run 'nixarchy-apply' to build it, then pick the language again in Setup > Language"
+                  fi
                 '';
               })
 

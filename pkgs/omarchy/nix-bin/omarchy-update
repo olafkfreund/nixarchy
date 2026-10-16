@@ -176,6 +176,14 @@ if [ "$targets" != nixpkgs ] &&
   echo
 fi
 
+# A dev checkout is an input of its own (#1278), and `-U nixarchy` leaves it
+# where the lock last saw it: the machine would rebuild what it already had.
+# Asked of nixarchy-channel, which reads the flake, rather than parsed here.
+omarchy_dev=0
+if [ "$targets" != nixpkgs ] && [ "$(nixarchy-channel omarchy --current 2>/dev/null || true)" = dev ]; then
+  omarchy_dev=1
+fi
+
 echo "Updating from $flake"
 echo
 # Said in terms of what changes on the machine, not which flake input moves.
@@ -198,6 +206,10 @@ case "$targets" in
     dim "selections are untouched."
     ;;
 esac
+if [ "$omarchy_dev" = 1 ]; then
+  dim "Omarchy is your own checkout: its latest COMMIT is picked up too."
+  dim "Uncommitted changes in it are not built."
+fi
 echo
 
 read -r -p "Update flake inputs and rebuild? [y/N] " reply
@@ -215,6 +227,8 @@ if [ "$targets" = all ]; then
   update_flags=(--update)
 else
   update_flags=(--update-input "$targets")
+  # nh takes the flag once per input.
+  if [ "$omarchy_dev" = 1 ]; then update_flags+=(--update-input omarchy); fi
 fi
 echo "==> nh os switch ${update_flags[*]} $flake"
 # No sudo: nh elevates itself, and wrapping it takes that decision away.

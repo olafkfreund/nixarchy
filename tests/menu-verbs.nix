@@ -99,19 +99,31 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # `nix log`. That is a correct red for an unreadable reason, and it cost
     # six rounds of diagnosis on #1016. Empty is now a value the floor can
     # describe rather than a death.
-    verbs_of() {
-      sed -n -e '/case "''${1:-}" in/,/^ *esac/p' \
-             -e '/case "$target" in/,/^ *esac/p' "$1" \
-        | grep -oE '^[[:space:]]*[-a-z|"[:space:]]+\)' \
+    verbs_from() {
+      grep -oE '^[[:space:]]*[-a-z|"[:space:]]+\)' \
         | tr -d ' )"' \
         | tr '|' '\n' \
         | grep -vE '^\*?$' \
         | sort -u || true
     }
+    verbs_of() {
+      sed -n -e '/case "''${1:-}" in/,/^ *esac/p' \
+             -e '/case "$target" in/,/^ *esac/p' "$1" | verbs_from
+    }
 
     verbs_of ${vmcli}/bin/nixarchy-vm   > vm-verbs
     verbs_of ${secretcli}/bin/nixarchy-secret > secret-verbs
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-channel > channel-verbs
+    # `nixarchy-channel omarchy <verb>` is dispatched by an `if` on "$1", ahead
+    # of the nixpkgs case above, and has a case of its own on "$o_target".
+    # Reading it separately keeps `nixarchy-channel unstable` from passing as an
+    # Omarchy channel. `omarchy` itself is a verb of the first list only if that
+    # dispatch is really there, so deleting it turns the rows red.
+    sed -n -e '/case "$o_target" in/,/^ *esac/p' \
+      ${omarchyPkg}/share/omarchy/bin/nixarchy-channel | verbs_from | grep -vx rc > omarchy-channel-verbs || true
+    if grep -qF '"''${1:-}" = omarchy' ${omarchyPkg}/share/omarchy/bin/nixarchy-channel; then
+      echo omarchy >> channel-verbs
+    fi
     verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-remote  > remote-verbs
     for m in ${pkgs.lib.escapeShellArgs pluginSources}; do
       jq -r .id "$m/manifest.json"
@@ -120,6 +132,7 @@ pkgs.runCommand "nixarchy-menu-verbs"
     echo "nixarchy-vm accepts:  $(tr '\n' ' ' < vm-verbs)"
     echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
+    echo "nixarchy-channel omarchy accepts: $(tr '\n' ' ' < omarchy-channel-verbs)"
     echo "nixarchy-remote accepts: $(tr '\n' ' ' < remote-verbs)"
     echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
 
@@ -149,6 +162,8 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # Two: stable and unstable. `rc` and `dev` are pacman repositories with no
     # NixOS meaning and stay out of the menu, so this floor is 2 and not 4.
     floor channel-verbs 2 nixarchy-channel
+    # stable, edge, dev, rc, --current, -h, --help, and the empty report.
+    floor omarchy-channel-verbs 4 "nixarchy-channel omarchy"
     # serve, --status, -h, --help. The floor is what turns "the dispatch
     # stopped parsing" from a green into a red: nixarchy-remote spells its
     # case block `"''${1:-}"` rather than `"''${1:-serve}"` precisely so
@@ -195,6 +210,36 @@ pkgs.runCommand "nixarchy-menu-verbs"
     # found by a tester.
     scan '\bnixarchy-channel +[-a-z]+'  2 nixarchy-channel channel-verbs
     scan '\bnixarchy +channel +[-a-z]+' 3 nixarchy-channel channel-verbs
+    scan '\bnixarchy-channel +omarchy +[-a-z]+' 3 "nixarchy-channel omarchy" omarchy-channel-verbs
+
+    # The two groups, and what each row runs. A scan above proves every verb
+    # exists; it cannot prove the edge row runs the Omarchy command rather than
+    # the nixpkgs one, which is the mix-up the split invites. Read from the
+    # generated menu, not the source, so a generator that blanks a key is seen.
+    # The file opens with // comment lines, which is not JSON.
+    row() { sed '/^\/\//d' ${menu} | jq -r --arg id "$1" --arg k "$2" '.[$id][$k] // ""'; }
+    for c in stable edge dev; do
+      a=$(row "update.channel.$c" action)
+      case "$a" in
+        *"nixarchy-channel omarchy $c"*) ;;
+        *) echo "ERROR: update.channel.$c runs '$a', not 'nixarchy-channel omarchy $c'" >&2; fail=1 ;;
+      esac
+    done
+    for c in stable unstable; do
+      a=$(row "update.nixpkgs.$c" action)
+      case "$a" in
+        *"nixarchy-channel $c"*) ;;
+        *) echo "ERROR: update.nixpkgs.$c runs '$a', not 'nixarchy-channel $c'" >&2; fail=1 ;;
+      esac
+    done
+    for id in update.channel.stable update.channel.edge update.channel.dev \
+              update.nixpkgs.stable update.nixpkgs.unstable; do
+      if [ -z "$(row "$id" checked)" ]; then
+        echo "ERROR: $id has no check mark; the menu would not show which channel is active" >&2
+        fail=1
+      fi
+      checked=$((checked + 1))
+    done
 
     # The remote desktop rows (#1015), added with the rows for the same
     # reason the three groups above were.

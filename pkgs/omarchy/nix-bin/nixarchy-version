@@ -34,5 +34,24 @@ case "${1:-}" in
     ;;
 esac
 
-printf 'Omarchy   %s\n' '@omarchyversion@'
+# Which Omarchy channel, when this build is not the release one. The suffix
+# describes the BUILD, not the flake's intent: a flake that says edge but has
+# not been rebuilt still runs the version printed here, and must not claim
+# otherwise. Only an edge build (its version says so) is suffixed, and dev
+# when the flake also names a checkout. nixarchy-channel is asked if it is on
+# PATH; this script otherwise has no runtime dependency, and the build runs it
+# where nothing is.
+built='@omarchyversion@'
+om_suffix=""
+case "$built" in
+  edge-*)
+    om_suffix=" (edge)"
+    if command -v nixarchy-channel >/dev/null 2>&1 &&
+      [ "$(nixarchy-channel omarchy --current 2>/dev/null || true)" = dev ]; then
+      om_suffix=" (dev)"
+    fi
+    ;;
+esac
+
+printf 'Omarchy   %s%s\n' "$built" "$om_suffix"
 printf 'nixarchy  %s  %s\n' '@nixarchyrev@' '@nixarchydate@'

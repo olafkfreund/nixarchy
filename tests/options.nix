@@ -1119,6 +1119,42 @@ let
           || avahiDisabled.systemd.units ? "avahi-daemon.service";
       };
 
+    # #1285: fprintd is restarted on resume and told to stop in 3s, only where
+    # fprintd is on and nixarchy is on. The two machines whose `off` must read
+    # false are nixarchy on with fprintd off, and Mode A with fprintd on.
+    fprintdResume =
+      let
+        withFprintd =
+          machine: extra:
+          (machine.extendModules {
+            modules = [ { services.fprintd.enable = true; } ] ++ extra;
+          }).config;
+        stopTimeout = c: c.systemd.services.fprintd.serviceConfig.TimeoutStopSec or null;
+        restarts = c: pkgs.lib.hasInfix "try-restart fprintd.service" c.powerManagement.resumeCommands;
+        touched = c: restarts c || stopTimeout c != null;
+        on = withFprintd adopter [ ];
+      in
+      {
+        on = restarts on && stopTimeout on == "3s";
+        off = touched adopter.config || touched (withFprintd modeAOff [ ]);
+      };
+    fprintdStopTimeoutUserWins =
+      let
+        kept =
+          (adopter.extendModules {
+            modules = [
+              {
+                services.fprintd.enable = true;
+                systemd.services.fprintd.serviceConfig.TimeoutStopSec = "10s";
+              }
+            ];
+          }).config.systemd.services.fprintd.serviceConfig.TimeoutStopSec;
+      in
+      {
+        on = kept == "10s";
+        off = kept != "10s";
+      };
+
     etcNativeSwappiness = etcNative (c: c.boot.kernel.sysctl."vm.swappiness" or null) 150;
     etcNativeDirtyBytes = etcNative (c: c.boot.kernel.sysctl."vm.dirty_bytes" or null) 268435456;
     etcNativeMtuProbing = etcNative (c: c.boot.kernel.sysctl."net.ipv4.tcp_mtu_probing" or null) 1;

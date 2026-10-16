@@ -1297,6 +1297,15 @@ and on an entry whose line is gone (delete it). It does not read
 reasons: an entry with a wrong reason is a review failure, not a check
 failure (see "An inventory check cannot check its own reasons" above).
 
+**`| head -N` is the same race, and nothing guards it.** `checks.channel` once
+died with `builder failed with exit code 141`, on CI only. The cause was
+`r=$(bash nixarchy-version | head -1)`: when `head` exits before the writer is
+done, the writer gets SIGPIPE, `pipefail` makes the assignment 141, and
+`set -e` ends the check. It passed five local reruns out of five (#1278).
+Take the first line with `sed -n 1p`, which reads all its input.
+`checks.grep-q-pipefail` scans only for `grep -q`; covering `head` would need
+the same allowlist for every `| head` in the tree.
+
 ## A list check must look where the item lives, not anywhere on the page
 
 `checks.docs-lists` (#1246) first did `grep -qF "$line" configuration.md`
@@ -1610,3 +1619,21 @@ plain push rejects a non-fast-forward, so the refusal happened anyway, one
 layer down. When a guard duplicates a refusal the tool already makes, assert
 the guard's own reason (`not a fast-forward` on stderr), not only that
 something failed -- otherwise the red proof for the guard cannot go red.
+
+## The hardware-only pair: fprintd after a real suspend, and a splash for a late display (#1285)
+
+Two fixes ported from Omarchy `quattro` have parts no layer here can show:
+
+- **fprintd after resume.** `checks.options` holds that nixarchy, on a
+  machine with `services.fprintd.enable`, adds the post-resume restart and a
+  3 s `TimeoutStopSec`, and adds neither without fprintd or in Mode A. It
+  cannot show that the restart actually un-wedges a reader: that needs a real
+  reader, a real suspend, and fprintd#173 happening. `pkgs/verify.sh` has no
+  fingerprint section to extend. By hand: enrol a finger, suspend, resume,
+  unlock with the finger.
+- **The splash re-centring.** `checks.plymouth-layout` holds the structure:
+  every positioning call lives in `layout()` or `position_bullet()`, and
+  `refresh_callback` re-runs `layout()` when the window size changes. No VM
+  grows plymouth's window mid-boot, so whether it *looks* right is a human's
+  call. By hand: boot with a Thunderbolt dock whose display comes up late
+  and watch the logo and the passphrase field land in the middle of it.

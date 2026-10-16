@@ -694,6 +694,33 @@ if [ -r "$flake_dir/flake.nix" ]; then
   esac
 fi
 
+# ---- which Omarchy this machine runs (#1278) ----------------------------
+#
+# A separate question from the nixpkgs one above, answered on different lines of
+# the flake. Asked of nixarchy-channel rather than parsed again here: a second
+# reader of flake.nix is a second thing to drift, and the command already knows
+# every shape it refuses. It lives in the Omarchy tree rather than in
+# runtimeInputs, so it is looked for on the machine's PATH and the line is
+# omitted where it is absent -- the doctor also runs before nixarchy is.
+if [ -r "$flake_dir/flake.nix" ] && command -v nixarchy-channel >/dev/null 2>&1; then
+  om_chan=$(nixarchy-channel omarchy --current 2>/dev/null || true)
+  case "$om_chan" in
+    stable | edge)
+      finding "omarchy-channel: $om_chan" "$ok" ""
+      ;;
+    dev)
+      # The command's own report prints the checkout on its "omarchy" line.
+      om_path=$(nixarchy-channel omarchy 2>/dev/null | sed -n 's/^  omarchy  *//p' | head -1 || true)
+      finding "omarchy-channel: dev" "$dim" "your checkout at ${om_path:-unknown}"
+      say "     Only COMMITTED changes in it are built."
+      ;;
+    custom)
+      finding "omarchy-channel: custom" "$warn" "the nixarchy input points somewhere of your own"
+      say "     ${dim}nixarchy channel omarchy   shows what it points at.${off}"
+      ;;
+  esac
+fi
+
 # Packages taken from the other channel, and what they cost.
 #
 # Worth its own line because the cost is invisible and large: two channels

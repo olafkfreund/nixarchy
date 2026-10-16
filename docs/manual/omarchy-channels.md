@@ -61,11 +61,12 @@ to something that does not boot.
 `nixarchy version` shows the date edge was cut, for example
 `edge-20261015-246f33a (edge)`.
 
-**What edge carries without a NixOS port yet** is listed in
-[#1280](https://github.com/olafkfreund/nixarchy/issues/1280): language
-switching, and the fingerprint reader's resume hook. The passwordless-sudo
-toggle is hidden. Each one is being ported, and lands on stable with the
-release that brings it.
+**Edge's new Omarchy features are ported**
+([#1280](https://github.com/olafkfreund/nixarchy/issues/1280)): language
+switching, the fingerprint reader's resume hook, and removing fingerprint
+authentication all work as on stable. The passwordless-sudo toggle is hidden,
+because NixOS declares sudo in the build ([Security](security.md#passwordless-sudo) says how to
+set it). Each port lands on stable with the release that brings it.
 
 ## Dev: your own checkout
 

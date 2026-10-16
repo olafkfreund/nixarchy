@@ -27,8 +27,6 @@ for (i = 0; i < global.frame_count; i++)
   frames.images[i] = Image("frame-" + i + ".png");
 
 frames.sprite = Sprite(frames.images[0]);
-frames.sprite.SetX(Window.GetWidth() / 2 - frames.images[0].GetWidth() / 2);
-frames.sprite.SetY(Window.GetHeight() / 2 - frames.images[0].GetHeight() / 2);
 frames.sprite.SetOpacity(1);
 
 # The wordmark the animation resolves into: same shape, drawn from the vector
@@ -37,8 +35,6 @@ frames.sprite.SetOpacity(1);
 # below is positioned from this sprite's height -- only its opacity changes.
 logo.image = Image("logo.png");
 logo.sprite = Sprite(logo.image);
-logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
-logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2);
 logo.sprite.SetOpacity(0);
 
 # The handoff, in one place because three different things ask for it: the
@@ -65,7 +61,17 @@ global.fake_progress_start_time = 0.0;  # Track when fake progress started
 global.password_shown = 0;  # Track if password dialog has been shown
 global.max_progress = 0.0;  # Track the maximum progress reached to prevent backwards movement
 
+# The window size the sprites were last laid out for. A display can appear
+# after this script ran (a Thunderbolt dock's DisplayPort tunnel, say) and the
+# window then grows, so every position lives in layout() and is redone on change.
+global.layout_width = 0;
+global.layout_height = 0;
+
 fun refresh_callback() {
+  if (Window.GetWidth() != global.layout_width || Window.GetHeight() != global.layout_height) {
+    layout();
+  }
+
   global.animation_frame++;
 
   # The wordmark, one frame every second tick. The refresh runs at 50 FPS, so
@@ -170,26 +176,25 @@ entry.image = Image("entry.png");
 bullet.image = Image("bullet.png");
 
 entry.sprite = Sprite(entry.image);
-entry.x = Window.GetWidth() / 2 - entry.image.GetWidth() / 2;
-entry.y = logo.sprite.GetY() + logo.image.GetHeight() + 40;
-entry.sprite.SetPosition(entry.x, entry.y, 10001);
 entry.sprite.SetOpacity(0);
 
 # Scale lock to be slightly shorter than entry field height
-# Original lock is 84x96, entry height determines scale
-lock_height = entry.image.GetHeight() * 0.8;
-lock_scale = lock_height / 96;
-lock_width = 84 * lock_scale;
+# Original lock is 84x96, entry height determines scale.
+# lock.height and lock.width, not locals: layout() positions from them.
+lock.height = entry.image.GetHeight() * 0.8;
+lock_scale = lock.height / 96;
+lock.width = 84 * lock_scale;
 
-scaled_lock = lock.image.Scale(lock_width, lock_height);
+scaled_lock = lock.image.Scale(lock.width, lock.height);
 lock.sprite = Sprite(scaled_lock);
-lock.x = entry.x - lock_width - 15;
-lock.y = entry.y + entry.image.GetHeight() / 2 - lock_height / 2;
-lock.sprite.SetPosition(lock.x, lock.y, 10001);
 lock.sprite.SetOpacity(0);
 
 # Bullet array
 bullet.sprites = [];
+
+fun position_bullet(index) {
+  bullet.sprites[index].SetPosition(entry.x + 20 + index * (7 + 5), entry.y + entry.image.GetHeight() / 2 - 3.5, 10002);
+}
 
 fun display_normal_callback() {
   hide_password_dialog();
@@ -239,9 +244,7 @@ fun display_password_callback(prompt, bullets) {
       # Scale bullet image to 7x7 pixels
       scaled_bullet = bullet.image.Scale(7, 7);
       bullet.sprites[index] = Sprite(scaled_bullet);
-      bullet.x = entry.x + 20 + index * (7 + 5);
-      bullet.y = entry.y + entry.image.GetHeight() / 2 - 3.5;
-      bullet.sprites[index].SetPosition(bullet.x, bullet.y, 10002);
+      position_bullet(index);
     }
 
     bullet.sprites[index].SetOpacity(1);
@@ -255,20 +258,54 @@ Plymouth.SetDisplayPasswordFunction(display_password_callback);
 
 progress_box.image = Image("progress_box.png");
 progress_box.sprite = Sprite(progress_box.image);
-
-progress_box.x = Window.GetWidth() / 2 - progress_box.image.GetWidth() / 2;
-progress_box.y = entry.y + entry.image.GetHeight() / 2 - progress_box.image.GetHeight() / 2;
-progress_box.sprite.SetPosition(progress_box.x, progress_box.y, 0);
 progress_box.sprite.SetOpacity(0);
 
 progress_bar.original_image = Image("progress_bar.png");
 progress_bar.sprite = Sprite();
 progress_bar.image = progress_bar.original_image.Scale(1, progress_bar.original_image.GetHeight());
-
-progress_bar.x = Window.GetWidth() / 2 - progress_bar.original_image.GetWidth() / 2;
-progress_bar.y = progress_box.y + (progress_box.image.GetHeight() - progress_bar.original_image.GetHeight()) / 2;
-progress_bar.sprite.SetPosition(progress_bar.x, progress_bar.y, 1);
 progress_bar.sprite.SetOpacity(0);
+
+message_sprite = Sprite();
+
+#----------------------------------------- Layout --------------------------------
+
+# Every position, in the order the statements held at top level: entry reads
+# logo's Y, and the progress box reads entry's. Runs once below, once all the
+# sprites exist, and again from refresh_callback when the window size changes.
+fun layout() {
+  frames.sprite.SetX(Window.GetWidth() / 2 - frames.images[0].GetWidth() / 2);
+  frames.sprite.SetY(Window.GetHeight() / 2 - frames.images[0].GetHeight() / 2);
+
+  logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
+  logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2);
+
+  entry.x = Window.GetWidth() / 2 - entry.image.GetWidth() / 2;
+  entry.y = logo.sprite.GetY() + logo.image.GetHeight() + 40;
+  entry.sprite.SetPosition(entry.x, entry.y, 10001);
+
+  lock.x = entry.x - lock.width - 15;
+  lock.y = entry.y + entry.image.GetHeight() / 2 - lock.height / 2;
+  lock.sprite.SetPosition(lock.x, lock.y, 10001);
+
+  for (index = 0; bullet.sprites[index]; index++) {
+    position_bullet(index);
+  }
+
+  progress_box.x = Window.GetWidth() / 2 - progress_box.image.GetWidth() / 2;
+  progress_box.y = entry.y + entry.image.GetHeight() / 2 - progress_box.image.GetHeight() / 2;
+  progress_box.sprite.SetPosition(progress_box.x, progress_box.y, 0);
+
+  progress_bar.x = Window.GetWidth() / 2 - progress_bar.original_image.GetWidth() / 2;
+  progress_bar.y = progress_box.y + (progress_box.image.GetHeight() - progress_bar.original_image.GetHeight()) / 2;
+  progress_bar.sprite.SetPosition(progress_bar.x, progress_bar.y, 1);
+
+  message_sprite.SetPosition(10, 10, 10000);
+
+  global.layout_width = Window.GetWidth();
+  global.layout_height = Window.GetHeight();
+}
+
+layout();
 
 fun progress_callback(duration, progress) {
   # Track when fake progress starts
@@ -289,9 +326,6 @@ fun progress_callback(duration, progress) {
 Plymouth.SetBootProgressFunction(progress_callback);
 
 #----------------------------------------- Message --------------------------------
-
-message_sprite = Sprite();
-message_sprite.SetPosition(10, 10, 10000);
 
 fun display_message_callback(text) {
   message = Image.Text(text, 1, 1, 1);

@@ -96,12 +96,28 @@ Rebuild, and the enrolled key or print is accepted.
 
 ## Passwordless sudo
 
-Unchanged. `omarchy-sudo-passwordless` writes
-`/etc/sudoers.d/99-omarchy-nopasswd-$USER` and a systemd timer removes it
-after 15 minutes; pass a number of minutes to change that. NixOS manages
-`/etc/sudoers` but leaves `sudoers.d` alone, so this works as upstream
-describes. Upstream's warning applies in full: while it is on, anything
-running as your user is root.
+Not a toggle here, on purpose. Upstream's `omarchy-sudo-passwordless`
+(*Setup > Security > Passwordless Sudo*) writes
+`/etc/sudoers.d/99-omarchy-nopasswd-$USER` and a timer removes it after 15
+minutes. NixOS's `/etc/sudoers` has no `#includedir`, so that file would never
+be read, and upstream would still print that it was enabled. nixarchy
+replaces the command with one that says so, prints the options below, and
+exits non-zero. In Omarchy's newer releases the row becomes a toggle that
+writes sudoers and tmpfiles rules; nixarchy hides it there, rather than offer
+passwordless root one click away (#1280).
+
+If you want it, declare it, for your user only:
+
+```nix
+security.sudo.extraRules = [{
+  users = [ "you" ];
+  commands = [{ command = "ALL"; options = [ "NOPASSWD" ]; }];
+}];
+```
+
+or for the whole `wheel` group, `security.sudo.wheelNeedsPassword = false;`.
+There is no timer: it stays until you remove it and rebuild. While it is on,
+anything running as your user is root.
 
 ## Changing your passwords
 

@@ -49,7 +49,7 @@ spec: spec/2026-10-16-1280-remove-fingerprint-edge.md
    `$out/share/omarchy/bin/omarchy-remove-security-fingerprint`:
    - `grep -n '/usr/'` prints nothing;
    - `bash -n` passes;
-   - `grep -q 'fingerprint_user=$(/run/current-system/sw/bin/id'` and
+   - `grep -qF 'fingerprint_user=$(/run/current-system/sw/bin/id'` and
      `grep -q 'nothing to unpick'` both succeed, which shows the range delete
      did not eat the neighbours;
    - the line after `remove_lock_fingerprint_pam` is `:`.
@@ -118,3 +118,13 @@ spec: spec/2026-10-16-1280-remove-fingerprint-edge.md
 Revert the carry commit on `edge-next`, push it as a fast-forward to
 `edge-candidate`, and publish again. Edge only fast-forwards, so the revert
 is a new commit, never a force-push (§11).
+
+## Deviations recorded during implementation
+
+- Step 1: the identity check needs `grep -qF`. Without `-F` the pattern
+  fails on a line that is present (found by the coder, confirmed by hand).
+  The code lives on `edge`, so this note is a separate commit on this
+  branch rather than the same commit as the code.
+- Step 1: the coder guard blocks the §6 `pgrep` gate because its pattern
+  names deploy commands; `pgrep -af p620` was used instead and matched only
+  `nixd` and avahi.

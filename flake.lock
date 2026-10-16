@@ -165,16 +165,16 @@
     "gliff": {
       "flake": false,
       "locked": {
-        "lastModified": 1791631910,
-        "narHash": "sha256-7tE/Gsf3RkeSKqESn+6GMq0vZpZA1miWH3pUiyqUs3E=",
+        "lastModified": 1792028459,
+        "narHash": "sha256-niJDyzNyKW5FVmilPnIodYMjjS2WgLhYsPM4hrnjlK8=",
         "owner": "omacom",
         "repo": "gliff",
-        "rev": "a2edd505f9868a0f3299eada3ddfbc342b0da0a7",
+        "rev": "089662fd59ebcedb047eea22fd983d66b4216d73",
         "type": "github"
       },
       "original": {
         "owner": "omacom",
-        "ref": "v0.3.1",
+        "ref": "v0.4.0",
         "repo": "gliff",
         "type": "github"
       }

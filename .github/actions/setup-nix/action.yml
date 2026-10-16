@@ -46,6 +46,16 @@ runs:
         # publish. The download came from nixarchy.cachix.org until #1248,
         # because the key for hyprwm's cache was wrong; checks.cache-keys holds
         # it now.
+        #
+        # And it still came from nixarchy.cachix.org after #1248, for a second
+        # reason: cachix-action's `cachix use` writes a full `substituters =`
+        # line into the runner user's nix.conf. The daemon accepts it (every URL
+        # in it is already a system substituter) and it REPLACES the list, so
+        # hyprland.cachix.org was never asked. Nobody saw, because ours held the
+        # same Hyprland -- until a Hyprland bump (#1294) compiled it from source
+        # twice and timed out `system`. So every cachix-action step sets
+        # skipAddingSubstituter: true; this file is the only place substituters
+        # are configured.
         extra-conf: |
           accept-flake-config = true
           extra-substituters = https://nixarchy.cachix.org https://hyprland.cachix.org

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1280
 intent: intent/2026-10-16-1280-remove-fingerprint-edge.md
 ---

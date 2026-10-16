@@ -838,8 +838,10 @@ pkgs.testers.runNixOSTest {
     # direction must leave one menu loaded, and Super+Space's summon must
     # still draw it.
     def menus():
-        plugins = json.loads(machine.succeed(on_desktop(
-            "OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json")))
+        # Retried: right after an enable the shell is still reloading its
+        # plugins, and the list exits 1 with no output until it is back.
+        plugins = json.loads(machine.wait_until_succeeds(on_desktop(
+            "OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"), timeout=60))
         on = {p["id"]: p["enabled"] for p in plugins}
         return on.get("omarchy.menu"), on.get("nixarchy.menu")
     def summon_draws(why):

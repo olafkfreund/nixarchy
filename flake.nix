@@ -1876,6 +1876,8 @@
             "apply-imports"
             "apply-staging"
             "home-activation-writes"
+            "language-locale"
+            "language-select"
             # data/bin-ledger.nix, held to its own claim. Also the home of the
             # pacman allowlist that used to live inline in build.yml. See
             # tests/bin-ledger.nix and #447.
@@ -2203,6 +2205,14 @@
           doctor-wireless = import ./tests/doctor-wireless.nix {
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) doctor;
+          };
+
+          # The Omarchy-channel line (#1278): stable, edge, dev and custom
+          # flakes, and a machine where nixarchy-channel is not installed.
+          doctor-channel = import ./tests/doctor-channel.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) doctor;
+            omarchy = self.packages.${system}.omarchy;
           };
 
           # The dynamic-link check, against binaries built broken on purpose.

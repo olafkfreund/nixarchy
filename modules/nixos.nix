@@ -9,6 +9,15 @@ inputs:
 let
   cfg = config.programs.nixarchy;
 
+  # Omarchy's language registry (#1289). Absent on v4.0.4, so the option's enum
+  # is empty there and `language` can only be null.
+  registryFile = "${inputs.omarchy}/default/i18n/locales.json";
+  registry =
+    if builtins.pathExists registryFile then
+      builtins.fromJSON (builtins.readFile registryFile)
+    else
+      { };
+
   # Hyprland's own nixpkgs pin, so its GPU drivers share its glibc. See the
   # hardware.graphics block below.
   hyprPkgs = inputs.hyprland.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
@@ -914,6 +923,18 @@ in
         expression that names `nixosConfigurations.<host>` is two answers to
         the same question -- the failure programs.nixarchy.localAi already
         avoids by being read across rather than declared twice.
+      '';
+    };
+
+    language = lib.mkOption {
+      type = lib.types.nullOr (lib.types.enum (builtins.attrNames registry));
+      default = null;
+      description = ''
+        Interface language, as a code from Omarchy's registry (for example
+        `"da"`). Generates that language's locale so Setup > Language can
+        switch to it; `nixarchy-language-select` writes this line for you.
+        `null` adds nothing. The registry ships with Omarchy releases newer
+        than v4.0.4, so on older ones only `null` is accepted.
       '';
     };
 
@@ -2194,10 +2215,15 @@ in
       liberation_ttf
     ]);
 
-    # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
-    i18n.inputMethod = {
-      enable = lib.mkOverride 1250 true;
-      type = lib.mkOverride 1250 "fcitx5";
+    i18n = {
+      # programs.nixarchy.language (#1289): the one locale Setup > Language needs.
+      extraLocales = lib.mkIf (cfg.language != null) [ "${registry.${cfg.language}.locale}/UTF-8" ];
+
+      # Why: modules/AGENTS.md#default-environment-d-10-omarchy-fcitx-conf-plus-t
+      inputMethod = {
+        enable = lib.mkOverride 1250 true;
+        type = lib.mkOverride 1250 "fcitx5";
+      };
     };
 
     # Why: modules/AGENTS.md#fcitx5-says-this-itself-in-a-notification-on-every

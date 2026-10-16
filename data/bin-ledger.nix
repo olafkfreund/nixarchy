@@ -173,14 +173,12 @@
     allow = "rfkill";
   };
   "omarchy-channel-current" = {
-    class = "vendor";
-    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
-    pacman = "Update, channel, keyring and mirror plumbing. Unreachable here because pkgs/omarchy/nix-bin replaces the entry points the UI calls -- omarchy-update and omarchy-update-available.";
+    class = "patch";
+    reason = "Upstream reads pacman packages to name the channel. The body is replaced by a delegation to `nixarchy-channel omarchy --current`, which reads the machine's flake.nix. The shebang and `# omarchy:` header lines are kept.";
   };
   "omarchy-channel-set" = {
-    class = "vendor";
-    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
-    pacman = "Update, channel, keyring and mirror plumbing. Unreachable here because pkgs/omarchy/nix-bin replaces the entry points the UI calls -- omarchy-update and omarchy-update-available.";
+    class = "patch";
+    reason = "Upstream switches channels with pacman and mirrors. The body is replaced by a delegation to `nixarchy-channel omarchy`, which edits the machine's flake.nix (stable, edge, or a checkout of your own; rc is refused). The shebang and `# omarchy:` header lines are kept, minus requires-sudo.";
   };
   "omarchy-clipboard-open" = {
     class = "patch";

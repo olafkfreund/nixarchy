@@ -728,6 +728,29 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-version-channel \
                       --replace-fail 'if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then' 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then'
 
+                    # The channel switch is nixarchy-channel's, not pacman's.
+                    #
+                    # omarchy-channel-current and omarchy-channel-set decide and change the
+                    # channel through pacman packages and mirrors, none of which exist here.
+                    # The Omarchy axis (stable, edge, or your own checkout) lives in the
+                    # machine's flake.nix, and `nixarchy-channel omarchy` reads and edits it,
+                    # so both commands hand over to it. The shebang and the `# omarchy:` header
+                    # lines are kept because the omarchy CLI reads them -- except
+                    # requires-sudo, which nothing here needs. Written with printf: a heredoc
+                    # in an indented string makes nixfmt reindent the whole file.
+                    delegate() {
+                      f=$out/share/omarchy/bin/$1
+                      grep -q '^# omarchy:summary=' "$f" || {
+                        echo "$1 has no omarchy:summary header; upstream reshaped it" >&2
+                        exit 1
+                      }
+                      shebang=$(head -n 1 "$f")
+                      header=$(grep '^# omarchy:' "$f" | grep -v 'requires-sudo' | sed 's/|rc|/|/' || true)
+                      printf '%s\n\n%s\n\n%s\n' "$shebang" "$header" "$2" > "$f"
+                    }
+                    delegate omarchy-channel-current 'exec nixarchy-channel omarchy --current'
+                    delegate omarchy-channel-set 'exec nixarchy-channel omarchy "$@"'
+
                     # Vulkan was never detected.
                     #
                     # Upstream looks in /usr/share/vulkan/icd.d, which does not exist on NixOS:

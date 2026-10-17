@@ -550,22 +550,6 @@ let
           description = "Switch to an earlier system generation. Your home directory is not touched";
         };
 
-        # Explicit `parent`: MenuModel.js's default parent for this id is
-        # "system.recovery.snapshot" (its own id with the last segment
-        # dropped) -- the PEER row below, not this menu. Left to the
-        # default, this row would render one level too deep: invisible when
-        # browsing System > Backup and recovery, reachable only by search --
-        # the same trap trigger.snapshot.restore was already in under
-        # Trigger, and the reason system.recovery.home-backup.restore below
-        # needs the same override.
-        "system.recovery.snapshot.restore" = {
-          icon = "󰦛";
-          label = "Restore from snapshot";
-          parent = "system.recovery";
-          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot restore";
-          description = "Open an earlier version of your home directory and copy back what you want";
-        };
-
         # Why: modules/AGENTS.md#the-off-disk-half-beside-the-on-disk-one
         "system.recovery.home-backup.restore" = {
           icon = "󰇚";
@@ -574,16 +558,6 @@ let
           when = "nixarchy-home-backup --check";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-home-backup restore";
           description = "Copy your bar, keybindings and themes back out of the backup. Works on a new machine";
-        };
-
-        # Upstream's snapshots are taken by its updater and restored from
-        # the boot menu, and neither happens here. This is a new row, so it
-        # carries its own label and icon.
-        "system.recovery.snapshot" = {
-          icon = "󰆓";
-          label = "Snapshot home";
-          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot create";
-          description = "Save your home directory as it is now. Instant, and costs nothing until files change";
         };
 
         "system.recovery.home-backup" = {
@@ -614,6 +588,12 @@ let
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-reinstall-iso";
           description = "A bootable image that reinstalls this machine's system on new hardware. Not a backup: it carries none of your files";
         };
+
+        # Upstream gates these on Arch's binary names (#1303): nixpkgs' helix
+        # installs `hx`, nixarchy's Zen is the flake's `zen-beta`. The setter and
+        # launcher patches in pkgs/omarchy/default.nix name the same binaries.
+        "setup.default.editor.helix".when = "omarchy-cmd-present hx";
+        "setup.default.browser.zen".when = "omarchy-cmd-present zen-beta";
 
         "install.aur" = {
           when = "false";
@@ -847,6 +827,58 @@ let
         # #1304: hidden. Its omarchy-remove-dev-env arm is `elixir|phoenix`, so
         # removing Phoenix uninstalls Elixir and Erlang with it.
         "remove.development.elixir.phoenix".when = "false";
+        # #1304: omarchy-dns now explains instead of switching, and these
+        # three ran with no terminal to show it in.
+        "setup.network.dns.dhcp".action =
+          "omarchy-launch-floating-terminal-with-presentation 'omarchy-dns DHCP'";
+        "setup.network.dns.cloudflare".action =
+          "omarchy-launch-floating-terminal-with-presentation 'omarchy-dns Cloudflare'";
+        "setup.network.dns.google".action =
+          "omarchy-launch-floating-terminal-with-presentation 'omarchy-dns Google'";
+        # #1304: the catalogue's openssh route, in its rows' shape. Setup dims
+        # rather than hides: a negated grep on a missing services.nix is true.
+        "setup.security.sshd" = {
+          action = "nixarchy-service-enable openssh";
+          disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ openssh([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+          description = "Turn on services.openssh in your services, then Apply changes";
+        };
+        "remove.security.sshd" = {
+          action = "nixarchy-service-disable openssh";
+          when = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ openssh([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+          description = "Remove from your services, then Apply changes";
+        };
+        # #1304: plain bash, so #1301's rule for pkg-guarded rows leaves these alone.
+        "remove.security.fingerprint".when = "command -v fprintd-enroll >/dev/null";
+        "remove.security.fido2".when = "[[ -e /etc/fido2 ]]";
+      }
+      # Snapshots need the `home` snapper config omarchy-snapshot drives;
+      # only the installer sets one, so Mode A gets no rows that only refuse (#1303).
+      // lib.optionalAttrs (config.services.snapper.configs ? home) {
+        # Explicit `parent`: MenuModel.js's default parent for this id is
+        # "system.recovery.snapshot" (its own id with the last segment
+        # dropped) -- the PEER row below, not this menu. Left to the
+        # default, this row would render one level too deep: invisible when
+        # browsing System > Backup and recovery, reachable only by search --
+        # the same trap trigger.snapshot.restore was already in under
+        # Trigger, and the reason system.recovery.home-backup.restore above
+        # needs the same override.
+        "system.recovery.snapshot.restore" = {
+          icon = "󰦛";
+          label = "Restore from snapshot";
+          parent = "system.recovery";
+          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot restore";
+          description = "Open an earlier version of your home directory and copy back what you want";
+        };
+
+        # Upstream's snapshots are taken by its updater and restored from
+        # the boot menu, and neither happens here. This is a new row, so it
+        # carries its own label and icon.
+        "system.recovery.snapshot" = {
+          icon = "󰆓";
+          label = "Snapshot home";
+          action = "omarchy-launch-floating-terminal-with-presentation omarchy-snapshot create";
+          description = "Save your home directory as it is now. Instant, and costs nothing until files change";
+        };
       }
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
       //

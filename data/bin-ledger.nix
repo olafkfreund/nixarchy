@@ -204,7 +204,7 @@
   };
   "omarchy-default-browser" = {
     class = "patch";
-    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id.";
+    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id. It also names zen.desktop; nixarchy's Zen is the zen-browser flake's beta, which installs zen-beta.desktop, so the setter set a desktop id that does not exist and the reader never answered zen (#1303).";
   };
   "omarchy-dev-install-ydoo" = {
     class = "vendor";
@@ -227,13 +227,17 @@
     allow = "etc-write";
   };
   "omarchy-dns" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Writes /etc/systemd/resolved.conf with `tee` to switch DNS providers. That file is generated from services.resolved on NixOS, so the write is reverted by the next rebuild.";
+    class = "patch";
+    reason = "Writes resolved.conf and NetworkManager state imperatively; exits 1 with the networking.nameservers route at require_root, before any write (#1304).";
     allow = "etc-write";
   };
   "omarchy-display-text-size" = {
     class = "patch";
     reason = "Its terminal-font step edits ~/.config/{alacritty,ghostty,foot,kitty} with `sed -i`. On Arch those are ordinary files; here they can be Home Manager symlinks into the store, so sed dies with `couldn't open temporary file /nix/store/sedXXXXXX: Read-only file system` while the shell and GTK sizes still apply -- a partial result and an error nobody can act on (#948). A guard returns early and names the files instead, so an unmanaged config keeps today's behaviour.";
+  };
+  "omarchy-font-list" = {
+    class = "patch";
+    reason = "Its fc-list :spacing=100 also matches X11's cursor glyph font, which fontconfig reports as family `cursor.pcf` wherever font-cursor-misc is installed -- NixOS adds it with services.xserver.enable. The grep -v that already drops emoji fonts also drops that family (#1303).";
   };
   "omarchy-games-retro-cores" = {
     class = "replace";
@@ -244,9 +248,8 @@
     reason = "It hardcodes /usr/lib/libretro. nixpkgs puts the cores inside the retroarch wrapper's own store path, so the directory is resolved at runtime with `omarchy-retroarch-cores`.";
   };
   "omarchy-hibernation-available" = {
-    class = "vendor";
-    reason = "Vendored unchanged, and read-only: it decides hibernation is set up by testing for /etc/mkinitcpio.conf.d/omarchy_resume.conf, which nothing on NixOS creates, so it reports unavailable -- which is right, because modules/nixos.nix ships zram and no hibernation swap.";
-    allow = "initrd-boot";
+    class = "patch";
+    reason = "It decided hibernation was set up by testing for /etc/mkinitcpio.conf.d/omarchy_resume.conf, which only Omarchy's Arch installer writes, so a NixOS machine with swap and boot.resumeDevice never saw the Hibernate row. That term asks logind's CanHibernate instead -- the same authority `systemctl hibernate` uses. Upstream's image_size, swap-size and zram terms stay (#1303).";
   };
   "omarchy-hibernation-remove" = {
     class = "vendor";
@@ -312,6 +315,10 @@
     class = "patch";
     reason = "It reads the browser's .desktop from {~/.local,~/.nix-profile,/usr}/share/applications. On NixOS those live under /run/current-system/sw and /etc/profiles/per-user, so the lookup found nothing.";
   };
+  "omarchy-launch-editor" = {
+    class = "patch";
+    reason = "omarchy-default-editor saves `helix`, but nixpkgs' helix installs only `hx`, so the launcher's omarchy-cmd-present fell back to nvim. A saved `helix` is read as `hx` (#1303).";
+  };
   "omarchy-launch-openclaw" = {
     class = "vendor";
     reason = "Vendored unchanged, and read-only: `systemctl --user is-enabled openclaw-gateway.service` decides whether to launch the gateway or the client.";
@@ -346,9 +353,8 @@
     reason = "Summon the menu with a 10 s IPC timeout instead of omarchy-shell's 2 s: from a key bind the shell answers later than that, and the script would exit and leave the menu it opened doing nothing (#1189).";
   };
   "omarchy-menu-timezone" = {
-    class = "vendor";
-    reason = "Vendored unchanged. `sudo timedatectl set-timezone` rewrites /etc/localtime, which time.timeZone owns on NixOS, so the menu's choice is reverted by the next rebuild.";
-    allow = "ctl-set";
+    class = "patch";
+    reason = "timedatectl from a terminal-less menu row, with no sudoers rule, where time.timeZone is always set; notifies with the time.timeZone line and exits 1 (#1304).";
   };
   "omarchy-migrate" = {
     class = "replace";
@@ -474,7 +480,7 @@
   };
   "omarchy-remove-browser" = {
     class = "patch";
-    reason = "It writes chromium.desktop as the fallback default browser, a name nixpkgs does not use, and its `|| true` swallowed the failure -- so removing Chrome left a default resolving to nothing.";
+    reason = "It writes chromium.desktop as the fallback default browser, a name nixpkgs does not use, and its `|| true` swallowed the failure -- so removing Chrome left a default resolving to nothing. Its Zen fallback compared against zen.desktop, which nixarchy's Zen does not install; it names zen-beta.desktop (#1303).";
     allow = "etc-write";
   };
   "omarchy-remove-dev-env" = {
@@ -498,11 +504,12 @@
   };
   "omarchy-remove-security-fido2" = {
     class = "patch";
-    reason = "Its remove_pam_config seds /etc/pam.d/sudo, a symlink into /etc/static/pam.d that `sed -i` replaces with a stale regular file -- and its grep guard fires for anyone who set u2fAuth declaratively.";
+    reason = "Its remove_pam_config seds /etc/pam.d/sudo, a symlink into /etc/static/pam.d that `sed -i` replaces with a stale regular file -- and its grep guard fires for anyone who set u2fAuth declaratively. The script exits 1 before dropping packages or deleting the registration (#1304). Its etc-write match is only the guidance text naming `sudo rm -rf /etc/fido2`; nothing here runs it.";
+    allow = "etc-write";
   };
   "omarchy-remove-security-fingerprint" = {
     class = "patch";
-    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes; dropping the packages and the omarchy-lock file stays.";
+    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes, and the script exits 1 with the services.fprintd route before dropping packages or deleting the omarchy-lock file (#1304).";
     allow = "etc-write";
   };
   "omarchy-remove-security-sshd" = {
@@ -511,8 +518,8 @@
     allow = "systemctl-system ufw";
   };
   "omarchy-remove-security-sudoless-docker" = {
-    class = "vendor";
-    reason = "Vendored unchanged. `gpasswd -d $USER docker` removes a group membership that users.users.<name>.extraGroups owns on NixOS, so a rebuild puts it back.";
+    class = "patch";
+    reason = "`gpasswd -d $USER docker` removes a group membership that users.users.<name>.extraGroups owns on NixOS; prints that route and exits 1 before any write (#1304).";
     allow = "account-tools";
   };
   "omarchy-remove-service-sunshine" = {
@@ -565,8 +572,7 @@
   };
   "omarchy-setup-security-fingerprint" = {
     class = "patch";
-    reason = "Same as fido2: setup_pam_config and setup_lock_fingerprint_pam edit NixOS-managed PAM stacks. fprintd-enroll stays; the PAM step names services.fprintd and the fprintAuth options instead.";
-    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it.";
+    reason = "Same as fido2: setup_pam_config and setup_lock_fingerprint_pam edit NixOS-managed PAM stacks. fprintd-enroll stays; the PAM step names services.fprintd and the fprintAuth options instead. The pacman install becomes the services.fprintd.enable line (#1304).";
   };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
@@ -574,8 +580,8 @@
     allow = "systemctl-system ufw";
   };
   "omarchy-setup-security-sudoless-docker" = {
-    class = "vendor";
-    reason = "Vendored unchanged. `usermod -aG docker $USER` adds a group membership that users.users.<name>.extraGroups owns on NixOS, so the change is lost at the next rebuild.";
+    class = "patch";
+    reason = "`usermod -aG docker $USER` adds a group membership that users.users.<name>.extraGroups owns on NixOS, and rootless Docker needs no group; prints that route and exits 1 before any write (#1304).";
     allow = "account-tools";
   };
   "omarchy-shell" = {

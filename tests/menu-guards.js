@@ -106,8 +106,11 @@ for (const id of Object.keys(upRaw)) {
   if (!id.startsWith("remove.") || !PKG.test(String(upRaw[id].when || ""))) continue
   count("upstream-guarded-remove")
   if (!raw[id]) { fail(`${id}: upstream's remove row is missing from the generated menu`); continue }
-  // A row nixarchy ported has its own action; #1304 owns those.
+  // A row nixarchy ported has its own action or its own `when` (a "false" is the
+  // generator's hide, not a port); #1304 owns those.
+  const when = String(raw[id].when || "")
   if (raw[id].action !== upRaw[id].action) continue
+  if (when !== String(upRaw[id].when || "") && when !== "false") continue
   count("unported-remove")
   if (present.visible(id)) fail(`${id}: visible with its package present, and still runs upstream's ${upRaw[id].action}`)
 }

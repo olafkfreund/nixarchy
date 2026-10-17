@@ -32,12 +32,11 @@
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
   "remove.preinstalls" =
     "owned: deletes only unmodified seeds and exact mise stubs; omarchy-install-hermes-cli removes only the wrapper it wrote (--owns) (decision 2, checks.remove-preinstalls)";
-  "remove.security.fido2" =
-    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 2 ports it (decision 7)";
+  "remove.security.fido2" = "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
   "remove.security.fingerprint" =
-    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 2 ports it (decision 7)";
-  "remove.security.sshd" = "pending #1304 class 2: decision 5";
-  "remove.security.sudoless-docker" = "pending #1304 class 2: decision 6";
+    "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
+  "remove.security.sudoless-docker" =
+    "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "remove.windows" = "pending #1304 class 4: decision 12";
   "setup.config.xcompose" = "session: restarts the user's XCompose unit";
   "setup.default.agent.antigravity" =
@@ -68,15 +67,18 @@
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.pi" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
-  "setup.network.dns.cloudflare" = "pending #1304 class 2: decision 4";
-  "setup.network.dns.custom" = "pending #1304 class 2: decision 4";
-  "setup.network.dns.dhcp" = "pending #1304 class 2: decision 4";
-  "setup.network.dns.google" = "pending #1304 class 2: decision 4";
+  "setup.network.dns.cloudflare" =
+    "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+  "setup.network.dns.custom" =
+    "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+  "setup.network.dns.dhcp" =
+    "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
+  "setup.network.dns.google" =
+    "guidance: exits 1 before its writers (decision 4, checks.menu-guidance)";
   "setup.security.fido2" =
     "unreached: names omarchy-remove-security-fido2 in its guidance text and never runs it";
-  "setup.security.fingerprint" = "pending #1304 class 2: decision 8";
-  "setup.security.sshd" = "pending #1304 class 2: decision 5";
-  "setup.security.sudoless-docker" = "pending #1304 class 2: decision 6";
+  "setup.security.sudoless-docker" =
+    "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "style.theme" = "owned: omarchy-install-hermes-cli removes only the wrapper it wrote (--owns)";
   "trigger.hardware.hybrid-gpu" = "pending #1304 class 4: decision 12";
   "trigger.reminder.clear" = "session: creates, shows or clears the user's reminder timer unit";
@@ -92,5 +94,4 @@
     "runtime: reloads the trackpad driver for this boot; nothing a rebuild owns";
   "update.hardware.wifi" = "runtime: resets wifi for this boot; nothing a rebuild owns";
   "update.process.shell" = "session: restarts the user's shell unit";
-  "update.timezone" = "pending #1304 class 2: decision 9";
 }

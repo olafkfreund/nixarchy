@@ -1987,6 +1987,10 @@
             # against the subcommands the CLI it invokes actually has. See
             # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
             "menu-verbs"
+            # The menu scripts patched to explain and exit 1 call no writer (#1304).
+            "menu-guidance"
+            # A font row run with no terminal reopens itself in one, when the font is missing (#1304).
+            "install-font-terminal"
             # Every visible menu row's action, followed into its scripts (#1304).
             "menu-actions"
             # The other half of that: a declared machine actually boots, on the
@@ -2536,6 +2540,18 @@
           # #1070: `omarchy-menu close` asks the menu to dismiss before hiding it, so a
           # scripted close never starts dictation; stubs stand in for omarchy-shell.
           menu-close = import ./tests/menu-close.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1305: a partial override in the user's menu file keeps the rest of the row.
+          menu-model-merge = import ./tests/menu-model-merge.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1305: Right never runs a menu row, and a displaced request releases its caller.
+          menu-keys = import ./tests/menu-keys.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };

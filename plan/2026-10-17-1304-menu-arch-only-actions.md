@@ -244,6 +244,74 @@ applies.
   overrides and stay visible. The `omarchy-pkg-drop` ledger reason keeps
   #1304's text ("reached, and inert") and adds #1301's note.
 
+## Deviations during implementation (Part 2)
+
+- **2.1:** the sudoless-docker setup anchor contains `'docker'`. A `'\''`
+  inside a Nix `''` string would end it, so the anchor is a shell `$'…'`
+  string. It matched.
+- **2.2:** `omarchy-menu-timezone`'s `ctl-set` allowance was pruned, because
+  the patch removed the call it matched. `omarchy-remove-security-fido2`
+  gained `allow = "etc-write"`: its guidance text names `sudo rm -rf
+  /etc/fido2`, and the ledger's scan matches the text. Nothing runs it.
+- **2.4:** the `setup.security.fingerprint` and `update.timezone` entries
+  were deleted, not turned into `guidance:` entries. The 2.1 patches replace
+  those scripts' writer lines outright, rather than exiting in front of
+  them, so neither row reaches a hazard and the probe calls the entries
+  stale. `checks.menu-guidance` alone holds decisions 8 and 9.
+  `menu-actions` reads 52 flagged and 6 hidden.
+- **2.5:** a second timezone case (`Asia/Tokyo`) proves the notification
+  carries the pick it was given.
+- **The owner waived the local load gate.** The lead checked the p620 gate.
+
+- **2.6:** `checks.menu-guidance` labels each failure by case (`dns Cloudflare`,
+  `timezone …`, `remove fido2`), not by script name as the plan's expected
+  text does. The failures are the same. All five breaks went red, and both
+  checks are green after restore.
+
+- **After review:** `checks.menu-guidance`'s markers for remove fingerprint,
+  remove fido2 and setup fingerprint also occurred in an older PAM patch's
+  text, so that half of those cases could not fail. They are now strings
+  only the new guidance prints. Break 3, re-run, shows the marker half
+  failing too.
+
+- **After CI:** the seven multi-line guidance texts moved from inline
+  `--replace-fail` literals into `pkgs/omarchy/1304-guidance-*.sh`, read with
+  `"$(cat ${./…})"` as #1301's snippets are. Inline, they pushed the
+  `omarchy` installPhase to 123628 bytes against `checks.install-phase-budget`'s
+  123000. It now reads 122537. The built scripts are unchanged apart from
+  leading whitespace, and `menu-guidance` still passes all ten cases.
+  `tests/menu-guidance.nix` takes `{ pkgs, ... }`: deadnix flagged the unused
+  `inputs`.
+
+- **Merging main after #1303 landed:** two things only the combination showed.
+  (1) `checks.install-phase-budget` read 123955 bytes, because #1303's script
+  patches had landed on main. The two longest install-phase comments
+  (wallpaper sizing, the web-app failure) moved verbatim to `pkgs/AGENTS.md`
+  behind `# Why:` pointers, and #1301's, #1303's and this series' comments
+  became one-line pointers. It now reads 121041, with headroom left for
+  #1305. (2) #1301's `menu-guards` counted a Remove row as unported when its
+  action matched upstream's. Part 2 ports remove.security.fingerprint through
+  its `when` and keeps upstream's (now patched) action, so the check now also
+  counts a changed `when` as ported (`false`, the generator's hide, excepted).
+  The proof: removing #1301's hide loop still turns the check red on hermes,
+  perplexity and brave-origin.
+
+## Deviations during implementation (Part 3)
+
+- **Stacked on Part 2 (2026-10-17).** Part 2's PR #1312 is blocked by an
+  unrelated Quickshell crash (#1313), so Part 3 does not wait for it to
+  merge. Its branch `fix/1304-menu-unsupported-rows` is based on
+  `fix/1304-menu-imperative-writes` @ 6053b65e, not on `main`. When #1312
+  merges, Part 3 is replayed onto `main` with its own commits only (CLAUDE.md
+  §8, "A stacked PR conflicts the moment its base squash-merges").
+  Replayed onto `main` @ 50afaa1f after #1312 merged.
+- **`menu-guards`' `package-guarded` floor goes from 1 to 0.** On stable
+  the only Install rows with a package guard in their `when` were
+  `install.ai.hermes` and `install.ai.perplexity`, and step 3.1 hides both
+  (decision 12). The floor of 1 then failed on a correct tree: `only 0
+  package-guarded cases`. Edge still counts three. The PATH answer itself
+  stays covered on both pins by `helper-agreement` (606 cases).
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

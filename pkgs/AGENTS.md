@@ -221,6 +221,49 @@ reply format this depends on.
 **When to drop it:** never, unless upstream grows an explicit close verb of
 its own, distinct from hide.
 
+<a id="the-menus-own-bugs-1305"></a>
+
+### The menu's own bugs (#1305)
+
+CARRIED, until omacom/omarchy fixes them. Three `--replace-fail`
+substitutions in `pkgs/omarchy/default.nix`, written against the tree after
+`1301-menu-disabled.patch` and its `MenuModel.js` substitution. The
+replacement text lives in `pkgs/omarchy/1305-menu-*.js`, because a multi-line
+argument inside the `installPhase` string re-flows the whole phase under
+`nix fmt`.
+
+- **Bug 1: Right ran rows.** In `Menu.qml` the Right arrow shared Enter's
+  branch, so on an action row it ran the action (Shutdown is Super+Escape,
+  Up, Right), and in a select or input prompt it picked the row or submitted
+  half-typed text. The guard is the branch's first statement and tests "not
+  Enter", so it holds on quattro's `readingKey` line too, where the physical
+  Left key arrives as Right. Right now opens a submenu or follows a link and
+  is otherwise left unhandled. Drop it when upstream restricts Right.
+- **Bug 2: a displaced prompt hung its caller.** `openDmenu` and
+  `openExistingMenu` dropped the pending `doneFile` without writing it, so
+  `omarchy-menu-select` and `-input` waited for ever. Both now call
+  `releaseDisplacedRequest()` first, which writes the file empty (the caller
+  exits 1, as for Escape). The write goes through
+  `Quickshell.execDetached(["sh", ...])` with the path as an argument, not
+  `resultProc`, because one `Process` ignores a new command while it runs.
+  `omarchy-menu-images` is not covered: it waits on `image-selector`. Drop it
+  when a shipped release contains upstream PR #9031.
+- **Bug 3: partial overrides blanked rows.** `normalizeItem` fills every key
+  before `mergeMenuSources` copies all of them, so a file stating only
+  `label` blanked the action. `parseMenuJsonc` now records `statedKeys`
+  (filtered to keys `normalizeItem` returns), and the merge copies only those
+  onto an id an earlier source defined. `normalizeItem` is untouched because
+  #1301 changes it. Drop it when upstream merges stated keys only;
+  `modules/apps.nix`'s full-row merge is then redundant (follow-up).
+- **Not carried:** the early summon (upstream #14053, PR #15519, open);
+  inline `//` in the menu file, `summon <alias>` ignoring `when`, one shell
+  for every guard and a power-profiles provider that is not volatile (report
+  only, drafts in the spec's appendix); search ancestors (a feature request);
+  PageUp and AltGr/IME (fixed on quattro, which stable gets at its next bump).
+
+Checks: `checks.menu-model-merge` (node over the built `MenuModel.js`) and
+`checks.menu-keys` (the real `Menu.qml`, headless; see `tests/AGENTS.md`).
+
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)
 
@@ -934,3 +977,53 @@ decision of 2026-10-17. A future `keepLoaded` plugin with the same
 Drop it when nixarchy-menu survives an asynchronous load, proven with the
 same `checks.session` runs. The defect is nixarchy-menu's own; the follow-up
 issue is olafkfreund/nixarchy-menu#28.
+
+<a id="wallpapers-are-capped-at-4096px-so-they-can-become-a-texture"></a>
+## Wallpapers are capped at 4096 px so they can become a texture
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #948).
+
+Omarchy ships wallpapers up to 7680px wide. Anything wider than
+GL_MAX_TEXTURE_SIZE cannot become a texture, and the background renders
+black with no error anywhere -- Qt reports the image Ready, the layer
+surface exists at full size, and nothing is drawn. 4096 is the limit on
+llvmpipe and on plenty of integrated GPUs, and 5 of the 8 backgrounds in
+the default theme are over it.
+
+sourceSize caps what Qt decodes to. Setting only the width keeps the
+aspect ratio, and 4096 is wider than any display this would be shown on,
+so there is no visible loss -- and every machine decodes less. A plain
+constant rather than anything derived from Screen: Screen is an attached
+property that does not resolve inside an Image, and a QML error here
+would take out the whole background rather than just the size hint.
+
+displayedBackground dropped from this loop (#1153): the 1153 patch above
+replaces that layer's Image with a BackgroundMedia, which draws through
+its own Image with its own sourceSize.width, retargeted just below. The
+transition layers (oldBackground, incomingBackground) are untouched by
+that patch and still match here.
+
+<a id="every-web-app-failed-with"></a>
+## Every web app failed with
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #948).
+
+Every web app failed with
+
+  Error: Path "--app=https://messages.google.com/..." does not exist!
+
+omarchy-launch-webapp resolves the browser by reading Exec= out of a
+.desktop file and passing the binary to uwsm-app. When that lookup finds
+nothing the substitution is empty, so `--app=<url>` lands where the
+program should be and uwsm-app reports it as a missing path.
+
+It found nothing because the fallback names chromium.desktop, which is
+what Arch installs. NixOS calls it chromium-browser.desktop. The default
+browser here was a Chrome web-app profile entry -- chrome-<id>-Default
+-- which matches none of the patterns upstream lists, so every launch
+took the fallback and every web app was broken: all nine that call this
+directly, plus HEY and Zoom through their handlers.
+
+Both names are tried rather than one swapped for the other, because
+someone may have a chromium.desktop of their own and upstream's name
+should keep working.

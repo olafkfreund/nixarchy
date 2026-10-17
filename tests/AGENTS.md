@@ -1364,6 +1364,31 @@ It does not pin an `ok` reply that arrives with a non-zero exit, since
 pin is `qs`'s real reply format -- only `checks.session`'s #1069 probe, against
 a live shell, sees that.
 
+## menu-keys runs the real Menu.qml headless, and never the shipped menu
+
+`checks.menu-keys` (#1305) loads the built `Menu.qml` into a headless
+Quickshell, sends keys with QtTest's `TestCase.keyClick` (real key events, so
+the real handler runs) and reads state over IPC.
+
+- Offscreen Quickshell has "No PanelWindow backend loaded", so the harness
+  swaps the layer window for a `FloatingWindow` in its own copy of `Menu.qml`.
+  `replace_once` dies unless the anchor is found exactly once: a silent
+  no-match would test the shipped window, not this one.
+- A stub `omarchy-shell` forwards `shell summon omarchy.menu` to the probe, so
+  the built `omarchy-menu-select` and `-input` run as the callers.
+- 1f (Enter runs a row) is the positive control. Without it an all-quiet 1a
+  proves nothing: no key might have arrived.
+- **The trap:** on 2026-10-17 one Right keypress against the SHIPPED menu ran
+  `omarchy-launch-screensaver force` on p620. It reached nothing only because
+  the environment had no compositor variables. A harness that sends keys loads
+  a fixture menu whose actions touch markers, never the shipped one, and runs
+  with `HOME` and `OMARCHY_PATH` pointing into its own directory.
+- `bash -lc` actions take `PATH` from the login profile outside the sandbox,
+  so a stub on `PATH` can be skipped there.
+
+`checks.menu-model-merge` is the cheap sibling: node over the built
+`MenuModel.js`, for the partial-override merge.
+
 ## Working here
 
 - **`machine: output:` is the whole command's stdout, not the probe's.**

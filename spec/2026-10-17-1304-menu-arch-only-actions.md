@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1304
 intent: intent/2026-10-17-1304-menu-arch-only-actions.md
 ---

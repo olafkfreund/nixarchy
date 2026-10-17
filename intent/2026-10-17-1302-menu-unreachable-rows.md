@@ -16,6 +16,12 @@ is the user's hand-written `~/.config/omarchy/extensions/omarchy-menu.jsonc`,
 which overrides the first by id. Reading it against the code splits the
 report into three groups.
 
+Line numbers for MenuModel.js and Menu.qml below refer to the deployed tree,
+`/nix/store/rla9km5silzbp6h9dcfz0pd1p90ia8r9-nixarchy-omarchy-tree/shell/plugins/menu/`.
+Its `default/omarchy/omarchy-menu.jsonc` is byte-identical to
+`/etc/nixarchy/omarchy-menu.jsonc`. Orphans, rows under an action, and the
+first alias match were all computed from that file.
+
 **Ours, and real:**
 
 - **`install.flatpak.geforce-now` is an orphan.** `modules/apps.nix:909-920`
@@ -145,6 +151,9 @@ defaults file.
 - **Upstream rows are upstream's (§11).** If the check finds a defect in a row
   Omarchy ships, it is routed upstream or listed as a known exception. It is
   not patched here unprompted. #1305 owns changes to the stock menu code.
+- **#1303 also edits the `system.recovery.snapshot*` rows** (their `when`).
+  Whichever of the two lands second rebases onto the other, and does not
+  revert the other's change to those rows.
 - **A user's `extraEntries` must not fail their rebuild by surprise.** Any
   feedback on user rows is a warning, not an assertion, unless the approver
   decides otherwise.

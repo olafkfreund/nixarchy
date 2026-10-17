@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1306
 intent: intent/2026-10-17-1306-stale-session-scripts.md
 ---

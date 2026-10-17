@@ -116,9 +116,12 @@ for (const id of Object.keys(upRaw)) {
 const helper = path.join(tree, "bin/omarchy-pkg-present")
 const sample = [...names]
 for (const [wn, w] of [["absent", absent], ["present", present]]) {
-  const prelude = M.guardScript({ probe: { id: "probe", when: "true" } }).split("if {")[0]
+  // The whole batch, not a cut of it: edge runs each guard inside a group.
+  const probe = M.guardScript({ probe: { id: "probe", when: 'omarchy-pkg-present "$1"' } })
   for (const n of sample.concat(sample.map((s) => s + "-bin"), sample.map((s) => s + "-stable"))) {
-    const inShell = spawnSync(bash, ["--noprofile", "--norc", "-c", prelude + 'omarchy-pkg-present "$1"', "x", n], { env: w.env, stdio: "ignore" }).status
+    const out = spawnSync(bash, ["--noprofile", "--norc", "-c", probe, "x", n], { env: w.env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).stdout
+    if (!/^probe:w:[01]$/m.test(out)) { fail(`${wn}: the guard batch gave no answer for ${n}`); continue }
+    const inShell = /^probe:w:1$/m.test(out) ? 0 : 1
     const shipped = spawnSync(helper, [n], { env: w.env, stdio: "ignore" }).status
     count("helper-agreement")
     if ((inShell === 0) !== (shipped === 0)) fail(`${wn}: omarchy-pkg-present ${n}: the menu says ${inShell === 0}, bin/omarchy-pkg-present says ${shipped === 0}`)

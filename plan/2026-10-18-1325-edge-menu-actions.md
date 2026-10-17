@@ -120,7 +120,7 @@ In "menu-actions proves classification, not safety (#1304)", the paragraph
 Then add one sentence: edge entries live only on `edge-candidate`, because the
 stale rule fires for a row the channel does not have (#1325).
 
-### 5. [coder] `.github/workflows/omarchy-edge.yml:238`, main worktree
+### 5. [coder] `.github/workflows/omarchy-edge.yml:239`, main worktree
 
 Add `menu-actions` to
 `for c in menu-verbs bin-ledger skill-parity panel-loaders review-pins stable-eval; do`.

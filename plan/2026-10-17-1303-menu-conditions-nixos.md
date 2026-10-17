@@ -126,6 +126,10 @@ in `modules/apps.nix` or a `substituteInPlace --replace-fail` patch in
   only; `noresume` gave `na` and `na`. So step 9's break 8 may also delete
   `boot.resumeDevice`.
 
+- **Step 3: one word in a moved comment.** The `snapshot.restore` comment
+  said `home-backup.restore` was "below". After the move it is above, so the
+  word was changed. Everything else was moved byte for byte.
+
 ## Steps
 
 0. **Preflight. No edits.**

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1313
 spec: spec/2026-10-17-1313-nixarchy-menu-connections-crash.md
 ---

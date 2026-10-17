@@ -1027,3 +1027,28 @@ directly, plus HEY and Zoom through their handlers.
 Both names are tried rather than one swapped for the other, because
 someone may have a chromium.desktop of their own and upstream's name
 should keep working.
+
+<a id="refresh-applications-copies-writable-desktop-files"></a>
+## omarchy-refresh-applications copies writable desktop files
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte
+budget (`checks.install-phase-budget`), by #1313.
+
+The third site of the same store-mode problem, and the expensive one.
+
+These two copies land 17 desktop files in ~/.local/share/applications
+at the store's 444, so the NEXT run cannot rewrite its own output:
+
+  cp: cannot create regular file '.../Basecamp.desktop': Permission denied
+
+omarchy-provision-user runs under `set -euo pipefail` and calls this
+eleven lines before `omarchy-done mark finalize-user`, so it aborted
+here, the marker was never written, and provisioning re-ran and
+re-failed on every login -- with nothing after the call ever running
+once. ~/.local/state/omarchy/done did not exist on a machine that had
+been in daily use for months.
+
+-f as well as --no-preserve=mode: the mode flag only stops NEW copies
+from landing read-only, and every machine installed before this
+already has 444 files that cp cannot open for writing even as their
+owner. -f unlinks and retries, which repairs those in place.

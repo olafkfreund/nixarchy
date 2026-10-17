@@ -244,6 +244,14 @@ are the lead's.
    its own `.old/.new.qml` pair. Push to `edge-candidate` and dispatch
    `omarchy-edge.yml` with `from_candidate=true`.
 
+## Deviations during implementation
+
+- **Step 6, install-phase budget.** After merging `main` (#1311 and the #1304
+  parts landed), the phase read 123275 bytes against 123000. The 18-line
+  `omarchy-refresh-applications` comment moved verbatim to
+  `pkgs/AGENTS.md#refresh-applications-copies-writable-desktop-files` behind
+  a `# Why:` pointer, the pattern #997 and #1304 used. It now reads 122136.
+
 ## Tests
 
 | check | expected |

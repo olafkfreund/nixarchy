@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1305
 intent: intent/2026-10-17-1305-omarchy-menu-upstream-bugs.md
 ---

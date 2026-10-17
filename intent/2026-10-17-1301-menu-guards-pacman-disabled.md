@@ -15,7 +15,9 @@ check notices either one.
 
 **1. Package guards are answered by pacman.** Before it evaluates any
 `when:` or `checked:`, `MenuModel.js` `guardHelpers()` (line 410 in the
-pinned v4.0.4 source and in the deployed tree) defines bash *functions* named
+pinned v4.0.4 source and in the deployed tree,
+`/nix/store/rla9km5s…-nixarchy-omarchy-tree/shell/plugins/menu/MenuModel.js`)
+defines bash *functions* named
 `omarchy-pkg-present` and `omarchy-pkg-missing`. They are built from
 `pacman -Qq` and `pacman -Qi`. A function shadows a command, so nixarchy's
 Nix-aware `omarchy-pkg-present` script on PATH (`data/bin-ledger.nix:392`)
@@ -44,6 +46,11 @@ copies every upstream key that an override does not set
 that `when` is always true. It hides nothing only because of this bug.
 Correct the guard alone, and installed apps would **disappear** from Install
 instead of dimming. The two problems have to be solved together.
+
+Two of those 39 are `install.editor.helix` (`when: "! omarchy-pkg-present
+helix"`) and `install.browser.zen` (`when: "! omarchy-pkg-present
+zen-browser-bin"`). Investigating #1303 found that both stay visible because
+of this guard. They belong to this issue, not to #1303.
 
 That code is correct on Arch, so the bug is in how nixarchy uses it. It is
 not an Omarchy bug.
@@ -75,6 +82,12 @@ The edge pin (quattro `cce8b1c`, `431c03c7` on `origin/edge`) does support
 `disabled`, with `isDisabled` and a ✓ label. So this half has been solved
 upstream on edge but has not reached stable. Edge still has the pacman-backed
 `guardHelpers`.
+
+All counts above come from the defaults in that deployed tree
+(`default/omarchy/omarchy-menu.jsonc`, byte-identical to
+`/etc/nixarchy/omarchy-menu.jsonc`). Its `MenuModel.js` and `Menu.qml`
+contain no `disabled`. An older tree (`zlhw6r3r…`), still loaded by a
+session started before the deploy, has the same `MenuModel.js`.
 
 **Why the suite is green.** `tests/session.nix:1520-1560` reads each row's
 `disabled` from the JSON and runs it with `bash -c`. That proves the

@@ -1,4 +1,4 @@
-{ inputs, pkgs }:
+{ pkgs, ... }:
 # The menu scripts patched to explain and exit 1 (#1304) call no writer.
 #
 # checks.menu-actions classifies rows; it cannot tell that a patched script

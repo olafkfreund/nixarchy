@@ -274,6 +274,15 @@ applies.
   only the new guidance prints. Break 3, re-run, shows the marker half
   failing too.
 
+- **After CI:** the seven multi-line guidance texts moved from inline
+  `--replace-fail` literals into `pkgs/omarchy/1304-guidance-*.sh`, read with
+  `"$(cat ${./…})"` as #1301's snippets are. Inline, they pushed the
+  `omarchy` installPhase to 123628 bytes against `checks.install-phase-budget`'s
+  123000. It now reads 122537. The built scripts are unchanged apart from
+  leading whitespace, and `menu-guidance` still passes all ten cases.
+  `tests/menu-guidance.nix` takes `{ pkgs, ... }`: deadnix flagged the unused
+  `inputs`.
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

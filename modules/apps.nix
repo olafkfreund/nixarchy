@@ -846,6 +846,29 @@ let
         # #1304: hidden. Its omarchy-remove-dev-env arm is `elixir|phoenix`, so
         # removing Phoenix uninstalls Elixir and Erlang with it.
         "remove.development.elixir.phoenix".when = "false";
+        # #1304: omarchy-dns now explains instead of switching, and these
+        # three ran with no terminal to show it in.
+        "setup.network.dns.dhcp".action =
+          "omarchy-launch-floating-terminal-with-presentation 'omarchy-dns DHCP'";
+        "setup.network.dns.cloudflare".action =
+          "omarchy-launch-floating-terminal-with-presentation 'omarchy-dns Cloudflare'";
+        "setup.network.dns.google".action =
+          "omarchy-launch-floating-terminal-with-presentation 'omarchy-dns Google'";
+        # #1304: the catalogue's openssh route, in its rows' shape. Setup dims
+        # rather than hides: a negated grep on a missing services.nix is true.
+        "setup.security.sshd" = {
+          action = "nixarchy-service-enable openssh";
+          disabled = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ openssh([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+          description = "Turn on services.openssh in your services, then Apply changes";
+        };
+        "remove.security.sshd" = {
+          action = "nixarchy-service-disable openssh";
+          when = "grep -qE '^[[:space:]]*[^#[:space:]].*#@ openssh([[:space:]]|$)' $HOME/.config/nixarchy/services.nix";
+          description = "Remove from your services, then Apply changes";
+        };
+        # #1304: plain bash, so #1301's rule for pkg-guarded rows leaves these alone.
+        "remove.security.fingerprint".when = "command -v fprintd-enroll >/dev/null";
+        "remove.security.fido2".when = "[[ -e /etc/fido2 ]]";
       }
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
       //

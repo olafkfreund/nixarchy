@@ -1985,6 +1985,8 @@
             # against the subcommands the CLI it invokes actually has. See
             # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
             "menu-verbs"
+            # The menu scripts patched to explain and exit 1 call no writer (#1304).
+            "menu-guidance"
             # Every visible menu row's action, followed into its scripts (#1304).
             "menu-actions"
             # The other half of that: a declared machine actually boots, on the

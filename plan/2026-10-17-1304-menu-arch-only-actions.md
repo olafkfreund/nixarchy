@@ -244,6 +244,36 @@ applies.
   overrides and stay visible. The `omarchy-pkg-drop` ledger reason keeps
   #1304's text ("reached, and inert") and adds #1301's note.
 
+## Deviations during implementation (Part 2)
+
+- **2.1:** the sudoless-docker setup anchor contains `'docker'`. A `'\''`
+  inside a Nix `''` string would end it, so the anchor is a shell `$'…'`
+  string. It matched.
+- **2.2:** `omarchy-menu-timezone`'s `ctl-set` allowance was pruned, because
+  the patch removed the call it matched. `omarchy-remove-security-fido2`
+  gained `allow = "etc-write"`: its guidance text names `sudo rm -rf
+  /etc/fido2`, and the ledger's scan matches the text. Nothing runs it.
+- **2.4:** the `setup.security.fingerprint` and `update.timezone` entries
+  were deleted, not turned into `guidance:` entries. The 2.1 patches replace
+  those scripts' writer lines outright, rather than exiting in front of
+  them, so neither row reaches a hazard and the probe calls the entries
+  stale. `checks.menu-guidance` alone holds decisions 8 and 9.
+  `menu-actions` reads 52 flagged and 6 hidden.
+- **2.5:** a second timezone case (`Asia/Tokyo`) proves the notification
+  carries the pick it was given.
+- **The owner waived the local load gate.** The lead checked the p620 gate.
+
+- **2.6:** `checks.menu-guidance` labels each failure by case (`dns Cloudflare`,
+  `timezone …`, `remove fido2`), not by script name as the plan's expected
+  text does. The failures are the same. All five breaks went red, and both
+  checks are green after restore.
+
+- **After review:** `checks.menu-guidance`'s markers for remove fingerprint,
+  remove fido2 and setup fingerprint also occurred in an older PAM patch's
+  text, so that half of those cases could not fail. They are now strings
+  only the new guidance prints. Break 3, re-run, shows the marker half
+  failing too.
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

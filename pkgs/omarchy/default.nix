@@ -1444,11 +1444,10 @@ stdenvNoCC.mkDerivation {
                         exit 1' \
                       --replace-fail 'setup_lock_fingerprint_pam' ':'
 
-                    # The removal side says the same thing in one breath. Both keep
-                    # everything else they do -- dropping the packages, and in the
-                    # fingerprint case removing /etc/pam.d/omarchy-lock-fingerprint, which
-                    # is a plain file the lock screen writes rather than a link into the
-                    # store, so removing it is right.
+                    # The removal side says the same thing in one breath, and the block
+                    # after the drift guard makes both exit 1 before they drop packages or
+                    # delete anything. /etc/pam.d/omarchy-lock-fingerprint is declared by
+                    # modules/nixos.nix when fprintd is on, so removing it by hand is wrong.
                     substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fido2 \
                       --replace-fail 'remove_pam_config' \
                         'echo "PAM is configured by your NixOS build, so there is nothing to unpick" >&2
@@ -1459,8 +1458,8 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fingerprint \
                       --replace-fail 'remove_pam_config' \
                         'echo "PAM is configured by your NixOS build, so there is nothing to unpick" >&2
-                        echo "in /etc/pam.d. Drop the fprintAuth lines and services.fprintd from" >&2
-                        echo "your configuration and rebuild." >&2
+                        echo "in /etc/pam.d. Turn off services.fprintd (fprintAuth follows it)" >&2
+                        echo "and rebuild." >&2
                         echo "" >&2'
 
                     # The drift guard for all four: if an upstream release moves these edits
@@ -1470,6 +1469,57 @@ stdenvNoCC.mkDerivation {
                       echo "the scripts above still edit a NixOS-managed PAM stack" >&2
                       exit 1
                     fi
+
+                    # #1304: commands a menu row runs that can only explain on NixOS. Each
+                    # exits 1 before its first writer; upstream's later lines stay in the
+                    # file, unreachable, and data/menu-actions.nix says so.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-dns \
+                      --replace-fail 'require_root "$provider"' \
+                        'echo "DNS is part of your NixOS configuration here, not a file to edit:" >&2
+                        echo "" >&2
+                        echo "  networking.nameservers = [ \"1.1.1.1\" \"1.0.0.1\" ];" >&2
+                        echo "  services.resolved.fallbackDns = [ \"9.9.9.9\" ];" >&2
+                        echo "" >&2
+                        echo "Add it to your host configuration, then Apply changes." >&2
+                        exit 1'
+
+                    substituteInPlace $out/share/omarchy/bin/omarchy-setup-security-sudoless-docker \
+                      --replace-fail $'echo "⚠️  WARNING: Enabling sudoless Docker adds you to the \'docker\' group."' \
+                        'echo "Docker here is rootless by default: it runs as you and needs no group." >&2
+                        echo "For the rooted daemon, the docker group is declared:" >&2
+                        echo "  users.users.<you>.extraGroups = [ \"docker\" ];" >&2
+                        echo "then Apply changes." >&2
+                        exit 1'
+
+                    substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-sudoless-docker \
+                      --replace-fail 'echo "Removing $USER from the docker group..."' \
+                        'echo "The docker group is declared here: remove \"docker\" from users.users.<you>.extraGroups, then Apply changes." >&2
+                        exit 1'
+
+                    substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fingerprint \
+                      --replace-fail 'echo -e "\e[32mRemoving fingerprint scanner from authentication.\n\e[0m"' \
+                        'echo "Fingerprint login is declared here. Turn off services.fprintd (fprintAuth follows it)," >&2
+                        echo "then Apply changes. Nothing on this machine was changed." >&2
+                        exit 1'
+
+                    substituteInPlace $out/share/omarchy/bin/omarchy-remove-security-fido2 \
+                      --replace-fail 'echo -e "\e[32mRemoving FIDO2 device from authentication.\n\e[0m"' \
+                        'echo "FIDO2 login is declared here. Remove security.pam.u2f and the u2fAuth lines," >&2
+                        echo "Apply changes, and only then delete the registration: sudo rm -rf /etc/fido2." >&2
+                        echo "Nothing on this machine was changed." >&2
+                        exit 1'
+
+                    substituteInPlace $out/share/omarchy/bin/omarchy-setup-security-fingerprint \
+                      --replace-fail 'if omarchy-pkg-missing libfprint-git fprintd usbutils; then' \
+                        'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
+                      --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 libfprint-git fprintd usbutils' \
+                        '  echo "Enable the reader first: services.fprintd.enable = true; then Apply changes and run this again." >&2
+                          exit 1'
+
+                    substituteInPlace $out/share/omarchy/bin/omarchy-menu-timezone \
+                      --replace-fail 'sudo timedatectl set-timezone "$timezone"' \
+                        'omarchy-notification-send "Timezone is part of your configuration: set time.timeZone = \"$timezone\"; then Apply changes"
+                        exit 1'
 
                     # Each Icon= key is the file's basename lowercased with runs of non
                     # alphanumerics collapsed to a dash -- safe_icon_name() in

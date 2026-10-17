@@ -227,8 +227,8 @@
     allow = "etc-write";
   };
   "omarchy-dns" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Writes /etc/systemd/resolved.conf with `tee` to switch DNS providers. That file is generated from services.resolved on NixOS, so the write is reverted by the next rebuild.";
+    class = "patch";
+    reason = "Writes resolved.conf and NetworkManager state imperatively; exits 1 with the networking.nameservers route at require_root, before any write (#1304).";
     allow = "etc-write";
   };
   "omarchy-display-text-size" = {
@@ -346,9 +346,8 @@
     reason = "Summon the menu with a 10 s IPC timeout instead of omarchy-shell's 2 s: from a key bind the shell answers later than that, and the script would exit and leave the menu it opened doing nothing (#1189).";
   };
   "omarchy-menu-timezone" = {
-    class = "vendor";
-    reason = "Vendored unchanged. `sudo timedatectl set-timezone` rewrites /etc/localtime, which time.timeZone owns on NixOS, so the menu's choice is reverted by the next rebuild.";
-    allow = "ctl-set";
+    class = "patch";
+    reason = "timedatectl from a terminal-less menu row, with no sudoers rule, where time.timeZone is always set; notifies with the time.timeZone line and exits 1 (#1304).";
   };
   "omarchy-migrate" = {
     class = "replace";
@@ -498,11 +497,12 @@
   };
   "omarchy-remove-security-fido2" = {
     class = "patch";
-    reason = "Its remove_pam_config seds /etc/pam.d/sudo, a symlink into /etc/static/pam.d that `sed -i` replaces with a stale regular file -- and its grep guard fires for anyone who set u2fAuth declaratively.";
+    reason = "Its remove_pam_config seds /etc/pam.d/sudo, a symlink into /etc/static/pam.d that `sed -i` replaces with a stale regular file -- and its grep guard fires for anyone who set u2fAuth declaratively. The script exits 1 before dropping packages or deleting the registration (#1304). Its etc-write match is only the guidance text naming `sudo rm -rf /etc/fido2`; nothing here runs it.";
+    allow = "etc-write";
   };
   "omarchy-remove-security-fingerprint" = {
     class = "patch";
-    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes; dropping the packages and the omarchy-lock file stays.";
+    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes, and the script exits 1 with the services.fprintd route before dropping packages or deleting the omarchy-lock file (#1304).";
     allow = "etc-write";
   };
   "omarchy-remove-security-sshd" = {
@@ -511,8 +511,8 @@
     allow = "systemctl-system ufw";
   };
   "omarchy-remove-security-sudoless-docker" = {
-    class = "vendor";
-    reason = "Vendored unchanged. `gpasswd -d $USER docker` removes a group membership that users.users.<name>.extraGroups owns on NixOS, so a rebuild puts it back.";
+    class = "patch";
+    reason = "`gpasswd -d $USER docker` removes a group membership that users.users.<name>.extraGroups owns on NixOS; prints that route and exits 1 before any write (#1304).";
     allow = "account-tools";
   };
   "omarchy-remove-service-sunshine" = {
@@ -565,8 +565,7 @@
   };
   "omarchy-setup-security-fingerprint" = {
     class = "patch";
-    reason = "Same as fido2: setup_pam_config and setup_lock_fingerprint_pam edit NixOS-managed PAM stacks. fprintd-enroll stays; the PAM step names services.fprintd and the fprintAuth options instead.";
-    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it.";
+    reason = "Same as fido2: setup_pam_config and setup_lock_fingerprint_pam edit NixOS-managed PAM stacks. fprintd-enroll stays; the PAM step names services.fprintd and the fprintAuth options instead. The pacman install becomes the services.fprintd.enable line (#1304).";
   };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
@@ -574,8 +573,8 @@
     allow = "systemctl-system ufw";
   };
   "omarchy-setup-security-sudoless-docker" = {
-    class = "vendor";
-    reason = "Vendored unchanged. `usermod -aG docker $USER` adds a group membership that users.users.<name>.extraGroups owns on NixOS, so the change is lost at the next rebuild.";
+    class = "patch";
+    reason = "`usermod -aG docker $USER` adds a group membership that users.users.<name>.extraGroups owns on NixOS, and rootless Docker needs no group; prints that route and exits 1 before any write (#1304).";
     allow = "account-tools";
   };
   "omarchy-shell" = {

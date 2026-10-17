@@ -131,9 +131,9 @@ for (const [wn, w] of [["absent", absent], ["present", present]]) {
   }
 }
 
-// package-guarded is 0: on stable the only such rows (hermes, perplexity) are
-// hidden by #1304; edge still has three.
-const floors = { "disabled-no-when": 30, unavailable: 3, "dims-on-path": 40, "package-guarded": 0, "upstream-guarded-remove": 1, "unported-remove": 0, "helper-agreement": 60 }
+// package-guarded is 0 on stable: hermes and perplexity are dimmed by
+// #1320, and a disabled row drops its package-guard when. Edge still has three.
+const floors = { "disabled-no-when": 30, unavailable: 6, "dims-on-path": 40, "package-guarded": 0, "upstream-guarded-remove": 1, "unported-remove": 0, "helper-agreement": 60 }
 for (const [k, min] of Object.entries(floors))
   if ((counts[k] || 0) < min) fail(`only ${counts[k] || 0} ${k} cases, expected at least ${min}: the menu changed shape or this check stopped reading it`)
 

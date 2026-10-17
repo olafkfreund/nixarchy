@@ -849,16 +849,50 @@ let
         # #1304: plain bash, so #1301's rule for pkg-guarded rows leaves these alone.
         "remove.security.fingerprint".when = "command -v fprintd-enroll >/dev/null";
         "remove.security.fido2".when = "[[ -e /etc/fido2 ]]";
-        # #1304: hidden on NixOS; each needs something this port does not have.
-        "install.windows".when = "false"; # rooted Docker and an FHS PATH
-        "remove.windows".when = "false";
-        "trigger.hardware.hybrid-gpu".when = "false"; # supergfxd, /usr/lib/systemd/system-sleep
-        "setup.direct-boot".when = "false"; # efibootmgr and an Omarchy UKI
-        "install.ai.hermes".when = "false"; # /usr/share/hermes-desktop
-        "remove.ai.hermes".when = "false";
-        "install.ai.perplexity".when = "false"; # a pacman package nixpkgs lacks
-        "remove.ai.perplexity".when = "false";
-        "remove.browser.brave-origin".when = "false"; # AUR-only
+        # #1320: dimmed with a reason. `true` because `omarchy menu summon <id>`
+        # runs a row's action whatever its when or disabled says (omacom/omarchy#15742).
+        "install.windows" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — Omarchy's Windows VM needs rooted Docker and an FHS PATH. Use programs.virt-manager in your configuration";
+        };
+        "trigger.hardware.hybrid-gpu" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
+        };
+        "setup.direct-boot" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — needs efibootmgr and an Omarchy UKI. NixOS writes its own boot entries on every rebuild";
+        };
+        "install.ai.hermes" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — Hermes installs itself under /usr/share/hermes-desktop, and nixpkgs has no package";
+        };
+        "install.ai.perplexity" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — a pacman package nixpkgs does not carry";
+        };
+        # #1320: hidden, since nothing can be installed to remove; `true` for the same reason.
+        "remove.windows" = {
+          when = "false";
+          action = "true";
+        };
+        "remove.ai.hermes" = {
+          when = "false";
+          action = "true";
+        };
+        "remove.ai.perplexity" = {
+          when = "false";
+          action = "true";
+        };
+        "remove.browser.brave-origin" = {
+          when = "false";
+          action = "true";
+        };
         # #1304: the routes nixarchy already has.
         "install.gaming.geforce-now" = {
           action = "nixarchy-service-enable geforce-now";
@@ -946,6 +980,8 @@ let
             if app ? unavailable then
               {
                 disabled = "true";
+                # summon would run upstream's action otherwise (omacom/omarchy#15742)
+                action = "true";
                 description = "Not available on NixOS — ${app.unavailable}";
               }
             else

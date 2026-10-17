@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1319
 spec: spec/2026-10-17-1319-provisioning-refresh-applications.md
 ---

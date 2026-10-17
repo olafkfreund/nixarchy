@@ -65,7 +65,7 @@ the documentation as much as the code.
 | **Gaming** | **differs on NixOS** — [read here](gaming) |
 | **Android** | **nixarchy only** — [read here](android) |
 | Filling out pdfs | same as Omarchy — [read there](https://omarchy.org/manual/filling-out-pdfs/) |
-| Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |
+| Windows vm | **differs on NixOS** — Omarchy's Windows VM needs rooted Docker and an FHS PATH, so the menu row is dimmed with that reason. Use programs.virt-manager in your configuration |
 | **Other packages** | **differs on NixOS** — [read here](other-packages) |
 | **Flatpak and Snap** | **nixarchy only** — [read here](flatpak-and-snap) |
 | **Configuring nixarchy** | **nixarchy only** — [read here](configuration) |

@@ -1753,8 +1753,16 @@ reason. Whether a deleting row deletes the right things is the job of a
 `runCommand` with a fixture `$HOME`, as `checks.remove-preinstalls` does for
 Remove and Restore preinstalls.
 
-Two holes no check here closes: that the stock menu actually hides a row with
-`when = "false"` (that is MenuModel, and #1301's `checks.menu-guards`), and
+A row with `disabled = "true"` must have `action = "true"`, and the check
+asserts it (#1320). Neither `when = "false"` nor `disabled` stops
+`omarchy menu summon <id>`: `openRoute` runs an action row reached by id
+or alias before any guard (omacom/omarchy#15742). So a row that must
+never run cannot keep a live action.
+
+Three holes no check here closes: that the stock menu actually hides a row with
+`when = "false"` (that is MenuModel, and #1301's `checks.menu-guards`), that no
+route around the menu, such as `omarchy menu summon <id>`, runs a hidden row's
+action (only rows with `disabled = "true"` are asserted to run nothing), and
 that `nixarchy-service-disable geforce-now` stops activation reinstalling
 the Flatpak.
 

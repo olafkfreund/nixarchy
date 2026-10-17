@@ -1920,6 +1920,8 @@
             # Every pipe into grep -q is rewritten or allowlisted with a reason (#1060).
             "grep-q-pipefail"
             "hardware-modules"
+            # The Hibernate row's logind answer, in a VM with resume configured (#1303). Needs KVM.
+            "hibernate-resume"
             # The profile a user with their own interpreter actually gets, built
             # rather than inspected: #809's collision only exists once something
             # calls buildEnv. See tests/home-profile.nix.

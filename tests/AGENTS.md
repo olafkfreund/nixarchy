@@ -1664,7 +1664,7 @@ Two fixes ported from Omarchy `quattro` have parts no layer here can show:
   and watch the logo and the passphrase field land in the middle of it.
 
 <a id="menu-conditions-and-hibernate-resume"></a>
-## menu-conditions, and the hibernation measurement (#1303)
+## menu-conditions and hibernate-resume (#1303)
 
 Five menu rows asked Arch instead of the NixOS machine (Hibernate, Helix, Zen,
 the snapshot rows, and the font list's `cursor.pcf`).
@@ -1673,20 +1673,19 @@ the snapshot rows, and the font list's `cursor.pcf`).
   generated menu, as `menu-verbs` does. The stubs are sound only because
   upstream's scripts are unwrapped (see "A PATH stub loses to runtimeInputs"):
   check none gained a wrapper before trusting a green.
-- **The logind half is measured, not yet checked in CI.** A scratch
-  `runNixOSTest` (two nodes, `zramSwap.enable` on both, a 2 GiB `/dev/vdb` as
-  swap) showed logind's `CanHibernate` answering:
+- **`hibernate-resume`** is a one-node VM. It proves logind's `CanHibernate`
+  says `yes` with `boot.resumeDevice` set and disk swap on, and `na` with zram
+  alone. Measured before any code was written (scratch `runNixOSTest`, two
+  nodes, `zramSwap.enable` on both, a 2 GiB `/dev/vdb` as swap):
 
   ```
   resume    resume= 253:16  with disk swap: s "yes"  zram only: s "na"
   noresume  resume= 0:0     with disk swap: s "na"   zram only: s "na"
   ```
 
-  So without `boot.resumeDevice` logind says `na` even with disk swap. The
-  VM check that pins this (`checks.hibernate-resume`) needs KVM, and so a
-  claim in `generated-checks.sh` plus a step in `build.yml`'s `box` job. That
-  CI-gate change is held for a maintainer, so the check is not in this tree:
-  an unclaimed VM check would boot in the `omarchy` job, which has no KVM.
+  So without `boot.resumeDevice` logind answers `na` even with disk swap. It
+  needs KVM, so it is claimed in `generated-checks.sh` and runs in the `box`
+  job, not the `omarchy` job.
 
 Holes, named rather than closed:
 

@@ -1759,11 +1759,6 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.wifi-hwsim
 
-      # checks.hibernate-resume is a nixosTest and needs the /dev/kvm set up above (#1303).
-      - name: A VM with resume configured sees the Hibernate row
-        if: needs.gate.outputs.relevant == 'true'
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.hibernate-resume
-
       - name: Create a box offline, and pin what enter does without a network
         if: needs.gate.outputs.relevant == 'true'
         # checks.box-boot: the pinned image is preloaded from the store

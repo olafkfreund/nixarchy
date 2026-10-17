@@ -142,6 +142,15 @@ in `modules/apps.nix` or a `substituteInPlace --replace-fail` patch in
   commit needs an interactive rebase, which this environment cannot run. So
   the fix is its own commit, and the squash merge folds it in.
 
+- **Owner decision: no CI-gate change (2026-10-17).** The owner approved
+  merging #1303 without step 8's commit. Without that claim, the generated
+  step would build the KVM check in the `omarchy` job, which has no KVM. So
+  `checks.hibernate-resume` (step 5) and its flake entry leave this branch
+  too, and the two `.github` files return to `main`'s versions. The check and
+  its wiring are kept on the local branch `fix/1303-hibernate-resume-vm`, for
+  a follow-up once a maintainer takes the CI edit. Break 8 is not run.
+  `tests/AGENTS.md` keeps the measurement and names the gap.
+
 ## Steps
 
 0. **Preflight. No edits.**

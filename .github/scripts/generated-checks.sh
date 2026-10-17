@@ -34,7 +34,7 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # omarchy job, which has no KVM setup -- the udev rule lives in `box` -- so
 # leaving it generated put a VM test in a job that cannot boot one. The
 # integration that added the check is what surfaced it.
-claimed="wifi-hwsim hibernate-resume install free-space installer-refusal
+claimed="wifi-hwsim install free-space installer-refusal
   install-encrypted install-iso install-iso-net iso-budget microvm-boot
   reinstall-vm
   box-boot box-template coexist coexistence dashboard-clock installer-ui

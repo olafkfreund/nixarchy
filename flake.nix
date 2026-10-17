@@ -1979,6 +1979,8 @@
             # Two machines differing only by name must build the same parts, or
             # an offline install has to build the difference. See #404.
             "machine-name-free"
+            # Menu when/checked answers on NixOS, not Arch. See tests/menu-conditions.nix and #1303.
+            "menu-conditions"
             # The menu's guards through its own model, absent and present (#1301).
             "menu-guards"
             # And the same idea aimed at the menu: every action string checked

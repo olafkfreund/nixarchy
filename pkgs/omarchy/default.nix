@@ -1377,6 +1377,26 @@ stdenvNoCC.mkDerivation {
                         --replace-fail 'chromium.desktop' 'chromium-browser.desktop'
                     done
 
+                    # nixarchy's Zen is the flake's beta, which installs zen-beta.desktop (#1303).
+                    for f in omarchy-default-browser omarchy-remove-browser; do
+                      substituteInPlace $out/share/omarchy/bin/$f \
+                        --replace-fail 'zen.desktop' 'zen-beta.desktop'
+                    done
+
+                    # nixpkgs' helix installs `hx`: a saved `helix` fell back to nvim (#1303).
+                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \
+                      --replace-fail 'omarchy-cmd-present "$editor" || editor="nvim"' \
+                        '[[ $editor == helix ]] && editor=hx; omarchy-cmd-present "$editor" || editor="nvim"'
+
+                    # Ask logind, which runs `systemctl hibernate`, not Arch's mkinitcpio drop-in (#1303).
+                    substituteInPlace $out/share/omarchy/bin/omarchy-hibernation-available \
+                      --replace-fail '[[ -f /etc/mkinitcpio.conf.d/omarchy_resume.conf ]]' \
+                        '[[ $(busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanHibernate 2>/dev/null) =~ ^s\ \"(yes|challenge)\"$ ]]'
+
+                    # The X11 cursor glyph font is monospace to fontconfig, and is no text font (#1303).
+                    substituteInPlace $out/share/omarchy/bin/omarchy-font-list \
+                      --replace-fail "'emoji|signwriting|omarchy'" "'emoji|signwriting|omarchy|^cursor\.pcf$'"
+
                     # Why: pkgs/AGENTS.md#nothing-may-sed-etcpamd
                     pambin=$out/share/omarchy/bin
                     for pair in \

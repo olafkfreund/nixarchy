@@ -204,7 +204,7 @@
   };
   "omarchy-default-browser" = {
     class = "patch";
-    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id.";
+    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id. It also names zen.desktop; nixarchy's Zen is the zen-browser flake's beta, which installs zen-beta.desktop, so the setter set a desktop id that does not exist and the reader never answered zen (#1303).";
   };
   "omarchy-dev-install-ydoo" = {
     class = "vendor";
@@ -235,6 +235,10 @@
     class = "patch";
     reason = "Its terminal-font step edits ~/.config/{alacritty,ghostty,foot,kitty} with `sed -i`. On Arch those are ordinary files; here they can be Home Manager symlinks into the store, so sed dies with `couldn't open temporary file /nix/store/sedXXXXXX: Read-only file system` while the shell and GTK sizes still apply -- a partial result and an error nobody can act on (#948). A guard returns early and names the files instead, so an unmanaged config keeps today's behaviour.";
   };
+  "omarchy-font-list" = {
+    class = "patch";
+    reason = "Its fc-list :spacing=100 also matches X11's cursor glyph font, which fontconfig reports as family `cursor.pcf` wherever font-cursor-misc is installed -- NixOS adds it with services.xserver.enable. The grep -v that already drops emoji fonts also drops that family (#1303).";
+  };
   "omarchy-games-retro-cores" = {
     class = "replace";
     reason = "Upstream filters a hardcoded list of 23 preferred cores against /usr/lib/libretro. Lists whatever the built retroarch package actually carries, labelled from libretro-core-info.";
@@ -244,9 +248,8 @@
     reason = "It hardcodes /usr/lib/libretro. nixpkgs puts the cores inside the retroarch wrapper's own store path, so the directory is resolved at runtime with `omarchy-retroarch-cores`.";
   };
   "omarchy-hibernation-available" = {
-    class = "vendor";
-    reason = "Vendored unchanged, and read-only: it decides hibernation is set up by testing for /etc/mkinitcpio.conf.d/omarchy_resume.conf, which nothing on NixOS creates, so it reports unavailable -- which is right, because modules/nixos.nix ships zram and no hibernation swap.";
-    allow = "initrd-boot";
+    class = "patch";
+    reason = "It decided hibernation was set up by testing for /etc/mkinitcpio.conf.d/omarchy_resume.conf, which only Omarchy's Arch installer writes, so a NixOS machine with swap and boot.resumeDevice never saw the Hibernate row. That term asks logind's CanHibernate instead -- the same authority `systemctl hibernate` uses. Upstream's image_size, swap-size and zram terms stay (#1303).";
   };
   "omarchy-hibernation-remove" = {
     class = "vendor";
@@ -311,6 +314,10 @@
   "omarchy-launch-browser" = {
     class = "patch";
     reason = "It reads the browser's .desktop from {~/.local,~/.nix-profile,/usr}/share/applications. On NixOS those live under /run/current-system/sw and /etc/profiles/per-user, so the lookup found nothing.";
+  };
+  "omarchy-launch-editor" = {
+    class = "patch";
+    reason = "omarchy-default-editor saves `helix`, but nixpkgs' helix installs only `hx`, so the launcher's omarchy-cmd-present fell back to nvim. A saved `helix` is read as `hx` (#1303).";
   };
   "omarchy-launch-openclaw" = {
     class = "vendor";
@@ -473,7 +480,7 @@
   };
   "omarchy-remove-browser" = {
     class = "patch";
-    reason = "It writes chromium.desktop as the fallback default browser, a name nixpkgs does not use, and its `|| true` swallowed the failure -- so removing Chrome left a default resolving to nothing.";
+    reason = "It writes chromium.desktop as the fallback default browser, a name nixpkgs does not use, and its `|| true` swallowed the failure -- so removing Chrome left a default resolving to nothing. Its Zen fallback compared against zen.desktop, which nixarchy's Zen does not install; it names zen-beta.desktop (#1303).";
     allow = "etc-write";
   };
   "omarchy-remove-dev-env" = {

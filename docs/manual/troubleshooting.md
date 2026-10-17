@@ -298,11 +298,20 @@ then in `/etc/nixos/hosts/<hostname>/configuration.nix`:
 ```nix
 swapDevices = [ { device = "/swap/swapfile"; } ];
 boot.resumeDevice = "/dev/disk/by-uuid/<the root filesystem's UUID>";
+boot.kernelParams = [ "resume_offset=<the offset below>" ];
 ```
 
 Size it at least your RAM. `boot.resumeDevice` is the *partition* holding the
 file, not the file — and hibernation on an encrypted disk also needs the
 initrd to unlock that device, which it already does for the root filesystem.
+
+A swap *file* also needs its offset on that partition, or the
+machine hibernates and then boots fresh: the kernel looks for the
+image at the start of the partition. On btrfs,
+`sudo btrfs inspect-internal map-swapfile -r /swap/swapfile`
+prints it; on ext4 it is the first `physical_offset` in
+`sudo filefrag -v /swapfile`. Once you have rebuilt and rebooted,
+**System › Hibernate** appears in the menu.
 
 To turn zram off — because you added real swap, or you would rather not spend
 the CPU on compression:

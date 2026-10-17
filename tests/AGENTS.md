@@ -1638,6 +1638,39 @@ Two fixes ported from Omarchy `quattro` have parts no layer here can show:
   call. By hand: boot with a Thunderbolt dock whose display comes up late
   and watch the logo and the passphrase field land in the middle of it.
 
+<a id="menu-conditions-and-hibernate-resume"></a>
+## menu-conditions, and the hibernation measurement (#1303)
+
+Five menu rows asked Arch instead of the NixOS machine (Hibernate, Helix, Zen,
+the snapshot rows, and the font list's `cursor.pcf`).
+
+- **`menu-conditions`** varies each row's input with PATH stubs and reads the
+  generated menu, as `menu-verbs` does. The stubs are sound only because
+  upstream's scripts are unwrapped (see "A PATH stub loses to runtimeInputs"):
+  check none gained a wrapper before trusting a green.
+- **The logind half is measured, not yet checked in CI.** A scratch
+  `runNixOSTest` (two nodes, `zramSwap.enable` on both, a 2 GiB `/dev/vdb` as
+  swap) showed logind's `CanHibernate` answering:
+
+  ```
+  resume    resume= 253:16  with disk swap: s "yes"  zram only: s "na"
+  noresume  resume= 0:0     with disk swap: s "na"   zram only: s "na"
+  ```
+
+  So without `boot.resumeDevice` logind says `na` even with disk swap. The
+  VM check that pins this (`checks.hibernate-resume`) needs KVM, and so a
+  claim in `generated-checks.sh` plus a step in `build.yml`'s `box` job. That
+  CI-gate change is held for a maintainer, so the check is not in this tree:
+  an unclaimed VM check would boot in the `omarchy` job, which has no KVM.
+
+Holes, named rather than closed:
+
+- The swap-file `resume_offset` recipe in the manual is checked as text only
+  (`swap-guard`); no VM resumes from a file.
+- systemd's EFI `HibernateLocation` path is not booted by any VM.
+- Zen is supported for the shipped beta package only: another variant of the
+  package hides the row by design.
+
 ## menu-actions proves classification, not safety (#1304)
 
 `checks.menu-actions` takes every visible row of the generated menu, scans its

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1301
 spec: spec/2026-10-17-1301-menu-guards-pacman-disabled.md
 ---

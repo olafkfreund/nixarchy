@@ -75,6 +75,7 @@ pkgs.runCommand "nixarchy-menu-verbs"
       pkgs.gnugrep
       pkgs.gnused
       pkgs.jq
+      pkgs.python3
     ];
   }
   ''
@@ -371,6 +372,30 @@ pkgs.runCommand "nixarchy-menu-verbs"
       echo "ERROR: setup.default.menu.nixarchy is not checked when nixarchy-menu is on" >&2
       fail=1
     }
+
+    # #1302: every row reachable by browsing, every shared alias pinned.
+    # The rules are proved to fire on copies of this menu before the real
+    # run, so a rule that stops firing fails every build (tests/AGENTS.md).
+    sed '/^\/\//d' ${menu} > menu.json
+    tree_selftest() {
+      jq "$1" menu.json > broken.json
+      if python3 -I ${./menu-tree.py} broken.json 2> tree.err; then
+        echo "ERROR: menu-tree.py passed a menu with $2 ($1)" >&2
+        exit 1
+      fi
+      grep -qF "$3" tree.err || {
+        echo "ERROR: menu-tree.py failed on $2 without saying '$3':" >&2
+        cat tree.err >&2
+        exit 1
+      }
+    }
+    tree_selftest 'del(.["install.flatpak"])' "an orphan" \
+      "orphan: install.flatpak.geforce-now"
+    tree_selftest 'del(.["system.recovery.home-backup.restore"].parent)' "a row under an action" \
+      "under an action: system.recovery.home-backup.restore"
+    tree_selftest '.["trigger.ask.backup"].aliases += ["backup"]' "an unpinned shared alias" \
+      "alias backup:"
+    python3 -I ${./menu-tree.py} ${menu} || fail=1
 
     test "$fail" -eq 0
     echo "every menu row names a subcommand its CLI has"

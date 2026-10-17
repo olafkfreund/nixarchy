@@ -109,6 +109,21 @@ How the carries are written (spec):
   Nix, for the same indentation reason. The spec's two `displayModel`
   accessors were dropped: no case needed them.
 
+## Deviations during implementation
+
+- **Step 0: merged, not rebased.** After #1301 merged (89bdbf9b), the lead
+  merged `origin/main` into this branch (4541adac). The branch then held only
+  intent, spec and plan files, so the merge was clean.
+- **Step 2: placed after #1301's lines.** The plan's `default.nix:2090` was
+  the pre-#1301 position. The block now follows #1301's `substituteInPlace` of
+  `MenuModel.js`, after `:2098`.
+- **Step 4: snippet indentation.** The plan's listing did not show leading
+  spaces exactly. The guard uses 12, to match `if (root.dmenuActive) {`; the
+  other two use 2, to match the function anchors. Step 6's nine passing cases
+  and step 8's breaks show the result is right.
+- **Owner waived the local load gate (2026-10-17).** The lead checked the
+  p620 build gate.
+
 ## Steps
 
 0. **Branch base: wait for #1301, do not stack.** #1301's branch exists only

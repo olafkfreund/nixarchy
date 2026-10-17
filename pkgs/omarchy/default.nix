@@ -2097,6 +2097,21 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \
                       --replace-fail "$(cat ${./1301-pkg-has.old.js})" "$(cat ${./1301-pkg-has.new.js})"
 
+                    # The menu's own bugs, carried until omacom/omarchy fixes them (#1305).
+                    # Why: pkgs/AGENTS.md#the-menus-own-bugs-1305
+                    # Bug 3: an override in the user's menu file copies only the keys it states.
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \
+                      --replace-fail '    out.push(normalizeItem(id, entry))' "$(cat ${./1305-menu-stated-keys.js})" \
+                      --replace-fail '      for (var k2 in entry) merged[k2] = entry[k2]' "$(cat ${./1305-menu-merge-stated.js})"
+                    # Bug 1: Right opens a submenu or follows a link, and never runs a row.
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                      --replace-fail '            if (root.dmenuActive) {' "$(cat ${./1305-menu-right-guard.js})"$'\n'"            if (root.dmenuActive) {" \
+                      --replace-fail '  function activateIndex(index, fromPointer) {' "$(cat ${./1305-menu-right-enters.js})"$'\n\n'"  function activateIndex(index, fromPointer) {"
+                    # Bug 2: a request the next one displaces releases its caller.
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                      --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
+                      --replace-fail "  function openDmenu(payload) {"$'\n'"    requestSerial += 1" "  function openDmenu(payload) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

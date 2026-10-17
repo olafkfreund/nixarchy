@@ -877,3 +877,29 @@ The guard is a FILE, not an inline block: this phase was
 1,910 bytes from MAX_ARG_STRLEN when #948 first tried it
 inline, and the build failed with "Argument list too
 long" naming nothing (#997). A path costs ~60 bytes.
+
+<a id="the-menu-asks-pacman-and-ignores-disabled-1301"></a>
+## The menu asks pacman, and ignores disabled (#1301)
+
+Omarchy's menu (`shell/plugins/menu/MenuModel.js`, `guardHelpers()`) defines
+bash *functions* `omarchy-pkg-present` and `omarchy-pkg-missing` before it
+evaluates any guard, built from `pacman -Qq` / `pacman -Qi`. A function
+shadows a PATH command of the same name, so nixarchy's own
+`nix-bin/omarchy-pkg-present` was never reached and every guard concluded
+"not installed". Stable v4.0.4 also drops `disabled` in `normalizeItem`, so
+the rows nixarchy marks `disabled` never dimmed.
+
+The fix is in the shell, not a fork: `default.nix` rewrites the two lines
+that define `__omarchy_pkg_has` (`1301-pkg-has.{old,new}.js`) to apply the
+PATH rule, because the batch avoids forks. `checks.menu-guards` asserts the
+in-shell copy agrees with `bin/omarchy-pkg-present`, so the two cannot drift.
+
+`1301-menu-disabled.patch` is CARRIED from omacom/omarchy@4b93f8d84d (#6955),
+restricted to `Menu.qml` and `MenuModel.js`, and applied with `--fuzz=0`.
+Drop it when stable reaches a release containing #6955. Edge already has it
+and deletes the `patch` line in its carry commit. #1305 rebases its own menu
+edits onto this patch, so its content is frozen (sha256 in the plan).
+
+The pacman snapshot lines above the rewritten ones are left dead on purpose:
+edge builds them in `guardPackageSnapshot()`, so their text differs between
+pins, while the two replaced lines read the same on both.

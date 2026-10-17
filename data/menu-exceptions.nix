@@ -59,10 +59,7 @@
 
   # New in Omarchy 4.0.3.
   "install.ai.hermes" =
-    "nixpkgs has no `hermes` and no `hermes-cli`; upstream fetches a binary "
-    + "with its own installer. Left unmapped rather than pointed at some other "
-    + "`hermes` -- see the openclaw note in data/apps.nix for why that matters.";
-  "install.ai.perplexity" =
-    "a web app, not a package: its action is `omarchy-install-and-launch "
-    + "Perplexity perplexity perplexity`, the same shape as install.webapp.";
+    "hidden (#1304): upstream installs a binary with its own installer under "
+    + "/usr/share/hermes-desktop; nixpkgs has no hermes";
+  "install.ai.perplexity" = "hidden (#1304): a pacman package nixpkgs does not carry, not a web app";
 }

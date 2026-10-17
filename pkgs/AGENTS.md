@@ -221,6 +221,49 @@ reply format this depends on.
 **When to drop it:** never, unless upstream grows an explicit close verb of
 its own, distinct from hide.
 
+<a id="the-menus-own-bugs-1305"></a>
+
+### The menu's own bugs (#1305)
+
+CARRIED, until omacom/omarchy fixes them. Three `--replace-fail`
+substitutions in `pkgs/omarchy/default.nix`, written against the tree after
+`1301-menu-disabled.patch` and its `MenuModel.js` substitution. The
+replacement text lives in `pkgs/omarchy/1305-menu-*.js`, because a multi-line
+argument inside the `installPhase` string re-flows the whole phase under
+`nix fmt`.
+
+- **Bug 1: Right ran rows.** In `Menu.qml` the Right arrow shared Enter's
+  branch, so on an action row it ran the action (Shutdown is Super+Escape,
+  Up, Right), and in a select or input prompt it picked the row or submitted
+  half-typed text. The guard is the branch's first statement and tests "not
+  Enter", so it holds on quattro's `readingKey` line too, where the physical
+  Left key arrives as Right. Right now opens a submenu or follows a link and
+  is otherwise left unhandled. Drop it when upstream restricts Right.
+- **Bug 2: a displaced prompt hung its caller.** `openDmenu` and
+  `openExistingMenu` dropped the pending `doneFile` without writing it, so
+  `omarchy-menu-select` and `-input` waited for ever. Both now call
+  `releaseDisplacedRequest()` first, which writes the file empty (the caller
+  exits 1, as for Escape). The write goes through
+  `Quickshell.execDetached(["sh", ...])` with the path as an argument, not
+  `resultProc`, because one `Process` ignores a new command while it runs.
+  `omarchy-menu-images` is not covered: it waits on `image-selector`. Drop it
+  when a shipped release contains upstream PR #9031.
+- **Bug 3: partial overrides blanked rows.** `normalizeItem` fills every key
+  before `mergeMenuSources` copies all of them, so a file stating only
+  `label` blanked the action. `parseMenuJsonc` now records `statedKeys`
+  (filtered to keys `normalizeItem` returns), and the merge copies only those
+  onto an id an earlier source defined. `normalizeItem` is untouched because
+  #1301 changes it. Drop it when upstream merges stated keys only;
+  `modules/apps.nix`'s full-row merge is then redundant (follow-up).
+- **Not carried:** the early summon (upstream #14053, PR #15519, open);
+  inline `//` in the menu file, `summon <alias>` ignoring `when`, one shell
+  for every guard and a power-profiles provider that is not volatile (report
+  only, drafts in the spec's appendix); search ancestors (a feature request);
+  PageUp and AltGr/IME (fixed on quattro, which stable gets at its next bump).
+
+Checks: `checks.menu-model-merge` (node over the built `MenuModel.js`) and
+`checks.menu-keys` (the real `Menu.qml`, headless; see `tests/AGENTS.md`).
+
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)
 
@@ -904,6 +947,37 @@ The pacman snapshot lines above the rewritten ones are left dead on purpose:
 edge builds them in `guardPackageSnapshot()`, so their text differs between
 pins, while the two replaced lines read the same on both.
 
+<a id="nixarchy-menu-loads-synchronously-1313"></a>
+## nixarchy-menu loads synchronously (#1313)
+
+Enabling nixarchy-menu could segfault Quickshell (#1313). The backtrace is
+`QQmlConnections::setTarget` <- `connectSignalsToMethods`, reached from a
+binding write inside `QsIncubationController::incubate`: a `Connections` was
+retargeted while its component was still incubating, which Qt 6.11 does not
+survive. The `Connections` is nixarchy-menu's `providers/Applications.qml:32`
+(`target: root.library`).
+
+Two routes into the retarget were seen: `core/ApplicationLibrary.qml`'s
+fallback Loader creating Omarchy's `AppLibrary.qml` mid-incubation, and the
+scoped shell API arriving mid-incubation. Plugin-registry timing decides
+whether `library` changes inside the window, and the stock menu's unload in
+the same pass shifts it, which is why unrelated PRs flipped it.
+
+Fixing only route 1 (fix (a)) crashed in 1 of 3 runs (unpatched: 3 of 3 SEGV).
+So `default.nix` rewrites the shell's `panelLoader` (`1313-panel-loader.{old,new}.qml`)
+to `asynchronous: panelEntry.pluginId !== "nixarchy.menu"`: the panel is
+created in one step and the retarget happens after incubation. The inner
+loaders were already synchronous; they only ran nested because the outer
+load was not.
+
+Only nixarchy-menu is synchronous, not every plugin: Mode A, the owner's
+decision of 2026-10-17. A future `keepLoaded` plugin with the same
+`Connections` pattern is unprotected.
+
+Drop it when nixarchy-menu survives an asynchronous load, proven with the
+same `checks.session` runs. The defect is nixarchy-menu's own; the follow-up
+issue is olafkfreund/nixarchy-menu#28.
+
 <a id="wallpapers-are-capped-at-4096px-so-they-can-become-a-texture"></a>
 ## Wallpapers are capped at 4096 px so they can become a texture
 
@@ -953,3 +1027,28 @@ directly, plus HEY and Zoom through their handlers.
 Both names are tried rather than one swapped for the other, because
 someone may have a chromium.desktop of their own and upstream's name
 should keep working.
+
+<a id="refresh-applications-copies-writable-desktop-files"></a>
+## omarchy-refresh-applications copies writable desktop files
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte
+budget (`checks.install-phase-budget`), by #1313.
+
+The third site of the same store-mode problem, and the expensive one.
+
+These two copies land 17 desktop files in ~/.local/share/applications
+at the store's 444, so the NEXT run cannot rewrite its own output:
+
+  cp: cannot create regular file '.../Basecamp.desktop': Permission denied
+
+omarchy-provision-user runs under `set -euo pipefail` and calls this
+eleven lines before `omarchy-done mark finalize-user`, so it aborted
+here, the marker was never written, and provisioning re-ran and
+re-failed on every login -- with nothing after the call ever running
+once. ~/.local/state/omarchy/done did not exist on a machine that had
+been in daily use for months.
+
+-f as well as --no-preserve=mode: the mode flag only stops NEW copies
+from landing read-only, and every machine installed before this
+already has 444 files that cp cannot open for writing even as their
+owner. -f unlinks and retries, which repairs those in place.

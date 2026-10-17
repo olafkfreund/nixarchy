@@ -47,11 +47,14 @@
   "install.style.font.victor" = "font, installed by omarchy-install-font.";
 
   # Documented gaps -- the README names these as needing a hand.
-  "install.ai.ollama" = "a service, not an app: programs.nixarchy.services.local-ai.";
-  "install.gaming.battlenet" = "needs a hand; documented in the README.";
-  "install.gaming.geforce-now" = "needs a hand; documented in the README.";
+  "install.ai.ollama" =
+    "rewired (#1304) to setup.local-ai's action: Ollama is programs.nixarchy.localAi, a service rather than an app.";
+  "install.gaming.battlenet" =
+    "a Windows launcher under umu-launcher; the row ends at omarchy-pkg-add's declarative umu-launcher line.";
+  "install.gaming.geforce-now" =
+    "rewired (#1304) to nixarchy-service-enable geforce-now, the Flatpak in data/flatpaks.nix.";
   "install.gaming.retro-launcher" = "needs a hand; documented in the README.";
-  "install.gaming.xbox-cloud" = "needs a hand; documented in the README.";
+  "install.gaming.xbox-cloud" = "a web app: omarchy-webapp-install, nothing to package.";
   "install.development.docker-dbs" = "a compose stack, not a package.";
   "install.development.elixir.phoenix" = "a framework scaffold, not a package.";
   "install.development.php.laravel" = "a framework scaffold, not a package.";
@@ -59,10 +62,7 @@
 
   # New in Omarchy 4.0.3.
   "install.ai.hermes" =
-    "nixpkgs has no `hermes` and no `hermes-cli`; upstream fetches a binary "
-    + "with its own installer. Left unmapped rather than pointed at some other "
-    + "`hermes` -- see the openclaw note in data/apps.nix for why that matters.";
-  "install.ai.perplexity" =
-    "a web app, not a package: its action is `omarchy-install-and-launch "
-    + "Perplexity perplexity perplexity`, the same shape as install.webapp.";
+    "hidden (#1304): upstream installs a binary with its own installer under "
+    + "/usr/share/hermes-desktop; nixpkgs has no hermes";
+  "install.ai.perplexity" = "hidden (#1304): a pacman package nixpkgs does not carry, not a web app";
 }

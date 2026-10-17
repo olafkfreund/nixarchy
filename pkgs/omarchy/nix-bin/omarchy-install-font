@@ -41,6 +41,13 @@ if grep -qiF "$family" <<<"$families"; then
   exec omarchy-font-set "$family"
 fi
 
+# A menu row runs this with no terminal, so the route below would print to
+# nowhere; show it in one (#1304). The installed branch above stays silent.
+if [[ ! -t 1 ]]; then
+  exec omarchy-launch-floating-terminal-with-presentation \
+    "omarchy-install-font $(printf '%q ' "$name" "$package" "$family")"
+fi
+
 echo "$name is not installed."
 omarchy-pkg-add "$package" || true
 echo "Then pick $name again."

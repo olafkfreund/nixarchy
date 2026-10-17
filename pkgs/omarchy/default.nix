@@ -578,24 +578,7 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     }
 
-                    # The third site of the same store-mode problem, and the expensive one.
-                    #
-                    # These two copies land 17 desktop files in ~/.local/share/applications
-                    # at the store's 444, so the NEXT run cannot rewrite its own output:
-                    #
-                    #   cp: cannot create regular file '.../Basecamp.desktop': Permission denied
-                    #
-                    # omarchy-provision-user runs under `set -euo pipefail` and calls this
-                    # eleven lines before `omarchy-done mark finalize-user`, so it aborted
-                    # here, the marker was never written, and provisioning re-ran and
-                    # re-failed on every login -- with nothing after the call ever running
-                    # once. ~/.local/state/omarchy/done did not exist on a machine that had
-                    # been in daily use for months.
-                    #
-                    # -f as well as --no-preserve=mode: the mode flag only stops NEW copies
-                    # from landing read-only, and every machine installed before this
-                    # already has 444 files that cp cannot open for writing even as their
-                    # owner. -f unlinks and retries, which repairs those in place.
+                    # Why: pkgs/AGENTS.md#refresh-applications-copies-writable-desktop-files
                     substituteInPlace $out/share/omarchy/bin/omarchy-refresh-applications \
                       --replace-fail \
                         'cp "$OMARCHY_PATH"/applications/*.desktop' \
@@ -2103,10 +2086,29 @@ stdenvNoCC.mkDerivation {
                     # the bump that rewords it fails here. checks.session closes one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./902-notification-sender-close.patch}
 
+                    # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
+                    substituteInPlace $out/share/omarchy/shell/shell.qml \
+                      --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
+
                     # Why: pkgs/AGENTS.md#the-menu-asks-pacman-and-ignores-disabled-1301
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1301-menu-disabled.patch}
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \
                       --replace-fail "$(cat ${./1301-pkg-has.old.js})" "$(cat ${./1301-pkg-has.new.js})"
+
+                    # The menu's own bugs, carried until omacom/omarchy fixes them (#1305).
+                    # Why: pkgs/AGENTS.md#the-menus-own-bugs-1305
+                    # Bug 3: an override in the user's menu file copies only the keys it states.
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \
+                      --replace-fail '    out.push(normalizeItem(id, entry))' "$(cat ${./1305-menu-stated-keys.js})" \
+                      --replace-fail '      for (var k2 in entry) merged[k2] = entry[k2]' "$(cat ${./1305-menu-merge-stated.js})"
+                    # Bug 1: Right opens a submenu or follows a link, and never runs a row.
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                      --replace-fail '            if (root.dmenuActive) {' "$(cat ${./1305-menu-right-guard.js})"$'\n'"            if (root.dmenuActive) {" \
+                      --replace-fail '  function activateIndex(index, fromPointer) {' "$(cat ${./1305-menu-right-enters.js})"$'\n\n'"  function activateIndex(index, fromPointer) {"
+                    # Bug 2: a request the next one displaces releases its caller.
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                      --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
+                      --replace-fail "  function openDmenu(payload) {"$'\n'"    requestSerial += 1" "  function openDmenu(payload) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1"
 
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \

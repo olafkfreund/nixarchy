@@ -866,6 +866,20 @@ pkgs.testers.runNixOSTest {
         b64 = base64.b64encode(action.encode()).decode()
         machine.succeed(f"echo {b64} | base64 -d > /tmp/row.sh && chmod 755 /tmp/row.sh")
         machine.succeed(on_desktop("OMARCHY_SHELL_IPC_TIMEOUT=30s bash /tmp/row.sh"))
+    def quickshell_crashed(where):
+        # #1313: a shell that crashed and restarted still fails. The journal
+        # line is written at the crash; a stored core may never be.
+        status, journal = machine.execute("journalctl -b -o cat --no-pager")
+        assert status == 0, f"#1313: journalctl exited {status} {where}"
+        hits = [l for l in journal.splitlines()
+                if ("(.quickshell-wra)" in l and "terminated abnormally" in l)
+                or "Quickshell has crashed" in l]
+        crash_dir = "/home/omarchy/.cache/quickshell/crashes"
+        found = machine.succeed(f"find {crash_dir} -mindepth 1 -maxdepth 1 2>/dev/null || true").strip()
+        report = machine.succeed(f"find {crash_dir} -name report.txt -exec head -30 {{}} + 2>/dev/null || true") if found else ""
+        assert not hits and not found, (
+            f"#1313: Quickshell crashed during the session ({where}):\n"
+            + "\n".join(hits[:10]) + "\n" + found + "\n" + report)
     marker = "/home/omarchy/.local/state/nixarchy/enabled-once/nixarchy.menu"
     stock, nix = menus()
     assert stock and not nix, (
@@ -874,8 +888,12 @@ pkgs.testers.runNixOSTest {
     machine.fail(f"test -e {marker}")
     # 30 s, as the post-boot hook gives it: enabling reloads plugins, which
     # can outlast upstream's 2 s IPC budget.
+    t_row = time.time()
     click("setup.default.menu.nixarchy")
+    t_done = time.time()
     stock, nix = menus()
+    print(f"#1313 timing: row {t_done - t_row:.2f}s, plugin-list answered {time.time() - t_done:.2f}s after it")
+    quickshell_crashed("after enabling nixarchy-menu")
     assert nix and not stock, (
         f"#1283: the Nixarchy row left omarchy.menu={stock} nixarchy.menu={nix}")
     marked = machine.succeed(f"cat {marker}").strip()
@@ -2683,6 +2701,7 @@ pkgs.testers.runNixOSTest {
         if "TypeError" in line or "Unable to assign [undefined]" in line]
     assert not qml_errors, (
         "the shell logged QML type errors this boot:\n" + "\n".join(qml_errors[:40]))
+    quickshell_crashed("at the end of the session")
 
   '';
 }

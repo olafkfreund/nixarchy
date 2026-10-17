@@ -545,6 +545,7 @@ let
         "system.recovery.rollback" = {
           icon = "󰕍";
           label = "Roll back";
+          aliases = [ "rollback" ];
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-rollback";
           description = "Switch to an earlier system generation. Your home directory is not touched";
         };

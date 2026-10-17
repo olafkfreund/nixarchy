@@ -538,25 +538,7 @@ stdenvNoCC.mkDerivation {
                     install -Dm444 ${./branding/logo.txt} $out/share/omarchy/logo.txt
                     python3 ${./check-logo.py} ${./branding/logo.txt} ${src}/logo.txt
 
-                    # Omarchy ships wallpapers up to 7680px wide. Anything wider than
-                    # GL_MAX_TEXTURE_SIZE cannot become a texture, and the background renders
-                    # black with no error anywhere -- Qt reports the image Ready, the layer
-                    # surface exists at full size, and nothing is drawn. 4096 is the limit on
-                    # llvmpipe and on plenty of integrated GPUs, and 5 of the 8 backgrounds in
-                    # the default theme are over it.
-                    #
-                    # sourceSize caps what Qt decodes to. Setting only the width keeps the
-                    # aspect ratio, and 4096 is wider than any display this would be shown on,
-                    # so there is no visible loss -- and every machine decodes less. A plain
-                    # constant rather than anything derived from Screen: Screen is an attached
-                    # property that does not resolve inside an Image, and a QML error here
-                    # would take out the whole background rather than just the size hint.
-                    #
-                    # displayedBackground dropped from this loop (#1153): the 1153 patch above
-                    # replaces that layer's Image with a BackgroundMedia, which draws through
-                    # its own Image with its own sourceSize.width, retargeted just below. The
-                    # transition layers (oldBackground, incomingBackground) are untouched by
-                    # that patch and still match here.
+                    # Why: pkgs/AGENTS.md#wallpapers-are-capped-at-4096px-so-they-can-become-a-texture
                     for prop in oldBackground incomingBackground; do
                       substituteInPlace $out/share/omarchy/shell/plugins/background/Background.qml \
                         --replace-fail \
@@ -959,25 +941,7 @@ stdenvNoCC.mkDerivation {
               --replace-fail 'EXTENSION_DIR="/usr/share/chromium/extensions"' \
               'EXTENSION_DIR=""  # declared, not written -- see the message below'
 
-                # Every web app failed with
-            #
-            #   Error: Path "--app=https://messages.google.com/..." does not exist!
-            #
-            # omarchy-launch-webapp resolves the browser by reading Exec= out of a
-            # .desktop file and passing the binary to uwsm-app. When that lookup finds
-            # nothing the substitution is empty, so `--app=<url>` lands where the
-            # program should be and uwsm-app reports it as a missing path.
-            #
-            # It found nothing because the fallback names chromium.desktop, which is
-            # what Arch installs. NixOS calls it chromium-browser.desktop. The default
-            # browser here was a Chrome web-app profile entry -- chrome-<id>-Default
-            # -- which matches none of the patterns upstream lists, so every launch
-            # took the fallback and every web app was broken: all nine that call this
-            # directly, plus HEY and Zoom through their handlers.
-            #
-            # Both names are tried rather than one swapped for the other, because
-            # someone may have a chromium.desktop of their own and upstream's name
-            # should keep working.
+                # Why: pkgs/AGENTS.md#every-web-app-failed-with
             substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
               --replace-fail '*) browser="chromium.desktop" ;;' \
               '*) browser="chromium-browser.desktop" ;;'
@@ -1377,23 +1341,23 @@ stdenvNoCC.mkDerivation {
                         --replace-fail 'chromium.desktop' 'chromium-browser.desktop'
                     done
 
-                    # nixarchy's Zen is the flake's beta, which installs zen-beta.desktop (#1303).
+                    # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     for f in omarchy-default-browser omarchy-remove-browser; do
                       substituteInPlace $out/share/omarchy/bin/$f \
                         --replace-fail 'zen.desktop' 'zen-beta.desktop'
                     done
 
-                    # nixpkgs' helix installs `hx`: a saved `helix` fell back to nvim (#1303).
+                    # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-editor \
                       --replace-fail 'omarchy-cmd-present "$editor" || editor="nvim"' \
                         '[[ $editor == helix ]] && editor=hx; omarchy-cmd-present "$editor" || editor="nvim"'
 
-                    # Ask logind, which runs `systemctl hibernate`, not Arch's mkinitcpio drop-in (#1303).
+                    # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-hibernation-available \
                       --replace-fail '[[ -f /etc/mkinitcpio.conf.d/omarchy_resume.conf ]]' \
                         '[[ $(busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanHibernate 2>/dev/null) =~ ^s\ \"(yes|challenge)\"$ ]]'
 
-                    # The X11 cursor glyph font is monospace to fontconfig, and is no text font (#1303).
+                    # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-font-list \
                       --replace-fail "'emoji|signwriting|omarchy'" "'emoji|signwriting|omarchy|^cursor\.pcf$'"
 
@@ -1490,9 +1454,7 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     fi
 
-                    # #1304: commands a menu row runs that can only explain on NixOS. Each
-                    # exits 1 before its first writer; upstream's later lines stay in the
-                    # file, unreachable, and data/menu-actions.nix says so.
+                    # #1304: each exits 1 before its first writer (data/menu-actions.nix).
                     substituteInPlace $out/share/omarchy/bin/omarchy-dns \
                       --replace-fail 'require_root "$provider"' \
                         "$(cat ${./1304-guidance-dns.sh})"
@@ -2141,9 +2103,6 @@ stdenvNoCC.mkDerivation {
                     # the bump that rewords it fails here. checks.session closes one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./902-notification-sender-close.patch}
 
-                    # Omarchy's menu answers omarchy-pkg-present from pacman (#1301); this
-                    # carries upstream's dimming (omacom/omarchy#6955) until stable has it,
-                    # and asks the PATH the way nix-bin/omarchy-pkg-present does.
                     # Why: pkgs/AGENTS.md#the-menu-asks-pacman-and-ignores-disabled-1301
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1301-menu-disabled.patch}
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \

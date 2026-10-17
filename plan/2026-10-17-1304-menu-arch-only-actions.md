@@ -283,6 +283,19 @@ applies.
   `tests/menu-guidance.nix` takes `{ pkgs, ... }`: deadnix flagged the unused
   `inputs`.
 
+- **Merging main after #1303 landed:** two things only the combination showed.
+  (1) `checks.install-phase-budget` read 123955 bytes, because #1303's script
+  patches had landed on main. The two longest install-phase comments
+  (wallpaper sizing, the web-app failure) moved verbatim to `pkgs/AGENTS.md`
+  behind `# Why:` pointers, and #1301's, #1303's and this series' comments
+  became one-line pointers. It now reads 121041, with headroom left for
+  #1305. (2) #1301's `menu-guards` counted a Remove row as unported when its
+  action matched upstream's. Part 2 ports remove.security.fingerprint through
+  its `when` and keeps upstream's (now patched) action, so the check now also
+  counts a changed `when` as ported (`false`, the generator's hide, excepted).
+  The proof: removing #1301's hide loop still turns the check red on hermes,
+  perplexity and brave-origin.
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

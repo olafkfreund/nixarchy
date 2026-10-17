@@ -131,6 +131,12 @@ Two mechanical traps that produced fake green results here, live:
   the export had grepped scripts for `/etc/nixos` fallbacks without finding it
   (§12: search for the behaviour). Before calling a green break a blind check,
   grep the whole tree for a second place that already does the thing.
+- **A content test is not an ownership test.** `cmp` and `grep` follow
+  symlinks, so "delete the launcher if it is identical to the one Omarchy
+  shipped" passes a home-manager link whose target happens to hold the same
+  bytes, and the delete takes the user's link (#1304). Test `-L` first, then
+  the content; and put a link to identical content in the fixture, because a
+  fixture of plain files cannot make that guard fail.
 
 And the same rule read backwards, for the day a check goes red on you: **ask
 whether it was testing the property or the arrangement.** #220 moved the menu

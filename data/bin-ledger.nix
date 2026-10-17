@@ -280,6 +280,10 @@
     reason = "Vendored unchanged. Blacklists xpad in /etc/modprobe.d, loads hid_xpadneo, and adds $USER to the input group. All three are declarative here -- boot.blacklistedKernelModules, boot.kernelModules and extraGroups -- so the imperative run does not survive a rebuild.";
     allow = "account-tools etc-write modprobe";
   };
+  "omarchy-install-preinstalls" = {
+    class = "replace";
+    reason = "Upstream reseeds through omarchy-refresh-applications, whose cp -f replaces an edited launcher or a home-manager link and whose mise stubs delete a home-manager ~/.local/bin entry, then exits on omarchy-pkg-add so the marker never clears. Copies only missing launchers, writes no stubs, and clears the marker (#1304).";
+  };
   "omarchy-install-service-1password" = {
     class = "patch";
     reason = "It drops a JSON stub into /usr/share/chromium/extensions with sudo; that is a store path here, so the write fails. Replaced by a message naming programs.chromium.extensions.";
@@ -378,8 +382,8 @@
   };
   "omarchy-pkg-drop" = {
     class = "vendor";
-    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
-    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it. The remove rows nixarchy has not ported are kept hidden by the generator (`when = \"false\"`, #1301) until #1304 ports them.";
+    reason = "Vendored unchanged. Reached from live menu rows; its pacman -Qq comes back empty here, so it drops nothing.";
+    pacman = "Reached, and inert: `pacman -Qq` answers nothing on NixOS, so the -Rns branch never runs. The remove rows nixarchy has not ported are also kept hidden by the generator (`when = \"false\"`, #1301).";
   };
   "omarchy-pkg-install" = {
     class = "replace";
@@ -487,6 +491,10 @@
     class = "patch";
     reason = "Its last branch uninstalls a package-owned .desktop with `pacman -Qqo` and `pacman -Rns`, so the App Library said it did not know how. Only that dead end is replaced, with the apps.nix route.";
     pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it.";
+  };
+  "omarchy-remove-preinstalls" = {
+    class = "replace";
+    reason = "Upstream deletes every web app and TUI launcher and rm -f's named ~/.local/bin entries whoever made them. Deletes only an unmodified, regular-file seed of a shipped web app or TUI, and only an exact omarchy-mise-install stub (#1304).";
   };
   "omarchy-remove-security-fido2" = {
     class = "patch";

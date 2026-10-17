@@ -844,6 +844,9 @@ let
           when = "nixarchy-vm --check && ! nixarchy-plugin --enabled nixarchy.microvm";
           description = "The panel is off: what you have created, in a terminal";
         };
+        # #1304: hidden. Its omarchy-remove-dev-env arm is `elixir|phoenix`, so
+        # removing Phoenix uninstalls Elixir and Erlang with it.
+        "remove.development.elixir.phoenix".when = "false";
       }
       # Why: modules/AGENTS.md#the-default-plugins-are-on-from-the-first-login
       //
@@ -1017,6 +1020,35 @@ let
                 ),
                 "description": "Remove from your app selection, then Apply changes",
             }
+
+        # A Remove row whose Install sibling nixarchy rewired to the selection
+        # undoes it the same way, whatever upstream's `when` spelled (#1304).
+        # Runs after the pkg-present rule, so rows that rule mapped keep theirs.
+        for row_id in list(upstream):
+            if not row_id.startswith("remove.") or row_id in overrides:
+                continue
+            sibling = overrides.get("install." + row_id[len("remove."):], {})
+            m = re.fullmatch(
+                r"nixarchy-(app|service)-enable ([a-z0-9._-]+)",
+                str(sibling.get("action", "")),
+            )
+            if not m:
+                continue
+            kind, ident = m.groups()
+            if kind == "app":
+                when = ("grep -qE '^[[:space:]]*" + ident
+                        + "\\.enable' $HOME/.config/nixarchy/apps.nix")
+                description = "Remove from your app selection, then Apply changes"
+            else:
+                when = ("grep -qE '^[[:space:]]*[^#[:space:]].*#@ " + ident
+                        + "([[:space:]]|$)' $HOME/.config/nixarchy/services.nix")
+                description = "Remove from your services, then Apply changes"
+            overrides[row_id] = {
+                "action": f"nixarchy-{kind}-disable {ident}",
+                "when": when,
+                "description": description,
+            }
+            print(f"sibling rule: {row_id} -> nixarchy-{kind}-disable {ident}")
 
         # An upstream remove row nixarchy has not ported still runs Arch's script,
         # so it stays hidden however the guard answers. #1304 ports them row by row;

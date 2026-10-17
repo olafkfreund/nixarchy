@@ -1679,6 +1679,27 @@ upstream code (#1305).
 The user's `~/.config/omarchy/extensions/omarchy-menu.jsonc` and any
 `extraEntries` are never checked. The reference configuration has none.
 
+## menu-actions proves classification, not safety (#1304)
+
+`checks.menu-actions` takes every visible row of the generated menu, scans its
+action, and follows each `omarchy-*` command it names through the shipped bin
+directory, transitively. A hit is a `check-bin-ledger.py` pattern, pacman or
+yay, `omarchy-pkg-drop`, or an `rm` into the home directory. Each row that
+reaches one needs a reason in `data/menu-actions.nix`; an entry whose row
+reaches nothing is stale. That proves every hazardous row was *classified*.
+
+It cannot see `nixarchy-*` commands (modules generate them; they are not in
+the tree) or an `rm "$VAR"`. A script patched in place to explain and exit
+still reaches its old writers, so it stays flagged and carries a `guidance:`
+reason. Whether a deleting row deletes the right things is the job of a
+`runCommand` with a fixture `$HOME`, as `checks.remove-preinstalls` does for
+Remove and Restore preinstalls.
+
+Two holes no check here closes: that the stock menu actually hides a row with
+`when = "false"` (that is MenuModel, and #1301's `checks.menu-guards`), and
+that `nixarchy-service-disable geforce-now` stops activation reinstalling
+the Flatpak.
+
 <a id="menu-guards-runs-the-menu-s-model-not-the-strings"></a>
 ## menu-guards runs the menu's model, not the strings (#1301)
 

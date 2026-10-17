@@ -43,13 +43,32 @@ spec: spec/2026-10-17-1320-dimmed-arch-only-rows.md
    - `data/menu-exceptions.nix` rewords three entries to "dimmed with a reason (#1320)".
    - `tests/menu-guards.js` raises the `unavailable` floor from 3 to 6 and
      updates its comment.
-6. **Out of scope:** the " ✓" on disabled rows (the owner accepted it), the
-   other `when = "false"` rows (#15742's general case), and edge.
+6. **Out of scope:**
+   - **The " ✓" on disabled rows.** It stays in the spec's Risks as something
+     the owner may revisit, and this change keeps it as it is.
+   - the other `when = "false"` rows (#15742's general case);
+   - edge.
 7. **Coexistence:** none. Only nixarchy's generated menu JSONC changes.
 
-Hand-off: there are four file-editing steps across five files, so the
-`coder` agent takes steps 1-4 (CLAUDE.md model split). The lead runs steps 0
-and 5-7.
+### Deviation from the spec: nixarchy-menu (found in review)
+
+The spec's Risks section does not cover the nixarchy-menu palette.
+
+- **What it does.** Its provider (`providers/OmarchyMenu.qml:320-353` in
+  olafkfreund/nixarchy-menu) evaluates only `when` and ignores `disabled`.
+- **The cost.** With that palette on, the five dimmed rows show at full
+  strength, and choosing one silently runs `true`. The reason is still in the
+  description, but nothing marks the row as unavailable.
+- **What improves.** Today the three catalogue "Not available" rows run their
+  Arch actions from that palette. After this change they run `true` there
+  too. That is strictly safer than today, so it does not block this change.
+- **Follow-up.** The lead files an issue in olafkfreund/nixarchy-menu for the
+  provider to honour `disabled` (step 8).
+
+### Hand-off
+
+The `coder` agent takes the six file-editing steps: 1-4, 4a and 4b, across
+seven files (CLAUDE.md model split). The lead runs steps 0, 5-7 and 8.
 
 ## Steps
 
@@ -112,19 +131,41 @@ and 5-7.
    Expect green. The `hidden` count should be the baseline minus 5, and
    `flagged` should be unchanged.
 
-   Also read the generated rows:
+   Also read the generated rows. The file is the exact menu the check reads,
+   written with `json.dumps(indent=2)` under a `//` header
+   (`modules/apps.nix:1141-1152`). So `grep` for a compact `"action":"true"`
+   never matches; strip the header and use `jq`:
    ```bash
-   # the exact menu file the check reads (tests/menu-actions.nix's `menu` input)
-   m=$(nix eval --raw .#checks.x86_64-linux.menu-actions.menu) || exit 1
-   nix build --no-link "$m" || exit 1
-   grep -E '"(install\.windows|trigger\.hardware\.hybrid-gpu|setup\.direct-boot|install\.ai\.(hermes|perplexity)|remove\.(windows|ai\.hermes|ai\.perplexity|browser\.brave-origin)|install\.(browser\.brave-origin|editor\.sublime|ai\.grok-bot))"' "$m"
+   m=$(nix build --no-link --print-out-paths "$(nix eval --raw .#checks.x86_64-linux.menu-actions.menu.drvPath)^*") || exit 1
+   grep -v '^[[:space:]]*//' "$m" | jq '{
+       "install.windows", "trigger.hardware.hybrid-gpu", "setup.direct-boot",
+       "install.ai.hermes", "install.ai.perplexity",
+       "remove.windows", "remove.ai.hermes", "remove.ai.perplexity", "remove.browser.brave-origin",
+       "install.browser.brave-origin", "install.editor.sublime", "install.ai.grok-bot"
+     } | map_values({when, action, disabled, description})'
    ```
-   Expected:
-   - all twelve rows have `"action":"true"`;
-   - the five dimmed rows and the three catalogue rows have `"disabled":"true"`;
-   - `install.ai.hermes` and `install.ai.perplexity` have no `when`;
-   - hybrid-gpu has `"when":"omarchy-hw-hybrid-gpu"`;
-   - the four Remove rows have `"when":"false"`.
+   Expected output (`D` is a description from decision 1, written in full in the real output):
+   ```json
+   {
+     "install.windows":             {"when": "[[ ! -f $HOME/.local/share/applications/windows-vm.desktop ]]", "action": "true", "disabled": "true", "description": "D(install.windows)"},
+     "trigger.hardware.hybrid-gpu": {"when": "omarchy-hw-hybrid-gpu", "action": "true", "disabled": "true", "description": "D(hybrid-gpu)"},
+     "setup.direct-boot":           {"when": null, "action": "true", "disabled": "true", "description": "D(direct-boot)"},
+     "install.ai.hermes":           {"when": null, "action": "true", "disabled": "true", "description": "D(hermes)"},
+     "install.ai.perplexity":       {"when": null, "action": "true", "disabled": "true", "description": "D(perplexity)"},
+     "remove.windows":              {"when": "false", "action": "true", "disabled": null, "description": null},
+     "remove.ai.hermes":            {"when": "false", "action": "true", "disabled": null, "description": null},
+     "remove.ai.perplexity":        {"when": "false", "action": "true", "disabled": null, "description": null},
+     "remove.browser.brave-origin": {"when": "false", "action": "true", "disabled": null, "description": null},
+     "install.browser.brave-origin": {"when": null, "action": "true", "disabled": "true", "description": "Not available on NixOS — <its data/apps.nix unavailable text>"},
+     "install.editor.sublime":       {"when": null, "action": "true", "disabled": "true", "description": "Not available on NixOS — <…>"},
+     "install.ai.grok-bot":          {"when": null, "action": "true", "disabled": "true", "description": "Not available on NixOS — <…>"}
+   }
+   ```
+   - A `null` `when` on hermes, perplexity and the three catalogue rows is
+     the generator dropping a package-guard `when` (`:1125`).
+   - A non-null `when` on any of them means a guard was inherited, and the
+     row would be hidden instead of dimmed.
+   - Any `action` other than `"true"` is a failure.
 
    Traps:
    - **§5, the nixpkgs-fmt hook:** after editing `apps.nix`, run `nix fmt`
@@ -139,7 +180,9 @@ and 5-7.
      why all five dimmed entries must go in this same step.
 
 2. **[coder] `.github/scripts/check-menu-actions.py:112-113`.** Directly after
-   `errors = []`, add:
+   `errors = []`, add the block below. It sits inside `main()`, so the `#` and
+   `for` lines are indented **4 spaces**, matching `errors = []`. The block's
+   inner lines are indented relative to that:
    ```python
    # A dimmed "Not available" row must run nothing: summon ignores disabled (omacom/omarchy#15742).
    for rid, row in sorted(menu.items()):
@@ -193,17 +236,68 @@ and 5-7.
 
    Traps: §5 (`nix fmt`; the file is `.nix`).
 
+4a. **[coder] `tests/AGENTS.md`, the menu-actions section (~:1699-1718).**
+    Write the lesson back.
+
+    After the paragraph ending "…Remove and Restore preinstalls." (~:1713),
+    add:
+
+    > A row with `disabled = "true"` must have `action = "true"`, and the
+    > check asserts it (#1320). Neither `when = "false"` nor `disabled` stops
+    > `omarchy menu summon <id>`: `openRoute` runs an action row reached by id
+    > or alias before any guard (omacom/omarchy#15742). So a row that must
+    > never run cannot keep a live action.
+
+    Extend the "Two holes" sentence (~:1715). After "…#1301's
+    `checks.menu-guards`)", add:
+
+    > , and that no route around the menu, such as `omarchy menu summon <id>`,
+    > runs a hidden row's action (only rows with `disabled = "true"` are
+    > asserted to run nothing)
+
+    Change "Two holes" to "Three holes".
+
+    Verify:
+    ```bash
+    sed -n '/## menu-actions proves/,/## menu-guards runs/p' tests/AGENTS.md
+    ```
+    It should read as one section, with the new paragraph and the sentence
+    in place.
+
+    Traps:
+    - Keep it to 2-3 lines plus the sentence (CLAUDE.md §7: reasoning goes in
+      AGENTS.md, briefly).
+    - Do not add a new `##` section. The anchor
+      `menu-guards-runs-the-menu-s-model-not-the-strings` below must stay
+      intact.
+
+4b. **[coder] `docs/manual/index.md:68`.** Replace the row
+    `| Windows vm | same as Omarchy — [read there](https://omarchy.org/manual/windows-vm/) |`
+    with:
+
+    `| Windows vm | **differs on NixOS** — Omarchy's Windows VM needs rooted Docker and an FHS PATH, so the menu row is dimmed with that reason. Use programs.virt-manager in your configuration |`
+
+    The first cell stays unbolded, because there is no nixarchy page to link.
+    That follows the "Text extraction dictation" row (~:40).
+
+    Verify: `grep -n 'Windows vm' docs/manual/index.md` shows the new text.
+
+    Traps: `docs/AGENTS.md:13` says a *new page* goes in all three lists, and
+    this adds no page, so nothing else changes.
+
 5. **[lead] Lint and review the coder's diff against this plan.**
    ```bash
    nix fmt -- --ci && nix run nixpkgs#statix -- check . && nix run nixpkgs#deadnix -- --fail .
    git diff --stat 92781236
    ```
-   Expect exactly these six paths:
+   Expect exactly these paths (seven, plus the plan if it changed):
    - `modules/apps.nix`
    - `data/menu-actions.nix`
    - `data/menu-exceptions.nix`
    - `.github/scripts/check-menu-actions.py`
    - `tests/menu-guards.js`
+   - `tests/AGENTS.md`
+   - `docs/manual/index.md`
    - this plan, if it deviated
 
    Commit the code as one known-good baseline before step 6. The subject is
@@ -241,6 +335,21 @@ and 5-7.
      asks (§11).
    - Check that the build log lists `menu-actions` and `menu-guards` as run
      (§4). Do not edit a workflow.
+   - Note the nixarchy-menu deviation (see the summary) in the PR body.
+
+8. **[lead] File the nixarchy-menu follow-up.**
+   - **Where:** an issue in olafkfreund/nixarchy-menu. It is the owner's own
+     repo, so §11's upstream rule does not apply. Give it a milestone and an
+     area label if that repo uses them (§12).
+   - **Title:** "OmarchyMenu provider ignores `disabled`: dimmed Not-available
+     rows show at full strength".
+   - **Body:**
+     - `providers/OmarchyMenu.qml:320-353` evaluates only `when`.
+     - Since nixarchy#1320, eight rows carry `disabled = "true"` and
+       `action = "true"`. They are safe, but they look runnable and do
+       nothing.
+     - Ask it to honour `disabled` the way `MenuModel.isDisabled` does.
+   - Link the issue from the PR. This step edits no file here.
 
 ## Tests
 

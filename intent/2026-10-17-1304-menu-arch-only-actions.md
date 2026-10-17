@@ -11,7 +11,7 @@ author: olafkfreund
 Some rows in the stock Omarchy menu still run upstream scripts unchanged. On
 NixOS their code paths cannot do what the row's label says. #1304 lists them.
 This draft re-reads each one against the deployed tree
-(`/nix/store/zlhw6r3rqm9bjs5ll913xrfcrw3g91xc-nixarchy-omarchy-tree/bin`)
+(`/nix/store/rla9km5silzbp6h9dcfz0pd1p90ia8r9-nixarchy-omarchy-tree/bin`)
 and the merged menu (`/etc/nixarchy/omarchy-menu.jsonc`). They fall into four
 classes, and each class needs a different outcome. Rows marked † were not in
 the issue.

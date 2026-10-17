@@ -767,12 +767,17 @@ whether real `quickshell list` still prints `Process ID:`. The first is a hand
 check on p620: swap a plugin folder and restart at once. The second fails
 toward today's behaviour, not a hang.
 
-## Menu aliases: the words are a judgement, and nothing here checks them
+## Menu aliases: the words are a judgement, and only where they lead is checked
 
 `checks.options` asserts that the Nixi row carries its `when` guard and that no
 second nixi row exists, and `checks.menu-verbs` asserts the actions are
 commands the CLI accepts. Neither says anything about the **nine Ask rows'
 aliases** added in #961, and no check here can.
+
+Since #1302, `tests/menu-tree.py` (run by `checks.menu-verbs`) checks that every
+alias two rows share, or that an exact id shadows, summons the winner pinned in
+its `EXPECTED` table. It still says nothing about whether the words are the
+right words, which is the judgement the rest of this section describes.
 
 Two reasons, both worth knowing before someone writes a check that looks like
 coverage:
@@ -1637,6 +1642,42 @@ Two fixes ported from Omarchy `quattro` have parts no layer here can show:
   grows plymouth's window mid-boot, so whether it *looks* right is a human's
   call. By hand: boot with a Thunderbolt dock whose display comes up late
   and watch the logo and the passphrase field land in the middle of it.
+
+## menu-tree: reachable by browsing, and what it cannot see (#1302)
+
+`tests/menu-tree.py` applies `MenuModel.js`'s rules to the generated menu
+defaults. It walks the screens a user can open from `root` and fails every row
+that is not listed on one, naming the cause: an `orphan` (the parent is not a
+row), a row `under an action`, or `unreachable` (a cycle, a link). It also pins
+every alias that two rows declare, or that an exact id shadows, to the row
+`omarchy menu summon` must open. It runs inside `checks.menu-verbs`, so it
+shares that check's evaluation of the reference configuration and runs on edge
+(`omarchy-edge.yml:239`) with no workflow of its own.
+
+It tests itself first. Before the real run, `menu-verbs.nix` feeds it three
+mutated copies of the real menu (the Flatpak parent deleted, a restore row's
+`parent` deleted, `backup` added back to an Ask row) and requires each to fail
+with its message. A rule that stops firing then fails every build, instead of
+reading as a menu that is fine.
+
+The parent rule must honour an explicit `parent`. #1302's own resolver ignored
+it and reported the two correct restore rows as unreachable, which was a false
+positive in the issue and would have been one in the check.
+
+Three holes, none of them closable here:
+
+A single-owner alias pointing at the wrong row is not mechanically decidable.
+`rollback` on `trigger.ask.update` was that shape: one owner, wrong
+destination. `backup` is both a deliberate alias of `system.recovery` and the
+last segment of `system.recovery.backup`, so no segment rule can tell intended
+from accidental. Choosing a new alias means reading `resolveRoute` order by
+hand.
+
+`resolveRoute` ignores `when`, so a hidden row can still win a summon. That is
+upstream code (#1305).
+
+The user's `~/.config/omarchy/extensions/omarchy-menu.jsonc` and any
+`extraEntries` are never checked. The reference configuration has none.
 
 ## menu-actions proves classification, not safety (#1304)
 

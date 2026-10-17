@@ -545,6 +545,7 @@ let
         "system.recovery.rollback" = {
           icon = "󰕍";
           label = "Roll back";
+          aliases = [ "rollback" ];
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-rollback";
           description = "Switch to an earlier system generation. Your home directory is not touched";
         };
@@ -922,6 +923,14 @@ let
           }
         ) flatpakCatalogue
       )
+      # The Flatpak rows' parent: without it every one is an orphan,
+      # reachable only by search (#1302).
+      // lib.optionalAttrs (flatpakCatalogue != { }) {
+        "install.flatpak" = {
+          icon = "󰏓";
+          label = "Flatpak";
+        };
+      }
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: svc:
@@ -1247,15 +1256,22 @@ in
       type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
       default = { };
       example = lib.literalExpression ''
-        { "personal.notes" = { icon = "󰎞"; label = "Notes"; action = "omarchy-launch-editor ~/notes"; }; }
+        {
+          "personal" = { icon = ""; label = "Personal"; };
+          "personal.notes" = { icon = "󰎞"; label = "Notes"; action = "omarchy-launch-editor ~/notes"; };
+        }
       '';
       description = ''
-        Extra rows merged into Omarchy's menu, keyed by dotted id. Reuse an
-        existing id to override it.
+        Extra rows merged into the menu defaults nixarchy generates, keyed
+        by dotted id. Reuse an existing id to override it. Your own
+        ~/.config/omarchy/extensions/omarchy-menu.jsonc is untouched and
+        still overrides anything here by id.
 
-        Upstream reads a single extension file, so nixarchy manages it and this
-        option is how to add your own rows -- editing the file directly would
-        be overwritten on the next rebuild.
+        A row's parent is its id minus the last dotted segment unless it
+        sets `parent`, and the parent has to be a row too: `personal.notes`
+        needs a `personal` row, or it can only be found by search. A row
+        with an `action` runs it rather than opening, so it cannot have
+        children.
       '';
     };
 

@@ -2534,6 +2534,18 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # #1305: a partial override in the user's menu file keeps the rest of the row.
+          menu-model-merge = import ./tests/menu-model-merge.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1305: Right never runs a menu row, and a displaced request releases its caller.
+          menu-keys = import ./tests/menu-keys.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           home-backup-restore = import ./tests/home-backup-restore.nix {
             pkgs = pkgsFor.${system};
             script = ./pkgs/omarchy/nix-bin/nixarchy-home-backup;

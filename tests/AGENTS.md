@@ -1711,3 +1711,13 @@ NixOS that resets PATH; `bash -l` sources `/etc/profile`, which does the
 same.** A check that varies PATH must spawn bash with stdin ignored,
 `--noprofile --norc` and an absolute path. Measured on p620: the "absent"
 world found `/run/current-system/sw/bin/sdl-freerdp`.
+
+## The session probe fails on any Quickshell crash (#1313)
+
+`checks.session` calls `quickshell_crashed()` right after the #1283 probe
+enables nixarchy-menu and again at the end of the script: a restarted shell
+that answers `omarchy-plugin-list` still fails. It reads the boot journal, not
+`coredumpctl`, which printed "No coredumps found" while systemd-coredump was
+still writing 798 MB (`Cannot store coredump … No space left on device`). The
+journal line names the process `(.quickshell-wra)`, with a leading dot, so an
+exact match such as coredumpctl's `COMM=quickshell-wra` misses it.

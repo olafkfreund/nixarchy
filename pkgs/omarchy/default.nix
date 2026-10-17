@@ -2109,6 +2109,10 @@ stdenvNoCC.mkDerivation {
                     # the bump that rewords it fails here. checks.session closes one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./902-notification-sender-close.patch}
 
+                    # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
+                    substituteInPlace $out/share/omarchy/shell/shell.qml \
+                      --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
+
                     # Omarchy's menu answers omarchy-pkg-present from pacman (#1301); this
                     # carries upstream's dimming (omacom/omarchy#6955) until stable has it,
                     # and asks the PATH the way nix-bin/omarchy-pkg-present does.

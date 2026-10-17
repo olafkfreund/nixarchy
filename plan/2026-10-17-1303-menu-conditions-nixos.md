@@ -136,6 +136,12 @@ in `modules/apps.nix` or a `substituteInPlace --replace-fail` patch in
   plain `run:` command, and CI runs the full lint. The commit subject also drops
   the plan's `CI:` prefix (CLAUDE.md §8).
 
+- **Step 10: statix flagged step 5's line.** `tests/hibernate-resume.nix:5`
+  assigned `omarchy = (pkgs.extend …).omarchy;`, and statix [04] asks for
+  `inherit (…) omarchy;`. The plan says to amend step 5, but rewriting that
+  commit needs an interactive rebase, which this environment cannot run. So
+  the fix is its own commit, and the squash merge folds it in.
+
 ## Steps
 
 0. **Preflight. No edits.**

@@ -2,7 +2,7 @@
 # The Hibernate row on a machine with resume configured, and without (#1303).
 # Why: tests/AGENTS.md#menu-conditions-and-hibernate-resume
 let
-  omarchy = (pkgs.extend inputs.self.overlays.default).omarchy;
+  inherit (pkgs.extend inputs.self.overlays.default) omarchy;
   # Only the script, so the guest does not carry the whole tree.
   avail = pkgs.runCommand "omarchy-hibernation-available" { } ''
     install -m755 ${omarchy}/share/omarchy/bin/omarchy-hibernation-available $out

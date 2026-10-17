@@ -991,6 +991,9 @@ let
         overrides = json.load(open(spec_path))
         arch_map = json.load(open(archmap_path))
 
+        # Upstream's `omarchy-pkg-*` guards, which the menu answers from the PATH (#1301).
+        PKG_GUARD = re.compile(r"\bomarchy-pkg-(present|missing)\b")
+
         # Upstream's remove.* rows name their app only in their `when`, as
         # `omarchy-pkg-present <arch-package>`. Deriving the overrides from
         # that keeps them tracking upstream instead of being hand-listed here,
@@ -1015,6 +1018,14 @@ let
                 "description": "Remove from your app selection, then Apply changes",
             }
 
+        # An upstream remove row nixarchy has not ported still runs Arch's script,
+        # so it stays hidden however the guard answers. #1304 ports them row by row;
+        # a row it overrides is in `overrides` and this leaves it alone.
+        for row_id, row in upstream.items():
+            if (row_id.startswith("remove.") and row_id not in overrides
+                    and PKG_GUARD.search(str(row.get("when", "")))):
+                overrides[row_id] = {"when": "false"}
+
         out = {}
         missing = []
         for row_id, override in overrides.items():
@@ -1036,6 +1047,9 @@ let
             if base:
                 for key, value in base.items():
                     if key not in merged and value not in ("", [], None):
+                        # A row we dim must not also be hidden by upstream's package guard.
+                        if key == "when" and "disabled" in merged and PKG_GUARD.search(str(value)):
+                            continue
                         merged[key] = value
             out[row_id] = merged
 

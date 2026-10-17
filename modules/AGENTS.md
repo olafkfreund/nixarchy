@@ -1790,8 +1790,10 @@ Then the user's file is free, upstream's merge does the rest in the
 direction it was designed for, and there is nothing to arbitrate. See #210.
 
 A failing `when:` hides a row outright (MenuModel.js isVisible); a
-succeeding `disabled:` leaves it listed but dim and unselectable, which is
-what upstream already uses for "you have this installed".
+succeeding `disabled:` leaves it listed but dim and unselectable, which
+upstream uses for "you have this installed" since
+omacom/omarchy#6955. Stable v4.0.4 predates it and carries it as
+`pkgs/omarchy/1301-menu-disabled.patch` (#1301).
 The override rows, as data. Deliberately WITHOUT label or icon: those are
 copied from upstream's own menu at build time by the script below, so a
 rename upstream follows through instead of being frozen into this repo.

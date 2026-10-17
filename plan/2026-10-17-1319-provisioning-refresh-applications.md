@@ -56,6 +56,11 @@ written `$B`.
    fixture home. No `tests/coexistence/` fixture is added, because that
    check never runs first login and so could not fail.
 
+9. **Docs.** `tests/AGENTS.md` gains a section with the spec's two holes
+   and the lesson that `cp -f` writes through a symlink. After the merge
+   with #1313, `pkgs/AGENTS.md` loses the refresh-applications section #1313
+   moved there, because the code it explained is gone.
+
 ## Who does what
 
 Steps marked **[coder]** edit files. Steps marked **[lead]** run checks and
@@ -91,8 +96,10 @@ Isolation, exactly as `remove-preinstalls.nix:35-47`:
 - `OMARCHY_PATH=$tree`.
 
 Stubs in `$TMPDIR/stubs`, each recording its call to `$TMPDIR/calls` and
-exiting 0: `mise`, `update-desktop-database`, `omarchy-install-hermes-cli`.
-Then `PATH=$TMPDIR/stubs:$tree/bin:$PATH`.
+exiting 0: `mise`, `update-desktop-database`, `omarchy-install-hermes-cli`,
+`alacritty`. The `alacritty` stub makes `omarchy-cmd-present alacritty` true,
+so the `Alacritty.desktop` branch runs. Then
+`PATH=$TMPDIR/stubs:$tree/bin:$PATH`.
 
 The provisioning run, as a function `provision`, in this order:
 
@@ -102,17 +109,31 @@ bash "$refresh"                                               # provision-user:1
 ```
 
 Each call's exit status is captured with `|| rc=$?`, and a non-zero one is a
-failure.
+failure. Each call's stdout and stderr go to a log per run, `mise.log` and
+`refresh.log`. **The exit status alone cannot catch a failed copy:** the
+script has no `set -e` and ends in an `if`, so it exits 0 whatever `cp` did.
+So also assert `! grep -E 'cp:|Permission denied' refresh.log`, with failure
+text `refresh printed a copy error: <the line>`.
 
 Fixture home, in `$TMPDIR/home`, with Home Manager targets in `$TMPDIR/hm`.
 Let `A=$HOME/.local/share/applications` and `B=$HOME/.local/bin`.
 - `A/Basecamp.desktop`: the shipped file with `sed`'s URL edit, as
   `remove-preinstalls.nix:73`.
-- `A/Zoom.desktop` → a link to `$TMPDIR/hm/Zoom.desktop`, which is a copy of
-  the shipped file.
+- `A/Zoom.desktop` → a link to `$TMPDIR/hm/Zoom.desktop`. The target is the
+  shipped file **with an edit that makes it differ** (for example, `sed`
+  `Name=` to `Name=Zoom (mine)`), then `chmod 444`.
 - `A/YouTube.desktop`: the shipped file, then `chmod 444`.
 - `B/claude` → a link to `$TMPDIR/hm/claude`, which holds
-  `#!/bin/bash\nexec /opt/claude "$@"`.
+  `#!/bin/bash\nexec /opt/claude "$@"`, then `chmod 555`.
+
+Why both Home Manager targets are read-only and differ from what would be
+written: **GNU `cp -f` writes through a destination symlink whose target is
+writable**. It unlinks the link only when the target refuses the write
+(measured, coreutils 9.11). A writable target holding the shipped content
+would come out of `cp -f` still a link, with identical bytes, and the check
+could not go red. Read-only matches a real Home Manager link into the store.
+Differing content means a write-through, should one happen, also shows as a
+`C` line on `hm/…`.
 
 Assertions on the dirty home. Take `state` before, run `provision`, take
 `state` after, and run `compare`:
@@ -125,19 +146,31 @@ Assertions on the dirty home. Take `state` before, run `provision`, take
   `.local/bin/claude is no longer a link`;
 - `Basecamp.desktop changed` is a separate, named failure taken from the `C`
   set, so that the proof output reads plainly;
-- every `A` path is under `home/.local/share/applications/` or
-  `home/.local/bin/`. Anything else is `wrote unexpected files: …`;
-- `B/codex` exists and contains `^exec mise x `. This is the empty-name case,
+- **the set of `A` paths is exactly what is expected**, compared with `comm`
+  in the way `remove-preinstalls.nix:122-126` compares deletions:
+  - `home/.local/share/applications/<name>` for every
+    `$tree/applications/*.desktop` except the three fixtures (Basecamp, Zoom
+    and YouTube), plus `Alacritty.desktop`;
+  - `home/.local/bin/<cmd>` for the 14 commands `mise.sh` writes when
+    nothing provides them. That is every one except `claude`: codex, crush,
+    gemini, gh, copilot, opencode, playwright, pi, omp, grok, cursor-agent,
+    ghui, hunk, muse. Hard-code the list with a one-line comment naming
+    `install/user/mise.sh`, so an Omarchy bump that changes it goes red and
+    can be read;
+  - a missing name is `not seeded: …`, and an extra one is
+    `wrote unexpected files: …`;
+- `B/codex` contains `^exec mise x `. This is the empty-name case,
   `stub not written into an empty name`;
-- every `$tree/applications/*.desktop` other than the three fixtures is
-  `cmp`-equal in `A`.
+- each seeded launcher is `cmp`-equal to its source in `$tree`.
 
 Then run `provision` **a second time** and compare. It must exit 0 and show
 no `D`, `C` or `A` at all: `second run changed: …`.
 
 Clean home: `HOME=$TMPDIR/clean`, with `XDG_*` re-pointed. Run `provision`
-once. Every `$tree/applications/*.desktop` must be present and `cmp`-equal,
-otherwise `clean home missing <name>`.
+once. Every `$tree/applications/*.desktop`, and
+`$tree/default/alacritty/Alacritty.desktop`, must be present and `cmp`-equal,
+otherwise `clean home missing <name>`. The refresh log must hold no copy
+error.
 
 End: `[ ! -e "$real_home" ] || fail "wrote outside the fixture: $real_home"`,
 then `report`, then `touch $out`.
@@ -182,9 +215,16 @@ It is expected to go red with all three:
 - `Zoom.desktop is no longer a link`;
 - `.local/bin/claude is no longer a link`.
 
-The clean-home half and `stub not written into an empty name` should
-already pass. If anything else is red, the check is wrong: send it back to
-the coder.
+The generic `changed files it should not touch` line is **also expected**.
+It names `Basecamp.desktop`, and the `hm/` targets or links of `claude` and
+`Zoom`, so it is the same failure seen twice. Do not read it as a fault in
+the check.
+
+`refresh printed a copy error` may also appear, because upstream's
+`cp -f` meets read-only targets. The clean-home half and
+`stub not written into an empty name` should already pass.
+
+If anything else is red, the check is wrong: send it back to the coder.
 
 Run it under bash, and read `PIPESTATUS`, not the pipeline's status (§1).
 
@@ -276,15 +316,13 @@ Verify: `bash -n pkgs/omarchy/nix-bin/omarchy-install-preinstalls`.
   not change.
 
 Traps:
-- **The install-phase budget.** Measured at `8d5fc587`,
-  `builtins.stringLength omarchy.installPhase` is **122,935 bytes** against a
-  budget of 123,000. That is 65 bytes of headroom, not the ~900 the brief
-  assumed. The deletion removes about 1,300 bytes, and the extension adds
-  about 130, so the net is about −1,200. **Do the deletion in the same
-  step.** An extension committed alone breaks `checks.install-phase-budget`.
-  Measure after the edit:
-  `nix eval --raw .#packages.x86_64-linux.omarchy.installPhase | wc -c`.
-  It must print less than 122,935.
+- **The install-phase budget.** At `8d5fc587`,
+  `builtins.stringLength omarchy.installPhase` measured 122,935 bytes against
+  a budget of 123,000. **Do the deletion in the same step as the
+  extension:** the extension alone can push it over. The final figure is
+  measured in step 10, after the merge with #1313, which moves the
+  comment out and changes the arithmetic. For now, just check that it went
+  down: `nix eval --raw .#packages.x86_64-linux.omarchy.installPhase | wc -c`.
 - **The formatter hook.** The editor hook on this machine runs
   `nixpkgs-fmt` on every `.nix` edit. Run `nix fmt` afterwards, and read
   `git diff --stat`. It must show only these lines (CLAUDE.md §5, #897).
@@ -295,7 +333,7 @@ Traps:
   `grep -n 'refresh-applications' pkgs/omarchy/default.nix` returns only the
   lines being deleted.
 
-Verify: `bash -n` cannot reach this text, so verify by building, in step 9.
+Verify: `bash -n` cannot reach this text, so verify by building, in step 11.
 
 ### 7. [coder] Retarget the session assertion: `tests/session.nix:1619-1629`
 
@@ -321,9 +359,74 @@ Verify: `nix-instantiate --parse tests/session.nix >/dev/null`.
   `class = "replace";` and
   `reason = "Upstream's cp -f replaces an edited launcher or a home-manager link, and it reruns install/user/mise.sh, whose stubs replaced a home-manager ~/.local/bin entry. Copies only missing launchers and runs no mise.sh; provisioning already runs it from install/user/all.sh (#1319).";`
 
-Verify: step 9's `checks.bin-ledger`.
+Verify: step 11's `checks.bin-ledger`.
 
-### 9. [lead] Build, then the §1 break proofs
+### 9. [coder] Write the holes and the lesson into `tests/AGENTS.md`
+
+Append a new section at the end of the file (after `:1738`), so no anchor
+moves:
+
+```
+<a id="provision-launchers-runs-two-calls-not-provisioning"></a>
+## provision-launchers runs two calls, not provisioning (#1319)
+```
+
+It covers three things:
+- **What it runs.** `install/user/mise.sh` the way `all.sh:14` runs it, then
+  `omarchy-refresh-applications` (`omarchy-provision-user:118`), twice, on
+  a dirty home and on a clean one.
+- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so a
+  third writer added upstream to `all.sh` or to provision-user is not seen.
+- **Hole 2.** No check runs a real Home Manager activation followed by a
+  real first login, in that order. Only a VM with Home Manager could.
+
+Then the lesson, as its own bold paragraph:
+
+> **`cp -f` writes through a destination symlink whose target is
+> writable.** It unlinks the link only when the target refuses the write
+> (coreutils 9.11). So a fixture "home-manager link" pointing at a writable
+> copy of the shipped file survives `cp -f` as a link with identical bytes,
+> and a check built on it cannot go red. Make the target read-only, as a
+> store link is, and give it content that differs from what would be
+> written (#1319's review).
+
+Verify: `grep -c 'provision-launchers-runs-two-calls' tests/AGENTS.md`
+prints 1.
+
+### 10. [lead] Move onto `main` after #1313
+
+#1313 (`wt-1313` @ `5934f809`) merges first. It touches the same lines.
+
+- **History.** Rebuild the branch by cherry-picking onto the new `main`; do
+  not squash after a merge (CLAUDE.md §5, #922). For example:
+  `git fetch origin && git switch -c 1319-onto-main origin/main && git
+  cherry-pick <first-1319-commit>^..<old-head>`. Then point the branch at the
+  result. If the branch was already pushed, replacing it is a force-push:
+  ask the owner first (§11).
+- **The conflict in `pkgs/omarchy/default.nix`.** #1313 replaced the
+  18-line comment above the `substituteInPlace` with
+  `# Why: pkgs/AGENTS.md#refresh-applications-copies-writable-desktop-files`.
+  Resolve it by deleting that pointer, the `substituteInPlace
+  …/omarchy-refresh-applications` with its two `--replace-fail` pairs, and
+  the blank line after it. Keep the extended mise patch from step 6.
+- **`pkgs/AGENTS.md`.** Delete the section #1313 added, from
+  `<a id="refresh-applications-copies-writable-desktop-files"></a>` through
+  the line ending "repairs those in place.", and one blank line after it.
+  Its history now lives in `tests/provision-launchers.nix`'s header. Check
+  that nothing else links the anchor:
+  `grep -rn refresh-applications-copies-writable --exclude-dir=.git .`
+  should return only `plan/2026-10-17-1313-…`, a historical artifact that is
+  left alone.
+- **The budget.** At #1313's head it is about 122,124, and this change nets
+  about −260. Re-measure on the merged, **committed** tree. `mkFlake` is not
+  involved here, but a dirty tree's evaluation is not the commit's (§5).
+  Use `nix eval --raw .#packages.x86_64-linux.omarchy.installPhase | wc -c`.
+  It must be **≤ 123,000 and below the figure for `main`** measured the same
+  way.
+- **Check.** `git merge-base origin/main HEAD` equals `origin/main`'s
+  commit. `git show --stat` for each commit lists only #1319's files.
+
+### 11. [lead] Build, then the §1 break proofs
 
 First, make sure the formatter hook did not reformat anything (CLAUDE.md §5).
 Commit a known-good baseline (temporary subject) before breaking anything.
@@ -347,12 +450,13 @@ for c in omarchy checks.x86_64-linux.provision-launchers \
 done
 ```
 
-Then three breaks, each restored before the next:
+Then four breaks, each restored before the next:
 
 1. **The launchers only.** `git rm --cached` and delete
    `pkgs/omarchy/nix-bin/omarchy-refresh-applications`. Then re-add **only**
-   the `substituteInPlace` lines (`:599-605` of
-   `git show 8d5fc587:pkgs/omarchy/default.nix`) at the same place. Do not
+   the `substituteInPlace …/omarchy-refresh-applications` block, as it
+   stands in `git show origin/main:pkgs/omarchy/default.nix`, at the same
+   place. Do not
    check out the whole file, which would revert the mise half too. This
    puts the shipped `cp -f` back. Without the `-f` patch, the 444
    `YouTube.desktop` makes the run exit 1 instead, which is a different red
@@ -367,11 +471,19 @@ Then three breaks, each restored before the next:
    `[[ -e $dst || -L $dst ]] && continue` to plain `continue`. Expected red:
    `clean home missing …` for every launcher. The dirty-home assertions
    about files that already exist stay green.
+4. **The skip only.** In the new nix-bin script, replace the two loop
+   lines (`[[ -e … ]] && continue` and the `cp … && echo`) with a plain
+   `cp --no-preserve=mode "$src" "$dst"`, with no skip and no `-f`.
+   Expected red: `refresh printed a copy error` (`Permission denied` on the
+   444 `YouTube.desktop`, and on the read-only Zoom target), plus
+   `Basecamp.desktop changed`. This is the break that proves the log
+   assertion can fail. The exit status stays 0 here, which is the reason
+   that assertion exists.
 
 Restore, and see green. Every red output, together with step 3's, goes in
 the PR.
 
-### 10. [lead] Format, lint, commit, and PR
+### 12. [lead] Format, lint, commit, and PR
 
 ```sh
 nix fmt -- --ci
@@ -379,13 +491,17 @@ nix run nixpkgs#statix -- check .
 nix run nixpkgs#deadnix -- --fail .
 ```
 
-- Squash to one commit with a real sentence subject (no `wip:`, §8), for
-  example: `First login adds only missing launchers and stubs, leaving edited
-  launchers and home-manager links alone (#1319)`.
-- Check `git merge-base origin/main HEAD` and `git show --stat HEAD`. The
-  stat must list only these files: the two nix-bin scripts, `default.nix`,
-  `bin-ledger.nix`, `session.nix`, the new test, `flake.nix`, and the three
-  artifacts.
+- The final commit subject is a real sentence (no `wip:`, §8), for example:
+  `First login adds only missing launchers and stubs, leaving edited
+  launchers and home-manager links alone (#1319)`. Squash locally only
+  *before* step 10's cherry-pick, never after a merge.
+- Check `git merge-base origin/main HEAD` and `git diff --stat origin/main`
+  after a fresh `git fetch`. They must list only these files:
+  - the two nix-bin scripts;
+  - `pkgs/omarchy/default.nix` and `pkgs/AGENTS.md`;
+  - `data/bin-ledger.nix`, `tests/session.nix` and `tests/AGENTS.md`;
+  - the new test and `flake.nix`;
+  - the three artifacts.
 - The PR body links intent, spec and plan, says which steps the coder did,
   and carries the red outputs.
 - Name the session retarget in the PR as "measured the arrangement" (§1).
@@ -398,18 +514,18 @@ nix run nixpkgs#deadnix -- --fail .
 
 | command | expected |
 |---|---|
-| `nix build .#checks.x86_64-linux.provision-launchers` | green after step 8, red at step 3 with the three named failures |
+| `nix build .#checks.x86_64-linux.provision-launchers` | green after step 8; red at step 3 with the three named failures (plus the generic changed-files line); red under each of step 11's four breaks |
 | `nix build .#checks.x86_64-linux.remove-preinstalls` | green: Restore still adds only launchers, changes nothing |
 | `nix build .#checks.x86_64-linux.mise-launchers` | green: (a)-(e) unchanged; (b) writes into an empty name |
 | `nix build .#checks.x86_64-linux.bin-ledger` | green with the `replace` class |
 | `nix build .#checks.x86_64-linux.menu-actions` | green: no row reaches either script, no reason goes stale |
-| `nix build .#checks.x86_64-linux.install-phase-budget` | green, and its printed bytes are lower than 122,935 |
+| `nix build .#checks.x86_64-linux.install-phase-budget` | green on the merged, committed tree: ≤ 123,000 and below `main`'s figure |
 | `nix build .#omarchy` | builds: the `nix-bin` loop finds an upstream `omarchy-refresh-applications` to replace |
 | `checks.session` | CI only; green with the retargeted assertion |
 
 ## Rollback
 
-Revert the squash commit. Nothing writes state outside a home directory, and
+Revert #1319's commit or commits. Nothing writes state outside a home directory, and
 no option or default changes. Homes provisioned while the fix was in place
 keep whatever they had. A revert restores upstream's `cp -f` and stub
 rewrite at the next `omarchy refresh applications` or first login.

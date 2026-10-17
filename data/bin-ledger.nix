@@ -379,7 +379,7 @@
   "omarchy-pkg-drop" = {
     class = "vendor";
     reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
-    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it.";
+    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it. The remove rows nixarchy has not ported are kept hidden by the generator (`when = \"false\"`, #1301) until #1304 ports them.";
   };
   "omarchy-pkg-install" = {
     class = "replace";
@@ -387,16 +387,16 @@
   };
   "omarchy-pkg-missing" = {
     class = "replace";
-    reason = "Same reason as omarchy-pkg-present: there is no package database to query, so this asks whether the command is runnable, with the -bin and -stable suffixes stripped.";
+    reason = "Same reason as omarchy-pkg-present: there is no package database to query, so this asks whether the command is runnable, with the -bin and -stable suffixes stripped. The stock menu does not call this command: its guard batch defines a function of the same name, which #1301 makes answer by the same rule, inside the shell.";
   };
   "omarchy-pkg-present" = {
     class = "replace";
-    reason = "Upstream asks `pacman -Q`. There is no package database here, so the closest honest answer is whether the command is runnable; menu rows needing exactness check the app selection themselves.";
+    reason = "Upstream asks `pacman -Q`. There is no package database here, so the closest honest answer is whether the command is runnable; menu rows needing exactness check the app selection themselves. The stock menu does not call this command: its guard batch defines a function of the same name, which #1301 makes answer by the same rule, inside the shell.";
   };
   "omarchy-pkg-remove" = {
     class = "vendor";
     reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
-    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it.";
+    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it. The remove rows nixarchy has not ported are kept hidden by the generator (`when = \"false\"`, #1301) until #1304 ports them.";
   };
   "omarchy-plugin-clone" = {
     class = "patch";

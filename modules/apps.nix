@@ -919,6 +919,14 @@ let
           }
         ) flatpakCatalogue
       )
+      # The Flatpak rows' parent: without it every one is an orphan,
+      # reachable only by search (#1302).
+      // lib.optionalAttrs (flatpakCatalogue != { }) {
+        "install.flatpak" = {
+          icon = "󰏓";
+          label = "Flatpak";
+        };
+      }
       // lib.listToAttrs (
         lib.mapAttrsToList (
           name: svc:

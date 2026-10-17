@@ -62,13 +62,13 @@ are the lead's.
    - `pkgs/omarchy/default.nix`: after the `902-notification-sender-close.patch`
      line (~2110) and its blank line, add:
      ```
-                         # nixarchy-menu's panel loads synchronously: retargeting its Connections
-                         # mid-incubation segfaults Quickshell (#1313). Other plugins stay async.
                          # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
                          substituteInPlace $out/share/omarchy/shell/shell.qml \
                            --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"
                      ```
-     The `$(cat …)` form is the one `1301-pkg-has.{old,new}.js` already uses.
+     One comment line only: the install phase has about 1,450 bytes left of its
+     123,000 budget, and #1311 adds to it too. The `# Why:` pointer carries the
+     reasoning (§7). The `$(cat …)` form is the one `1301-pkg-has.{old,new}.js` already uses.
      It keeps the install phase small (`checks.install-phase-budget`) and
      needs no quoting of the QML.
    - `pkgs/AGENTS.md`: a new section after the #1301 one, with anchor
@@ -139,8 +139,12 @@ are the lead's.
    - Verify:
      - `nix fmt -- --ci`;
      - `nix eval --raw .#checks.x86_64-linux.session.drvPath` evaluates;
-     - `nix derivation show <drv>` contains `quickshell_crashed` three times
-       (one definition, two calls).
+     - `nix eval --raw .#checks.x86_64-linux.session.driver.testScript | grep -c quickshell_crashed`
+       prints `3` (one definition, two calls). The script lives in the driver
+       derivation, not the vm-test-run one.
+     - `nix build --no-link .#checks.x86_64-linux.session.driver` succeeds.
+       It is cheap, and nixpkgs runs `ty check` and `ruff check --select F` on
+       the script, so a Python error shows here rather than six minutes into a VM.
 
      Do not build `session` here: it is a VM check (§6), and the lead runs it
      in step 4.
@@ -158,43 +162,58 @@ are the lead's.
    `.quickshell-wra` leading dot. Verify: `git diff --stat` shows one file.
 
 4. **§1 proofs (lead, VM tier: only with `gh run list` showing 0 in flight).**
-   Commit steps 1–3 first, so there is a baseline to restore to. Then build
-   the scratch tree:
+   Commit steps 1–3 first. Then build the proof tree from #1307's head, the
+   same tree `loop-unpatched-1` crashed on, with steps 1–3 on top:
    ```
-   git worktree add --detach /mnt/data/vmtest/wt-1313-proof HEAD
+   git worktree add --detach /mnt/data/vmtest/wt-1313-proof 193c7d13
+   git -C /mnt/data/vmtest/wt-1313-proof cherry-pick <step 1–3 commits>
    ```
-   and in it run `git merge --no-edit 193c7d13`, #1307's head, where the
-   unpatched crash is deterministic. Commit the merge; `mkFlake` needs a
-   committed tree (§5). Evaluate each drv once and check it with
+   Merging HEAD instead conflicts in `tests/AGENTS.md` (#1307 against #1310).
+   #1307 does not touch `tests/session.nix`. The cherry-picks are the
+   committed baseline that the restores return to, and the tree `mkFlake`
+   needs (§5). Evaluate each drv once and check it with
    `nix derivation show` before building `<drv>^*` (§5, the stale-evaluation
-   trap). Use `git checkout HEAD --` to restore, never `git checkout --`.
+   trap). For Break A, `nix derivation show -r <drv> | grep -c 1313-panel-loader`
+   prints `0`. For Break B, the driver's `testScript` contains the planted
+   `mkdir` line. Use `git checkout HEAD --` to restore, never `git checkout --`.
    Confirm each break landed with `git diff` (§1).
    - **Break A:** delete the D1 `substituteInPlace` (both lines). Run 3
      times. Expected red each time:
      `#1313: Quickshell crashed during the session (after enabling nixarchy-menu)`.
      `loop-unpatched-1` is the recorded case where the old #1283 assertion
      alone passed over the crash (segv=1, switch_ok=1). Record whether any of
-     the three is that case too.
-   - **Break B:** keep Break A, and also delete the
-     `quickshell_crashed("after enabling nixarchy-menu")` call. Run once.
-     Expected red: `#1313: Quickshell crashed during the session (at the end of the session)`.
-     This proves the end-of-session check can fail.
+     the three is that case too. Each failure text must show both detectors,
+     the journal lines and the crash-directory entry. If one is missing, that
+     detector is blind (§1).
+   - **Break B:** keep D1. Directly before the final
+     `quickshell_crashed("at the end of the session")`, plant
+     `machine.succeed("mkdir -p /home/omarchy/.cache/quickshell/crashes/proof-1313")`.
+     Run once. Expected red: `#1313: Quickshell crashed during the session (at the end of the session)`.
+     A real crash with the switch-time check removed does not work for this:
+     the crash run that got past the switch (`loop-unpatched-1`) then failed
+     on an unrelated `#1284` assertion and never reached the end.
    - **Restore** with `git checkout HEAD -- pkgs tests` and confirm
-     `git status` is clean. Run twice, expecting green both times. Each log
+     `git status` is clean. Run twice, expecting green both times. The second
+     run uses `nix build --rebuild '<drv>^*'`, because a successful build is
+     cached and would otherwise run no VM. Each log
      has a `#1313 timing:` line, and neither has a
      `.quickshell-wra … terminated abnormally` line.
-   - D1's six measurement runs (n-1..n-6, team-1305, same tree, no D2) must
-     all be clean. Any crash rejects D1, and the plan goes back to the spec.
+   - D1's six measurement runs (n-1..n-6, team-1305, same tree) must all be
+     clean. They carry D2's checks as a scratch `check1313` at three points:
+     after the enable, after the switch back, and at the end. Any crash rejects D1, and the plan goes back to the spec.
    - Save each log to `/mnt/data/vmtest/1313-proof-*.txt`.
 
-5. **Startup cost (lead or team-1305, VM tier, scratch only, not committed).**
-   On the proof tree, with nixarchy-menu enabled, time
-   `omarchy-restart-shell` up to the first successful
-   `omarchy-plugin-list --json`. Take 3 samples with D1 and 3 with Break A.
-   Record the medians in the PR. A slower start well inside the 60 s retry is
-   accepted.
+5. **Startup cost (team-1305, VM tier, scratch only, not committed).**
+   Method: a scratch `testScript` edit on the proof tree, placed right after the
+   enable. It runs `omarchy-restart-shell` three times, as `on_desktop(...)`.
+   Each sample is the time from the restart's return to the first successful
+   `omarchy-plugin-list --json`, polled every 0.1 s. Run it with D1, and with
+   Break A. Record the medians in the PR. On Break A a restart may itself
+   crash: count a sample with a new `.quickshell-wra` journal line as a crash,
+   not as a time. A slower start well inside the 60 s retry is accepted.
 
 6. **Cheap checks (lead, under `flock`):** `install-phase-budget`, `omarchy`,
+   `qml` (it lints the built, substituted `shell.qml`, `tests/qml.nix:83`),
    `nix run nixpkgs#statix -- check .`, `nix run nixpkgs#deadnix -- --fail .`,
    and `nix fmt -- --ci`. Before pushing, `git merge origin/main` and re-run
    `install-phase-budget`: #1312 and #1311 also add to the install phase.
@@ -232,8 +251,10 @@ are the lead's.
 | `omarchy` build and the step 1 greps | 1 / 0 / 1 |
 | `install-phase-budget` | green, after merging main |
 | `session`, Break A ×3 | red, `#1313: … (after enabling nixarchy-menu)` |
-| `session`, Break B ×1 | red, `#1313: … (at the end of the session)` |
-| `session`, restored ×2 | green, timing line printed |
+| `session.driver` build | green (ty, ruff) |
+| `qml` | green |
+| `session`, Break B ×1 (planted dir) | red, `#1313: … (at the end of the session)` |
+| `session`, restored ×2 (second `--rebuild`) | green, timing line printed |
 | D1 runs n-1..n-6 | no SEGV, no crash dir, no binding loop |
 | statix, deadnix, fmt | clean |
 

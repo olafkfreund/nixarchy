@@ -86,7 +86,10 @@ All evidence below was read from these places:
    actions (settled by the lead).** In the same python, after the arch-map
    rewrite (~:983-1007), every upstream `remove.*` row that still carries
    upstream's `action` and whose `when` calls `omarchy-pkg-*` gets
-   `when = "false"`. A comment names #1304 as the issue that lifts it, row by
+   `when = "false"`. "Still carries upstream's action" means the row is not in
+   nixarchy's overrides at all. Any row #1304 overrides is untouched by this
+   rule, whatever its new action is, so the two issues can land in either
+   order. A comment names #1304 as the issue that lifts it, row by
    row, as it ports each action. Today these are `remove.service.tailscale`,
    `remove.security.fingerprint`, `remove.security.fido2`,
    `remove.ai.hermes`, `remove.ai.perplexity` and
@@ -152,8 +155,9 @@ All evidence below was read from these places:
        upstream moved every such guard from `when` to `disabled`, so a group
        of "`when` only" rows would be empty there and fail;
      - every `remove.*` row whose `when` in upstream's menu calls
-       `omarchy-pkg-*`, and whose generated action is still upstream's (not
-       `nixarchy-*`), is hidden in **present**. Rows like `remove.theme`
+       `omarchy-pkg-*`, and whose generated row nixarchy does not override
+       (its action is byte-identical to upstream's), is hidden in
+       **present**. Rows like `remove.theme`
        and `remove.security.sshd`, which have no package guard, are not
        this check's concern;
      - the in-shell helper agrees with the tree's `bin/omarchy-pkg-present`,

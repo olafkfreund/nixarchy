@@ -16,8 +16,14 @@ spec: spec/2026-10-18-1325-edge-menu-actions.md
 3. **The walker does not change.** Its blind spots get a note in
    `tests/AGENTS.md` on main.
 4. **`menu-actions` joins the edge cheap-check list** in `omarchy-edge.yml`.
-   That is a CI-gate change, merged by a maintainer, and only after the edge
-   carry is green.
+   That is a CI-gate change, merged by a maintainer, and only once `edge`
+   itself contains the carry:
+   `git merge-base --is-ancestor <carry> origin/edge`.
+   `edge-candidate` alone is not enough. It is a scratch ref: a run that is
+   not `from_candidate` starts from `edge` and force-pushes it
+   (`omarchy-edge.yml:99-102`, `:348`). The 06:00 scheduled run does exactly
+   that, and `cancel-in-progress` (`:37-39`) lets it cancel a dispatched run
+   still waiting in `wait-idle`.
 5. **Remove › SSH Agent keeps its upstream script,** with a `session:` reason.
    Its NixOS wording is left as is.
 6. **Closing:** the main PR is `Refs #1325`. #1325 closes by hand once the
@@ -35,16 +41,24 @@ lead does 0, 2, 3 and 6, plus every commit and push.
 - `git worktree add -b edge-carry-1325 /mnt/data/vmtest/wt-1325-edge origin/edge-candidate`,
   then `git merge origin/main`. Read the merge status, and resolve any
   conflict the way earlier `Edge:` carries did.
+- **Wait for any edge run in flight to finish** first. Run 39076339015
+  promotes #1313's carry, and a new dispatch would cancel it. Proceed when
+  `origin/edge` contains `origin/edge-candidate`, or the run has ended.
 - Build `checks.x86_64-linux.menu-actions` under
   `flock /mnt/data/vmtest/codex-build.lock`. Save the `menu-actions:` lines to
   `/mnt/data/vmtest/1325-before.txt`.
 - **Compare with the spec's 31.** `edge-candidate` has moved to quattro
   386176a since the spec. If any finding is new or gone, stop. Classify the
   difference the way the spec did, and add it to this plan before step 1.
-- Find what `install.style.theme` and `remove.preinstalls` reach on edge. Run
-  the walker on those two rows (the `walk()` function at
-  `check-menu-actions.py:66-81`, against the built edge tree), and record
-  their hazard and first script here. Step 1's rewording depends on it.
+- Find what `install.style.theme` and `remove.preinstalls` reach on the
+  **merged** tree with the script's `--measure` flag (`check-menu-actions.py:45,106`),
+  and record their hazard and first script here. Step 1's rewording depends on
+  it. Before the merge, both read `omarchy-install-hermes-cli: systemctl-user`
+  and `remove.preinstalls` no longer reached `home-rm`; #1319 touched it.
+- Also build `menu-verbs`, `bin-ledger` and `menu-guards` on the merged tree.
+  main's #1307 added reachability checks that edge's cheap list runs. If one
+  is red because of quattro, report it as unrelated (§10) and do not fix it
+  here.
 
 Traps:
 - §5: a flake sees only tracked files, so `git add` before building.
@@ -94,7 +108,8 @@ check out of. For each break:
 | B2: delete the six `style.font.cjk.*` entries | six `style.font.cjk.* reaches omarchy-restart-shell` lines |
 | B3: restore `style.theme`'s old entry | `entry for style.theme, which reaches no hazard: stale` |
 
-Then green again. `bin-ledger` and `menu-guards` must be green on edge too.
+Then green again. `menu-verbs`, `bin-ledger` and `menu-guards` must be no
+redder than step 0 measured.
 
 Traps:
 - §5: `git checkout HEAD --`, not `git checkout --`.
@@ -102,11 +117,21 @@ Traps:
 
 ### 3. [lead] Commit, push and dispatch the edge carry
 
-- Squash to one commit: `Edge: menu-actions classifies quattro's new rows and drops three that no longer exist (#1325)`.
-- Check the install queue is 0, then push `HEAD:edge-candidate`. That is a
-  fast-forward; never a force-push.
-- `gh workflow run omarchy-edge.yml --ref main -f from_candidate=true`. In the
-  run, read that `edge-candidate` keeps the commit.
+- Squash with `git reset --soft <step 0's merge commit>`, not against
+  `origin/edge-candidate`. Against `origin/edge-candidate` it would fold main's
+  new commits into the carry (§5). Subject:
+  `Edge: menu-actions classifies quattro's new rows and drops three that no longer exist (#1325)`.
+  Check that `git show --stat HEAD` lists only `data/menu-actions.nix`, and
+  that `git merge-base origin/main HEAD` equals `origin/main`.
+- No edge run in flight, and the install queue at 0. Then push
+  `HEAD:edge-candidate`, which must be a fast-forward; never force it. If
+  it is rejected, fetch, merge the new `origin/edge-candidate`, re-run
+  `menu-actions`, and push again.
+- `gh workflow run omarchy-edge.yml --ref main -f from_candidate=true`. Do this
+  well before 06:00 UTC, so the scheduled run cannot cancel it.
+- **Done** when `git merge-base --is-ancestor <carry> origin/edge` succeeds. If
+  the run fails, or is cancelled, the next scheduled run drops the carry. Push
+  it again and dispatch again.
 
 ### 4. [coder] `tests/AGENTS.md`, main worktree `wt-1325`
 
@@ -129,7 +154,8 @@ Verify: `nix run nixpkgs#actionlint -- .github/workflows/omarchy-edge.yml`.
 
 ### 6. [lead] Main PR
 
-- `menu-actions` on main stays green, with 335 rows and 48 flagged.
+- `menu-actions` on main stays green. The PR touches no data, so the counts
+  are main's own.
 - `nix fmt -- --ci`.
 - Squash to one commit: `Edge's CI runs menu-actions, and tests/AGENTS.md names the walker's blind spots (#1325)`.
 - The PR body:
@@ -138,15 +164,15 @@ Verify: `nix run nixpkgs#actionlint -- .github/workflows/omarchy-edge.yml`.
     run on the carry is green;
   - includes the B1–B3 output;
   - says `Refs #1325`.
-- Close #1325 by hand once both are in, naming the edge commit and the PR
-  (§12).
+- Close #1325 by hand once `edge` contains the carry and the PR has merged,
+  naming both (§12).
 
 ## Tests
 
 | command | expect |
 |---|---|
 | `menu-actions` on the edge tree | green |
-| `menu-actions` on main | green, 335 rows, 48 flagged |
+| `menu-actions` on main | green |
 | B1–B3 | each red with its message, then green |
 | `bin-ledger`, `menu-guards` on edge | green |
 | `actionlint` on `omarchy-edge.yml` | clean |
@@ -154,8 +180,9 @@ Verify: `nix run nixpkgs#actionlint -- .github/workflows/omarchy-edge.yml`.
 
 ## Rollback
 
-- **Edge:** revert the `Edge:` commit on `edge-candidate`. The next edge run
-  carries the revert.
+- **Edge:** revert the `Edge:` commit on a branch from `edge`. Push it to
+  `edge-candidate` and dispatch with `from_candidate=true`; a scheduled run
+  starts from `edge` and would not carry the revert.
 - **Main:** revert the PR. That removes `menu-actions` from edge CI and the
   note.
 - Nothing is stateful.

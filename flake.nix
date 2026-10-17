@@ -1989,6 +1989,8 @@
             "menu-verbs"
             # The menu scripts patched to explain and exit 1 call no writer (#1304).
             "menu-guidance"
+            # A font row run with no terminal reopens itself in one, when the font is missing (#1304).
+            "install-font-terminal"
             # Every visible menu row's action, followed into its scripts (#1304).
             "menu-actions"
             # The other half of that: a declared machine actually boots, on the

@@ -272,7 +272,7 @@
   };
   "omarchy-install-font" = {
     class = "replace";
-    reason = "Upstream runs `omarchy-pkg-add <package> && sleep 2 && omarchy-font-set`, so the && meant the switch never ran either. Asks fontconfig first, and defers to omarchy-pkg-add only if the family is absent.";
+    reason = "Upstream runs `omarchy-pkg-add <package> && sleep 2 && omarchy-font-set`, so the && meant the switch never ran either. Asks fontconfig first, and defers to omarchy-pkg-add only if the family is absent; on the missing-font path with no terminal it reopens itself in one (#1304).";
   };
   "omarchy-install-gaming-retroarch" = {
     class = "patch";

@@ -859,6 +859,15 @@ let
         "install.ai.perplexity".when = "false"; # a pacman package nixpkgs lacks
         "remove.ai.perplexity".when = "false";
         "remove.browser.brave-origin".when = "false"; # AUR-only
+        # #1304: the routes nixarchy already has.
+        "install.gaming.geforce-now" = {
+          action = "nixarchy-service-enable geforce-now";
+          description = "Flatpak — declared in your configuration, but updated by Flathub rather than by a rebuild";
+        };
+        "install.ai.ollama" = {
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-local-ai";
+          description = "Ollama is programs.nixarchy.localAi here: set it up in a terminal";
+        };
       }
       # Snapshots need the `home` snapper config omarchy-snapshot drives;
       # only the installer sets one, so Mode A gets no rows that only refuse (#1303).

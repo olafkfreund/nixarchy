@@ -122,6 +122,14 @@ lands second rebases and keeps the other's change (step 7).
     `alias backup: declared by trigger.ask.backup, system.recovery; resolves to trigger.ask.backup; not in the expected table`.
 
   The plan's text is what ships. Step 5's table and the PR use it.
+
+- **Load gate waived (implementation, 2026-10-17).** The owner said "don't
+  wait for load, run the builds now". Step 4's build ran with the 1-minute
+  load above 12. The p620 build gate (0) and CI-idle gate were still checked,
+  by the lead, because the coder's command guard misreads that pgrep pattern.
+- **Row count (step 4).** The reference build has 400 rows, not about 395: the
+  396 measured earlier came from p620's deployed menu, before step 1. The
+  "396 rows" text in step 5's simulation notes refers to that older menu.
 - The manual already shows the correct two-row example, so
   `docs/manual/dotfiles.md` is not edited.
 

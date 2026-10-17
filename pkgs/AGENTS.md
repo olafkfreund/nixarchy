@@ -933,4 +933,4 @@ decision of 2026-10-17. A future `keepLoaded` plugin with the same
 
 Drop it when nixarchy-menu survives an asynchronous load, proven with the
 same `checks.session` runs. The defect is nixarchy-menu's own; the follow-up
-issue is filed at plan step 7.
+issue is olafkfreund/nixarchy-menu#28.

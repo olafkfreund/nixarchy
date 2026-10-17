@@ -341,7 +341,8 @@ def main():
             errors.append(f"entry for {rid} has no reason")
             continue
         if reason.startswith("hidden:"):
-            when = str(menu.get(rid, {}).get("when", "<no such row>"))
+            row = menu.get(rid)
+            when = "<no such row>" if row is None else str(row.get("when", "<no when>"))
             if when.strip() != "false":
                 errors.append(f"{rid} is listed hidden but its when is {when!r}")
         elif rid not in flagged:
@@ -623,7 +624,7 @@ Traps: T-add.
 
 | the row | reason text |
 |---|---|
-| `remove.preinstalls` | **no entry.** After 1.4 the replacement deletes only through variables (`rm -f "$dst"`), which the probe cannot see, so the row is not flagged. Its safety is `checks.remove-preinstalls`. An entry here would be reported stale |
+| `remove.preinstalls` | `owned: deletes only unmodified seeds and exact mise stubs; omarchy-install-hermes-cli removes only the wrapper it wrote (--owns) (decision 2, checks.remove-preinstalls)`. It stays flagged even after 1.4. Its own deletions go through variables, which the probe cannot see, but it still calls `omarchy-install-hermes-cli`, whose `rm -f "$HOME/.local/bin/hermes"` (`$T/bin/omarchy-install-hermes-cli:137,188,232`) matches `home-rm`. Its safety is `checks.remove-preinstalls` |
 | `install.preinstalls` | `owned: adds missing launchers only, never overwrites; its one rm is its own marker (decision 2, checks.remove-preinstalls)`. Its `rm -f ~/.local/state/…` matches `home-rm` |
 | the DNS rows, `setup/remove.security.sshd`, `setup/remove.security.sudoless-docker`, `remove.security.fingerprint`/`fido2`, `setup.security.fingerprint`, `update.timezone` | `pending #1304 class 2: decision <4…9>` |
 | the rows decision 12 lists, if flagged | `pending #1304 class 4: decision 12` |
@@ -889,9 +890,10 @@ verified with `git diff` before the check runs, and restored with
    It uses `rm -f "$HOME/.local/share/applications/battlenet.desktop"` and
    `omarchy-pkg-drop umu-launcher`. Record the exact group list.
 
-   This proof uses Battle.net rather than `remove.preinstalls` because the
-   replaced Remove is not flagged at all, which is the probe's documented
-   blind spot.
+   This proof uses Battle.net rather than `remove.preinstalls`, because the
+   replaced Remove is flagged only through `omarchy-install-hermes-cli`. Its
+   own `rm -f "$dst"` deletions are the probe's documented blind spot, so a
+   red on that row would not show the probe seeing what Remove deletes.
 2. Comment out the sibling rule's whole `for` loop from 1.2, then build
    `menu-actions`. Expected red: 14 lines, one per rewired row, of the form
    `remove.development.<x> reaches omarchy-remove-dev-env: …` and
@@ -904,7 +906,12 @@ verified with `git diff` before the check runs, and restored with
    `menu-actions: remove.development.elixir.phoenix is listed hidden but its when is 'true'`.
 5. In `tests/remove-preinstalls.nix`, set
    `remove = "${upstream}/bin/omarchy-remove-preinstalls"`. Expected red:
-   `deleted files that are not preinstalls: home/.local/bin/claude home/.local/bin/gemini home/.local/bin/gh home/.local/share/applications/Basecamp.desktop home/.local/share/applications/MyApp.desktop home/.local/share/applications/MyTui.desktop home/.local/share/applications/Zoom.desktop`.
+   `deleted files that are not preinstalls: home/.local/bin/claude home/.local/bin/gemini home/.local/bin/gh home/.local/bin/opencode home/.local/share/applications/Basecamp.desktop home/.local/share/applications/MyApp.desktop home/.local/share/applications/MyTui.desktop home/.local/share/applications/Zoom.desktop`.
+   Upstream reaches all of them:
+   - `omarchy-webapp-remove-all` takes every web app and handler;
+   - `omarchy-tui-remove-all` takes every TUI;
+   - the `rm -f` list (`$T/bin/omarchy-remove-preinstalls:16-18`) takes
+     `claude`, `gemini`, `gh` and `opencode`, link or not.
 6. In the replacement script, change `[[ -f $f && ! -L $f ]]` in
    `is_mise_stub` to `[[ -f $f ]]`. Expected red:
    `deleted files that are not preinstalls: home/.local/bin/claude`.
@@ -1193,13 +1200,13 @@ The cases, with the arguments each script gets and the marker it must name:
 | `omarchy-remove-security-fingerprint` | — | `services.fprintd` |
 | `omarchy-remove-security-fido2` | — | `security.pam.u2f` |
 | `omarchy-setup-security-fingerprint` | — | `services.fprintd.enable` |
+| `omarchy-menu-timezone` | — | `time.timeZone = "Europe/Oslo"` |
 
 The "setup fingerprint, enabled" case asserts the opposite. The script must
 get past the guard, so the first line of `writes` must be
 `sudo fprintd-enroll <user>`, and `rc` is not checked. That is what shows
 enrollment is reachable once fprintd is on. Otherwise it fails with
 `menu-guidance: setup fingerprint never reaches fprintd-enroll with fprintd on`.
-| `omarchy-menu-timezone` | — | `time.timeZone = "Europe/Oslo"` |
 
 Clear `writes` between cases.
 
@@ -1208,6 +1215,15 @@ Clear `writes` between cases.
 Traps: T-add, T-heredoc (printf only, `''${`), T-pipe, T-env, T-drv.
 
 **2.6 Baseline commit, then the §1 proofs.**
+
+Commit a known-good baseline first, so that `git checkout HEAD -- <path>`
+restores the fix, not `main` (CLAUDE.md §5):
+
+```bash
+git add -A && git commit -m "WIP baseline for the Part 2 §1 proofs"
+```
+
+2.7 squashes it away.
 
 1. In `default.nix`, comment out the `omarchy-dns` `substituteInPlace` only,
    and rebuild the `omarchy` package and `menu-guidance` (T-tier). Expected
@@ -1228,13 +1244,23 @@ Traps: T-add, T-heredoc (printf only, `''${`), T-pipe, T-env, T-drv.
    row returns, with `omarchy-remove-security-sshd`. Expected red:
    `menu-actions: remove.security.sshd reaches omarchy-remove-security-sshd: …, with no entry in data/menu-actions.nix`.
    The group list starts with `systemctl-system` and `ufw`; record it.
+5. Decision 8's guard. In the `omarchy-setup-security-fingerprint`
+   `substituteInPlace`, delete only the first `--replace-fail`, the one that
+   turns `if omarchy-pkg-missing libfprint-git fprintd usbutils; then` into
+   `if ! command -v fprintd-enroll …`. Leave the pacman-line replacement in
+   place. Check the break landed with `git diff`, then rebuild the `omarchy`
+   package and `menu-guidance` (T-tier). The guard is now always true
+   again, so the "enabled" case exits at the guidance and never reaches
+   `sudo fprintd-enroll`. Expected red:
+   `menu-guidance: setup fingerprint never reaches fprintd-enroll with fprintd on`.
 
 Restore each one with `git checkout HEAD --`, and see green. The red outputs
 go in the PR.
 
 Traps: T-break, T-tier, T-drv.
 
-**2.7 PR**, as in 1.12. The subject is `DNS, sshd, sudoless Docker,
+**2.7 PR**, as in 1.12. First squash the 2.6 baseline away, so that no
+WIP subject survives on the branch (CLAUDE.md §8). The subject is `DNS, sshd, sudoless Docker,
 fingerprint, FIDO2 and timezone rows explain the declarative route instead
 of writing state a rebuild undoes`. Use `Refs #1304`.
 
@@ -1286,6 +1312,13 @@ Traps: T-drv, T-tier.
 
 **3.3 §1 proofs.**
 
+First, commit a known-good baseline. Without one, `git checkout HEAD --
+modules/apps.nix` would wipe 3.1's uncommitted overrides (CLAUDE.md §5):
+
+```bash
+git add -A && git commit -m "WIP baseline for the Part 3 §1 proofs"
+```
+
 1. Delete the `trigger.hardware.hybrid-gpu` line from 3.1 (its entry stays
    `hidden:`). Expected red:
    `menu-actions: trigger.hardware.hybrid-gpu is listed hidden but its when is 'omarchy-hw-hybrid-gpu'`.
@@ -1294,13 +1327,16 @@ Traps: T-drv, T-tier.
    The group list may be longer; record it. These are executed lines,
    `$T/bin/omarchy-toggle-hybrid-gpu:39,73`.
 3. Delete the `setup.direct-boot` line (its entry stays). Expected red:
-   `… setup.direct-boot is listed hidden but its when is ''`.
+   `menu-actions: setup.direct-boot is listed hidden but its when is '<no when>'`.
+   Upstream's `setup.direct-boot` has no `when` key at all, so the check
+   prints its `<no when>` placeholder.
 
 Restore and see green. Paste all three.
 
 Traps: T-break, T-drv.
 
-**3.4 PR**, as in 1.12. The subject is `Menu rows that cannot work on NixOS
+**3.4 PR**, as in 1.12. First squash 3.3's baseline away, so that no WIP
+subject survives (CLAUDE.md §8). The subject is `Menu rows that cannot work on NixOS
 (Windows VM, hybrid GPU, direct boot, Hermes, Perplexity, Brave Origin
 removal) are hidden`. Use `Refs #1304`.
 
@@ -1328,9 +1364,10 @@ File: `modules/apps.nix`, in the `overrideSpec` literal:
 Traps: T-fmt.
 
 **4.2 Font terminal.**
-File: `pkgs/omarchy/nix-bin/omarchy-install-font`. Insert between `:45`
-(the `fi` closing the installed branch) and `:47`
-(`echo "$name is not installed."`):
+File: `pkgs/omarchy/nix-bin/omarchy-install-font`. Insert between `:42`
+(the `fi` closing the installed branch) and `:44`
+(`echo "$name is not installed."`). Those are the line numbers at HEAD;
+anchor on the text:
 
 ```bash
 # A menu row runs this with no terminal, so the route below would print to
@@ -1389,6 +1426,12 @@ Traps: T-drv, T-tier.
 
 **4.5 §1 proofs.**
 
+First, commit a known-good baseline, for the same reason as 3.3:
+
+```bash
+git add -A && git commit -m "WIP baseline for the Part 4 §1 proofs"
+```
+
 1. Delete 4.2's `if` block. Expected red:
    `the not-installed path wrote to a non-terminal stdout and launched no terminal`.
 2. Remove `[[ ! -t 1 ]]` from the condition, so it reads `if true`, and move
@@ -1404,7 +1447,8 @@ Restore and see green. Paste all three.
 
 Traps: T-break, T-tier, T-drv.
 
-**4.6 PR**, as in 1.12. The subject is `GeForce NOW, Ollama and missing-font
+**4.6 PR**, as in 1.12. First squash 4.5's baseline away, so that no WIP
+subject survives (CLAUDE.md §8). The subject is `GeForce NOW, Ollama and missing-font
 menu rows go straight to the route nixarchy already has`.
 
 - The body says `closes #1304`. This is the last Part. Before writing it,

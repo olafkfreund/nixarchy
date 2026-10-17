@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1303
 spec: spec/2026-10-17-1303-menu-conditions-nixos.md
 ---

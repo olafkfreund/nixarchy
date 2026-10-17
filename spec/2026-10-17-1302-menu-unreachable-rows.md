@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1302
 intent: intent/2026-10-17-1302-menu-unreachable-rows.md
 ---

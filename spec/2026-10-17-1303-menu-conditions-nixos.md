@@ -17,8 +17,7 @@ gets a `data/bin-ledger.nix` row.
 ### Decisions
 
 1. **The stale-scripts problem is out of scope.** A running session keeps
-   its old tree after a switch. That is the stale-session issue, filed
-   separately by the lead.
+   its old tree after a switch. That is #1306.
 2. **Hibernation: ask logind instead of mkinitcpio, and add no option.**
    - In `bin/omarchy-hibernation-available`, the term
      `[[ -f /etc/mkinitcpio.conf.d/omarchy_resume.conf ]]` becomes "logind's

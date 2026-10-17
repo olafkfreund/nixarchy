@@ -16,9 +16,12 @@
   "install.style.theme" =
     "owned: omarchy-install-hermes-cli removes only the wrapper it wrote (--owns)";
   "install.windows" = "pending #1304 class 4: decision 12";
-  "remove.ai.hermes" = "pending #1304 class 4: decision 12";
-  "remove.ai.perplexity" = "pending #1304 class 4: decision 12";
-  "remove.browser.brave-origin" = "pending #1304 class 4: decision 12";
+  "remove.ai.hermes" =
+    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 4 ports it (decision 12)";
+  "remove.ai.perplexity" =
+    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 4 ports it (decision 12)";
+  "remove.browser.brave-origin" =
+    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 4 ports it (decision 12)";
   "remove.development.elixir.phoenix" =
     "hidden: its elixir|phoenix arm removes Elixir and Erlang (decision 3)";
   "remove.development.php.laravel" =
@@ -29,8 +32,10 @@
     "owned: deletes its own prefix; GE-Proton and umu only after a confirm; pkg-drop is inert here (decision 10)";
   "remove.preinstalls" =
     "owned: deletes only unmodified seeds and exact mise stubs; omarchy-install-hermes-cli removes only the wrapper it wrote (--owns) (decision 2, checks.remove-preinstalls)";
-  "remove.security.fido2" = "pending #1304 class 2: decision 7";
-  "remove.security.fingerprint" = "pending #1304 class 2: decision 7";
+  "remove.security.fido2" =
+    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 2 ports it (decision 7)";
+  "remove.security.fingerprint" =
+    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 2 ports it (decision 7)";
   "remove.security.sshd" = "pending #1304 class 2: decision 5";
   "remove.security.sudoless-docker" = "pending #1304 class 2: decision 6";
   "remove.windows" = "pending #1304 class 4: decision 12";

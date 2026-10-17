@@ -1658,3 +1658,23 @@ Two holes no check here closes: that the stock menu actually hides a row with
 `when = "false"` (that is MenuModel, and #1301's `checks.menu-guards`), and
 that `nixarchy-service-disable geforce-now` stops activation reinstalling
 the Flatpak.
+
+<a id="menu-guards-runs-the-menu-s-model-not-the-strings"></a>
+## menu-guards runs the menu's model, not the strings (#1301)
+
+Running a menu condition with `bash -c` cannot see a function the menu's own
+guard batch defines first: the old check ran `omarchy-pkg-present x` against
+the PATH command while the menu ran a pacman-backed function, so it passed
+with the menu wrong. `checks.menu-guards` loads the tree's `MenuModel.js`,
+builds the real guard script with it, runs it in two worlds that differ only
+in what is on PATH (nothing installed, every asked-about name stubbed), and
+judges rows with the model's `isVisible` and `isDisabled`.
+
+The hole, stated: `Menu.qml` is not exercised. Dimming and blocked clicks are
+QML, so only a human on a session sees them.
+
+**bash spawned by node with a socket on stdin sources `/etc/bashrc`, and on
+NixOS that resets PATH; `bash -l` sources `/etc/profile`, which does the
+same.** A check that varies PATH must spawn bash with stdin ignored,
+`--noprofile --norc` and an absolute path. Measured on p620: the "absent"
+world found `/run/current-system/sw/bin/sdl-freerdp`.

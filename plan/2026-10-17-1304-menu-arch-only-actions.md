@@ -231,6 +231,19 @@ applies.
   text matched only part of it. All eleven proofs went red and both checks
   are green after restore.
 
+- **Merging main after #1301 landed (2026-10-17).** #1301's generator hides
+  every upstream `remove.*` row with a package guard that nixarchy does not
+  override (`when = "false"`). In Part 1 that is hermes, perplexity,
+  brave-origin, fido2 and fingerprint. The probe skips hidden rows, so their
+  `pending` entries went stale. They are now `hidden:` entries, which assert
+  the row stays hidden. So `menu-actions` reads 54 flagged and 8 hidden, not
+  59 and 3. **Part 2 must turn fido2 and fingerprint back from `hidden:` into
+  guidance reasons when decision 7 overrides them**, and Part 3 does the same
+  for the other three. In the merge, apps.nix runs the sibling rule before
+  #1301's hide, so the rows it rewires (tailscale, the dev rows) are
+  overrides and stay visible. The `omarchy-pkg-drop` ledger reason keeps
+  #1304's text ("reached, and inert") and adds #1301's note.
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

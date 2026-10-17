@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1320
 intent: intent/2026-10-17-1320-dimmed-arch-only-rows.md
 ---

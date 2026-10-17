@@ -10,25 +10,27 @@ author: olafkfreund
 
 A review of the menu on 2026-10-17 found bugs in Omarchy's own menu code,
 `shell/plugins/menu/Menu.qml` and `MenuModel.js`, and in the
-`omarchy-menu-select`/`-input`/`-images` scripts that wait on it. Nixarchy
-does not change the menu files: in 4.0.4 both are byte-identical to upstream's
-source (`/nix/store/3pyxkhsadqhyrcm57inxgb9dax4r5vb2-source`). So each of
-these would happen on Arch too. Under the routing rule in
+`omarchy-menu-select`/`-input`/`-images` scripts that wait on it. File and
+line references below are to the deployed tree,
+`/nix/store/rla9km5silzbp6h9dcfz0pd1p90ia8r9-nixarchy-omarchy-tree`. Nixarchy
+does not change the menu files: in that tree both are byte-identical to
+upstream's 4.0.4 source (`/nix/store/3pyxkhsadqhyrcm57inxgb9dax4r5vb2-source`).
+So each of these would happen on Arch too. Under the routing rule in
 `pkgs/omarchy/skills/nixarchy/contributing.md` they are Omarchy's bugs, and
 nothing has been reported upstream.
 
 Each one was checked against 4.0.4 (stable) and against `quattro`, upstream's
 default branch. Edge pins `quattro` at `cce8b1c9`, which is identical to its
-head today. MenuModel.js was run under node for 3, 4 and 8, and the index arithmetic for
-9. Codex and
-Antigravity each checked the claims independently; the corrections they made
-are folded in below. Rows are ordered by severity, so the numbers differ from
-the issue's.
+head today. `MenuModel.js` was run under node for 3, 4 and 8, and the index
+arithmetic for 9. Codex and Antigravity each checked rows 1-10
+independently, and their corrections are folded in. Rows 1-10 are ordered by
+severity, so the numbers differ from the issue's. Row 11 came later, from
+#1303.
 
 | # | Bug | Severity | 4.0.4 | quattro / edge | Upstream knows? |
 |---|---|---|---|---|---|
 | 1 | **The right arrow activates rows the way Enter does** (Menu.qml:1106). On an action row that includes Shutdown and Reboot, which close every window and power off with no prompt. It launches app rows, and in `omarchy-menu-input` it submits the half-typed text | high: unsaved work lost | yes | yes | not found |
-| 2 | **A menu request that is displaced hangs its caller for ever.** `openDmenu`, and `openExistingMenu` (the ordinary Super+Space open), drop the pending `doneFile` without writing it. `omarchy-menu-select` (bin:91), `-input` (:50) and `-images` (:301) then wait with no limit. Nixarchy's `OMARCHY_SHELL_IPC_TIMEOUT` patch bounds only the summon in `-select`, not the wait | high: a script hangs | yes | yes | PR [#9031](https://github.com/omacom/omarchy/pull/9031), open, covers it ("a request displaced by the next one") |
+| 2 | **A menu request that is displaced hangs its caller for ever.** `openDmenu`, and `openExistingMenu` (the ordinary Super+Space open), drop the pending `doneFile` without writing it. `omarchy-menu-select` (bin:91), `-input` (:50) and `-images` (:358) then wait with no limit. Nixarchy's `OMARCHY_SHELL_IPC_TIMEOUT` patch bounds only the summon in `-select`, not the wait | high: a script hangs | yes | yes | PR [#9031](https://github.com/omacom/omarchy/pull/9031), open, covers it ("a request displaced by the next one") |
 | 3 | **A partial override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` wipes the row.** `normalizeItem` fills in defaults before `mergeMenuSources` copies every key, so a label-only override turns Shutdown into an empty `kind: "menu"`, and the row disappears. Upstream promises the opposite twice: Menu.qml:243 says overrides are "on a per-key basis", and the seeded file says "Reuse an existing id to override/extend it" | medium: the row disappears | yes | yes | not found ([#14425](https://github.com/omacom/omarchy/issues/14425) is a nearby feature request) |
 | 4 | **An inline `//` comment silently drops the whole extension file.** `stripJsonc` removes only full-line comments, and the parse error returns `[]` without reporting anything | medium: silent | yes | yes | not found |
 | 5 | **A summon before the menu files load loses its route.** `pendingInitialMenu` is written (Menu.qml:866) and never read, so the menu opens root. An action alias opens root as well, instead of running | medium | yes | yes | issue [#14053](https://github.com/omacom/omarchy/issues/14053) and PR [#15519](https://github.com/omacom/omarchy/pull/15519), both open. An earlier PR, #14055, was closed |
@@ -37,6 +39,7 @@ the issue's.
 | 8 | **Search ignores ancestor words.** "install vim" does not find Install › Editor › Vim, because `matchesQuery` reads only the row's own label, leaf id, aliases and description | low: arguably design | yes | yes | not found |
 | 9 | **PageUp in a list shorter than 6 rows loses the cursor.** `(i + delta + count) % count` gives -2 | low | yes | **fixed**: `nextSelectable` normalises the index | already fixed |
 | 10 | **AltGr and IME characters cannot be typed in search.** Characters are accepted only with no modifier or with Shift | medium for non-US layouts | yes | **fixed in code** by `FilterInput` (#14433). Not checked on a live session | already fixed |
+| 11 | **Style › Power profile keeps its ✓ on the old profile after a switch.** The `power-profiles` provider (Menu.qml:276) has no `volatile: true`, unlike `fonts` (:273), so its rows and `current` are read once and not again when the submenu is re-entered (:413). Found by #1303 | low: shows the wrong state | yes | yes, still not volatile | not found |
 
 Two claims were refuted: the stale `maxRowsHeight` is the documented design
 ("the starting menu sets the ceiling", Menu.qml:157), and the bar icon's store
@@ -52,6 +55,10 @@ Two facts in this repository bear on the decision:
   they read it from the raw `omarchy` flake input (`flake.nix:260`, `:357`,
   `follows = "omarchy"`), not from the patched package. A fix carried in
   `pkgs/omarchy` would not reach them, though bugs 3, 4, 7 and 8 do.
+
+Related, but not upstream's and not in scope: after a switch, a running
+session keeps the old tree's `PATH` and `OMARCHY_PATH` but reads the new
+`/etc` menu. team-1303 is proposing a separate issue for it.
 
 ## Proposed outcome
 
@@ -112,6 +119,9 @@ Two facts in this repository bear on the decision:
      of it. Leave it, or report it?
    - **8 (search ancestors).** Closer to a feature request. Leave it, or post
      it in upstream's Discussions?
+   - **11 (stale power-profile ✓).** Not known upstream, and present on
+     quattro. Likely a one-word fix. Report it, carry it, or both? #1303
+     owns whether it is fixed there or here.
    - **9, 10.** Already fixed upstream and on edge. Carry on stable until the
      next stable bump, or leave them?
 2. **Who files upstream, and in what form?** One report per bug, or one

@@ -116,6 +116,17 @@ the field, so the 63 rows nixarchy marks `disabled` never dim, and the three
   #1304 will port all six, and a floor of 1 would then fail on a correct
   tree. The other groups' minimums still catch a parse that goes empty.
 
+- **Implementation: load gate waived (2026-10-17).** The owner said "don't
+  wait for load, run the builds now". Step 2's package build ran with the
+  1-minute load above 12. The lead checked the p620-build gate (0).
+- **Implementation: step 2's first verify needs `grep -cF`.** As written,
+  `grep -cF 'local c=${1%-bin}'` is a basic regex whose `{1%-bin}` can never
+  match, so it printed 0 on a correct tree. With `-F` it prints 1.
+
+- **Implementation: step 7 edits the `pacman =` text on two ledger rows only.**
+  The same text appears on five rows. The plan names `omarchy-pkg-drop` and
+  `omarchy-pkg-remove`, so only those two changed.
+
 ### Measured while planning (prototype, no nix build)
 
 The check below was run with node 24 against scratch copies of the deployed
@@ -264,7 +275,7 @@ Each break in step 6 turned it red with the text quoted there.
      drv=$(nix eval --raw .#packages.x86_64-linux.omarchy.drvPath)
      out=$(nix build --no-link --print-out-paths "$drv^*")
      m=$out/share/omarchy/shell/plugins/menu/MenuModel.js
-     grep -c 'local c=${1%-bin}' "$m" || true   # 1
+     grep -cF 'local c=${1%-bin}' "$m" || true   # 1
      grep -c 'pacman -Q "$1"' "$m" || true      # 0 (grep -c exits 1 on zero matches)
      grep -c 'function isDisabled' "$m" || true # 1
      grep -c 'disabledResults' "$out/share/omarchy/shell/plugins/menu/Menu.qml" || true  # > 0

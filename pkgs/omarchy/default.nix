@@ -2089,6 +2089,14 @@ stdenvNoCC.mkDerivation {
                     # the bump that rewords it fails here. checks.session closes one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./902-notification-sender-close.patch}
 
+                    # Omarchy's menu answers omarchy-pkg-present from pacman (#1301); this
+                    # carries upstream's dimming (omacom/omarchy#6955) until stable has it,
+                    # and asks the PATH the way nix-bin/omarchy-pkg-present does.
+                    # Why: pkgs/AGENTS.md#the-menu-asks-pacman-and-ignores-disabled-1301
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1301-menu-disabled.patch}
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/MenuModel.js \
+                      --replace-fail "$(cat ${./1301-pkg-has.old.js})" "$(cat ${./1301-pkg-has.new.js})"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

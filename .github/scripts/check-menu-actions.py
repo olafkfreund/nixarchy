@@ -111,6 +111,11 @@ def main():
 
     entries = json.load(open(a.entries, encoding="utf-8"))
     errors = []
+    # A dimmed "Not available" row must run nothing: summon ignores disabled (omacom/omarchy#15742).
+    for rid, row in sorted(menu.items()):
+        if str(row.get("disabled", "")).strip() == "true" and row.get("action") != "true":
+            errors.append(f'{rid} has disabled = "true" but runs {row.get("action")!r}; '
+                          f"omarchy menu summon {rid} would run it (omacom/omarchy#15742)")
     for rid in sorted(flagged):
         if rid not in entries:
             errors.append(f"{rid} reaches {fmt(flagged[rid])}, with no entry in data/menu-actions.nix")

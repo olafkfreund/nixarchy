@@ -35,7 +35,7 @@
   "install.style.theme" = "installs a theme. Handled by programs.nixarchy.theme.";
   "install.tui" = "installs a TUI app by name, like install.package.";
   "install.webapp" = "installs a web app as a chromium PWA. Nothing to package.";
-  "install.windows" = "a Windows VM helper, out of scope for this port.";
+  "install.windows" = "a Windows VM helper needing rooted Docker; dimmed with a reason (#1320).";
   "install.service.chromium-account" = "adds a browser profile. Not a package.";
 
   # Fonts go through omarchy-install-font and the Arch-name map.
@@ -62,7 +62,8 @@
 
   # New in Omarchy 4.0.3.
   "install.ai.hermes" =
-    "hidden (#1304): upstream installs a binary with its own installer under "
+    "dimmed with a reason (#1320): upstream installs a binary with its own installer under "
     + "/usr/share/hermes-desktop; nixpkgs has no hermes";
-  "install.ai.perplexity" = "hidden (#1304): a pacman package nixpkgs does not carry, not a web app";
+  "install.ai.perplexity" =
+    "dimmed with a reason (#1320): a pacman package nixpkgs does not carry, not a web app";
 }

@@ -58,7 +58,7 @@ Two facts in this repository bear on the decision:
 
 Related, but not upstream's and not in scope: after a switch, a running
 session keeps the old tree's `PATH` and `OMARCHY_PATH` but reads the new
-`/etc` menu. team-1303 is proposing a separate issue for it.
+`/etc` menu. It is tracked as #1306.
 
 ## Proposed outcome
 

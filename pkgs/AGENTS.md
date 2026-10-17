@@ -946,3 +946,53 @@ edits onto this patch, so its content is frozen (sha256 in the plan).
 The pacman snapshot lines above the rewritten ones are left dead on purpose:
 edge builds them in `guardPackageSnapshot()`, so their text differs between
 pins, while the two replaced lines read the same on both.
+
+<a id="wallpapers-are-capped-at-4096px-so-they-can-become-a-texture"></a>
+## Wallpapers are capped at 4096 px so they can become a texture
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #948).
+
+Omarchy ships wallpapers up to 7680px wide. Anything wider than
+GL_MAX_TEXTURE_SIZE cannot become a texture, and the background renders
+black with no error anywhere -- Qt reports the image Ready, the layer
+surface exists at full size, and nothing is drawn. 4096 is the limit on
+llvmpipe and on plenty of integrated GPUs, and 5 of the 8 backgrounds in
+the default theme are over it.
+
+sourceSize caps what Qt decodes to. Setting only the width keeps the
+aspect ratio, and 4096 is wider than any display this would be shown on,
+so there is no visible loss -- and every machine decodes less. A plain
+constant rather than anything derived from Screen: Screen is an attached
+property that does not resolve inside an Image, and a QML error here
+would take out the whole background rather than just the size hint.
+
+displayedBackground dropped from this loop (#1153): the 1153 patch above
+replaces that layer's Image with a BackgroundMedia, which draws through
+its own Image with its own sourceSize.width, retargeted just below. The
+transition layers (oldBackground, incomingBackground) are untouched by
+that patch and still match here.
+
+<a id="every-web-app-failed-with"></a>
+## Every web app failed with
+
+Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #948).
+
+Every web app failed with
+
+  Error: Path "--app=https://messages.google.com/..." does not exist!
+
+omarchy-launch-webapp resolves the browser by reading Exec= out of a
+.desktop file and passing the binary to uwsm-app. When that lookup finds
+nothing the substitution is empty, so `--app=<url>` lands where the
+program should be and uwsm-app reports it as a missing path.
+
+It found nothing because the fallback names chromium.desktop, which is
+what Arch installs. NixOS calls it chromium-browser.desktop. The default
+browser here was a Chrome web-app profile entry -- chrome-<id>-Default
+-- which matches none of the patterns upstream lists, so every launch
+took the fallback and every web app was broken: all nine that call this
+directly, plus HEY and Zoom through their handlers.
+
+Both names are tried rather than one swapped for the other, because
+someone may have a chromium.desktop of their own and upstream's name
+should keep working.

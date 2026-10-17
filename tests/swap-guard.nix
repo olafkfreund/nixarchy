@@ -60,6 +60,12 @@ pkgs.runCommand "nixarchy-swap-guard" { } ''
   }
   echo "  ok      and the manual says it is not hibernation"
 
+  grep -q 'boot.kernelParams = \[ "resume_offset=' ${../docs/manual/troubleshooting.md} || {
+    echo "  FAILED  the manual's swap-file recipe has no resume_offset" >&2
+    exit 1
+  }
+  echo "  ok      and its swap-file recipe sets resume_offset"
+
   [ "$fail" = 0 ] || exit 1
   echo "an installed machine has swap, and can still refuse it"
   touch $out

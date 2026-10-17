@@ -130,6 +130,12 @@ in `modules/apps.nix` or a `substituteInPlace --replace-fail` patch in
   said `home-backup.restore` was "below". After the move it is above, so the
   word was changed. Everything else was moved byte for byte.
 
+- **Step 8: actionlint ran without shellcheck.** `nix run nixpkgs#actionlint`
+  hung on p620 at 0.2% CPU for 10 minutes, and was killed by pid. It was
+  re-run with `-shellcheck= -pyflakes=` and exited 0. The new step is a single
+  plain `run:` command, and CI runs the full lint. The commit subject also drops
+  the plan's `CI:` prefix (CLAUDE.md §8).
+
 ## Steps
 
 0. **Preflight. No edits.**

@@ -33,8 +33,9 @@ and `checks.bin-ledger` fails until the row agrees.
 
 1. **Scope and delivery.** One spec covers all four classes. They ship as
    one PR per class, in this order: class 1 (data loss), then class 2, then
-   class 4, then class 3. Class 4 comes before class 3 because three of its
-   Remove rows have to be safe before #1301 lands (decision 13). The plan is split
+   class 4, then class 3. Class 4 comes before class 3 because it only hides
+   rows, and class 3 adds new routes. Neither order is forced by #1301
+   (decision 13). The plan is split
    the same way.
 2. **`remove.preinstalls` (the intent's Q2): nixarchy guards ownership
    locally.** `omarchy-remove-preinstalls` is replaced in
@@ -157,7 +158,7 @@ and `checks.bin-ledger` fails until the row agrees.
    openssh`. Each follows the catalogue rows' shape (`modules/apps.nix:922-936`):
    - Setup always shows, and carries the marker test as `disabled`. That is
      the catalogue Install rows' dimming, which #1301 makes the stock menu
-     honour. It is not a `when`, because a negated grep on a missing
+     honour (until then it is dropped, which is harmless here; decision 13). It is not a `when`, because a negated grep on a missing
      `services.nix` would read as true.
    - Remove's `when` is the positive marker test, so it shows only while the
      service is selected.
@@ -190,8 +191,16 @@ and `checks.bin-ledger` fails until the row agrees.
      leave a `required` u2f stack with no keys. The message gives the order:
      drop the options, rebuild, then `sudo rm -rf /etc/fido2`.
 
-   Both rows keep upstream's `omarchy-pkg-present` `when`. #1301 makes that
-   truthful, and decision 13 orders this before it.
+   Both rows are also overridden with a plain-bash `when` that names no
+   `omarchy-pkg-*` helper:
+   - fingerprint: `command -v fprintd-enroll >/dev/null`, which is on PATH
+     exactly when `services.fprintd` is on;
+   - FIDO2: `[[ -e /etc/fido2 ]]`, the registration its own Setup row wrote.
+
+   Without an override, #1301's decision 4 would hide both rows for good,
+   because it hides any upstream `remove.*` row that nixarchy does not
+   override and whose `when` calls `omarchy-pkg-*`. With the override, the
+   rows show when there is something to explain, before #1301 and after.
 8. **`setup.security.fingerprint`.** The `sudo pacman -S` under
    `omarchy-pkg-missing` (`$T/bin/omarchy-setup-security-fingerprint:24-27`)
    is replaced with the `services.fprintd.enable` line and `exit 1`. The
@@ -244,22 +253,34 @@ and `checks.bin-ledger` fails until the row agrees.
     - **Already guidance: no change.** `setup.security.passwordless-sudo`,
       `update.config.plymouth` and `style.unlock` already explain instead of
       failing.
-13. **Ordering with #1301.** #1301's change makes the stock menu's
-    `omarchy-pkg-present` answer truthfully, and that reveals six Remove rows:
-    - `remove.service.tailscale` (decision 3, class 1's PR)
-    - `remove.security.fingerprint` and `fido2` (decision 7, class 2's PR)
-    - `remove.ai.hermes`, `remove.ai.perplexity` and
-      `remove.browser.brave-origin` (decision 12, class 4's PR)
+13. **Ordering with #1301: either may land first.** This is agreed with
+    team-1301 and recorded in #1301's spec (`f504495d`).
 
-    So #1301's guard fix must land after, or in the same merge as, the class
-    1, 2 and 4 PRs here. Class 3 does not block it. Every `when` this spec
-    writes is plain bash that names no `omarchy-pkg-*` helper, so it means the
-    same before #1301 and after. The two security rows keep upstream's
-    `omarchy-pkg-present` `when` on purpose (decision 7). Whether
-    `omarchy-pkg-present pam-u2f` maps to anything on NixOS is #1301's to
-    answer, and is safe either way once decision 7 has landed. Coordination outcome with team-1301:
-    *no reply from team-1301 when this draft was committed. The order above
-    is this spec's proposal, sent to team-1301 to agree or amend.*
+    Six upstream Remove rows have a `when` that calls `omarchy-pkg-present`,
+    which the stock menu answers from pacman, so today it is always false:
+    - `remove.service.tailscale`, rewired by decision 3
+    - `remove.security.fingerprint` and `fido2`, overridden by decision 7
+    - `remove.ai.hermes`, `remove.ai.perplexity` and
+      `remove.browser.brave-origin`, hidden by decision 12
+
+    #1301's decision 4 hides every upstream `remove.*` row with an
+    `omarchy-pkg-*` guard that nixarchy does **not** override. Its
+    `checks.menu-guards` asserts exactly that scope. #1301 changes only the
+    in-shell `omarchy-pkg-present` and `omarchy-pkg-missing`; every other
+    `when` evaluates as before.
+
+    So all six rows are covered whichever PR lands first:
+    - **#1301 first:** each row stays hidden until the #1304 PR that
+      overrides it lands, and from then on #1301's rule leaves it alone.
+    - **#1304 first:** its overrides apply. None of the `when`s here calls
+      `omarchy-pkg-*`, so they mean the same before #1301 and after.
+
+    There is one order-dependent choice. A row that may merge before #1301
+    cannot rely on `disabled`, because until then the stock menu drops the
+    field and the row stays clickable. That is why class 4 hides with
+    `when = "false"` (decision 12). Setup sshd's `disabled` (decision 5) only
+    dims the row, so before #1301 it stays clickable, and a second
+    `nixarchy-service-enable openssh` changes nothing.
 14. **The probe (§2).** A new static check, `checks.menu-actions`
     (`tests/menu-actions.nix` running `.github/scripts/check-menu-actions.py`),
     uses the reference-plus-boxes evaluation that `tests/menu-verbs.nix:29-42`
@@ -352,10 +373,12 @@ rows by id.
 - **A DNS option in nixarchy.** It would be a second vocabulary for
   `networking.nameservers`. That is the RFC 42 argument `data/services.nix`
   already makes against a wrapper.
-- **`disabled` + reason for the class 4 rows listed in decision 12.** The
-  stock menu ignores `disabled` until #1301 lands, so these rows would stay
-  clickable. Hiding works today, and #1301 can turn hidden rows into
-  labelled ones later. The three existing `disabled` rows are a separate
+- **`disabled` + reason for the class 4 rows listed in decision 12.** After
+  #1301 the stock menu honours `disabled`: the row is dimmed, gets a ✓, and
+  cannot be selected or found in search. Before #1301 it is dropped and the
+  row stays clickable. The two PRs may land in either order (decision 13),
+  so `when = "false"` is the only choice that is safe in both. Once #1301 has
+  landed, a follow-up can turn these rows into labelled `disabled` ones. The three existing `disabled` rows are a separate
   case (decision 12).
 - **Probe in `checks.session`.** That needs a VM. A static walk sees every
   hazard here more cheaply, and §2 asks for the highest layer that can see

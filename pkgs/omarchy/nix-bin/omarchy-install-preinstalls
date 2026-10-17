@@ -2,25 +2,14 @@
 
 # omarchy:summary=Restore the preinstalled Omarchy applications (web apps, TUIs, and selected packages).
 
-# Upstream reseeds with omarchy-refresh-applications, whose cp -f replaces an
-# edited launcher or a home-manager link and whose mise stubs delete a
-# home-manager ~/.local/bin entry, then omarchy-pkg-add exits 1 here, so the
-# marker never cleared (#1304). This only adds what is missing.
+# Upstream reseeds through mise stubs and then exits on omarchy-pkg-add, so the
+# marker never cleared (#1304). Launchers come from nix-bin's
+# omarchy-refresh-applications, which adds only missing ones (#1319).
 set -uo pipefail
-
-apps="$HOME/.local/share/applications"
 
 if gum confirm "Are you sure you want to restore all preinstalled web apps, TUI wrappers, and desktop applications?"; then
   echo -e "Restoring preinstalled Omarchy applications...\n"
-  mkdir -p "$apps"
-  for src in "$OMARCHY_PATH"/applications/*.desktop; do
-    dst=$apps/${src##*/}
-    [[ -e $dst || -L $dst ]] && continue
-    cp --no-preserve=mode "$src" "$dst" && echo "Restored ${src##*/}"
-  done
-  if omarchy-cmd-present update-desktop-database; then
-    update-desktop-database "$apps" &>/dev/null || true
-  fi
+  omarchy-refresh-applications
   echo
   echo "The agent CLIs and the preinstalled packages are part of your app"
   echo "selection here: add them under Install, then Apply changes."

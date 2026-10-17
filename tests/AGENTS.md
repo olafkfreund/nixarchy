@@ -1746,3 +1746,22 @@ that answers `omarchy-plugin-list` still fails. It reads the boot journal, not
 still writing 798 MB (`Cannot store coredump … No space left on device`). The
 journal line names the process `(.quickshell-wra)`, with a leading dot, so an
 exact match such as coredumpctl's `COMM=quickshell-wra` misses it.
+
+<a id="provision-launchers-runs-two-calls-not-provisioning"></a>
+## provision-launchers runs two calls, not provisioning (#1319)
+
+`checks.provision-launchers` runs `install/user/mise.sh` the way `all.sh:14`
+runs it, then `omarchy-refresh-applications` (`omarchy-provision-user:118`),
+twice on a dirty home and once on a clean one.
+
+- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so a third
+  writer added upstream to `all.sh` or to provision-user is not seen.
+- **Hole 2.** No check runs a real Home Manager activation followed by a real
+  first login, in that order. Only a VM with Home Manager could.
+
+**`cp -f` writes through a destination symlink whose target is writable.** It
+unlinks the link only when the target refuses the write (coreutils 9.11). So a
+fixture "home-manager link" pointing at a writable copy of the shipped file
+survives `cp -f` as a link with identical bytes, and a check built on it cannot
+go red. Make the target read-only, as a store link is, and give it content that
+differs from what would be written (#1319's review).

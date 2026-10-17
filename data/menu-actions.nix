@@ -4,7 +4,7 @@
 # any other reason must still reach a hazard, or the entry is stale. `pending`
 # is temporary: Part 4 of the series forbids it.
 {
-  "install.ai.hermes" = "pending #1304 class 4: decision 12";
+  "install.ai.hermes" = "hidden: needs /usr/share/hermes-desktop (decision 12)";
   "install.preinstalls" =
     "owned: adds missing launchers only, never overwrites; its one rm is its own marker (decision 2, checks.remove-preinstalls)";
   "install.style.font.bitstream" = "session: restarts the user's shell unit";
@@ -15,13 +15,10 @@
   "install.style.font.victor" = "session: restarts the user's shell unit";
   "install.style.theme" =
     "owned: omarchy-install-hermes-cli removes only the wrapper it wrote (--owns)";
-  "install.windows" = "pending #1304 class 4: decision 12";
-  "remove.ai.hermes" =
-    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 4 ports it (decision 12)";
-  "remove.ai.perplexity" =
-    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 4 ports it (decision 12)";
-  "remove.browser.brave-origin" =
-    "hidden: an unported upstream remove row, kept hidden by #1301 until #1304 class 4 ports it (decision 12)";
+  "install.windows" = "hidden: needs rooted Docker and an FHS PATH (decision 12)";
+  "remove.ai.hermes" = "hidden: needs /usr/share/hermes-desktop (decision 12)";
+  "remove.ai.perplexity" = "hidden: a pacman package nixpkgs lacks (decision 12)";
+  "remove.browser.brave-origin" = "hidden: AUR-only (decision 12)";
   "remove.development.elixir.phoenix" =
     "hidden: its elixir|phoenix arm removes Elixir and Erlang (decision 3)";
   "remove.development.php.laravel" =
@@ -37,7 +34,7 @@
     "guidance: exits 1 before its writers (decision 7, checks.menu-guidance)";
   "remove.security.sudoless-docker" =
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
-  "remove.windows" = "pending #1304 class 4: decision 12";
+  "remove.windows" = "hidden: needs rooted Docker and an FHS PATH (decision 12)";
   "setup.config.xcompose" = "session: restarts the user's XCompose unit";
   "setup.default.agent.antigravity" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
@@ -80,7 +77,8 @@
   "setup.security.sudoless-docker" =
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "style.theme" = "owned: omarchy-install-hermes-cli removes only the wrapper it wrote (--owns)";
-  "trigger.hardware.hybrid-gpu" = "pending #1304 class 4: decision 12";
+  "trigger.hardware.hybrid-gpu" =
+    "hidden: needs supergfxd and /usr/lib/systemd/system-sleep (decision 12)";
   "trigger.reminder.clear" = "session: creates, shows or clears the user's reminder timer unit";
   "trigger.reminder.set" = "session: creates, shows or clears the user's reminder timer unit";
   "trigger.reminder.show" = "session: creates, shows or clears the user's reminder timer unit";
@@ -94,4 +92,6 @@
     "runtime: reloads the trackpad driver for this boot; nothing a rebuild owns";
   "update.hardware.wifi" = "runtime: resets wifi for this boot; nothing a rebuild owns";
   "update.process.shell" = "session: restarts the user's shell unit";
+  "setup.direct-boot" = "hidden: needs efibootmgr and an Omarchy UKI (decision 12)";
+  "install.ai.perplexity" = "hidden: a pacman package nixpkgs lacks (decision 12)";
 }

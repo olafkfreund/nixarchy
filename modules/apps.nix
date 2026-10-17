@@ -849,6 +849,16 @@ let
         # #1304: plain bash, so #1301's rule for pkg-guarded rows leaves these alone.
         "remove.security.fingerprint".when = "command -v fprintd-enroll >/dev/null";
         "remove.security.fido2".when = "[[ -e /etc/fido2 ]]";
+        # #1304: hidden on NixOS; each needs something this port does not have.
+        "install.windows".when = "false"; # rooted Docker and an FHS PATH
+        "remove.windows".when = "false";
+        "trigger.hardware.hybrid-gpu".when = "false"; # supergfxd, /usr/lib/systemd/system-sleep
+        "setup.direct-boot".when = "false"; # efibootmgr and an Omarchy UKI
+        "install.ai.hermes".when = "false"; # /usr/share/hermes-desktop
+        "remove.ai.hermes".when = "false";
+        "install.ai.perplexity".when = "false"; # a pacman package nixpkgs lacks
+        "remove.ai.perplexity".when = "false";
+        "remove.browser.brave-origin".when = "false"; # AUR-only
       }
       # Snapshots need the `home` snapper config omarchy-snapshot drives;
       # only the installer sets one, so Mode A gets no rows that only refuse (#1303).

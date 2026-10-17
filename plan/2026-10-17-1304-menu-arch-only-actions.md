@@ -296,6 +296,22 @@ applies.
   The proof: removing #1301's hide loop still turns the check red on hermes,
   perplexity and brave-origin.
 
+## Deviations during implementation (Part 3)
+
+- **Stacked on Part 2 (2026-10-17).** Part 2's PR #1312 is blocked by an
+  unrelated Quickshell crash (#1313), so Part 3 does not wait for it to
+  merge. Its branch `fix/1304-menu-unsupported-rows` is based on
+  `fix/1304-menu-imperative-writes` @ 6053b65e, not on `main`. When #1312
+  merges, Part 3 is replayed onto `main` with its own commits only (CLAUDE.md
+  §8, "A stacked PR conflicts the moment its base squash-merges").
+  Replayed onto `main` @ 50afaa1f after #1312 merged.
+- **`menu-guards`' `package-guarded` floor goes from 1 to 0.** On stable
+  the only Install rows with a package guard in their `when` were
+  `install.ai.hermes` and `install.ai.perplexity`, and step 3.1 hides both
+  (decision 12). The floor of 1 then failed on a correct tree: `only 0
+  package-guarded cases`. Edge still counts three. The PATH answer itself
+  stays covered on both pins by `helper-agreement` (606 cases).
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

@@ -109,8 +109,21 @@ merge, so there is no fixture for `tests/coexistence/fixtures.nix`.
 (`modules/apps.nix:560-594`), next to step 2's hunk at `:545-550`. Whichever
 lands second rebases and keeps the other's change (step 7).
 
-**Deviations from the spec:** none. The manual already shows the correct
-two-row example, so `docs/manual/dotfiles.md` is not edited.
+**Deviations from the spec:**
+
+- **Message wording.** The spec's Verification section wrote the cycle
+  failure as one line, `unreachable: install.flatpak,
+  install.flatpak.geforce-now`. Its alias failure read
+  `alias backup: declared by …; not in the expected table`. The script in
+  step 4 differs in two ways:
+  - It prints **one line per unreachable row**, each with its parent:
+    `unreachable: install.flatpak (parent install.flatpak)`.
+  - Its alias lines add **`resolves to X;`**, as in
+    `alias backup: declared by trigger.ask.backup, system.recovery; resolves to trigger.ask.backup; not in the expected table`.
+
+  The plan's text is what ships. Step 5's table and the PR use it.
+- The manual already shows the correct two-row example, so
+  `docs/manual/dotfiles.md` is not edited.
 
 ## Build rules for every step
 
@@ -172,8 +185,10 @@ two-row example, so `docs/manual/dotfiles.md` is not edited.
    retype it.
 
    → Verify:
-   - `nix eval --raw .#nixosConfigurations.reference.config.system.name`
-     still evaluates (a syntax slip fails here).
+   - `nix eval --raw .#nixosConfigurations.reference.config.environment.etc.'"nixarchy/omarchy-menu.jsonc"'.source.drvPath`
+     prints a `/nix/store/…-nixarchy-omarchy-menu.jsonc.drv` path. This
+     forces the evaluation of the whole menu row set, the new row included,
+     which `system.name` would not.
    - `grep -n '"install.flatpak" = {' modules/apps.nix` shows exactly one
      line.
    - The row's presence in the generated menu is proved by step 4's check.
@@ -434,6 +449,19 @@ two-row example, so `docs/manual/dotfiles.md` is not edited.
    `menu tree: N rows, all reachable; 11 shared or shadowed aliases as expected`
    (N is about 395) and `every menu row names a subcommand its CLI has`.
 
+   **If the build fails with an alias line that p620's menu did not show**
+   (`alias <word>: declared by …; resolves to <id>; not in the expected
+   table`), the reference configuration (with boxes and devenv on) declares a
+   shared alias the deployed machine lacks. Do not change any row for it.
+   Instead:
+   - Add `"<word>": "<id>"` to `EXPECTED` in `tests/menu-tree.py`, using the
+     printed winner. Only do this if that winner is the obvious destination
+     for the word. If it is not, stop and report.
+   - Update the `11` in the summary text expected by steps 4 and 5 to match.
+   - Record the entry as a deviation in this plan's **Deviations** list, in
+     the same commit (managed instructions: a deviation updates `plan/` with
+     the code).
+
    Traps:
    - `git add` the new `.py` before evaluating.
    - Run `nix fmt`, then `git diff --stat`.
@@ -458,7 +486,7 @@ two-row example, so `docs/manual/dotfiles.md` is not edited.
    4. Re-evaluate, and prove the evaluation saw the break:
       ```bash
       drv=$(nix eval --raw .#checks.x86_64-linux.menu-verbs.drvPath)
-      test "$drv" != "$base_drv" || echo "STALE: the break did not change the derivation; stop and investigate"
+      test "$drv" != "$base_drv" || { echo "STALE: the break did not change the derivation; stop and investigate" >&2; exit 1; }
       ```
       For breaks 4 and 6, which are script edits, also run step 4's `diff`
       of the drv's `menu-tree.py` against the working file.
@@ -515,8 +543,25 @@ two-row example, so `docs/manual/dotfiles.md` is not edited.
    - Evaluate the drvPath fresh for each break. Never reuse a background
      build (§5).
 
-6. **`tests/AGENTS.md`: document the check and its holes.** Append a new
-   section at the end of the file (after line ~1640; never insert one in the
+6. **`tests/AGENTS.md`: document the check and its holes.**
+
+   **First, correct the existing section at `tests/AGENTS.md:770`,**
+   `## Menu aliases: the words are a judgement, and nothing here checks them`.
+   It is now half wrong:
+   - Change the heading to
+     `## Menu aliases: the words are a judgement, and only where they lead is checked`.
+   - After its first paragraph (lines 772-775), add one paragraph: since
+     #1302, `tests/menu-tree.py` (run by `checks.menu-verbs`) checks that
+     every alias two rows share, or that an exact id shadows, summons the
+     winner pinned in its `EXPECTED` table. It still says nothing about
+     whether the words are the right words, which is the judgement the rest
+     of the section describes.
+   - Leave the rest of that section as it is.
+   - Check that no other file links to the old heading's anchor:
+     `grep -rn 'nothing-here-checks-them' . --exclude-dir=.git --exclude-dir=plan`
+     must print nothing (this plan names the anchor itself), or each hit is updated to the new anchor.
+
+   **Then append a new section** at the end of the file (after line ~1640; never insert one in the
    middle). Title it
    `## menu-tree: reachable by browsing, and what it cannot see (#1302)`.
    Its content, in house style (short paragraphs, no bullet soup):
@@ -541,8 +586,10 @@ two-row example, so `docs/manual/dotfiles.md` is not edited.
        `extraEntries` are never checked. The reference configuration has
        none.
 
-   → Verify: `grep -n "menu-tree" tests/AGENTS.md` shows the new heading.
-   `tail -5 tests/AGENTS.md` shows it is the last section.
+   → Verify: `grep -n "menu-tree" tests/AGENTS.md` shows both the new
+   heading and the paragraph added at ~770. `tail -5 tests/AGENTS.md` shows
+   the new section is the last one. `grep -c "nothing here checks them"
+   tests/AGENTS.md` prints `0`.
 
    Traps: append only; never renumber or insert in the middle (CLAUDE.md
    "Write back what cost you an hour").

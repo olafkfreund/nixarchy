@@ -115,6 +115,17 @@ in `modules/apps.nix` or a `substituteInPlace --replace-fail` patch in
 - **Plan step comments.** Name the step being executed in each commit body:
   `Plan step N`.
 
+## Deviations during implementation
+
+- **Load gate waived (2026-10-17).** The owner said "don't wait for load, run
+  the builds now". Step 1's VM and step 2's package build ran with the
+  1-minute load above 12. The p620-build and CI-idle gates were still
+  checked, by the lead.
+- **Step 1 used `--no-link`**, so no `result` link was left in the scratch
+  directory. Measured: `resume` gave `yes` with disk swap and `na` with zram
+  only; `noresume` gave `na` and `na`. So step 9's break 8 may also delete
+  `boot.resumeDevice`.
+
 ## Steps
 
 0. **Preflight. No edits.**

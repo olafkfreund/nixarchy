@@ -1983,6 +1983,8 @@
             # against the subcommands the CLI it invokes actually has. See
             # tests/menu-verbs.nix and the `nixarchy-vm new` row that shipped.
             "menu-verbs"
+            # Every visible menu row's action, followed into its scripts (#1304).
+            "menu-actions"
             # The other half of that: a declared machine actually boots, on the
             # -tcg runner, and the ro-store mount is asserted from inside the
             # running guest. See tests/microvm-boot.nix for why the KVM runner --
@@ -2027,6 +2029,8 @@
             # note that reads calm because a grep stopped matching. See
             # tests/release-notes.nix.
             "release-notes"
+            # Remove and Restore preinstalls delete only what Omarchy seeded (#1304).
+            "remove-preinstalls"
             "retroarch-paths"
             # `nix run .#review` watches the pinned packages; this watches that
             # it can still see them. See tests/review-pins.nix.

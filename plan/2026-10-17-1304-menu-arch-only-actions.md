@@ -211,6 +211,26 @@ applies.
 
 ---
 
+## Deviations during implementation (Part 1)
+
+- **The owner waived the local load gate (2026-10-17).** The lead checked the
+  p620-build gate.
+- **1.7:** `checks.menu-actions` runs the probe with `python3 -B`, so the
+  sandbox writes no `__pycache__`. Its flake entry sits after `menu-verbs`.
+  The check's menu has 335 action rows (boxes and devenv are on), against 332
+  in 1.6's measurement. Both flag 59.
+- **1.8:** `pkgs.gawk` was added to `nativeBuildInputs`, because `compare`
+  uses awk. Stub shebangs use `pkgs.runtimeShell`. An `upstream` attribute is
+  set for the 1.10 break that runs upstream's script.
+
+- **1.10:** breaks 5 and 10 refer to `${inputs.omarchy}`, not `${upstream}`.
+  `upstream` is an attribute of the check's set, not a variable in scope
+  there, so the plan's text fails evaluation with "undefined variable
+  'upstream'". Breaks 1 and 2 print the helper path first
+  (`reaches omarchy-pkg-drop: pacman; omarchy-remove-…: …`), and the plan's
+  text matched only part of it. All eleven proofs went red and both checks
+  are green after restore.
+
 ## Steps
 
 ### Part 1: class 1, data loss (branch `fix/1304-menu-arch-only-actions`)

@@ -79,7 +79,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/v4.0.4";
+      url = "github:basecamp/omarchy/v4.0.5";
       flake = false;
     };
 
@@ -534,7 +534,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "4.0.4";
+      omarchyVersion = "4.0.5";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).
@@ -2533,12 +2533,10 @@
             touch $out
           '';
           # #953: a restart never ends with zero shells, against stubs that make
-          # teardown slower than upstream's `timeout 5`; upstream's own script is
-          # the negative control.
+          # teardown slow; guards upstream's own wait (the patch retired in v4.0.5).
           shell-restart-race = import ./tests/shell-restart-race.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
-            omarchySrc = omarchy;
           };
 
           # #1070: `omarchy-menu close` asks the menu to dismiss before hiding it, so a

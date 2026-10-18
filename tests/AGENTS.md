@@ -749,8 +749,8 @@ here has. p620 is one most days, so it is a hand check.
 
 ## shell-restart-race runs the script, with a quickshell that dies slowly
 
-`checks.shell-restart-race` (#953) runs the real `omarchy-restart-shell`,
-patched and upstream's, against PATH stubs. That works because the script is
+`checks.shell-restart-race` (#953) runs the real `omarchy-restart-shell`
+(upstream's own since the patch retired in v4.0.5), against PATH stubs. That works because the script is
 upstream's and unwrapped. The stubs model one config:
 
 - the old instance dies at a scripted time, and `quickshell kill` blocks until
@@ -758,14 +758,16 @@ upstream's and unwrapped. The stubs model one config:
 - `quickshell list` prints a block copied verbatim from a real run;
 - a `hyprctl dispatch` launch "exits already running" while the old one lives.
 
-**What it pins:** a 7 s teardown ends with one shell; upstream's script ends
-with zero (the negative control); a wedged shell is reported with no second
-launch; a fast teardown stays fast.
+**What it pins:** a 7 s teardown ends with one shell, and a fast teardown stays
+fast. It guards upstream's own wait, so it goes red if upstream stops waiting.
 
 **What it cannot reach:** how long a real quickshell takes to tear down, and
 whether real `quickshell list` still prints `Process ID:`. The first is a hand
 check on p620: swap a plugin folder and restart at once. The second fails
 toward today's behaviour, not a hang.
+
+Link opening through `omarchy-browser.desktop` is covered only by the
+build-time name check in `pkgs/omarchy/default.nix`; no VM opens a link.
 
 ## Menu aliases: the words are a judgement, and only where they lead is checked
 

@@ -1,23 +1,18 @@
 {
   pkgs,
   omarchy,
-  omarchySrc,
 }:
-# #953: `omarchy restart shell` could leave ZERO shells. Upstream's kill loop is
-# `while timeout 5 quickshell kill ...`; a plugin-heavy shell takes ~14 s to
-# tear down (up to ~30 s mid hot-reload), so `timeout` gave up, the relaunch
-# ran beside the dying shell, the new one exited "already running", and then
-# the old one finished exiting. p620 sat with no shell and no bar for 17 min.
+# #953: `omarchy restart shell` could leave ZERO shells, because upstream's kill
+# loop gave up (`timeout 5`) on a slow teardown and the relaunch lost the race
+# with the dying shell. nixarchy carried a patch for it; v4.0.5 waits for the
+# old shell itself (`timeout 30`, then up to 30 s on `quickshell list`, then a
+# 60 s readiness deadline), so the patch retired and this guards upstream's wait.
 #
 # omarchy-restart-shell is upstream's and unwrapped, so PATH stubs reach it
 # (tests/AGENTS.md#a-path-stub-loses-to-runtimeinputs...). The stubs model one
 # quickshell config whose old instance dies at a scripted time; `quickshell
 # kill` blocks until then, like the real one. `list` prints a block copied from
-# a real `quickshell list`, so the patch is matched against the real label.
-#
-# Case 2 runs UPSTREAM's unpatched script through the same harness: it must end
-# with zero shells. That is the proof the harness reproduces the bug, and the
-# signal to retire the patch if upstream ever stops losing this race.
+# a real `quickshell list`.
 pkgs.runCommand "nixarchy-shell-restart-race"
   {
     nativeBuildInputs = [
@@ -31,11 +26,10 @@ pkgs.runCommand "nixarchy-shell-restart-race"
   ''
     # Keep this harness focused on teardown timing. Replace only the absolute
     # IPC dependency with our readiness stub; real IPC is checked separately.
-    patched=$TMPDIR/restart
+    shipped=$TMPDIR/restart
     sed 's|${omarchy}/bin/omarchy-shell|omarchy-shell|g' \
-      ${omarchy}/share/omarchy/bin/omarchy-restart-shell > "$patched"
-    upstream=${omarchySrc}/bin/omarchy-restart-shell
-    [ -f "$patched" ] && [ -f "$upstream" ] || { echo "restart script missing ($patched, $upstream)" >&2; exit 1; }
+      ${omarchy}/share/omarchy/bin/omarchy-restart-shell > "$shipped"
+    [ -s "$shipped" ] || { echo "restart script missing ($shipped)" >&2; exit 1; }
 
     export STATE=$TMPDIR/state TREE=$TMPDIR/tree
     mkdir -p "$TREE/shell" && touch "$TREE/shell/shell.qml"
@@ -86,13 +80,13 @@ pkgs.runCommand "nixarchy-shell-restart-race"
     export PATH=$stubs:$PATH HYPRLAND_INSTANCE_SIGNATURE=test XDG_RUNTIME_DIR=$TMPDIR
 
     now() { date +%s%3N; }
-    # run_case NAME SCRIPT OLD_DEATH_MS|never NEW_READY_MS [EXIT_TIMEOUT]
+    # run_case NAME SCRIPT OLD_DEATH_MS|never NEW_READY_MS
     run_case() {
       rm -rf "$STATE" && mkdir -p "$STATE"
       if [ "$3" = never ]; then echo never > "$STATE/old-death"; else echo $(( $(now) + $3 )) > "$STATE/old-death"; fi
       echo "$4" > "$STATE/new-ready-delay"
       start=$(now)
-      OMARCHY_SHELL_EXIT_TIMEOUT=''${5:-60} bash "$2" > "$STATE/out" 2> "$STATE/err" && rc=0 || rc=$?
+      bash "$2" > "$STATE/out" 2> "$STATE/err" && rc=0 || rc=$?
       elapsed=$(( $(now) - start ))
       # The final state: let a dying old shell finish before counting.
       if [ "$3" != never ]; then while (( $(now) < $(cat "$STATE/old-death") )); do sleep 0.05; done; fi
@@ -104,35 +98,21 @@ pkgs.runCommand "nixarchy-shell-restart-race"
     ran=0
     fail() { echo "FAIL: $1" >&2; exit 1; }
 
-    # 1. A slow teardown (7 s > `timeout 5`), and a new shell that answers after
-    #    3 s -- longer than upstream's readiness poll lasts against these stubs
-    #    (20 x 0.1 s), so part 2 of the patch is exercised as well.
-    run_case slow-patched "$patched" 7000 3000
-    [ "$shells" = 1 ] || fail "slow teardown: the patched restart ended with $shells shells"
+    # 1. A slow teardown (7 s, past the old `timeout 5`), and a new shell that
+    #    answers after 3 s.
+    run_case slow-shipped "$shipped" 7000 3000
+    [ "$shells" = 1 ] || fail "slow teardown: the restart ended with $shells shells"
     [ "$rc" = 0 ] || fail "slow teardown: one shell came up, but the restart reported failure (exit $rc)"
-    grep -q already-running "$STATE/launches" && fail "slow teardown: the patched restart launched beside the dying shell"
     ran=$((ran + 1))
 
-    # 2. The negative control: upstream's script, same harness, must lose.
-    run_case slow-upstream "$upstream" 7000 3000
-    [ "$shells" = 0 ] && grep -q already-running "$STATE/launches" \
-      || fail "upstream's script no longer ends with zero shells here: the harness cannot see #953, or upstream fixed it and the patch can go"
-    ran=$((ran + 1))
-
-    # 3. A wedged old shell: bounded, reported, and no second launch.
-    run_case wedged-patched "$patched" never 0 6
-    [ "$rc" != 0 ] && grep -q "did not exit within 6s" "$STATE/err" || fail "a wedged shell was not reported"
-    [ ! -e "$STATE/launches" ] || fail "a wedged shell still got a second one launched beside it"
-    ran=$((ran + 1))
-
-    # 4. A fast teardown stays fast.
-    run_case fast-patched "$patched" 500 0
-    [ "$shells" = 1 ] || fail "fast teardown: the patched restart ended with $shells shells"
+    # 2. A fast teardown stays fast.
+    run_case fast-shipped "$shipped" 500 0
+    [ "$shells" = 1 ] || fail "fast teardown: the restart ended with $shells shells"
     [ "$rc" = 0 ] || fail "fast teardown: the restart reported failure (exit $rc)"
     (( elapsed < 4000 )) || fail "fast teardown took ''${elapsed} ms"
     ran=$((ran + 1))
 
-    [ "$ran" = 4 ] || fail "only $ran of 4 cases ran"
-    echo "omarchy-restart-shell ends with exactly one shell in all four cases (#953)"
+    [ "$ran" = 2 ] || fail "only $ran of 2 cases ran"
+    echo "omarchy-restart-shell ends with exactly one shell in both cases (#953)"
     touch $out
   ''

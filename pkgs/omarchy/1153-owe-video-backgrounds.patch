@@ -1,6 +1,6 @@
 # CARRIED. Upstream omacom/omarchy #6792 ("Add native video wallpaper
 # support") and #12429 ("Replace the shell's desktop video path with OWE"),
-# squashed as one patch on top of v4.0.4, for #1153: video and GIF desktop
+# squashed as one patch on top of v4.0.5, for #1153: video and GIF desktop
 # backgrounds and a video-aware lock screen poster, routed through the owe
 # package (pkgs/apps/owe.nix) rather than through the shell's own decoder.
 #
@@ -10,7 +10,7 @@
 # patch -d line, for the one edit that has to change because of it.
 #
 # Generated with:
-#   git diff v4.0.4 backport -- bin/omarchy-bar-text-color \
+#   git diff v4.0.5 backport -- bin/omarchy-bar-text-color \
 #     bin/omarchy-menu-images bin/omarchy-theme-bg-next bin/omarchy-theme-bg-set \
 #     bin/omarchy-theme-set bin/omarchy-theme-switcher shell/Commons/Util.qml \
 #     shell/Ui/BackgroundMedia.qml shell/Ui/qmldir shell/plugins/background/Background.qml \
@@ -18,13 +18,13 @@
 #     shell/plugins/lock/LockView.qml shell/plugins/lock/Service.qml \
 #     shell/plugins/lock/poster.sh shell/plugins/services/battery/Service.qml shell/shell.qml
 #
-# Deleted by the quattro bump: when nixarchy moves off v4.0.4, the base
+# Deleted by the quattro bump: when nixarchy moves off v4.0.5, the base
 # release carries this upstream and the patch no longer applies -- which is
 # the point. Delete this file, the patch -d line in default.nix, and the
 # retargeted-4096-cap comment with it.
 
 diff --git a/bin/omarchy-bar-text-color b/bin/omarchy-bar-text-color
-index a2ce8cde..35cd0ead 100755
+index a2ce8cdef..35cd0eadd 100755
 --- a/bin/omarchy-bar-text-color
 +++ b/bin/omarchy-bar-text-color
 @@ -109,7 +109,10 @@ right)
@@ -40,7 +40,7 @@ index a2ce8cde..35cd0ead 100755
    -gravity center -extent "${screen_width}x${screen_height}" \
    -gravity NorthWest -crop "$crop" +repage \
 diff --git a/bin/omarchy-menu-images b/bin/omarchy-menu-images
-index 8c316462..8305cb0f 100755
+index 8c3164620..8305cb0fd 100755
 --- a/bin/omarchy-menu-images
 +++ b/bin/omarchy-menu-images
 @@ -75,8 +75,9 @@ fi
@@ -210,7 +210,7 @@ index 8c316462..8305cb0f 100755
      while IFS=$'\t' read -r row_image row_thumbnail; do
        if [[ ! -e $row_thumbnail ]]; then
 diff --git a/bin/omarchy-theme-bg-next b/bin/omarchy-theme-bg-next
-index dfb3d3f0..f9907d7a 100755
+index dfb3d3f07..f9907d7a3 100755
 --- a/bin/omarchy-theme-bg-next
 +++ b/bin/omarchy-theme-bg-next
 @@ -10,7 +10,8 @@ CURRENT_BACKGROUND_LINK="$HOME/.local/state/omarchy/current/background"
@@ -224,7 +224,7 @@ index dfb3d3f0..f9907d7a 100755
  )
  TOTAL=${#BACKGROUNDS[@]}
 diff --git a/bin/omarchy-theme-bg-set b/bin/omarchy-theme-bg-set
-index 45b420df..835321d7 100755
+index 45b420dfd..835321d74 100755
 --- a/bin/omarchy-theme-bg-set
 +++ b/bin/omarchy-theme-bg-set
 @@ -1,11 +1,11 @@
@@ -252,7 +252,7 @@ index 45b420df..835321d7 100755
  
  # Update the live shell background immediately when it is running. The
 diff --git a/bin/omarchy-theme-set b/bin/omarchy-theme-set
-index 016fe67e..782b4ba7 100755
+index 016fe67e1..782b4ba70 100755
 --- a/bin/omarchy-theme-set
 +++ b/bin/omarchy-theme-set
 @@ -48,12 +48,17 @@ shell_ipc() {
@@ -375,7 +375,7 @@ index 016fe67e..782b4ba7 100755
  
  # Swap next theme in as current
 diff --git a/bin/omarchy-theme-switcher b/bin/omarchy-theme-switcher
-index 6d014dd5..49bc127c 100755
+index 6d014dd5c..49bc127c8 100755
 --- a/bin/omarchy-theme-switcher
 +++ b/bin/omarchy-theme-switcher
 @@ -22,7 +22,7 @@ find_preview() {
@@ -418,7 +418,7 @@ index 6d014dd5..49bc127c 100755
      selected_preview="$preview_dir/$current_theme.$extension"
      break
 diff --git a/shell/Commons/Util.qml b/shell/Commons/Util.qml
-index ca265acd..14af44fe 100644
+index ca265acda..14af44fed 100644
 --- a/shell/Commons/Util.qml
 +++ b/shell/Commons/Util.qml
 @@ -44,6 +44,10 @@ QtObject {
@@ -434,7 +434,7 @@ index ca265acd..14af44fe 100644
    function shellQuote(value) {
 diff --git a/shell/Ui/BackgroundMedia.qml b/shell/Ui/BackgroundMedia.qml
 new file mode 100644
-index 00000000..aabde8d1
+index 000000000..aabde8d1f
 --- /dev/null
 +++ b/shell/Ui/BackgroundMedia.qml
 @@ -0,0 +1,38 @@
@@ -477,7 +477,7 @@ index 00000000..aabde8d1
 +  }
 +}
 diff --git a/shell/Ui/qmldir b/shell/Ui/qmldir
-index 5d8e6d4a..464e25b7 100644
+index 5d8e6d4ae..464e25b74 100644
 --- a/shell/Ui/qmldir
 +++ b/shell/Ui/qmldir
 @@ -3,6 +3,7 @@ module qs.Ui
@@ -489,10 +489,10 @@ index 5d8e6d4a..464e25b7 100644
  BorderSurface 1.0 BorderSurface.qml
  Button 1.0 Button.qml
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
-index 21e1b0a9..b3dd7dab 100644
+index 0a53b20dd..606670a45 100644
 --- a/shell/plugins/background/Background.qml
 +++ b/shell/plugins/background/Background.qml
-@@ -26,6 +26,10 @@ Item {
+@@ -27,6 +27,10 @@ Item {
    property string pendingShellRaw: ""
    property real revealProgress: 1
  
@@ -503,7 +503,7 @@ index 21e1b0a9..b3dd7dab 100644
    function imageUrl(path) {
      return Util.fileUrl(path)
    }
-@@ -50,10 +54,12 @@ Item {
+@@ -51,10 +55,12 @@ Item {
      revealAnimation.stop()
      finishingTransition = false
  
@@ -518,7 +518,7 @@ index 21e1b0a9..b3dd7dab 100644
        revealProgress = 1
        return
      }
-@@ -196,9 +202,8 @@ Item {
+@@ -197,9 +203,8 @@ Item {
        color: "transparent"
        // Keep render updates enabled. The background layer has been observed to
        // lose its committed buffer while parked with updatesEnabled=false,
@@ -530,7 +530,7 @@ index 21e1b0a9..b3dd7dab 100644
        updatesEnabled: true
  
        property bool maskReady: false
-@@ -218,15 +223,14 @@ Item {
+@@ -219,15 +224,14 @@ Item {
        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
        exclusionMode: ExclusionMode.Ignore
  
@@ -553,7 +553,7 @@ index 21e1b0a9..b3dd7dab 100644
              root.oldBackground = ""
              root.finishingTransition = false
 diff --git a/shell/plugins/image-picker/list.sh b/shell/plugins/image-picker/list.sh
-index a30e4743..0fb74117 100755
+index a30e47438..0fb741172 100755
 --- a/shell/plugins/image-picker/list.sh
 +++ b/shell/plugins/image-picker/list.sh
 @@ -3,12 +3,18 @@
@@ -679,7 +679,7 @@ index a30e4743..0fb74117 100755
    printf '%s\t%s\n' "$image" "$thumbnail"
 diff --git a/shell/plugins/lock/LockFeedSurface.qml b/shell/plugins/lock/LockFeedSurface.qml
 new file mode 100644
-index 00000000..ecd1f7d4
+index 000000000..ecd1f7d47
 --- /dev/null
 +++ b/shell/plugins/lock/LockFeedSurface.qml
 @@ -0,0 +1,7 @@
@@ -691,10 +691,10 @@ index 00000000..ecd1f7d4
 +LockFeed {
 +}
 diff --git a/shell/plugins/lock/LockView.qml b/shell/plugins/lock/LockView.qml
-index c2deae0f..7084fb0f 100644
+index 3c5f65da3..900784ec8 100644
 --- a/shell/plugins/lock/LockView.qml
 +++ b/shell/plugins/lock/LockView.qml
-@@ -7,6 +7,7 @@ Item {
+@@ -8,6 +8,7 @@ Item {
    id: root
  
    property string backgroundPath: ""
@@ -702,7 +702,7 @@ index c2deae0f..7084fb0f 100644
    property int backgroundVersion: 0
    property bool fingerprintConfigured: false
    property bool authenticatingPassword: false
-@@ -14,6 +15,11 @@ Item {
+@@ -15,6 +16,11 @@ Item {
    property int failedAttempts: 0
    property bool inputEnabled: true
    property bool loadBackground: true
@@ -714,9 +714,9 @@ index c2deae0f..7084fb0f 100644
    property string passwordText: ""
    property bool syncingPasswordText: false
  
-@@ -38,20 +44,14 @@ Item {
-     ? Border.surfaceSpec("lock", "border-error", Color.lock.borderError, root.outlineThickness, "border-alpha")
-     : Border.surfaceSpec("lock", "border-active", Color.lock.borderActive, root.outlineThickness, "border-alpha")
+@@ -39,20 +45,14 @@ Item {
+     ? Border.surfaceSpec("lock", "border-error", Commons.Color.lock.borderError, root.outlineThickness, "border-alpha")
+     : Border.surfaceSpec("lock", "border-active", Commons.Color.lock.borderActive, root.outlineThickness, "border-alpha")
  
 +  readonly property bool video: Util.isVideoPath(root.backgroundPath)
 +  readonly property bool feedActive: root.video && root.loadBackground && !root.displaysBlank && !root.powerSaverActive
@@ -738,9 +738,9 @@ index c2deae0f..7084fb0f 100644
    function forcePasswordFocus() {
      passwordInput.forceActiveFocus()
    }
-@@ -90,28 +90,44 @@ Item {
+@@ -91,28 +91,44 @@ Item {
      anchors.fill: parent
-     color: Color.background
+     color: Commons.Color.background
  
 -    Image {
 +    BackgroundMedia {
@@ -792,10 +792,10 @@ index c2deae0f..7084fb0f 100644
        anchors.fill: parent
        hoverEnabled: true
 diff --git a/shell/plugins/lock/Service.qml b/shell/plugins/lock/Service.qml
-index 9ecb1cc0..6e1f703e 100644
+index 9c33e703c..d616a752c 100644
 --- a/shell/plugins/lock/Service.qml
 +++ b/shell/plugins/lock/Service.qml
-@@ -28,14 +28,25 @@ Item {
+@@ -29,14 +29,25 @@ Item {
    property string failureMessage: ""
    property int failedAttempts: 0
    property string backgroundPath: ""
@@ -821,7 +821,7 @@ index 9ecb1cc0..6e1f703e 100644
  
    function realScreenCount() {
      var screens = Quickshell.screens || []
-@@ -103,6 +114,16 @@ Item {
+@@ -107,6 +118,16 @@ Item {
      if (!readlinkProc.running) readlinkProc.running = true
    }
  
@@ -838,7 +838,7 @@ index 9ecb1cc0..6e1f703e 100644
    function refreshFingerprintStatus() {
      if (!fingerprintCheckProc.running) fingerprintCheckProc.running = true
    }
-@@ -165,14 +186,42 @@ Item {
+@@ -169,14 +190,42 @@ Item {
    }
  
    function runWake() {
@@ -881,7 +881,7 @@ index 9ecb1cc0..6e1f703e 100644
    function submitPassword(value) {
      var password = String(value || "")
      if (!lockRequested || authenticatingPassword || password.length === 0) return
-@@ -269,6 +318,7 @@ Item {
+@@ -273,6 +322,7 @@ Item {
          id: lockView
          anchors.fill: parent
          backgroundPath: root.backgroundPath
@@ -889,7 +889,7 @@ index 9ecb1cc0..6e1f703e 100644
          backgroundVersion: root.backgroundVersion
          fingerprintConfigured: root.fingerprintConfigured
          authenticatingPassword: root.authenticatingPassword
-@@ -276,6 +326,8 @@ Item {
+@@ -280,6 +330,8 @@ Item {
          failedAttempts: root.failedAttempts
          inputEnabled: root.lockRequested
          loadBackground: root.locked
@@ -898,7 +898,7 @@ index 9ecb1cc0..6e1f703e 100644
          passwordText: root.enteredPassword
          onPasswordTextEdited: function(password) { root.enteredPassword = password }
          onSubmitPassword: function(password) { root.submitPassword(password) }
-@@ -299,6 +351,7 @@ Item {
+@@ -303,6 +355,7 @@ Item {
      LockView {
        anchors.fill: parent
        backgroundPath: root.backgroundPath
@@ -906,7 +906,7 @@ index 9ecb1cc0..6e1f703e 100644
        backgroundVersion: root.backgroundVersion
        fingerprintConfigured: root.fingerprintConfigured
        authenticatingPassword: false
-@@ -306,6 +359,7 @@ Item {
+@@ -310,6 +363,7 @@ Item {
        failedAttempts: 0
        inputEnabled: false
        loadBackground: root.previewVisible
@@ -914,7 +914,7 @@ index 9ecb1cc0..6e1f703e 100644
        passwordText: ""
      }
  
-@@ -368,9 +422,25 @@ Item {
+@@ -372,9 +426,25 @@ Item {
        onStreamFinished: {
          var next = String(text || "").trim()
          if (next !== root.backgroundPath) {
@@ -940,7 +940,7 @@ index 9ecb1cc0..6e1f703e 100644
        }
      }
    }
-@@ -411,6 +481,31 @@ Item {
+@@ -416,6 +486,31 @@ Item {
      command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
    }
  
@@ -972,7 +972,7 @@ index 9ecb1cc0..6e1f703e 100644
    Timer {
      id: idleBlankTimer
      interval: 5000
-@@ -467,6 +562,10 @@ Item {
+@@ -472,6 +567,10 @@ Item {
    Connections {
      target: Quickshell
      function onScreensChanged() {
@@ -985,7 +985,7 @@ index 9ecb1cc0..6e1f703e 100644
        // A monitor still coming up has no workspace, so cannot answer yet.
 diff --git a/shell/plugins/lock/poster.sh b/shell/plugins/lock/poster.sh
 new file mode 100755
-index 00000000..836d01f0
+index 000000000..836d01f06
 --- /dev/null
 +++ b/shell/plugins/lock/poster.sh
 @@ -0,0 +1,24 @@
@@ -1014,7 +1014,7 @@ index 00000000..836d01f0
 +
 +printf '%s\n' "$poster"
 diff --git a/shell/plugins/services/battery/Service.qml b/shell/plugins/services/battery/Service.qml
-index 37fdf5c7..a1b01cff 100644
+index 37fdf5c72..a1b01cfff 100644
 --- a/shell/plugins/services/battery/Service.qml
 +++ b/shell/plugins/services/battery/Service.qml
 @@ -12,6 +12,8 @@ Item {
@@ -1077,10 +1077,10 @@ index 37fdf5c7..a1b01cff 100644
 +  Component.onCompleted: root.refreshPowerProfile()
  }
 diff --git a/shell/shell.qml b/shell/shell.qml
-index 0cc0575d..0685d5e8 100644
+index e7df0006f..3b1c675bc 100644
 --- a/shell/shell.qml
 +++ b/shell/shell.qml
-@@ -883,6 +883,10 @@ ShellRoot {
+@@ -886,6 +886,10 @@ ShellRoot {
        _pluginBarEntryShellApis[entryKey].barConfig = shell.publicBarConfig()
    }
  

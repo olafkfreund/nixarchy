@@ -55,6 +55,7 @@
   wireplumber,
   # provides `wpctl`
   playerctl,
+  procps,
   bluez,
   bluez-tools,
   # provides `bluetoothctl`
@@ -236,6 +237,8 @@ let
     pulseaudio
     wireplumber
     playerctl
+    # pgrep: omarchy-hyprland-session-lock-stranded asks whether another locker runs
+    procps
     bluez
     bluez-tools
     networkmanager
@@ -602,12 +605,6 @@ stdenvNoCC.mkDerivation {
                         'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;' \
                         'google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium* | chromium*) ;;'
 
-                    # Why: pkgs/AGENTS.md#the-web-app-keybinding-upstream-breaks-and-the-one-word-fix
-                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-                      --replace-fail \
-                        'browser=$(xdg-settings get default-web-browser)' \
-                        'browser=$(env -u BROWSER xdg-settings get default-web-browser)'
-
                     # omarchy-launch-webapp and omarchy-launch-browser find the browser by
                     # reading its .desktop out of {~/.local,~/.nix-profile,/usr}/share/
                     # applications. On NixOS a system package's desktop file is under
@@ -925,12 +922,8 @@ stdenvNoCC.mkDerivation {
             # handing uwsm-app an --app= flag to run as a program. The message it
             # produced named the URL, which reads like the URL is at fault.
             substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-              --replace-fail 'exec setsid uwsm-app -- $(sed -n' \
-              'browser_bin=$(sed -n' \
-              --replace-fail "| head -1) --app=\"\$1\" \"\''${@:2}\"" \
-              '| head -1)
-
-        if [ -z "$browser_bin" ]; then
+              --replace-fail 'if ! omarchy-cmd-browser-handoff "$browser_exec"' \
+              'if [ -z "$browser_exec" ]; then
           echo "omarchy-launch-webapp: no browser found for $browser." >&2
           echo "Set one with: xdg-settings set default-web-browser <name>.desktop" >&2
           echo "Installed browsers:" >&2
@@ -941,7 +934,9 @@ stdenvNoCC.mkDerivation {
           exit 1
         fi
 
-        exec setsid uwsm-app -- "$browser_bin" --app="$1" "''${@:2}"'
+        if ! omarchy-cmd-browser-handoff "$browser_exec"' \
+              --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
+              'exec setsid uwsm-app -- "$browser_exec"'
 
             # Why: pkgs/AGENTS.md#the-browser-theme-policy-and-why-402-broke-it
             #
@@ -1292,7 +1287,19 @@ stdenvNoCC.mkDerivation {
                       #
                       # Only the filename changes; Name= still reads "Zoom", so the launcher
                       # shows what upstream shows.
-                      install -m644 "$desktop" "$out/share/applications/omarchy-$base"
+                      # omarchy-browser.desktop keeps its name: no package ships an entry
+                      # with Omarchy's own name, and mimeapps lists name it unprefixed.
+                      case "$base" in
+                        omarchy-browser.desktop) install -m644 "$desktop" "$out/share/applications/$base" ;;
+                        *) install -m644 "$desktop" "$out/share/applications/omarchy-$base" ;;
+                      esac
+                    done
+
+                    # Every entry a shipped mimeapps list names must exist, or links open nothing.
+                    for list in ${src}/config/*mimeapps.list; do
+                      for id in $(sed -n 's/^[^#=]*=//p' "$list" | tr ';' ' '); do
+                        [ -e "$out/share/applications/$id" ] || { echo "$list names $id, which is not installed" >&2; exit 1; }
+                      done
                     done
 
                     # The one place a shipped entry is named rather than merely launched.
@@ -1453,7 +1460,7 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-setup-security-fingerprint \
                       --replace-fail 'if omarchy-pkg-missing libfprint-git fprintd usbutils; then' \
                         'if ! command -v fprintd-enroll >/dev/null 2>&1; then' \
-                      --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 libfprint-git fprintd usbutils' \
+                      --replace-fail '  sudo pacman -S --needed --noconfirm --ask 4 -- libfprint-git fprintd usbutils' \
                         "$(cat ${./1304-guidance-setup-fingerprint.sh})"
 
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-timezone \
@@ -1999,30 +2006,6 @@ stdenvNoCC.mkDerivation {
                       "  hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-shell\")' >/dev/null" \
                       'fi')
                     substituteInPlace "$restartBin" --replace-fail "$relaunchOld" "$relaunchNew"
-
-                    # Why: pkgs/AGENTS.md#omarchy-restart-shell-waits-for-the-old-shell-to-be-gone-953
-                    killOld='while timeout 5 quickshell kill -p "$CONFIG_DIR" --any-display >/dev/null 2>&1; do :; done'
-                    killNew=$(printf '%s\n' \
-                      '# nixarchy CARRIED patch (#953): wait until no instance of this config remains.' \
-                      '# `timeout 5` gave up on a slow teardown, the launch below lost the race with' \
-                      '# the dying shell ("already running"), and the desktop was left with none.' \
-                      'exit_wait=''${OMARCHY_SHELL_EXIT_TIMEOUT:-60}' \
-                      'exit_deadline=$((SECONDS + exit_wait))' \
-                      '# Captured, not piped into grep -q: that can fail on a match (#1058).' \
-                      'while [[ $(quickshell list -p "$CONFIG_DIR" --any-display 2>/dev/null) == *"Process ID:"* ]]; do' \
-                      '  if (( SECONDS >= exit_deadline )); then' \
-                      '    echo "Omarchy shell did not exit within ''${exit_wait}s; not starting a second one." >&2' \
-                      '    exit 1' \
-                      '  fi' \
-                      '  timeout 5 quickshell kill -p "$CONFIG_DIR" --any-display >/dev/null 2>&1 || sleep 0.2' \
-                      'done')
-                    substituteInPlace "$restartBin" --replace-fail "$killOld" "$killNew"
-                    readyOld='for (( attempt = 0; attempt < 20; attempt++ )); do'
-                    readyNew=$(printf '%s\n' \
-                      '# nixarchy CARRIED patch (#953): a plugin-heavy shell takes 30-60 s to answer.' \
-                      'ready_deadline=$((SECONDS + ''${OMARCHY_SHELL_READY_TIMEOUT:-60}))' \
-                      'while (( SECONDS < ready_deadline )); do')
-                    substituteInPlace "$restartBin" --replace-fail "$readyOld" "$readyNew"
 
                     # Why: pkgs/AGENTS.md#omarchy-menu-close-never-starts-dictation-1070
                     menuBin=$out/share/omarchy/bin/omarchy-menu

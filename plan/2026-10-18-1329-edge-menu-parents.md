@@ -131,8 +131,6 @@ Traps:
 
   | break | expect |
   |---|---|
-  | break | expect |
-  |---|---|
   | B1: drop the guarded-parent skip from rule 1 | the build fails: `guarded parent remove.dictation was given an override by an earlier rule` |
   | B2: rename `trigger.herdr` back to `apps.herdr` | `menu-verbs`: `under an action: apps.herdr` |
   | B3: drop rule 3's skip **and** delete the parent rule (agy's case) | the edge menu's `remove.dictation.when` is `"false"`, by `jq` |

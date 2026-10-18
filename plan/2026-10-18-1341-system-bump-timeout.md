@@ -13,15 +13,17 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
    Branch protection's required contexts
    (`lint, omarchy, system, devenv-presets, box, install`) do not change.
 2. **`system-build`** keeps the toplevels, `coexistence`, the allowlisted
-   tools and box image, the system-closure push, `options`, **`session`** and
-   the cache budget. Of `system`'s checks only `session` and `options` pull in
-   `hypr-rdp` (`tests/session.nix:171`), so it is compiled once, here.
+   tools and box image, the system-closure push, **`session`** and the cache
+   budget. Of `system`'s checks only `session` builds `hypr-rdp`
+   (`tests/session.nix:171`), so it is compiled once, here.
 3. **`system-checks`** takes the MicroVM template and its push, the box
-   template, `integration`, `coexist`, `install-teardown`, `installer-ui`,
-   `try-nixarchy`, `dashboard-clock`, `installer-wizard` and `plugin`.
-4. **Both halves gain `box`'s step "/dev/kvm is real and writable, or fail
-   here"** (`build.yml:1736-1751`), after `Free disk space`. Today `system`'s
-   VM tests run under TCG.
+   template, **`options`** (it only evaluates whether the unit exists,
+   `tests/options.nix:1945-1953`), `integration`, `coexist`,
+   `install-teardown`, `installer-ui`, `try-nixarchy`, `dashboard-clock`,
+   `installer-wizard` and `plugin`.
+4. **No KVM step.** `system` already has KVM: `setup-nix`'s
+   `nix-installer-action` enables it (main's job 117701579179 logs
+   `kvm: true`).
 5. **The aggregator `system`** has `needs: [gate, system-build, system-checks]`,
    `if: ${{ !cancelled() }}`, and fails unless all three concluded `success`
    (#1134's shape; a skipped required check passes the gate, #1144).
@@ -29,11 +31,13 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
    so a timed-out half (`cancelled`) still reaches a human rather than Copilot.
 7. **Each half keeps `timeout-minutes: 45`** and today's per-commit
    concurrency group, named by job.
-8. **Verification is measured**, on a throwaway draft PR from a `test/`
-   branch: red `system-checks`, red `system-build`, and a timed-out half each
-   read `BLOCKED`, and `copilot-handoff.sh` hands off nothing for the timeout.
-   `session` is timed under KVM. **Stop before the real PR** if `system-build`
-   would still exceed ~35 minutes on a bump.
+8. **Verification is measured**, on a throwaway PR from a `test/` branch,
+   **ready for review, with `install` left to finish**, so every required
+   check but `system` is green when the merge state is read. A timed-out
+   `system-checks` and a red `system-build` each read `BLOCKED`, and
+   `copilot-handoff.sh` hands off nothing for the timeout. The real PR's green
+   run is the control. Estimates on a bump: `system-build` ~36,
+   `system-checks` ~28; only a real bump measures them.
 9. **A CI-gate change** (§11): the PR proposes it, a maintainer merges it.
    #1341 closes on the next nightly bump finishing without a re-run.
 
@@ -45,7 +49,7 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
   `system-build` builds them a second time for the budget: about +2 minutes,
   putting the TCG estimate at ~40.5. Moving the budget to `system-checks`
   instead would rebuild `hypr-rdp` there (10 minutes), which is worse. The
-  stop rule in step 4 counts the +2.
+  spec's ~36 counts the +2.
 - **The stub `gh` in `tests/copilot-handoff/gh` ignores `-q`.** It prints the
   already-filtered job name, so a change to the jq filter cannot make
   `checks.copilot-handoff` fail. Step 2 makes the stub apply `-q` to a JSON
@@ -56,7 +60,7 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
 
 ## Who does what
 
-Four files change across three editing steps, so the coder (Sonnet) does steps
+Six files change across three editing steps, so the coder (Sonnet) does steps
 1–3, one `SendMessage` per step. The lead does 4–6, every commit and push, and
 runs every build (§6 tiers).
 
@@ -70,26 +74,25 @@ runs every build (§6 tiers).
   setup verbatim: `needs: gate`, `if: ${{ !cancelled() }}`,
   `runs-on: ubuntu-latest`, `timeout-minutes: 45`, a concurrency group with
   `-system-checks-`, then the steps through `Free disk space`
-  (`:1352-1392`): the gate's "cannot pass" step, "Nothing here can affect a
+  (`:1352-1391`): the gate's "cannot pass" step, "Nothing here can affect a
   build", `checkout`, `setup-nix`, and the pull-only `cachix-action` with its
   comments. The long `timeout-minutes` and concurrency comments stay on
   `system-build` only; `system-checks` gets one line pointing at them.
-- **Add box's KVM step** (`:1736-1751`, comment and all five checks) to both
-  halves, right after `Free disk space`. In each copy, the comment's "this
-  job" stays true.
 - **Move** these steps, comments included, from `system-build` to
   `system-checks`, keeping their order:
   - "Read a MicroVM runner without booting it" (`:1439`),
     "Push the MicroVM template runners to cachix" (`:1449`) and
     "Read a box template without pulling it online" (`:1461`);
-  - the run from "Build onto a config that already exists" (`:1614`) through
-    "Add third-party plugins from real repos" (`:1667-1675`): `integration`,
-    `coexist`, `install-teardown`, `installer-ui`, `try-nixarchy`,
-    `dashboard-clock`, `installer-wizard`, `plugin`.
+  - the run from the comment above "Check every option both ways"
+    (`:1482-1612`, its comment block "Both of these were written after…"
+    included) through "Add third-party plugins from real repos"
+    (`:1667-1674`): `options`, `integration`, `coexist`, `install-teardown`,
+    `installer-ui`, `try-nixarchy`, `dashboard-clock`, `installer-wizard`,
+    `plugin`. Read `:1474-1485` first and move only the comment that belongs
+    to `options`.
 
-  "Drive a session and the app-selection loop" (`:1474`), "Check every option
-  both ways" (`:1485`) and "The cache allowlist fits its budget" (`:1676`)
-  stay in `system-build`.
+  "Drive a session and the app-selection loop" (`:1474`) and "The cache
+  allowlist fits its budget" (`:1676`) stay in `system-build`.
 - **Add the aggregator** after `system-checks`:
   ```yaml
   # The required context. Two halves since #1341, so a nixpkgs bump, which has
@@ -113,23 +116,26 @@ runs every build (§6 tiers).
 - **Comments:**
   - the `timeout-minutes` comment (`:1310-1317`) gains one paragraph: a
     nixpkgs bump has no proofs, so `system` ran ~50 minutes and timed out
-    (#1332); since #1341 it is two halves, split by what needs `hypr-rdp`,
-    both on KVM.
-  - the concurrency comment's measured table (`:1326-1329`) is history; leave
+    (#1332); since #1341 it is two halves, split by what builds `hypr-rdp`.
+  - the concurrency comment's measured table (`:1331-1333`) is history; leave
     it.
   - `box`'s comment (`:1695-1697`): "that job's 30-minute budget is already
     mostly spent, and this needs /dev/kvm arranged first, which no step there
-    does" is stale twice. Replace it with: it needs its own budget, and its
-    KVM step is the one both `system` halves copied (#1341).
+    does" is stale (the budget is 45, and `setup-nix` provides KVM). Replace
+    it with one line: its own job, with its own budget and an explicit KVM
+    assertion.
+- `.github/scripts/already-proven.sh:20` and `build-unless-proven.sh:11`:
+  "`system`'s timeout comment" / "The `system` job's timeout comment" name
+  `system-build`.
 
 Verify:
 - `nix run nixpkgs#actionlint -- .github/workflows/build.yml` is clean.
 - `grep -c 'build-unless-proven.sh .#checks.x86_64-linux' .github/workflows/build.yml`
   is unchanged from `main`.
 - Every check named in the old `system` job appears exactly once across the
-  two halves: diff the sorted `checks.x86_64-linux.<name>` lists of old
-  `system` (`git show origin/main:.github/workflows/build.yml`) against the
-  union of the halves.
+  two halves: compare `sort | uniq -c` of the `checks.x86_64-linux.<name>`
+  lists of old `system` (`git show origin/main:.github/workflows/build.yml`)
+  and of the two halves together (not `sort -u`, which hides a duplicate).
 - `grep -n 'needs:.*system' .github/workflows/*.yml` names only the
   aggregator.
 
@@ -175,46 +181,44 @@ Traps:
 
 - `docs/internals/workflows.md:103-107`: `system` is now `system-build` and
   `system-checks` plus an aggregator named `system`. Say what each half runs,
-  that both have `/dev/kvm`, and why (#1341). One short paragraph.
+  and why (#1341). One short paragraph.
 - `AGENTS.md:583`: "`cache-budget.sh` fails the `system` job" becomes the
   `system-build` job. Leave `:294`, which is history. (`CLAUDE.md` is a
   symlink to `AGENTS.md`; edit `AGENTS.md`.)
 
-### 4. [lead] Throwaway PR: blocking, the timeout, and `session` under KVM
+### 4. [lead] Throwaway PR: the aggregator blocks
 
 When `gh run list --limit 8 --json status -q '[.[]|select(.status!="completed")]|length'`
-prints `0`: `git worktree add --detach /mnt/data/vmtest/wt-1341-test`, push
-three runs to `test/1341-throwaway` from it, as a **draft** PR. Cancel each
-run's `install check` as soon as it starts (§13). Wait for each run to end
-before the next push, since a push cancels the previous run.
+prints `0`: `git worktree add --detach /mnt/data/vmtest/wt-1341-test`, and push
+two runs to `test/1341-throwaway` from it, as a PR **marked ready for review**
+(a draft reads `DRAFT`). Let `install check` finish: a cancelled required
+check blocks on its own, which would make the reading meaningless. Wait for
+each run to end before the next push, since a push cancels the previous run.
 
 | run | change on top of the branch | record |
 |---|---|---|
-| A | `exit 1` as a new first step of `system-checks`; touch a comment in `tests/session.nix` | `mergeStateStatus` `BLOCKED`; `system` names `system-checks`; `system-build`'s total and the `session` step's duration under KVM |
-| B | `exit 1` as a new first step of `system-build` | `BLOCKED`; `system` names `system-build` |
-| C | `system-checks` with `timeout-minutes: 1` and a first step `sleep 120` | `BLOCKED`; `system-checks` `cancelled` with the "exceeded the maximum execution time" annotation; `RUN_ID=<C> REPO=olafkfreund/nixarchy BRANCH=test/1341-throwaway DRY_RUN=1 .github/scripts/copilot-handoff.sh` prints `not handed off` |
+| C | `system-checks` with `timeout-minutes: 1` and a first step `sleep 120` | `gh pr checks --required` green but `system`; `mergeStateStatus` `BLOCKED`; `system-checks` `cancelled` with the "exceeded the maximum execution time" annotation; `RUN_ID=<C> REPO=olafkfreund/nixarchy BRANCH=test/1341-throwaway DRY_RUN=1 .github/scripts/copilot-handoff.sh` prints `not handed off` |
+| B | `exit 1` as a new first step of `system-build` | required checks green but `system`; `BLOCKED`; `system` names `system-build` |
 
-Then close the PR, delete the branch, and remove the worktree.
-
-**The stop rule.** The bump estimate for `system-build` is 38.5 (the spec's
-TCG total) − 9.8 (`session` under TCG) + 2 (the runners for the budget) + run
-A's `session` under KVM. If that exceeds 35, stop and report to the user
-before step 5; the spec needs another revision.
+Then close the PR, delete the branch, and remove the worktree. If a reading
+is not as expected, stop and report before step 5.
 
 ### 5. [lead] Timing on the real PR
 
 The PR's own run gives both halves' durations. Record them in the PR body
-with run A's measurements, next to the spec's estimates.
+next to the spec's estimates (~36 and ~28 on a bump; a normal PR substitutes
+`hypr-rdp`, so it is well under those). The control: this run reads `CLEAN`
+or `UNSTABLE` with `system` green.
 
 ### 6. [lead] PR
 
 - `git merge origin/main` into the branch (no rebase: the branch is pushed,
   and there is no force-push). Check `git merge-base origin/main HEAD` is
   `main`'s head and the diff against it lists only this plan's files.
-- Title: `The system check runs in two parallel halves on KVM, so a nixpkgs
+- Title: `The system check runs in two parallel halves, so a nixpkgs
   bump fits the 45-minute limit (#1341)`. The squash uses it.
 - Body: links intent, spec and plan; says the coder did steps 1–3; includes
-  run A/B/C's merge states, the timings, the copilot-handoff failing output;
+  runs C and B's merge states, the timings, the copilot-handoff failing output;
   says it changes a CI gate for a maintainer to merge; `Refs #1341` (it
   closes after the next nightly bump finishes without a re-run). No skip-CI
   marker in its literal form (§8). Check `closingIssuesReferences` is empty.
@@ -228,10 +232,9 @@ with run A's measurements, next to the spec's estimates.
 | `build-unless-proven` count | unchanged from main |
 | check list, old `system` vs the halves | identical |
 | `checks.copilot-handoff` | passes; fails with the exclusion removed |
-| run A | `BLOCKED`, `system` names `system-checks`, KVM timings recorded |
-| run B | `BLOCKED`, `system` names `system-build` |
-| run C | `BLOCKED`, half `cancelled` by timeout, handoff `not handed off` |
-| the PR's own run | `system-build`, `system-checks`, `system` green |
+| run C | other required green; `BLOCKED`; half `cancelled` by timeout; handoff `not handed off` |
+| run B | other required green; `BLOCKED`; `system` names `system-build` |
+| the PR's own run | all green; `CLEAN` or `UNSTABLE` |
 | next nightly bump | both halves finish, no re-run |
 
 ## Rollback

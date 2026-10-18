@@ -44,6 +44,12 @@ So edge is stuck without #1313's fix, and everything merged since: #1306,
 - Checks that name these ids: `menu-verbs`, `menu-guards`, `options`, the
   session check's menu probes, and `tests/demo/` scenes (§4).
 
+Found in review (agy): if the generator just skips a parent row, a third rule
+(`modules/apps.nix:1147`, `PKG_GUARD`) sets `when = "false"` on any Remove row
+guarded by `omarchy-pkg-present`, and that would hide the whole Dictation
+submenu. So the parent's `when` still has to be rewritten. The pkg-present
+rule also reads only the first package in an `||` guard.
+
 ## Constraints
 
 - Stable and Mode A must not regress. `checks.options` asserts every option in
@@ -57,8 +63,13 @@ So edge is stuck without #1313's fix, and everything merged since: #1306,
 
 ## Open questions
 
-1. What to name the new submenu, and where it sits. My suggestion is a
-   top-level "Nixarchy" (id `nixarchy`), next to Apps.
+1. Where the five rows go. Two candidates:
+   - **Trigger** (`trigger.*`), my recommendation, from agy's review. It is
+     where nixarchy already puts its other two panels, Boxes and Sandbox
+     (`trigger.box` and `trigger.vm`, `modules/apps.nix:791,807`). Trigger has
+     no action on v4.0.5 or on quattro, so no new top-level row is needed.
+   - A new top-level **Nixarchy** row, which needs its own label and icon, and
+     a place in the root menu.
 2. Both channels, or quattro only? I recommend both. Quattro becomes stable,
    one code path is simpler, and stable's Apps provider list does not need our
    rows mixed in.

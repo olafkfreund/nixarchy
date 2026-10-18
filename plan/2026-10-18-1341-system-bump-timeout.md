@@ -220,7 +220,7 @@ is not as expected, stop and report before step 5.
 ### 5. [lead] Timing on the real PR
 
 The PR's own run gives both halves' durations. Record them in the PR body
-next to the spec's estimates (~36 and ~28 on a bump; a normal PR substitutes
+next to the spec's estimates (~36 and ~38 on a bump; a normal PR substitutes
 `hypr-rdp`, so it is well under those). The control: this run reads `CLEAN`
 or `UNSTABLE` with `system` green.
 

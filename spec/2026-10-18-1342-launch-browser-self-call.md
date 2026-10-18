@@ -93,7 +93,7 @@ defaults).
   the script's check has a symlink case.
 - **A user's own `mimeapps.list`** (Home Manager's `xdg.mimeApps`, as on
   p620) is a different file and untouched.
-- **Mode A:** without `programs.nixarchy`, the seed and the unit are not
+- **Mode A:** without `programs.nixarchy`, the seed and the hook are not
   there, as today.
 
 ## Alternatives rejected

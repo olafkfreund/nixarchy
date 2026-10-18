@@ -267,6 +267,10 @@ argument inside the `installPhase` string re-flows the whole phase under
   only, drafts in the spec's appendix); search ancestors (a feature request);
   PageUp and AltGr/IME (fixed on quattro, which stable gets at its next bump).
 
+nixarchy-menu and nixi import this same patched `MenuModel.js` through
+`modules/home.nix` (#1314), and `checks.menu-model-merge` runs the harness on
+all three.
+
 Checks: `checks.menu-model-merge` (node over the built `MenuModel.js`) and
 `checks.menu-keys` (the real `Menu.qml`, headless; see `tests/AGENTS.md`).
 

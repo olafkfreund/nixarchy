@@ -1186,13 +1186,11 @@ let
                 missing.append(row_id)
                 continue
             merged = dict(override)
-            # Carry across EVERY key the override does not state. MenuModel.js
-            # normalizes an entry before merging -- label falls back to the id,
-            # and every other field to "" -- and then copies all of the
-            # override's keys over the default. So an override that omits a
-            # key does not inherit upstream's, it blanks it: omitting `label`
-            # renders the raw id, and omitting `action` makes the row do
-            # nothing at all. Only a full row is safe to hand back.
+            # Carry across EVERY key the override does not state: `full.update`
+            # below REPLACES upstream's row in the defaults file, and nothing
+            # merges the two afterwards. Omitting `label` would render the raw
+            # id, and omitting `action` would leave a row that does nothing.
+            # So this is structural, not a workaround for #1305 (#1315).
             if base:
                 for key, value in base.items():
                     if key not in merged and value not in ("", [], None):

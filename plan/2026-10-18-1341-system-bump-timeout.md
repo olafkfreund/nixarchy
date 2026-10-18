@@ -14,11 +14,11 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
    (`lint, omarchy, system, devenv-presets, box, install`) do not change.
 2. **`system-build`** keeps the toplevels, `coexistence`, the allowlisted
    tools and box image, the system-closure push, **`session`** and the cache
-   budget. Of `system`'s checks only `session` builds `hypr-rdp`
-   (`tests/session.nix:171`), so it is compiled once, here.
+   budget.
 3. **`system-checks`** takes the MicroVM template and its push, the box
-   template, **`options`** (it only evaluates whether the unit exists,
-   `tests/options.nix:1945-1953`), `integration`, `coexist`,
+   template, a new step `nix build --no-link .#hypr-rdp`, **`options`** (whose
+   `rdpExecStart`, `tests/options.nix:3464-3465`, makes `hypr-rdp` a build
+   input), `integration`, `coexist`,
    `install-teardown`, `installer-ui`, `try-nixarchy`, `dashboard-clock`,
    `installer-wizard` and `plugin`.
 4. **No KVM step.** `system` already has KVM: `setup-nix`'s
@@ -37,7 +37,8 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
    `system-checks` and a red `system-build` each read `BLOCKED`, and
    `copilot-handoff.sh` hands off nothing for the timeout. The real PR's green
    run is the control. Estimates on a bump: `system-build` ~36,
-   `system-checks` ~28; only a real bump measures them.
+   `system-checks` ~38 (it compiles `hypr-rdp` too); only a real bump
+   measures them. A normal PR substitutes `hypr-rdp` in both.
 9. **A CI-gate change** (§11): the PR proposes it, a maintainer merges it.
    #1341 closes on the next nightly bump finishing without a re-run.
 
@@ -46,8 +47,8 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
 - **The budget step builds the MicroVM runners.** `cache-budget.sh` realises
   every `cache-allowlist.sh` entry (`:34-40`), the `runners` group included.
   After the split those are built in `system-checks`, so on a bump
-  `system-build` builds them a second time for the budget: about +2 minutes,
-  putting the TCG estimate at ~40.5. Moving the budget to `system-checks`
+  `system-build` builds them a second time for the budget: about +2 minutes.
+  Moving the budget to `system-checks`
   instead would rebuild `hypr-rdp` there (10 minutes), which is worse. The
   spec's ~36 counts the +2.
 - **The stub `gh` in `tests/copilot-handoff/gh` ignores `-q`.** It prints the
@@ -60,7 +61,7 @@ spec: spec/2026-10-18-1341-system-bump-timeout.md
 
 ## Who does what
 
-Six files change across three editing steps, so the coder (Sonnet) does steps
+Eight files change across three editing steps, so the coder (Sonnet) does steps
 1–3, one `SendMessage` per step. The lead does 4–6, every commit and push, and
 runs every build (§6 tiers).
 
@@ -83,13 +84,22 @@ runs every build (§6 tiers).
   - "Read a MicroVM runner without booting it" (`:1439`),
     "Push the MicroVM template runners to cachix" (`:1449`) and
     "Read a box template without pulling it online" (`:1461`);
-  - the run from the comment above "Check every option both ways"
-    (`:1482-1612`, its comment block "Both of these were written after…"
-    included) through "Add third-party plugins from real repos"
-    (`:1667-1674`): `options`, `integration`, `coexist`, `install-teardown`,
-    `installer-ui`, `try-nixarchy`, `dashboard-clock`, `installer-wizard`,
-    `plugin`. Read `:1474-1485` first and move only the comment that belongs
-    to `options`.
+  - the run `:1482-1674`, from the comment "Both of these were written
+    after…" through "Add third-party plugins from real repos": `options`
+    (`:1485`), `integration`, `coexist`, `install-teardown`, `installer-ui`,
+    `try-nixarchy`, `dashboard-clock`, `installer-wizard`, `plugin`. The
+    comment at `:1482-1484` belongs to `integration` and `coexist`
+    (dbd9010b), not `options`: put it back directly above "Build onto a
+    config that already exists".
+- **Add** before `options` in `system-checks`:
+  ```yaml
+      # checks.options takes hypr-rdp as a build input (its ExecStart). Built
+      # first so a bump's 447-crate compile is not in the options step's
+      # time, which is the trend #747 and #1150 read. Substituted on a PR.
+      - name: Build hypr-rdp, which checks.options needs
+        if: needs.gate.outputs.relevant == 'true'
+        run: nix build --no-link .#hypr-rdp
+  ```
 
   "Drive a session and the app-selection loop" (`:1474`) and "The cache
   allowlist fits its budget" (`:1676`) stay in `system-build`.
@@ -124,6 +134,10 @@ runs every build (§6 tiers).
     does" is stale (the budget is 45, and `setup-nix` provides KVM). Replace
     it with one line: its own job, with its own budget and an explicit KVM
     assertion.
+- `:1414-1419` (tools step comment): "checks.options pulls it in further
+  down" and "Free in this job, which builds it either way" become
+  `checks.session`.
+- `:1552`: "a red `system` job" becomes "a red `system-checks` job".
 - `.github/scripts/already-proven.sh:20` and `build-unless-proven.sh:11`:
   "`system`'s timeout comment" / "The `system` job's timeout comment" name
   `system-build`.

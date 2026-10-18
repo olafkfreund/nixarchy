@@ -1468,13 +1468,16 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     # Cap and concurrency group as system-build: see the comments there (#1341).
-    timeout-minutes: 45
+    timeout-minutes: 1
     concurrency:
       group: >-
         ${{ github.workflow }}-system-checks-${{ github.ref }}-${{
           github.ref == 'refs/heads/main' && github.sha || 'shared' }}
       cancel-in-progress: false
     steps:
+      - name: THROWAWAY (#1341) time out this half
+        run: sleep 120
+
       - name: The gate did not succeed, so this check cannot pass
         if: needs.gate.result != 'success'
         run: |

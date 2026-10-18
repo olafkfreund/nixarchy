@@ -236,7 +236,7 @@ jobs:
           # Not options: it peaks near 11.5 GB, and beside the quickshell build
           # edge needs it lost a 16 GB hosted runner mid-run (#1278). It runs in
           # verify, on p620, after the idle wait (CLAUDE.md section 6).
-          for c in menu-verbs bin-ledger skill-parity panel-loaders review-pins stable-eval; do
+          for c in menu-verbs menu-actions bin-ledger skill-parity panel-loaders review-pins stable-eval; do
             try "$c" nix build ".#checks.x86_64-linux.$c" --print-build-logs
           done
           echo "failed=${failed# }" >> "$GITHUB_OUTPUT"

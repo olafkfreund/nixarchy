@@ -178,25 +178,30 @@ installs, it does not enable". **nixarchy.pkg**, the package manager panel, is
 installed wherever nixarchy is, turned on at your first login, and opened from
 **Install ▸ Packages** or, on a new install, **Super+Alt+N**. **nixarchy.podman**,
 the Podman panel, follows podman rather than nixarchy: it comes with the Podman
-service row or with boxes, opens from **Apps ▸ Podman** or **Super+Alt+O**, and
+service row or with boxes, opens from **Trigger ▸ Podman** or **Super+Alt+O**, and
 is absent where podman is off (the key then says the panel is not installed).
 
 The GitLab pipelines panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui))
 is the same: installed with `glab`, on at your first login, opened from
-**Apps ▸ GitLab Pipelines** or **Super+Alt+P** (its keys: **Super+Ctrl+Alt+P**).
+**Trigger ▸ GitLab Pipelines** or **Super+Alt+P** (its keys: **Super+Ctrl+Alt+P**).
 It needs `glab auth login` once; until then it says so and stops polling.
 If you ran the panel before nixarchy shipped it, its own `register` may have
 written `apps.gitlab-pipelines` and `learn.gitlab-pipelines-keybindings` into
 `~/.config/omarchy/extensions/omarchy-menu.jsonc`. Your file wins over
 nixarchy's rows, so delete those two keys to get nixarchy's.
+Since #1329 nixarchy's Dev environments, GitHub Actions, GitLab Pipelines,
+Herdr and Podman rows are under Trigger, so an `apps.*` key of theirs in your
+extension file, whether a panel's `register` wrote it or you pasted the panel's
+own `share/omarchy-menu.jsonc` snippet, only adds a second row under Apps, and
+on quattro that row cannot be browsed to.
 The GitHub Actions panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui))
-is its GitHub twin: installed with `gh`, opened from **Apps ▸ GitHub Actions**
+is its GitHub twin: installed with `gh`, opened from **Trigger ▸ GitHub Actions**
 or **Super+Alt+A** (its keys: **Super+Ctrl+Alt+A**), and it needs
 `gh auth login` once. The same two keys apply, as `apps.github-actions` and
 `learn.github-actions-keybindings`.
 The herdr sessions widget ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr))
 sits in the bar's right section with `herdr` itself, on at your first login,
-and opens from **Apps ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
+and opens from **Trigger ▸ Herdr** or **Super+Alt+H**. `herdr update` cannot
 write to the Nix store: update herdr with nixpkgs, or put your own build ahead
 of it on `PATH`.
 The Gliff-Manager widget ([nixarchy-gliff-manager](https://github.com/olafkfreund/nixarchy-gliff-manager))

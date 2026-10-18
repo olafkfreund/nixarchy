@@ -486,7 +486,7 @@ installed host whether or not podman is on, is **5.2 MiB**, mostly docs images.
 
 Not in `checks`, like nixarchy-pkg: `validatedPlugins` validates it in every
 home that installs it, and `checks.menu-verbs` builds a machine with boxes, so
-podman is on there and the Apps ▸ Podman row's id is checked against its
+podman is on there and the Trigger ▸ Podman row's id is checked against its
 manifest.
 
 **Bumping the pin.** As nixarchy-pkg's, with two differences: the branch is

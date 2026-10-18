@@ -418,7 +418,7 @@ let
         # The GitLab pipelines panel (#770). nixarchy declares these rows and
         # its copy carries `menu.managed`, so the panel does not also write
         # them into the user's menu extension file.
-        "apps.gitlab-pipelines" = {
+        "trigger.gitlab-pipelines" = {
           icon = "";
           label = "GitLab Pipelines";
           action = "nixarchy-plugin olafkfreund.gitlab-pipelines";
@@ -439,7 +439,7 @@ let
         };
 
         # The GitHub Actions panel (#772), the same way.
-        "apps.github-actions" = {
+        "trigger.github-actions" = {
           icon = "";
           label = "GitHub Actions";
           action = "nixarchy-plugin olafkfreund.github-actions";
@@ -461,7 +461,7 @@ let
 
         # The herdr sessions widget (#771): its sessions in the bar, and the
         # sheet of keys that only exist while its menu has the keyboard.
-        "apps.herdr" = {
+        "trigger.herdr" = {
           icon = "";
           label = "Herdr";
           action = "nixarchy-plugin nixarchy.herdr";
@@ -750,7 +750,7 @@ let
         # The Dev environments panel (#802). The helper rather than a bare
         # toggle, as install.packages: an off plugin is named, not toggled,
         # and `when` hides the row once it is turned off.
-        "apps.devenv" = {
+        "trigger.devenv" = {
           icon = "󱄅";
           label = "Dev environments";
           action = "nixarchy-plugin nixarchy.devenv";
@@ -768,7 +768,7 @@ let
         # The helper, as install.packages: an off plugin is named, not toggled.
         # No `docker` alias, unlike the plugin's own snippet: where the engine is
         # Docker, searching "docker" must not open a podman panel.
-        "apps.podman" = {
+        "trigger.podman" = {
           icon = "";
           label = "Podman";
           action = "nixarchy-plugin nixarchy.podman";
@@ -1086,12 +1086,18 @@ let
         # Upstream's `omarchy-pkg-*` guards, which the menu answers from the PATH (#1301).
         PKG_GUARD = re.compile(r"\bomarchy-pkg-(present|missing)\b")
 
+        # A Remove row upstream made a submenu is browsed into, so no rule gives it an action (#1329).
+        def guarded_parent(row_id, row):
+            return (row_id.startswith("remove.") and PKG_GUARD.search(str(row.get("when", "")))
+                    and any(k.startswith(row_id + ".") for k in upstream))
+
         # Upstream's remove.* rows name their app only in their `when`, as
         # `omarchy-pkg-present <arch-package>`. Deriving the overrides from
         # that keeps them tracking upstream instead of being hand-listed here,
         # and means a row upstream adds is picked up on the next bump.
         for row_id, row in upstream.items():
-            if not row_id.startswith("remove.") or row_id in overrides:
+            if (not row_id.startswith("remove.") or row_id in overrides
+                    or guarded_parent(row_id, row)):
                 continue
             m = re.search(r"omarchy-pkg-present\s+([a-z0-9._@+-]+)", str(row.get("when", "")))
             if not m:
@@ -1113,8 +1119,9 @@ let
         # A Remove row whose Install sibling nixarchy rewired to the selection
         # undoes it the same way, whatever upstream's `when` spelled (#1304).
         # Runs after the pkg-present rule, so rows that rule mapped keep theirs.
-        for row_id in list(upstream):
-            if not row_id.startswith("remove.") or row_id in overrides:
+        for row_id, row in list(upstream.items()):
+            if (not row_id.startswith("remove.") or row_id in overrides
+                    or guarded_parent(row_id, row)):
                 continue
             sibling = overrides.get("install." + row_id[len("remove."):], {})
             m = re.fullmatch(
@@ -1144,8 +1151,29 @@ let
         # a row it overrides is in `overrides` and this leaves it alone.
         for row_id, row in upstream.items():
             if (row_id.startswith("remove.") and row_id not in overrides
-                    and PKG_GUARD.search(str(row.get("when", "")))):
+                    and PKG_GUARD.search(str(row.get("when", "")))
+                    and not guarded_parent(row_id, row)):
                 overrides[row_id] = {"when": "false"}
+
+        # A guarded parent shows when any direct child does, and keeps no action (#1329).
+        for row_id, row in upstream.items():
+            if not guarded_parent(row_id, row):
+                continue
+            if row_id in overrides:
+                sys.exit(f"guarded parent {row_id} was given an override by an earlier rule")
+            whens = []
+            for k, child in upstream.items():
+                if k.startswith(row_id + ".") and "." not in k[len(row_id) + 1:]:
+                    whens.append(overrides[k]["when"] if "when" in overrides.get(k, {})
+                                 else str(child.get("when", "")))
+            visible = [w for w in whens if w != "false"]
+            if not visible:
+                when = "false"
+            elif "" in visible:
+                when = "true"
+            else:
+                when = " || ".join("( " + w + " )" for w in visible)
+            overrides[row_id] = {"when": when}
 
         out = {}
         missing = []
@@ -3635,7 +3663,7 @@ in
                     nixarchy apply              Copy the selection into your flake and rebuild
                     nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
                     nixarchy dev list --json    Every devenv project under your roots
-                                                The panel is Super+Alt+E, or Apps > Dev environments
+                                                The panel is Super+Alt+E, or Trigger > Dev environments
                     nixarchy try <app|attr>     Run something once without installing it
                     nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                     nixarchy doctor             What this machine needs to run nixarchy

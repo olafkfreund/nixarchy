@@ -265,11 +265,6 @@
     class = "patch";
     reason = "It looks in /usr/share/vulkan/icd.d, which does not exist on NixOS -- hardware.graphics puts the ICD manifests under /run/opengl-driver -- so it answered no Vulkan on every machine.";
   };
-  "omarchy-install-ai-hermes" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service before reinstalling; stopping a user unit is session state and carries no configuration.";
-    allow = "systemctl-user";
-  };
   "omarchy-install-font" = {
     class = "replace";
     reason = "Upstream runs `omarchy-pkg-add <package> && sleep 2 && omarchy-font-set`, so the && meant the switch never ran either. Asks fontconfig first, and defers to omarchy-pkg-add only if the family is absent; on the missing-font path with no terminal it reopens itself in one (#1304).";
@@ -282,6 +277,16 @@
     class = "vendor";
     reason = "Vendored unchanged. Blacklists xpad in /etc/modprobe.d, loads hid_xpadneo, and adds $USER to the input group. All three are declarative here -- boot.blacklistedKernelModules, boot.kernelModules and extraGroups -- so the imperative run does not survive a rebuild.";
     allow = "account-tools etc-write modprobe";
+  };
+  "omarchy-install-hermes-cli" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service on --now only; stopping a user unit is session state and carries no configuration.";
+    allow = "systemctl-user";
+  };
+  "omarchy-install-openclaw-cli" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Stops, disables and queries the openclaw-<role> user units it installed; user-unit state, not configuration.";
+    allow = "systemctl-user";
   };
   "omarchy-install-preinstalls" = {
     class = "replace";
@@ -334,7 +339,7 @@
   };
   "omarchy-launch-webapp" = {
     class = "patch";
-    reason = "Four edits: the desktop-file search paths, the chromium-browser.desktop fallback name, `chromium*` added to the browser case, and `env -u BROWSER` around xdg-settings -- the last upstream's own bug.";
+    reason = "Four edits: the desktop-file search paths, the chromium-browser.desktop fallback name, `chromium*` added to the browser case, and the no-browser message. The `env -u BROWSER` edit went in 4.0.5: upstream's omarchy-cmd-default-browser does it now.";
   };
   "omarchy-menu" = {
     class = "patch";
@@ -544,7 +549,7 @@
   };
   "omarchy-restart-shell" = {
     class = "patch";
-    reason = "Resolve the running tree before stopping the shell, then launch the current-system tree through its absolute launcher path. Neither stopping nor relaunching depends on an inherited OMARCHY_PATH or PATH. Keep the bounded teardown and readiness waits (#953).";
+    reason = "Resolve the running tree before stopping the shell, then launch the current-system tree through its absolute launcher path. Neither stopping nor relaunching depends on an inherited OMARCHY_PATH or PATH.";
     allow = "systemctl-user";
   };
   "omarchy-restart-trackpad" = {

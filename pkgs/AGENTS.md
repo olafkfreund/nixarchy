@@ -142,7 +142,13 @@ The same line therefore goes into the store file, after
 `hyprctl`. That is the only layer that can see "saved but never loaded" (§2).
 <a id="omarchy-restart-shell-waits-for-the-old-shell-to-be-gone-953"></a>
 
-### omarchy-restart-shell waits for the old shell to be gone (#953)
+### omarchy-restart-shell waits for the old shell to be gone (#953) (retired in v4.0.5)
+
+**Retired 2026-10-18.** v4.0.5 waits for the old shell itself: it kills with
+`timeout 30`, waits up to 30 s on `quickshell list -a -j`, then launches with a
+60 s readiness deadline. The patch and both knobs
+(`OMARCHY_SHELL_EXIT_TIMEOUT`, `OMARCHY_SHELL_READY_TIMEOUT`) were deleted, and
+`checks.shell-restart-race` now guards upstream's wait. What follows is history.
 
 A CARRIED patch, not reported upstream (the owner's decision). Upstream stops
 the running shell with:
@@ -1005,6 +1011,9 @@ that patch and still match here.
 
 <a id="every-web-app-failed-with"></a>
 ## Every web app failed with
+
+*Update, 4.0.5:* the `env -u BROWSER` edit described below was dropped;
+upstream's `omarchy-cmd-default-browser` does it now.
 
 Moved here from `pkgs/omarchy/default.nix`'s install phase, which has a byte budget (`checks.install-phase-budget`, #948).
 

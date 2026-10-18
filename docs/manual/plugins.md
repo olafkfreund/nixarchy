@@ -26,13 +26,13 @@ machine use the menu row, or copy the line from a fresh install.
 |---|---|---|---|
 | [Package manager](#package-manager) | apps, services, packages and options | **on by default** | Install ▸ Packages · Super+Alt+N <!-- nixarchy.pkg --> |
 | [Flatpak and Snap](#flatpak-and-snap) | apps nixpkgs does not carry, from Flathub or the Snap Store | **on by default** | Install ▸ Flatpak & Snap <!-- nixarchy.flatsnap --> |
-| [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Apps ▸ Podman · Super+Alt+O <!-- nixarchy.podman --> |
-| [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Apps ▸ GitLab Pipelines · Super+Alt+P <!-- olafkfreund.gitlab-pipelines --> |
-| [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Apps ▸ Herdr · Super+Alt+H <!-- nixarchy.herdr --> |
+| [Podman](#podman) | containers, images, volumes, networks | **on wherever podman is** | Trigger ▸ Podman · Super+Alt+O <!-- nixarchy.podman --> |
+| [GitLab pipelines](#gitlab-pipelines) | CI for every project you belong to | **on by default** | Trigger ▸ GitLab Pipelines · Super+Alt+P <!-- olafkfreund.gitlab-pipelines --> |
+| [Herdr sessions](#herdr-sessions) | your herdr sessions and their agents | **on by default** | bar (right) · Trigger ▸ Herdr · Super+Alt+H <!-- nixarchy.herdr --> |
 | [MicroVMs](#microvms) | disposable and permanent VMs, one list | **on by default** | Trigger ▸ Sandbox · Super+Alt+V <!-- nixarchy.microvm --> |
 | [Distrobox](#distrobox) | boxes, created from nixarchy's templates | **on wherever Boxes are** | Trigger ▸ Boxes · Super+Alt+D <!-- nixarchy.distrobox --> |
-| [Dev environments](#dev-environments) | the per-project environments on this machine | **on wherever devenv is** | Apps ▸ Dev environments · Super+Alt+E <!-- nixarchy.devenv --> |
-| [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Apps ▸ GitHub Actions · Super+Alt+A <!-- olafkfreund.github-actions --> |
+| [Dev environments](#dev-environments) | the per-project environments on this machine | **on wherever devenv is** | Trigger ▸ Dev environments · Super+Alt+E <!-- nixarchy.devenv --> |
+| [GitHub Actions](#github-actions) | workflow runs, jobs and steps | **on by default** | Trigger ▸ GitHub Actions · Super+Alt+A <!-- olafkfreund.github-actions --> |
 | [Plugin Browser](#plugin-browser) | the plugin marketplace, audited before you install | **on by default** | Setup ▸ Plugins ▸ Add Plugin · Super+Alt+U <!-- io.github.olafkfreund.nixarchy-plugin-browser --> |
 | [Rebuild](#rebuild) | the rebuild running now, and its log | **on by default** | Install ▸ Apply changes <!-- nixarchy.rebuild --> |
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
@@ -201,7 +201,7 @@ their own to edit or delete, so removal offers only revoke. Enter one in a termi
 start and stop its processes, update its lock, allow or revoke it, and remove
 it in steps from revoke to deleting the folder. Create a new project from
 twenty-seven templates — languages, web frontends and backends, Jupyter, machine learning and AI, Flutter, Android, Omarchy plugins, NixOS configurations, and cloud
-projects for AWS, Azure, GCP and five more. It is **Apps ▸ Dev environments**
+projects for AWS, Azure, GCP and five more. It is **Trigger ▸ Dev environments**
 or **Super+Alt+E** wherever the [devenv service](per-project-environments) is
 on, and `nixarchy dev …` is the same tool in a terminal.
 

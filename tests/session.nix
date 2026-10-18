@@ -295,6 +295,8 @@ pkgs.testers.runNixOSTest {
     # system activation, so none of this needs a session, and a slow login
     # must not be able to mask a broken selection loop.
     machine.wait_for_file("/home/omarchy/.config/nixarchy/apps.nix")
+    # #1342: held back until login
+    machine.succeed("test ! -e /home/omarchy/.config/hyprland-mimeapps.list")
     machine.succeed("su omarchy -c 'nixarchy-app-enable brave'")
     machine.succeed("su omarchy -c 'nixarchy-app-enable helix'")
     enabled = machine.succeed(
@@ -508,6 +510,9 @@ pkgs.testers.runNixOSTest {
     # Long enough for omarchy-launch-shell to exhaust its supervision budget:
     # it gives up after 5 relaunches inside one minute.
     machine.sleep(75)
+
+    # #1342: the post-boot.d hook seeded it at login
+    machine.wait_for_file("/home/omarchy/.config/hyprland-mimeapps.list")
 
     # Omarchy's own user units are gated on HYPRLAND_INSTANCE_SIGNATURE so they
     # stay out of other Wayland sessions (#1276). A gate on a variable this

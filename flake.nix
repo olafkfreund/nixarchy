@@ -2557,6 +2557,18 @@
             nixi = self.nixosConfigurations.vm.config.home-manager.users.omarchy.services.nixi.package;
           };
 
+          # #1342: a default browser entry that runs the launcher itself is refused.
+          launch-browser-self-call = import ./tests/launch-browser-self-call.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # #1342: the login hook seeds the mimeapps list only into nothing.
+          seed-hyprland-mimeapps = import ./tests/seed-hyprland-mimeapps.nix {
+            pkgs = pkgsFor.${system};
+            script = ./pkgs/seed-hyprland-mimeapps.sh;
+          };
+
           # #1305: Right never runs a menu row, and a displaced request releases its caller,
           # and the card fits its widest label (#1339).
           menu-keys = import ./tests/menu-keys.nix {

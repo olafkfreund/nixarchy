@@ -149,6 +149,13 @@ Traps:
   the run fails, or is cancelled, the next scheduled run drops the carry. Push
   it again and dispatch again.
 
+### Deviation in step 3 (2026-10-18)
+
+The carry (22115c78, on `edge-carry-1325`) is committed but not pushed.
+Edge's `menu-verbs` is red for #1329, so a dispatched run would fail in
+`prepare`, and the next scheduled run starts from `edge` and drops the carry.
+It is pushed with #1329's edge merge, and done still means `edge` contains it.
+
 ### 4. [coder] `tests/AGENTS.md`, main worktree `wt-1325`
 
 In "menu-actions proves classification, not safety (#1304)", the paragraph

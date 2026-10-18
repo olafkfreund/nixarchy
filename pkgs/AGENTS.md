@@ -319,6 +319,32 @@ the base again, a `--width 800` prompt keeps 800, and a short prompt after a
 long one returns to the base). With the substitution removed, 3b, 3f and the
 width half of 3c fail.
 
+<a id="launch-browser-refuses-to-launch-itself-1342"></a>
+
+### omarchy-launch-browser refuses to launch itself (#1342)
+
+CARRIED, not filed upstream. One `--replace-fail` substitution in
+`pkgs/omarchy/default.nix` puts a guard in front of the `--help` probe in
+`omarchy-launch-browser` (Omarchy v4.0.5): if the resolved `browser_exec` is
+`omarchy-launch-browser` itself, it sends a critical notification and exits 1.
+The text is `pkgs/omarchy/1342-launch-browser-self-call.sh`, a file because a
+multi-line argument inside the `installPhase` string re-flows the phase under
+`nix fmt` and every path costs bytes of `checks.install-phase-budget`. The
+anchor is the `if` line after `browser_exec=$(...)`, not the assignment, which
+the path loop rewrites.
+
+- **What it guards.** A 4.0.4 session that meets 4.0.5's
+  `hyprland-mimeapps.list` resolves the default browser to an entry whose
+  `Exec` is the launcher, so the launcher called itself without bound.
+- **4.0.5 never reaches it on the normal path.** `omarchy-cmd-default-browser`
+  resolves a real browser there; the guard is for the upgrade window.
+
+Drop it when no supported upgrade crosses from a launcher without
+`omarchy-cmd-default-browser`.
+
+Check: `checks.launch-browser-self-call` (the built launcher exits 1 after one
+call; with the guard deleted by `sed` the same fixture recurses to its cap).
+
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)
 

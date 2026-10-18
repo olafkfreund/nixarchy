@@ -179,6 +179,10 @@ Traps:
     exclusion from its absence.
   The existing case keeps passing with the default `GH_JOBS`.
 
+  *Deviation (implemented):* the stub sets `jobs=${GH_JOBS:-'[…]'}` on its own
+  line and wraps it with `jq -n -c --argjson jobs "$jobs" '{jobs: $jobs}'`. A
+  JSON default written inside `"${GH_JOBS:-[{…}]}"` ends at its first `}`.
+
 Verify (lead, cheap tier, under the flock):
 `nix build .#checks.x86_64-linux.copilot-handoff --print-build-logs` passes.
 Then break the exclusion in the real script (remove it), confirm with

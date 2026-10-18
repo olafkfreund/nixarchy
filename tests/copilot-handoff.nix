@@ -74,6 +74,35 @@ pkgs.runCommand "nixarchy-copilot-handoff"
     echo "control: head -100 against the 500-line stub failed as expected:"
     cat control-err.txt
 
+    # The aggregator `system` fails whenever a half does, so a run whose only
+    # real failure is a half that timed out (cancelled) must not be handed off
+    # (#1341). The control is the script with the exclusion removed.
+    export GH_JOBS='[{"name":"system","conclusion":"failure"},{"name":"system-build","conclusion":"cancelled"},{"name":"system-checks","conclusion":"success"}]'
+    if ! bash ${../.github/scripts/copilot-handoff.sh} >agg-out.txt 2>agg-err.txt; then
+      echo "copilot-handoff.sh exited non-zero on an aggregator-only failure" >&2
+      cat agg-err.txt >&2
+      exit 1
+    fi
+    if ! grep -q 'not handed off' agg-out.txt; then
+      echo "copilot-handoff.sh handed off a run whose only failed job is the aggregator" >&2
+      cat agg-out.txt >&2
+      exit 1
+    fi
+
+    sed 's/ and \.name!="system"//' ${../.github/scripts/copilot-handoff.sh} >noexcl.sh
+    if grep -q 'name!="system"' noexcl.sh; then
+      echo "control setup failed: noexcl.sh still contains the exclusion" >&2
+      exit 1
+    fi
+    bash noexcl.sh >noexcl-out.txt 2>noexcl-err.txt || true
+    if ! grep -q 'would comment on #1154' noexcl-out.txt; then
+      echo "the control did not hand off: this check cannot tell the" >&2
+      echo "aggregator exclusion from its absence." >&2
+      cat noexcl-out.txt noexcl-err.txt >&2
+      exit 1
+    fi
+    unset GH_JOBS
+
     echo "copilot-handoff.sh: fixed script posts a $lines-line excerpt;" \
       "the head -100 control fails"
     touch $out

@@ -246,3 +246,7 @@ launcher loses its guard. A list already seeded stays, harmlessly.
   rules out. The hold break that kept the block's shape was
   `mimeapps_absent=1` → `mimeapps_absent=`; deleting the `rm` line also failed,
   but on the extraction, not on the behaviour.
+- Found in CI: `checks.grep-q-pipefail` flagged the guard's re-emitted anchor
+  (`… | grep -q MOZ_LOG`) in the new `.sh` and in the `--replace-fail` needle.
+  Both are allowlisted in `tests/grep-q-allowlist.txt` with reasons: the
+  launcher runs without `pipefail`, and the needle is a string literal.

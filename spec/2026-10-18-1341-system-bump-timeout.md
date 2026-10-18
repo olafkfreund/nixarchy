@@ -35,9 +35,16 @@ enables it: main's job 117701579179 logs `kvm: true` and "Accelerated KVM is
 enabled", and so do both #1332 timeouts. Revision 1's "the lever is KVM" was
 wrong, and its KVM step is dropped: it would be a no-op.
 
-**`options` does not build `hypr-rdp`.** It evaluates whether the unit exists
-(`tests/options.nix:1945-1953`, `? hypr-rdp`), so it moves to
-`system-checks`. That is the lever that replaces KVM.
+**`options` moves to `system-checks`, and builds `hypr-rdp` there too.**
+Revision 2 first said `options` only evaluates whether the unit exists; it
+does not. Its `rdpExecStart` (`tests/options.nix:3464-3465`) carries the
+package's store path, so `hypr-rdp` is a build input (as `cache-allowlist.sh:42`
+and `build.yml:1414-1416` already said). On a bump both halves compile it. That
+is the price of balancing them: with `options` in `system-build` the worse
+half is ~40.5, with it here ~38. On a normal PR both substitute it from the
+cache, so it costs nothing there. `system-checks` builds it in its own step,
+`nix build --no-link .#hypr-rdp`, before `options`, so the compile does not
+land in the `options` step's time, which is the trend #747 and #1150 read.
 
 The verification's merge-state test could not fail: a draft PR reads `DRAFT`,
 and a cancelled `install`, a required check, blocks on its own. It now uses a
@@ -47,16 +54,14 @@ ready PR whose other required checks are green.
 
 `.github/workflows/build.yml`:
 
-- **`system-build`**: today's `system` job (`:1306`) minus the checks that do
-  not need `hypr-rdp` or publish. It keeps the toplevels, `coexistence`, the
-  allowlisted tools and box image, the system-closure push, **`session`**
-  and the cache budget. Everything that builds `hypr-rdp` is here, once.
-- **`system-checks`**: the MicroVM template and its push, the box template,
-  `integration`, `coexist`, `install-teardown`, `installer-ui`,
-  `try-nixarchy`, `dashboard-clock`, `installer-wizard` and `plugin`. Several
-  of these are `runCommand`s, not VMs; what they share is that none needs
-  `hypr-rdp`. It has the same setup steps, `Free disk space`, and its own copy
-  of the gate's "cannot pass" first step.
+- **`system-build`**: today's `system` job (`:1306`). It keeps the toplevels,
+  `coexistence`, the allowlisted tools and box image, the system-closure push,
+  **`session`** and the cache budget.
+- **`system-checks`**: the MicroVM template and its push, the box template, a
+  `hypr-rdp` build step, **`options`**, `integration`, `coexist`,
+  `install-teardown`, `installer-ui`, `try-nixarchy`, `dashboard-clock`,
+  `installer-wizard` and `plugin`. It has the same setup steps,
+  `Free disk space`, and its own copy of the gate's "cannot pass" first step.
 - **`system`** (the required context, unchanged in branch protection:
   `["lint","omarchy","system","devenv-presets","box","install"]`):
   `needs: [gate, system-build, system-checks]`, `if: ${{ !cancelled() }}`,
@@ -81,14 +86,14 @@ already under KVM, worst of two:
 | job | steps (minutes) | total incl. setup |
 |---|---|---|
 | `system-build` | disk 2.0, VM closure 3.3, installed 0.9, coexistence 0.7, tools 10.3, push 1.7, session 9.8, budget 2.3 + 2 | ~36 |
-| `system-checks` | disk 2.0, MicroVM 2.0 + push 2.2, options 4.5, plugin 5.5, coexist 2.5, wizard 1.4, integration 1.1, the four small ones ~2, nixarchy's own packages again ~2 | ~28 |
+| `system-checks` | disk 2.0, MicroVM 2.0 + push 2.2, hypr-rdp 10, options 4.5, plugin 5.5, coexist 2.5, wizard 1.4, integration 1.1, the four small ones ~2, nixarchy's own packages again ~2 | ~38 |
 
 The budget's "+ 2" is the MicroVM runners: `cache-budget.sh` realises every
 allowlist entry (`:34-40`), and after the split they are built in the other
 job. "Nixarchy's own packages again" is because pull requests push no
 closures, so both halves build them.
 
-~36 of 45 leaves ~9 minutes, against ~50 in one job today. It is an estimate
+The worse half, ~38 of 45, leaves ~7 minutes, against ~50 in one job today. It is an estimate
 from step times: only a real nixpkgs bump measures it, because a normal PR
 substitutes `hypr-rdp` from the cache. A normal PR (proofs present) stays at
 today's ~20 minutes or less, and a timeout now names the half that ran out.
@@ -132,7 +137,7 @@ today's ~20 minutes or less, and a timeout now names the half that ran out.
   failure mode.
 - **Runner minutes.** Two setups instead of one, about 5 more hosted minutes
   per run. Public repository, so free.
-- **~9 minutes of headroom on a bump** is less than the 25 a normal run
+- **~7 minutes of headroom on a bump** is less than the 25 a normal run
   has. A substituter stall on a bump day would still time `system-build` out;
   it would then name `system-build` rather than everything.
 - **Disk.** Each half frees disk and downloads its own closures. The VM half

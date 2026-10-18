@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1329
 intent: intent/2026-10-18-1329-edge-menu-parents.md
 ---

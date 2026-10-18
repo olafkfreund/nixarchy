@@ -30,8 +30,8 @@ So edge is stuck without #1313's fix, and everything merged since: #1306,
   On stable, `remove.dictation` is a leaf and is unchanged.
 - Apps: nixarchy's five rows (Dev environments, GitHub Actions, GitLab
   Pipelines, Herdr, Podman) can be browsed to on both channels. They move to a
-  nixarchy-owned submenu of their own, as approved on the issue thread
-  ("own nixarchy submenu"), rather than overriding quattro's Apps action.
+  nixarchy-owned submenu of their own, the direction the owner approved
+  in the session on 2026-10-18, rather than overriding quattro's Apps action.
 - Search finds each of the five, and the Super+Alt keybindings are unchanged.
   They call `nixarchy-plugin` directly, not the menu id.
 

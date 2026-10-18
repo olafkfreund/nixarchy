@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1314
 intent: intent/2026-10-18-1314-menu-apps-stated-keys.md
 ---

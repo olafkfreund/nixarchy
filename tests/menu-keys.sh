@@ -2,6 +2,8 @@
 # shellcheck disable=SC2015 # pass and fail always succeed, so A && B || C is if-else here
 # #1305: the real Menu.qml in a headless Quickshell. Right must not run a row,
 # and a request displaced by the next one must release its caller.
+# #1339: the card is as wide as its widest label, up to a cap, and a filter
+# does not shrink it.
 # Usage: menu-keys.sh <built share/omarchy> <harness shell.qml>
 # Needs on PATH: qs, bash, sh, perl, sed, coreutils. TEST_BASH is the stubs' shebang.
 set -uo pipefail
@@ -41,10 +43,13 @@ replace_once "$shell_dir/plugins/menu/Menu.qml" '  PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore' '  FloatingWindow {
     id: panel
+    implicitWidth: 1920
+    implicitHeight: 1080
     visible: root.opened && root.rowsLoaded
     color: "transparent"'
 cp "$2" "$shell_dir/shell.qml"
 
+long_label='the quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly and pack my box with five dozen liquor jugs so that this label is far wider than any card the menu would draw by default'
 # The fixture menu. Its actions only touch markers: never load the shipped
 # menu here, whose rows lock, suspend and power off (tests/AGENTS.md).
 printf '%s\n' '{' \
@@ -53,7 +58,9 @@ printf '%s\n' '{' \
   '  "probe.link": {"label": "Link", "target": "probe.sub"},' \
   '  "probe.sub": {"label": "Sub"},' \
   "  \"probe.sub.x\": {\"label\": \"X\", \"action\": \"touch $marks/x\"}," \
-  "  \"probe.d\": {\"label\": \"D\", \"action\": \"touch $marks/d\"}" \
+  "  \"probe.d\": {\"label\": \"D\", \"action\": \"touch $marks/d\"}," \
+  '  "wide": {"label": "Wide"},' \
+  "  \"wide.long\": {\"label\": \"$long_label\", \"action\": \"touch $marks/long\"}" \
   '}' > "$work/fake/default/omarchy/omarchy-menu.jsonc"
 
 # The menu scripts summon through omarchy-shell; forward that to the probe.
@@ -83,11 +90,12 @@ for ((i = 0; i < 100; i++)); do
 done
 [[ -n $ready ]] || die "the menu never loaded its fixture rows (last state: ${out:-none})"
 
-K_RIGHT=$((0x01000014)) K_RETURN=$((0x01000004)) K_ESCAPE=$((0x01000000))
+K_RIGHT=$((0x01000014)) K_RETURN=$((0x01000004)) K_ESCAPE=$((0x01000000)) K_Z=$((0x5a))
 failed=0
 pass() { echo "PASS $1"; }
 fail() { echo "FAIL $1"; failed=1; }
 summon() { ipc open "{\"menu\":\"$1\"}" >/dev/null; sleep 0.3; }
+field() { ipc state | sed -n "s/.*\"$1\":\"\\{0,1\\}\\([^\",}]*\\).*/\\1/p"; }
 active() { ipc state | sed -n 's/.*"active":"\([^"]*\)".*/\1/p'; }
 fresh() { rm -f "$marks"/*; }
 alive_after() { sleep "$2"; kill -0 "$1" 2>/dev/null; }
@@ -131,5 +139,17 @@ omarchy-menu-select Second b > /dev/null 2>&1 & p2=$!; callers+=("$p2")
 if exited_within "$p" 5; then [[ $rc == 1 ]] && pass "2b a select displaced by a select exits 1" || fail "2b displaced select exited $rc, want 1"
 else fail "2b a select displaced by a select is still waiting after 5 s"; kill "$p"; fi
 ipc key $K_ESCAPE >/dev/null; exited_within "$p2" 5 || kill "$p2"
+
+# 3a-3d (#1339): the card fits its widest label, up to a cap, and a filter
+# does not shrink it. Rows in `wide` are long(0); `probe` labels are short.
+summon probe
+[[ $(field width) == "$(field base)" ]] && pass "3a a menu of short labels keeps the base width" || fail "3a short labels: width $(field width), want base $(field base)"
+summon wide
+[[ $(field width) == "$(field cap)" ]] && pass "3b a very long label widens the card to the cap" || fail "3b long label: width $(field width), want cap $(field cap)"
+ipc key $K_Z >/dev/null; ipc key $K_Z >/dev/null; ipc key $K_Z >/dev/null; sleep 0.5
+[[ $(field filter) == zzz ]] && pass "3c typing reaches the filter (keys arrive)" || fail "3c filter is '$(field filter)', want zzz: no key reached the menu"
+[[ $(field width) == "$(field cap)" ]] && pass "3c a filter does not shrink the card" || fail "3c filtered: width $(field width), want cap $(field cap)"
+summon probe
+[[ $(field width) == "$(field base)" ]] && pass "3d the next menu starts from the base width again" || fail "3d after leaving wide: width $(field width), want base $(field base)"
 
 exit $failed

@@ -1,6 +1,7 @@
 { pkgs, omarchy }:
 # #1305: the real Menu.qml in a headless Quickshell. Right must not run a
-# row, and a displaced request must release its caller. Why: tests/AGENTS.md.
+# row, a displaced request must release its caller, and the card fits its
+# widest label (#1339). Why: tests/AGENTS.md.
 pkgs.runCommand "nixarchy-menu-keys"
   {
     nativeBuildInputs = [

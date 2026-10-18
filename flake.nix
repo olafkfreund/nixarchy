@@ -2557,7 +2557,8 @@
             nixi = self.nixosConfigurations.vm.config.home-manager.users.omarchy.services.nixi.package;
           };
 
-          # #1305: Right never runs a menu row, and a displaced request releases its caller.
+          # #1305: Right never runs a menu row, and a displaced request releases its caller,
+          # and the card fits its widest label (#1339).
           menu-keys = import ./tests/menu-keys.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

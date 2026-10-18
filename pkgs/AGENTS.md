@@ -274,6 +274,51 @@ all three.
 Checks: `checks.menu-model-merge` (node over the built `MenuModel.js`) and
 `checks.menu-keys` (the real `Menu.qml`, headless; see `tests/AGENTS.md`).
 
+<a id="the-menu-fits-its-widest-label-1339"></a>
+
+### The menu fits its widest label (#1339)
+
+CARRIED, not filed upstream (the owner's call). Upstream sizes the card to a
+fixed `Style.space(300)` (520 for two menus, `dmenuWidth` for a prompt), so a long label
+is cut off. One `--replace-fail` substitution in `pkgs/omarchy/default.nix`
+rewrites the single `cardWidth` line of `Menu.qml` (Omarchy v4.0.5). It runs
+after the #1301 patch and the #1305 substitutions on the same file. The
+replacement text is `pkgs/omarchy/1339-menu-fit-width.qml`, because a
+multi-line argument inside the `installPhase` string re-flows the phase under
+`nix fmt`.
+
+- **The floor is upstream's width.** That includes a caller's own `--width`:
+  `omarchy-menu-keybindings` asks for 800 and keeps it. The new line wraps
+  upstream's own expression, verbatim, in `Math.max(…, <upstream>)`, so a menu
+  of short labels is exactly as wide as before.
+- **The cap is a fixed `Style.space(640)`, and it limits the fitted width
+  only.** A caller's width above it passes through. The card also stays inside
+  `panel.width - Style.gapsOut * 2`, as upstream's did. There is no option for
+  the cap.
+- **It only grows, within one request.** `fitWidth` never shrinks because of
+  `Math.max(fitWidth, …)`, so typing a filter does not make the card jump. A
+  search can still widen it, because it can add longer rows from submenus.
+- **It starts again at each request and on menu navigation.** `fitWidth` resets
+  on `requestSerial` (both open paths bump it before the rows are rebuilt, so
+  a re-summoned menu or a second prompt starts from the floor) and on
+  `activeMenu`.
+- **`layoutSerial` is the hook.** `onLayoutSerialChanged` fires whenever the
+  displayed rows are rebuilt, so `displayModel` holds the rows now shown. It
+  measures every label with a `TextMetrics` that copies the row label's font
+  (`root.fontFamily`, `Style.font.heading`, `Font.Medium`), and adds the row
+  chrome.
+- **Do not read the delegates' `implicitWidth`.** A `ListView` instantiates
+  only the visible rows, so the widest label can be off screen and the card
+  would resize as the user scrolls.
+
+Drop it when upstream sizes the card to its labels.
+
+Checks: `checks.menu-keys` (3a to 3f: short labels keep the base width, a long
+label reaches the cap, a filter does not shrink it, the next menu starts from
+the base again, a `--width 800` prompt keeps 800, and a short prompt after a
+long one returns to the base). With the substitution removed, 3b, 3f and the
+width half of 3c fail.
+
 <a id="display-text-size-on-a-managed-config-948"></a>
 ### `display text size` on a config it cannot edit (#948)
 

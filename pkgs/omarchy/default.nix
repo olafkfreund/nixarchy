@@ -2085,6 +2085,10 @@ stdenvNoCC.mkDerivation {
                       --replace-fail "  function openExistingMenu(initialMenu) {"$'\n'"    requestSerial += 1" "$(cat ${./1305-menu-release-displaced.js})"$'\n\n'"  function openExistingMenu(initialMenu) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1" \
                       --replace-fail "  function openDmenu(payload) {"$'\n'"    requestSerial += 1" "  function openDmenu(payload) {"$'\n'"    root.releaseDisplacedRequest()"$'\n'"    requestSerial += 1"
 
+                    # Why: pkgs/AGENTS.md#the-menu-fits-its-widest-label-1339
+                    substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
+                      --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "style.font") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \
                       $out/share/omarchy/shell/plugins/menu/BarWidget.qml \

@@ -863,6 +863,8 @@ let
           description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
         };
         "setup.direct-boot" = {
+          # quattro's `when` tests a path naming omarchy-dgx-spark, which checks.options reads as a missing command.
+          when = "true";
           disabled = "true";
           action = "true";
           description = "Not available on NixOS — needs efibootmgr and an Omarchy UKI. NixOS writes its own boot entries on every rebuild";

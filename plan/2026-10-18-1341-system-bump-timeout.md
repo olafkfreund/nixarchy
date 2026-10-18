@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1341
 spec: spec/2026-10-18-1341-system-bump-timeout.md
 ---

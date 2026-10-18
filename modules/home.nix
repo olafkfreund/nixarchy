@@ -21,6 +21,13 @@ let
     install -Dm444 ${omarchyPath}/shell/plugins/menu/MenuModel.js "$out/shell/plugins/menu/MenuModel.js"
   '';
 
+  # Why: the post-boot.d hook below seeds hyprland-mimeapps.list at login (#1342).
+  seedMimeapps = pkgs.writeShellApplication {
+    name = "nixarchy-seed-mimeapps";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = builtins.readFile ../pkgs/seed-hyprland-mimeapps.sh;
+  };
+
   # Upstream's user menu file, which nixarchy does not write -- named here
   # because the activation below has to undo an older nixarchy having done so.
   menuExtensionPath = "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc";
@@ -1129,7 +1136,17 @@ in
                 # all read from ~/.config -- so seeding only hypr and omarchy left
                 # starship on its stock prompt, tmux without Omarchy's prefix and
                 # keybindings, and foot and btop unthemed.
+                # #1342: hold the mimeapps list until login
+                # A 4.0.4 session that finds this list at a switch resolves links to the launcher itself.
+                mimeapps_absent=
+                if [ ! -e "${config.xdg.configHome}/hyprland-mimeapps.list" ] && [ ! -L "${config.xdg.configHome}/hyprland-mimeapps.list" ]; then
+                  mimeapps_absent=1
+                fi
                 seed_dir "${omarchyPath}/config" "${config.xdg.configHome}"
+                if [ -n "$mimeapps_absent" ] && [ -e "${config.xdg.configHome}/hyprland-mimeapps.list" ]; then
+                  run rm -f "${config.xdg.configHome}/hyprland-mimeapps.list"
+                  echo "nixarchy: hyprland-mimeapps.list is seeded at your next login (#1342)"
+                fi
                 note_kept "${omarchyPath}/config/hypr" "${config.xdg.configHome}/hypr"
 
                 # And say, once, which session to pick.
@@ -2158,6 +2175,13 @@ in
     # shell.json: the shell rewrites that whole file from memory, so a second
     # writer loses updates. The marker is written only once the enable worked.
     xdg.configFile = {
+      "omarchy/hooks/post-boot.d/seed-mimeapps" = {
+        executable = true;
+        text = ''
+          #!/usr/bin/env bash
+          exec ${seedMimeapps}/bin/nixarchy-seed-mimeapps ${omarchyPath}/config/hyprland-mimeapps.list ${config.xdg.configHome}/hyprland-mimeapps.list
+        '';
+      };
       "omarchy/hooks/post-boot.d/default-plugins" = lib.mkIf (resolvedDefaults != { }) {
         executable = true;
         text = ''

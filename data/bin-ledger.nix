@@ -318,7 +318,7 @@
   };
   "omarchy-launch-browser" = {
     class = "patch";
-    reason = "It reads the browser's .desktop from {~/.local,~/.nix-profile,/usr}/share/applications. On NixOS those live under /run/current-system/sw and /etc/profiles/per-user, so the lookup found nothing.";
+    reason = "It reads the browser's .desktop from {~/.local,~/.nix-profile,/usr}/share/applications. On NixOS those live under /run/current-system/sw and /etc/profiles/per-user, so the lookup found nothing. It also refuses a default browser entry that runs the launcher itself, which recursed without bound when a 4.0.4 session met 4.0.5's mimeapps list (#1342).";
   };
   "omarchy-launch-editor" = {
     class = "patch";

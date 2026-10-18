@@ -15,6 +15,8 @@ modules/apps.nix	if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgsOther'; then	one
 modules/apps.nix	if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then	one write: sed -n prints one line and quits
 modules/apps.nix	if ! sed -n '/^{/{p;q}' "$file" | grep -q 'pkgs'; then	one write: sed -n prints one line and quits
 pkgs/doctor.sh	if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx input; then	one write: id -nG | tr, one short list
+pkgs/omarchy/1342-launch-browser-self-call.sh	if $browser_exec --help 2>/dev/null | grep -q MOZ_LOG; then	upstream's own line, re-emitted as the #1342 anchor; the launcher runs without pipefail, so the if reads grep's status
+pkgs/omarchy/default.nix	--replace-fail 'if $browser_exec --help 2>/dev/null | grep -q MOZ_LOG; then' "$(cat ${./1342-launch-browser-self-call.sh})"	a string literal, the --replace-fail needle for #1342; nothing runs it here
 pkgs/secret.nix	if names_in_store "$USER_STORE" | grep -qx "$name"; then	names_in_store ends in || true, which absorbs 141
 pkgs/secret.nix	elif names_in_store "$SYS_STORE" | grep -qx "$name"; then	names_in_store ends in || true, which absorbs 141
 pkgs/verify.sh	if tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null | grep -q omarchy; then	one write: tr of one cmdline

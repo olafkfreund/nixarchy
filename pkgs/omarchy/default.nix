@@ -620,6 +620,10 @@ stdenvNoCC.mkDerivation {
                           '{~/.local,~/.nix-profile,/etc/profiles/per-user/$USER,/run/current-system/sw,/usr}/share/applications'
                     done
 
+                    # Why: pkgs/AGENTS.md#launch-browser-refuses-to-launch-itself-1342
+                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-browser \
+                      --replace-fail 'if $browser_exec --help 2>/dev/null | grep -q MOZ_LOG; then' "$(cat ${./1342-launch-browser-self-call.sh})"
+
                     # RetroArch loads its cores from /usr/lib/libretro upstream. nixpkgs puts
                     # them inside the wrapper's own store path. The menu resolves that path
                     # now; the installer saves the stable system-profile path. Without either,

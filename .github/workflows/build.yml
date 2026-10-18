@@ -78,7 +78,7 @@ jobs:
     # and worse in a branch protection rule, where "require gate" would no
     # longer name one thing. Caught on this PR's own first run.
     name: build gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
     steps:
@@ -100,7 +100,7 @@ jobs:
           echo "relevant=$relevant" >> "$GITHUB_STEP_SUMMARY"
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -242,7 +242,7 @@ jobs:
   devenv-presets:
     needs: gate
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - name: The gate did not succeed, so this check cannot pass
@@ -283,7 +283,7 @@ jobs:
         run: nix run .#devenv-presets
 
   omarchy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Warm runs measured 675-878s against the old 900s limit (2026-09-13), and
     # a nixpkgs bump starts cold: #671 timed out at 919s and 1200s. Past the
     # limit the job reports `cancelled`, which reads as an eviction (§6).
@@ -1230,7 +1230,7 @@ jobs:
   apps:
     needs: gate
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - name: The gate did not succeed, so this check cannot pass
@@ -1306,7 +1306,7 @@ jobs:
   system:
     needs: gate
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # 45, not 30. The job's own work is ~20 minutes (see below), so 30 looked
     # like ample headroom until 2026-09-04, when a cache.nixos.org stall of
     # 21-24 minutes hit four independent runners inside the same wall-clock
@@ -1698,7 +1698,7 @@ jobs:
   box:
     needs: gate
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - name: The gate did not succeed, so this check cannot pass
@@ -1735,7 +1735,7 @@ jobs:
 
       - name: /dev/kvm is real and writable, or fail here
         if: needs.gate.outputs.relevant == 'true'
-        # ubuntu-latest runners have /dev/kvm, but root:kvm 0660 and the nix
+        # ubuntu-26.04 runners have /dev/kvm, but root:kvm 0660 and the nix
         # build users are not in `kvm`; the udev rule is GitHub's own
         # documented fix. Loud rather than falling back: without a usable
         # /dev/kvm the test driver would run the node under TCG and this job

@@ -28,7 +28,7 @@ jobs:
       github.event.workflow_run.conclusion == 'failure'
       && startsWith(github.event.workflow_run.head_branch, 'update/')
       && github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5

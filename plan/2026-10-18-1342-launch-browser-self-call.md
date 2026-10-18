@@ -13,23 +13,26 @@ spec: spec/2026-10-18-1342-launch-browser-self-call.md
    `config/`; right after it, if the list did not exist **before** this run,
    the activation removes it and prints one line. A file or symlink the user
    already had is never touched.
-2. **A user oneshot, `nixarchy-seed-mimeapps.service`**, `WantedBy`
-   `graphical-session.target`, seeds the list when it is absent (a file or a
-   symlink counts as present, `-e || -L`), through a new
-   `pkgs/seed-hyprland-mimeapps.sh`.
+2. **A session-start hook, `~/.config/omarchy/hooks/post-boot.d/seed-mimeapps`**,
+   seeds the list when it is absent (a file or a symlink counts as present,
+   `-e || -L`), through a new `pkgs/seed-hyprland-mimeapps.sh`. **Not a
+   systemd unit:** Home Manager's `startServices` (default `true`) would start
+   a new `WantedBy` unit at the switch, inside the 4.0.4 session.
 3. **A carried guard in `omarchy-launch-browser`**: if the resolved
    `browser_exec` is `omarchy-launch-browser` itself, it notifies (critical)
-   and exits 1. The text lives in `pkgs/omarchy/1342-launch-browser-self-call.sh`.
+   and exits 1. The text lives in `pkgs/omarchy/1342-launch-browser-self-call.sh`;
+   it notifies with `omarchy-notification-send`, as the rest of 4.0.5 does.
    `data/bin-ledger.nix` updates the existing `patch` row; `pkgs/AGENTS.md`
    gets a section with when to drop it.
 4. **The release note:** log out and back in after the upgrade.
 5. **Coexistence (§14):** a Home Manager symlink at the list's path is
    present, so it is never replaced. `mimeapps.list` is a different file.
    Mode A is unchanged.
-6. **Verification:** two runCommand checks, each failing with its fix
-   reverted (§1); `checks.session` asserts the list exists after login. The
-   activation's "remove if absent before" branch has no cheap layer; the PR
-   names that hole (§3).
+6. **Verification:** `checks.launch-browser-self-call` and
+   `checks.seed-hyprland-mimeapps`, plus the hold block run from the
+   activation's own text in `tests/home-activation-writes.nix`; each fails
+   with its fix reverted (§1). `checks.session` asserts the list is absent
+   before login and present after.
 
 ### Found while planning
 
@@ -48,13 +51,19 @@ spec: spec/2026-10-18-1342-launch-browser-self-call.md
   deleted by `sed`, and a stub `omarchy-cmd-default-browser` that answers
   `omarchy-browser.desktop`, recurses exactly as 4.0.4's did. This is the §1
   form ("the bug reintroduced"), and it varies only the guard.
-- **The seed check's symlink case must be dangling.** A symlink to an existing
-  file passes `-e` on its own, so a control without `-L` could not fail. A
-  Home Manager link whose target is gone is the case `-L` exists for.
+- **The seed check's symlink case must be dangling, and asserts an exit
+  status.** A symlink to an existing file passes `-e` on its own. And GNU `cp`
+  refuses to write through a dangling symlink (exit 1, link untouched), so
+  without `-L` the link is not replaced; the seed fails at every login
+  instead. The control asserts that non-zero exit.
+- **The hold has a cheap layer after all** (plan review):
+  `tests/home-activation-writes.nix:72-82` already extracts a block of
+  `nixarchySeed` with `awk` and runs it with `run()` and `DRY_RUN`. The hold
+  goes there, so it is tested rather than named as a hole.
 
 ## Who does what
 
-Seven files across four editing steps, so the coder (Sonnet) does steps 1–4,
+Eight files across four editing steps, so the coder (Sonnet) does steps 1–4,
 one `SendMessage` per step. The lead does 5–6, every commit and push, and
 every build (§6 tiers).
 
@@ -65,7 +74,7 @@ every build (§6 tiers).
 - New `pkgs/omarchy/1342-launch-browser-self-call.sh`, exactly:
   ```sh
   if [[ ${browser_exec##*/} == omarchy-launch-browser ]]; then
-    notify-send -u critical "No browser to open this in" "The default browser entry runs omarchy-launch-browser itself (#1342). Choose a browser with: omarchy default browser"
+    omarchy-notification-send -u critical "No browser to open this in" "The default browser entry runs omarchy-launch-browser itself (#1342). Choose a browser with: omarchy default browser"
     exit 1
   fi
   if $browser_exec --help 2>/dev/null | grep -q MOZ_LOG; then
@@ -86,10 +95,9 @@ every build (§6 tiers).
   `omarchy-cmd-default-browser`; the check names.
 
 Traps: the installPhase byte budget (`checks.install-phase-budget`): a path
-costs ~60 bytes, which is why the text is a file. `nix fmt`, then read
-`git diff --stat` (§5: an edit hook may reformat). `notify-send` must resolve:
-check `omarchy-launch-browser`'s runtime PATH already has `libnotify` (grep
-`runtimeDeps` in `default.nix`), and say so in the report.
+costs ~60 bytes, which is why the text is a file. The phase is at 120,884 of
+123,000 bytes; report the new figure. `nix fmt`, then read `git diff --stat`
+(§5: an edit hook may reformat).
 
 ### 2. [coder] The login seed
 
@@ -102,21 +110,23 @@ check `omarchy-launch-browser`'s runtime PATH already has `libnotify` (grep
   runtimeInputs = [ pkgs.coreutils ]; text = builtins.readFile ../pkgs/seed-hyprland-mimeapps.sh; }`
   (precedent: `modules/apps.nix:2957`).
 - `modules/home.nix`, the activation (`:1132`): before `seed_dir "${omarchyPath}/config" …`,
-  record `mimeapps_absent=1` when `${config.xdg.configHome}/hyprland-mimeapps.list`
-  is neither `-e` nor `-L`. After it, if `mimeapps_absent` is set and the file
-  now exists, `run rm -f` it and echo
+  set `mimeapps_absent=` and then `mimeapps_absent=1` when
+  `${config.xdg.configHome}/hyprland-mimeapps.list` is neither `-e` nor `-L`.
+  The activation runs under `set -eu`, so initialise it first and test
+  `[ -n "$mimeapps_absent" ]`, never an unset variable. After `seed_dir`, if
+  it is set and the file now exists, `run rm -f` it and echo
   `nixarchy: hyprland-mimeapps.list is seeded at your next login (#1342)`.
-  Two-line comment: why (a running session keeps its launcher until login;
-  #1342). Use `run`, like the rest of the activation, so `--dry-run` works.
-- `modules/home.nix`, `systemd.user.services` (next to `omarchy-theme-gnome`,
-  `:1332`): `nixarchy-seed-mimeapps` — `Unit.Description`,
-  `Unit.After`/`PartOf` `graphical-session.target`, `Service.Type = "oneshot"`,
-  `ExecStart = "${seedMimeapps}/bin/nixarchy-seed-mimeapps ${omarchyPath}/config/hyprland-mimeapps.list ${config.xdg.configHome}/hyprland-mimeapps.list"`,
-  `Install.WantedBy = [ "graphical-session.target" ]`. Guard it by the same
-  condition the seed activation has, so Mode A gets neither.
+  Open the block with the comment line `# #1342: hold the mimeapps list until
+  login` (the test extracts from it) and one more line of why. Use `run`, like
+  the rest of the activation, so a dry run writes nothing.
+- `modules/home.nix`, `xdg.configFile` (beside `default-plugins`, `:2161`):
+  `"omarchy/hooks/post-boot.d/seed-mimeapps"` with `executable = true` and
+  `text` a two-line bash script: `#!/usr/bin/env bash` and
+  `exec ${seedMimeapps}/bin/nixarchy-seed-mimeapps ${omarchyPath}/config/hyprland-mimeapps.list "''${XDG_CONFIG_HOME:-$HOME/.config}/hyprland-mimeapps.list"`.
+  No extra guard: it sits under the module's `lib.mkIf cfg.enable`, as the
+  seed does, so Mode A gets neither.
 
-Traps: §7 — plain assignment for the attrset, no `mkDefault`. Read how the
-seed activation is conditioned (`lib.mkIf …`) and mirror it exactly. `nix fmt`.
+Traps: §7, plain assignment for the attrset, no `mkDefault`. `nix fmt`.
 
 ### 3. [coder] The checks
 
@@ -125,10 +135,13 @@ seed activation is conditioned (`lib.mkIf …`) and mirror it exactly. `nix fmt`
   `HOME=$PWD/home`, `home/.local/share/applications/omarchy-browser.desktop`
   with `Exec=omarchy-launch-browser %U`. A `bin/` on `PATH` holding stubs:
   `omarchy-cmd-default-browser` (prints `omarchy-browser.desktop`),
-  `notify-send` (appends its args to `notified`), `systemd-run`, `uwsm-app`,
+  `omarchy-notification-send` (appends its args to `notified`), `systemd-run`, `uwsm-app`,
   `omarchy-cmd-browser-handoff` (exit 1), and an `omarchy-launch-browser`
-  wrapper that increments a `count` file and exits 99 at 20, else execs
-  `$LAUNCHER "$@"`. Run `LAUNCHER=<built> timeout 60 omarchy-launch-browser https://example.org`:
+  wrapper that increments a `count` file and exits 99 at 20, else runs
+  `exec bash "$LAUNCHER" "$@"` (so a `sed` copy needs no mode bit). The
+  `systemd-run` and `uwsm-app` stubs append their arguments to a file and
+  exit 0, and never exec anything: after the cap every level unwinds through
+  them. Run `LAUNCHER=<built> timeout 60 omarchy-launch-browser https://example.org`:
   - patched (`${omarchy}/share/omarchy/bin/omarchy-launch-browser`): exit 1,
     `count` is 1, `notified` names #1342;
   - control: `sed` deletes the guard's four lines into `unguarded.sh`, `grep`
@@ -137,16 +150,31 @@ seed activation is conditioned (`lib.mkIf …`) and mirror it exactly. `nix fmt`
   `printf '%s\n'` for the fixture files, never a heredoc (§5).
 - `tests/seed-hyprland-mimeapps.nix` (runCommand, the script by path):
   absent → copied; a regular file → bytes unchanged; a **dangling** symlink →
-  still a symlink to the same target, and the target not created. Control:
-  the script with `|| [ -L "$dest" ]` removed (prove with `grep`) must break
-  the dangling case.
+  the script exits 0, the link is unchanged, the target not created. Control:
+  the script with `|| [ -L "$dest" ]` removed (prove with `grep`) must exit
+  non-zero on the dangling link.
+- `tests/home-activation-writes.nix`: a section `# ---- #1342: the mimeapps
+  hold ----`. Extract from `rehome ${act "nixarchySeed"}` with `awk`, from
+  `#1342: hold the mimeapps list` through the hold's closing `fi` (the file's
+  reconcile extraction, `:72-82`, is the pattern). Define a stub `seed_dir`
+  that copies one fixture list, so the extract's `seed_dir` call runs it.
+  `grep` that the extract holds `run rm -f`, or fail saying the hold moved.
+  Cases: absent before → absent after, and the message printed; a file
+  present → bytes unchanged; a symlink present → still the link; `DRY_RUN=1`
+  with it absent → nothing removed that a dry seed did not write (read how
+  `run` behaves dry in that file first). Control: the extract with its `rm`
+  line deleted must leave the file.
 - `flake.nix`: two `checks` entries beside `menu-model-merge` (`:2552`),
   `omarchy = self.packages.${system}.omarchy` for the first. They are built by
   the `omarchy` job's generated step with no workflow edit (§4).
-- `tests/session.nix`: after the desktop is up, near `:297`'s
-  `wait_for_file`, add
-  `machine.wait_for_file("/home/omarchy/.config/hyprland-mimeapps.list")`
-  with a one-line `# #1342: seeded at login by nixarchy-seed-mimeapps` comment.
+- `tests/session.nix`, two assertions:
+  - right after `:297`'s `wait_for_file` (Home Manager has run; no session
+    yet): `machine.succeed("test ! -e /home/omarchy/.config/hyprland-mimeapps.list")`,
+    comment `# #1342: held back until login`;
+  - after the 75 s sleep at `:511`, before the user-unit loop:
+    `machine.wait_for_file("/home/omarchy/.config/hyprland-mimeapps.list")`,
+    comment `# #1342: the post-boot.d hook seeded it at login`.
+  The pair is what fails on a full revert.
 
 Traps: `git add` the new files before any build (§5). Do not use `pgrep` in
 any wait loop.
@@ -156,24 +184,26 @@ any wait loop.
 - `docs/manual/troubleshooting.md`: under the table (`:20-26`), one short
   paragraph: after upgrading to Omarchy 4.0.5, log out and back in; until then
   links open with the browser the session started with, and
-  `hyprland-mimeapps.list` appears at the next login (#1342).
+  `hyprland-mimeapps.list` appears at the next login (#1342). A shell restart
+  is not enough, because the session's `PATH` is fixed at login.
 
 ### 5. [lead] Builds and break proofs
 
 Cheap tier, one at a time under `flock /mnt/data/vmtest/codex-build.lock`:
-`checks.seed-hyprland-mimeapps`, then (package tier: load below 12, no p620
+`checks.seed-hyprland-mimeapps`, `checks.home-activation-writes`, then (package tier: load below 12, no p620
 system build) `checks.launch-browser-self-call`, which builds the `omarchy`
 tree, plus `checks.bin-ledger` and `checks.install-phase-budget`. Then the §1
 proofs: remove the guard substitution from `default.nix` and watch
 `launch-browser-self-call` fail; remove `|| [ -L "$dest" ]` and watch the seed
-check fail; restore with `git checkout HEAD --`. `statix`, `deadnix`,
+check fail; remove the hold's `rm` and watch `home-activation-writes` fail; restore with
+`git checkout HEAD --`. `statix`, `deadnix`,
 `nix fmt -- --ci`. `checks.session` is a VM: leave it to CI.
 
 ### 6. [lead] PR
 
 One PR, `Closes #1342`. Body: intent, spec and plan; which steps the coder
-did; the failing outputs; the hole (the activation's remove branch is
-unexercised by any check); a request to add the log-out line to the first
+did; the failing outputs; that the hold is tested in `home-activation-writes`; the `installPhase` byte
+figure; a request to add the log-out line to the first
 4.0.5 release's body. Draft the Discussions post to a file for the owner. Run
 `merge-when-green.sh` once green, since this is no CI-gate change.
 
@@ -183,8 +213,9 @@ unexercised by any check); a request to add the log-out line to the first
 |---|---|
 | `checks.launch-browser-self-call` | passes; fails with the guard removed |
 | `checks.seed-hyprland-mimeapps` | passes; fails without `-L` |
+| `checks.home-activation-writes` | passes; fails without the hold's `rm` |
 | `checks.bin-ledger`, `checks.install-phase-budget` | pass |
-| `checks.session` (CI) | the list exists after login |
+| `checks.session` (CI) | absent before login, present after |
 | statix, deadnix, `nix fmt -- --ci` | clean |
 
 ## Rollback

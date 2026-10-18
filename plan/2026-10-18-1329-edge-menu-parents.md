@@ -38,11 +38,12 @@ The coder (Sonnet) does steps 1–3, one `SendMessage` per step. The lead does
 
 ### 0. [lead] Stable baseline
 
-On this branch before any edit, build
-`nixosConfigurations.reference.config.environment.etc."nixarchy/omarchy-menu.jsonc".source`
-(the file `menu-verbs` reads) and copy it to
-`/mnt/data/vmtest/1329-menu-before.jsonc`. Compare the output file's
-contents, not drvPaths (§5).
+On this branch before any edit, copy the menu `checks.menu-actions` reads (its
+derivation's `menu` env, the `reference` machine extended with boxes and
+devenv, and so with podman) to `/mnt/data/vmtest/1329-menu-before.jsonc`.
+`reference` alone has no `apps.devenv`, and has `apps.podman` only when podman
+is on, so it could show three of the five renames at most (review finding 3).
+Compare the files' contents, not drvPaths (§5).
 
 ### 1. [coder] `modules/apps.nix`, the generator (~lines 1086–1150)
 
@@ -55,8 +56,11 @@ contents, not drvPaths (§5).
   ```
 - In each of the three rules, skip a guarded parent with the same `continue`
   or condition the rule already uses for `row_id in overrides`.
-- After rule 3, add the parent rule (decision 2): direct children only, meaning
-  no further `.` after the parent's prefix. A child's `when` is
+- After rule 3, add the parent rule (decision 2). It begins with
+  `if row_id in overrides: sys.exit(f"guarded parent {row_id} was given an override by an earlier rule")`,
+  so a rule that loses its skip fails the build rather than being silently
+  overwritten (review finding 1). Direct children only, meaning no further
+  `.` after the parent's prefix. A child's `when` is
   `overrides[k]["when"]` if set, else `upstream[k].get("when", "")`. Set
   `overrides[row_id] = {"when": …}`.
 - Verify: `nix fmt`, `git diff --stat` (only `modules/apps.nix`), `git add -A`,
@@ -64,7 +68,9 @@ contents, not drvPaths (§5).
 
 Traps:
 - This is Python inside a Nix `''…''` string. `${` must not appear unescaped,
-  and the indentation must match the block. No heredoc (§5).
+  and Python strings use **double quotes only**: an empty `''` ends the Nix
+  string (`apps.nix:1162` already uses `""`). The indentation must match the
+  block. No heredoc (§5).
 - An agent hook may reformat with `nixpkgs-fmt`. `nix fmt` reverts it (§5).
 
 ### 2. [coder] The five rows, and what names them
@@ -73,7 +79,8 @@ Traps:
   `trigger.*`. Change nothing else in them. Line ~3638 "Apps > Dev
   environments" becomes "Trigger > Dev environments".
 - `tests/options.nix:1635-1636` `"apps.devenv"` → `"trigger.devenv"`;
-  `:2684` `"apps.podman"` → `"trigger.podman"`.
+  `:2684` `"apps.podman"` → `"trigger.podman"`. The `:1633` comment "The Apps
+  row exists exactly where the panel does." becomes "The Trigger row …".
 - `grep -rnE 'apps\.(devenv|github-actions|gitlab-pipelines|herdr|podman)\b'`
   over `modules tests pkgs data .github` must now match nothing except
   `cfg.apps.*` and `programs.nixarchy.apps.*` option paths. Also grep
@@ -89,12 +96,19 @@ Traps:
   - `boxes.md:73`, wrapped;
   - `development-tools.md:360`;
   - `docs/internals/flake.md:489`;
-  - `README.md` (483, 485, 497, 498, 499, 522).
+  - `README.md` (483, 485, 497, 498, 499, 522);
+  - `modules/AGENTS.md:1093`, "The Apps ▸ Podman row uses the same gate"
+    (review finding 4).
 
   Rewrap only the paragraph you touched.
-- `configuration.md`, after the stale-extension sentence (~190), add: "Since
-  #1329 nixarchy's rows are under Trigger, so a leftover `apps.*` key only adds
-  a second row under Apps."
+- `configuration.md`, after the stale-extension sentence (~190), add a sentence
+  naming all five: since #1329 nixarchy's Dev environments, GitHub Actions,
+  GitLab Pipelines, Herdr and Podman rows are under Trigger. So an `apps.*` key
+  of theirs in your extension file, whether a panel's `register` wrote it or you
+  pasted the panel's own `share/omarchy-menu.jsonc` snippet, only adds a second
+  row under Apps, and on quattro that row cannot be browsed to (review
+  finding 6). The plugin repos' own docs still say "under Apps". Changing them
+  is outside this repo (§11) and goes in the PR as a follow-up.
 - Verify: `grep -rn 'Apps ▸ \(Dev environments\|GitHub Actions\|GitLab Pipelines\|Herdr\|Podman\)' docs README.md`
   is empty, and `.github/scripts/readme-counts.sh` passes.
 
@@ -102,7 +116,12 @@ Traps:
 
 - **Stable:** rebuild step 0's file into `1329-menu-after.jsonc`. Diff it as
   JSON with sorted keys (`jq -S`). The only differences allowed are the five
-  `apps.*` keys becoming `trigger.*`, with identical values.
+  `apps.*` keys becoming `trigger.*`, with identical values. Then state the
+  order change, which `jq -S` hides: rows upstream does not ship come after
+  upstream's, in `builtins.toJSON`'s sorted order. So Trigger reads Boxes,
+  Dev environments, GitHub Actions, GitLab Pipelines, Herdr, Podman, Sandbox
+  (finding 7). The `tests/demo` scenes `menu-apps` and `menu-trigger`
+  summon by route and keep working, but record different contents.
 - **Edge:** in `/mnt/data/vmtest/wt-1325-edge` (the #1325 carry, 22115c78), run
   `git merge` on this branch's head. Then `menu-verbs`, `menu-actions`,
   `menu-guards` and `bin-ledger` must all be green. Check with `jq` on the edge
@@ -112,12 +131,17 @@ Traps:
 
   | break | expect |
   |---|---|
-  | B1: drop the guarded-parent skip from rule 1 | `menu-verbs`: `under an action: remove.dictation.voxtype` |
+  | break | expect |
+  |---|---|
+  | B1: drop the guarded-parent skip from rule 1 | the build fails: `guarded parent remove.dictation was given an override by an earlier rule` |
   | B2: rename `trigger.herdr` back to `apps.herdr` | `menu-verbs`: `under an action: apps.herdr` |
-  | B3: delete the parent rule | the edge menu's `remove.dictation.when` is `"false"` |
+  | B3: drop rule 3's skip **and** delete the parent rule (agy's case) | the edge menu's `remove.dictation.when` is `"false"`, by `jq` |
+  | B4: delete the parent rule only | `remove.dictation` keeps upstream's `omarchy-pkg-present …` guard. Record what `menu-guards` says, which the review could not verify. If it stays green, the PR names this as a case only the `jq` assertion sees |
 
-  Then green again, and drop the `wip:` commit (`git reset --hard` to the
-  merge, in that scratch worktree only).
+  Then green again. Reset the scratch edge worktree to **22115c78** (the #1325
+  carry, before this branch was merged in), not to the merge, so step 5's
+  `origin/main` merge does not bring both the branch and its squash (finding
+  8).
 - On main: `nix fmt -- --ci`, `menu-actions`, `menu-guards`.
 
 Traps:
@@ -140,10 +164,11 @@ Traps:
      fast-forward;
   4. `gh workflow run omarchy-edge.yml --ref main -f from_candidate=true`, well
      before 06:00 UTC.
-- Done when `git merge-base --is-ancestor <head> origin/edge`. Then:
-  - close #1329, #1326 and (with #1334 merged) #1325 by hand, naming the
-    commits;
-  - #1334 can now be merged by the maintainer.
+- Done when `git merge-base --is-ancestor <this PR's squash commit on main> origin/edge`
+  and the same for 22115c78. Then:
+  - close #1329 and #1326 by hand, naming the commits;
+  - tell the maintainer #1334 can now be merged;
+  - once #1334 has merged, close #1325 by hand, naming both (finding 8).
 
 ## Tests
 

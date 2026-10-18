@@ -70,7 +70,7 @@ if you already use it, is untouched -- boxes only need podman) and installs
 same property nixarchy's own rootless Docker default has, for the same
 reason.
 
-Because boxes turn podman on, they also bring the **Podman panel** (Apps ▸
+Because boxes turn podman on, they also bring the **Podman panel** (Trigger ▸
 Podman, Super+Alt+O on a new install); see
 [Development tools](development-tools#podman).
 

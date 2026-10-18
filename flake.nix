@@ -2026,6 +2026,8 @@
             # is on, all of it overridable. See tests/preview-variant.nix
             # and #487.
             "preview-variant"
+            # First login seeds only missing launchers and stubs (#1319).
+            "provision-launchers"
             # The reinstall image (#478): installer/cd.nix over a USER machine
             # instead of the reference set, installed offline and booted. Asserts
             # copy-never-build and that the machine that boots is the closure the

@@ -1638,12 +1638,12 @@ pkgs.testers.runNixOSTest {
     # landed 444 and the *next* run could not overwrite them. That aborted
     # omarchy-provision-user under pipefail before it marked finalize-user, so
     # the whole first-run sequence re-ran and re-failed on every login.
+    # nix-bin's replacement skips existing files instead; checks.provision-launchers
+    # runs it twice.
     refresh = machine.succeed(
         f"cat {root}/bin/omarchy-refresh-applications")
     assert "--no-preserve=mode" in refresh, (
         "omarchy-refresh-applications still copies store files with their mode")
-    assert "cp -f" in refresh, (
-        "without -f it cannot overwrite the 444 files already on disk")
     print("refresh-applications copies without the store's read-only mode")
 
     # Every shipped bash script parses. This is the check that would have

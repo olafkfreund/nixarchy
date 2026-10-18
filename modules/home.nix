@@ -2299,10 +2299,13 @@ in
     # A switch must preserve the live generation until the user restarts it.
     # Home Manager activation has a restricted PATH, not the desktop's PATH.
     # Activation runs under `set -e`: a failed sync must not fail the switch.
+    # --current: a different live tree gets one restart offer; only a NixOS tree is one a restart reaches (#1306).
     home.activation.nixarchySyncSession = lib.hm.dag.entryAfter [ "reloadSystemd" "nixarchySeed" ] ''
       if ${pkgs.systemd}/bin/systemctl --user is-active --quiet graphical-session.target; then
-        PATH="${lib.makeBinPath cfg.package.passthru.runtimeDeps}:$PATH" \
-          run ${cfg.package}/bin/nixarchy-shell-session sync --if-running \
+        PATH="${cfg.package}/bin:${lib.makeBinPath cfg.package.passthru.runtimeDeps}:$PATH" \
+          run ${cfg.package}/bin/nixarchy-shell-session sync --if-running${
+            lib.optionalString (osConfig != null) " --current ${omarchyPath}"
+          } \
           || echo "nixarchy: could not synchronize the running desktop; restart the shell to pick up this generation" >&2
       fi
     '';

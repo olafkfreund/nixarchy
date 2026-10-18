@@ -285,7 +285,7 @@
   };
   "omarchy-install-preinstalls" = {
     class = "replace";
-    reason = "Upstream reseeds through omarchy-refresh-applications, whose cp -f replaces an edited launcher or a home-manager link and whose mise stubs delete a home-manager ~/.local/bin entry, then exits on omarchy-pkg-add so the marker never clears. Copies only missing launchers, writes no stubs, and clears the marker (#1304).";
+    reason = "Upstream reseeds through omarchy-refresh-applications and its mise stubs, then exits on omarchy-pkg-add so the marker never clears. Seeds through nix-bin's omarchy-refresh-applications, writes no stubs, and clears the marker (#1304, #1319).";
   };
   "omarchy-install-service-1password" = {
     class = "patch";
@@ -363,7 +363,7 @@
   };
   "omarchy-mise-install" = {
     class = "patch";
-    reason = "Writes no launcher when a command outside ~/.local/bin already provides the tool. Upstream's launchers sit ahead of the Nix profiles on PATH, so a Nix-installed codex or claude never ran (#707).";
+    reason = "Writes no launcher when a command outside ~/.local/bin already provides the tool. Upstream's launchers sit ahead of the Nix profiles on PATH, so a Nix-installed codex or claude never ran (#707). Never removes or replaces an existing ~/.local/bin entry, which may be a home-manager link (#1319).";
   };
   "omarchy-mise-unshadow" = {
     class = "new";
@@ -431,8 +431,8 @@
     reason = "Two edits: `xdg-settings set default-web-browser chromium.desktop` exits 2 under `set -euo pipefail` and aborted provisioning, and the shipped HEY.desktop is installed prefixed as omarchy-HEY.desktop.";
   };
   "omarchy-refresh-applications" = {
-    class = "patch";
-    reason = "Its two copies land 17 desktop files at the store's 444, so the next run cannot rewrite them; under `set -euo pipefail` that aborted omarchy-provision-user before it marked finalize-user.";
+    class = "replace";
+    reason = "Upstream's cp -f replaces an edited launcher or a home-manager link, and it reruns install/user/mise.sh, whose stubs replaced a home-manager ~/.local/bin entry. Copies only missing launchers and runs no mise.sh; provisioning already runs it from install/user/all.sh (#1319).";
   };
   "omarchy-refresh-limine" = {
     class = "vendor";
@@ -736,7 +736,7 @@
   };
   "nixarchy-shell-session" = {
     class = "new";
-    reason = "Resolve the live Quickshell process on the selected Wayland display and publish its tree and PATH to Hyprland, D-Bus and the systemd user manager.";
+    reason = "Resolve the live Quickshell process on the selected Wayland display and publish its tree and PATH to Hyprland, D-Bus and the systemd user manager, and offer a shell restart when a switch activated a different tree.";
     allow = "systemctl-user";
   };
   "omarchy-launch-shell" = {

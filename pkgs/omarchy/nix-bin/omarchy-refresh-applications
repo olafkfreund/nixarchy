@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Ensure default application launchers are installed.
+
+# Upstream's cp -f replaced an edited launcher or a home-manager link, and its
+# second mise.sh run deleted a home-manager ~/.local/bin entry (#1319).
+# Provisioning runs mise.sh itself (all.sh). This only adds missing launchers.
+set -uo pipefail
+
+apps="$HOME/.local/share/applications"
+mkdir -p "$apps"
+srcs=("$OMARCHY_PATH"/applications/*.desktop)
+if omarchy-cmd-present alacritty; then
+  srcs+=("$OMARCHY_PATH/default/alacritty/Alacritty.desktop")
+fi
+for src in "${srcs[@]}"; do
+  dst=$apps/${src##*/}
+  [[ -e $dst || -L $dst ]] && continue
+  cp --no-preserve=mode "$src" "$dst" && echo "Added ${src##*/}"
+done
+if omarchy-cmd-present update-desktop-database; then
+  update-desktop-database "$apps" &>/dev/null || true
+fi

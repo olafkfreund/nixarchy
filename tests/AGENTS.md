@@ -1800,3 +1800,48 @@ that answers `omarchy-plugin-list` still fails. It reads the boot journal, not
 still writing 798 MB (`Cannot store coredump … No space left on device`). The
 journal line names the process `(.quickshell-wra)`, with a leading dot, so an
 exact match such as coredumpctl's `COMM=quickshell-wra` misses it.
+
+<a id="provision-launchers-runs-two-calls-not-provisioning"></a>
+## provision-launchers runs two calls, not provisioning (#1319)
+
+`checks.provision-launchers` runs `install/user/mise.sh` the way `all.sh:14`
+runs it, then `omarchy-refresh-applications` (`omarchy-provision-user:118`),
+twice on a dirty home and once on a clean one.
+
+- **Hole 1.** It does not run the whole of `omarchy-provision-user`, so a third
+  writer added upstream to `all.sh` or to provision-user is not seen.
+- **Hole 2.** No check runs a real Home Manager activation followed by a real
+  first login, in that order. Only a VM with Home Manager could.
+
+**`cp -f` writes through a destination symlink whose target is writable.** It
+unlinks the link only when the target refuses the write (coreutils 9.11). So a
+fixture "home-manager link" pointing at a writable copy of the shipped file
+survives `cp -f` as a link with identical bytes, and a check built on it cannot
+go red. Make the target read-only, as a store link is, and give it content that
+differs from what would be written (#1319's review).
+
+## The restart notice: decided in a runCommand, delivered by nothing here
+
+`checks.shell-session` varies the variable #1306 is about: the live
+shell's tree against the tree a switch activated. Every other check logs in
+after the switch, so the two are always equal there. It proves the
+decision, the replace-not-stack id, that an id from a restarted shell is
+never reused, that a dev-linked tree is left alone and that a failed
+notifier fails nothing. `checks.options` (`syncSessionOffersActivatedTree`)
+proves activation passes the generated tree, and only on NixOS.
+
+**Nothing proves delivery.** Home Manager's activation does receive the
+session bus: `hm-setup-env` imports `DBUS_SESSION_BUS_ADDRESS`,
+`WAYLAND_DISPLAY` and `XDG_RUNTIME_DIR` from the user manager. But no check
+shows the shell's server accepting the notice, or a click moving the menu
+and new terminals. `checks.session` could, with a switch inside the VM,
+which is a VM run for one notice. It is a manual step on a real desktop,
+recorded in #1306's PR.
+
+**A switch stalls the shell's notification server for up to about 20 s.**
+Measured on p620: a 3 s stall, then a 16 s one, while the theme engine reloads
+the plugins. So the notice is delivered by a `systemd-run --user` unit, and
+never inside the activation. **systemd expands `$` in that unit's argv**, so a
+`bash -c '…${x%/*}…'` string arrives mangled. The helper runs its own
+`deliver` action instead. `shell-session`'s fake `systemd-run` refuses a `$`,
+so that case can go red.

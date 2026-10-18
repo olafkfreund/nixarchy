@@ -578,23 +578,15 @@ stdenvNoCC.mkDerivation {
                       exit 1
                     }
 
-                    # Why: pkgs/AGENTS.md#refresh-applications-copies-writable-desktop-files
-                    substituteInPlace $out/share/omarchy/bin/omarchy-refresh-applications \
-                      --replace-fail \
-                        'cp "$OMARCHY_PATH"/applications/*.desktop' \
-                        'cp -f --no-preserve=mode "$OMARCHY_PATH"/applications/*.desktop' \
-                      --replace-fail \
-                        'cp "$OMARCHY_PATH/default/alacritty/Alacritty.desktop"' \
-                        'cp -f --no-preserve=mode "$OMARCHY_PATH/default/alacritty/Alacritty.desktop"'
-
                     # A launcher in ~/.local/bin shadows the Nix package of the same name,
                     # so a Nix codex never ran (#707). Write one only when nothing outside
                     # ~/.local/bin provides the command; nix-bin/omarchy-mise-unshadow
-                    # removes the ones written before this.
+                    # removes the ones written before this. It never replaces an existing
+                    # ~/.local/bin entry either, which may be a home-manager link (#1319).
                     substituteInPlace $out/share/omarchy/bin/omarchy-mise-install \
                       --replace-fail \
                         'rm -f "$HOME/.local/bin/$command"' \
-                        'nix_cmd=$(PATH=$(printf "%s" "$PATH" | tr ":" "\n" | grep -vx "$HOME/.local/bin" | paste -sd:) command -v "$command") && { echo "omarchy-mise-install: $command is provided by Nix ($nix_cmd), no mise launcher"; exit 0; }; rm -f "$HOME/.local/bin/$command"'
+                        'nix_cmd=$(PATH=$(printf "%s" "$PATH" | tr ":" "\n" | grep -vx "$HOME/.local/bin" | paste -sd:) command -v "$command") && { echo "omarchy-mise-install: $command is provided by Nix ($nix_cmd), no mise launcher"; exit 0; }; [[ -e $HOME/.local/bin/$command || -L $HOME/.local/bin/$command ]] && { echo "omarchy-mise-install: ~/.local/bin/$command exists, left as is"; exit 0; }'
 
                     # Both launchers accept a handful of browser desktop-file names and fall
                     # back to "chromium.desktop" for anything else. nixpkgs ships chromium's

@@ -9,10 +9,21 @@ fail() { echo "nixarchy-shell-session: $*" >&2; exit 1; }
 # Quickshell 0.3.2 prints a non-UTF-8 locale warning on STDOUT, ahead of --json.
 run() { LC_ALL=C.UTF-8 timeout --kill-after=1s 2s "$@"; }
 
+# Internal: sync hands this to a user unit. No shell text, because systemd expands $ in a unit's argv.
+if [[ ${1:-} == deliver ]]; then
+  notice_new=$(LC_ALL=C.UTF-8 timeout --kill-after=1s 60s "$2" -u normal -r "$3" -p \
+    'Restart the shell to finish this update' \
+    'The menu and its commands are from the generation you logged in with. Windows already open keep the old commands until reopened.' \
+    --exec "$4/bin/omarchy-restart-shell") || exit 1
+  mkdir -p "${5%/*}" && printf '%s %s\n' "$6" "$notice_new" > "$5"
+  exit
+fi
+
 action=${1:-}
-case $action in pid|tree|sync) shift ;; *) fail 'usage: nixarchy-shell-session {pid|tree|sync} [--if-running] [--pid PID] [--wait SECONDS]' ;; esac
+case $action in pid|tree|sync) shift ;; *) fail 'usage: nixarchy-shell-session {pid|tree|sync} [--if-running] [--pid PID] [--wait SECONDS] [--current TREE]' ;; esac
 if_running=0
 expected_pid=
+current_tree=
 wait_seconds=0
 while (($#)); do
   case $1 in
@@ -21,6 +32,10 @@ while (($#)); do
       option=$1
       (($# >= 2)) && [[ $2 =~ ^[0-9]+$ ]] || fail "$option requires a nonnegative integer"
       if [[ $option == --pid ]]; then expected_pid=$2; else wait_seconds=$((10#$2)); fi
+      shift 2 ;;
+    --current)
+      (($# >= 2)) && [[ -n $2 ]] || fail '--current requires a tree'
+      current_tree=$2
       shift 2 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -116,3 +131,22 @@ reply=$(run hyprctl -i "$selected_instance" eval "$code") || fail 'could not upd
 reply=$(run hyprctl -i "$selected_instance" reload config-only) || fail 'could not reload Hyprland configuration'
 [[ $reply == ok ]] || fail "Hyprland refused the configuration reload: $reply"
 run dbus-update-activation-environment --systemd "OMARCHY_PATH=$selected_tree" "PATH=$new_path"
+
+# Advice, never a failure: the publication above is the contract (#1306).
+notice_file=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nixarchy/restart-notice-id
+if [[ -n $current_tree ]]; then
+  if [[ $current_tree == "$selected_tree" ]]; then
+    rm -f "$notice_file" 2>/dev/null || true
+  # A dev-linked checkout is not in the store, and a restart would not move off it.
+  elif [[ $selected_tree == "${NIX_STORE_DIR:-/nix/store}"/* ]]; then
+    # The server renumbers from 1 when the shell restarts: reuse an id only for this shell.
+    notice_id=0 saved_pid='' saved_id=''
+    read -r saved_pid saved_id 2>/dev/null < "$notice_file" || true
+    if [[ $saved_pid == "$selected_pid" && $saved_id =~ ^[0-9]+$ ]]; then notice_id=$saved_id; fi
+    # A switch reloads the shell's plugins, and the notification server stops answering for
+    # up to ~20s (measured on p620). So deliver from a user unit; the switch never waits (#1306).
+    deliver=(bash "$0" deliver "$(command -v omarchy-notification-send)" "$notice_id" "$current_tree" "$notice_file" "$selected_pid")
+    run systemd-run --user --quiet --collect --setenv=PATH="$PATH" -- "${deliver[@]}" >/dev/null 2>&1 \
+      || "${deliver[@]}" >/dev/null 2>&1 || true
+  fi
+fi

@@ -1166,8 +1166,10 @@
           # that: nixi's own Home Manager module already defaults
           # `services.nixi.package` to its flake's package, and because that
           # flake follows this nixpkgs it is the same derivation this line
-          # names. An overlay attribute would be a second way to spell one
-          # package and a second thing to keep in step.
+          # names, bar one thing: nixarchy overrides its `omarchySrc` (#1314),
+          # so `checks.nixi` guards the pin while `checks.menu-model-merge`
+          # builds the package users get. An overlay attribute would be a
+          # second way to spell one package and a second thing to keep in step.
           #
           # Not in data/apps.nix either. That catalogue is for things that are
           # a package: install it and it is there. Nixi is a package plus a user
@@ -2550,6 +2552,9 @@
           menu-model-merge = import ./tests/menu-model-merge.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+            menuPlugin =
+              self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;
+            nixi = self.nixosConfigurations.vm.config.home-manager.users.omarchy.services.nixi.package;
           };
 
           # #1305: Right never runs a menu row, and a displaced request releases its caller.

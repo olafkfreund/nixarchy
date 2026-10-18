@@ -271,6 +271,10 @@ nothing: every permission request is cancelled before it reaches you.
 **Mechanic** (`/mechanic`) makes the change for you, and every step needs your
 **Allow**. `/tour` and `/learn` work with no agent at all.
 
+Its menu search merges rows the way the stock menu does, so a partial override
+keeps the rest of the row; setting your own `services.nixi.package` gives you
+upstream's merge instead.
+
 [Nixi's own site](https://olafkfreund.github.io/nixi-nixarchy/) walks through a
 first session, and its [README](https://github.com/olafkfreund/nixi-nixarchy#readme)
 covers the options.

@@ -172,3 +172,13 @@ Traps:
 
 Revert the PR. Both apps go back to importing upstream's raw file, which is
 today's behaviour; nothing is stateful.
+
+## Deviations (2026-10-18)
+
+- **Step 1's shape.** `nixi.package` was a third `nixi.*` key in the
+  `services` block, which statix refuses as a repeated key (the block's own
+  comment records the rule). `enable` and `package` now sit in one
+  `nixi = { … }`, and `nixi.agents` stays where it was. Found in step 5; the
+  B1 break was proven on the earlier shape, and deletes the same binding.
+- **Step 2's header** is a few lines longer than the plan's wording, and the
+  `|| true` reason sits inside the loop.

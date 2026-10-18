@@ -16,6 +16,11 @@ let
   # Why: modules/AGENTS.md#what-omarchy-path-points-at-and-the-source-of-ever
   omarchyPath = osConfig.programs.nixarchy.tree or "${cfg.package}/share/omarchy";
 
+  # The stock menu's MenuModel.js, with #1311's patch, for the apps that import it (#1314).
+  menuModelSrc = pkgs.runCommandLocal "nixarchy-menu-model" { } ''
+    install -Dm444 ${omarchyPath}/shell/plugins/menu/MenuModel.js "$out/shell/plugins/menu/MenuModel.js"
+  '';
+
   # Upstream's user menu file, which nixarchy does not write -- named here
   # because the activation below has to undo an older nixarchy having done so.
   menuExtensionPath = "${config.xdg.configHome}/omarchy/extensions/omarchy-menu.jsonc";
@@ -848,7 +853,13 @@ in
     # nixi's two fold together here rather than the new one landing a thousand
     # lines from the option it bridges.
     services = {
-      nixi.enable = lib.mkDefault true;
+      nixi = {
+        enable = lib.mkDefault true;
+        # Nixi's menu search merges rows with the stock menu's patched file (#1314).
+        package = lib.mkDefault (
+          inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override { omarchySrc = menuModelSrc; }
+        );
+      };
 
       # The one nixi default nixarchy DOES change, and the only one it needs to.
       #
@@ -1989,6 +2000,9 @@ in
               src = inputs.nixarchy-menu.packages.${pkgs.stdenv.hostPlatform.system}.plugin;
               postPatch = ''
                 substituteInPlace BarWidget.qml --replace-fail 'fontFamily: "omarchy"' '${snowflakeButton}'
+                # Its search merges rows with the stock menu's patched file (#1314).
+                sed -i -E 's#file:///nix/store/[a-z0-9]{32}-omarchy-menu-model/MenuModel\.js#file://${menuModelSrc}/shell/plugins/menu/MenuModel.js#' providers/OmarchyMenu.qml
+                grep -qF 'file://${menuModelSrc}/shell/plugins/menu/MenuModel.js' providers/OmarchyMenu.qml
               '';
             };
           placement = "";

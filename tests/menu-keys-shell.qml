@@ -20,7 +20,7 @@ ShellRoot {
     function state(): string {
       if (!r.menu) return JSON.stringify({ error: r.loadError || "menu not created" })
       return JSON.stringify({ opened: r.menu.opened, active: r.menu.activeMenu, rows: Object.keys(r.menu.items || {}).length,
-        width: r.menu.cardWidth, base: Style.space(300), cap: Style.space(640), filter: r.menu.filterText })
+        width: r.menu.cardWidth, base: Style.space(300), cap: Style.space(640), w800: Style.space(800), filter: r.menu.filterText })
     }
     function open(payload: string): string { return String(r.menu.open(payload)) }
     function key(k: int): string { tc.keyClick(k); return "sent" }

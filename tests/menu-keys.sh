@@ -152,4 +152,16 @@ ipc key $K_Z >/dev/null; ipc key $K_Z >/dev/null; ipc key $K_Z >/dev/null; sleep
 summon probe
 [[ $(field width) == "$(field base)" ]] && pass "3d the next menu starts from the base width again" || fail "3d after leaving wide: width $(field width), want base $(field base)"
 
+# 3e: a caller's own width passes through, above the cap. 3f: a long prompt
+# fits and the next short one starts from the base again.
+omarchy-menu-select Pick a b -- --width 800 > /dev/null 2>&1 & p=$!; callers+=("$p"); sleep 1
+[[ $(field width) == "$(field w800)" ]] && pass "3e a --width 800 prompt keeps its own width" || fail "3e --width 800: width $(field width), want $(field w800)"
+ipc key $K_ESCAPE >/dev/null; exited_within "$p" 5 || kill "$p"
+omarchy-menu-select Pick "$long_label" > /dev/null 2>&1 & p=$!; callers+=("$p"); sleep 1
+[[ $(field width) == "$(field cap)" ]] && pass "3f a long prompt option widens the card to the cap" || fail "3f long prompt: width $(field width), want cap $(field cap)"
+ipc key $K_ESCAPE >/dev/null; exited_within "$p" 5 || kill "$p"
+omarchy-menu-select Short a b > /dev/null 2>&1 & p=$!; callers+=("$p"); sleep 1
+[[ $(field width) == "$(field base)" ]] && pass "3f a short prompt after a long one starts from the base" || fail "3f short prompt: width $(field width), want base $(field base)"
+ipc key $K_ESCAPE >/dev/null; exited_within "$p" 5 || kill "$p"
+
 exit $failed

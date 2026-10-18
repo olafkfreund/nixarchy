@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1325
 spec: spec/2026-10-18-1325-edge-menu-actions.md
 ---

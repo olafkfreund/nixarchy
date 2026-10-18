@@ -736,7 +736,7 @@
   };
   "nixarchy-shell-session" = {
     class = "new";
-    reason = "Resolve the live Quickshell process on the selected Wayland display and publish its tree and PATH to Hyprland, D-Bus and the systemd user manager.";
+    reason = "Resolve the live Quickshell process on the selected Wayland display and publish its tree and PATH to Hyprland, D-Bus and the systemd user manager, and offer a shell restart when a switch activated a different tree.";
     allow = "systemctl-user";
   };
   "omarchy-launch-shell" = {

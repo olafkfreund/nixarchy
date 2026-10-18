@@ -275,9 +275,10 @@ preview of each plugin you open are fetched when you use the panel, and
 never otherwise. Previews can be turned off with `{"previews": false}` in
 `~/.config/nixarchy-plugin-browser/config.json`.
 
-**After the switch that brings it in,** log out and back in once. Until you
-do, Add Plugin still opens the old prompt: the menu is read from the tree
-your session started with.
+**After the switch that brings it in,** restart the shell when the
+notification offers it (or run `omarchy-restart-shell`). Until you do,
+Add Plugin still opens the old prompt: the running shell keeps the
+generation it started with, so the desktop never changes under you.
 
 **If you installed it by hand before,** remove your copy before switching:
 `rm -rf ~/.config/omarchy/plugins/io.github.olafkfreund.nixarchy-plugin-browser`.

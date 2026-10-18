@@ -430,6 +430,38 @@ The PR links the intent, the spec and this plan. It says:
   `options` was not run against B5;
 - step 7's result.
 
+**Deviation found in step 7 (2026-10-18).** The first p620 switch sent no
+notice. `nixarchySyncSession` took 2.2 s, and the id file was never written.
+The same command sent the notice by hand (0.2 s), and also from a system
+service that imports the user's environment the way `hm-setup-env` does.
+
+A probe of `GetServerInformation` every 100 ms during an activation showed
+the cause: the notification server stalls for 3.4 s right after the
+activation starts `nixarchyThemeEnginePlugin.service`. That stall covers the
+helper's `run`, whose limit is 2 s.
+
+A 10 s limit was tried first, and the next switch timed out at 10 s as well.
+A 40 s probe then showed a 3 s stall followed by a 16 s one. In the shell's
+own log, the plugins' `IpcHandler` components are re-created as the theme
+engine reloads them.
+
+So the helper no longer sends the notice itself. It hands
+send-and-save-the-id to `systemd-run --user --collect`, which returns at once
+and gives delivery 60 s. If `systemd-run` fails, the same command runs inline.
+The notifier's absolute path and the caller's PATH are passed to the unit.
+
+The unit runs the helper's own hidden `deliver` action (`bash "$0" deliver …`).
+It never runs a `bash -c` string, because systemd expands `$` and `${…}` in a
+unit's argv. The first p620 run, with a `bash -c` string, logged
+`Invalid environment variable name evaluates to an empty string: 4%/*`. It
+delivered the notice after 16 s, then failed to save the id.
+
+`tests/shell-session.sh` gains a fake `systemd-run` that runs the command in
+the background, refuses any argument containing `$` as the real one would
+mangle it, and a notifier that sleeps 3 s. It asserts that `sync`
+returns in under 2 s and the id still arrives. With delivery run inline, it
+is red: `FAIL: the sync waited for a stalled notifier`.
+
 Use `Closes #1306` only if step 7 passed; otherwise use `Refs #1306` (§8).
 
 ## Tests

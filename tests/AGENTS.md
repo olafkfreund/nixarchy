@@ -1813,3 +1813,29 @@ fixture "home-manager link" pointing at a writable copy of the shipped file
 survives `cp -f` as a link with identical bytes, and a check built on it cannot
 go red. Make the target read-only, as a store link is, and give it content that
 differs from what would be written (#1319's review).
+
+## The restart notice: decided in a runCommand, delivered by nothing here
+
+`checks.shell-session` varies the variable #1306 is about: the live
+shell's tree against the tree a switch activated. Every other check logs in
+after the switch, so the two are always equal there. It proves the
+decision, the replace-not-stack id, that an id from a restarted shell is
+never reused, that a dev-linked tree is left alone and that a failed
+notifier fails nothing. `checks.options` (`syncSessionOffersActivatedTree`)
+proves activation passes the generated tree, and only on NixOS.
+
+**Nothing proves delivery.** Home Manager's activation does receive the
+session bus: `hm-setup-env` imports `DBUS_SESSION_BUS_ADDRESS`,
+`WAYLAND_DISPLAY` and `XDG_RUNTIME_DIR` from the user manager. But no check
+shows the shell's server accepting the notice, or a click moving the menu
+and new terminals. `checks.session` could, with a switch inside the VM,
+which is a VM run for one notice. It is a manual step on a real desktop,
+recorded in #1306's PR.
+
+**A switch stalls the shell's notification server for up to about 20 s.**
+Measured on p620: a 3 s stall, then a 16 s one, while the theme engine reloads
+the plugins. So the notice is delivered by a `systemd-run --user` unit, and
+never inside the activation. **systemd expands `$` in that unit's argv**, so a
+`bash -c '…${x%/*}…'` string arrives mangled. The helper runs its own
+`deliver` action instead. `shell-session`'s fake `systemd-run` refuses a `$`,
+so that case can go red.

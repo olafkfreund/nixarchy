@@ -862,6 +862,19 @@ let
       off = pkgs.lib.hasInfix "share/nix-skills" (activationText defaultHome);
     };
 
+    # #1306: activation offers a restart into the tree it activated -- the
+    # generated one on NixOS -- and offers none without a NixOS tree to reach.
+    syncSessionOffersActivatedTree =
+      let
+        sync = home: home.home.activation.nixarchySyncSession.data;
+      in
+      {
+        on = builtins.any (
+          l: builtins.match ".*--current /nix/store/[a-z0-9]{32}-nixarchy-omarchy-tree( .*)?" l != null
+        ) (pkgs.lib.splitString "\n" (sync defaultHomeOn));
+        off = pkgs.lib.hasInfix "--current" (sync defaultHome);
+      };
+
     # ---- #773: ai-mirror, on every machine, connected to no agent -------
     #
     # Off unless asked for, and independent of `mcp` above, which is on for

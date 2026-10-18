@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 1342
 intent: intent/2026-10-18-1342-launch-browser-self-call.md
 ---
@@ -29,12 +29,19 @@ file is seeded at login.
   `seed_dir` just wrote and print one line: *"nixarchy: hyprland-mimeapps.list
   is seeded at your next login (#1342)"*. A file the user already had is never
   touched, because the check is "absent before this run".
-- **A user unit, `nixarchy-seed-mimeapps.service`**: a oneshot,
-  `WantedBy = [ "graphical-session.target" ]`, that runs the script with
-  `${omarchyPath}/config/hyprland-mimeapps.list` and
-  `${config.xdg.configHome}/hyprland-mimeapps.list`. Login is when the session
-  picks up the current generation's tree, so the launcher and the file arrive
-  together.
+- **A session-start hook, `~/.config/omarchy/hooks/post-boot.d/seed-mimeapps`**
+  (`xdg.configFile`, executable, like `default-plugins` at `home.nix:2161`),
+  that runs the script with `${omarchyPath}/config/hyprland-mimeapps.list` and
+  `${config.xdg.configHome}/hyprland-mimeapps.list`. Hyprland runs
+  `post-boot.d` once, when the session starts, and a switch never does. Login
+  is when the session picks up the current generation's tree, so the launcher
+  and the file arrive together.
+
+  **Not a systemd user unit** (revision, after the plan review). Home
+  Manager's `systemd.user.startServices` defaults to `true`, and it starts a
+  *new* unit wanted by an active target at the switch. In a logged-in 4.0.4
+  session `graphical-session.target` is active, so a `WantedBy` unit would
+  seed the file seconds after the activation held it back: #1342 again.
 
 On a fresh install there is no session at the first switch, and the first
 login seeds the file, before any link can be opened from that session. On a
@@ -53,7 +60,7 @@ A CARRIED patch, `--replace-fail`, in `pkgs/omarchy/default.nix`, on
 
 ```sh
 if [[ ${browser_exec##*/} == omarchy-launch-browser ]]; then
-  notify-send -u critical "No browser to open this in" "The default browser entry runs omarchy-launch-browser itself (#1342). Choose a browser with: omarchy default browser"
+  omarchy-notification-send -u critical "No browser to open this in" "The default browser entry runs omarchy-launch-browser itself (#1342). Choose a browser with: omarchy default browser"
   exit 1
 fi
 ```
@@ -110,26 +117,33 @@ defaults).
 - **Between a switch and the next login**, links use upstream 4.0.4 behaviour,
   the `xdg-settings` default, which is the browser from `mimeapps.list`. That
   is the behaviour the session already had.
-- **The unit runs at every login.** It is one `test -e` when the file exists.
+- **The hook runs at every login.** It is one `test -e` when the file exists.
 - **The guard's notification** names a command, `omarchy default browser`;
   the plan checks it exists in 4.0.5.
 
 ## Verification
 
 - **`checks.seed-hyprland-mimeapps`** (runCommand) drives the script:
-  absent → seeded; a file present → untouched; a symlink present →
-  untouched. Control: the script with the `-L` test removed must replace the
-  symlink (§1's ownership rule).
+  absent → seeded; a file present → untouched; a dangling symlink present →
+  untouched **and the script exits 0**. Control: the script with the `-L` test
+  removed must exit non-zero on the dangling link. (GNU `cp` refuses to write
+  through a dangling symlink, so `-L` buys "the seed does not fail at every
+  login", not "the link is not replaced"; the first version of this spec said
+  the latter.)
+- **The activation hold**, as its own check: the hold block is extracted from
+  `home.activation.nixarchySeed.data` and run in a sandbox with `run()`
+  defined, as `tests/home-activation-writes.nix` does. Absent before → removed;
+  a file or a symlink already present → kept; a dry run → nothing written.
+  Control: the block without its `rm` must leave the file.
 - **`checks.launch-browser-self-call`** (runCommand) runs the built
   `omarchy-launch-browser` against a fixture whose default browser entry runs
   the launcher, with every launch counted through a wrapper on `PATH`. The
   patched launcher exits 1 after one invocation. Control: upstream's
   unpatched 4.0.4 launcher, which must reach the wrapper's cap (20) and be
   stopped by it, or the check cannot see the recursion.
-- **The activation hold**: `checks.session` already boots a desktop. It
-  asserts the file exists after login (the unit ran). The "removed if absent
-  before" branch of the activation is covered by a fixture run of the
-  activation's own snippet only if the plan finds that cheap; otherwise the
-  PR says so (§3: name the hole).
+- **`checks.session`**: the file is absent once Home Manager has run and
+  before login, and present after login (the hook ran). The pair is what
+  makes it fail on a full revert, where the boot-time activation would seed
+  it.
 - Each new check fails with its fix reverted (§1), and the output goes in the
   PR.

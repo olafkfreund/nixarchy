@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 1341
 intent: intent/2026-10-18-1341-system-bump-timeout.md
 ---
@@ -8,9 +8,8 @@ intent: intent/2026-10-18-1341-system-bump-timeout.md
 
 ## Design
 
-**Split `system` into two parallel jobs, divided by what needs `hypr-rdp`,
-give both a usable `/dev/kvm`, and keep a job named `system` that passes only
-when both did.** The answer to the intent's first question is "split", and to
+**Split `system` into two parallel jobs, divided by what needs `hypr-rdp`
+built, and keep a job named `system` that passes only when both did.** The answer to the intent's first question is "split", and to
 the second "PRs still build `hypr-rdp`": see the alternatives.
 
 ### Revision (2026-10-18), after the plan review
@@ -23,11 +22,26 @@ and that half came to ~39 of 45, not ~29. Of `system`'s checks, only
 `session` and `options` pull in `hypr-rdp` (grep of `tests/*.nix`), so the
 split now follows that dependency.
 
-It also found that **`system`'s VM checks run without KVM.** No step in it
+It also claimed, wrongly (see revision 2), that **`system`'s VM checks run without KVM.** No step in it
 grants `/dev/kvm`, and `box`'s own comment (`build.yml:1738-1742`) says that
 without the udev rule the test driver falls back to TCG and the job "would
 quietly get slower until it started flapping against its timeout". That is
 `system`'s history. Both halves gain `box`'s udev step.
+
+### Revision 2 (2026-10-18), after the second plan review
+
+**`system` already has KVM.** `setup-nix` uses `nix-installer-action`, which
+enables it: main's job 117701579179 logs `kvm: true` and "Accelerated KVM is
+enabled", and so do both #1332 timeouts. Revision 1's "the lever is KVM" was
+wrong, and its KVM step is dropped: it would be a no-op.
+
+**`options` does not build `hypr-rdp`.** It evaluates whether the unit exists
+(`tests/options.nix:1945-1953`, `? hypr-rdp`), so it moves to
+`system-checks`. That is the lever that replaces KVM.
+
+The verification's merge-state test could not fail: a draft PR reads `DRAFT`,
+and a cancelled `install`, a required check, blocks on its own. It now uses a
+ready PR whose other required checks are green.
 
 ### Jobs
 
@@ -35,17 +49,14 @@ quietly get slower until it started flapping against its timeout". That is
 
 - **`system-build`**: today's `system` job (`:1306`) minus the checks that do
   not need `hypr-rdp` or publish. It keeps the toplevels, `coexistence`, the
-  allowlisted tools and box image, the system-closure push, `options`,
-  **`session`** and the cache budget. Everything `hypr-rdp` touches is built
-  once, here.
+  allowlisted tools and box image, the system-closure push, **`session`**
+  and the cache budget. Everything that builds `hypr-rdp` is here, once.
 - **`system-checks`**: the MicroVM template and its push, the box template,
   `integration`, `coexist`, `install-teardown`, `installer-ui`,
   `try-nixarchy`, `dashboard-clock`, `installer-wizard` and `plugin`. Several
   of these are `runCommand`s, not VMs; what they share is that none needs
   `hypr-rdp`. It has the same setup steps, `Free disk space`, and its own copy
   of the gate's "cannot pass" first step.
-- **Both** gain `box`'s step "/dev/kvm is real and writable, or fail here"
-  (`:1736-1746`), after `Free disk space`.
 - **`system`** (the required context, unchanged in branch protection:
   `["lint","omarchy","system","devenv-presets","box","install"]`):
   `needs: [gate, system-build, system-checks]`, `if: ${{ !cancelled() }}`,
@@ -64,22 +75,23 @@ Each half keeps `timeout-minutes: 45` and the per-commit concurrency group
 
 ### Time
 
-Measured on the two #1332 timeouts (jobs 117666616240 and 117687897155), under
-TCG, worst of two:
+Measured on the two #1332 timeouts (jobs 117666616240 and 117687897155), both
+already under KVM, worst of two:
 
 | job | steps (minutes) | total incl. setup |
 |---|---|---|
-| `system-build` | disk 2.0, VM closure 3.3, installed 0.9, coexistence 0.7, tools 10.3, push 1.7, options 4.5, **session 9.8**, budget 2.3 | ~38.5 |
-| `system-checks` | disk 2.0, MicroVM 2.0 + push 2.2, plugin 5.5, coexist 2.5, wizard 1.4, integration 1.1, the four small ones ~2 | ~22 |
+| `system-build` | disk 2.0, VM closure 3.3, installed 0.9, coexistence 0.7, tools 10.3, push 1.7, session 9.8, budget 2.3 + 2 | ~36 |
+| `system-checks` | disk 2.0, MicroVM 2.0 + push 2.2, options 4.5, plugin 5.5, coexist 2.5, wizard 1.4, integration 1.1, the four small ones ~2, nixarchy's own packages again ~2 | ~28 |
 
-`system-build` at ~38.5 under TCG is not enough headroom on its own. **KVM is
-what makes it fit**: `session` and `plugin` are the two VM-heavy checks, and
-under TCG they emulate every instruction. The saving is not assumed:
-verification measures `session` under KVM, and if `system-build` would still
-exceed ~35 minutes on a bump, the plan stops before the PR.
+The budget's "+ 2" is the MicroVM runners: `cache-budget.sh` realises every
+allowlist entry (`:34-40`), and after the split they are built in the other
+job. "Nixarchy's own packages again" is because pull requests push no
+closures, so both halves build them.
 
-A normal PR (proofs present) stays at today's ~20 minutes wall clock or less.
-A timeout now names the half that ran out.
+~36 of 45 leaves ~9 minutes, against ~50 in one job today. It is an estimate
+from step times: only a real nixpkgs bump measures it, because a normal PR
+substitutes `hypr-rdp` from the cache. A normal PR (proofs present) stays at
+today's ~20 minutes or less, and a timeout now names the half that ran out.
 
 ### Coverage guard
 
@@ -101,9 +113,9 @@ A timeout now names the half that ran out.
   `hypr-rdp` compile, 447 crates (`:1414-1421`), and `options` and `session`
   need `hypr-rdp` too. Pull requests never push closures, so it would be
   compiled again. That would save nothing on a PR.
-- **KVM alone, no split.** It may cut `session` and `plugin` enough, but the
-  job would still run the whole suite in one 45-minute window, and a timeout
-  would still name nothing. Taken as part of the design, not instead of it.
+- **KVM** (revision 1's lever). `system` already has it.
+- **A third job for `session`.** It needs `hypr-rdp` built, so it would
+  compile the 447 crates a second time: no saving.
 - **Skip `hypr-rdp`/box image on PRs.** `options` still builds `hypr-rdp`, and
   the box image is what the box checks test. No saving, and less coverage.
 - **Self-hosted runners.** All four are on p620 and share the two install
@@ -120,32 +132,36 @@ A timeout now names the half that ran out.
   failure mode.
 - **Runner minutes.** Two setups instead of one, about 5 more hosted minutes
   per run. Public repository, so free.
-- **KVM changes how the VM tests run.** Faster guests can expose a timing race
-  that TCG's slowness hid. `box` has run its VM checks under KVM on these
-  runners for weeks; a new race fails a check loudly, not silently.
+- **~9 minutes of headroom on a bump** is less than the 25 a normal run
+  has. A substituter stall on a bump day would still time `system-build` out;
+  it would then name `system-build` rather than everything.
 - **Disk.** Each half frees disk and downloads its own closures. The VM half
   substitutes the test VMs' closures from cache.nixos.org, about 3 minutes, as
   `system` does today.
 - **Docs and references.** `docs/internals/workflows.md:103-107` and
   `AGENTS.md:583` (CLAUDE.md is a symlink to it) name the job; the stale
-  comment at `build.yml:1695-1696` is corrected in passing.
+  comment at `build.yml:1695-1697` is corrected in passing, and so are the
+  pointers to "`system`'s timeout comment" in `already-proven.sh:20` and
+  `build-unless-proven.sh:11`, which name `system-build`.
 
 ## Verification
 
 - `actionlint` on `build.yml`; the workflow guards in `build.yml` itself
   (skipPush, coverage) green on the PR.
-- **The aggregator blocks on a red half**, measured, not inferred (§4): on a
-  throwaway draft PR (a `test/` branch, outside Copilot's `update/` filter;
-  its install run cancelled at once), with a deliberately failing step in
-  `system-checks`, `gh pr view --json mergeStateStatus` reads `BLOCKED`, and
-  `system` reads `failure` naming `system-checks`. Then the same with
-  `system-build`, and once with a half that times out (a `sleep` past a
-  1-minute `timeout-minutes`): `BLOCKED`, and `copilot-handoff.sh` run against
-  that run hands off nothing.
-- **`session` under KVM, measured:** the throwaway PR also touches a comment
-  in `tests/session.nix`, so its drv changes and `session` really runs rather
-  than being skipped as proven. Its duration under KVM, against the 9.8
-  minutes under TCG, gives the bump estimate for `system-build`.
+- **The aggregator blocks on a red half**, measured, not inferred (§4), on a
+  throwaway PR from a `test/` branch (outside Copilot's `update/` filter),
+  **marked ready for review, with `install` left to finish**, so that every
+  required check but `system` is green when the merge state is read
+  (`gh pr checks --required`). Two runs:
+  - `system-checks` times out (a `sleep` past a 1-minute `timeout-minutes`),
+    `system-build` green: `mergeStateStatus` reads `BLOCKED`, the half is
+    `cancelled` with the timeout annotation, and `copilot-handoff.sh` run
+    against that run hands off nothing.
+  - `system-build` fails (an `exit 1`), `system-checks` green: `BLOCKED`.
+  The green control is the real PR's own run, which must read `CLEAN` or
+  `UNSTABLE` with `system` green.
+- `checks.copilot-handoff` gains a case for the aggregator's exclusion, with a
+  control that fails when the exclusion is removed.
 - **Timing:** the PR's own run shows both halves' durations. The next nightly
   nixpkgs bump finishes both halves without a re-run; the PR records it, and
   #1341 closes on that evidence rather than on merge.

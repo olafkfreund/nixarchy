@@ -1750,9 +1750,15 @@ reaches nothing is stale. That proves every hazardous row was *classified*.
 It cannot see `nixarchy-*` commands (modules generate them; they are not in
 the tree) or an `rm "$VAR"`. A script patched in place to explain and exit
 still reaches its old writers, so it stays flagged and carries a `guidance:`
-reason. Whether a deleting row deletes the right things is the job of a
-`runCommand` with a fixture `$HOME`, as `checks.remove-preinstalls` does for
+reason. The walker follows every `omarchy-*` name in a script, whichever
+`case` branch it sits in and even inside `echo` text, so a dispatch script
+flags every row that calls it, and the reason names the branch. It does not
+follow `"$OMARCHY_PATH/bin/omarchy-x"`. Whether a deleting row deletes the
+right things is the job of a `runCommand` with a fixture `$HOME`, as `checks.remove-preinstalls` does for
 Remove and Restore preinstalls.
+
+Edge entries live only on `edge-candidate`, because the stale rule fires for a
+row the channel does not have (#1325).
 
 A row with `disabled = "true"` must have `action = "true"`, and the check
 asserts it (#1320). Neither `when = "false"` nor `disabled` stops

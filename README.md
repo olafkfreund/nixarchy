@@ -480,9 +480,9 @@ actually show (`tests/demo/`).
 | ![The Packages panel: searching nixpkgs, adding a package, and applying without a terminal](docs/img/features/pkg.gif) | ![The Flatpak and Snap panel: pasting a Flathub link, reading the app's card, and queueing it](docs/img/features/flatsnap.gif) |
 | **Install ▸ Packages** — `Super+Alt+N` | **Install ▸ Flatpak & Snap** |
 | ![The Distrobox panel: creating an Arch box from a template and entering it](docs/img/features/boxes.gif) | ![The Herdr panel: agent sessions and what each one is doing](docs/img/features/herdr.gif) |
-| **Trigger ▸ Boxes** — `Super+Alt+D` | **Apps ▸ Herdr** — `Super+Alt+H` |
+| **Trigger ▸ Boxes** — `Super+Alt+D` | **Trigger ▸ Herdr** — `Super+Alt+H` |
 | ![The Dev environments panel: scaffolding a devenv project and entering it](docs/img/features/devenv.gif) | |
-| **Apps ▸ Dev environments** — `Super+Alt+E` | |
+| **Trigger ▸ Dev environments** — `Super+Alt+E` | |
 
 More under [`docs/img/features/`](docs/img/features), and the rest of the tour
 is on [the site](https://olafkfreund.github.io/nixarchy/).
@@ -494,9 +494,9 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Install menu** | picks write to a Nix config, not pacman |
 | **Install ▸ Search** | one picker over 137k rows — every nixpkgs package, every NixOS option, and the app selection |
 | **Install ▸ Packages** | the same catalogue in a panel ([nixarchy-pkg](https://github.com/olafkfreund/nixarchy-pkg)): search, add, draft and apply without a terminal. **On by default**, Super+Alt+N on a new install; `programs.nixarchy.defaultPlugins.pkg = false` removes it |
-| **Apps ▸ GitLab Pipelines** | project pipelines, stages and jobs in a panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui)), with `glab`. **On by default**, Super+Alt+P on a new install; `programs.nixarchy.defaultPlugins.gitlab = false` removes it |
-| **Apps ▸ GitHub Actions** | repository workflow runs, jobs and steps in a panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)), with `gh`. **On by default**, Super+Alt+A on a new install; `programs.nixarchy.defaultPlugins.github = false` removes it |
-| **Apps ▸ Herdr** | your herdr sessions and their agents in the bar ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)), with `herdr`. **On by default**, Super+Alt+H on a new install; `programs.nixarchy.defaultPlugins.herdr = false` removes it |
+| **Trigger ▸ GitLab Pipelines** | project pipelines, stages and jobs in a panel ([nixarchy-gltui](https://github.com/olafkfreund/nixarchy-gltui)), with `glab`. **On by default**, Super+Alt+P on a new install; `programs.nixarchy.defaultPlugins.gitlab = false` removes it |
+| **Trigger ▸ GitHub Actions** | repository workflow runs, jobs and steps in a panel ([nixarchy-ghtui](https://github.com/olafkfreund/nixarchy-ghtui)), with `gh`. **On by default**, Super+Alt+A on a new install; `programs.nixarchy.defaultPlugins.github = false` removes it |
+| **Trigger ▸ Herdr** | your herdr sessions and their agents in the bar ([nixarchy-herdr](https://github.com/olafkfreund/nixarchy-herdr)), with `herdr`. **On by default**, Super+Alt+H on a new install; `programs.nixarchy.defaultPlugins.herdr = false` removes it |
 | **Install ▸ Apply changes** | the rebuild itself in a panel (`pkgs/rebuild-panel/`, shipped with nixarchy): it asks before it starts, then shows the elapsed time and the log tail while `nixarchy-rebuild` runs, and keeps the exit code and the log if it fails. Closing it does not stop the rebuild. **On by default**; its bar icon shows only while one is running — `programs.nixarchy.defaultPlugins.rebuild = false` removes it |
 | **Super+Space** | a palette over the whole menu ([nixarchy-menu](https://github.com/olafkfreund/nixarchy-menu)): apps, Omarchy's rows, sums, conversions, files, hotkeys, a hand-off to your agent. **Installed, off by default**: Omarchy's own menu is the default, and Setup ▸ Defaults ▸ Menu switches to the palette with no rebuild |
 | **Hyprforge** | every Hyprland setting, previewed live on your real windows ([Hyprforge](https://github.com/AbdulazizAlwabel/omarchy-hyprforge), by Aziz). **On by default**, and what it saves is what the session loads |
@@ -519,7 +519,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **Boxes** | the Distrobox panel (`Super+Alt+D`) creates, enters and promotes an Arch or Debian userland via rootless podman and [distrobox](https://distrobox.it), for software NixOS will not run — [the page](https://olafkfreund.github.io/nixarchy/manual/boxes). Off by default |
 | **Trigger ▸ Boxes** | your distrobox boxes in a panel ([nixarchy-distrobox](https://github.com/olafkfreund/nixarchy-distrobox)), created from nixarchy's own templates. **On wherever Boxes are**, Super+Alt+D on a new install; `programs.nixarchy.defaultPlugins.distrobox = false` removes it |
 | **Trigger ▸ Sandbox** | disposable and permanent MicroVMs in one panel ([nixarchy-microvm](https://github.com/olafkfreund/nixarchy-microvm)). **On by default**, Super+Alt+V on a new install; `programs.nixarchy.defaultPlugins.microvm = false` removes it |
-| **Apps ▸ Podman** | containers, images, volumes and networks in a panel ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)). **On wherever podman is** — the Podman services row or Boxes — Super+Alt+O on a new install; `docker` stays Docker |
+| **Trigger ▸ Podman** | containers, images, volumes and networks in a panel ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)). **On wherever podman is** — the Podman services row or Boxes — Super+Alt+O on a new install; `docker` stays Docker |
 | **Remote desktop** | `gliff user@host` shows another Hyprland machine's session over SSH, **installed by default**, with a Gliff-Manager bar widget (Setup ▸ Remote desktop ▸ Manage gliff machines); `programs.nixarchy.services.hypr-rdp` serves the running Hyprland session to any RDP client, from an encrypted password, with the firewall closed — [the page](https://olafkfreund.github.io/nixarchy/manual/remote-desktop). RDP is off by default |
 | **Sandboxes** | `nixarchy vm run` boots a disposable NixOS MicroVM sharing the host's `/nix/store`, no root and no rebuild — [the page](https://olafkfreund.github.io/nixarchy/manual/sandboxes). Off by default |
 | **Prebuilt binaries** | `nix-ld` with a curated library set — a downloaded binary finds `libGL`, the X/Wayland stack, NSS and friends; `envfs` resolves `/bin` and `/usr/bin` shebangs; binfmt makes AppImages double-clickable — [the page](https://olafkfreund.github.io/nixarchy/manual/prebuilt-binaries). **On by default** |

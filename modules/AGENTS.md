@@ -1090,7 +1090,7 @@ How, and why this way:
   is the line the user wrote -- or the one boxes sets at `mkDefault`. Reading
   `services.boxes.enable` instead would put a podman panel on a machine where
   boxes are on and podman was forced back off; tests/options.nix
-  (`podmanViaBoxes`) holds that line. The Apps ▸ Podman row uses the same gate
+  (`podmanViaBoxes`) holds that line. The Trigger ▸ Podman row uses the same gate
   at the Nix level (`podmanEnabled`), so it does not exist without podman.
 - **A seeded bind can outlive its plugin.** Seed binds reach every new home,
   gated defaults do not. So the helper checks the plugin's directory before

@@ -1630,10 +1630,10 @@ let
       # licence must not satisfy it.
       off = builtins.pathExists "${inputs.nixarchy-devenv.packages.${system}.plugin}/COPYING";
     };
-    # The Apps row exists exactly where the panel does.
+    # The Trigger row exists exactly where the panel does.
     devenvRow = {
-      on = menuSpec devenvPanelOn ? "apps.devenv";
-      off = menuSpec devenvPanelOff ? "apps.devenv";
+      on = menuSpec devenvPanelOn ? "trigger.devenv";
+      off = menuSpec devenvPanelOff ? "trigger.devenv";
     };
     # The Sandbox group is the panel: no trigger.vm.* child is left (each one
     # called a verb with no name, #781), the parent opens the plugin, and the
@@ -2681,7 +2681,7 @@ let
   hasPodmanRow =
     cfg:
     builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text
-      ? "apps.podman";
+      ? "trigger.podman";
 
   menuSpec =
     cfg: builtins.fromJSON cfg.environment.etc."nixarchy/omarchy-menu.jsonc".source.overrideSpec.text;

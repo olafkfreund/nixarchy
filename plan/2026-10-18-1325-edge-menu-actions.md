@@ -64,6 +64,22 @@ Traps:
 - §5: a flake sees only tracked files, so `git add` before building.
 - §5: `git merge-base` and `git show --stat` after the merge.
 
+### Step 0 results (2026-10-18)
+
+- Edge tree: `edge-candidate` (quattro 386176a) merged with main 4ff4e62e,
+  merge commit 21b22fb6, clean.
+- `menu-actions`: the same 31 findings as the spec, none new, none gone
+  (`/mnt/data/vmtest/1325-before.txt`).
+- `--measure`: `install.style.theme` and `remove.preinstalls` both reach only
+  `omarchy-install-hermes-cli: systemctl-user`. That stop is on its `--now`
+  branch (line 542). `install.style.theme` reaches it through
+  `omarchy-theme-set-hermes`, which runs `--check` only. `remove.preinstalls`
+  runs `--owns`, which quattro's script no longer accepts: it falls to the
+  usage branch and exits 1. Neither reaches `home-rm` any more, so `owned:`
+  no longer fits; both become `unreached:`.
+- `menu-verbs` is red on quattro for #1329 (`apps.*`, `remove.dictation.*`),
+  unrelated here (§10). `bin-ledger` and `menu-guards` are green.
+
 ### 1. [coder] `data/menu-actions.nix` in `wt-1325-edge`
 
 Keep the file's key order and its nixfmt wrapping.

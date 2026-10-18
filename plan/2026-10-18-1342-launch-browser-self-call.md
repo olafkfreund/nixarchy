@@ -117,12 +117,16 @@ costs ~60 bytes, which is why the text is a file. The phase is at 120,884 of
   it is set and the file now exists, `run rm -f` it and echo
   `nixarchy: hyprland-mimeapps.list is seeded at your next login (#1342)`.
   Open the block with the comment line `# #1342: hold the mimeapps list until
-  login` (the test extracts from it) and one more line of why. Use `run`, like
+  login` (the test extracts from it) and one more line of why. The block is
+  contiguous: the `mimeapps_absent` test, then the `seed_dir "${omarchyPath}/config"`
+  call, then the hold's `if … fi` **directly** after it, before `note_kept`,
+  so the extract needs no `note_kept`. Use `run`, like
   the rest of the activation, so a dry run writes nothing.
 - `modules/home.nix`, `xdg.configFile` (beside `default-plugins`, `:2161`):
   `"omarchy/hooks/post-boot.d/seed-mimeapps"` with `executable = true` and
   `text` a two-line bash script: `#!/usr/bin/env bash` and
-  `exec ${seedMimeapps}/bin/nixarchy-seed-mimeapps ${omarchyPath}/config/hyprland-mimeapps.list "''${XDG_CONFIG_HOME:-$HOME/.config}/hyprland-mimeapps.list"`.
+  `exec ${seedMimeapps}/bin/nixarchy-seed-mimeapps ${omarchyPath}/config/hyprland-mimeapps.list ${config.xdg.configHome}/hyprland-mimeapps.list`,
+  the same baked path the hold removes from (the spec's form).
   No extra guard: it sits under the module's `lib.mkIf cfg.enable`, as the
   seed does, so Mode A gets neither.
 
@@ -157,21 +161,27 @@ Traps: §7, plain assignment for the attrset, no `mkDefault`. `nix fmt`.
   hold ----`. Extract from `rehome ${act "nixarchySeed"}` with `awk`, from
   `#1342: hold the mimeapps list` through the hold's closing `fi` (the file's
   reconcile extraction, `:72-82`, is the pattern). Define a stub `seed_dir`
-  that copies one fixture list, so the extract's `seed_dir` call runs it.
+  that copies one fixture list through `run` (as the real one does), so the
+  extract's `seed_dir` call runs it. Source the extract under
+  `( set -eu; . ./hold.sh )`: activation runs under `set -eu`, and
+  `runCommand`'s shell does not, so only this catches an unset variable.
   `grep` that the extract holds `run rm -f`, or fail saying the hold moved.
   Cases: absent before → absent after, and the message printed; a file
-  present → bytes unchanged; a symlink present → still the link; `DRY_RUN=1`
-  with it absent → nothing removed that a dry seed did not write (read how
-  `run` behaves dry in that file first). Control: the extract with its `rm`
+  present → bytes unchanged; a symlink present → still the link. The dry case:
+  `DRY_RUN=1` (`run` echoes instead of executing, `:44`), the list absent,
+  and a stub `seed_dir` that copies **without** `run`, standing in for "a file
+  appeared". The file must survive, which fails if the hold's `rm` loses its
+  `run`. Control: the extract with its `rm`
   line deleted must leave the file.
 - `flake.nix`: two `checks` entries beside `menu-model-merge` (`:2552`),
   `omarchy = self.packages.${system}.omarchy` for the first. They are built by
   the `omarchy` job's generated step with no workflow edit (§4).
-- `tests/session.nix`, two assertions:
+- `tests/session.nix`, two assertions (the hold runs before `apps.nix` is
+  seeded, `home.nix:~1303`, so `:297` proves it already ran):
   - right after `:297`'s `wait_for_file` (Home Manager has run; no session
     yet): `machine.succeed("test ! -e /home/omarchy/.config/hyprland-mimeapps.list")`,
     comment `# #1342: held back until login`;
-  - after the 75 s sleep at `:511`, before the user-unit loop:
+  - after the 75 s sleep at `:510`, before the user-unit loop:
     `machine.wait_for_file("/home/omarchy/.config/hyprland-mimeapps.list")`,
     comment `# #1342: the post-boot.d hook seeded it at login`.
   The pair is what fails on a full revert.
@@ -185,7 +195,7 @@ any wait loop.
   paragraph: after upgrading to Omarchy 4.0.5, log out and back in; until then
   links open with the browser the session started with, and
   `hyprland-mimeapps.list` appears at the next login (#1342). A shell restart
-  is not enough, because the session's `PATH` is fixed at login.
+  does not seed the list.
 
 ### 5. [lead] Builds and break proofs
 
@@ -203,7 +213,9 @@ check fail; remove the hold's `rm` and watch `home-activation-writes` fail; rest
 
 One PR, `Closes #1342`. Body: intent, spec and plan; which steps the coder
 did; the failing outputs; that the hold is tested in `home-activation-writes`; the `installPhase` byte
-figure; a request to add the log-out line to the first
+figure; in its §14 section, that a plain Hyprland session with the user's own
+`hypr` config never runs `post-boot.d`, so the list is never seeded there,
+which is safe (links route as in 4.0.4); a request to add the log-out line to the first
 4.0.5 release's body. Draft the Discussions post to a file for the owner. Run
 `merge-when-green.sh` once green, since this is no CI-gate change.
 

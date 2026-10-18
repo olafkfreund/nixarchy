@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1342
 spec: spec/2026-10-18-1342-launch-browser-self-call.md
 ---

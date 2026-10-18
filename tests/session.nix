@@ -1892,7 +1892,18 @@ pkgs.testers.runNixOSTest {
                # `omarchy-pkg-add hermes-desktop`, which reaches this port's
                # pacman shim and says so. Patching the paths would point at
                # files that do not exist either.
-               "omarchy-install-ai-hermes"]
+               "omarchy-install-ai-hermes",
+               # New in 4.0.5. Their /usr is the default of an unset
+               # XDG_DATA_DIRS, which NixOS always sets.
+               "omarchy-cmd-default-browser",
+               # Matches only /usr/bin/<browser>, so here it exits 1 and both
+               # launchers start the browser themselves, as on 4.0.4.
+               "omarchy-cmd-browser-handoff",
+               # Both seed from an Arch package (/usr/share/hermes-desktop,
+               # /usr/share/openclaw) that NixOS has no copy of, and both refuse
+               # with a message and exit 1 when it is absent, before writing
+               # anything -- the same as omarchy-install-ai-hermes above.
+               "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

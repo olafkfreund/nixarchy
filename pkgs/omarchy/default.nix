@@ -1296,7 +1296,7 @@ stdenvNoCC.mkDerivation {
                     done
 
                     # Every entry a shipped mimeapps list names must exist, or links open nothing.
-                    for list in ${src}/config/*mimeapps.list; do
+                    for list in $out/share/omarchy/config/*mimeapps.list; do
                       for id in $(sed -n 's/^[^#=]*=//p' "$list" | tr ';' ' '); do
                         [ -e "$out/share/applications/$id" ] || { echo "$list names $id, which is not installed" >&2; exit 1; }
                       done

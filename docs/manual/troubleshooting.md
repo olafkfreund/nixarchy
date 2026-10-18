@@ -25,6 +25,8 @@ actual problem on a NixOS host:
 | Boot splash | Whether Omarchy's Plymouth theme is the one in use, or stylix's |
 | TLP | TLP is on, so power-profiles-daemon is off and `omarchy powerprofiles` cannot work |
 
+After you upgrade to Omarchy 4.0.5, log out and back in. Until then, links open with the browser your session started with. `~/.config/hyprland-mimeapps.list` appears at your next login (#1342). Restarting the shell does not seed it.
+
 ### A rebuild failed and the error is unreadable
 
 ```sh

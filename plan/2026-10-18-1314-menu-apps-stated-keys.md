@@ -88,13 +88,18 @@ Traps:
   node ${./menu-model-merge.js} ${omarchy}/share/omarchy/shell/plugins/menu/MenuModel.js
   for qml in ${menuPlugin}/providers/OmarchyMenu.qml \
       ${nixi}/share/omarchy/plugins/io.github.olafkfreund.nixi/MenuSearch.qml; do
-    model=$(grep -oE 'file:///nix/store/[^"]*/MenuModel\.js' "$qml" | head -1)
+    model=$(grep -oE 'file:///nix/store/[^"]*/MenuModel\.js' "$qml" | head -1 || true)
     [ -n "$model" ] || { echo "menu-model-merge: $qml imports no store MenuModel.js"; exit 1; }
     echo "menu-model-merge: $qml"
     node ${./menu-model-merge.js} "''${model#file://}"
   done
   ```
-  Update the header comment to name the three readers.
+  Update the header comment to name the three readers, and say that it reads
+  `services.nixi.package`, not the module's `nixiPkg`: the module re-overrides
+  only the adapters (`hm-module.nix:18`), which leaves `omarchySrc` as set.
+  The `|| true` keeps the friendly message reachable: stdenv runs with
+  `set -eu -o pipefail`, so a grep that matches nothing would otherwise end
+  the build there.
 - `flake.nix`: pass, after the qml check's pattern (`:2419-2420`),
   `menuPlugin = self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet.menu.src;`
   and `nixi = self.nixosConfigurations.vm.config.home-manager.users.omarchy.services.nixi.package;`.
@@ -106,11 +111,15 @@ Traps:
 - The test runs under `pkgs.runCommand`, i.e. bash with `set -e`, so a failed
   node exits the loop.
 
-### 3. [coder] Docs
+### 3. [coder] Docs and the `flake.nix` comment
 
 - `docs/manual/ai.md`, section "Nixi, on SUPER + H" (`:259`): one sentence
   saying Nixi's menu search uses the stock menu's merge, and that setting your
   own `services.nixi.package` gives you upstream's instead.
+- `flake.nix:1166-1170`: the comment says the module's default "is the same
+  derivation this line names". It no longer is: nixarchy overrides
+  `omarchySrc` (#1314). Say so in one sentence, and that `checks.nixi` still
+  guards the pin while `checks.menu-model-merge` builds the package users get.
 - `pkgs/AGENTS.md#the-menus-own-bugs-1305`: one sentence that nixarchy-menu
   and nixi import the same patched file through `modules/home.nix` (#1314),
   and that `checks.menu-model-merge` runs all three.
@@ -123,7 +132,7 @@ capture, then `git checkout HEAD -- modules/home.nix`.
 
 | break | expect |
 |---|---|
-| B1: delete the `nixi.package` line | red after `menu-model-merge: …/MenuSearch.qml`, with the harness's failure |
+| B1: delete the whole `nixi.package = lib.mkDefault ( … );` binding | red after `menu-model-merge: …/MenuSearch.qml`, with the harness's failure |
 | B2: delete the two plugin lines (`sed`, `grep`) | red after `menu-model-merge: …/OmarchyMenu.qml` |
 | B3: change the sed's `omarchy-menu-model` to `omarchy-menu-modelx` | the plugin build fails at the `grep -qF` |
 
@@ -136,7 +145,9 @@ Traps:
 
 ### 5. [lead] PR
 
-- `menu-model-merge`, `qml`, `plugin-loaders`-tier cheap checks, `nix fmt -- --ci`,
+- `menu-model-merge` is no longer seconds-long: it evaluates the `vm` home
+  configuration and builds the nixi package. That is the package-build tier
+  (§6): no p620 system build running, load below 12. Run it, `qml`, `nix fmt -- --ci`,
   statix and deadnix locally. `options`, `plugin` and `session` run in CI (§6).
 - Squash to one commit: `nixarchy-menu and nixi merge menu rows with the stock
   menu's patched file, so a partial override keeps the rest of the row (#1314)`.

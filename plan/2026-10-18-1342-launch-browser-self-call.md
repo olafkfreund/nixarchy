@@ -234,3 +234,15 @@ which is safe (links route as in 4.0.4); a request to add the log-out line to th
 
 Revert the PR. The activation seeds the list at the switch again, and the
 launcher loses its guard. A list already seeded stays, harmlessly.
+
+## Deviations (implemented)
+
+- Step 1: the `pkgs/AGENTS.md` section sits before the `#948` anchor, which is
+  where the #1339 section ends, not "after the #1339 section" literally.
+- Step 5: removing the guard makes `launch-browser-self-call` fail on its own
+  precondition ("the built launcher carries no guard"), not on the patched
+  assertion. The control in the same check runs that unguarded launcher and
+  asserts it recurses to the cap, which is the behaviour the patched assertion
+  rules out. The hold break that kept the block's shape was
+  `mimeapps_absent=1` → `mimeapps_absent=`; deleting the `rm` line also failed,
+  but on the extraction, not on the behaviour.

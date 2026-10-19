@@ -505,6 +505,14 @@ stdenvNoCC.mkDerivation {
                         --replace-fail "  \"\$download\" --appimage-extract 'usr/share/icons/hicolor/*/apps/t3code.png' >/dev/null" ""
                     fi
 
+                    # CARRIED (#1370): nixpkgs wraps kitty (and may wrap ghostty), so the running
+                    # process is .kitty-wrapped, and an exact match on the bare name misses it.
+                    substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \
+                      --replace-fail 'if pgrep -x kitty >/dev/null; then' "if pgrep -x '[.]?kitty(-wrapped)?' >/dev/null; then" \
+                      --replace-fail '  killall -SIGUSR1 kitty >/dev/null' "  pkill -USR1 -x '[.]?kitty(-wrapped)?' >/dev/null" \
+                      --replace-fail 'if pgrep -x ghostty >/dev/null; then' "if pgrep -x '[.]?ghostty(-wrapped?)?' >/dev/null; then" \
+                      --replace-fail '  killall -SIGUSR2 ghostty' "  pkill -USR2 -x '[.]?ghostty(-wrapped?)?'"
+
                     # Cursor resolves through PATH, because /usr/bin is not where anything
                     # lives here.
                     #

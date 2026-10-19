@@ -2476,6 +2476,16 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };
+          # #1370: omarchy-restart-terminal must reach nixpkgs' wrapped kitty and ghostty.
+          restart-terminal-wrapped = import ./tests/restart-terminal-wrapped.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+          # #1370: a theme-engine machine's omarchy-theme-gnome unit re-applies the GTK theme.
+          theme-gnome-gtk = import ./tests/theme-gnome-gtk.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+          };
 
           # What reaches nixarchy.cachix.org and what it costs: the allowlist
           # budget, proofs pushed alone, closures from main only (#697). Against

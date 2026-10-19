@@ -23,14 +23,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "owe";
-  # Held at 0.2.10: 0.2.11 parks the renderer mid-handoff (#1359). Bump once owe fixes it.
-  version = "0.2.10";
+  version = "0.2.11";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "owe";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-8bRTpvxnh+uECUfgvMyeBU/hBOVfSxgStDfn+xBpph0=";
+    hash = "sha256-0o+YpXsgz2ibsmzQzOS2wInZcMaZrkUyovoBN6lrk38=";
   };
 
   # No binary here is a Qt app -- owed/owe-render/owe/owe-idle are plain
@@ -97,6 +96,21 @@ stdenv.mkDerivation (finalAttrs: {
   postPatch = ''
     substituteInPlace src/daemon/supervisor.c \
       --replace-fail 'while (waited < 1000) {' 'while (waited < 10000) {'
+
+    # CARRIED (#1359, omacom/owe#18): switch_to_shell() schedules a park 2 s
+    # out, and since 0.2.11 the engine stays "shell" through a handoff, so a
+    # video set inside those 2 s had its loading renderer parked and never
+    # showed. Clear the pending park when the handoff starts. Drop once owe has it.
+    # Captured rather than a quiet grep in a pipe: postPatch runs under pipefail.
+    beside=$(grep -A1 'app->handoff_pending = true;' src/daemon/main.c | grep shell_stop_at_ms || true)
+    in_park=$(sed -n '/^static void process_shell_handoff/,/^}/p' src/daemon/main.c | grep handoff_pending || true)
+    if [ -n "$beside$in_park" ]; then
+      echo "owe already clears the pending park during a handoff (omacom/owe#18): drop the #1359 substitution" >&2
+      exit 1
+    fi
+    substituteInPlace src/daemon/main.c \
+      --replace-fail 'app->handoff_pending = true;' \
+                     'app->handoff_pending = true; app->shell_stop_at_ms = 0;'
   '';
 
   # The qml-plugin/ subtree is a second, separate CMake project (the LockFeed

@@ -101,3 +101,20 @@ One file, so the lead implements it.
 ## Rollback
 
 Revert the commit. That restores #1360's hold at 0.2.10.
+
+## Deviation
+
+Step 3's guard: `… | grep -q` would run under stdenv's `pipefail`. If `grep -q`
+exits on its first match, the writer can die of SIGPIPE, and the condition
+then reads false exactly when upstream has the fix: the trap #1352 removed
+from home-activation-writes. Each half is captured into a variable with a
+plain `grep … || true` instead, and the guard tests that they are non-empty.
+
+Step 4's expected count was wrong: v0.2.11 already has four
+`shell_stop_at_ms = 0` lines (232, 271, 459, 559). Line 271 is
+`process_shell_handoff` clearing its own deadline. With ours, the patched file
+has 5, which is what step 5's script measured.
+
+Step 1: `main` is merged into the branch rather than rebased under it. A
+rebase rewrites the artifact commits already pushed, and pushing that needs
+a force-push, which this repo does not allow.

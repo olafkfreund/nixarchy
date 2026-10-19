@@ -99,3 +99,10 @@ The change touches more than three files, so the `coder` agent implements it
 
 Revert the squash commit. The image label goes back to `ubuntu-latest` and the
 guard and the actionlint entry go with it; nothing outside `.github/` changes.
+
+## Deviation
+
+#1345 merged during review and added two hosted jobs (`system-checks`, the
+`system` aggregator) on `ubuntu-latest`. After merging `main` into the branch,
+step 1's sed was re-run on `build.yml`. That makes 26 `runs-on:` lines, not 24.
+The guard named exactly those two lines before the sed.

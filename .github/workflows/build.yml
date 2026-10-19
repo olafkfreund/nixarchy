@@ -1475,7 +1475,7 @@ jobs:
   system-checks:
     needs: gate
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Cap and concurrency group as system-build: see the comments there (#1341).
     timeout-minutes: 45
     concurrency:
@@ -1768,7 +1768,7 @@ jobs:
   system:
     needs: [gate, system-build, system-checks]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Both halves of the system check passed

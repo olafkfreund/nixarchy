@@ -626,6 +626,8 @@
         ];
       };
 
+      # nixarchy's own pins, which a consumer's overrides never change (#1371)
+      ownLock = builtins.fromJSON (builtins.readFile ./flake.lock);
       # Why: docs/internals/flake.md#which-nixarchy-built-this-machine-208-for-nixarchy
       nixarchyRev = self.shortRev or self.dirtyShortRev or "unknown";
       #
@@ -908,7 +910,11 @@
 
         omarchy = final.callPackage ./pkgs/omarchy {
           src = omarchy;
-          version = omarchyVersion;
+          version = import ./pkgs/omarchy/version-label.nix {
+            version = omarchyVersion;
+            pinnedRev = ownLock.nodes.${ownLock.nodes.root.inputs.omarchy}.locked.rev or null;
+            input = omarchy;
+          };
           inherit nixarchyRev nixarchyDate;
           # The compositor the Lua config is written against, not nixpkgs'.
           inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
@@ -2475,6 +2481,11 @@
           appimage-extract = import ./tests/appimage-extract.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
+          };
+          omarchy-version-label = import ./tests/omarchy-version-label.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            inherit omarchyVersion;
           };
 
           # What reaches nixarchy.cachix.org and what it costs: the allowlist

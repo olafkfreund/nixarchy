@@ -251,7 +251,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.reinstall-vm --no-link --print-build-logs
 
   cache:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # 20, not 10: the entries probe evaluates both system toplevels, about two
     # minutes on a warm p620 and several on a cold hosted runner (#697).
     # 35, not 20: the proofs probe evaluates every generated check, and four
@@ -506,7 +506,7 @@ jobs:
   # from failing silently.
   canary:
     name: what a user's flake update gets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -550,7 +550,7 @@ jobs:
   # those is exactly the upstream movement this job exists to notice.
   pkg-new:
     name: draft a real package with headless nix-init
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -580,7 +580,7 @@ jobs:
 
   report:
     name: report a failure
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # install-encrypted was missing here, and the omission is the same class
     # of bug as the cancelled() note below: a watchdog that cannot see one of
     # its subjects. `if: failure()` observes only the jobs in `needs`, so on

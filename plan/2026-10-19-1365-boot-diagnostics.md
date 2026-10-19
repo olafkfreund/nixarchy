@@ -98,3 +98,13 @@ green.
 
 Revert the commit. The two call sites return to the bare
 `wait_for_console_text`.
+
+## Deviations
+
+- Step 5's local driver builds for `install` and `free-space` were not run.
+  Their closure includes the installer image, so each is a full install
+  build. The PR's own `install` job builds both drivers and runs the
+  helper's success path.
+- Break B was run as `timeout 30 python3 tests/boot-diagnostics.py`
+  (exit 124) rather than through `nix build`. An unbounded probe blocks
+  forever, and a hung sandbox build outlives a killed `nix build` client.

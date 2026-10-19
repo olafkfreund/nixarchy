@@ -114,3 +114,16 @@ Step 2: the same `rehome ${act "nixarchySeed"} | awk '…exit…'` shape was
 also in the dry-plugin-reconcile section (line 73, from #1277), with the same
 SIGPIPE exposure. The activation script is now written to `seed.sh` once,
 before that section, and both awk programs read it. Neither program changed.
+
+## Deviation (after merge)
+
+Step 1 covered the first video poll only. `tests/session.nix` has a second:
+the re-arm before locking (step 4 of the owe block), which also waited only
+for `render_alive`. On `main` c335cad7 (owe 0.2.11), the test locked about
+one second after setting the video. The lock paused the renderer before its
+first frame, owed logged `renderer handoff cancelled (media did not start)`,
+and the lock screen kept the still: `the locked screen does not move over
+2.8s (spread 0)`. The same failure appeared on edge's verify. It passed on
+#1349's own run only because that handoff finished before the lock. The
+re-arm poll now waits for `engine == "renderer"` too. A grep for
+`render_alive` finds no other poll that waits for the video.

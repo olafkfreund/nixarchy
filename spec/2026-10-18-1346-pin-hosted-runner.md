@@ -35,8 +35,8 @@ is going anyway. Pinning 24.04 would only move this decision to a later date,
 with nothing tested in between.
 
 1. **Every functional `ubuntu-latest` becomes `ubuntu-26.04`:** the 23
-   `runs-on:` lines, the gate's `runner=["ubuntu-latest"]` output
-   (`install-check.yml:188`), and the fallback at `install-check.yml:329`.
+   `runs-on:` lines (the fallback at `install-check.yml:329` among them) and
+   the gate's `runner=["ubuntu-latest"]` output (`install-check.yml:188`).
 2. **Comments:** `build.yml:1738` ("ubuntu-latest runners have /dev/kvm …")
    is a statement about now, so it names `ubuntu-26.04`. The comments at
    `install-check.yml:250` and `nightly.yml:116,425` record what happened on

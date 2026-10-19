@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1346
 spec: spec/2026-10-18-1346-pin-hosted-runner.md
 ---

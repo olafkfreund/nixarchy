@@ -89,6 +89,10 @@ let
   # nixarchy's NixOS side is off (Mode A) but this Home Manager module is on
   # regardless. ai-mirror's own package gate (`home.packages` below) already
   # reads `osConfig.programs.nixarchy.enable or false` for the same reason.
+  # #1370: the GTK theme is the engine's to write, and a switch resets it unless the unit re-applies it.
+  themeEngineGtk =
+    (osConfig.programs.nixarchyThemeEngine.enable or false)
+    && (osConfig.programs.nixarchyThemeEngine.targets.gtk or false);
   oweOn =
     (osConfig.programs.nixarchy.enable or false) && (osConfig.programs.nixarchy.owe.enable or false);
   # Through the overlay, like omarchyNvimConfig below and nixos.nix's
@@ -1365,6 +1369,7 @@ in
             "${cfg.package}/bin/omarchy-theme-set-gnome"
             "${cfg.package}/bin/omarchy-cursor-set"
           ];
+          ExecStartPost = lib.optional themeEngineGtk "-${osConfig.programs.nixarchyThemeEngine.package}/bin/hyprchroma --target=gtk --force --quiet";
         };
         Install.WantedBy = [ "graphical-session.target" ];
       };

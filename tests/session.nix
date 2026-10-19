@@ -2450,7 +2450,12 @@ pkgs.testers.runNixOSTest {
                 and status.get("engine") == "renderer"):
             break
         machine.sleep(2)
+    assert status.get("source_kind") in ("video", "gif"), (
+        f"owe status does not report the video set before locking: {status}")
     assert status.get("render_alive"), f"video did not re-arm before locking: {status}"
+    assert status.get("engine") == "renderer", (
+        f"owe's renderer is alive but engine is {status.get('engine')!r} -- the "
+        f"handoff did not finish before locking: {status}")
 
     # No IPC route exists for the lock screen's feed loader: Service.qml's
     # IpcHandler exposes only lock/isLocked/status/preview/hidePreview, none

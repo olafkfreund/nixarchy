@@ -127,3 +127,11 @@ and the lock screen kept the still: `the locked screen does not move over
 #1349's own run only because that handoff finished before the lock. The
 re-arm poll now waits for `engine == "renderer"` too. A grep for
 `render_alive` finds no other poll that waits for the video.
+
+Second deviation (review by Codex and agy). The re-arm poll waited for
+`engine == "renderer"`, but after the loop it asserted only `render_alive`.
+That is already true while a warm renderer sits behind the shell, so a timed-out
+handoff fell through to the lock and failed later as "the locked screen does
+not move". That misleading message is what first sent the #1359 diagnosis to
+the lock. The poll now asserts what it waits for: source kind, `render_alive`
+and `engine`, each with its own message.

@@ -102,7 +102,7 @@ stdenv.mkDerivation (finalAttrs: {
     # video set inside those 2 s had its loading renderer parked and never
     # showed. Clear the pending park when the handoff starts. Drop once owe has it.
     # Captured rather than a quiet grep in a pipe: postPatch runs under pipefail.
-    beside=$(grep -A1 'app->handoff_pending = true;' src/daemon/main.c | grep shell_stop_at_ms || true)
+    beside=$(sed -n '/app->handoff_pending = true;/,/^        }/p' src/daemon/main.c | grep shell_stop_at_ms || true)
     in_park=$(sed -n '/^static void process_shell_handoff/,/^}/p' src/daemon/main.c | grep handoff_pending || true)
     if [ -n "$beside$in_park" ]; then
       echo "owe already clears the pending park during a handoff (omacom/owe#18): drop the #1359 substitution" >&2

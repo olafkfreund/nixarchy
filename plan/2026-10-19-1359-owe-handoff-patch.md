@@ -118,3 +118,15 @@ has 5, which is what step 5's script measured.
 Step 1: `main` is merged into the branch rather than rebased under it. A
 rebase rewrites the artifact commits already pushed, and pushing that needs
 a force-push, which this repo does not allow.
+
+## Deviations after merge (review by Codex and agy)
+
+- **The regression was not deterministic.** `checks.session` crossed owe's
+  2 s park window only because step 3 → step 4 happened to take 1.66 s, so a
+  slower run would pass on unpatched 0.2.11. A new step 3b goes video → still
+  → video, and sets the second video within about 0.2 s of owe reporting
+  `engine: shell`. That is always inside the window. It then returns to the
+  still with a warm renderer, the state step 4 starts from.
+- **The guard read one line** after `app->handoff_pending = true;`. It now
+  reads the whole `if (!app->handoff_pending)` block up to its closing brace,
+  so an upstream clear placed after the `OWE_INFO` line is caught too.

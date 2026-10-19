@@ -2438,6 +2438,41 @@ pkgs.testers.runNixOSTest {
     print("owe: back to the original still, renderer warm, background "
           "plugin enabled again")
 
+    # 3b. A video set inside the 2 s after owed hands the layer back to the
+    # shell: owe 0.2.11 parked the renderer loading it, and it never showed
+    # (#1359, omacom/owe#18). Steps 3 -> 4 hit that window only by timing.
+    def owe_wait(want, what):
+        status = None
+        for _ in range(30):
+            status = owe_status()
+            if want(status):
+                return status
+            machine.sleep(2)
+        raise AssertionError(f"owe never reached {what}: {status}")
+
+    def owe_on_video(st):
+        return (st.get("source_kind") in ("video", "gif") and st.get("render_alive")
+                and st.get("engine") == "renderer")
+
+    def owe_on_still(st):
+        return st.get("source_kind") not in ("video", "gif") and st.get("engine") == "shell"
+
+    aim(f"omarchy-theme-bg-set {owe_video_path}")
+    owe_wait(owe_on_video, "the renderer for the video")
+    aim(f"omarchy-theme-bg-set {original_background}")
+    for _ in range(50):
+        if owe_on_still(owe_status()):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError(f"owe never handed the still back to the shell: {owe_status()}")
+    aim(f"omarchy-theme-bg-set {owe_video_path}")
+    owe_wait(owe_on_video, "the renderer for a video set right after a still (#1359)")
+    print("owe: a video set straight after a still takes the layer")
+    aim(f"omarchy-theme-bg-set {original_background}")
+    owe_wait(lambda st: owe_on_still(st) and st.get("render_alive"),
+             "the still again, renderer warm, before step 4")
+
     # 4. Lock with a video background set, which is what makes LockView load
     # LockFeedSurface.qml (its Loader is `active: video && loadBackground
     # && ...`) and therefore `import Owe.LockFeed`.

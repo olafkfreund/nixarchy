@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import traceback
 
 
@@ -39,3 +40,27 @@ def reap_owned_vms(vms):
         sys.stdout.flush()
         sys.stderr.flush()
         os._exit(1)
+
+
+def wait_for_multi_user(machine, timeout=900, probe_timeout=90):
+    try:
+        machine.wait_for_console_text(r"Reached target Multi-User System", timeout=timeout)
+    except Exception:
+        # #1365: say what systemd is stuck on before failing. Bounded in a thread,
+        # because connect() can block with no timeout on a frozen guest (#1260).
+        answer = {}
+
+        def probe():
+            try:
+                answer["out"] = machine.execute(
+                    "systemctl list-jobs --no-pager; systemctl --failed --no-pager; "
+                    "journalctl -b -p warning --no-pager | tail -n 80", timeout=60)[1]
+            except Exception as e:
+                answer["out"] = f"the probe itself failed: {e!r}"
+
+        t = threading.Thread(target=probe, daemon=True)
+        t.start()
+        t.join(probe_timeout)
+        print("multi-user.target was not reached. What systemd reports:\n"
+              + answer.get("out", f"no answer from the guest within {probe_timeout} s"))
+        raise

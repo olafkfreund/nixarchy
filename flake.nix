@@ -2651,6 +2651,10 @@
             pkgs = pkgsFor.${system};
           };
 
+          # wait_for_multi_user prints what systemd is stuck on, bounded, and
+          # re-raises the original failure (#1365). Stub machines, no VM.
+          boot-diagnostics = import ./tests/boot-diagnostics.nix { pkgs = pkgsFor.${system}; };
+
           vm-toplevel = self.nixosConfigurations.vm.config.system.build.toplevel;
 
           # The installed machine, as opposed to the smoke-test guest: a real

@@ -368,7 +368,7 @@ pkgs.testers.runNixOSTest {
     # connect() blocked in recv() with no timeout, up to globalTimeout (#1260).
     def boot(machine):
         machine.start()
-        machine.wait_for_console_text(r"Reached target Multi-User System", timeout=900)
+        wait_for_multi_user(machine)
         machine.wait_for_unit("multi-user.target")
 
     # execute, not succeed. The dashboard sends every phase to a log file and

@@ -571,7 +571,7 @@ pkgs.testers.runNixOSTest {
         name="target")
     target.start()
     # Bounds a frozen boot; connect() alone can wait until globalTimeout (#1260).
-    target.wait_for_console_text(r"Reached target Multi-User System", timeout=900)
+    wait_for_multi_user(target)
     target.wait_for_unit("multi-user.target")
     print("a free-space install boots on its own bootloader")
 

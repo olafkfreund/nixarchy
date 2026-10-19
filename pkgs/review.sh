@@ -118,6 +118,8 @@ hey-cli	pkgs/apps/hey-cli.nix	basecamp/hey-cli
 omacalc	pkgs/apps/omacalc.nix	omacom/omacalc
 omacut	pkgs/apps/omacut.nix	omacom/omacut
 omawrite	pkgs/apps/omawrite.nix	omacom/omawrite
+owe	pkgs/apps/owe.nix	omacom/owe
+aether	pkgs/apps/aether.nix	omacom/aether
 ttfx	pkgs/apps/ttfx.nix	omacom/ttfx
 EOF
 )

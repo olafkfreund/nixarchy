@@ -21,6 +21,8 @@ let
     "omacalc"
     "omacut"
     "omawrite"
+    "owe"
+    "aether"
     "ttfx"
   ];
 in
@@ -70,6 +72,17 @@ pkgs.runCommand "nixarchy-review-pins"
           fail=1
           ;;
       esac
+    done
+
+    # Every app the daily bump updates (.#update selects on updateScript)
+    # must be one the review watches; read from source, not from review.sh.
+    watched=$(cut -f2 pins.txt)
+    for f in pkgs/apps/*.nix; do
+      grep -q updateScript "$f" || continue
+      grep -qxF "$f" <<<"$watched" || {
+        echo "review: $f has an updateScript (the daily bump updates it) but review.sh does not watch it" >&2
+        fail=1
+      }
     done
 
     got=$(wc -l < pins.txt)

@@ -552,6 +552,10 @@
     reason = "Resolve the running tree before stopping the shell, then launch the current-system tree through its absolute launcher path. Neither stopping nor relaunching depends on an inherited OMARCHY_PATH or PATH.";
     allow = "systemctl-user";
   };
+  "omarchy-restart-terminal" = {
+    class = "patch";
+    reason = "It found kitty and ghostty with `pgrep -x kitty` and `killall`, which match a process's comm. nixpkgs wraps kitty, so the running process is .kitty-wrapped, and a wrapped ghostty is .ghostty-wrappe (comm is cut at 15 characters). Neither was signalled, so a theme change never reached them (#1370).";
+  };
   "omarchy-restart-trackpad" = {
     class = "vendor";
     reason = "Vendored unchanged. `modprobe -r intel_quicki2c && modprobe intel_quicki2c` reloads one driver at runtime. That is a reload rather than configuration, and works here as it does upstream.";

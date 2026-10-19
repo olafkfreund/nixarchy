@@ -2471,6 +2471,11 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          # #1368: no shipped script may self-extract an AppImage; appimage-run passes the flag to the app.
+          appimage-extract = import ./tests/appimage-extract.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
 
           # What reaches nixarchy.cachix.org and what it costs: the allowlist
           # budget, proofs pushed alone, closures from main only (#697). Against

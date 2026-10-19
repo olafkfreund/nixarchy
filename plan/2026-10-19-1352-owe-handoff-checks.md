@@ -107,3 +107,10 @@ below the coder threshold).
 
 Revert the squash commit. Both files return to their earlier form, and nothing
 outside `tests/` is touched.
+
+## Deviation
+
+Step 2: the same `rehome ${act "nixarchySeed"} | awk '…exit…'` shape was
+also in the dry-plugin-reconcile section (line 73, from #1277), with the same
+SIGPIPE exposure. The activation script is now written to `seed.sh` once,
+before that section, and both awk programs read it. Neither program changed.

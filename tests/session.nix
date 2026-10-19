@@ -2350,12 +2350,13 @@ pkgs.testers.runNixOSTest {
     # store is world-readable.
     aim(f"omarchy-theme-bg-set {owe_video_path}")
 
-    # owed's switch_to_shell/switch_to_renderer path transcodes before the
-    # renderer reports alive, so this is the longer poll in the block.
+    # owe >= 0.2.11 keeps the shell's still until the video's first frame,
+    # then sets engine (omacom/owe#17), so the poll waits for that too.
     status = None
     for _ in range(30):
         status = owe_status()
-        if status.get("source_kind") in ("video", "gif") and status.get("render_alive"):
+        if (status.get("source_kind") in ("video", "gif") and status.get("render_alive")
+                and status.get("engine") == "renderer"):
             break
         machine.sleep(2)
     assert status is not None and status.get("source_kind") in ("video", "gif"), (

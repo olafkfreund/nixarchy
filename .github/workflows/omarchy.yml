@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   bump:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # 45, not the 20 this had. The session check below builds Hyprland, and
     # build.yml gives the same closure 30 minutes WITH the hyprland cache
     # configured; this job also builds .#omarchy from a source that just

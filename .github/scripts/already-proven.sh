@@ -17,7 +17,7 @@
 # already-substitutable path DOWNLOADS it, and on 2026-09-04 that behaviour
 # killed four runners at their timeout -- three of them blocked on the
 # identical obs-studio path from a stalled cache.nixos.org, every build
-# already green. See build.yml's `system` timeout comment.
+# already green. See build.yml's `system-build` timeout comment.
 #
 # Prints the checks that still need building on stdout, one per line, as
 #

@@ -580,7 +580,7 @@ requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
   the box checks' pinned base images, because Docker Hub is not ours (#788, #800);
 - check results are pushed from any ref by `cachix-push.sh --proof`, as a
   single path, which is how `build-unless-proven.sh` skips what already passed;
-- `cache-budget.sh` fails the `system` job when the allowlist would cost more
+- `cache-budget.sh` fails the `system-build` job when the allowlist would cost more
   than 2.5 GB, which leaves room for a nixpkgs bump (#1231).
 
 Adding something to the cache means adding it to the allowlist in the same PR,

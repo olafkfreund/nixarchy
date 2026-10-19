@@ -71,14 +71,15 @@ pkgs.runCommand "nixarchy-home-activation-writes"
     # ---- a dry plugin reconcile writes no staging file ----
     # The block from its first comment to the manifest move's `fi`, plus the
     # dry-run cleanup line when there is one.
-    rehome ${act "nixarchySeed"} | awk '
+    rehome ${act "nixarchySeed"} > seed.sh
+    awk '
       /Reconcile, never relink/ { on = 1 }
       on && done && /DRY_RUN/ { print; exit }
       on && done { exit }
       on { print }
       on && /run mv / { mv = 1 }
       on && mv && /^[[:space:]]*fi$/ { done = 1 }
-    ' > reconcile.sh
+    ' seed.sh > reconcile.sh
     grep -q 'run mv ' reconcile.sh || { echo "the plugin reconcile is not in nixarchySeed any more" >&2; exit 1; }
     mkdir -p home/.config/omarchy/plugins
     ( DRY_RUN=1; . ./reconcile.sh ) > reconcile.out 2>&1 || bad "the dry reconcile failed: $(cat reconcile.out)"
@@ -92,12 +93,12 @@ pkgs.runCommand "nixarchy-home-activation-writes"
     # a list this run created, leaving it to the login hook. The block runs
     # under `set -eu` as activation does (runCommand's shell does not, so only
     # this sees an unset variable). seed_dir is a stub that copies one list.
-    rehome ${act "nixarchySeed"} | awk '
+    awk '
       /#1342: hold the mimeapps list/ { on = 1 }
       on { print }
       on && /run rm -f/ { rm = 1 }
       on && rm && /^[[:space:]]*fi$/ { exit }
-    ' > hold.sh
+    ' seed.sh > hold.sh
     grep -q 'run rm -f' hold.sh || { echo "the mimeapps hold is not in nixarchySeed any more" >&2; exit 1; }
     list=home/.config/hyprland-mimeapps.list
     printf '%s\n' 'seeded' > fixture-list

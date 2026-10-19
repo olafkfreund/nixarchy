@@ -10,3 +10,6 @@ self-hosted-runner:
     - nixos
     - kvm
     - big
+    # A GitHub image, not one of ours: actionlint 1.7.12 predates the label
+    # (#1346). Drop this once the pinned actionlint knows ubuntu-26.04.
+    - ubuntu-26.04

@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Same 45 as omarchy.yml, for the same reason: the first build of a source
     # that just changed is a guaranteed cache miss.
     timeout-minutes: 45
@@ -356,7 +356,7 @@ jobs:
   wait-idle:
     needs: prepare
     if: needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 200
     steps:
       # The VM tier rule (CLAUDE.md section 6): a VM check runs only with
@@ -439,7 +439,7 @@ jobs:
     # would file a failure. A job that TIMED OUT still reports cancelled as its
     # result, and !cancelled() runs for it, so it is treated as a failure below.
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Update the omarchy-edge issue

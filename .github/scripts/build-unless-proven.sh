@@ -8,7 +8,7 @@
 #
 # Downloading is not free and has already cost a day: on 2026-09-04 four
 # runners died at their timeout, three blocked on the identical obs-studio
-# path from a stalled cache.nixos.org, with every build green. The `system`
+# path from a stalled cache.nixos.org, with every build green. The `system-build`
 # job's timeout comment records it. Nothing here needs the bytes -- the job
 # asserts that the check passes, not that this machine holds its output.
 #

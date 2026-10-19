@@ -7,7 +7,16 @@ args="$*"
 
 case "$args" in
   *"--json jobs"*)
-    printf '%s\n' "system"
+    # Apply the caller's -q to a jobs fixture, so a change to the script's
+    # jq filter changes what this prints (#1341).
+    q=""
+    prev=""
+    for a in "$@"; do
+      [ "$prev" = "-q" ] && q="$a"
+      prev="$a"
+    done
+    jobs=${GH_JOBS:-'[{"name":"system-checks","conclusion":"failure"}]'}
+    jq -n -c --argjson jobs "$jobs" '{jobs: $jobs}' | jq -r "$q"
     ;;
   *"pr list "*)
     printf '%s\n' "1154"

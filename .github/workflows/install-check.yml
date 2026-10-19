@@ -109,7 +109,7 @@ jobs:
   # not the required context: it decides, `install` reports.
   gate:
     name: gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
       runner: ${{ steps.filter.outputs.runner }}
@@ -185,7 +185,7 @@ jobs:
           if [ "$relevant" = true ] && [ "$fork" = false ]; then
             echo 'runner=["self-hosted","nixos","kvm","big"]' >> "$GITHUB_OUTPUT"
           else
-            echo 'runner=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+            echo 'runner=["ubuntu-26.04"]' >> "$GITHUB_OUTPUT"
           fi
 
           # Which of the two VM slot groups this ref belongs to (#555).
@@ -326,7 +326,7 @@ jobs:
     # person actually receives. When there is nothing to do it asks for a
     # hosted runner instead, which is what the fromJSON is for: `runs-on`
     # takes an expression, but a label LIST has to arrive as JSON.
-    runs-on: ${{ needs.gate.result == 'success' && fromJSON(needs.gate.outputs.runner) || 'ubuntu-latest' }}
+    runs-on: ${{ needs.gate.result == 'success' && fromJSON(needs.gate.outputs.runner) || 'ubuntu-26.04' }}
 
     # 90, not 45: this job does two full installs now. The old number was sized
     # for one, and a timeout is recorded as `cancelled` -- which reads like

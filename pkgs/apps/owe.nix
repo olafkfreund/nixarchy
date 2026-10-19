@@ -23,13 +23,14 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "owe";
-  version = "0.2.11";
+  # Held at 0.2.10: 0.2.11 parks the renderer mid-handoff (#1359). Bump once owe fixes it.
+  version = "0.2.10";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "owe";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-0o+YpXsgz2ibsmzQzOS2wInZcMaZrkUyovoBN6lrk38=";
+    hash = "sha256-8bRTpvxnh+uECUfgvMyeBU/hBOVfSxgStDfn+xBpph0=";
   };
 
   # No binary here is a Qt app -- owed/owe-render/owe/owe-idle are plain

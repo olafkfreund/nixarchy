@@ -130,3 +130,13 @@ a force-push, which this repo does not allow.
 - **The guard read one line** after `app->handoff_pending = true;`. It now
   reads the whole `if (!app->handoff_pending)` block up to its closing brace,
   so an upstream clear placed after the `OWE_INFO` line is caught too.
+
+## Result of step 3b's red proof
+
+It failed to go red. On unpatched 0.2.11 the second video's first frame came
+1.93 s into the handoff, before owed's park fired, which in the failing runs
+came about 2.9 s after `switch_to_shell`. The bug needs a first frame slower
+than the park, which a VM on an idle host does not produce. Step 3b stays as
+a functional check, and its comment now says what it does. The regression is
+guarded by the `postPatch` guard (four proven cases) and tracked upstream in
+omacom/owe#18.

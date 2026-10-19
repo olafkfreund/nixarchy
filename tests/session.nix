@@ -2438,9 +2438,9 @@ pkgs.testers.runNixOSTest {
     print("owe: back to the original still, renderer warm, background "
           "plugin enabled again")
 
-    # 3b. A video set inside the 2 s after owed hands the layer back to the
-    # shell: owe 0.2.11 parked the renderer loading it, and it never showed
-    # (#1359, omacom/owe#18). Steps 3 -> 4 hit that window only by timing.
+    # 3b. A video set within 0.2 s of owed handing the layer back to the shell
+    # takes the layer. owe 0.2.11 parked such a renderer (#1359, omacom/owe#18),
+    # but only when its first frame came after the park; this cannot force that.
     def owe_wait(want, what):
         status = None
         for _ in range(30):

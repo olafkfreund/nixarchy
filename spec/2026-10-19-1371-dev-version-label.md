@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1371
 intent: intent/2026-10-19-1371-dev-version-label.md
 ---

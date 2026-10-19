@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1352
 spec: spec/2026-10-19-1352-owe-handoff-checks.md
 ---

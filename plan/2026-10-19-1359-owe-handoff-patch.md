@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1359
 spec: spec/2026-10-19-1359-owe-handoff-patch.md
 ---

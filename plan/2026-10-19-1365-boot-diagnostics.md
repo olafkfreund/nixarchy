@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1365
 spec: spec/2026-10-19-1365-boot-diagnostics.md
 ---

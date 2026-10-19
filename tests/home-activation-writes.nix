@@ -86,6 +86,58 @@ pkgs.runCommand "nixarchy-home-activation-writes"
       ok "a dry plugin reconcile writes no staging file" ||
       bad "a dry plugin reconcile left $(ls -A home/.config/omarchy tmp | tr '\n' ' ')"
 
+    # ---- #1342: the mimeapps hold ----
+    # The activation seeds config/ at a switch, and a still-running 4.0.4
+    # session that finds hyprland-mimeapps.list then recurses; the hold removes
+    # a list this run created, leaving it to the login hook. The block runs
+    # under `set -eu` as activation does (runCommand's shell does not, so only
+    # this sees an unset variable). seed_dir is a stub that copies one list.
+    rehome ${act "nixarchySeed"} | awk '
+      /#1342: hold the mimeapps list/ { on = 1 }
+      on { print }
+      on && /run rm -f/ { rm = 1 }
+      on && rm && /^[[:space:]]*fi$/ { exit }
+    ' > hold.sh
+    grep -q 'run rm -f' hold.sh || { echo "the mimeapps hold is not in nixarchySeed any more" >&2; exit 1; }
+    list=home/.config/hyprland-mimeapps.list
+    printf '%s\n' 'seeded' > fixture-list
+    seed_dir() { [ -e "$2/hyprland-mimeapps.list" ] || [ -L "$2/hyprland-mimeapps.list" ] || run cp fixture-list "$2/hyprland-mimeapps.list"; }
+    hold() { ( set -eu; . ./hold.sh ) > hold.out 2>&1 || bad "the hold failed: $(cat hold.out)"; }
+
+    rm -f $list
+    hold
+    [ ! -e $list ] && grep -q 'seeded at your next login (#1342)' hold.out &&
+      ok "a list this run created is removed, and the message is printed" ||
+      bad "the hold left the list or said nothing: $(cat hold.out)"
+
+    printf '%s\n' 'mine' > $list
+    hold
+    [ "$(cat $list)" = mine ] && ok "a list the user had is left unchanged" ||
+      bad "the hold changed the user's list"
+
+    rm -f $list
+    printf '%s\n' 'theirs' > theirs
+    ln -s "$root/theirs" $list
+    hold
+    [ -L $list ] && [ "$(cat theirs)" = theirs ] && ok "a symlink at the list's path is left alone" ||
+      bad "the hold replaced a symlink"
+
+    # A dry run: a file appeared by other means (the stub copies without
+    # `run`), and the hold's own rm must only echo.
+    rm -f $list
+    seed_dir() { cp fixture-list "$2/hyprland-mimeapps.list"; }
+    ( DRY_RUN=1; set -eu; . ./hold.sh ) > hold.out 2>&1 || bad "the dry hold failed: $(cat hold.out)"
+    [ -e $list ] && ok "a dry run removes nothing" || bad "a dry run removed the list"
+
+    # control: the hold with its rm deleted must leave the file.
+    sed '/run rm -f/d' hold.sh > nohold.sh
+    if grep -q 'run rm -f' nohold.sh; then echo "the sed did not remove the hold's rm" >&2; exit 1; fi
+    rm -f $list
+    seed_dir() { [ -e "$2/hyprland-mimeapps.list" ] || run cp fixture-list "$2/hyprland-mimeapps.list"; }
+    ( set -eu; . ./nohold.sh ) > /dev/null 2>&1 || true
+    [ -e $list ] || { echo "the hold's rm is not what removes the list, so this check cannot see it (#1342)" >&2; exit 1; }
+    rm -f $list
+
     # ---- an unreadable plugin list stops the hook ----
     mkdir -p stubs
     printf '#!/bin/sh\nexit 0\n' > stubs/omarchy-shell

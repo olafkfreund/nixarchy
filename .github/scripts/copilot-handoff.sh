@@ -8,8 +8,10 @@ max=2 # ponytail: a fixed cap; if Copilot's second fix is still red, a human rea
 # failure, never cancelled. An evicted job reports cancelled, and so does one
 # that hit its timeout (AGENTS.md §6). Neither is Copilot's to fix: an
 # eviction needs nothing, and a timeout is a CI gate change for a human.
+# The aggregator `system` fails whenever a half does, a half that timed out
+# included, so it is not evidence of a failure (#1341).
 failed=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs \
-  -q '[.jobs[]|select(.conclusion=="failure")|.name]|join(", ")')
+  -q '[.jobs[]|select(.conclusion=="failure" and .name!="system")|.name]|join(", ")')
 if [ -z "$failed" ]; then
   echo "run $RUN_ID has no failed job -- cancelled only (an eviction or a timeout); not handed off"
   exit 0

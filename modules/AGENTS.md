@@ -1113,6 +1113,19 @@ How, and why this way:
 Nixi's own turn-on is separate and stays nixi's: its module does it, with its
 own marker (#709).
 
+<a id="at-login-means-post-boot-d-not-a-user-unit-1342"></a>
+
+### "At login" means post-boot.d, not a user unit (#1342)
+
+Home Manager's `systemd.user.startServices` defaults to `true`, and at a
+switch it starts any *new* unit that an active target wants. So a oneshot
+with `WantedBy = [ "graphical-session.target" ]`, written to run "at the next
+login", runs at the switch instead, inside the session that is already logged
+in. #1342's seed would have recreated the bug it existed to prevent that way;
+the plan review caught it. Work that must wait for a fresh session goes in
+`~/.config/omarchy/hooks/post-boot.d/`, which Hyprland runs once per session
+start and a switch never runs (`seed-mimeapps`, and `default-plugins` above).
+
 <a id="omarchys-desktop-is-its-hyprland-config"></a>
 
 ### Omarchy's desktop is its Hyprland config

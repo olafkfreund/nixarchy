@@ -117,3 +117,14 @@ Approved decisions, carried from the spec:
 
 Each PR reverts on its own: A's stub, B's pin (nixi stays fixed upstream),
 C's overlay.
+
+## Deviations
+
+- **A goes on the artifacts branch** (`ci/1381-nixpkgs-bump-blockers`),
+  not on a separate `ci/1381-copilot-handoff` branch. That way its PR
+  carries intent, spec and plan; B and C get their own branches.
+- **A's red proof:** on p620, the old 500-line stub's control failed
+  correctly in 20 of 20 rebuilds, as did the 20 000-line one. The race
+  shows only on the CI runner (#1378's `omarchy` job, where the control
+  passed). The fix removes the dependence on timing rather than
+  reproducing it locally. Both loops are recorded in the PR.

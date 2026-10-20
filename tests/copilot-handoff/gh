@@ -28,9 +28,10 @@ case "$args" in
     printf '%s\n' "[]"
     ;;
   *"--log-failed"*)
-    # 500 lines, enough to make `head -100` close the pipe on a still-writing
-    # upstream stage and SIGPIPE it under pipefail (#1157).
-    for i in $(seq 1 500); do
+    # 20 000 lines (~1.3 MB): far more than any pipe buffer between the stages,
+    # so they are still writing when `head -100` exits and SIGPIPE is certain
+    # under pipefail (#1157). 500 lines fit in a buffer and raced (#1381).
+    for i in $(seq 1 20000); do
       printf 'system\tDrive a session\t2026-10-02T00:00:00.0000000Z error: line %d\n' "$i"
     done
     ;;

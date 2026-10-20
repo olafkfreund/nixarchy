@@ -92,10 +92,12 @@ pkgs.testers.runNixOSTest rec {
     home-manager.users.omarchy.programs.nixarchy.defaultPluginSet = {
       teleprompt = {
         inherit (builtins.elemAt plugins 0) id src;
+        renamedFrom = "nixarchy.oldtele";
       };
       panel = {
         id = "nixarchy.panelfixture";
         src = panelFixture;
+        renamedFrom = "nixarchy.oldpanel";
       };
     };
   };
@@ -614,6 +616,17 @@ pkgs.testers.runNixOSTest rec {
     machine.wait_until_succeeds("systemctl is-active user@1000.service")
     machine.wait_until_succeeds("test -S /run/user/1000/bus")
     machine.succeed("test -s /home/omarchy/.config/omarchy/shell.json")
+    # #1391: the panel default was once called nixarchy.oldpanel, and the user
+    # had it on. Seeded before the session starts, so no shell is writing.
+    machine.succeed(
+        "cat > /tmp/seed-old.sh <<'PROBE_EOF'\n"
+        "d=$HOME/.local/state/nixarchy/enabled-once\n"
+        "mkdir -p $d && touch $d/nixarchy.oldpanel\n"
+        "c=$HOME/.config/omarchy/shell.json\n"
+        "${pkgs.jq}/bin/jq '.plugins += [{\"id\":\"nixarchy.oldpanel\"}]' $c > $c.new\n"
+        "mv $c.new $c\n"
+        "PROBE_EOF")
+    machine.succeed("su omarchy -c 'bash /tmp/seed-old.sh'")
     start_session()
     wait_for_shell()
 
@@ -646,6 +659,14 @@ pkgs.testers.runNixOSTest rec {
     machine.wait_until_succeeds("su omarchy -c 'python3 /tmp/panel.py'", timeout=120)
     user("test -e ~/.local/state/nixarchy/enabled-once/nixarchy.panelfixture")
     print("a panel default is in plugins[], with its marker")
+    # #1391: the rename moved the user's "on" to the new id and dropped the
+    # old marker. Whether the old id is also gone from shell.json is measured,
+    # not asserted: the disable goes through the shell and may find it unknown.
+    user("test ! -e ~/.local/state/nixarchy/enabled-once/nixarchy.oldpanel")
+    left = user(
+        "${pkgs.jq}/bin/jq -c '[.plugins[]? | if type == \"object\" then .id else . end]' "
+        "~/.config/omarchy/shell.json")
+    print(f"renamed panel default migrated; plugins[] now {left.strip()}")
 
     # #771: herdr is on the session's PATH -- the one the shell, and so the
     # widget's herdr-sessions, inherits -- and with no sessions the widget's
@@ -678,5 +699,18 @@ pkgs.testers.runNixOSTest rec {
         f"{tele} was turned back on at the next login after the user turned "
         "it off. A default is enabled once; after that the choice is theirs.")
     print("turned off, it stays off at the next login")
+
+    # #1391: a default that was renamed while the user had it OFF stays off.
+    # The old id's marker is all the hook has to go on.
+    user(f"rm -f ~/.local/state/nixarchy/enabled-once/{tele}; "
+         "touch ~/.local/state/nixarchy/enabled-once/nixarchy.oldtele")
+    user("~/.config/omarchy/hooks/post-boot.d/default-plugins")
+    status, _ = machine.execute("su omarchy -c 'bash /tmp/enabled.sh'")
+    assert status != 0, (
+        f"{tele} was turned back on by the rename of nixarchy.oldtele. "
+        "The user had it off under the old id, and that choice moves with it.")
+    user(f"test -e ~/.local/state/nixarchy/enabled-once/{tele}")
+    user("test ! -e ~/.local/state/nixarchy/enabled-once/nixarchy.oldtele")
+    print("a renamed default that was off stays off, its marker moved")
   '';
 }

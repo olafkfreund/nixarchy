@@ -1572,12 +1572,13 @@ let
     # #1059: Hyprforge is on wherever nixarchy is.
     hyprforgeIsADefault = {
       on =
-        defaultHomeOn.programs.nixarchy.plugins ? "aziz.hyprforge"
+        defaultHomeOn.programs.nixarchy.plugins ? "nixarchy.hyprlandsettings"
+        && hookLists "nixarchy.hyprlandsettings" defaultHomeOn
         && hookLists "aziz.hyprforge" defaultHomeOn;
       off =
-        noDefaultsHome.programs.nixarchy.plugins ? "aziz.hyprforge"
-        || defaultHome.programs.nixarchy.plugins ? "aziz.hyprforge"
-        || fixtureNixarchyOff.programs.nixarchy.plugins ? "aziz.hyprforge";
+        noDefaultsHome.programs.nixarchy.plugins ? "nixarchy.hyprlandsettings"
+        || defaultHome.programs.nixarchy.plugins ? "nixarchy.hyprlandsettings"
+        || fixtureNixarchyOff.programs.nixarchy.plugins ? "nixarchy.hyprlandsettings";
     };
     # #766 PR D: the Distrobox panel follows Boxes, like distrobox itself:
     # on with Boxes, off without them, off standalone and when opted out.
@@ -6414,15 +6415,17 @@ pkgs.runCommand "nixarchy-options"
           echo "hyprforgePackaged: Hyprforge's LICENSE does not name its holder ($hyprforgeSrc)" >&2
           exit 1
         }
-        [ ! -e "$hyprforgeSrc/test" ] || {
-          echo "hyprforgePackaged: Hyprforge ships its test/ directory ($hyprforgeSrc)" >&2
+        for f in test .github flake.nix AGENTS.md; do
+          [ ! -e "$hyprforgeSrc/$f" ] || {
+            echo "hyprforgePackaged: Hyprforge ships its $f ($hyprforgeSrc)" >&2
+            exit 1
+          }
+        done
+        grep -Eq '"id": *"nixarchy[.]hyprlandsettings"' "$hyprforgeSrc/manifest.json" || {
+          echo "hyprforgePackaged: Hyprforge's manifest id is not nixarchy.hyprlandsettings ($hyprforgeSrc)" >&2
           exit 1
         }
-        grep -Eq '"id": *"aziz[.]hyprforge"' "$hyprforgeSrc/manifest.json" || {
-          echo "hyprforgePackaged: Hyprforge's manifest id is not aziz.hyprforge ($hyprforgeSrc)" >&2
-          exit 1
-        }
-        echo "Hyprforge keeps its notice, drops its tests, and is aziz.hyprforge"
+        echo "Hyprforge keeps its notice, drops its tests, and is nixarchy.hyprlandsettings"
 
         # ---- #912: the Flatpak & Snap row ----
         # nixarchy's own row, in the menu the session actually reads.

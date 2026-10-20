@@ -38,7 +38,7 @@ machine use the menu row, or copy the line from a fresh install.
 | [ai-mirror](#ai-mirror) | let an agent use your real desktop, and stop it | **on by default** | bar (right) · Super+Shift+Escape stops it <!-- olafkfreund.ai-mirror --> |
 | [Runtime themes](#runtime-themes) | switch the active palette across supported applications without a rebuild | **on by default** | Setup ▸ Themes <!-- io.github.nobledoodle.omarchroma --> |
 | [Menu](#menu) | a Raycast-style palette in place of the Omarchy menu | **installed, off by default** | Setup ▸ Defaults ▸ Menu ▸ Nixarchy <!-- nixarchy.menu --> |
-| [Hyprforge](#hyprforge) | every Hyprland setting, previewed live on your real windows | **on by default** | Super+Space ▸ Hyprforge <!-- aziz.hyprforge --> |
+| [Hyprforge](#hyprforge) | every Hyprland setting, previewed live on your real windows | **on by default** | Super+Space ▸ Hyprforge <!-- nixarchy.hyprlandsettings --> |
 | [Gliff-Manager](#gliff-manager) | your gliff machines: ready or not, headless or mirror, connect | **on wherever nixarchy installs gliff** | the bar, or Setup ▸ Remote desktop ▸ Manage gliff machines <!-- nixarchy.gliff-manager --> |
 | [Voice](#voice) | operate the desktop by talking to it | **opt-in** | — |
 

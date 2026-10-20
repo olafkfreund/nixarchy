@@ -429,7 +429,9 @@ let
   hyprforgePlugin = pkgs.runCommand "nixarchy-hyprforge" { } ''
     cp -r ${inputs.nixarchy-hyprsettngs} $out
     chmod -R u+w $out
-    rm -rf $out/test $out/preview.png
+    rm -rf $out/test $out/preview.png $out/.github $out/.gitignore \
+      $out/AGENTS.md $out/CLAUDE.md $out/devenv.* $out/flake.* $out/intent \
+      $out/plan $out/skills $out/spec
     grep -q "Copyright (c) 2026 Aziz" $out/LICENSE || {
       echo "nixarchy-hyprforge: LICENSE must keep its copyright holder" >&2
       exit 1
@@ -824,6 +826,12 @@ in
             placement = lib.mkOption {
               type = lib.types.str;
               default = "right";
+            };
+            # The id this default had before; its once-marker and on/off state
+            # move to `id` once (#1391).
+            renamedFrom = lib.mkOption {
+              type = lib.types.str;
+              default = "";
             };
           };
         }
@@ -2081,7 +2089,8 @@ in
         # ~/.config/hypr/hyprforge.lua, which the session loads through a line
         # pkgs/omarchy adds to the store hyprland.lua; Connect alone would not.
         hyprforge = {
-          id = "aziz.hyprforge";
+          id = "nixarchy.hyprlandsettings";
+          renamedFrom = "aziz.hyprforge";
           src = hyprforgePlugin;
           # lua 5.4 (what Arch ships, and upstream targets) runs baseline.lua;
           # cmp checks a write; notify-send and wl-copy/wl-paste back its toasts

@@ -599,9 +599,9 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           logs=$(for c in install free-space installer-refusal; do nix log ".#checks.x86_64-linux.$c" 2>/dev/null || true; done)
-          if printf '%s\n' "$logs" | grep -qE 'RequestedAssertionFailed|Traceback'; then
+          if [[ $logs == *RequestedAssertionFailed* || $logs == *Traceback* ]]; then
             class="assertion: a test in the guest failed"
-          elif printf '%s\n' "$logs" | grep -q 'timeout reached'; then
+          elif [[ $logs == *"timeout reached"* ]]; then
             class="guest deadline: the in-guest timeout was hit"
           elif [ "$JOB_STATUS" = cancelled ]; then
             class="cancelled: job timeout, eviction or runner restart (read the annotation)"

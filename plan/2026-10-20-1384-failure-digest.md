@@ -144,3 +144,8 @@ the digest.
   prints no digest; its quattro failure is reported by `report`. Red: the
   script as on `main` leaves no `Cannot build` line in `build.log`
   (`/mnt/data/vmtest/proof-edge-tee.sh`). Green with the line.
+- **The classification matches with `[[ == *…* ]]`, not `| grep -q`.**
+  `checks.grep-q-pipefail` rejected the two new pipes (run 39479555422:
+  `NEW: a pipe into grep -q that nobody has reviewed`). Rewritten rather
+  than allowlisted. Green after; a stub `nix log` still yields assertion,
+  guest deadline and other.

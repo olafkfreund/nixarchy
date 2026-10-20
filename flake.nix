@@ -2482,6 +2482,12 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
           };
+          # #1385: the passwordless-sudo toggle is hidden in the menu and the bar.
+          passwordless-sudo-hidden = import ./tests/passwordless-sudo-hidden.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
           omarchy-version-label = import ./tests/omarchy-version-label.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

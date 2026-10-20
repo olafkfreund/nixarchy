@@ -103,8 +103,9 @@ minutes. NixOS's `/etc/sudoers` has no `#includedir`, so that file would never
 be read, and upstream would still print that it was enabled. nixarchy
 replaces the command with one that says so, prints the options below, and
 exits non-zero. In Omarchy's newer releases the row becomes a toggle that
-writes sudoers and tmpfiles rules; nixarchy hides it there, rather than offer
-passwordless root one click away (#1280).
+writes sudoers and tmpfiles rules. nixarchy hides it on both channels, in the
+menu and, on edge, the bar indicator, rather than offer passwordless root one
+click away: sudo is configuration here, so the toggle could not work (#1280, #1385).
 
 If you want it, declare it, for your user only:
 

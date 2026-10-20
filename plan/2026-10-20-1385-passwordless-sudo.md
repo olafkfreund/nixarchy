@@ -77,3 +77,15 @@ Approved decisions, carried from the spec:
 
 Revert the main PR and the edge-candidate commit. The icon and row come
 back as before.
+
+## Deviations
+
+- **The row on `main`** sits after `update.nixpkgs.unstable`, because main
+  has none of the quattro rows edge puts it beside.
+- **Edge's manifest rewrite** uses `cat tmp > file`, not `mv`, so the file
+  keeps its mode. `jq` is called as `${jq}/bin/jq`, because it is a
+  function argument of the package but not in `nativeBuildInputs`.
+- **The red for the `jq` step** is the build's own guard: with the `jq`
+  lines removed, `.#omarchy` fails with "#1385: PasswordlessSudo is still
+  offered in Indicators.manifest.json" before the check can run. The check
+  covers the manifest on any tree where the build-time guard is bypassed.

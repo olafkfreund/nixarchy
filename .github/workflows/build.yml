@@ -1324,7 +1324,9 @@ jobs:
     # and four PRs sat unmergeable behind an outage in somebody else's CDN.
     # This cap exists to fail a hung job in half an hour rather than six
     # (411c6a4); 45 still does that, while surviving a substituter blip.
-    timeout-minutes: 45
+    # 75 since #1378: a nixpkgs bump starts every closure cold, and its split
+    # halves still ran past 45 (vm-toplevel alone 23 min, 7.5 GiB fetched).
+    timeout-minutes: 75
     # A nixpkgs bump has no proofs, so the one `system` job ran ~50 minutes and
     # timed out (#1332). Since #1341 it is two halves, split by what builds
     # hypr-rdp: this one and `system-checks`, with `system` below as the
@@ -1477,7 +1479,7 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     # Cap and concurrency group as system-build: see the comments there (#1341).
-    timeout-minutes: 45
+    timeout-minutes: 75
     concurrency:
       group: >-
         ${{ github.workflow }}-system-checks-${{ github.ref }}-${{

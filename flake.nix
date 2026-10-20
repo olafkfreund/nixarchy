@@ -254,8 +254,11 @@
     # - dead code, migrations, MotionTuner and fff removed (#36, #67, #68, #70, #81)
     # - menu writes escalate safely, learned visibility, and drift fixes (#54, #59, #61, #72)
     # - one ack event, a tour file-watch reload, agent settings sources (#45, #66, #71), plus a flake.lock update (#82)
+    # Now master at 5ae2ca4 (#1391): Mechanic edits are backed up, checked and
+    # undoable with /undo (#90), a learned marker counts only at a line start
+    # (#89), and the Qt 6.12 Color fix (#1381).
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/dc6609ba5a72aa457438a55c32f3a4fcf6d3c8f8";
+      url = "github:olafkfreund/nixi-nixarchy/5ae2ca4917cc7c0eabb2c22d4aa7fc0ddfaa06fe";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.omarchy.follows = "omarchy";
     };
@@ -280,7 +283,7 @@
     # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
     # a branch is not a version.
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/8e21313204830a40e5ee695f321fce361db7a2be";
+      url = "github:olafkfreund/nixarchy-voice/0231774e529521e158b27d932684871740fcd892";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";
@@ -376,7 +379,7 @@
     # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-distrobox = {
-      url = "github:olafkfreund/nixarchy-distrobox/e016c75a17537b9b662ab975abd8c1910ddd2c94";
+      url = "github:olafkfreund/nixarchy-distrobox/cfa684f21bdf7a896cd403d1a7b5bf32fefb6cdc";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -397,7 +400,7 @@
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
-      url = "github:olafkfreund/nixarchy-microvm/01186d79c702c662ca60d8c32208c75eb70fe64f";
+      url = "github:olafkfreund/nixarchy-microvm/ca0bc01f11ac5438c1a174ea75559a869bd5616e";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1381
 spec: spec/2026-10-20-1381-nixpkgs-bump-blockers.md
 ---

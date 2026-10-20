@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1384
 author: olafkfreund
 ---
@@ -74,3 +74,8 @@ never where a person looks: the last lines and the job summary.
 - **#1382 (report all drift in one build).** I propose parking it: the
   digest makes each failure cheap to read, which is most of what #1382
   wanted, and it prevents no failure on its own.
+
+## Decisions (owner, 2026-10-20)
+
+- The digest reads the job's own build output and `nix log` of failed derivations, within the job.
+- #1382 is parked.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1384
 intent: intent/2026-10-20-1384-failure-digest.md
 ---

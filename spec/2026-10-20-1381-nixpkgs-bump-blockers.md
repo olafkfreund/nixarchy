@@ -1,5 +1,5 @@
 ---
-status: approved
+status: draft
 issue: 1381
 intent: intent/2026-10-20-1381-nixpkgs-bump-blockers.md
 ---
@@ -46,44 +46,61 @@ apart from reading 1.3 MB in a sandbox, which takes milliseconds.
   script.
 - Dropping the control: §1 forbids a check that cannot fail.
 
-## 2. nixi's QML errors under Qt 6.12
+## 2. Qt 6.12's `Color` singleton shadows ours: every QML plugin, not only nixi (revised 2026-10-20)
 
-**What fails.** Every error is a read through the `Color` singleton from
-`qs.Commons`:
-- `Color.accent.r`
-- `Color.menu.text`, `Color.menu.border`, `Color.menu.background`
+**Measured** (plan step B1, a repro under Qt's `qml` tool, offscreen,
+in `/mnt/data/vmtest/qt612-repro`). A module singleton named `Color`,
+referenced unqualified:
 
-They come from `HarnessSelector.qml` and `Ask.qml` in
-`olafkfreund/nixi-nixarchy`, pinned at 245e2a3 (`flake.nix:258`). `Style.*`
-from the same module still resolves, and Omarchy's own shell, which reads
-`Color.menu` everywhere, logs nothing.
+| | Qt 6.11.2 | Qt 6.12.0 |
+|---|---|---|
+| `import QtQuick` + `import Commons` → `Color` | our singleton (`Color_QMLTYPE`) | **`QQuickColor`**, Qt's own new singleton: `Color.menu` is `undefined` |
+| the same, with `QtQuick.Controls` too | ours | `QQuickColor` |
+| `import Commons as Commons` → `Commons.Color` | ours | **ours** |
 
-**Working hypothesis, to be measured first in the plan.** nixi imports
-`QtQuick.Controls` and Omarchy's plugins do not (they import `QtQuick` and
-`qs.Commons`, and also `qs.Commons as Commons`). If Qt 6.12's Controls
-brings in a `Color` name, it shadows the singleton for an unqualified
-reference, so `Color` resolves to an object without `menu` or `accent`.
-The plan proves or refutes this with a two-file QML repro run under Qt
-6.12's `qml` tool, offscreen, before anything is changed.
+So the shadowing comes from `QtQuick` itself, not `QtQuick.Controls`; the
+original hypothesis was wrong in that detail. The qualified fix works on
+both versions. Upstream hit the same thing and fixed it the same way:
+omacom/omarchy#14553, "Qualify shell palette references for Qt 6.12".
+Omarchy has no unqualified `Color.` left, which is why its shell logged
+nothing.
 
-**Design (in nixi, released, then pinned here):**
-- Each nixi QML file that reads the Commons singletons adds
-  `import qs.Commons as Commons`, the alias Omarchy's own plugins already
-  use, and refers to `Commons.Color` and `Commons.Style`.
-- A qualified reference cannot be shadowed by any import, so this is
-  correct whatever the exact Qt 6.12 cause turns out to be.
-- If the repro refutes the shadowing hypothesis, the plan stops and the
-  spec is revised. A mechanical qualify-everything change is not shipped
-  on a guess.
-- In nixarchy: move the `nixi` pin in `flake.nix:258` and `flake.lock`
-  to the fixed commit, with the `flake.nix` comment's change list
-  extended by one line.
-- The `session` assertion is not touched.
+**The scope is wider than nixi.** A scan of every flake input's QML for an
+unqualified `Color.` finds 16 plugin repositories, all
+`olafkfreund/*`: ai-mirror, nixarchy-devenv, -distrobox, -flatsnap,
+-ghtui, -gliff-manager, -gltui, -herdr, -hyprsettngs, -menu, -microvm,
+-pkg, -plugin-browser, -podman, -voice, and nixi-nixarchy. It also finds
+nixarchy's own `pkgs/rebuild-panel/{Panel,RebuildView}.qml`.
+`checks.session` caught only nixi because nixi is the only one of these
+panels the VM test opens. On Qt 6.12 every other one would render
+without its palette, with nothing red.
+
+**Design:**
+
+1. **Each affected repository** gets the same mechanical change:
+   - add `import qs.Commons as Commons`;
+   - qualify every `Color.` as `Commons.Color.` (match `\bColor\.`, never
+     `textColor.`);
+   - `Style.` may stay unqualified, since Qt 6.12 adds no `Style`;
+   - one PR per repository, merged by the owner, then released at a
+     tag or commit.
+2. **`pkgs/rebuild-panel`** gets the same change, in this repository.
+3. **One nixarchy PR** moves all 16 pins (`flake.nix` + `flake.lock`),
+   each pin comment gaining a line.
+4. **A new guard, `checks.qml-color-qualified`** (cheap, `runCommand`): it
+   greps the QML of every plugin nixarchy ships (each plugin input's
+   source, and `pkgs/rebuild-panel`) for an unqualified `Color.`, and
+   fails naming each file and line. This is §2's rule: the session check
+   saw one panel of seventeen, so the class of bug gets a probe that sees
+   all of them. It also catches the next plugin someone adds.
+
+`checks.session`'s QML-errors assertion is not touched.
 
 **Rejected:**
-- An exception for nixi in the QML-error rule: it found a real
-  user-visible break, missing colours.
-- Pinning Qt: that holds every app back.
+- **Rewriting plugin QML at nixarchy build time** (a `sed` over plugin
+  sources): it fixes the symptom here, leaves every repository broken for
+  anyone using it elsewhere, and is a carried patch on 17 trees.
+- **Holding Qt at 6.11:** that holds back the whole nixpkgs bump.
 
 ## 3. The VirtualBox guest-additions collision
 
@@ -134,11 +151,14 @@ configuration gets the same package. No fixture applies.
    - with the stub back at 500 lines, reproduce the original flake on the
      runner class that showed it, or document that the old control passed
      on #1378's run (already observed).
-2. `checks.session` on the bumped nixpkgs:
-   - red with nixi at 245e2a3 (#1378's run is the record);
-   - green with the fixed pin;
-   - also green on today's nixpkgs (Qt 6.11), so it can merge before the
-     bump.
+2. **Qt 6.12 shadowing:**
+   - `checks.qml-color-qualified` is red today, listing the 17 trees, and
+     green once every pin and `rebuild-panel` is qualified. It is red
+     again with one `Commons.Color.` reverted, naming that file.
+   - `checks.session` on the bumped nixpkgs is green with the new pins.
+     #1378's run is the red.
+   - Every repository's own change is checked by building nixarchy's
+     check against its new commit.
 3. `checks.offline-hardware-packages` on the bumped nixpkgs: red before
    (#1378's run), green with the override.
 4. The next nightly bump PR goes green.

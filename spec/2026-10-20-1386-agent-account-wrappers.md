@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1386
 intent: intent/2026-10-20-1386-agent-account-wrappers.md
 ---

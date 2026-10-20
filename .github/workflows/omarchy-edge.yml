@@ -41,13 +41,13 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-26.04
-    # Same 45 as omarchy.yml, for the same reason: the first build of a source
-    # that just changed is a guaranteed cache miss.
-    timeout-minutes: 45
+    # Two cold build passes when quattro is red and the fallback runs (#1383).
+    timeout-minutes: 90
     outputs:
       skip: ${{ steps.pin.outputs.skip }}
       expected: ${{ steps.start.outputs.expected }}
       candidate: ${{ steps.candidate.outputs.sha }}
+      fallback: ${{ steps.build2.outcome == 'success' }}
       failed: ${{ steps.build.outputs.failed || steps.candidate.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed || steps.start.outputs.failed }}
     steps:
       - uses: actions/checkout@v5
@@ -170,14 +170,19 @@ jobs:
           MAIN_IN: ${{ steps.start.outputs.main_in }}
           START: ${{ steps.start.outputs.start }}
           EXPECTED: ${{ steps.start.outputs.expected }}
+          FROM_CANDIDATE: ${{ inputs.from_candidate }}
         run: |
           set -euo pipefail
           # Authenticated, and refuses anything but a full SHA: a 403 once made
           # the answer empty and the sed pinned upstream's default branch
           # (omarchy.yml). The SHA is pasted into later steps' shell, so the
           # 40-hex test is also what makes that safe.
-          sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
-            { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
+          if [ "$FROM_CANDIDATE" = true ] && [[ $HAVE =~ ^[0-9a-f]{40}$ ]]; then
+            sha=$HAVE # carry main to the candidate's quattro; a scheduled run moves quattro
+          else
+            sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
+              { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
+          fi
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"
             echo "::error::no commit SHA from the API for quattro: '$sha'"
@@ -219,28 +224,47 @@ jobs:
       - name: Build, and the cheap checks, each separately
         id: build
         if: steps.pin.outputs.skip != 'true'
+        # A red new quattro falls back to edge's last good pin in this same run (#1383).
+        continue-on-error: true
+        run: bash .github/scripts/edge-build.sh
+
+      - name: Find the pin edge already publishes
+        id: good
+        if: steps.build.outcome == 'failure' && steps.pin.outputs.skip != 'true'
+        env:
+          NEW: ${{ steps.pin.outputs.sha }}
         run: |
           set -uo pipefail
-          failed=""
-          try() {
-            local name=$1
-            shift
-            echo "::group::$name"
-            if "$@"; then echo "::endgroup::"; else
-              echo "::endgroup::"
-              echo "::error::$name failed"
-              failed="$failed $name"
-            fi
-          }
-          try omarchy nix build .#omarchy --print-build-logs
-          # Not options: it peaks near 11.5 GB, and beside the quickshell build
-          # edge needs it lost a 16 GB hosted runner mid-run (#1278). It runs in
-          # verify, on p620, after the idle wait (CLAUDE.md section 6).
-          for c in menu-verbs menu-actions bin-ledger skill-parity panel-loaders review-pins stable-eval; do
-            try "$c" nix build ".#checks.x86_64-linux.$c" --print-build-logs
-          done
-          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
-          [ -z "$failed" ] || { echo "::error::red:$failed"; exit 1; }
+          # Captured first: a missing origin/edge must read as "no fallback".
+          flake=$(git show origin/edge:flake.nix 2>/dev/null) || flake=""
+          good=$(grep -oE 'github:basecamp/omarchy/[0-9a-f]{40}' <<<"$flake" | cut -d/ -f3 || true)
+          if [ -n "$good" ] && [ "$good" != "$NEW" ]; then
+            echo "sha=$good" >> "$GITHUB_OUTPUT"
+          else
+            echo "no earlier pin to fall back to (edge has '${good:-none}')"
+          fi
+
+      - name: Pin the last good quattro
+        id: pin2
+        if: steps.good.outputs.sha != ''
+        env:
+          SHA: ${{ steps.good.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ver="edge-$(date -u +%Y%m%d)-${SHA:0:7}"
+          sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/$SHA|" flake.nix
+          sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$ver\"|" flake.nix
+          url_sha=$(sed -nE 's|.*github:basecamp/omarchy/([0-9a-f]{40})".*|\1|p' flake.nix | head -1)
+          lit_ver=$(sed -nE 's|.*omarchyVersion = "([^"]*)".*|\1|p' flake.nix | head -1)
+          [ "$url_sha" = "$SHA" ] && [ "$lit_ver" = "$ver" ] ||
+            { echo "::error::fallback pin did not apply: '$url_sha' '$lit_ver'"; exit 1; }
+          nix flake update omarchy
+          echo "quattro was red; falling back to the pin edge has: $SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the fallback pin
+        id: build2
+        if: steps.pin2.outcome == 'success'
+        run: bash .github/scripts/edge-build.sh
 
       # The briefing: what quattro changed that this port cares about, against
       # the Omarchy that `release` ships. Each step is continue-on-error and
@@ -335,9 +359,9 @@ jobs:
 
       - name: Publish the candidate
         id: candidate
-        if: steps.pin.outputs.skip != 'true'
+        if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')
         env:
-          SHA: ${{ steps.pin.outputs.sha }}
+          SHA: ${{ steps.build2.outcome == 'success' && steps.good.outputs.sha || steps.pin.outputs.sha }}
         run: |
           set -euo pipefail
           git add -A
@@ -351,6 +375,12 @@ jobs:
             echo "::error::GITHUB_TOKEN cannot push it: add a token with the workflows scope as NIXARCHY_EDGE_TOKEN"
             exit 1
           }
+
+      - name: Fail when no build passed
+        if: steps.pin.outputs.skip != 'true' && steps.build.outcome == 'failure' && steps.build2.outcome != 'success'
+        run: |
+          echo "::error::quattro is red and there is no earlier pin that builds; nothing was published"
+          exit 1
 
   # Its own hosted job: three hours of sleeping must not hold a VM runner.
   wait-idle:
@@ -454,12 +484,14 @@ jobs:
           PREPARE_FAILED: ${{ needs.prepare.outputs.failed }}
           VERIFY_FAILED: ${{ needs.verify.outputs.failed }}
           PROMOTED: ${{ needs.verify.outputs.promoted }}
+          FALLBACK: ${{ needs.prepare.outputs.fallback }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           # A plain variable, never `read` into fields: --jq renders null as
           # nothing, and a whitespace IFS drops the empty field (section 13).
-          num=$(gh issue list --label omarchy-edge --state open --json number --jq '.[0].number // empty')
+          num=$(gh issue list --label omarchy-edge --state open --json number,title \
+            --jq '[.[] | select(.title == "The Omarchy edge channel is not publishing")][0].number // empty')
 
           # A cancel after edge-promote pushed but before it wrote promoted=true
           # would report a failure for a promoted edge. Ask the remote.
@@ -468,7 +500,8 @@ jobs:
             [ "$current" != "$CANDIDATE" ] || PROMOTED=true
           fi
 
-          if [ "$PROMOTED" = true ]; then
+          # A promotion on the fallback pin must not hide that new quattro is red.
+          if [ "$PROMOTED" = true ] && [ "$FALLBACK" != true ]; then
             if [ -n "$num" ]; then
               gh issue close "$num" --comment "edge was promoted by $RUN_URL"
             fi
@@ -482,7 +515,9 @@ jobs:
 
           # A cancelled job result here is a timeout, not a person: a cancelled
           # workflow does not reach this job.
-          if [ "$PREPARE" != success ]; then
+          if [ "$PROMOTED" = true ]; then
+            sig="quattro red, edge kept on its last good pin: ${PREPARE_FAILED:-unknown}"
+          elif [ "$PREPARE" != success ]; then
             sig="prepare: ${PREPARE_FAILED:-$PREPARE}"
           elif [ "$WAIT" != success ]; then
             sig="wait-idle: $WAIT"

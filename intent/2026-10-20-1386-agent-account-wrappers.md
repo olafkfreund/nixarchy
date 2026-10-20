@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1386
 author: olafkfreund
 ---
@@ -102,3 +102,12 @@ On edge:
    prints `$CLAUDE_CONFIG_DIR`, real mise, the shipped toml) enough? Or does
    this need the edge `session` VM? I propose the stub. The VM adds only the
    launcher PATH question, which question 1 decides.
+
+## Decisions (owner, 2026-10-20)
+
+Approved with the proposals above:
+
+1. Launchers route through the account too, not only a terminal `claude`.
+2. No mise install in place of Nix: where nixarchy installs no agent, it
+   stays "not installed".
+3. A stubbed `runCommand` check, not a VM.

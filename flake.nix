@@ -2477,6 +2477,20 @@
             omarchy = self.packages.${system}.omarchy;
             omarchySrc = omarchy;
           };
+          # #1381: no shipped plugin reads Color unqualified (Qt 6.12 shadows it). The
+          # defaults come from defaultPluginSet; nixi and voice install through their own
+          # Home Manager modules (modules/home.nix), so they are named here.
+          qml-color-qualified = import ./tests/qml-color-qualified.nix {
+            pkgs = pkgsFor.${system};
+            sources =
+              builtins.mapAttrs (
+                _: p: p.src
+              ) self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet
+              // {
+                nixi = inputs.nixi;
+                voice = inputs.nixarchy-voice;
+              };
+          };
           # #1368: no shipped script may self-extract an AppImage; appimage-run passes the flag to the app.
           appimage-extract = import ./tests/appimage-extract.nix {
             pkgs = pkgsFor.${system};

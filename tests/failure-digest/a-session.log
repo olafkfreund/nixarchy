@@ -1,0 +1,151 @@
+vm-test-run-nixarchy-session> machine # [  125.467114] su[35911]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  125.650932] su[35911]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell nixarchy.rebuild.bar close', in 0.22 seconds)
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell nixarchy.rebuild.bar open'
+vm-test-run-nixarchy-session> machine # [  125.706987] su[35946]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  125.719131] su[35946]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  125.929858] su[35946]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell nixarchy.rebuild.bar open', in 0.27 seconds)
+vm-test-run-nixarchy-session> machine: must succeed: sleep 5.0
+vm-test-run-nixarchy-session> machine: (finished: must succeed: sleep 5.0, in 5.03 seconds)
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus nixarchy-rebuild-state' | grep -q idle
+vm-test-run-nixarchy-session> machine # [  130.992508] su[36464]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  131.000663] su[36464]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  131.083315] su[36464]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus nixarchy-rebuild-state' | grep -q idle, in 0.11 seconds)
+vm-test-run-nixarchy-session> opening the rebuild panel starts no rebuild
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell nixarchy.rebuild.bar rebuild'
+vm-test-run-nixarchy-session> machine # [  131.108314] su[36511]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  131.116604] su[36511]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  131.330075] su[36511]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell nixarchy.rebuild.bar rebuild', in 0.25 seconds)
+vm-test-run-nixarchy-session> machine: waiting for success: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user show -p LoadState --value nixarchy-rebuild' | grep -qx loaded
+vm-test-run-nixarchy-session> machine # [  131.344954] systemd[9529]: Started [systemd-run] /nix/store/cyhm16bc9j66nvsx4sqfy9c96wj7c589-nixarchy-apply/bin/nixarchy-apply --yes --no-preview.
+vm-test-run-nixarchy-session> machine # [  131.367405] su[36558]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  131.382370] su[36558]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  131.389517] nixarchy-rebuild[36557]: Enabled apps:
+vm-test-run-nixarchy-session> machine # [  131.397270] nixarchy-rebuild[36579]:     brave.enable = true;  #@ brave
+vm-test-run-nixarchy-session> machine # [  131.398162] nixarchy-rebuild[36579]:     helix.enable = true;  #@ helix
+vm-test-run-nixarchy-session> machine # [  131.419156] su[36558]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: waiting for success: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user show -p LoadState --value nixarchy-rebuild' | grep -qx loaded, in 0.10 seconds)
+vm-test-run-nixarchy-session> Rebuild now starts the nixarchy-rebuild unit
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications isDnd'
+vm-test-run-nixarchy-session> machine # [  131.473575] su[36602]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  131.487854] su[36602]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  131.539221] nixarchy-rebuild[36557]: /etc/nixos is already up to date.
+vm-test-run-nixarchy-session> machine # [  131.548865] nixarchy-rebuild[36557]: WARNING: nothing in /etc/nixos imports /etc/nixos/nixarchy-apps.nix.
+vm-test-run-nixarchy-session> machine # [  131.549288] nixarchy-rebuild[36557]:   The selection has been copied, and a rebuild will
+vm-test-run-nixarchy-session> machine # [  131.550673] nixarchy-rebuild[36557]:   ignore it: every app you enable will look installed
+vm-test-run-nixarchy-session> machine # [  131.551604] nixarchy-rebuild[36557]:   and never be built.
+vm-test-run-nixarchy-session> machine # [  131.552678] nixarchy-rebuild[36557]:   Add it to this host's configuration:
+vm-test-run-nixarchy-session> machine # [  131.553679] nixarchy-rebuild[36557]:     imports = [ ./nixarchy-apps.nix ];
+vm-test-run-nixarchy-session> machine # [  131.555597] nixarchy-rebuild[36557]:   The path is relative to the file you put it in, and
+vm-test-run-nixarchy-session> machine # [  131.556359] nixarchy-rebuild[36557]:   must resolve to what apply just wrote:
+vm-test-run-nixarchy-session> machine # [  131.557059] nixarchy-rebuild[36557]:     /etc/nixos/nixarchy-apps.nix
+vm-test-run-nixarchy-session> machine # [  131.558056] nixarchy-rebuild[36557]:   A root-level nixarchy-apps.nix imported from elsewhere
+vm-test-run-nixarchy-session> machine # [  131.559225] nixarchy-rebuild[36557]:   does NOT count despite the matching name: this
+vm-test-run-nixarchy-session> machine # [  131.560138] nixarchy-rebuild[36557]:   selection would be ignored and the old one kept (#734).
+vm-test-run-nixarchy-session> machine # [  131.649115] nixarchy-rebuild[36638]: Error:
+vm-test-run-nixarchy-session> machine # [  131.649555] nixarchy-rebuild[36638]:    0: Flake reference `/etc/nixos` points to local path `/etc/nixos`, but that path does not exist or does not contain a flake.nix file.
+vm-test-run-nixarchy-session> machine # [  131.650418] nixarchy-rebuild[36638]:       Pass an existing flake path or update NH_FLAKE/NH_OS_FLAKE if this value came from the environment.
+vm-test-run-nixarchy-session> machine # [  131.650827] nixarchy-rebuild[36638]: Location:
+vm-test-run-nixarchy-session> machine # [  131.652060] nixarchy-rebuild[36638]:    crates/nh-installable/src/lib.rs:507
+vm-test-run-nixarchy-session> machine # [  131.658895] nixarchy-rebuild[36557]: The rebuild failed (exit 1). The log above says where.
+vm-test-run-nixarchy-session> machine # [  131.660636] nixarchy-rebuild[36557]:   If it stopped while building, the running system is unchanged.
+vm-test-run-nixarchy-session> machine # [  131.662469] nixarchy-rebuild[36557]:   If it stopped while activating, it may be partly switched --
+vm-test-run-nixarchy-session> machine # [  131.664240] nixarchy-rebuild[36557]:   'nixarchy rollback' lists the earlier generations to go back to.
+vm-test-run-nixarchy-session> machine # [  131.666170] nixarchy-rebuild[36557]:   What you picked is still in the selection, so the next
+vm-test-run-nixarchy-session> machine # [  131.667879] nixarchy-rebuild[36557]:   rebuild will fail the same way until it is removed:
+vm-test-run-nixarchy-session> machine # [  131.669635] nixarchy-rebuild[36557]:     nixarchy app remove                    take out what you just picked
+vm-test-run-nixarchy-session> machine # [  131.671557] nixarchy-rebuild[36557]:     nh os switch /etc/nixos 2>&1 | nixarchy explain   what the error means
+vm-test-run-nixarchy-session> machine # [  131.673657] systemd[9529]: nixarchy-rebuild.service: Main process exited, code=exited, status=1/FAILURE
+vm-test-run-nixarchy-session> machine # [  131.675877] systemd[9529]: nixarchy-rebuild.service: Failed with result 'exit-code'.
+vm-test-run-nixarchy-session> machine # [  131.728434] su[36602]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications isDnd', in 0.30 seconds)
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications dismissAll'
+vm-test-run-nixarchy-session> machine # [  131.751338] su[36670]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  131.759162] su[36670]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  131.970106] su[36670]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications dismissAll', in 0.24 seconds)
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /nix/store/9yrxszw0fbyx68dbr4nbcnb408vqxgya-libnotify-0.8.8/bin/notify-send -u critical -p -a nixarchy-probe -- close-me-1032 body'
+vm-test-run-nixarchy-session> machine # [  132.033753] su[36705]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  132.077539] su[36705]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  132.162930] su[36705]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /nix/store/9yrxszw0fbyx68dbr4nbcnb408vqxgya-libnotify-0.8.8/bin/notify-send -u critical -p -a nixarchy-probe -- close-me-1032 body', in 0.19 seconds)
+vm-test-run-nixarchy-session> machine: waiting for success: test -s /home/omarchy/.local/state/omarchy/notifications/live.json && /nix/store/m3y7hqmy20nd1ps6qy8410a326255bf0-jq-1.8.2-bin/bin/jq -e 'any(.[]; .summary == "close-me-1032")' /home/omarchy/.local/state/omarchy/notifications/live.json
+vm-test-run-nixarchy-session> machine: (finished: waiting for success: test -s /home/omarchy/.local/state/omarchy/notifications/live.json && /nix/store/m3y7hqmy20nd1ps6qy8410a326255bf0-jq-1.8.2-bin/bin/jq -e 'any(.[]; .summary == "close-me-1032")' /home/omarchy/.local/state/omarchy/notifications/live.json, in 2.05 seconds)
+vm-test-run-nixarchy-session> machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u 3'
+vm-test-run-nixarchy-session> machine # [  134.245124] su[36816]: Successful su for omarchy by root
+vm-test-run-nixarchy-session> machine # [  134.251692] su[36816]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+vm-test-run-nixarchy-session> machine # [  134.269852] su[36816]: pam_unix(su:session): session closed for user omarchy
+vm-test-run-nixarchy-session> machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u 3', in 0.05 seconds)
+vm-test-run-nixarchy-session> machine: waiting for success: ! (test -s /home/omarchy/.local/state/omarchy/notifications/live.json && /nix/store/m3y7hqmy20nd1ps6qy8410a326255bf0-jq-1.8.2-bin/bin/jq -e 'any(.[]; .summary == "close-me-1032")' /home/omarchy/.local/state/omarchy/notifications/live.json)
+vm-test-run-nixarchy-session> machine # [  143.760908] systemd[1]: systemd-timedated.service: Deactivated successfully.
+vm-test-run-nixarchy-session> machine # [  157.571867] clocksource: Watchdog remote CPU 1 read timed out
+vm-test-run-nixarchy-session> !!! Traceback (most recent call last):
+vm-test-run-nixarchy-session> !!!   File "<string>", line 834, in <module>
+vm-test-run-nixarchy-session> !!!     machine.wait_until_succeeds("! (" + live_has + ")", timeout=60)
+vm-test-run-nixarchy-session> !!! 
+vm-test-run-nixarchy-session> !!! RequestedAssertionFailed: action timed out after 60.96 seconds (timeout=60.0)
+vm-test-run-nixarchy-session> cleanup
+vm-test-run-nixarchy-session> kill QemuMachine (pid 45)
+vm-test-run-nixarchy-session> machine # qemu-system-x86_64: terminating on signal 15 from pid 39 (/nix/store/lb41b0anx1f98y9y5s9mdv97gjgsq740-python3-3.14.7/bin/python3.14)
+vm-test-run-nixarchy-session> machine # [2026-10-20T12:06:53Z INFO  virtiofsd] Client disconnected, shutting down
+vm-test-run-nixarchy-session> machine # [2026-10-20T12:06:53Z INFO  virtiofsd] Client disconnected, shutting down
+vm-test-run-nixarchy-session> machine # [2026-10-20T12:06:53Z INFO  virtiofsd] Client disconnected, shutting down
+vm-test-run-nixarchy-session> (finished: cleanup, in 1.06 seconds)
+error: Cannot build '/nix/store/qwps3x2cli7ygq0wp2rkdp2yfwrr7k33-vm-test-run-nixarchy-session.drv'.
+       Reason: builder failed with exit code 1.
+       Output paths:
+         /nix/store/f98lqyb6d2gvqxxycmwjpic6wngb038g-vm-test-run-nixarchy-session
+       Last 50 log lines:
+       > machine # [  131.560138] nixarchy-rebuild[36557]:   selection would be ignored and the old one kept (#734).
+       > machine # [  131.649115] nixarchy-rebuild[36638]: Error:
+       > machine # [  131.649555] nixarchy-rebuild[36638]:    0: Flake reference `/etc/nixos` points to local path `/etc/nixos`, but that path does not exist or does not contain a flake.nix file.
+       > machine # [  131.650418] nixarchy-rebuild[36638]:       Pass an existing flake path or update NH_FLAKE/NH_OS_FLAKE if this value came from the environment.
+       > machine # [  131.650827] nixarchy-rebuild[36638]: Location:
+       > machine # [  131.652060] nixarchy-rebuild[36638]:    crates/nh-installable/src/lib.rs:507
+       > machine # [  131.658895] nixarchy-rebuild[36557]: The rebuild failed (exit 1). The log above says where.
+       > machine # [  131.660636] nixarchy-rebuild[36557]:   If it stopped while building, the running system is unchanged.
+       > machine # [  131.662469] nixarchy-rebuild[36557]:   If it stopped while activating, it may be partly switched --
+       > machine # [  131.664240] nixarchy-rebuild[36557]:   'nixarchy rollback' lists the earlier generations to go back to.
+       > machine # [  131.666170] nixarchy-rebuild[36557]:   What you picked is still in the selection, so the next
+       > machine # [  131.667879] nixarchy-rebuild[36557]:   rebuild will fail the same way until it is removed:
+       > machine # [  131.669635] nixarchy-rebuild[36557]:     nixarchy app remove                    take out what you just picked
+       > machine # [  131.671557] nixarchy-rebuild[36557]:     nh os switch /etc/nixos 2>&1 | nixarchy explain   what the error means
+       > machine # [  131.673657] systemd[9529]: nixarchy-rebuild.service: Main process exited, code=exited, status=1/FAILURE
+       > machine # [  131.675877] systemd[9529]: nixarchy-rebuild.service: Failed with result 'exit-code'.
+       > machine # [  131.728434] su[36602]: pam_unix(su:session): session closed for user omarchy
+       > machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications isDnd', in 0.30 seconds)
+       > machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications dismissAll'
+       > machine # [  131.751338] su[36670]: Successful su for omarchy by root
+       > machine # [  131.759162] su[36670]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+       > machine # [  131.970106] su[36670]: pam_unix(su:session): session closed for user omarchy
+       > machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus omarchy-shell notifications dismissAll', in 0.24 seconds)
+       > machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /nix/store/9yrxszw0fbyx68dbr4nbcnb408vqxgya-libnotify-0.8.8/bin/notify-send -u critical -p -a nixarchy-probe -- close-me-1032 body'
+       > machine # [  132.033753] su[36705]: Successful su for omarchy by root
+       > machine # [  132.077539] su[36705]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+       > machine # [  132.162930] su[36705]: pam_unix(su:session): session closed for user omarchy
+       > machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /nix/store/9yrxszw0fbyx68dbr4nbcnb408vqxgya-libnotify-0.8.8/bin/notify-send -u critical -p -a nixarchy-probe -- close-me-1032 body', in 0.19 seconds)
+       > machine: waiting for success: test -s /home/omarchy/.local/state/omarchy/notifications/live.json && /nix/store/m3y7hqmy20nd1ps6qy8410a326255bf0-jq-1.8.2-bin/bin/jq -e 'any(.[]; .summary == "close-me-1032")' /home/omarchy/.local/state/omarchy/notifications/live.json
+       > machine: (finished: waiting for success: test -s /home/omarchy/.local/state/omarchy/notifications/live.json && /nix/store/m3y7hqmy20nd1ps6qy8410a326255bf0-jq-1.8.2-bin/bin/jq -e 'any(.[]; .summary == "close-me-1032")' /home/omarchy/.local/state/omarchy/notifications/live.json, in 2.05 seconds)
+       > machine: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u 3'
+       > machine # [  134.245124] su[36816]: Successful su for omarchy by root
+       > machine # [  134.251692] su[36816]: pam_unix(su:session): session opened for user omarchy(uid=1000) by (uid=0)
+       > machine # [  134.269852] su[36816]: pam_unix(su:session): session closed for user omarchy
+       > machine: (finished: must succeed: su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u 3', in 0.05 seconds)
+       > machine: waiting for success: ! (test -s /home/omarchy/.local/state/omarchy/notifications/live.json && /nix/store/m3y7hqmy20nd1ps6qy8410a326255bf0-jq-1.8.2-bin/bin/jq -e 'any(.[]; .summary == "close-me-1032")' /home/omarchy/.local/state/omarchy/notifications/live.json)
+       > machine # [  143.760908] systemd[1]: systemd-timedated.service: Deactivated successfully.
+       > machine # [  157.571867] clocksource: Watchdog remote CPU 1 read timed out
+       > !!! Traceback (most recent call last):
+       > !!!   File "<string>", line 834, in <module>
+       > !!!     machine.wait_until_succeeds("! (" + live_has + ")", timeout=60)
+       > !!! 
+       > !!! RequestedAssertionFailed: action timed out after 60.96 seconds (timeout=60.0)
+       > cleanup
+       > kill QemuMachine (pid 45)
+       > machine # qemu-system-x86_64: terminating on signal 15 from pid 39 (/nix/store/lb41b0anx1f98y9y5s9mdv97gjgsq740-python3-3.14.7/bin/python3.14)
+       > machine # [2026-10-20T12:06:53Z INFO  virtiofsd] Client disconnected, shutting down
+       > machine # [2026-10-20T12:06:53Z INFO  virtiofsd] Client disconnected, shutting down
+       > machine # [2026-10-20T12:06:53Z INFO  virtiofsd] Client disconnected, shutting down
+       > (finished: cleanup, in 1.06 seconds)

@@ -35,6 +35,12 @@ for a in "$@"; do
   esac
 done
 
+# Keep a copy of everything this step prints for failure-digest.sh (#1384). Done
+# here, not as `| tee` in the workflow: those steps run without pipefail. Two
+# tees, so stderr stays stderr; and after the refusal above, whose caller
+# reads that stderr the moment this script exits.
+exec > >(tee -a "${RUNNER_TEMP:-/tmp}/build.log") 2> >(tee -a "${RUNNER_TEMP:-/tmp}/build.log" >&2)
+
 # stdout is the list that still needs building; stderr is the narration, and
 # it is passed through so the log says which checks were skipped and why.
 #

@@ -33,19 +33,12 @@ if [ "$count" -ge "$max" ]; then
   exit 0
 fi
 
-# The error lines themselves, not a tail. Each job's post-job cleanup is cut
-# first (the cachix push would fill any tail), and nix's `… while calling`
-# frames are dropped: the line that names the cause is the `error:` at the
-# bottom of a trace two hundred lines deep, and a tail lands past it.
-# Colour is stripped in both spellings: GitHub's log API returns the literal
-# text ^[[31m rather than ESC, and filtering \x1b alone lets every trace
-# frame through the filter below.
+# The error lines themselves, not a tail (filter: failure-excerpt.sh). Each
+# job's post-job cleanup is cut first: the cachix push would fill any tail.
 log=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null \
   | awk -F'\t' '$1 != job { job = $1; skip = 0 } /Post job cleanup/ { skip = 1 } !skip { print $1 ": " $3 }' \
-  | sed 's/\x1b\[[0-9;]*m//g; s/\^\[\[[0-9;]*m//g; s/: \xEF\xBB\xBF\?[0-9T:.-]*Z /: /' \
-  | grep -vE '^[^:]*: +(… |[0-9]+ *\||\|)' \
-  | grep -E -A6 'error|Error|does not evaluate|unexpected changes|Failed to|FAIL' \
-  | sed -n '1,100p') # sed, not head: head exits early and the stages before it die of SIGPIPE under pipefail (#1157, tests/AGENTS.md).
+  | sed 's/: \xEF\xBB\xBF\?[0-9T:.-]*Z /: /' \
+  | MAX=100 "$(dirname "$0")/failure-excerpt.sh")
 
 body=$(cat <<EOF
 @copilot The dependency bump on this branch broke the build. Fix it here, on this branch.

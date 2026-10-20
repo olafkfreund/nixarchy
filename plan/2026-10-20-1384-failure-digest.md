@@ -96,3 +96,33 @@ the digest as its last lines.
 
 Revert the PR. Jobs go back to the bare log; no status ever depended on
 the digest.
+
+## Deviations
+
+- **The `copilot-handoff` test is rewired.** The handoff script now needs
+  its sibling `failure-excerpt.sh`, so the test copies both. The SIGPIPE
+  control reverts the excerpt's `sed -n "1,${MAX}p"` to `head`; the
+  20 000-line control still fails as intended.
+- **Fixture (b)** is #1378's real `copilot-handoff` failure followed by
+  proof pushes, not an `etc-overlay` one, because that was the real log at
+  hand. Its `nix log` excerpt is hand-trimmed, as is (c)'s.
+- **The excerpt keeps the last 40 matching lines, not the first.** With
+  the first 40, early "Failed to" noise pushed the session Traceback out.
+- **`build-unless-proven.sh` tees stdout and stderr separately**, after its
+  store-path refusal. A merged `2>&1` broke `checks.proof-push`'s stderr
+  assertion.
+- **Edge capture:** `omarchy-edge.yml`'s two build steps do not all go
+  through the script, so each gets the same `exec > >(tee …)`. They
+  already run with pipefail.
+- **Install classification** is a new step, "Classify the failure": an
+  assertion, a guest deadline, cancelled, or other, from the three
+  install checks' `nix log` plus `job.status`. From inside the job, a
+  timeout, an eviction and a runner restart all read as `cancelled`.
+  Telling them apart needs the job's annotations after it ends, which
+  stays with #1365.
+- **Step 5's red:** the digest replaced by `tail -n 25` (today's
+  behaviour) fails the check: `FAIL: a-session: digest lacks: ✗
+  vm-test-run-nixarchy-session`. Green with the real digest.
+- **Step 6's throwaway-break CI run is skipped.** It costs a full CI cycle
+  to show what the first real failure after merge shows anyway, and the
+  digest only runs on failure.

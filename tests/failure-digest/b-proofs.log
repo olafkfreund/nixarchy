@@ -1,0 +1,96 @@
+nixarchy-app-selection> /nix/store/46jy6xhc3v9ak67icjngv1kynrsi44ks-omarchy-4.0.6/bin/omarchy-notification-send: line 210: busctl: command not found
+nixarchy-app-selection> /nix/store/46jy6xhc3v9ak67icjngv1kynrsi44ks-omarchy-4.0.6/bin/omarchy-notification-send: line 210: busctl: command not found
+nixarchy-app-selection> /nix/store/46jy6xhc3v9ak67icjngv1kynrsi44ks-omarchy-4.0.6/bin/omarchy-notification-send: line 210: busctl: command not found
+nixarchy-apply-detach-interface> apply detach interface: 6 cases asserted (--status is unreachable here)
+nixarchy-app-selection> app-selection: every case passed
+pushing the proof of ai-mirror-mcp-remove (112 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/rvc3zzrhwz31hcdfc4hnv116qgmv8i8p-nixarchy-ai-mirror-mcp-remove (112.00 B)
+
+All done.
+pushing the proof of android (112 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/8wpx3f87vzkvb03zvx9ri27fvwgw1y03-nixarchy-android (112.00 B)
+
+All done.
+pushing the proof of app-selection (96 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/7ab8cymjdf67k4vl3xdy4m66bpy4cms5-nixarchy-app-selection (96.00 B)
+
+All done.
+pushing the proof of appimage-extract (112 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/n9s66vgxl9c6sx3vnqv5mlpa5gvwpllp-nixarchy-appimage-extract (112.00 B)
+
+All done.
+pushing the proof of apply-detach-interface (96 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+nixarchy-copilot-handoff> </details>
+nixarchy-copilot-handoff> 
+nixarchy-copilot-handoff> Constraints, from AGENTS.md:
+nixarchy-copilot-handoff> - Fix the cause in this repository. Do not revert the bump or pin the dependency back -- the bump is the point of the pull request.
+nixarchy-copilot-handoff> - Reproduce first with the command the failing job runs, then show it failing before your change and passing after (§1).
+nixarchy-copilot-handoff> - If the failing job needs KVM or a self-hosted runner, you cannot verify a fix. Say so and stop rather than push an unverified one.
+nixarchy-copilot-handoff> 
+nixarchy-copilot-handoff> <!-- copilot-handoff sha=deadbeef -->
+doc-options> 151 `programs.nixarchy.*` paths quoted in prose, all of them real
+doc-options> rdp-docs: current hypr-rdp documentation verified
+✅ /nix/store/1hqlah59dsk5aic74c25cqagn3kxw35s-nixarchy-config-warnings.drv^*
+✅ /nix/store/qipf46d6pdmbsvi5vs3hiwvqjz34d41w-nixarchy-crash-report-repo.drv^*
+✅ /nix/store/d59q9iv18dfbgbmxgkd2x4q2jkskf7s6-doc-options.drv^*
+✅ /nix/store/xjh3kv4qblm2jraypkk5113vj7xc19gl-nixarchy-docs-lists.drv^*
+❌ /nix/store/25gqym8sb6v2hclihm63av31ahja1wks-nixarchy-copilot-handoff.drv^*
+error: Cannot build '/nix/store/25gqym8sb6v2hclihm63av31ahja1wks-nixarchy-copilot-handoff.drv'.
+       Reason: builder failed with exit code 1.
+       Output paths:
+         /nix/store/9cc4ar25rqc0pxrmmakr2lccvqsjgqcq-nixarchy-copilot-handoff
+       Last 25 log lines:
+       > system: 2026-10-02T00:00:00.0000000Z error: line 86
+       > system: 2026-10-02T00:00:00.0000000Z error: line 87
+       > system: 2026-10-02T00:00:00.0000000Z error: line 88
+       > system: 2026-10-02T00:00:00.0000000Z error: line 89
+       > system: 2026-10-02T00:00:00.0000000Z error: line 90
+       > system: 2026-10-02T00:00:00.0000000Z error: line 91
+       > system: 2026-10-02T00:00:00.0000000Z error: line 92
+       > system: 2026-10-02T00:00:00.0000000Z error: line 93
+       > system: 2026-10-02T00:00:00.0000000Z error: line 94
+       > system: 2026-10-02T00:00:00.0000000Z error: line 95
+       > system: 2026-10-02T00:00:00.0000000Z error: line 96
+       > system: 2026-10-02T00:00:00.0000000Z error: line 97
+       > system: 2026-10-02T00:00:00.0000000Z error: line 98
+       > system: 2026-10-02T00:00:00.0000000Z error: line 99
+       > system: 2026-10-02T00:00:00.0000000Z error: line 100
+       > ~~~~
+       >
+       > </details>
+       >
+pushing the proof of ai-mirror-mcp-remove (112 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/rvc3zzrhwz31hcdfc4hnv116qgmv8i8p-nixarchy-ai-mirror-mcp-remove (112.00 B)
+
+All done.
+pushing the proof of android (112 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/8wpx3f87vzkvb03zvx9ri27fvwgw1y03-nixarchy-android (112.00 B)
+
+All done.
+pushing the proof of app-selection (96 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/7ab8cymjdf67k4vl3xdy4m66bpy4cms5-nixarchy-app-selection (96.00 B)
+
+All done.
+pushing the proof of appimage-extract (112 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳
+
+Pushing /nix/store/n9s66vgxl9c6sx3vnqv5mlpa5gvwpllp-nixarchy-appimage-extract (112.00 B)
+
+All done.
+pushing the proof of apply-detach-interface (96 bytes)
+Pushing 1 paths (0 are already present) using zstd to cache nixarchy ⏳

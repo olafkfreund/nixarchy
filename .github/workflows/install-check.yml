@@ -587,3 +587,26 @@ jobs:
           nix log .#checks.x86_64-linux.install 2>/dev/null \
             | grep -E '^(driver|install)_seconds=' \
             | tee -a "$GITHUB_STEP_SUMMARY" || echo "no timing recorded"
+
+      # Which kind of red this was, since "cancelled" alone reads the same for a
+      # failed assertion, a guest deadline and a runner restart (#1384). The job
+      # conclusion is the only thing that separates a timeout, an eviction and a
+      # restart, and the annotation says which: this names it, not the cause.
+      - name: Classify the failure
+        if: (failure() || cancelled()) && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          logs=$(for c in install free-space installer-refusal; do nix log ".#checks.x86_64-linux.$c" 2>/dev/null || true; done)
+          if printf '%s\n' "$logs" | grep -qE 'RequestedAssertionFailed|Traceback'; then
+            class="assertion: a test in the guest failed"
+          elif printf '%s\n' "$logs" | grep -q 'timeout reached'; then
+            class="guest deadline: the in-guest timeout was hit"
+          elif [ "$JOB_STATUS" = cancelled ]; then
+            class="cancelled: job timeout, eviction or runner restart (read the annotation)"
+          else
+            class="failure with no assertion or deadline in the logs"
+          fi
+          echo "install class: $class"
+          echo "- install class: $class" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,6 @@
+structuredAttrs is enabled
+pkgs.buildEnv error: two given paths contain a conflicting subpath:
+  `/nix/store/sg2r4jcx71h0nap3j8gh1bbl0hmh6pn0-VirtualBox-GuestAdditions-7.2.20-7.2.11/lib/modules/7.2.11/modules.builtin.alias.bin' and
+  `/nix/store/36c6ybh6gv1mbnfq5n5sbqy2ghbdcgsa-linux-7.2.11-modules/lib/modules/7.2.11/modules.builtin.alias.bin'
+hint: this may be caused by two different versions of the same package in buildEnv's `paths` parameter
+hint: `pkgs.nix-diff` can be used to compare derivations

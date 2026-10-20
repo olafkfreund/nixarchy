@@ -32,10 +32,17 @@ pkgs.runCommand "nixarchy-copilot-handoff"
     patchShebangs bin/gh
     export PATH="$PWD/bin:$PATH"
 
+    # The script finds its sibling failure-excerpt.sh by path.
+    mkdir sut
+    cp ${../.github/scripts/copilot-handoff.sh} sut/copilot-handoff.sh
+    cp ${../.github/scripts/failure-excerpt.sh} sut/failure-excerpt.sh
+    chmod +x sut/*.sh
+    patchShebangs sut
+
     export RUN_ID=1 REPO=o/r BRANCH=update/x DRY_RUN=1
 
     # The fixed script.
-    if ! bash ${../.github/scripts/copilot-handoff.sh} >out.txt 2>err.txt; then
+    if ! bash sut/copilot-handoff.sh >out.txt 2>err.txt; then
       echo "copilot-handoff.sh (fixed) exited non-zero -- it should not" >&2
       cat err.txt >&2
       exit 1
@@ -57,13 +64,16 @@ pkgs.runCommand "nixarchy-copilot-handoff"
 
     # The negative control: head -100 restored. Prove the edit landed before
     # trusting the run (AGENTS.md #1).
-    sed 's/sed -n .1,100p./head -100/' ${../.github/scripts/copilot-handoff.sh} >reverted.sh
-    if ! grep -q 'head -100' reverted.sh; then
-      echo "control setup failed: reverted.sh does not contain 'head -100'" >&2
+    # The excerpt's cap now lives in failure-excerpt.sh (#1384).
+    mkdir control
+    cp sut/* control/
+    sed -i 's/sed -n "1,.{MAX:-40}p"/head -n "''${MAX:-40}"/' control/failure-excerpt.sh
+    if ! grep -q 'head -n' control/failure-excerpt.sh; then
+      echo "control setup failed: control/failure-excerpt.sh does not contain 'head -n'" >&2
       exit 1
     fi
 
-    if bash reverted.sh >control-out.txt 2>control-err.txt; then
+    if bash control/copilot-handoff.sh >control-out.txt 2>control-err.txt; then
       echo "the control passed: a copy of copilot-handoff.sh with" >&2
       echo "head -100 restored exited 0 against the 20 000-line stub log," >&2
       echo "so this check can no longer tell the bug from the fix." >&2
@@ -79,7 +89,7 @@ pkgs.runCommand "nixarchy-copilot-handoff"
     # real failure is a half that timed out (cancelled) must not be handed off
     # (#1341). The control is the script with the exclusion removed.
     export GH_JOBS='[{"name":"system","conclusion":"failure"},{"name":"system-build","conclusion":"cancelled"},{"name":"system-checks","conclusion":"success"}]'
-    if ! bash ${../.github/scripts/copilot-handoff.sh} >agg-out.txt 2>agg-err.txt; then
+    if ! bash sut/copilot-handoff.sh >agg-out.txt 2>agg-err.txt; then
       echo "copilot-handoff.sh exited non-zero on an aggregator-only failure" >&2
       cat agg-err.txt >&2
       exit 1
@@ -90,12 +100,12 @@ pkgs.runCommand "nixarchy-copilot-handoff"
       exit 1
     fi
 
-    sed 's/ and \.name!="system"//' ${../.github/scripts/copilot-handoff.sh} >noexcl.sh
-    if grep -q 'name!="system"' noexcl.sh; then
+    sed 's/ and \.name!="system"//' sut/copilot-handoff.sh >sut/noexcl.sh
+    if grep -q 'name!="system"' sut/noexcl.sh; then
       echo "control setup failed: noexcl.sh still contains the exclusion" >&2
       exit 1
     fi
-    bash noexcl.sh >noexcl-out.txt 2>noexcl-err.txt || true
+    bash sut/noexcl.sh >noexcl-out.txt 2>noexcl-err.txt || true
     if ! grep -q 'would comment on #1154' noexcl-out.txt; then
       echo "the control did not hand off: this check cannot tell the" >&2
       echo "aggregator exclusion from its absence." >&2

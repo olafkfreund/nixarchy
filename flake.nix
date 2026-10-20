@@ -2472,6 +2472,11 @@
           copilot-handoff = import ./tests/copilot-handoff.nix {
             pkgs = pkgsFor.${system};
           };
+          # #1384: a failed build job ends with the failing check and its error.
+          # See tests/failure-digest.nix.
+          failure-digest = import ./tests/failure-digest.nix {
+            pkgs = pkgsFor.${system};
+          };
           panel-loaders = import ./tests/panel-loaders.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

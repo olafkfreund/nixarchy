@@ -1,0 +1,2 @@
+copilot-handoff.sh (fixed) exited non-zero -- it should not
+error: the failing-log excerpt has 0 lines, expected 1-100

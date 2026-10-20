@@ -54,6 +54,12 @@ pkgs.runCommand "nixarchy-failure-digest"
     lacks c-cascade '✗ initrd'
     lacks c-cascade '✗ nixos-system'
 
+    # A log captured twice (edge prepare's tee plus the script's) is one failure.
+    cat ${./failure-digest}/c-cascade.log ${./failure-digest}/c-cascade.log > twice.log
+    bash sut/failure-digest.sh $PWD/twice.log > digest-twice.txt || fail "twice: exited non-zero"
+    [ "$(grep -c '✗ linux-7.2.11-modules' digest-twice.txt)" = 1 ] || { cat digest-twice.txt >&2; fail "twice: root listed more than once"; }
+    has twice '5 checks failed only because linux-7.2.11-modules failed'
+
     run d-clean
     has d-clean 'no failed derivation found'
     grep -qx 'digest=' out-d-clean.txt || fail "d-clean: GITHUB_OUTPUT"

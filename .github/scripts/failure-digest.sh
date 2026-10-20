@@ -21,7 +21,9 @@ if [ -r "$log" ]; then
   # Captured, then split: a process substitution hides a failing awk (§4).
   rows=$(awk '
     /^error: Cannot build / { drv = $4; gsub(/\x27|\.$/, "", drv); want = 1; next }
-    want && /Reason:/ { print ($0 ~ /dependenc(y|ies) failed/ ? "C" : "R") "\t" drv; want = 0 }
+    # once per drv: the edge prepare step and build-unless-proven.sh both tee
+    # into the same log, so every line can appear twice
+    want && /Reason:/ { if (!seen[drv]++) print ($0 ~ /dependenc(y|ies) failed/ ? "C" : "R") "\t" drv; want = 0 }
   ' "$log")
 else
   rows=""

@@ -126,3 +126,8 @@ the digest.
 - **Step 6's throwaway-break CI run is skipped.** It costs a full CI cycle
   to show what the first real failure after merge shows anyway, and the
   digest only runs on failure.
+- **Roots are deduplicated by drv.** After #1392 merged, edge prepare's
+  build step tees into `build.log` and so does `build-unless-proven.sh`,
+  so each line arrives twice. The awk prints a drv once. A doubled
+  `c-cascade` log is a new case. Red without the dedupe:
+  `FAIL: twice: root listed more than once`. Green with it.

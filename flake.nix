@@ -369,7 +369,7 @@
     # Third-party (Aziz, MIT) via olafkfreund's fork, no flake upstream; a
     # reviewed commit, bumped the way that page says.
     nixarchy-hyprsettngs = {
-      url = "github:olafkfreund/nixarchy-hyprsettngs/2157e889ea7e8af4f7f897b456d1c03fc589c0ae";
+      url = "github:olafkfreund/nixarchy-hyprsettngs/367ca99ea9bb0cb32be2241a9a38a3b1e3d2ff9d";
       flake = false;
     };
 

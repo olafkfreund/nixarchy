@@ -255,7 +255,7 @@
     # - menu writes escalate safely, learned visibility, and drift fixes (#54, #59, #61, #72)
     # - one ack event, a tour file-watch reload, agent settings sources (#45, #66, #71), plus a flake.lock update (#82)
     nixi = {
-      url = "github:olafkfreund/nixi-nixarchy/5ae2ca4917cc7c0eabb2c22d4aa7fc0ddfaa06fe";
+      url = "github:olafkfreund/nixi-nixarchy/dc6609ba5a72aa457438a55c32f3a4fcf6d3c8f8";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.omarchy.follows = "omarchy";
     };
@@ -280,7 +280,7 @@
     # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
     # a branch is not a version.
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/0231774e529521e158b27d932684871740fcd892";
+      url = "github:olafkfreund/nixarchy-voice/8e21313204830a40e5ee695f321fce361db7a2be";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";
@@ -369,14 +369,14 @@
     # Third-party (Aziz, MIT) via olafkfreund's fork, no flake upstream; a
     # reviewed commit, bumped the way that page says.
     nixarchy-hyprsettngs = {
-      url = "github:olafkfreund/nixarchy-hyprsettngs/3052f1db6e6ccbf151b5edf925e81d344363778b";
+      url = "github:olafkfreund/nixarchy-hyprsettngs/2157e889ea7e8af4f7f897b456d1c03fc589c0ae";
       flake = false;
     };
 
     # Why: docs/internals/flake.md#the-distrobox-panel-wherever-boxes-are-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-distrobox = {
-      url = "github:olafkfreund/nixarchy-distrobox/cfa684f21bdf7a896cd403d1a7b5bf32fefb6cdc";
+      url = "github:olafkfreund/nixarchy-distrobox/e016c75a17537b9b662ab975abd8c1910ddd2c94";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -397,7 +397,7 @@
     # Why: docs/internals/flake.md#the-microvms-panel-on-by-default-766
     # A commit on main (no tags); bump it the way that page says.
     nixarchy-microvm = {
-      url = "github:olafkfreund/nixarchy-microvm/ca0bc01f11ac5438c1a174ea75559a869bd5616e";
+      url = "github:olafkfreund/nixarchy-microvm/01186d79c702c662ca60d8c32208c75eb70fe64f";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

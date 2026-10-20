@@ -158,3 +158,29 @@ C's overlay.
   tree with nixpkgs 09063bd is green with the change, and red without it,
   with the same `conflicting subpath ... modules.builtin.bin` CI showed
   on #1378.
+- **B2 covered 17 repositories, not 16.** The guard derives its list from
+  `defaultPluginSet`, and that found `omatheme` (`olafkfreund/nixarchy-omatheme`),
+  which the input scan had missed. Its unqualified references came from two
+  places:
+  - its own `pkgs/patches/omarchroma-panel.patch`, fixed in the patch;
+  - upstream omarchroma at the pinned 7048180, which upstream fixed in
+    3.2.3. Our patch does not apply to 3.2.4 (2 hunks, against new
+    settings/about panels), so the package's `postPatch` qualifies
+    `Panel.qml` and adds the `Commons` alias, marked `shortcut:` until the
+    input is at least 3.2.3. That is nixarchy-omatheme#59.
+- **herdr's own test** (`tests/session-actions.cjs`) stubbed a `Color`
+  global for `themeColor()`. One line stubs `Commons.Color` too
+  (nixarchy-herdr#19, red `ReferenceError` on its CI before the fix).
+- **Five pins take the old commit plus only the Qt fix.** Five pins were
+  behind their repo's default branch: distrobox (+10), hyprsettngs (+91),
+  microvm (+2), voice (+13) and nixi (+26). The first Qt 6.12 `session`
+  run on their heads failed, because hyprsettngs' unreleased commits
+  renamed its plugin id (`aziz.hyprforge` → `nixarchy.hyprlandsettings`),
+  which nixarchy's build guard refuses. So each is pinned to a
+  `nixarchy/qt612-on-pin` branch: the old pin plus the cherry-picked fix,
+  whose diff equals the merged PR's. Their other work arrives with its own
+  bump.
+- **omatheme is pinned by commit** (51fb129), not by the `v0.1.0` tag,
+  because the fix is one commit past the tag.
+- **Per-pin comment lines are not added.** The guard's comment in
+  `flake.nix` explains every pin move in this PR.

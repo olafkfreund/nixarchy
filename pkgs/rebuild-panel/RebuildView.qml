@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Ui
 import qs.Commons
+import qs.Commons as Commons
 
 // What the panel shows: the offer before anything is built, then the rebuild
 // as it runs, then what it left behind.
@@ -11,7 +12,7 @@ import qs.Commons
 FocusScope {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.5)
   readonly property Item keyTarget: root

@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Ui
 import qs.Commons
+import qs.Commons as Commons
 
 // The bar widget, and the panel under it.
 //
@@ -19,7 +20,7 @@ Panel {
   ipcTarget: "nixarchy.rebuild.bar"
   manageIpc: false
 
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   Component.onCompleted: RebuildState.acquire()
@@ -84,7 +85,7 @@ Panel {
              || RebuildState.state === "failed" || root.unreadResult
     active: RebuildState.active
     useActiveColor: true
-    activeColor: RebuildState.state === "failed" ? Color.urgent : Color.accent
+    activeColor: RebuildState.state === "failed" ? Commons.Color.urgent : Commons.Color.accent
     tooltipText: "Rebuild · " + RebuildState.state
     // The signal carries which button; the panel treats them all alike.
     onPressed: function (b) { root.toggle() }

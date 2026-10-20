@@ -141,3 +141,20 @@ C's overlay.
   shows only on the CI runner (#1378's `omarchy` job, where the control
   passed). The fix removes the dependence on timing rather than
   reproducing it locally. Both loops are recorded in the PR.
+- **C1 measured case (i).** On nixpkgs 09063bd,
+  `VirtualBox-GuestAdditions-7.2.20-7.2.11` ships depmod's index
+  (`modules.alias`, `modules.dep`, `modules.builtin.alias.bin` and the rest)
+  beside `vboxguest.ko.xz` and `vboxsf.ko.xz`. The 7.2.10 build on the
+  current pin ships only the two `.ko` files.
+- **C2 is `.extend` on the default kernel set, not an overlay.**
+  `modules/nixos.nix`'s `boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_latest`
+  becomes `linuxPackages_latest.extend` replacing only
+  `virtualboxGuestAdditions` (`postInstall` removes
+  `$out/lib/modules/*/modules.*`). It is smaller than an overlay, and it
+  leaves the kernel derivation byte-identical (`drvPath` compared in one
+  tree). A user who sets their own `boot.kernelPackages` does not get it.
+  That is acceptable until nixpkgs fixes the package.
+- **C2 proved locally:** `checks.offline-hardware-packages` on a scratch
+  tree with nixpkgs 09063bd is green with the change, and red without it,
+  with the same `conflicting subpath ... modules.builtin.bin` CI showed
+  on #1378.

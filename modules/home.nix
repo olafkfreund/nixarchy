@@ -2213,6 +2213,27 @@ in
           # upstream's 2 s IPC budget; this runs in the background, so wait.
           export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
 
+          # A default whose id changed: its once-marker and the user's on/off move
+          # to the new id (#1391). shell.json is read, never written.
+          declare -A renamed=(${
+            lib.concatMapStringsSep " " (
+              p: "[${lib.escapeShellArg p.id}]=${lib.escapeShellArg p.renamedFrom}"
+            ) (lib.filter (p: p.renamedFrom != "") (lib.attrValues resolvedDefaults))
+          })
+          cfgjson="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json"
+          retired=()
+          for new in "''${!renamed[@]}"; do
+            old=''${renamed[$new]}
+            [ -e "$state/$old" ] && [ ! -e "$state/$new" ] || continue
+            jq -e --arg id "$old" \
+              'any(.plugins[]?; (if type == "object" then .id else . end) == $id)' \
+              "$cfgjson" >/dev/null 2>&1
+            case $? in
+              0) rm -f "$state/$old"; retired+=("$old") ;; # on: enabled below as a new default
+              1) mkdir -p "$state"; mv "$state/$old" "$state/$new" ;; # off: stays off
+            esac # unreadable: left for the next login
+          done
+
           todo=()
           for id in ${lib.escapeShellArgs enableOnceIds}; do
             [ -e "$state/$id" ] || todo+=("$id")
@@ -2239,6 +2260,9 @@ in
           done
           omarchy-shell shell ping >/dev/null 2>&1 || exit 0
           omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+          for old in "''${retired[@]}"; do
+            omarchy-plugin-disable "$old" 2>&1 | systemd-cat -t nixarchy-default-plugins || true
+          done
 
           for id in "''${gone[@]}"; do
             src=$(head -n1 "$state/$id")

@@ -116,3 +116,23 @@ quattro and the hand-kept list.
 - **(a) found a bug in the new code:** `gate=an earlier step` (unquoted)
   ran a command named `earlier` and died with 127, which would have
   killed the draft step and left the failed bump silent again. Quoted.
+
+## Deviations (PR B)
+
+- **The build body moved to `.github/scripts/edge-build.sh`, unchanged**,
+  so `build` and `build2` run one script, not a copy-paste. #1393's
+  capture line (`exec > >(tee …)`) goes there when the two meet.
+- **`good` is its own step** before `pin2`. It reads `origin/edge`'s pin
+  and sets `sha` only when that pin exists and differs from the red one;
+  `pin` is untouched. `pin2` repeats `pin`'s two-copies-agree proof.
+- **Step 7's proof is a local harness** (`/mnt/data/vmtest/harness-1383b.sh`),
+  for the same reason as PR A: a real dispatch promotes the real edge. It
+  runs the new run blocks against main's, with stub `gh`/`nix`:
+  - (e) an older edge pin is the fallback; the same pin, or no `edge`,
+    gives none; main has no fallback step at all (red);
+  - (f) `pin2` moves the pin, and refuses a flake whose version literal
+    did not move (red with that check removed);
+  - (g) a promotion on the fallback comments "quattro red" and keeps the
+    issue open; a normal promotion still closes it; main's closes it (red).
+- **Timings are not measured.** Prepare goes to 90 minutes from PR A's
+  proxy (one pass in 25-28 minutes); the first real fallback run confirms it.

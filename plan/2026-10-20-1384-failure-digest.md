@@ -136,3 +136,11 @@ the digest.
   only add output after a failure and cannot skip a check. Red without the
   entry: `a workflow condition is not the shared gate … failure() failure()
   failure()`. Green with it.
+- **Edge prepare's capture moved into `edge-build.sh`.** #1394 moved the
+  build step's body into that script, so the `exec > >(tee …)` line goes
+  there too; `build2` (the fallback) is captured the same way. The digest
+  step sits after "Fail when no build passed", so a run with no green
+  build still ends with it. A run saved by the fallback ends green and
+  prints no digest; its quattro failure is reported by `report`. Red: the
+  script as on `main` leaves no `Cannot build` line in `build.log`
+  (`/mnt/data/vmtest/proof-edge-tee.sh`). Green with the line.

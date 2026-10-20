@@ -4,113 +4,70 @@ issue: 1385
 author: olafkfreund
 ---
 
-# Intent: Omarchy's timed passwordless sudo works on nixarchy
+# Intent: Omarchy's passwordless-sudo toggle is hidden everywhere on nixarchy
 
 ## Problem
 
-On edge, the top panel's passwordless-sudo icon (quattro's
-`PasswordlessSudo` indicator) opens a terminal that prints a NixOS
-explanation and ends `Failed (exit code 1)`. The menu row *Setup >
-Security > Passwordless Sudo* does the same on stable 4.0.6. The owner
-wants the feature to work.
+On edge, the top panel shows quattro's `PasswordlessSudo` indicator by
+default (`shell/plugins/bar/widgets/Indicators.qml:11`,
+`defaultIndicatorEntries`). Clicking it opens a terminal running
+`omarchy-sudo-passwordless`. Nixarchy replaces that command with a stub
+(`pkgs/omarchy/nix-bin/omarchy-sudo-passwordless`, bin-ledger `replace`)
+that explains the feature cannot work on NixOS and exits 1, so the user
+sees a wall of text and `Failed (exit code 1)`.
 
-It fails by design today. `pkgs/omarchy/nix-bin/omarchy-sudo-passwordless`
-(bin-ledger `replace`) replaces upstream's command, because:
+The feature cannot work here as upstream built it: it grants access by
+writing `/etc/sudoers.d`, which NixOS's sudo does not read. Nixarchy
+decided long ago not to offer passwordless root one click away
+(`docs/manual/security.md`, #1280), and the owner confirmed on 2026-10-20
+that the answer is to **hide it completely, not port it**.
 
-- upstream grants access by writing
-  `/etc/sudoers.d/99-omarchy-nopasswd-<uid>`, but NixOS's `/etc/sudoers`
-  has no include for `/etc/sudoers.d`, so the file would never be read;
-- the 4.0.5-era upstream script then printed "enabled" regardless, a lie
-  about a security state.
+Where it is still visible:
 
-`docs/manual/security.md` explains this and points at
-`security.sudo.extraRules`, which has no timer: it stays until removed and
-rebuilt. #1280 hid the menu row on newer releases rather than offer
-passwordless root one click away. Quattro's panel icon brought the command
-back into reach, still failing.
-
-There are two upstream designs:
-
-- **4.0.6 (stable):** a simple script. It writes the file with `sudo tee`
-  and arms a `systemd-run` timer that deletes it after N minutes (15 by
-  default).
-- **Quattro (edge):** a hardened rewrite (`docs/passwordless-sudo.md`):
-  - timed grants whose deadline sudo itself enforces (`NOTAFTER`), so they
-    hold across suspend;
-  - grant files validated with `visudo` and renamed into place
-    atomically;
-  - a lock at `/run/lock/omarchy-sudo-passwordless.lock`;
-  - a boot-time tmpfiles cleanup rule
-    (`/etc/tmpfiles.d/omarchy-nopasswd-sudo.conf`) that new grants
-    require to exist;
-  - permanent grants;
-  - a no-prompt status probe for the panel indicator, through installed
-    root "internal actions";
-  - pacman hooks, which are Arch-only.
-
-The common precondition: **sudo must read `/etc/sudoers.d`, and that
-directory must be root-owned and writable only by root.** Neither is true
-on NixOS today.
+| where | today |
+|---|---|
+| Edge, menu *Setup > Security > Passwordless Sudo* | hidden (`modules/apps.nix`, `when = "false"`, #1280) |
+| **Edge, the bar indicator** | **shown by default**; clicking runs the stub, which fails. Its `--active` probe also runs at shell start and on every indicator refresh, against a stub that knows no flags |
+| **Edge, Settings > bar > indicators** | `PasswordlessSudo` is offered as a choice (`Indicators.manifest.json:30`) |
+| **Stable 4.0.6, the menu row** | **shown**; it runs the stub, which fails |
 
 ## Proposed outcome
 
-- Clicking the panel icon, or the menu row, gives upstream's behaviour:
-  1. the warning;
-  2. a confirmation;
-  3. a duration;
-  4. passwordless sudo for that long;
-  5. automatic expiry;
-  6. the icon going red while it is active, and a click turning it off.
-- Nothing is granted until the user confirms in that flow. Sudo reading
-  `/etc/sudoers.d` grants nothing on its own, since only root can write
-  there.
-- Expiry survives reboot: a boot-time cleanup removes timed grants, as
-  upstream does.
-- Users who do not want the feature can turn it off declaratively, which
-  also removes the include.
-- The manual's security page describes what it does here instead of
-  saying it cannot work.
+- **No nixarchy user sees passwordless sudo anywhere:** not in the bar,
+  not in the menu, and not among the indicators settings offers, on
+  stable or edge.
+- A user who already has `PasswordlessSudo` in a saved indicator list
+  sees nothing and gets no error. The shell logs no QML error, which
+  `checks.session` asserts.
+- `omarchy-sudo-passwordless`, run by hand, still prints the NixOS
+  explanation. The stub stays: it is the one place someone typing the
+  command learns what to declare instead.
+- `docs/manual/security.md` says the toggle is hidden and why. The
+  declarative option it already documents stays.
 
 ## Affected users and systems
 
-- Every nixarchy machine, if on by default. Its sudo configuration gains
-  one include line.
-- Stable (4.0.6's simple script) and edge (quattro's rewrite), which ship
-  different upstream commands. The NixOS side, meaning the include, the
-  directory and the boot cleanup rule, can be shared.
-- Files: `modules/nixos.nix` (sudo, tmpfiles); the stub, which is deleted
-  so upstream's command is vendored; `data/bin-ledger.nix`;
-  `docs/manual/security.md`; the menu/visibility rule from #1280.
+- Edge: quattro's bar indicator and the settings manifest, in
+  `pkgs/omarchy/default.nix` (edge-candidate).
+- Stable: the menu row, in `modules/apps.nix` on `main`.
+- `docs/manual/security.md`.
 
 ## Constraints
 
-- **Security first.**
-  - The include is `@includedir /etc/sudoers.d` with the directory 0750
-    root.
-  - `visudo` must accept the generated `/etc/sudoers`.
-  - Nothing user-writable ever reaches sudo's policy.
-  - The quattro version's own checks (`verify_root_path`, the lock, the
-    tmpfiles precondition) must pass as written, not be patched away.
-- **Mode A (§7):** someone importing `nixosModules.nixarchy` into their
-  own configuration must not have their sudo policy changed unless they
-  opt in. Installer-managed machines may default on.
-- **§14 coexistence:** a user's own `security.sudo.extraConfig` or
-  `extraRules` must merge, not be replaced. A fixture covers a user with
-  their own `extraConfig`.
-- **§1/§2:** a check proves a grant file in `/etc/sudoers.d` is honoured
-  (red without the include), and a VM check proves the full flow: grant,
-  sudo without a password, expiry or disable, password required again.
-- Pacman hooks are not ported (`na`), and the rows say so.
+- **Hide; do not delete a file another file loads.** Removing
+  `PasswordlessSudo.qml` would turn a saved indicator name into a QML
+  load error. The indicator must resolve and simply never show.
+- **The stub must not be run by the shell at all.** The `--active` probe
+  at startup and refresh must not spawn it.
+- **`--replace-fail` and `--fuzz=0` as usual,** so the next quattro
+  change to these files fails the build instead of quietly bringing the
+  icon back.
+- **§1:** a check fails if the indicator is in the shipped defaults or
+  manifest, and the session check sees no QML error from a configuration
+  that names it.
+- Edge carries its own diff here, so the change goes where `main` and
+  `edge` agree, proved by a trial merge.
 
 ## Open questions
 
-- **Default:** I propose it is on for installer-managed machines
-  (`programs.nixarchy.installerManaged`) and off in Mode A, behind
-  `programs.nixarchy.security.passwordlessSudoToggle` (a bool). When it is
-  off, the stub's message stays, naming the option. Or should it be on
-  everywhere nixarchy is imported?
-- **Edge first or both?** Quattro's rewrite has more moving parts (fixed
-  root action paths, which assume `/usr/bin`, and the tmpfiles
-  precondition). I propose doing the shared NixOS side plus stable's
-  simple script first, then edge's rewrite as a second PR on
-  `edge-candidate`, so the stable fix is not held up by the port.
+- None. The owner chose "hide in full" over porting the feature.

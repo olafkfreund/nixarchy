@@ -8,9 +8,10 @@
 # SIGPIPEd.
 #
 # This runs the real script (DRY_RUN=1, so it prints instead of calling
-# `gh pr comment`) against a stub `gh` that serves a 500-line failing log --
-# large enough to reproduce the SIGPIPE deterministically; see the control
-# below. The negative control is the bug reintroduced: a copy of the script
+# `gh pr comment`) against a stub `gh` that serves a 20 000-line failing log.
+# Size, not speed, makes the SIGPIPE certain: the stages' output must outgrow
+# every pipe buffer, which 500 lines did not, so the control raced (#1381).
+# The negative control is the bug reintroduced: a copy of the script
 # with `head -100` restored, which must fail against the same stub, or this
 # check is not testing what it claims to.
 pkgs.runCommand "nixarchy-copilot-handoff"
@@ -64,14 +65,14 @@ pkgs.runCommand "nixarchy-copilot-handoff"
 
     if bash reverted.sh >control-out.txt 2>control-err.txt; then
       echo "the control passed: a copy of copilot-handoff.sh with" >&2
-      echo "head -100 restored exited 0 against the 500-line stub log," >&2
+      echo "head -100 restored exited 0 against the 20 000-line stub log," >&2
       echo "so this check can no longer tell the bug from the fix." >&2
-      echo "500 lines no longer reproduces the SIGPIPE on this machine;" >&2
-      echo "raise the line count in tests/copilot-handoff/gh." >&2
+      echo "the stub log no longer outgrows the pipe buffers between the" >&2
+      echo "stages; enlarge it in tests/copilot-handoff/gh (#1381)." >&2
       cat control-out.txt control-err.txt >&2
       exit 1
     fi
-    echo "control: head -100 against the 500-line stub failed as expected:"
+    echo "control: head -100 against the 20 000-line stub failed as expected:"
     cat control-err.txt
 
     # The aggregator `system` fails whenever a half does, so a run whose only

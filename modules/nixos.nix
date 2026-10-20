@@ -2153,7 +2153,18 @@ in
       # decision that hardware.enableAllHardware would take away.
       initrd.availableKernelModules = allHardwareInitrdModules;
 
-      kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+      # nixpkgs' VirtualBox guest additions for kernel 7.2.11 ship depmod's
+      # modules.* index beside their .ko files, which the kernel's own tree
+      # already has, so the aggregated module tree refuses the clash (#1381).
+      kernelPackages = lib.mkDefault (
+        pkgs.linuxPackages_latest.extend (
+          _: super: {
+            virtualboxGuestAdditions = super.virtualboxGuestAdditions.overrideAttrs (old: {
+              postInstall = (old.postInstall or "") + "\nrm -f $out/lib/modules/*/modules.*\n";
+            });
+          }
+        )
+      );
 
       # Upstream's sysctl.d, value for value. mkDefault on each, so a machine's
       # own boot.kernel.sysctl wins.

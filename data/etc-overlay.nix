@@ -111,6 +111,11 @@
     reason = "HOOKS for mkinitcpio, including dropping kms on an NVIDIA-only machine. NixOS builds its initrd from boot.initrd.*; there is no hook list to order.";
   };
 
+  "mkinitcpio.conf.d/omarchy_vconsole.conf" = {
+    class = "na";
+    reason = "Wraps mkinitcpio's add_file so a non-Latin first keyboard layout's /etc/vconsole.conf stays out of the initramfs, keeping a LUKS passphrase typeable at the Plymouth prompt (4.0.6). NixOS builds its initrd from boot.initrd.* and console.*, without mkinitcpio, so there is no add_file to wrap.";
+  };
+
   "mkinitcpio.conf.d/thunderbolt_module.conf" = {
     class = "covered";
     reason = "MODULES+=(thunderbolt) for mkinitcpio. modules/nixos.nix feeds boot.initrd.availableKernelModules the whole nixpkgs all-hardware list, so an initrd here carries the Thunderbolt drivers without being told.";

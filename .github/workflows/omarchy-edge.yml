@@ -43,7 +43,10 @@ jobs:
     runs-on: ubuntu-26.04
     # Same 45 as omarchy.yml, for the same reason: the first build of a source
     # that just changed is a guaranteed cache miss.
-    timeout-minutes: 45
+    # build.yml's omarchy job builds the same .#omarchy + 144 generated checks
+    # through the same script in 25-28 min (main, 2026-10-20); edge gets fewer
+    # cache hits, so 75 leaves room (#1383).
+    timeout-minutes: 75
     outputs:
       skip: ${{ steps.pin.outputs.skip }}
       expected: ${{ steps.start.outputs.expected }}
@@ -170,14 +173,19 @@ jobs:
           MAIN_IN: ${{ steps.start.outputs.main_in }}
           START: ${{ steps.start.outputs.start }}
           EXPECTED: ${{ steps.start.outputs.expected }}
+          FROM_CANDIDATE: ${{ inputs.from_candidate }}
         run: |
           set -euo pipefail
           # Authenticated, and refuses anything but a full SHA: a 403 once made
           # the answer empty and the sed pinned upstream's default branch
           # (omarchy.yml). The SHA is pasted into later steps' shell, so the
           # 40-hex test is also what makes that safe.
-          sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
-            { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
+          if [ "$FROM_CANDIDATE" = true ] && [[ $HAVE =~ ^[0-9a-f]{40}$ ]]; then
+            sha=$HAVE # carry main to the candidate's quattro; a scheduled run moves quattro
+          else
+            sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
+              { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
+          fi
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"
             echo "::error::no commit SHA from the API for quattro: '$sha'"
@@ -236,9 +244,15 @@ jobs:
           # Not options: it peaks near 11.5 GB, and beside the quickshell build
           # edge needs it lost a 16 GB hosted runner mid-run (#1278). It runs in
           # verify, on p620, after the idle wait (CLAUDE.md section 6).
-          for c in menu-verbs menu-actions bin-ledger skill-parity panel-loaders review-pins stable-eval; do
-            try "$c" nix build ".#checks.x86_64-linux.$c" --print-build-logs
-          done
+          # The list is derived, not kept: capture first, because a failing
+          # command inside mapfile < <(...) is invisible (CLAUDE.md section 4).
+          out=$(.github/scripts/generated-checks.sh) || { echo "::error::generated-checks.sh failed"; exit 1; }
+          mapfile -t targets <<<"$out"
+          [ "${#targets[@]}" -ge 5 ] || { echo "::error::only ${#targets[@]} generated checks"; exit 1; }
+          # The same script build.yml's omarchy job uses: slices of 5 with
+          # --keep-going, cache-proven checks skipped, and it continues past a
+          # failed slice, so an eval error hides at most its own slice.
+          try generated-checks .github/scripts/build-unless-proven.sh "${targets[@]}"
           echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
           [ -z "$failed" ] || { echo "::error::red:$failed"; exit 1; }
 
@@ -459,7 +473,8 @@ jobs:
           set -euo pipefail
           # A plain variable, never `read` into fields: --jq renders null as
           # nothing, and a whitespace IFS drops the empty field (section 13).
-          num=$(gh issue list --label omarchy-edge --state open --json number --jq '.[0].number // empty')
+          num=$(gh issue list --label omarchy-edge --state open --json number,title \
+            --jq '[.[] | select(.title == "The Omarchy edge channel is not publishing")][0].number // empty')
 
           # A cancel after edge-promote pushed but before it wrote promoted=true
           # would report a failure for a promoted edge. Ask the remote.

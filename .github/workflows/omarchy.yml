@@ -69,6 +69,7 @@ jobs:
 
       - name: Bump the input
         if: steps.rel.outputs.changed == 'true'
+        id: bump
         run: |
           sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/${{ steps.rel.outputs.latest }}|" flake.nix
           nix flake update omarchy
@@ -112,7 +113,13 @@ jobs:
       #     which would otherwise reach users as a row still calling pacman
       - name: Build against the new Omarchy
         if: steps.rel.outputs.changed == 'true'
-        run: nix build .#omarchy --print-build-logs
+        id: build
+        # The log goes to $RUNNER_TEMP, never the checkout: create-pull-request
+        # commits the whole tree. pipefail is set here because the default
+        # shell has none, and tee would otherwise hide nix's status.
+        run: |
+          set -o pipefail
+          nix build .#omarchy --print-build-logs 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
       - name: What packages this release adds and drops
         if: steps.rel.outputs.changed == 'true'
@@ -385,9 +392,11 @@ jobs:
 
       - name: Boot a session and check the desktop renders
         if: steps.rel.outputs.changed == 'true'
+        id: session
         run: |
+          set -o pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "$AGENT_TOOLSDIRECTORY"
-          .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.session
+          .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.session 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
       # The derived numbers, applied rather than asserted.
       #
@@ -437,6 +446,54 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           cat /tmp/counts.txt
           [ -z "${FAILED:-}" ]
+
+      # A bump that fails a gate used to leave nothing: every later step is
+      # skipped and the branch was never pushed. This pushes the same bump as a
+      # DRAFT, so the failure is a PR somebody sees (#1383). Its body claims
+      # nothing was proved -- unlike the ready PR below.
+      - name: Open a draft pull request for a failed bump
+        if: failure() && steps.bump.outcome == 'success'
+        id: draft_body
+        run: |
+          gate='an earlier step'
+          [ "${{ steps.build.outcome }}" = failure ] && gate=build
+          [ "${{ steps.build.outcome }}" != failure ] && [ "${{ steps.session.outcome }}" = failure ] && gate=session
+          [ "${{ steps.build.outcome }}" != failure ] && [ "${{ steps.session.outcome }}" != failure ] && [ "${{ steps.counts.outcome }}" = failure ] && gate=counts
+          errs=
+          [ -f "$RUNNER_TEMP/gate.log" ] && errs=$(grep -iE 'error' "$RUNNER_TEMP/gate.log" | sed -n '1,40p' || true)
+          {
+            echo "gate=$gate"
+            echo "body<<DRAFT_BODY_EOF"
+            echo "Bumps the vendored Omarchy to \`${{ steps.rel.outputs.latest }}\`, but the **$gate** gate failed, so this is a draft and will not merge itself."
+            echo
+            echo "First error lines from the log:"
+            echo
+            echo '```'
+            echo "$errs"
+            echo '```'
+            echo
+            echo "Most likely one of:"
+            echo "- a new app in the Install menu -> add it to data/apps.nix"
+            echo "- a renamed bin -> pkgs/omarchy/nix-bin/"
+            echo "- a changed substituteInPlace anchor -> pkgs/omarchy/default.nix"
+            echo "- a menu row id that no longer exists -> modules/apps.nix"
+            echo
+            echo "A later green night on this release marks the PR ready and arms auto-merge."
+            echo "DRAFT_BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the draft pull request
+        if: failure() && steps.bump.outcome == 'success'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+          branch: update/omarchy-${{ steps.rel.outputs.latest }}
+          title: "Omarchy ${{ steps.rel.outputs.latest }}: needs manual work (${{ steps.draft_body.outputs.gate }})"
+          commit-message: "Omarchy ${{ steps.rel.outputs.latest }}"
+          body: ${{ steps.draft_body.outputs.body }}
+          labels: dependencies
+          draft: true
+          delete-branch: true
 
       - name: Open a pull request
         if: steps.rel.outputs.changed == 'true'
@@ -532,6 +589,10 @@ jobs:
           set -euo pipefail
 
           pr=${{ steps.pr.outputs.pull-request-number }}
+
+          # A draft from an earlier failed night: v8's `draft: true` applies
+          # only on create, and auto-merge cannot be armed on a draft.
+          gh pr ready "$pr" || true
 
           # Needs the repository setting "Allow auto-merge" (Settings ->
           # General). If it is off, fail HERE and say so: the PR is already

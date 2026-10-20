@@ -85,3 +85,34 @@ linked in each PR.
 
 Revert PR B, then PR A, independently. Edge goes back to always moving
 quattro and the hand-kept list.
+
+## Deviations (PR A)
+
+- **The draft PR is two steps.** `draft_body` computes the gate and body
+  in shell; then create-pull-request runs. There is no `add-paths`,
+  matching the existing ready PR step. With no gate known, the title
+  says "an earlier step".
+- **The generated list goes through `build-unless-proven.sh`**, not a
+  per-check loop. `generated-checks.sh` prints **144** checks, not the
+  ~26 the spec estimated, and 144 evaluations would not fit. That is the
+  script build.yml's `omarchy` job uses for the same list: slices of 5,
+  `--keep-going`, cache-proven checks skipped, continuing past a failed
+  slice.
+- **Step 3's measurement is by proxy.** build.yml's `omarchy` job builds
+  the same `.#omarchy` plus the 144 checks through the same script on the
+  same runner type in 25-28 min (four main runs, 2026-10-20). Prepare's
+  timeout goes 45 → 75. The first real edge run after merge confirms it.
+- **Step 4's proofs are a local harness, not throwaway-branch dispatches.**
+  A real edge dispatch acts on the real `edge`/`edge-candidate` refs, so
+  a passing proof would promote the edge channel from a test. The harness
+  (`/mnt/data/vmtest/harness-1383.sh`) runs each changed `run:` block from
+  the new workflow and from `main`'s, with stub `gh`/`nix`:
+  - (b) `from_candidate` keeps `HAVE`; main's moves the pin (red);
+  - (d) the report picks the rolling issue by title, not #1377; main's
+    picks #1377 (red);
+  - (c) refuses fewer than 5, names a failing build, and passes a green
+    list;
+  - (a) the draft body names the failed gate and its first error line.
+- **(a) found a bug in the new code:** `gate=an earlier step` (unquoted)
+  ran a command named `earlier` and died with 127, which would have
+  killed the draft step and left the failed bump silent again. Quoted.

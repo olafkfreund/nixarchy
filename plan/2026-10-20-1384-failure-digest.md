@@ -131,3 +131,8 @@ the digest.
   so each line arrives twice. The awk prints a drv once. A doubled
   `c-cascade` log is a new case. Red without the dedupe:
   `FAIL: twice: root listed more than once`. Green with it.
+- **The skip guard allowlists the two `failure()` conditions.** build.yml's
+  "every skip uses the shared gate" step rejects any unlisted `if:`. These
+  only add output after a failure and cannot skip a check. Red without the
+  entry: `a workflow condition is not the shared gate … failure() failure()
+  failure()`. Green with it.

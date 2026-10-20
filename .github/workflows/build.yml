@@ -465,6 +465,8 @@ jobs:
           # in this repository is decided by one script
           # (.github/scripts/pr-touches-build.sh), so there is one denylist to
           # audit rather than a condition per job.
+          # The two failure() forms are the failure digest and the install
+          # classification (#1384): they only add output after a red, never skip.
           allowed_ifs="needs.gate.outputs.relevant == 'true'
           needs.gate.outputs.relevant != 'true'
           always() && needs.gate.outputs.relevant == 'true'
@@ -473,7 +475,9 @@ jobs:
           needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
           always() && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
           \${{ '${{' }} !cancelled() }}
-          needs.gate.result != 'success'"
+          needs.gate.result != 'success'
+          failure()
+          (failure() || cancelled()) && needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'"
 
           rogue=""
           # Process substitution, NOT a heredoc. The first version of this

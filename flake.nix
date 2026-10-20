@@ -2487,7 +2487,7 @@
                 _: p: p.src
               ) self.nixosConfigurations.vm.config.home-manager.users.omarchy.programs.nixarchy.defaultPluginSet
               // {
-                nixi = inputs.nixi;
+                inherit (inputs) nixi;
                 voice = inputs.nixarchy-voice;
               };
           };

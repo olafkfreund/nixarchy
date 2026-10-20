@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1383
 author: olafkfreund
 ---
@@ -79,3 +79,8 @@ none of them is a code bug.
   second run? I propose the same run: try new quattro first, and on
   failure retry with the old pin plus `main`. One run, two candidates,
   only a verified one promoted.
+
+## Decisions (owner, 2026-10-20)
+
+- A failed bump opens a **draft PR** on the pushed bump branch, updated in place.
+- The quattro fallback runs **in the same edge run**: new quattro first; on failure, the last good quattro with `main`.

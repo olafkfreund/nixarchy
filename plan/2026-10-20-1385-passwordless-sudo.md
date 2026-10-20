@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1385
 spec: spec/2026-10-20-1385-passwordless-sudo.md
 ---

@@ -248,3 +248,17 @@ lights on*, labels `omarchy-edge` and `ci`. Its body lists:
   run a `from_candidate` dispatch. Each cause is its own commit.
 - **Main:** revert the PR. The digest goes back to "no error lines",
   which changes no CI status.
+
+## Deviations during implementation
+
+- **A3: the check's control could not see the bug on quattro.** Quattro
+  runs the MOZ_LOG probe only for `--private`. A normal launch therefore
+  recurses through `systemd-run … uwsm-app -- "$browser_exec"`, and the
+  check stubbed both of those as loggers, so its control stopped at one
+  call. The stubs now run what they are handed. The fixture still opens a
+  plain URL: a `--private` fixture would pass the old placement too.
+  C1's red for cause 3 is therefore re-run: the old anchor (guard inside
+  the `--private` branch) must fail the updated check.
+- **A3: `$'\n''…'` cannot be written inside a Nix `''` string**, because
+  the `''` ends it. The second half is double-quoted instead, with the
+  same result.

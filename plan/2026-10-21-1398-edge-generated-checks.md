@@ -282,3 +282,13 @@ lights on*, labels `omarchy-edge` and `ci`. Its body lists:
   - D11 `grep-q-pipefail`: A3 removed the old anchor line from
     `default.nix`, so its allowlist entry is stale. Delete it; the snippet's
     own entry stays.
+- **D12, found by the promotion run (39573491829): the edge run cannot
+  evaluate the installer checks.** `edge-build.sh` builds from the working
+  tree, and the pin steps leave `flake.lock` edited, so `self.rev` is unset
+  and `installer-lock`, `installer-input-validation` and `initrd-pin-guard`
+  throw "build from a committed tree". Local runs were committed, so C2
+  could not see it, and the digest named nothing (evaluation errors).
+  `edge-build.sh` now builds from a throwaway commit and `reset --soft`s it
+  on exit, so "Publish the candidate" commits as before. Proved in the
+  merged tree: dirty → "flake-template: build from a committed tree";
+  with the block → evaluates, HEAD unchanged, tree still dirty.

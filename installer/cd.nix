@@ -588,7 +588,7 @@ in
       if lib.hasPrefix "edge-" version then
         "NIXARCHY_EDGE_${lib.toUpper (lib.last (lib.splitString "-" version))}${labelVariant}"
       else
-        "NIXARCHY_${lib.replaceStrings [ "." ] [ "_" ] version}${labelVariant}";
+        "NIXARCHY_${lib.toUpper (lib.replaceStrings [ "." "-" ] [ "_" "_" ] version)}${labelVariant}";
     makeEfiBootable = true;
     makeUsbBootable = true;
 

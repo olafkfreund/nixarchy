@@ -52,7 +52,13 @@ done <<<"$rows"
     # early noise would fill a first-40 cut, so keep the last 40 matched lines.
     # `|| true`: a drv nix no longer has a log for must not end the digest.
     excerpt=$(nix log "$drv" 2>/dev/null | MAX=100000 "$here/failure-excerpt.sh" | tail -n 40 || true)
-    if [ -n "$excerpt" ]; then printf '%s\n' "$excerpt" | sed 's/^/    /'; else echo "    (no error lines in nix log $drv)"; fi
+    if [ -n "$excerpt" ]; then
+      printf '%s\n' "$excerpt" | sed 's/^/    /'
+    else
+      # A check that prints its own words (no `error`/`FAIL`) still names its cause in the last lines.
+      echo "    (no error lines; last lines of the log)"
+      { nix log "$drv" 2>/dev/null | tail -n 10 || true; } | sed 's/^/    /'
+    fi
   done
   if [ "$cascades" -gt 0 ] && [ "${#roots[@]}" -gt 0 ]; then
     echo "$cascades checks failed only because ${names[*]} failed"

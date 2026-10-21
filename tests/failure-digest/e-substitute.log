@@ -1,0 +1,39 @@
+building '/nix/store/b0ndskwzf1kqcpqivq6qc2zw4kv505r3-omarchy-edge-20261021-087f73d.drv'...
+omarchy-edge> Running phase: unpackPhase
+omarchy-edge> unpacking source archive /nix/store/fs7y7mx5nxidmm56zdsq0s956zidlhdz-source
+omarchy-edge> source root is source
+omarchy-edge> Running phase: patchPhase
+omarchy-edge> Running phase: updateAutotoolsGnuConfigScriptsPhase
+omarchy-edge> Running phase: installPhase
+omarchy-edge> patching file shell/shell.qml
+omarchy-edge> Hunk #1 succeeded at 1409 (offset 18 lines).
+omarchy-edge> substituteStream() in derivation omarchy-edge-20261021-087f73d: ERROR: pattern if\ grep\ -q\ \"https://stable-mirror.omarchy.org/\"\ /etc/pacman.d/mirrorlist\;\ then doesn't match anything in file '/nix/store/a50i79jypmpf94z78983nsnywfsn1fif-omarchy-edge-20261021-087f73d/share/omarchy/bin/omarchy-version-channel'
+❌ git+file:///home/runner/work/nixarchy/nixarchy#omarchy
+error: Cannot build '/nix/store/b0ndskwzf1kqcpqivq6qc2zw4kv505r3-omarchy-edge-20261021-087f73d.drv'.
+       Reason: builder failed with exit code 1.
+       Output paths:
+         /nix/store/a50i79jypmpf94z78983nsnywfsn1fif-omarchy-edge-20261021-087f73d
+       Last 9 log lines:
+       > Running phase: unpackPhase
+       > unpacking source archive /nix/store/fs7y7mx5nxidmm56zdsq0s956zidlhdz-source
+       > source root is source
+       > Running phase: patchPhase
+       > Running phase: updateAutotoolsGnuConfigScriptsPhase
+       > Running phase: installPhase
+       > patching file shell/shell.qml
+       > Hunk #1 succeeded at 1409 (offset 18 lines).
+       > substituteStream() in derivation omarchy-edge-20261021-087f73d: ERROR: pattern if\ grep\ -q\ \"https://stable-mirror.omarchy.org/\"\ /etc/pacman.d/mirrorlist\;\ then doesn't match anything in file '/nix/store/a50i79jypmpf94z78983nsnywfsn1fif-omarchy-edge-20261021-087f73d/share/omarchy/bin/omarchy-version-channel'
+       For full logs, run:
+         nix log /nix/store/b0ndskwzf1kqcpqivq6qc2zw4kv505r3-omarchy-edge-20261021-087f73d.drv
+building '/nix/store/qk1m2n3p4r5s6v7w8x9y0z1a2b3c4d5f-nixarchy-menu-guidance.drv'...
+nixarchy-menu-guidance> ok: remove fido2: exit 1, named only then delete the registration, no writer called
+nixarchy-menu-guidance> menu-guidance: remove fingerprint did not name Nothing on this machine was changed
+error: Cannot build '/nix/store/qk1m2n3p4r5s6v7w8x9y0z1a2b3c4d5f-nixarchy-menu-guidance.drv'.
+       Reason: builder failed with exit code 1.
+       Output paths:
+         /nix/store/zk1m2n3p4r5s6v7w8x9y0z1a2b3c4d5f-nixarchy-menu-guidance
+       Last 2 log lines:
+       > ok: remove fido2: exit 1, named only then delete the registration, no writer called
+       > menu-guidance: remove fingerprint did not name Nothing on this machine was changed
+       For full logs, run:
+         nix log /nix/store/qk1m2n3p4r5s6v7w8x9y0z1a2b3c4d5f-nixarchy-menu-guidance.drv

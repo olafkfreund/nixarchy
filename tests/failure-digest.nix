@@ -54,6 +54,12 @@ pkgs.runCommand "nixarchy-failure-digest"
     lacks c-cascade '✗ initrd'
     lacks c-cascade '✗ nixos-system'
 
+    run e-substitute
+    has e-substitute '✗ omarchy-edge-20261021-087f73d'
+    has e-substitute "doesn't match anything in file"
+    has e-substitute '✗ nixarchy-menu-guidance'
+    has e-substitute 'did not name Nothing on this machine was changed'
+
     # A log captured twice (edge prepare's tee plus the script's) is one failure.
     cat ${./failure-digest}/c-cascade.log ${./failure-digest}/c-cascade.log > twice.log
     bash sut/failure-digest.sh $PWD/twice.log > digest-twice.txt || fail "twice: exited non-zero"
@@ -69,6 +75,6 @@ pkgs.runCommand "nixarchy-failure-digest"
     printf '%s\n' '#!${pkgs.bash}/bin/bash' 'exit 3' > bin/nix
     bash sut/failure-digest.sh ${./failure-digest}/c-cascade.log >/dev/null || fail "dead nix log exited non-zero"
 
-    echo "failure-digest: four fixtures name their check and its error; every run exits 0"
+    echo "failure-digest: five fixtures name their check and its error; every run exits 0"
     touch $out
   ''

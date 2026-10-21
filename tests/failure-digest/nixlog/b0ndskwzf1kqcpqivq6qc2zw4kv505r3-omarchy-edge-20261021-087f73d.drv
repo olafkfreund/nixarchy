@@ -1,0 +1,9 @@
+Running phase: unpackPhase
+unpacking source archive /nix/store/fs7y7mx5nxidmm56zdsq0s956zidlhdz-source
+source root is source
+Running phase: patchPhase
+Running phase: updateAutotoolsGnuConfigScriptsPhase
+Running phase: installPhase
+patching file shell/shell.qml
+Hunk #1 succeeded at 1409 (offset 18 lines).
+substituteStream() in derivation omarchy-edge-20261021-087f73d: ERROR: pattern if\ grep\ -q\ \"https://stable-mirror.omarchy.org/\"\ /etc/pacman.d/mirrorlist\;\ then doesn't match anything in file '/nix/store/a50i79jypmpf94z78983nsnywfsn1fif-omarchy-edge-20261021-087f73d/share/omarchy/bin/omarchy-version-channel'

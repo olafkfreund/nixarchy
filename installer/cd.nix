@@ -359,20 +359,18 @@ in
   boot = {
     loader.timeout = lib.mkForce 0;
 
-    # Both of these silence an evaluation warning by ANSWERING it, which is
-    # the only reason they are here -- nixpkgs asks a question the installer
-    # profile leaves unanswered, and an unanswered question that prints on
-    # every eval trains everyone to read past warnings.
-    #
-    # zfs: nixpkgs is changing this default to false in 26.11 and warns while
-    # nobody has stated an opinion (zfs.nix:710 tests whether the only
-    # definition is its own). false is the recommended value and the safer
-    # one -- it stops a pool being force-imported when it may still be in use
-    # elsewhere. Nothing is lost here in any case: ZFS is on this image so the
-    # installer can reach an existing pool, and this image's own root is a
-    # squashfs, so there is no root pool to import at all.
-    zfs.forceImportRoot = false;
+    # No ZFS on this image (#1399): the kernel below is linuxPackages_latest,
+    # which regularly outruns ZFS -- 7.3 marked zfs-kernel 2.4.4 broken and the
+    # ISO stopped evaluating. nixpkgs ships the same trade as
+    # installation-cd-minimal-new-kernel-no-zfs. Installs are btrfs; only
+    # reaching an existing pool from the live image is lost.
+    supportedFilesystems.zfs = lib.mkForce false;
 
+    # This silences an evaluation warning by ANSWERING it, which is the only
+    # reason it is here -- nixpkgs asks a question the installer profile
+    # leaves unanswered, and an unanswered question that prints on every eval
+    # trains everyone to read past warnings.
+    #
     # mdadm: swraid.nix:62 warns that mdmon crashes with neither MAILADDR nor
     # PROGRAM set, and the installer profile enables swraid without setting
     # either. Answered rather than disabled: turning boot.swraid.enable off

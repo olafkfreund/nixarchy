@@ -1222,11 +1222,15 @@ jobs:
           # merged menu rather than only our overrides, so those parents are
           # now in it -- and checking for children is what tells them apart
           # from a row that really does nothing.
+          # A row can also name its parent outright (`parent`), which is how
+          # the Nixarchy folder's trigger.* rows reach it (#1412).
           ids = set(rows)
+          parents = {v.get("parent") for v in rows.values()}
           dead = [k for k, v in rows.items()
                   if not v.get("action") and not v.get("when")
                   and not v.get("target") and not v.get("provider")
-                  and not any(o.startswith(k + ".") for o in ids)]
+                  and not any(o.startswith(k + ".") for o in ids)
+                  and k not in parents]
           if dead:
               sys.exit(f"::error::menu rows with no action and no submenu: {dead}")
           print(f"menu OK: {len(rows)} rows, {len(wired)} wired, all labelled and actionable")

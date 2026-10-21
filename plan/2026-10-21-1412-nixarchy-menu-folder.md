@@ -118,3 +118,10 @@ the root.
   required to make `menu-tree.py` fail with its message, so the rules prove
   they fire on every run. Nine parents are asserted (eight panels plus
   `help`). `options.nix`'s off state is Mode A (no menu at all).
+- **CI found a PR-only gate** (`build.yml` ~:1225, "menu rows with no action
+  and no submenu: ['nixarchy']"): it recognised a submenu only by id prefix.
+  The menu also honours an explicit `parent`, which is how the folder's
+  `trigger.*` rows reach it, so the step now counts both (§1 read backwards:
+  it checked the arrangement, not "this row has children"). Proved on the
+  generated menu: old logic flags `nixarchy`, new logic flags nothing, and
+  with the children's `parent` rewritten away the new logic flags it again.

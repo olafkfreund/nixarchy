@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1412
 spec: spec/2026-10-21-1412-nixarchy-menu-folder.md
 ---

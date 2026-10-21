@@ -2551,6 +2551,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The nightly bump follows RCs and never goes backwards (#1403).
+          # See tests/omarchy-newest.nix.
+          omarchy-newest = import ./tests/omarchy-newest.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # The nightly's cache step: probe every allowlist entry, rebuild and
           # push what the cache dropped, and still fail when a push delivers
           # nothing. Against a stubbed nix, curl and cachix. See

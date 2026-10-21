@@ -443,13 +443,33 @@ jobs:
 
       - name: Evaluate options, then boot the VM checks, each separately
         id: vms
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           # Keep a copy for the Failure digest step (#1384); not `| tee`, which
           # would need pipefail on every build.
           exec > >(tee -a "${RUNNER_TEMP:-/tmp}/build.log") 2>&1
           failed=""
+          # An install check's VMs and these must not share the host (#1365).
+          # Exit 2 (unknown) counts as busy; the bound is per check.
+          host_free() {
+            local deadline=$((SECONDS + 7200)) what rc
+            while :; do
+              rc=0
+              what=$(nix shell nixpkgs#gh nixpkgs#jq -c .github/scripts/vm-host-free.sh edge 2>&1) || rc=$?
+              [ "$rc" = 0 ] && return 0
+              echo "waiting ($(( (deadline - SECONDS) / 60 )) min left): $what"
+              [ "$SECONDS" -lt "$deadline" ] || { echo "::error::gave up after 120 min waiting on: $what"; return 1; }
+              sleep 60
+            done
+          }
           for c in options session coexist plugin; do
+            if [ "$c" != options ] && ! host_free; then
+              echo "::error::$c failed: the host never freed up"
+              failed="$failed $c"
+              continue
+            fi
             echo "::group::$c"
             if nix build ".#checks.x86_64-linux.$c" --print-build-logs; then echo "::endgroup::"; else
               echo "::endgroup::"

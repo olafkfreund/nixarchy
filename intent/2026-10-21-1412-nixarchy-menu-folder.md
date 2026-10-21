@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1412
 author: olafkfreund
 ---
@@ -116,3 +116,9 @@ nixarchy-owned submenu"
    with a matching `learn.*` id stay in Learn.
 7. **Does `trigger.hardware.hybrid-gpu` (`:882`) move?** Proposal: no. It is a
    hardware action under upstream's Hardware group, not a panel.
+
+## Decisions (owner, 2026-10-21)
+
+Approved with every proposal above, including the scope addition (Herdr,
+GitHub Actions, GitLab Pipelines move too) and the reversal of #1329's
+"no top-level Nixarchy row".

@@ -317,6 +317,7 @@ let
           ("system", "menu-system"),
           ("setup.default.agent", "menu-default-agent"),
           ("trigger", "menu-trigger"),
+          ("nixarchy", "menu-nixarchy"),
       ]:
           user(f"omarchy-menu summon {route}", timeout=30)
           machine.sleep(5)

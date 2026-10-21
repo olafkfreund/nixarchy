@@ -48,7 +48,7 @@ enable for the disposable half above. What you are turning on by using it is
 whatever templates you pick, one machine at a time, and nothing runs until
 you do.
 
-**`Trigger ▸ Sandbox` opens the MicroVMs panel**, on by default
+**`Nixarchy ▸ Sandbox` opens the MicroVMs panel**, on by default
 (Super+Alt+V on a new install): disposable VMs from `nixarchy vm` and the
 permanent machines you declare, in one list. Create, run in the background,
 attach to the console, stop and remove from there. See
@@ -57,7 +57,7 @@ Setup → Plugins, the same row opens `nixarchy vm list` in a terminal instead,
 and `programs.nixarchy.defaultPlugins.microvm = false` stops nixarchy
 installing it.
 
-The menu row is the one thing that needs a moment: `Trigger ▸ Sandbox`
+The menu row is the one thing that needs a moment: `Nixarchy ▸ Sandbox`
 is generated into the merged menu defaults at rebuild time, and Omarchy's
 shell reads that file once, at login. Rebuilding with this feature already
 on your system does not make the row appear in an already-open session —

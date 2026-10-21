@@ -70,13 +70,13 @@ if you already use it, is untouched -- boxes only need podman) and installs
 same property nixarchy's own rootless Docker default has, for the same
 reason.
 
-Because boxes turn podman on, they also bring the **Podman panel** (Trigger ▸
+Because boxes turn podman on, they also bring the **Podman panel** (Nixarchy ▸
 Podman, Super+Alt+O on a new install); see
 [Development tools](development-tools#podman).
 
 ## Making one
 
-**`Trigger ▸ Boxes` opens the Distrobox panel** (Super+Alt+D on a new
+**`Nixarchy ▸ Boxes` opens the Distrobox panel** (Super+Alt+D on a new
 install; search "box" or "distrobox"), and that is how you make one. It is
 also the whole feature: the panel lists every box, enters one in a terminal,
 starts, stops, upgrades, promotes and deletes them, and creates new ones from

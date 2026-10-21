@@ -357,7 +357,7 @@ virtualisation.podman.enable = true;
 Wherever podman is on -- that row or boxes -- nixarchy also turns on the
 **Podman panel** ([nixarchy-podman](https://github.com/olafkfreund/nixarchy-podman)):
 containers, images, volumes and networks, with start, stop, logs, a shell and
-prune, from **Trigger ▸ Podman** or, on a new install, **Super+Alt+O**. Its `d`
+prune, from **Nixarchy ▸ Podman** or, on a new install, **Super+Alt+O**. Its `d`
 key opens `podman-tui`, which nixarchy does not install, so that one key does
 nothing until you add `podman-tui` to your packages yourself.
 

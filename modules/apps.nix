@@ -3716,7 +3716,7 @@ in
                     nixarchy apply              Copy the selection into your flake and rebuild
                     nixarchy dev init <preset>  Scaffold a devenv project here (no argument lists them)
                     nixarchy dev list --json    Every devenv project under your roots
-                                                The panel is Super+Alt+E, or Trigger > Dev environments
+                                                The panel is Super+Alt+E, or Nixarchy > Dev environments
                     nixarchy try <app|attr>     Run something once without installing it
                     nixarchy vm <subcommand>    Disposable NixOS MicroVMs -- 'nixarchy vm help'
                     nixarchy doctor             What this machine needs to run nixarchy

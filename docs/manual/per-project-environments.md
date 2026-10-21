@@ -24,7 +24,7 @@ This is nixarchy's, not Omarchy's — upstream reaches for `mise use`, which
 not on by default.
 
 Once it is on, you also get the **Dev environments** panel: every project on
-the machine in one list, on **Super+Alt+E** and under **Trigger ▸ Dev
+the machine in one list, on **Super+Alt+E** and under **Nixarchy ▸ Dev
 environments**. See [The panel](#the-panel) below.
 
 ## Turning it on

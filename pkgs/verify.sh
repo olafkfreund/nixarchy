@@ -517,7 +517,17 @@ else
         if [ "$agent" = active ]; then
           hmm "adapter is pairable during temporary pairing" "check it returns to no when pairing ends"
         else
-          bad "adapter is pairable with no temporary agent" "check which client enabled pairing"
+          # BlueZ does not list its agents on D-Bus, so a process is the only
+          # read-only signal. These ask before they pair (#1418).
+          prompter=""
+          for p in blueman-applet bluedevil gnome-shell; do
+            if pgrep -x "$p" >/dev/null 2>&1; then prompter=$p; break; fi
+          done
+          if [ -n "$prompter" ]; then
+            hmm "adapter is pairable: $prompter holds a prompting agent" "pairing asks first"
+          else
+            bad "adapter is pairable with no temporary agent" "check which client enabled pairing"
+          fi
         fi
       else
         hmm "adapter pairability unknown (agent $agent)" "bluetoothctl gave no Pairable state"
@@ -662,6 +672,15 @@ for dir in "$state_dir"/*/ /var/lib/microvms/*/; do
   else
     target=$( (readlink -f "$cur") || true)
     if [ -z "$target" ] || [ ! -e "$target" ]; then
+      # A guest removed from the configuration leaves its state behind. The
+      # template unit microvm@ resolves any name, so ask for the per-guest
+      # install unit, or the GC root an imperative `microvm -c` guest has (#1417).
+      if [[ $dir == /var/lib/microvms/* ]] &&
+        ! systemctl cat "install-microvm-$name.service" >/dev/null 2>&1 &&
+        [ ! -e "/nix/var/nix/gcroots/microvm/$name" ]; then
+        hmm "$name: no longer declared" "its state can be removed: /var/lib/microvms/$name"
+        continue
+      fi
       bad "$name: current is a dangling link" "$cur -> $( (readlink "$cur") || echo '?')"
       say_dim "nothing here is a GC root -- nix-collect-garbage can already have taken it"
     else

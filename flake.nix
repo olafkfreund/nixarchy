@@ -2072,6 +2072,7 @@
             "update-available"
             "user-unit-links"
             "verify-boxes"
+            "verify-sections"
           ];
         in
         {
@@ -2265,6 +2266,13 @@
           explain = import ./tests/explain.nix {
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) explain;
+          };
+
+          # The packaged nixarchy-verify reaches its summary on a machine with
+          # nothing (#1416). See tests/verify-runs.nix.
+          verify-runs = import ./tests/verify-runs.nix {
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) verify;
           };
 
           # nixarchy-channel edits a file the user owns, so the check is mostly

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1406
 author: olafkfreund
 ---
@@ -90,3 +90,8 @@ An agent asked to "make me an app" on nixarchy:
    as an instruction in any shipped skill? I propose the grep, across
    **all** shipped skills. It also catches the next upstream skill that
    arrives Arch-shaped, which is the general version of this bug (§2).
+
+## Decisions (owner, 2026-10-21)
+
+1. **(a)** patch in place; keep upstream's portable sections verbatim.
+2. A build-time grep across **all** shipped skills refuses Arch install instructions.

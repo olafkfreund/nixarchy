@@ -27,7 +27,9 @@ rows = {
 known = set(os.environ["mapped"].split()) | set(os.environ["notApps"].split())
 
 unmapped = sorted(rows - known)
-stale = sorted(known - rows)
+# Only Install rows can go stale here: an app may map a row elsewhere in the
+# menu (quattro moved dictation to setup.default.dictation, #1278).
+stale = sorted(k for k in known - rows if k.startswith("install."))
 
 if unmapped:
     sys.exit(

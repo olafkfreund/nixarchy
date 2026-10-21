@@ -101,9 +101,24 @@
     reason = "Turns on unified-kernel-image generation in limine-entry-tool. NixOS builds its boot entries from the system closure, so there is no equivalent switch to set.";
   };
 
+  "mise/conf.d/omarchy-agent-accounts.toml" = {
+    class = "installed";
+    reason = "mise `[wrappers]` routing claude, codex and grok through `omarchy-agent-account-exec`, so `omarchy agent account use` reaches a CLI started in an activated shell. nixpkgs' mise reads `[wrappers]` (2026.10.3, measured). The launchers resolve the account themselves. The exec's mise install fallback is patched to refuse (#1386).";
+  };
+
+  "mise/conf.d/omarchy-tools.toml" = {
+    class = "divergent";
+    reason = "Lazy mise installs of about 22 tools (node, gh, claude, codex and more). Deliberately not adopted: it would put mise downloads ahead of the Nix builds, which is what data/apps.nix and #707 exist to prevent.";
+  };
+
   "mise/conf.d/omarchy.toml" = {
     class = "installed";
     reason = "A mise tool_alias so `mise use -g cursor-agent` resolves, which is how upstream's omarchy-mise-install wrapper installs the Cursor CLI. mise reads /etc/mise/conf.d, and this is the shipped file at that path, so that agent installs like the others. #649.";
+  };
+
+  "mkinitcpio.conf.d/00-omarchy-hooks.conf" = {
+    class = "na";
+    reason = "The platform's HOOKS baseline for mkinitcpio. NixOS builds its initrd from boot.initrd.*; there is no hook list to set.";
   };
 
   "mkinitcpio.conf.d/omarchy_hooks.conf" = {
@@ -124,6 +139,11 @@
   "modprobe.d/omarchy-usb-autosuspend.conf" = {
     class = "native";
     reason = "`options usbcore autosuspend=-1` stops the kernel suspending USB devices, which keeps a keyboard or dock from waking slowly or dropping. modules/nixos.nix writes the same line through boot.extraModprobeConfig; lines merge, so it is a plain assignment.";
+  };
+
+  "mpv/mpv.conf" = {
+    class = "installed";
+    reason = "hwdec=auto-safe, so mpv decodes video on the GPU where it safely can. libmpv reads /etc/mpv, and ~/.config/mpv still overrides it; installed as the shipped file through environment.etc.";
   };
 
   "nsswitch.conf" = {
@@ -161,6 +181,11 @@
     reason = "NOPASSWD for `/usr/bin/omarchy-dns Cloudflare|Google|DHCP`. Not adopted, for two measured reasons: /usr/bin here is envfs, which resolves each name through the CALLING process's PATH, so a passwordless rule on that path would run whatever the user's PATH puts first as root; and the script writes /etc/systemd/resolved.conf, which services.resolved regenerates, so the switch does not survive a rebuild (data/bin-ledger.nix). `omarchy dns` keeps its password prompt.";
   };
 
+  "sudoers.d/omarchy-locale-generate" = {
+    class = "covered";
+    reason = "NOPASSWD for the locale generator. The generator is a stub here, and programs.nixarchy.language builds locales with the system, so nothing needs root at runtime.";
+  };
+
   "sudoers.d/omarchy-passwd-tries" = {
     class = "native";
     reason = "`Defaults passwd_tries=10`, the sudo half of the lockout Omarchy loosens, so a mistyped password does not end the attempt at three. modules/nixos.nix carries the same line through security.sudo.extraConfig.";
@@ -174,6 +199,11 @@
   "sudoers.d/omarchy-tzupdate" = {
     class = "divergent";
     reason = "NOPASSWD for `timedatectl set-timezone`. Not adopted: every machine the installer writes sets time.timeZone (installer/template/host/configuration.nix), which makes /etc/localtime NixOS's to own, so the command cannot change it here and a passwordless root grant would buy nothing; and the rule names /usr/bin, which is envfs, resolved through the caller's PATH.";
+  };
+
+  "sysctl.d/90-omarchy-arp.conf" = {
+    class = "native";
+    reason = "arp_ignore=1 and arp_announce=2 on all and default, so Wi-Fi does not answer ARP for a dock's Ethernet address. modules/nixos.nix sets the four keys through boot.kernel.sysctl at mkDefault, so a machine's own value wins.";
   };
 
   "sysctl.d/90-omarchy-file-watchers.conf" = {
@@ -221,6 +251,11 @@
     reason = "DefaultTimeoutStopSec=5s, so power-off does not wait out systemd's 90 seconds on a hung unit. modules/nixos.nix sets it through systemd.settings.Manager at mkDefault; a unit that declares its own TimeoutStopSec keeps it.";
   };
 
+  "systemd/system.conf.d/20-mount-events.conf" = {
+    class = "native";
+    reason = "Raises PID 1's mount-event burst from 5 to 30 a second, so boot does not defer mounts. modules/nixos.nix sets SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST through systemd.managerEnvironment, which nixpkgs writes into ManagerEnvironment.";
+  };
+
   "systemd/system.conf.d/20-omarchy-nofile.conf" = {
     class = "native";
     reason = "DefaultLimitNOFILE=65536:524288, the descriptor limit every system unit inherits instead of systemd's soft 1024. modules/nixos.nix sets it through systemd.settings.Manager at mkDefault.";
@@ -241,6 +276,16 @@
     reason = "ConditionACPower=true keeps the locate database rebuild off a laptop on battery. NixOS names the unit update-locatedb, not plocate-updatedb, so modules/nixos.nix sets the condition on that unit, only while services.locate.enable is on.";
   };
 
+  "systemd/system/proc-sys-fs-binfmt_misc.mount.d/10-omarchy-conditions.conf" = {
+    class = "divergent";
+    reason = "Conditions matching the eager binfmt_misc mount in systemd-binfmt's drop-in. Not ported: no boot-time binfmt deferral has been seen here, and the pair needs overrideStrategy = \"asDropin\" units, so it is not a line or two. Tracked in #1386.";
+  };
+
+  "systemd/system/systemd-binfmt.service.d/10-eager-mount.conf" = {
+    class = "divergent";
+    reason = "Mounts binfmt_misc eagerly before systemd-binfmt runs. Not ported: no boot-time binfmt deferral has been seen here, and the pair needs overrideStrategy = \"asDropin\" units, so it is not a line or two. Tracked in #1386.";
+  };
+
   "systemd/system/user@.service.d/10-faster-shutdown.conf" = {
     class = "native";
     reason = "TimeoutStopSec=5s on the user manager, the per-user half of the faster shutdown, so logout and power-off do not wait on a stuck user service. modules/nixos.nix sets it on systemd.services.\"user@\" at mkDefault.";
@@ -249,6 +294,11 @@
   "systemd/user.conf.d/20-omarchy-nofile.conf" = {
     class = "native";
     reason = "DefaultLimitNOFILE=65536:524288 for the user manager, the limit every graphical application actually inherits. modules/nixos.nix sets it through systemd.user.settings.Manager at mkDefault.";
+  };
+
+  "systemd/user/wayland-wm@hyprland.desktop.service.d/10-keep-shell.conf" = {
+    class = "native";
+    reason = "KillMode=mixed, so the compositor stops before its shell clients. modules/nixos.nix sets it on the wayland-wm@ template through systemd.user.services, because uwsm names the instance start\\x2dhyprland here and upstream's instance name would never match.";
   };
 
   "tmpfiles.d/omarchy-nopasswd-sudo.conf" = {
@@ -261,8 +311,23 @@
     reason = "Writes N to zswap's enabled parameter so it cannot compete with zram. nixpkgs' kernels leave CONFIG_ZSWAP_DEFAULT_ON off and nothing here turns zswap on, so zram -- enabled in modules/nixos.nix -- is already the only compressed swap.";
   };
 
+  "udev/rules.d/60-omarchy-io-scheduler.rules" = {
+    class = "divergent";
+    reason = "Kyber on every whole disk. Not ported: a udev rule cannot be mkDefault, so it would silently override a host's own scheduler (p620 runs bfq), which is a coexistence change needing its own design. Tracked in #1386.";
+  };
+
   "xdg/kitty/kitty.conf" = {
     class = "installed";
     reason = "Omarchy's kitty defaults -- font, padding, the CSI-u bindings for shift+enter, the remote-control socket. kitty reads $XDG_CONFIG_DIRS/kitty/kitty.conf and NixOS sets that to /etc/xdg, so the shipped file is the system half; modules/home.nix seeds upstream's config/kitty/kitty.conf, the stub whose comment points at this one. #649.";
+  };
+
+  "xkb/rules/evdev" = {
+    class = "installed";
+    reason = "Defines the omarchy:shift_caps_compose option that Omarchy's Hyprland input config always sets, so Shift+Caps is Compose and Caps alone is still Caps Lock. libxkbcommon searches /etc/xkb first, and the shipped file is installed through environment.etc.";
+  };
+
+  "xkb/symbols/omarchy" = {
+    class = "installed";
+    reason = "The omarchy symbols file that xkb/rules/evdev's shift_caps_compose option pulls in. Installed at /etc/xkb/symbols/omarchy through environment.etc, where libxkbcommon finds it.";
   };
 }

@@ -583,7 +583,12 @@ in
     # most 32 characters -- asserted below rather than left to a truncation
     # nobody notices until a stick fails to boot. Two nixarchy sticks of
     # different versions or variants no longer collide.
-    volumeID = "NIXARCHY_${lib.replaceStrings [ "." ] [ "_" ] version}${labelVariant}";
+    # #1398: edge's version is edge-YYYYMMDD-rev, too long and not [A-Z0-9_]; its label is the rev.
+    volumeID =
+      if lib.hasPrefix "edge-" version then
+        "NIXARCHY_EDGE_${lib.toUpper (lib.last (lib.splitString "-" version))}${labelVariant}"
+      else
+        "NIXARCHY_${lib.toUpper (lib.replaceStrings [ "." "-" ] [ "_" "_" ] version)}${labelVariant}";
     makeEfiBootable = true;
     makeUsbBootable = true;
 

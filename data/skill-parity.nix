@@ -42,12 +42,6 @@
 # The idea, and the anchor-proof shape, come from zicochaos/omarchy-nix's
 # skills/omarchy/skill-parity.json (MIT). The code here is ours.
 {
-  "## When This Skill MUST Be Used" = {
-    class = "adapted";
-    upstream = "c4b249c56563";
-    anchor = "- Installing packages or changing system configuration — use the `nixos` skill";
-    reason = "Upstream's exclusion is Omarchy source development. Here the routing decision that matters first is packages-and-system versus desktop, because on NixOS those are different files with different lifetimes, so the exclusion names the `nixos` skill before it names source development.";
-  };
 
   "## Topic Guides" = {
     class = "adapted";
@@ -252,7 +246,7 @@
 
   "## Example Requests" = {
     class = "adapted";
-    upstream = "b7553b92485c";
+    upstream = "fd34bada703c";
     anchor = "\"My change disappeared after a reboot\"";
     reason = "Upstream's examples are kept where the answer is the same command. Three are replaced by the two mistakes that only happen here -- asking this skill to install something, and an imperative change that does not survive a reboot -- because an example is how an agent learns the boundary.";
   };

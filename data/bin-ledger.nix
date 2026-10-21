@@ -132,6 +132,10 @@
     class = "patch";
     reason = "The prompt is retargeted from `this Omarchy machine` and `reporting upstream to Omarchy` to Nixarchy or Omarchy, so the agent does not reach reporting.md already pointed at Basecamp.";
   };
+  "omarchy-agent-account-exec" = {
+    class = "patch";
+    reason = "Its mise install fallback refuses with exit 127 instead: nixarchy installs claude, codex and grok through Nix, and one it did not install (unfree off) stays not installed (#1386).";
+  };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
     reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";
@@ -146,7 +150,7 @@
   };
   "omarchy-apply-lock" = {
     class = "patch";
-    reason = "Its root PATH reset points at /usr/bin, which holds nothing here, so it lost tee and getent while writing lock-screen PAM files; and its `-x /usr/bin/fprintd-list` probe was never true.";
+    reason = "Its root PATH reset points at /usr/bin, which holds nothing here, so it lost tee and getent while writing lock-screen PAM files; and its `-x /usr/bin/fprintd-list` probe was never true. On quattro (#1285) it also copies a resume hook into /usr/lib and a stop timeout into /etc/systemd; modules/nixos.nix declares both, so those copies are dropped.";
     allow = "etc-write";
   };
   "omarchy-apply-system" = {
@@ -158,10 +162,6 @@
     class = "patch";
     reason = "It tests for the LSP limiter at a fixed path under /usr/lib/lv2. NixOS keeps LV2 plugins in the store and points hosts at them with LV2_PATH, so the search is over LV2_PATH and the system profile.";
     allow = "systemctl-user";
-  };
-  "omarchy-bar-text-color" = {
-    class = "patch";
-    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: ImageMagick now samples the file's first frame only ([0]), since a GIF or video background otherwise decodes every frame and the colour match falls into the fallback. Deleted by the quattro bump, with the rest of that patch.";
   };
   "omarchy-bluetooth-device" = {
     class = "patch";
@@ -179,10 +179,6 @@
   "omarchy-channel-set" = {
     class = "patch";
     reason = "Upstream switches channels with pacman and mirrors. The body is replaced by a delegation to `nixarchy-channel omarchy`, which edits the machine's flake.nix (stable, edge, or a checkout of your own; rc is refused). The shebang and `# omarchy:` header lines are kept, minus requires-sudo.";
-  };
-  "omarchy-clipboard-open" = {
-    class = "patch";
-    reason = "It execs tensaku-edit, which is packaged nowhere here, so the image editor is pointed at the satty-edit wrapper instead.";
   };
   "omarchy-cursor-set" = {
     class = "new";
@@ -204,7 +200,11 @@
   };
   "omarchy-default-browser" = {
     class = "patch";
-    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id. It also names zen.desktop; nixarchy's Zen is the zen-browser flake's beta, which installs zen-beta.desktop, so the setter set a desktop id that does not exist and the reader never answered zen (#1303).";
+    reason = "It names chromium.desktop, which nixpkgs calls chromium-browser.desktop, so setting the browser exited 1 having set nothing and the no-argument read printed the raw desktop id. It also names zen.desktop; nixarchy's Zen is the zen-browser flake's beta, which installs zen-beta.desktop, so the setter set a desktop id that does not exist and the reader never answered zen (#1303). Quattro also probes `zen-browser` before setting, and nixarchy's binary is `zen-beta` (#1398).";
+  };
+  "omarchy-default-editor" = {
+    class = "patch";
+    reason = "quattro's setter installs an editor it thinks is missing, and probes `helix`, which nixpkgs installs as `hx`. So choosing an installed Helix tried an Arch install and set nothing (#1398).";
   };
   "omarchy-dev-install-ydoo" = {
     class = "vendor";
@@ -345,10 +345,6 @@
     class = "patch";
     reason = "`close` asks the menu to dismiss() over `shell call` before falling back to upstream's `shell hide`: hide reaches the menu's close(), which nixarchy-menu turns into dictation when voice is on (the hotkey's second tap), so a script that closed the menu started a recording (#1070). `call` exits 0 with \"unknown\" when the enabled menu has no dismiss(), so the reply is matched, not the status.";
   };
-  "omarchy-menu-images" = {
-    class = "patch";
-    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: the image picker now lists video files too, thumbnailed with ffmpegthumbnailer (a separate, narrower-concurrency queue from vipsthumbnail's) rather than Qt's Image, with a per-file failure cache so one bad video does not retry every open. Needs ffmpegthumbnailer, already in pkgs/omarchy/default.nix runtimeDeps (first for Nautilus). Deleted by the quattro bump, with the rest of that patch.";
-  };
   "omarchy-menu-keybindings" = {
     class = "patch";
     reason = "Bound the Lua scan of a user's hyprland.lua to three seconds so a loop cannot leave a CPU pinned when the keybindings menu opens, and drop undescribed submap binds so a hint plugin's thousands of them cannot push the list past the 128 KiB argument limit (#1181).";
@@ -488,11 +484,6 @@
     reason = "It writes chromium.desktop as the fallback default browser, a name nixpkgs does not use, and its `|| true` swallowed the failure -- so removing Chrome left a default resolving to nothing. Its Zen fallback compared against zen.desktop, which nixarchy's Zen does not install; it names zen-beta.desktop (#1303).";
     allow = "etc-write";
   };
-  "omarchy-remove-dev-env" = {
-    class = "vendor";
-    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
-    pacman = "A menu row modules/apps.nix overrides away, so nothing on this system reaches the pacman path inside it.";
-  };
   "omarchy-remove-gaming-xbox-controllers" = {
     class = "vendor";
     reason = "Vendored unchanged. Deletes the /etc/modprobe.d and /etc/modules-load.d files omarchy-install-gaming-xbox-controllers wrote. Neither exists here, because both settings are declarative.";
@@ -514,7 +505,7 @@
   };
   "omarchy-remove-security-fingerprint" = {
     class = "patch";
-    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes, and the script exits 1 with the services.fprintd route before dropping packages or deleting the omarchy-lock file (#1304).";
+    reason = "Same PAM edit as omarchy-remove-security-fido2: `sed -i` over a symlink into /etc/static/pam.d detaches the stack. The function goes, and the script exits 1 with the services.fprintd route before dropping packages or deleting the omarchy-lock file (#1304). quattro's remove_resume_hook deletes a /usr/lib sleep hook and an fprintd drop-in the build declares instead (#1288), so here it has nothing to remove.";
     allow = "etc-write";
   };
   "omarchy-remove-security-sshd" = {
@@ -546,6 +537,10 @@
     class = "vendor";
     reason = "Vendored unchanged. `rfkill unblock bluetooth` and a `rfkill list`: runtime radio state, same as omarchy-bluetooth-power.";
     allow = "rfkill";
+  };
+  "omarchy-install-t3code-app" = {
+    class = "patch";
+    reason = "It ran the downloaded AppImage with --appimage-extract. On nixarchy an AppImage runs through appimage-run, which passes that flag to the app instead of extracting, so the install failed. The patch extracts with `appimage-run -x squashfs-root` (#1368).";
   };
   "omarchy-restart-shell" = {
     class = "patch";
@@ -618,14 +613,6 @@
     reason = "Vendored unchanged. Runs as root from a sysinit unit and clears machine identity: userdel, the /etc/ssh host keys, NetworkManager connections, the sddm autologin drop-in and /etc/machine-id. Most of those paths are generated on NixOS, and the unit it removes itself from does not exist here.";
     allow = "account-tools etc-write";
   };
-  "omarchy-theme-bg-next" = {
-    class = "patch";
-    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: the cycle-through-backgrounds find now matches video extensions (mp4, m4v, mov, webm, mkv, avi) alongside the still-image ones. Deleted by the quattro bump, with the rest of that patch.";
-  };
-  "omarchy-theme-bg-set" = {
-    class = "patch";
-    reason = "Part of the #1153 video-backgrounds backport, carried as a patch: usage text and the summary/args metadata comment say \"media\" rather than \"image\", since this now accepts a video or GIF path too. Deleted by the quattro bump, with the rest of that patch.";
-  };
   "omarchy-theme-set" = {
     class = "patch";
     reason = "Three edits: `cp -r` from $OMARCHY_THEMES_PATH preserves the store's read-only directory modes, so the next switch cannot clean up; omarchy-theme-set-zed is appended, which upstream has no equivalent of; and the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429) adds is_video_path and the staged-background lookups it needs, carried as a patch and deleted by the quattro bump with the rest of it.";
@@ -641,10 +628,6 @@
   "omarchy-theme-set-zed" = {
     class = "new";
     reason = "Not in upstream, which ships theme setters for vscode, obsidian and others but none for Zed, pointing at the AUR's omazed instead -- which cannot work on v4. Reads the palette from colors.toml.";
-  };
-  "omarchy-theme-switcher" = {
-    class = "patch";
-    reason = "Part of the #1153 video-backgrounds backport (omacom/omarchy #6792, #12429), carried as a patch: theme-preview lookup and caching now also match video extensions (mp4, m4v, mov, webm, mkv, avi), so a theme whose preview or first background is a video still gets one in the switcher. Deleted by the quattro bump, with the rest of that patch.";
   };
   "omarchy-toggle-crash-capture" = {
     class = "vendor";
@@ -733,11 +716,6 @@
     class = "replace";
     reason = "Upstream runs `voxtype configure` in a floating terminal. voxtype is opt-in here, so the bar's Dictation click produced `voxtype: command not found`; this says how to enable it instead.";
   };
-  "omarchy-voxtype-remove" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Disables voxtype.service, a user unit installed under the user's own tree.";
-    allow = "systemctl-user";
-  };
   "omarchy-windows-vm" = {
     class = "vendor";
     reason = "Vendored unchanged, and the modprobe match is prose: the two `sudo modprobe kvm-*` lines are inside the help text printed when KVM is unavailable, which comment-stripping cannot see. modules/nixos.nix loads the KVM modules declaratively.";
@@ -759,5 +737,103 @@
   "omarchy-system-sleep-lock" = {
     class = "patch";
     reason = "Use the packaged IPC helper so a long-lived monitor can lock a shell from either generation without following stale PATH entries.";
+  };
+  "omarchy-dictation-superwhisper" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Asks whether superwhisper.service, a user unit, is active before toggling it: session state, no configuration.";
+    allow = "systemctl-user";
+  };
+  "omarchy-install-dictation-voxtype" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Enables voxtype.service, a user unit the install writes under the user's own tree.";
+    allow = "systemctl-user";
+  };
+  "omarchy-install-hermes-cli" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service before reinstalling; stopping a user unit is session state and carries no configuration.";
+    allow = "systemctl-user";
+  };
+  "omarchy-install-openclaw-cli" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Stops and checks openclaw-<role>.service user units around an upgrade: session state, no configuration.";
+    allow = "systemctl-user";
+  };
+  "omarchy-remove-dictation-superwhisper" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Disables superwhisper.service, a user unit installed under the user's own tree, and asks whether fcitx5 is running.";
+    allow = "systemctl-user";
+  };
+  "omarchy-remove-dictation-voxtype" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Disables voxtype.service, a user unit installed under the user's own tree.";
+    allow = "systemctl-user";
+  };
+  "omarchy-remove-service-ssh-agent" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Disables the gcr-ssh-agent socket for this user; the enable symlink lives in the user's own tree, as on Arch.";
+    allow = "systemctl-user";
+  };
+  "omarchy-setup-security-ssh-agent" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Enables the gcr-ssh-agent socket for this user; the enable symlink lives in the user's own tree, as on Arch.";
+    allow = "systemctl-user";
+  };
+  "omarchy-system-lid-inhibit" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Starts and stops its own transient user unit to hold a lid-switch inhibitor: session state, no configuration.";
+    allow = "systemctl-user";
+  };
+  "omarchy-lifecycle-dispatch" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): first-run reaches it at every login, so its clean PATH and env -i are pointed at /run/current-system/sw. The /usr left is the aarch64-apple implementation path, which x86_64 never selects.";
+    pacman = "Reads a platform package's pacman record, but only aarch64-apple registers any operation: on x86_64 every operation, including first-run's setup-user, is a no-op before that read.";
+  };
+  "omarchy-provision-hardware" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Finishes hardware setup an Omarchy image build deferred; reached only from omarchy-apply-hardware, which only the ISO's provisioning service and omarchy-apply-system call. nixarchy runs neither.";
+    pacman = "The image build's keyring and package steps, on the same unreachable path.";
+    allow = "initrd-boot modprobe";
+  };
+  "omarchy-update-pacman" = {
+    class = "vendor";
+    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
+    pacman = "Called only by omarchy-update-system-pkgs, -refresh-pacman, -reinstall-pkgs and -channel-set. pkgs/omarchy/nix-bin replaces the update entry points and modules/apps.nix overrides the Channel rows, so none reaches it.";
+  };
+  "omarchy-remove-ai-ollama" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Reached only by upstream's remove.ai.ollama row, which modules/apps.nix hides: Ollama here is services.ollama under programs.nixarchy.localAi, and disabling its unit by hand would only last until the next switch.";
+    allow = "systemctl-system";
+  };
+  "omarchy-font-cjk" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): runs its stdlib-only Python helper with nixpkgs' python3, not /usr/bin/python3.";
+  };
+  "omarchy-hw-platform" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): re-execs itself under /run/current-system/sw's env and bash with that PATH; /bin/bash and /usr/bin hold nothing here.";
+  };
+  "omarchy-input-method" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): runs its stdlib-only Python helper with nixpkgs' python3, not /usr/bin/python3.";
+  };
+  "omarchy-locale-generate" = {
+    class = "patch";
+    reason = "Upstream uncomments /etc/locale.gen and runs locale-gen as root. NixOS builds locales with the system (i18n.extraLocales), so this refuses and names nixarchy-language-select (#1289).";
+  };
+  "omarchy-language" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): its Python helper runs with nixpkgs' python3. A locale the system has not built is recorded with nixarchy-language-select for the next rebuild, and the switch stops before LANG changes, instead of running locale-gen as root (#1289).";
+  };
+  "omarchy-setup-input" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): runs its stdlib-only Python helper with nixpkgs' python3, not /usr/bin/python3.";
+  };
+  "omarchy-setup-keyboard" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): runs its stdlib-only Python helper with nixpkgs' python3, not /usr/bin/python3.";
+  };
+  "omarchy-theme-set-fcitx5" = {
+    class = "patch";
+    reason = "Patched (#1278 edge): the packaged fcitx5 theme default points at /run/current-system/sw/share.";
   };
 }

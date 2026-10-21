@@ -118,8 +118,6 @@ pkgs.runCommand "nixarchy-provision-launchers"
     [ "$(readlink "$A/Zoom.desktop" || true)" = "$HM/Zoom.desktop" ] || fail "Zoom.desktop is no longer a link"
     [ "$(readlink "$B/claude" || true)" = "$HM/claude" ] || fail ".local/bin/claude is no longer a link"
 
-    # The 14 commands install/user/mise.sh writes when nothing provides them.
-    cmds="codex crush gemini gh copilot opencode playwright pi omp grok cursor-agent ghui hunk muse"
     want=$(
       {
         for f in "$tree"/applications/*.desktop; do
@@ -130,7 +128,6 @@ pkgs.runCommand "nixarchy-provision-launchers"
           esac
         done
         printf 'home/.local/share/applications/Alacritty.desktop\n'
-        for c in $cmds; do printf 'home/.local/bin/%s\n' "$c"; done
       } | sort
     )
     got=$(pick A delta)
@@ -139,7 +136,7 @@ pkgs.runCommand "nixarchy-provision-launchers"
     [ -z "$missing" ] || fail "not seeded: $missing"
     [ -z "$extra" ] || fail "wrote unexpected files: $extra"
 
-    grep -q '^exec mise x ' "$B/codex" || fail "stub not written into an empty name"
+    grep -qx 'mise reshim --system' "$TMPDIR/calls" || fail "mise.sh did not reshim"
     for f in "$tree"/applications/*.desktop; do
       n=''${f##*/}
       case $n in Basecamp.desktop | Zoom.desktop | YouTube.desktop) continue ;; esac

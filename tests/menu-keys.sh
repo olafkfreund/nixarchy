@@ -33,19 +33,21 @@ replace_once() {
 # has "No PanelWindow backend loaded". A plain window runs the same handler.
 cp -rL "$tree/shell" "$shell_dir"
 chmod -R u+w "$shell_dir"
-replace_once "$shell_dir/plugins/menu/Menu.qml" '  PanelWindow {
+# quattro's menu is an OverlayWindow whose code reads `shown`, so the plain
+# window declares it rather than renaming it to `visible`.
+replace_once "$shell_dir/plugins/menu/Menu.qml" '  OverlayWindow {
     id: panel
-    visible: root.opened && root.rowsLoaded
-    anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
-    WlrLayershell.namespace: "omarchy-menu"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-    exclusionMode: ExclusionMode.Ignore' '  FloatingWindow {
+    shown: root.opened && root.rowsLoaded
+    WlrLayershell.namespace: "omarchy-menu"' '  FloatingWindow {
     id: panel
     implicitWidth: 1920
     implicitHeight: 1080
-    visible: root.opened && root.rowsLoaded
+    property bool shown: root.opened && root.rowsLoaded
+    property var targetScreen: null
+    readonly property var targetMonitor: null
+    readonly property bool contentReady: shown
+    property bool contentRevealed: shown
+    visible: shown
     color: "transparent"'
 cp "$2" "$shell_dir/shell.qml"
 

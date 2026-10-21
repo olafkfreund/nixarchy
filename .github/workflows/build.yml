@@ -978,7 +978,8 @@ jobs:
           skills=result/share/omarchy/default/agents/skills
 
           have=$(ls "$skills" | sort | tr '\n' ' ')
-          [ "$have" = "devenv diagnose-crash nixarchy nixos nixos-ai nixos-android nixos-binaries nixos-config-repo nixos-doctor nixos-fleet nixos-gaming nixos-gpu nixos-performance nixos-secrets nixos-security nixos-services " ] || {
+          # omarchy-app is new in 4.5 and ships Arch-shaped until #1406 adapts it.
+          [ "$have" = "devenv diagnose-crash nixarchy nixos nixos-ai nixos-android nixos-binaries nixos-config-repo nixos-doctor nixos-fleet nixos-gaming nixos-gpu nixos-performance nixos-secrets nixos-security nixos-services omarchy-app " ] || {
             echo "::error::unexpected skill set: $have"
             exit 1
           }

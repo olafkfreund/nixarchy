@@ -684,9 +684,25 @@ let
           checked = "[[ \"$(nixarchy-channel --current)\" == unstable ]]";
         };
 
+        # quattro's Ollama rows (#1278). Ollama here is services.ollama under
+        # programs.nixarchy.localAi, so Install opens Local AI, and upstream's
+        # Uninstall -- `sudo systemctl disable --now ollama.service` -- is
+        # hidden: on NixOS that lasts only until the next switch.
+        "install.ai.ollama" = {
+          action = "omarchy-launch-floating-terminal-with-presentation nixarchy-local-ai";
+          description = "Set up a local model through programs.nixarchy.localAi";
+        };
+        "remove.ai.ollama" = {
+          when = "false";
+        };
         # quattro's passwordless-sudo toggle writes /etc/sudoers.d and
         # /etc/tmpfiles.d rules; on NixOS sudo is configuration (#1280).
         "setup.security.passwordless-sudo" = {
+          when = "false";
+        };
+        # quattro's Setup > Direct Boot writes a Limine entry for EFI direct
+        # boot. NixOS owns the bootloader (boot.loader.*), so it is hidden (#1278).
+        "setup.direct-boot" = {
           when = "false";
         };
 
@@ -1249,7 +1265,8 @@ let
       [ "$(basename "$entry")" = omarchy ] || ln -s "$entry" $out/default/
     done
 
-    cp --no-preserve=mode "$src"/default/omarchy/* $out/default/omarchy/
+    # -r: quattro ships a directory here (sudo-no-update).
+    cp -r --no-preserve=mode "$src"/default/omarchy/* $out/default/omarchy/
     cp --no-preserve=mode ${menuDefaults} $out/default/omarchy/omarchy-menu.jsonc
   '';
 

@@ -112,7 +112,7 @@ it still works; `checks.install-iso` proves that by installing with no network
 device present at all. `#iso-net` trades exactly this away: it fetches the same
 closure from `nixarchy.cachix.org` instead, which is why it is about 2 GB
 rather than 7, and why it stops at a Wi-Fi prompt on a machine with no cable.
-The 68 selectable apps are the exception, and are meant to be: they come from the Install
+The 69 selectable apps are the exception, and are meant to be: they come from the Install
 menu after first boot, from your own nixpkgs.
 
 **You can answer the questions ahead of time.** `nixarchy-install --answers

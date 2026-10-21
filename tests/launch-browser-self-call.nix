@@ -3,7 +3,8 @@
 # launcher itself. 4.0.4 met 4.0.5's mimeapps list and recursed without bound.
 # The fixture is that entry (`Exec=omarchy-launch-browser`); the wrapper on PATH
 # counts calls and stops the chain at 20 so a missing guard fails rather than
-# hangs. The control is the built launcher with the guard deleted: it must
+# hangs. The systemd-run and uwsm-app stubs run what they are handed, because
+# quattro's normal launch recurses through systemd-run (#1398). The control is the built launcher with the guard deleted: it must
 # recurse, or this check cannot see the bug (CLAUDE.md section 1).
 pkgs.runCommand "nixarchy-launch-browser-self-call"
   {
@@ -22,8 +23,8 @@ pkgs.runCommand "nixarchy-launch-browser-self-call"
 
     printf '%s\n' '#!/bin/sh' 'echo omarchy-browser.desktop' > bin/omarchy-cmd-default-browser
     printf '%s\n' '#!/bin/sh' "echo \"\$@\" >> $root/notified" > bin/omarchy-notification-send
-    printf '%s\n' '#!/bin/sh' "echo \"\$@\" >> $root/spawned" > bin/systemd-run
-    printf '%s\n' '#!/bin/sh' "echo \"\$@\" >> $root/spawned" > bin/uwsm-app
+    printf '%s\n' '#!/bin/sh' "echo \"\$@\" >> $root/spawned" 'while [ "$#" -gt 0 ] && [ "$1" != uwsm-app ]; do shift; done' 'exec "$@"' > bin/systemd-run
+    printf '%s\n' '#!/bin/sh' "echo \"\$@\" >> $root/spawned" '[ "$1" = -- ] && shift' 'exec "$@"' > bin/uwsm-app
     printf '%s\n' '#!/bin/sh' 'exit 1' > bin/omarchy-cmd-browser-handoff
     printf '%s\n' '#!/bin/sh' \
       "n=\$(cat $root/count 2>/dev/null || echo 0); n=\$((n + 1)); echo \$n > $root/count" \

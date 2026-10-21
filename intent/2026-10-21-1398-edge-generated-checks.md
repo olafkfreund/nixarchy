@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1398
 author: olafkfreund
 ---
@@ -93,3 +93,12 @@ purpose.
    not ship: should it go upstream (drafted for your approval, never
    posted unprompted), or be carried here meanwhile? I propose carrying
    here and drafting upstream.
+
+## Decisions (owner, 2026-10-21)
+
+Approved with the proposals above:
+
+1. One task: one spec with a per-check table, one carry commit per cause.
+2. The digest fix is in this task, on `main`.
+3. An upstream bug is carried here meanwhile, and an upstream report is
+   drafted for approval, never posted unprompted.

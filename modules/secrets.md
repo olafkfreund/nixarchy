@@ -44,7 +44,7 @@ accepted passwords only inline or on the command line:
   every process on the machine via `/proc/*/cmdline`.
 - The other source then was `password = "..."` inline in `config.toml`.
 
-Pinned v0.1.6 supports `password_file` in TOML and on the command line; a
+Pinned v0.1.7 supports `password_file` in TOML and on the command line; a
 missing or empty named file fails startup. That does not make credentials
 mandatory: with none, it serves unauthenticated, and a username with an empty
 inline password gets only a `HalfCredentials` warning. The module therefore

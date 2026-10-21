@@ -303,7 +303,7 @@ desktop from a Windows machine with nothing installed on it -- has no
 other implementation at all, at any price. See the alternatives survey
 on #159; every other route is closed, not merely worse.
 
-What this project is taking on: pinned v0.1.6, one primary
+What this project is taking on: pinned v0.1.7, one primary
 author. The protocol stack is not theirs -- it is IronRDP, Devolutions'
 maintained Rust implementation -- so what this author owns is the
 Hyprland glue: capture, input, audio, clipboard. That is a real
@@ -398,7 +398,7 @@ password only inline in config.toml or via `-p`; a command-line secret
 was readable in /proc/*/cmdline. That historical need to render TOML
 selected sops-nix over agenix's raw secret files.
 
-The pinned v0.1.6 supports `password_file` from config or CLI and
+The pinned v0.1.7 supports `password_file` from config or CLI and
 refuses a missing or empty named file. It still warns and serves without
 authentication when no credentials are set, or gives only a
 `HalfCredentials` warning for a username with an empty inline password.

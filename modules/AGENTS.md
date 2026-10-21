@@ -601,7 +601,10 @@ turns the adapter bondable when a default agent registers, so a session-wide
 `NoInputNoOutput` agent leaves an unattended pairing window open. The
 `omarchy-bluetooth-device pair` command starts it only for the user's outgoing
 pair and stops that process afterward. BlueZ's last-agent cleanup should
-return the adapter to non-bondable; that still needs confirmation on hardware.
+return the adapter to non-bondable; that is confirmed in BlueZ's source
+(`agent.c:156-171`), and on hardware it is masked whenever the user runs
+their own agent (blueman, bluedevil, GNOME), which `nixarchy-verify` reports
+as a note rather than a failure.
 
 omarchy-migrate-notify and omarchy-tailscale-receive are deliberately
 absent. Their conditions (ConditionPathIsDirectory=/usr/share/omarchy/

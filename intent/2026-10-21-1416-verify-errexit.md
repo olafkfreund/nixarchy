@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1416
 author: olafkfreund
 ---
@@ -82,3 +82,9 @@ guest.
    `nix-store`, `ai-mirror` and the few hardware probes, as fail or empty.
    Then assert two things: the run reaches "passed, … failed", and the
    #1417 line reads `·`.
+
+## Decisions (owner, 2026-10-21)
+
+Approved with all three proposals: #1417 folded in; sweep every failable
+substitution; a stub harness on the packaged binary that must reach the
+summary line.

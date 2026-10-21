@@ -267,3 +267,18 @@ lights on*, labels `omarchy-edge` and `ci`. Its body lists:
   `antigravity`. Edge stores `agy` on purpose (135c9394, #1278: "quattro names
   it agy, its command"). The edge check now expects `agy`; `main`'s stays
   `antigravity`, which is right for stable.
+- **C2 found four more reds** on the stack with main merged; three were
+  already red on plain `origin/edge`, invisible because they fail at
+  evaluation or were never in a hand-kept list. Each gets its own carry:
+  - D8 `shell-restart-race`: edge's `flake.nix` passes `omarchySrc`, which
+    the test file (rewritten in #1335) no longer takes. Drop the argument.
+  - D9 `iso-source`: edge's version `edge-YYYYMMDD-<rev>` makes the ISO label
+    `NIXARCHY_edge-20261020-0a7beb7_NET` (34 chars, lowercase, `-`). Edge
+    labels from the quattro rev: `NIXARCHY_EDGE_<REV>` + variant (25 chars).
+  - D10 `install-phase-budget`: plain edge is 125723 bytes against the
+    123000 budget; the stack adds ~1.2 KB. Long comments in the edge install
+    phase move to `pkgs/AGENTS.md` behind `# Why:` pointers (the check's own
+    instruction), at least 6000 bytes so a bump has headroom.
+  - D11 `grep-q-pipefail`: A3 removed the old anchor line from
+    `default.nix`, so its allowlist entry is stale. Delete it; the snippet's
+    own entry stays.

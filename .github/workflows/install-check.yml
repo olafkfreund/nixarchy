@@ -3,6 +3,7 @@ name: install check
 permissions:
   contents: read
   pull-requests: read
+  actions: read
 
 # Its own workflow, and that is the entire point of the file.
 #
@@ -416,6 +417,32 @@ jobs:
 
       - uses: actions/checkout@v5
         if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+
+      # Never start an install VM while omarchy-edge's `verify` is running its
+      # own on this host (#1365). The load gate in CLAUDE.md §6 admitted both
+      # once and the install crawled to the cap. Asks GitHub which job is
+      # running, not /proc: a second install's VMs look the same as edge's.
+      # Exit 2 (unknown) counts as busy, so a broken API ends at the bound.
+      - name: Wait for edge's VM checks to leave this host
+        if: needs.gate.outputs.relevant == 'true' && needs.gate.outputs.fork != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Edge re-checks before each VM check, so an install only waits out the
+          # one already running (~15-20 min); 30 + ~25 fits the job's 90-min cap.
+          deadline=$((SECONDS + 1800))
+          while :; do
+            rc=0
+            what=$(nix shell nixpkgs#gh nixpkgs#jq -c .github/scripts/vm-host-free.sh install 2>&1) || rc=$?
+            [ "$rc" = 0 ] && { echo "$what"; exit 0; }
+            echo "waiting ($(( (deadline - SECONDS) / 60 )) min left): $what"
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::gave up after 30 min waiting on: $what"
+              echo "- install waited 30 min and gave up on: \`$what\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            sleep 60
+          done
 
       # No installer action, and cachix to PULL from only. The runner is a
       # NixOS machine with a warm store, which is most of why this is ten

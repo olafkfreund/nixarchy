@@ -74,7 +74,7 @@
 +  join.
 --- a/default/agents/skills/omarchy-app/templates.md
 +++ b/default/agents/skills/omarchy-app/templates.md
-@@ -61,16 +61,37 @@
+@@ -61,16 +61,42 @@
  QT_QPA_PLATFORM=offscreen ./<name>_tests
  ```
  
@@ -98,30 +98,35 @@
 +
 +  outputs = { self, nixpkgs }:
 +    let
-+      system = "x86_64-linux";
-+      pkgs = nixpkgs.legacyPackages.${system};
++      forAllSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ];
 +    in
 +    {
-+      packages.${system}.default = pkgs.callPackage ./package.nix { };
++      packages = forAllSystems (system: {
++        default = nixpkgs.legacyPackages.${system}.callPackage ./package.nix { };
++      });
 +
-+      devShells.${system}.default = pkgs.mkShell {
-+        packages = [
-+          pkgs.qt6.qmake
-+          pkgs.gnumake
-+          pkgs.ffmpeg
-+          pkgs.qt6.qtbase
-+          pkgs.qt6.qtdeclarative
-+          pkgs.qt6.qtmultimedia
-+          pkgs.qt6.qtsvg
-+          pkgs.qt6.qtwayland
-+        ];
-+      };
++      devShells = forAllSystems (system:
++        let pkgs = nixpkgs.legacyPackages.${system}; in
++        {
++          default = pkgs.mkShell {
++            packages = [
++              pkgs.qt6.qmake
++              pkgs.gnumake
++              pkgs.ffmpeg
++              pkgs.qt6.qtbase
++              pkgs.qt6.qtdeclarative
++              pkgs.qt6.qtmultimedia
++              pkgs.qt6.qtsvg
++              pkgs.qt6.qtwayland
++            ];
++          };
++        });
 +    };
 +}
  ```
  
  ## `src/main.cpp`
-@@ -719,40 +740,57 @@
+@@ -719,40 +745,57 @@
  #include "<name>_tests.moc"
  ```
  
@@ -208,7 +213,7 @@
  
  ```ini
  [Desktop Entry]
-@@ -770,7 +808,7 @@
+@@ -770,7 +813,7 @@
  ships, so the launcher shows the translated name (`Name[da]=…`,
  `Comment[pt_BR]=…`; desktop files spell regions with an underscore).
  
@@ -217,7 +222,7 @@
  
  The icon is a single square SVG. Start from a rounded square in the accent
  and draw the app's mark on it.
-@@ -785,7 +823,5 @@
+@@ -785,7 +828,5 @@
  
  ```text
  /build/

@@ -2557,6 +2557,14 @@
             pkgs = pkgsFor.${system};
           };
 
+          # The omarchy-app skill's templates build as written (#1406). See
+          # tests/omarchy-app-template.nix.
+          omarchy-app-template = import ./tests/omarchy-app-template.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+            patch = ./pkgs/omarchy/1406-omarchy-app-nix.patch;
+          };
+
           # The nightly's cache step: probe every allowlist entry, rebuild and
           # push what the cache dropped, and still fail when a push delivers
           # nothing. Against a stubbed nix, curl and cachix. See

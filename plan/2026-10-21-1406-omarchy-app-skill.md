@@ -107,3 +107,11 @@ Revert the PR. The skill ships as upstream wrote it again, and
   120086 of 123000 bytes. Red: one altered context line → `Hunk #1 FAILED`
   at `--fuzz=0` (a first red attempt whose sed matched nothing was caught
   by diffing the two patches).
+- **Step 2: the template check reads the Nix text from the patch's added
+  lines** and evaluates it with `builtins.toFile` plus `callPackage` (no
+  import-from-derivation), then `cmp`s it against the shipped `package.nix`
+  so the two cannot drift. The template flake covers x86_64 and aarch64
+  (4.5 runs on Snapdragon, N1x and Apple Silicon). Reds: without
+  `wrapQtAppsHook`, nixpkgs refuses ("no wrapping behavior was specified");
+  with the `.desktop` file at `share/apps/`, "No such file". Not covered:
+  `bin/build`, `bin/test`, and the template `flake.nix` itself.

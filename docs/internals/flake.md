@@ -720,7 +720,7 @@ nixarchy-hyprsettngs = {
 ```
 
 [Hyprforge](https://github.com/AbdulazizAlwabel/omarchy-hyprforge) is Aziz's
-Hyprland studio for Omarchy (MIT, id `aziz.hyprforge`). nixarchy pins it
+Hyprland studio for Omarchy (MIT, id `nixarchy.hyprlandsettings`). nixarchy pins it
 through olafkfreund's fork, `nixarchy-hyprsettngs`, which carried no commits of
 its own when it was pinned at `2392ad6`, identical to upstream's HEAD.
 

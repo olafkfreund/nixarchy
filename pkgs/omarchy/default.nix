@@ -288,7 +288,11 @@ let
     # Omarchy declares it needs; curating the list by eye is what produced one
     # missing command per boot.
     gtk3 # gtk-launch, used by every omarchy-install-* to start the app
-    udiskie # autostart.lua execs this on every login
+    # autostart.lua execs this on every login.
+    # shortcut: nixpkgs' udiskie 2.7.0 fails its own test_list_keys (keyutils, #1399); drop when nixpkgs builds it.
+    (udiskie.overridePythonAttrs (old: {
+      disabledTests = (old.disabledTests or [ ]) ++ [ "test_list_keys" ];
+    }))
     git # theme install, update checks
     less
     man-db

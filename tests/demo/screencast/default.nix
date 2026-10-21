@@ -229,7 +229,7 @@ rec {
       # skal.bar as the bar" (#930).
       omarchy-shell shell listPlugins 2>/dev/null | jq -r '
         [ .[]? | select(.enabled == true)
-               | select(.id | test("^omarchy\\.|^nixarchy\\.|olafkfreund|^aziz\\.hyprforge$|^io\\.github\\.nobledoodle\\.omarchroma$") | not)
+               | select(.id | test("^omarchy\\.|^nixarchy\\.|olafkfreund|^io\\.github\\.nobledoodle\\.omarchroma$") | not)
                | select(.id != "evindor.keystroke")
                | { id: .id, kinds: (.kinds // []) } ]' > "$state/disabled.json"
 

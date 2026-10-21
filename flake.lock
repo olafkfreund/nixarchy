@@ -922,17 +922,17 @@
     "nixarchy-hyprsettngs": {
       "flake": false,
       "locked": {
-        "lastModified": 1792498148,
-        "narHash": "sha256-0VgycZUdRcpblY5e9cwcXsrg/wNDZCwNj56cfzkBqWE=",
+        "lastModified": 1792510151,
+        "narHash": "sha256-Ps4dTbB5irv94qPS8k+wS48FwpRNexuovm2vY/Xk+qA=",
         "owner": "olafkfreund",
         "repo": "nixarchy-hyprsettngs",
-        "rev": "2157e889ea7e8af4f7f897b456d1c03fc589c0ae",
+        "rev": "367ca99ea9bb0cb32be2241a9a38a3b1e3d2ff9d",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-hyprsettngs",
-        "rev": "2157e889ea7e8af4f7f897b456d1c03fc589c0ae",
+        "rev": "367ca99ea9bb0cb32be2241a9a38a3b1e3d2ff9d",
         "type": "github"
       }
     },
@@ -1203,11 +1203,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1792094642,
-        "narHash": "sha256-zp8ToDMnqZcu4o4IH9pdwXFXGp7yLm/M0dEnNWnyd7I=",
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "fe13242281a67641c0102cdb1087f0ebe586c7df",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
         "type": "github"
       },
       "original": {

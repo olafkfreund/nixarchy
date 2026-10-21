@@ -429,7 +429,9 @@ let
   hyprforgePlugin = pkgs.runCommand "nixarchy-hyprforge" { } ''
     cp -r ${inputs.nixarchy-hyprsettngs} $out
     chmod -R u+w $out
-    rm -rf $out/test $out/preview.png
+    rm -rf $out/test $out/preview.png $out/.github $out/.gitignore \
+      $out/AGENTS.md $out/CLAUDE.md $out/devenv.* $out/flake.* $out/intent \
+      $out/plan $out/skills $out/spec
     grep -q "Copyright (c) 2026 Aziz" $out/LICENSE || {
       echo "nixarchy-hyprforge: LICENSE must keep its copyright holder" >&2
       exit 1
@@ -824,6 +826,12 @@ in
             placement = lib.mkOption {
               type = lib.types.str;
               default = "right";
+            };
+            # The id this default had before; its once-marker and on/off state
+            # move to `id` once (#1391).
+            renamedFrom = lib.mkOption {
+              type = lib.types.str;
+              default = "";
             };
           };
         }
@@ -2081,7 +2089,8 @@ in
         # ~/.config/hypr/hyprforge.lua, which the session loads through a line
         # pkgs/omarchy adds to the store hyprland.lua; Connect alone would not.
         hyprforge = {
-          id = "aziz.hyprforge";
+          id = "nixarchy.hyprlandsettings";
+          renamedFrom = "aziz.hyprforge";
           src = hyprforgePlugin;
           # lua 5.4 (what Arch ships, and upstream targets) runs baseline.lua;
           # cmp checks a write; notify-send and wl-copy/wl-paste back its toasts
@@ -2204,6 +2213,27 @@ in
           # upstream's 2 s IPC budget; this runs in the background, so wait.
           export OMARCHY_SHELL_IPC_TIMEOUT=''${OMARCHY_SHELL_IPC_TIMEOUT:-30s}
 
+          # A default whose id changed: its once-marker and the user's on/off move
+          # to the new id (#1391). shell.json is read, never written.
+          declare -A renamed=(${
+            lib.concatMapStringsSep " " (
+              p: "[${lib.escapeShellArg p.id}]=${lib.escapeShellArg p.renamedFrom}"
+            ) (lib.filter (p: p.renamedFrom != "") (lib.attrValues resolvedDefaults))
+          })
+          cfgjson="''${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json"
+          retired=()
+          for new in "''${!renamed[@]}"; do
+            old=''${renamed[$new]}
+            [ -e "$state/$old" ] && [ ! -e "$state/$new" ] || continue
+            jq -e --arg id "$old" \
+              'any(.plugins[]?; (if type == "object" then .id else . end) == $id)' \
+              "$cfgjson" >/dev/null 2>&1
+            case $? in
+              0) rm -f "$state/$old"; retired+=("$old") ;; # on: enabled below as a new default
+              1) mkdir -p "$state"; mv "$state/$old" "$state/$new" ;; # off: stays off
+            esac # unreadable: left for the next login
+          done
+
           todo=()
           for id in ${lib.escapeShellArgs enableOnceIds}; do
             [ -e "$state/$id" ] || todo+=("$id")
@@ -2230,6 +2260,9 @@ in
           done
           omarchy-shell shell ping >/dev/null 2>&1 || exit 0
           omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+          for old in "''${retired[@]}"; do
+            omarchy-plugin-disable "$old" 2>&1 | systemd-cat -t nixarchy-default-plugins || true
+          done
 
           for id in "''${gone[@]}"; do
             src=$(head -n1 "$state/$id")

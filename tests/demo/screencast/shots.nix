@@ -106,7 +106,7 @@ let
         }
         {
           short = "hyprforge";
-          id = "aziz.hyprforge";
+          id = "nixarchy.hyprlandsettings";
           name = "Hyprforge — every Hyprland setting, previewed live";
           expect = "Hyprforge|Windows & Gaps|Borders & Colors";
         }

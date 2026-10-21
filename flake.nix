@@ -2526,6 +2526,7 @@
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
             inherit omarchyVersion;
+            lock = builtins.fromJSON (builtins.readFile ./flake.lock);
           };
           # #1370: omarchy-restart-terminal must reach nixpkgs' wrapped kitty and ghostty.
           restart-terminal-wrapped = import ./tests/restart-terminal-wrapped.nix {

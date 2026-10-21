@@ -3,6 +3,7 @@
   pkgs,
   omarchy,
   omarchyVersion,
+  lock,
 }:
 let
   label = import ../pkgs/omarchy/version-label.nix;
@@ -47,4 +48,18 @@ assert assertMsg (
 assert assertMsg (
   omarchy.version == omarchyVersion
 ) "version-label: the flake's own omarchy.version must equal omarchyVersion (wiring)";
+# #1407: omarchyVersion must name what flake.lock pins: the tag on stable, the
+# locked rev on edge. Dev pins evaluate in the user's flake and never reach here.
+assert
+  let
+    pin = lock.nodes.omarchy;
+    want =
+      if pin.original ? ref then
+        "v${omarchyVersion}" == pin.original.ref
+      else
+        builtins.match "edge-[0-9]{8}-${builtins.substring 0 7 pin.locked.rev}" omarchyVersion != null;
+  in
+  assertMsg want "version-label: flake.nix:540 says omarchyVersion = \"${omarchyVersion}\", but flake.lock pins omarchy at ${
+    pin.original.ref or pin.locked.rev
+  }";
 pkgs.runCommand "nixarchy-omarchy-version-label" { } "touch $out"

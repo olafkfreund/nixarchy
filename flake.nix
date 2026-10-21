@@ -2558,6 +2558,12 @@
             pkgs = pkgsFor.${system};
           };
 
+          # Install and edge's VM checks never share p620 (#1365). See
+          # tests/vm-host-free.nix.
+          vm-host-free = import ./tests/vm-host-free.nix {
+            pkgs = pkgsFor.${system};
+          };
+
           # The omarchy-app skill's templates build as written (#1406). See
           # tests/omarchy-app-template.nix.
           omarchy-app-template = import ./tests/omarchy-app-template.nix {

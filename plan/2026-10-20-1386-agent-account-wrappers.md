@@ -241,3 +241,22 @@ there without a workflow edit (§4).
 that has already switched loses `/etc/mise/conf.d/omarchy-agent-accounts.toml`
 at its next switch. Account registries under `~/.local/state/omarchy/agents`
 are upstream's and are not touched either way.
+
+## Deviations during implementation
+
+- **Step 6 found the spec's open risk true: nothing builds the wrappers.**
+  With mise 2026.10.3, `mise hook-env` (with or without `--force`) and
+  `mise activate bash` put `$MISE_DATA_DIR/command-wrappers/bin` on PATH but
+  never create it; only `mise reshim` does (measured by the coder in a clean
+  `MISE_DATA_DIR`). Upstream runs it from `install/user/mise.sh` and
+  migration `1791112479.sh`, and nixarchy runs neither. So a fresh edge
+  machine would install the toml and still route nothing.
+  Added: `home.activation.nixarchyAgentWrappers` in `modules/home.nix`, after
+  `nixarchyMiseUnshadow`, running `mise reshim` when
+  `/etc/mise/conf.d/omarchy-agent-accounts.toml` exists. A failure warns and
+  does not fail activation. The check runs `mise reshim` once in its stead,
+  and `tests/options.nix` asserts the activation entry, so removing it is red
+  in CI.
+- **Account `work` is created with `omarchy-agent-account-state begin` /
+  `register`** and a fake credentials file, because `account-add` needs a
+  real login.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1406
 intent: intent/2026-10-21-1406-omarchy-app-skill.md
 ---

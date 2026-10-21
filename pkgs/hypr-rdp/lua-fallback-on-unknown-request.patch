@@ -26,7 +26,7 @@ matcher, adds a test beside upstream's two that pins the new message, and
 changes nothing else.
 
 Carried here rather than fixed upstream, which is the wrong way round and is
-recorded as such: v0.1.6 is the newest tag and the narrow matcher is still on
+recorded as such: v0.1.7 is the newest tag and the narrow matcher is still on
 upstream main. Drop this patch as soon as a release carries the fix --
 olafkfreund/nixarchy#1031 tracks it.
 

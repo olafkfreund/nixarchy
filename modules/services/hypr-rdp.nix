@@ -8,7 +8,7 @@
 #
 # ## The part that decides the shape of this module
 #
-# hypr-rdp v0.1.6 has `password_file`. Its read_password_file rejects a
+# hypr-rdp v0.1.7 has `password_file`. Its read_password_file rejects a
 # missing or empty named file, but that does not make credentials mandatory:
 # with no credentials, RuntimeConfig::load warns and serves unauthenticated.
 # With a username and an empty inline password, it only warns
@@ -32,10 +32,10 @@
 #
 # ## What was checked against the binary rather than assumed
 #
-#   --config <path>   EXISTS in the pinned v0.1.6, defaulting to
+#   --config <path>   EXISTS in the pinned v0.1.7, defaulting to
 #                     ~/.config/hypr-rdp/config.toml. So the unit points at the
 #                     private runtime path directly; no symlink to manage.
-#                     Better still, config.rs:208-233 distinguishes the two:
+#                     Better still, config.rs:219-244 distinguishes the two:
 #                     a MISSING file is tolerated silently when the path is
 #                     implicit and is `bail!`ed when it was given explicitly.
 #
@@ -378,7 +378,7 @@ in
         # The raw password goes into this private staging file. ExecStartPre
         # escapes it into a private TOML file; neither path is in the store.
         #
-        # The pinned v0.1.6 supports `password_file`, but migration to it is
+        # The pinned v0.1.7 supports `password_file`, but migration to it is
         # separate work. Keep the startup guard: absent credentials serve
         # unauthenticated, and a username with an empty inline password gets
         # only a `HalfCredentials` warning and continues.
@@ -436,7 +436,7 @@ in
             ExecStartPre = "${guard}/bin/nixarchy-hypr-rdp-guard ${passwordPath} ${publicConfig} ${runtimeConfigPath}";
 
             # --config, not a symlink into ~/.config/hypr-rdp: the flag exists
-            # in the pinned v0.1.6, and naming the path explicitly also turns a
+            # in the pinned v0.1.7, and naming the path explicitly also turns a
             # missing file from "silently use defaults" into a hard error (config.rs
             # distinguishes the implicit and explicit cases). The certificates
             # still land in ~/.config/hypr-rdp, which is upstream's and stays

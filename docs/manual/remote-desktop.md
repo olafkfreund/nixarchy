@@ -156,7 +156,7 @@ against the password below and has nothing to do with your Linux account.
 Enabling this from the menu and rebuilding **fails**, on purpose, with an
 assertion naming the steps below. That is not a missing feature.
 
-Pinned hypr-rdp v0.1.6 supports `password_file`: a named `password_file`
+Pinned hypr-rdp v0.1.7 supports `password_file`: a named `password_file`
 that is missing or empty fails startup. But with no credentials named it only
 warns and serves your session without authentication. A username with an
 empty inline password gets only a `HalfCredentials` warning and continues.

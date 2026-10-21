@@ -20,27 +20,27 @@ reject() {
   fi
 }
 
-need "$secrets" 'v0.1.6 supports `password_file`'
+need "$secrets" 'v0.1.7 supports `password_file`'
 need "$secrets" 'service start'
 need "$secrets" '`HalfCredentials`'
 reject "$secrets" 'There is no `password_file` option'
 
-need "$flake" 'v0.1.6'
+need "$flake" 'v0.1.7'
 need "$flake" '`password_file`'
 need "$flake" 'service start'
 reject "$flake" 'there is no `password_file`'
 reject "$flake" 'It reads its password from exactly two'
 
-need "$manual" 'v0.1.6'
+need "$manual" 'v0.1.7'
 need "$manual" 'named `password_file`'
 need "$manual" '`HalfCredentials`'
 need "$manual" 'service start'
 reject "$manual" 'reads it from exactly two places'
 reject "$manual" 'the config file at activation'
 
-need "$options" 'v0.1.6, src/config.rs:301-361'
+need "$options" 'v0.1.7, src/config.rs:364-424'
 need "$options" '`HalfCredentials`'
-need "$options" 'src/server/mod.rs:200-206'
+need "$options" 'src/server/auth/mod.rs:39-45'
 reject "$options" 'hypr-rdp reads its password only from an inline string'
 
 printf 'rdp-docs: current hypr-rdp documentation verified\n'

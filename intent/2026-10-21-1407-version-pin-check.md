@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1407
 author: olafkfreund
 ---
@@ -51,3 +51,7 @@ to the pin.
 
 None. The mechanism is fixed by the issue, and the only choice (extend
 rather than add a check) follows the repo's rule.
+
+## Decisions (owner, 2026-10-21)
+
+Approved as written: extend `checks.omarchy-version-label`.

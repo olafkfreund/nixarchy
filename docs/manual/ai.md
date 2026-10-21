@@ -39,7 +39,7 @@ mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
 `~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
 reads `~/.agents/skills` too and would list every skill twice — but ships
-sixteen skills instead of one, and eight Nix skills beside them:
+seventeen skills instead of one, and eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -59,6 +59,7 @@ sixteen skills instead of one, and eight Nix skills beside them:
 | `nixos-fleet` | one flake and several machines: the `hosts/<name>/` layout, sharing without coupling, pulling on a timer, deploying with `--target-host` |
 | `devenv` | per-project environments: `devenv.nix`, the lockfile, and whether a tool belongs to the project or the machine |
 | `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
+| `omarchy-app` | scaffolding a C++ and Qt Quick desktop app that follows the Omarchy theme (upstream's, new in 4.5; its packaging half is written for Arch) |
 
 Each is written against the modules on the disk rather than from memory. That is
 not fastidiousness: it caught `services.ollama.acceleration`, which was removed,

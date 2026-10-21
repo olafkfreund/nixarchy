@@ -262,3 +262,8 @@ lights on*, labels `omarchy-edge` and `ci`. Its body lists:
 - **A3: `$'\n''…'` cannot be written inside a Nix `''` string**, because
   the `''` ends it. The second half is double-quoted instead, with the
   same result.
+- **A6: a second stale line in `stale-scripts`.** With `omarchy-hw-x86` stubbed,
+  the check reaches its Antigravity block, which expects the stored menu id
+  `antigravity`. Edge stores `agy` on purpose (135c9394, #1278: "quattro names
+  it agy, its command"). The edge check now expects `agy`; `main`'s stays
+  `antigravity`, which is right for stable.

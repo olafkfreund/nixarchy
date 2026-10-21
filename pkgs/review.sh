@@ -238,29 +238,37 @@ latest_tag() {
 echo "${bold}Looking upstream${off}" >&2
 
 omarchy_pin=$(grep -oE 'github:basecamp/omarchy/[^"]+' flake.nix | head -1 | cut -d/ -f3)
+# The newest FINAL release: the release row below compares against it.
 omarchy_latest=$(latest_tag basecamp/omarchy)
-if [ -z "$omarchy_latest" ]; then
+# The newest by the nightly bump's own rule, RCs included and never backwards
+# (#1405), so an RC pin on main is not read as "bump" back to the last final.
+omarchy_newest="" omarchy_changed=""
+if newest_out=$(bash .github/scripts/omarchy-newest.sh "$omarchy_pin" 2>/dev/null); then
+  omarchy_newest=$(sed -n 's/^latest=//p' <<<"$newest_out")
+  omarchy_changed=$(sed -n 's/^changed=//p' <<<"$newest_out")
+fi
+if [ -z "$omarchy_newest" ]; then
   finding "omarchy" "$omarchy_pin" "?" "cannot reach GitHub"
-elif [ "$omarchy_pin" != "$omarchy_latest" ]; then
-  finding "omarchy" "$omarchy_pin" "$omarchy_latest" "bump (omarchy.yml should do this nightly)"
+elif [ "$omarchy_changed" = true ]; then
+  finding "omarchy" "$omarchy_pin" "$omarchy_newest" "bump (omarchy.yml should do this nightly)"
 else
-  ok "omarchy" "$omarchy_pin" "$omarchy_latest"
+  ok "omarchy" "$omarchy_pin" "$omarchy_newest"
 fi
 
 # Does the newest Omarchy's Install menu name a package no catalogue maps? The
 # menu is in the source tree, so this answers "can we adopt it" without
 # building anything -- and it is the question that blocked v4.0.2.
-if [ -n "$omarchy_latest" ] && [ -x .github/scripts/check-menu-mapping.py ] ||
+if [ -n "$omarchy_newest" ] && [ -x .github/scripts/check-menu-mapping.py ] ||
   [ -f .github/scripts/check-menu-mapping.py ]; then
   menu=$(mktemp)
   if curl -fsSL \
-    "https://raw.githubusercontent.com/basecamp/omarchy/$omarchy_latest/default/omarchy/omarchy-menu.jsonc" \
+    "https://raw.githubusercontent.com/basecamp/omarchy/$omarchy_newest/default/omarchy/omarchy-menu.jsonc" \
     -o "$menu" 2>/dev/null; then
     if out=$(python3 .github/scripts/check-menu-mapping.py \
       "$menu" data/apps.nix data/services.nix 2>&1); then
-      ok "menu rows ($omarchy_latest)" "${out#all }" "mapped"
+      ok "menu rows ($omarchy_newest)" "${out#all }" "mapped"
     else
-      finding "menu rows ($omarchy_latest)" "-" \
+      finding "menu rows ($omarchy_newest)" "-" \
         "$(echo "$out" | grep -c '::error::') unmapped" \
         "map them in data/apps.nix"
     fi
@@ -330,6 +338,9 @@ else
   rel_age=$((($(date +%s) - $(date -d "$rel_when" +%s)) / 86400))
   if [ "$rel_omarchy" = "$pkg_version" ]; then
     ok "release" "$rel_tag" "vendors $pkg_version, ${rel_age}d old"
+  elif [[ $pkg_version == *-* ]] && [ "$rel_omarchy" = "${omarchy_latest#v}" ]; then
+    # An RC on main is never tagged: a v* tag moves `release` to every machine (#1405).
+    ok "release" "$rel_tag" "newest final; main's $pkg_version is an RC, never tagged"
   else
     finding "release" "$rel_tag (Omarchy $rel_omarchy)" "main vendors $pkg_version" \
       "no ISO for it -- tag v$pkg_version-1 to publish one"

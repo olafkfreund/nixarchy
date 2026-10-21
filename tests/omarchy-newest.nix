@@ -31,7 +31,7 @@ pkgs.runCommand "nixarchy-omarchy-newest"
         cat err >&2
         exit 1
       fi
-      if [ -n "$want" ] && ! printf '%s\n' "$got" | grep -qxF "$want"; then
+      if [ -n "$want" ] && ! grep -qxF "$want" <<<"$got"; then
         echo "FAILED  $name: wanted line '$want' in:" >&2
         echo "$got" >&2
         exit 1

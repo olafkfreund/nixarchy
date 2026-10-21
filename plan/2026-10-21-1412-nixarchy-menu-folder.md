@@ -113,3 +113,8 @@ the root.
   `trigger.gitlab-pipelines`) are in the always-on part of `overrideSpec`, so
   "only when a child is emitted" could never be false; a comment on the row
   says so. `tests/options.nix` therefore asserts the on state only.
+- **Step 3: the reds are permanent.** `tests/menu-verbs.nix` gains two
+  self-tests (`nixarchy` moved last; `trigger.herdr` without `parent`), each
+  required to make `menu-tree.py` fail with its message, so the rules prove
+  they fire on every run. Nine parents are asserted (eight panels plus
+  `help`). `options.nix`'s off state is Mode A (no menu at all).

@@ -81,6 +81,24 @@ for row_id, row in rows.items():
     else:
         errors.append(f"unreachable: {row_id} (parent {parent})")
 
+# Nixarchy's own folder (#1412): a root of its own straight after Trigger, and
+# the rows it holds. A row that merely dropped `parent` still falls back to
+# Trigger and is reachable, so reachability above cannot see it.
+NIXARCHY_CHILDREN = [
+    "trigger.devenv", "trigger.podman", "trigger.box", "trigger.vm", "trigger.vm-list",
+    "trigger.herdr", "trigger.github-actions", "trigger.gitlab-pipelines", "help",
+]
+roots = [k for k, v in rows.items() if parent_of(k, v) == "root"]
+if "trigger" not in roots or "nixarchy" not in roots:
+    errors.append("root: 'trigger' or 'nixarchy' is not a root row")
+elif roots.index("nixarchy") != roots.index("trigger") + 1:
+    errors.append(f"root order: nixarchy is not directly after trigger: {' '.join(roots)}")
+for child in NIXARCHY_CHILDREN:
+    if child not in rows:
+        errors.append(f"nixarchy folder: {child} is not a row")
+    elif parent_of(child, rows[child]) != "nixarchy":
+        errors.append(f"nixarchy folder: {child} has parent {parent_of(child, rows[child])}, expected nixarchy")
+
 
 def norm(alias):
     return str(alias or "").lower().replace("_", "-")

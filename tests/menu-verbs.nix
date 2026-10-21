@@ -395,6 +395,10 @@ pkgs.runCommand "nixarchy-menu-verbs"
       "under an action: system.recovery.home-backup.restore"
     tree_selftest '.["trigger.ask.backup"].aliases += ["backup"]' "an unpinned shared alias" \
       "alias backup:"
+    tree_selftest 'del(.nixarchy) + {nixarchy: .nixarchy}' "the folder moved to the end" \
+      "root order: nixarchy is not directly after trigger"
+    tree_selftest 'del(.["trigger.herdr"].parent)' "a folder row without its parent" \
+      "nixarchy folder: trigger.herdr has parent trigger"
     python3 -I ${./menu-tree.py} ${menu} || fail=1
 
     test "$fail" -eq 0

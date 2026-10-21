@@ -79,7 +79,7 @@
     hyprland.url = "github:hyprwm/Hyprland";
 
     omarchy = {
-      url = "github:basecamp/omarchy/v4.0.6";
+      url = "github:basecamp/omarchy/0a7beb7d6fe2b677bdc57ff05518b073b2d6ee60";
       flake = false;
     };
 
@@ -537,7 +537,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "4.0.6";
+      omarchyVersion = "edge-20261021-0a7beb7";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).
@@ -856,6 +856,7 @@
           omawrite = final.callPackage ./pkgs/apps/omawrite.nix { };
           omacalc = final.callPackage ./pkgs/apps/omacalc.nix { };
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
+          omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
 
           # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
           # and the lock screen's video feed. Not in nixpkgs. #1153.
@@ -974,7 +975,7 @@
           # The screensaver's text-effects engine, packaged in this repo rather
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
           # lives under nixarchy-apps, which callPackage does not search.
-          inherit (final.nixarchy-apps) ttfx;
+          inherit (final.nixarchy-apps) ttfx omasnap;
         };
 
         # Why: docs/internals/flake.md#the-boot-splash-and-nothing-else-on-the-disk-with-
@@ -1330,6 +1331,7 @@
             omawrite
             omacalc
             omacut
+            omasnap
             owe
             aether
             ttfx
@@ -2272,6 +2274,20 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # Edge carry (#1289): Setup > Language records a missing locale for
+          # the next rebuild instead of running locale-gen.
+          language-edge = import ./tests/language-edge.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
+          # Edge carry (#1386): mise's [wrappers] route claude through the selected
+          # account, and the exec refuses a mise install.
+          agent-account-routing = import ./tests/agent-account-routing.nix {
+            pkgs = pkgsFor.${system};
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           # `nixarchy pkg new` against stub nix-init and nix: the draft is
           # kept when its build fails, the placeholder hash is filled in from
           # the failed build, and a reshaped apps.nix is printed at rather
@@ -2459,10 +2475,6 @@
             pkgs = pkgsFor.${system};
           };
 
-          bar-keyed-sync = import ./tests/bar-keyed-sync.nix {
-            pkgs = pkgsFor.${system};
-            omarchy = self.packages.${system}.omarchy;
-          };
           manifest-has-kind = import ./tests/manifest-has-kind.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;
@@ -2589,7 +2601,8 @@
             touch $out
           '';
           # #953: a restart never ends with zero shells, against stubs that make
-          # teardown slow; guards upstream's own wait (the patch retired in v4.0.5).
+          # teardown slower than upstream's `timeout 5`; upstream's own script is
+          # the negative control.
           shell-restart-race = import ./tests/shell-restart-race.nix {
             pkgs = pkgsFor.${system};
             omarchy = self.packages.${system}.omarchy;

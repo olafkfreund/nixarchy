@@ -1023,6 +1023,7 @@ restricted to `Menu.qml` and `MenuModel.js`, and applied with `--fuzz=0`.
 Drop it when stable reaches a release containing #6955. Edge already has it
 and deletes the `patch` line in its carry commit. #1305 rebases its own menu
 edits onto this patch, so its content is frozen (sha256 in the plan).
+Edge dropped it: quattro already carries #6955, and the patch fails there.
 
 The pacman snapshot lines above the rewritten ones are left dead on purpose:
 edge builds them in `guardPackageSnapshot()`, so their text differs between
@@ -1111,3 +1112,161 @@ directly, plus HEY and Zoom through their handlers.
 Both names are tried rather than one swapped for the other, because
 someone may have a chromium.desktop of their own and upstream's name
 should keep working.
+
+<a id="zed-theme-setter-has-no-upstream-equivalent"></a>
+## The Zed theme setter has no upstream equivalent (#1398)
+
+And call the Zed setter, which upstream has no equivalent of.
+
+omarchy ships omarchy-theme-set-{vscode,obsidian,claude,foot,
+tmux,...} and nothing for Zed: its own installer reaches for
+a third-party AUR package (`omarchy-pkg-add zed omazed`)
+which cannot work on v4 -- that tool defaults to the v3 theme
+path, installs into a `theme-set` hook where v4 runs
+`theme-set.d/`, and hardcodes /usr/bin. So nix-bin carries
+the setter upstream is missing, and this line is what makes
+the theme switch actually reach it.
+
+Appended after obsidian rather than anywhere in the list: the
+order is upstream's and the two either side of it are the
+other editors, so a future upstream -zed lands in the same
+place and --replace-fail catches the collision.
+
+<a id="version-channel-reads-nixos-version"></a>
+## omarchy-version-channel reads nixos-version (#1398)
+
+And the line under it said "unknown".
+
+omarchy-version-channel decides between "stable" and "edge" by grepping
+/etc/pacman.conf for Omarchy's package mirrors. There is no pacman.conf
+here, so both halves fell through to their "unknown" branch and the
+splash carried a permanent unknown under the OS line.
+
+The nixpkgs this system was built from is the honest analogue -- it is
+the answer to the same question, "which package set am I on" -- and
+nixos-version is on PATH for every user. Falling back to exiting 1
+rather than printing something: fastfetch drops a command module that
+fails, which is better than a line that says nothing.
+
+Spliced in front of the FIRST grep rather than before the final
+comparison. Put after them, the pacman lookups still run and still
+write "No such file or directory" to stderr on every new terminal --
+answering correctly while looking broken.
+
+<a id="default-agent-menu-commands-use-the-id"></a>
+## Default-agent rows use their id as their command (#1398)
+
+4.0.3 added four: cursor-agent, hermes, muse, openclaw. The
+assertion at the end of this phase is what found them -- it
+failed the build of the bump rather than letting four rows
+ship that tick for an agent the machine does not have.
+
+All four use their id as their command, checked against
+upstream's own bin/omarchy-default-agent: muse says so
+outright (`bin=muse` in its package spec) and the other three
+set `agent=<id>` with no separate binary. antigravity below is
+still the only one that differs, and it is written out for
+exactly that reason.
+
+Getting a command name wrong here fails SAFE: the row simply
+never ticks, which reads as "that agent is not installed".
+The direction that would matter -- ticking for an agent that
+
+<a id="omarchy-agent-gets-mise-shims-and-antigravity"></a>
+## omarchy-agent gets the mise shims and Antigravity (#1398)
+
+omarchy-agent, twice.
+
+First: mise activates from the shell rc, and the menu launches an
+agent through `bash -c` inside a floating terminal, which sources no
+rc. An agent mise had installed perfectly was therefore reported as
+"not installed" by the very next line, while running fine one shell
+over. Only the two agents nixpkgs has no package for still come from
+mise -- see nix-bin/omarchy-default-agent -- but for those this is
+the difference between a working menu entry and a lie.
+
+Second: Antigravity. Google deprecated gemini-cli in favour of it,
+mise carries it as a prebuilt `aqua:` binary, and upstream's launcher
+has no case for a name it has never heard of -- which is an
+"Unsupported default agent" rather than an agent.
+
+<a id="sddm-lastuser-is-seeded-in-main-qml"></a>
+## SDDM lastUser is seeded in Main.qml (#1398)
+
+Omarchy's greeter is password-only: it shows no user list and logs in
+whoever userModel.lastUser says, which upstream's installer seeds into
+/var/lib/sddm/state.conf. Nothing seeds that here, so on a fresh machine
+lastUser is "" and SDDM answers every password with
+
+  pam_unix(sddm:auth): check pass; user unknown
+  Authentication for user  ""  failed
+
+with no user list to pick from -- an install that cannot be logged into.
+SDDM writes state.conf itself after the first successful login, so this
+only has to cover the case where it does not exist yet.
+
+NameRole is Qt::UserRole + 1 in SDDM's UserModel. --replace-fail so that
+an upstream rewrite of this line fails the build rather than silently
+restoring the lockout.
+
+<a id="shell-rc-files-name-their-own-omarchy-path"></a>
+## The shell rc files name their own OMARCHY_PATH (#1398)
+
+Make the shell rc files say where they actually are.
+
+All three open with a fallback to /usr/share/omarchy for when
+OMARCHY_PATH is unset. On NixOS that path can never exist, so any
+context that sources one of these without the variable already
+set -- a systemd unit, a container, ssh with a restricted
+environment -- gets
+
+  no such file or directory: /usr/share/omarchy/default/bash/envs
+
+and none of the aliases or functions. It works today only because
+environment.sessionVariables puts OMARCHY_PATH in
+/etc/set-environment and the login path reads that first, which
+is a lot of machinery for a file that already knows where it
+lives: it is installed here, at a path this build knows.
+
+So the fallback becomes that path. Nothing else changes -- an
+OMARCHY_PATH that is already set still wins, which is what makes
+`omarchy dev link` work.
+
+<a id="boot-splash-animation-is-played-at-build-time"></a>
+## The boot splash animation is played at build time (#1398)
+
+And the animation. The wordmark arrives by way of ttfx, the same
+text-effects engine the screensaver runs, over the same ASCII banner
+-- so what a machine shows while it boots and what it shows while it
+idles are the same mark drawn by the same tool.
+
+ttfx cannot run at boot: it writes to a terminal and Plymouth is not
+one. So the effect is played here and kept as stills.
+--parity-dump is ttfx's own parity-harness output -- whole frames on
+a virtual clock rather than cursor moves paced against the wall --
+which is what makes this reproducible rather than a recording of how
+busy the builder was. It is an undocumented flag, hence the frame
+count asserted below: a ttfx bump that changes the effect, or drops
+the flag, fails the build instead of quietly shipping something else.
+
+<a id="shell-panel-open-verbs-are-carried"></a>
+## The shell panel-open verbs are carried (#1398)
+
+The shell can open a panel and cannot say whether one is
+open, so anything driving the desktop -- a script, or an
+agent -- finds out by taking a screenshot, which is
+expensive enough that callers skip it and proceed on
+assumption. That is how a mis-aimed keystroke queued a
+package removal into apps.nix with nothing surfacing it
+(#749). shell.qml already knows: isPluginOpen() is what
+toggle() consults. The fragment only exposes it.
+
+CARRIED, and meant to be dropped. AGENTS.md section 11 is
+right that a fix to how Omarchy behaves belongs upstream,
+and this is re-applied at every source bump until it
+lands there. Delete it the moment upstream has the verbs.
+
+The anchor is asserted before the insert: awk inserting
+nothing would leave a shell that still works and silently
+lacks the verbs, which is the shape AGENTS.md section 4
+warns about.

@@ -1,39 +1,26 @@
-nixarchy #1032: a notification its SENDER closes leaves the screen.
-
-CloseNotification from the app that posted a notification only forgot the
-live reference; the popup row stayed, and a critical one (duration 0) stayed
-until dismissed by hand. The handler now takes Quickshell's close reason and,
-for CloseRequested only, removes the popup through removePopup -- archived to
-history like dismiss and expire, per the rule removePopup already states.
-
-CARRIED: upstream Omarchy has the same handler (it breaks on Arch too). Drop
-this when omacom/omarchy fixes it; applied with --fuzz=0, so the bump that
-rewords these lines fails the build and says so.
-
+# nixarchy #1032 / #1380: a critical notification its SENDER closes leaves the screen.
+# Quattro's new engine never expires a critical card, so CloseNotification left it up for good;
+# narrowed to critical cards, every other card keeps upstream's rule. Drop when upstream fixes it.
+diff --git a/shell/plugins/notifications/Service.qml b/shell/plugins/notifications/Service.qml
+index 1595fc94..0fd283d4 100644
 --- a/shell/plugins/notifications/Service.qml
 +++ b/shell/plugins/notifications/Service.qml
-@@ -162,9 +162,21 @@
-     liveRefs[snapshot.originalId] = notification
-     // Guard the delete: a newer notification may have reused this originalId
-     // (freedesktop replaces_id) and taken over the map slot.
--    notification.closed.connect(function() {
--      if (service.liveRefs[snapshot.originalId] === notification)
--        delete service.liveRefs[snapshot.originalId]
-+    notification.closed.connect(function(reason) {
-+      if (service.liveRefs[snapshot.originalId] !== notification) return
-+      delete service.liveRefs[snapshot.originalId]
-+      // The SENDER closed it (CloseNotification). Dismiss and expire already
-+      // went through removePopup; only a sender's close left the toast up --
-+      // for ever, for a critical one. Archived like any other exit, and
-+      // liveRefs is cleared first so removePopup sends no close back.
-+      if (reason !== NotificationCloseReason.CloseRequested) return
-+      Qt.callLater(function() {
-+        for (var i = popupModel.count - 1; i >= 0; i--) {
-+          var row = popupModel.get(i)
-+          if (row && row.originalId === snapshot.originalId && !isRestoredRow(row))
-+            service.removePopup(i, "close")
-+        }
-+      })
-     })
+@@ -878,13 +878,17 @@ Item {
  
-     // DND bypass rules: chat apps abuse urgency=critical to force
+   function watchNotification(notification, key) {
+     var reservation = liveKeys[key]
+-    notification.closed.connect(function() {
++    notification.closed.connect(function(reason) {
+       if (service.refs[key] !== notification) return
+       delete service.refs[key]
+       service.refsRevision += 1
+       // Visible snapshots outlive their sender; pending rows must not appear
+       // after the sender withdraws them.
+       if (service.rowIndexFor(key) < 0) service.finishClose(key, "closed")
++      // nixarchy #1032: a critical card never expires, so one its sender
++      // withdrew stayed on screen for good; take that one down, the rest keep upstream's rule.
++      else if (reason === NotificationCloseReason.CloseRequested && notification.urgency === NotificationUrgency.Critical)
++        service.closeToast(key, "closed")
+     })
+     // NotificationServer emits onNotification only for new objects. A
+     // replaces_id update mutates this QObject and emits its property signals,

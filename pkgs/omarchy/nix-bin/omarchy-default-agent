@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # omarchy:summary=Set and launch the default coding agent (declaratively, on NixOS).
-# omarchy:args=[claude|codex|opencode|crush|gemini|copilot|grok|antigravity|pi|omp]
+# omarchy:args=[claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|ori|kimi]
 # omarchy:examples=omarchy default agent | omarchy default agent codex | omarchy default agent claude
 
 # Upstream installs the agent with `mise use -g`, which downloads a prebuilt
@@ -51,6 +51,7 @@ attr_for() {
     copilot)  echo github-copilot-cli ;;
     grok)     echo grok-cli ;;
     openclaw) echo openclaw ;;
+    agy)      echo antigravity-cli ;;
     *)        echo "" ;;
   esac
 }
@@ -61,7 +62,8 @@ mise_pkg_for() {
   case "$1" in
     pi)          echo pi ;;
     omp)         echo "github:can1357/oh-my-pi" ;;
-    antigravity) echo agy ;;
+    ori)         echo "github:OpenRouterLabs/ori-releases" ;;
+    kimi)        echo "npm:@moonshot-ai/kimi-code" ;;
     *)           echo "" ;;
   esac
 }
@@ -93,7 +95,8 @@ claude | claude-code) agent="claude"; name="Claude Code" ;;
 codex) agent="codex"; name="Codex" ;;
 crush) agent="crush"; name="Crush" ;;
 grok) agent="grok"; name="Grok" ;;
-antigravity | agy) agent="antigravity"; name="Antigravity" ;;
+# quattro names it agy, its command; antigravity is the id stable stored.
+agy | antigravity | antigravity-cli) agent="agy"; name="Antigravity" ;;
 # Google deprecated gemini-cli in favour of Antigravity, but nixpkgs still has
 # a maintained gemini-cli and people still ask for it by name, so both stay.
 gemini | gemini-cli) agent="gemini"; name="Gemini" ;;
@@ -105,8 +108,10 @@ cursor-agent | cursor) agent="cursor-agent"; name="Cursor Agent" ;;
 hermes) agent="hermes"; name="Hermes" ;;
 muse) agent="muse"; name="Muse" ;;
 openclaw) agent="openclaw"; name="OpenClaw" ;;
+ori | openrouter) agent="ori"; name="Ori" ;;
+kimi | kimi-code) agent="kimi"; name="Kimi" ;;
 *)
-  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|antigravity|pi|omp|cursor-agent|hermes|muse|openclaw>" >&2
+  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|cursor-agent|hermes|muse|openclaw|ori|kimi>" >&2
   exit 1
   ;;
 esac
@@ -144,7 +149,6 @@ confirm() { # confirm <prompt> <yes|no, when it cannot be asked>
 # than against a package database: what matters is whether omarchy-agent will
 # find it, and that is the same question.
 agent_cmd=$agent
-[[ $agent == antigravity ]] && agent_cmd=agy
 if command -v "$agent_cmd" &>/dev/null; then
   record
   exec omarchy-agent

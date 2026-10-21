@@ -121,7 +121,8 @@ pkgs.runCommand "nixarchy-review-pins"
     #
     # So `hyprland ref` is the assertion, not `hyprland rev`: if someone pins
     # it back to a commit, this fails and says why.
-    for want_line in "omarchy	tag" "sops-nix	rev" "hyprland	ref" "nixpkgs	ref"; do
+    # edge pins Omarchy by quattro commit, not by tag (#1278).
+    for want_line in "omarchy	rev" "sops-nix	rev" "hyprland	ref" "nixpkgs	ref"; do
       name=''${want_line%%	*}
       kind=''${want_line##*	}
       got=$(grep -E "^$name	" pins-flake.txt | cut -f2)

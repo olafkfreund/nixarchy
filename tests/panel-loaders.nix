@@ -28,9 +28,14 @@ pkgs.runCommand "nixarchy-panel-loaders"
     patched=${omarchy}/share/omarchy/shell/shell.qml
     [ -f "$upstream" ] && [ -f "$patched" ] || { echo "shell.qml missing ($upstream, $patched)" >&2; exit 1; }
 
-    # The negative control: upstream's unpatched shell.qml must fail.
-    if python3 "$script" "$upstream" > control.log 2>&1; then
-      echo "FAIL: the control passed against upstream's unpatched shell.qml --" \
+    # The negative control. Upstream's own shell.qml was the control until
+    # quattro adopted the fix (#1278 edge), so the bug is now reintroduced
+    # into a copy of what ships: the Instantiator handed a plain array again.
+    # The detector must fail on that, or it can no longer tell bug from fix.
+    sed 's/model: panelEntryModel/model: panelEntries/' "$patched" > broken.qml
+    ! cmp -s "$patched" broken.qml || { echo "FAIL: the control's break did not land" >&2; exit 1; }
+    if python3 "$script" broken.qml > control.log 2>&1; then
+      echo "FAIL: the control passed with the bug reintroduced --" \
         "this check can no longer tell the bug from the fix"
       cat control.log
       exit 1
@@ -41,8 +46,12 @@ pkgs.runCommand "nixarchy-panel-loaders"
       cat control.log
       exit 1
     }
-    echo "control: upstream's unpatched shell.qml fails, as it should:"
+    echo "control: the reintroduced bug fails, as it should:"
     cat control.log
+    # Upstream itself is read only for the record.
+    python3 "$script" "$upstream" > upstream.log 2>&1 || true
+    echo "upstream's own shell.qml, for the record:"
+    cat upstream.log
 
     # The real check: what ships.
     if ! python3 "$script" "$patched" > built.log 2>&1; then

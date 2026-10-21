@@ -455,7 +455,9 @@ pkgs.runCommand "nixarchy-channel"
     verline() { # verline <script> <flake dir> -> the Omarchy line
       PATH=$bindir:$PATH NIXARCHY_FLAKE=$PWD/$2 bash "$1" 2>&1 | sed -n 1p  # not head: an early exit is SIGPIPE under pipefail
     }
-    r=$(verline "$bindir/nixarchy-version" ver-edge)
+    # Made, not assumed: on the edge branch the shipped script is an edge build.
+    sed "s|^built='.*'|built='4.0.4'|" "$bindir/nixarchy-version" > version-release-build
+    r=$(verline version-release-build ver-edge)
     wantnot "a release build is not suffixed, whatever the flake says" "$r" '('
     r=$(verline version-edge-build ver-edge)
     want    "an edge build on the edge channel says (edge)"     "$r" '(edge)'

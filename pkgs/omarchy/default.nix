@@ -1184,6 +1184,9 @@ stdenvNoCC.mkDerivation {
 
                     skills=$out/share/omarchy/default/agents/skills
 
+                    # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch (#1406)
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1406-omarchy-app-nix.patch}
+
                     # The boundary between our devenv skill and nix-skills'
                     # devenv-project (#888): ours is devenv ON a nixarchy machine,
                     # theirs is what devenv.nix's options mean. Both are installed

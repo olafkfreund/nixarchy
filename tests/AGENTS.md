@@ -1867,3 +1867,21 @@ and `iso-source` failed at **evaluation**, so no derivation failed and the
 failure digest had nothing to name. A check list that only reports failed
 builds reads an evaluation error as silence; build each check by drvPath
 (`nix eval --raw …drvPath` first) and count an evaluation failure as red.
+
+## omarchy-app-template: the Nix in a markdown file is read from the patch (#1406)
+
+`checks.omarchy-app-template` builds the omarchy-app skill's `templates.md` as
+a project called `tally`, so a typo in `pkgs/omarchy/1406-omarchy-app-nix.patch`
+fails a pull request rather than the first agent that follows the skill.
+`tests/omarchy-app-template.py` is its extractor, not a check: it is run by the
+`.nix` beside it, which is why `test-registration` (which counts `*.nix`) does
+not list it.
+
+`package.nix` cannot be `import`ed from the built skill without
+import-from-derivation, so the Nix text that is built comes from the patch's
+added lines (`builtins.toFile`), and the shipped copy is `cmp`ed against it at
+build time. The two cannot drift. Two breaks proved it: a template with
+`wrapQtAppsHook` removed fails inside nixpkgs' own qt hook, and one that
+installs the `.desktop` file elsewhere fails the `grep` on
+`share/applications/tally.desktop`. It does not run the template's tests, the
+`bin/` scripts, or evaluate the template `flake.nix`.

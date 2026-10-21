@@ -59,7 +59,7 @@ seventeen skills instead of one, and eight Nix skills beside them:
 | `nixos-fleet` | one flake and several machines: the `hosts/<name>/` layout, sharing without coupling, pulling on a timer, deploying with `--target-host` |
 | `devenv` | per-project environments: `devenv.nix`, the lockfile, and whether a tool belongs to the project or the machine |
 | `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
-| `omarchy-app` | scaffolding a C++ and Qt Quick desktop app that follows the Omarchy theme (upstream's, new in 4.5; its packaging half is written for Arch) |
+| `omarchy-app` | scaffolding a C++ and Qt Quick desktop app that follows the Omarchy theme (upstream's, new in 4.5; nixarchy rewrites its packaging half so the app is built with Nix: `nix develop`, `nix run`, and a flake you add to your configuration) |
 
 Each is written against the modules on the disk rather than from memory. That is
 not fastidiousness: it caught `services.ollama.acceleration`, which was removed,

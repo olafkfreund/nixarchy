@@ -1477,6 +1477,14 @@ in
         /etc/profiles/per-user/${config.home.username}/bin /run/current-system/sw/bin
     '';
 
+    # #1386: upstream's installer and migration 1791112479 run `mise reshim` to
+    # build the [wrappers] dispatch links; nixarchy runs neither.
+    home.activation.nixarchyAgentWrappers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ -e /etc/mise/conf.d/omarchy-agent-accounts.toml ]; then
+        run ${pkgs.mise}/bin/mise reshim || echo "nixarchy: mise reshim failed; agent account wrappers not rebuilt" >&2
+      fi
+    '';
+
     # #942: clear the hand-written voxtype unit before Home Manager trips over
     # it. Measured on razer, which is the state of anyone who followed
     # Omarchy's own install instructions:

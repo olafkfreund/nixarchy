@@ -175,6 +175,15 @@
     unfree = true;
     arch = "dropbox";
   };
+  # quattro's Install > Service > Slack (#1278).
+  slack = {
+    menuId = "install.service.slack";
+    label = "Slack";
+    category = "Service";
+    attr = "slack";
+    unfree = true;
+    arch = "slack-desktop";
+  };
   signal = {
     menuId = "install.service.signal";
     label = "Signal";
@@ -437,7 +446,9 @@
   # would name `dictation` -- a command that does not exist. That field did
   # nothing at all until #942; see modules/apps.nix's appBinary.
   dictation = {
-    menuId = "install.ai.dictation";
+    # quattro moved dictation to Setup > Default > Dictation; Voxtype is the
+    # row this option provides.
+    menuId = "setup.default.dictation.voxtype";
     label = "Dictation";
     category = "AI";
     option = [

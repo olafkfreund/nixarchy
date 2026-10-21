@@ -45,8 +45,8 @@ if unknown:
         "menu rows name agents omarchy-default-agent rejects: %s\n"
         "  it accepts: %s" % (unknown, sorted(accepted))
     )
-if "setup.default.agent.antigravity" not in agents:
-    sys.exit("the antigravity row did not survive")
+if "setup.default.agent.agy" not in agents:
+    sys.exit("the Antigravity (agy) row did not survive")
 ask = [k for k in d if k.startswith("trigger.ask")]
 if len(ask) < 10:
     sys.exit("the Ask rows did not survive: %d found" % len(ask))

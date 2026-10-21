@@ -1096,6 +1096,17 @@ let
     etcFastfetch = etcInstalled "fastfetch/config.jsonc";
     # The tool_alias `mise use -g cursor-agent` resolves through.
     etcMise = etcInstalled "mise/conf.d/omarchy.toml";
+    # The [wrappers] that route claude, codex and grok through the selected
+    # account (#1386).
+    etcMiseAccounts = etcInstalled "mise/conf.d/omarchy-agent-accounts.toml";
+    # Upstream builds the wrapper links with `mise reshim`; nothing else here
+    # does, so without this the installed toml routes nothing (#1386).
+    agentWrappersReshim = {
+      on = pkgs.lib.hasInfix "mise reshim" defaultHomeOn.home.activation.nixarchyAgentWrappers.data;
+      # The step is unconditional in the home module (its guard is the file at
+      # run time), so there is no configured-off home to ask.
+      off = false;
+    };
 
     # ---- upstream's /etc overlay, the rows carried as NixOS options ----
     #

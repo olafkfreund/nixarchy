@@ -1064,33 +1064,37 @@ pkgs.testers.runNixOSTest {
 
     # ---- a notification its sender closes leaves the screen (#1032) --------
     # CloseNotification from the app that posted it only forgot the live
-    # reference, so the toast stayed -- for ever, for a critical one. The shell
-    # keeps one file per toast on screen (Service.qml persistPopupFile, used to
-    # restore them after a restart) and moves it to history/ when the toast
-    # leaves. With the bug the file never moves, which is what this watches;
-    # the history/ half pins the decision that a sender's close archives.
+    # reference, so a critical card (it never expires) stayed for good. The
+    # shell writes live.json (cards on screen) and history.json (closed rows,
+    # with closed_reason) under ~/.local/state/omarchy/notifications/, both
+    # JSON arrays of rows, in batched writes: so wait for each, never read once.
     assert machine.succeed(as_user("omarchy-shell notifications isDnd")).strip() == "off", (
         "Do Not Disturb is on: no popup would appear, and this block would pass "
         "without testing anything")
     # Earlier blocks leave toasts up; clear them so this one is the only one on
-    # screen. dismissAll archives them, and the assertions below name one file.
+    # screen. dismissAll archives them, and the assertions below name one row.
     machine.succeed(as_user("omarchy-shell notifications dismissAll"))
-    popups = "/home/omarchy/.local/state/omarchy/notifications"
+    state = "/home/omarchy/.local/state/omarchy/notifications"
+    jq = "${pkgs.jq}/bin/jq"
+    # test -s first: a file not written yet must fail the wait, not throw.
+    live_has = ("test -s " + state + "/live.json && " + jq
+        + " -e 'any(.[]; .summary == \"close-me-1032\")' " + state + "/live.json")
     nid = machine.succeed(as_user(
         "${pkgs.libnotify}/bin/notify-send -u critical -p -a nixarchy-probe"
         " -- close-me-1032 body")).strip()
-    machine.wait_until_succeeds("grep -l close-me-1032 " + popups + "/*.json", timeout=30)
-    name = machine.succeed("grep -l close-me-1032 " + popups + "/*.json").strip().split("/")[-1]
+    machine.wait_until_succeeds(live_has, timeout=30)
     machine.succeed(as_user(
         "busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications"
         " org.freedesktop.Notifications CloseNotification u " + nid))
     # Two waits, not one: a single compound test failed the same way whether
-    # the toast stayed (the bug) or left without reaching history (the
-    # decision reversed), and could not say which.
-    # Measured: the file appeared in 0.05 s and moved 1.03 s after the close.
-    # 30 s and 60 s are floors for a loaded runner, not guesses at the shell.
-    machine.wait_until_succeeds("test ! -e " + popups + "/" + name, timeout=60)
-    machine.wait_until_succeeds("test -e " + popups + "/history/" + name, timeout=30)
+    # the card stayed (the bug) or left without reaching history (the
+    # decision reversed), and could not say which. 60 s and 30 s are floors
+    # for a loaded runner, not measurements of the shell.
+    machine.wait_until_succeeds("! (" + live_has + ")", timeout=60)
+    machine.wait_until_succeeds(
+        "test -s " + state + "/history.json && " + jq
+        + " -e 'any(.[]; .summary == \"close-me-1032\" and .closed_reason == \"closed\")' "
+        + state + "/history.json", timeout=30)
     print("a critical notification closed by its sender left the screen, into history")
 
     # ---- power ----------------------------------------------------------
@@ -1907,17 +1911,39 @@ pkgs.testers.runNixOSTest {
                # pacman shim and says so. Patching the paths would point at
                # files that do not exist either.
                "omarchy-install-ai-hermes",
-               # New in 4.0.5. Their /usr is the default of an unset
-               # XDG_DATA_DIRS, which NixOS always sets.
-               "omarchy-cmd-default-browser",
-               # Matches only /usr/bin/<browser>, so here it exits 1 and both
-               # launchers start the browser themselves, as on 4.0.4.
+               # Hardened privileged helpers that pin /usr/bin binaries. Their
+               # callers are upstream's update, pacman and channel flows, which
+               # nixarchy replaces, and the passwordless-sudo row edge hides; so
+               # none is reached, and patching their bash-identity checks would
+               # be an untestable change to a privilege check.
+               "omarchy-security-functions", "omarchy-update-stay-awake",
+               "omarchy-refresh-pacman", "omarchy-update-keyring",
+               "omarchy-provision-hardware",
+               # Patched where reached; the /usr left is the aarch64-apple
+               # implementation path, which x86_64 never selects.
+               "omarchy-lifecycle-dispatch",
+               # Read omarchy-platform's hardware data, an Arch package with no
+               # port. Every read is guarded (-r, 2>/dev/null), so they fall back.
+               "omarchy-brightness-display", "omarchy-hw-display",
+               "omarchy-menu-keybindings",
+               # /usr only as a fallback default or a match pattern: XDG_DATA_DIRS
+               # is always set here, update-restart's loop is patched off the
+               # variable, and an unmatched browser path falls back to a plain
+               # launch.
+               "omarchy-cmd-default-browser", "omarchy-update-restart",
                "omarchy-cmd-browser-handoff",
-               # Both seed from an Arch package (/usr/share/hermes-desktop,
-               # /usr/share/openclaw) that NixOS has no copy of, and both refuse
-               # with a message and exit 1 when it is absent, before writing
-               # anything -- the same as omarchy-install-ai-hermes above.
-               "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli"]
+               # Arch installers for apps that are mapped, excepted or absent
+               # here: Claude Desktop (data/menu-exceptions.nix), its Chromium
+               # extension, Superwhisper, and the hermes/openclaw CLIs, which
+               # omarchy-default-agent reaches through nixpkgs or mise instead.
+               "omarchy-install-ai-claude", "omarchy-install-chromium-claude",
+               "omarchy-install-dictation-superwhisper",
+               "omarchy-remove-dictation-superwhisper",
+               "omarchy-install-dictation-voxtype",
+               "omarchy-install-hermes-cli", "omarchy-install-openclaw-cli",
+               # The /usr/bin/python3 here runs on the REMOTE machine an account
+               # is transferred to, not on this one.
+               "omarchy-agent-account-transfer"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched
@@ -2390,10 +2416,15 @@ pkgs.testers.runNixOSTest {
     # time (#1220), the same race #1189 fixed for the menu.
     plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
     background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
-    assert background is not None and not background["enabled"], (
-        f"the background plugin is still enabled while owe's renderer holds "
-        f"the layer: {background}")
-    print("owe: the background plugin is disabled while the renderer holds the layer")
+    # quattro's background plugin takes `background setSuspended true`, which
+    # owe tries first, so it stays enabled and hides its layer instead (#1278
+    # edge). Either way the property is the same: the shell is not drawing.
+    layers = aim("hyprctl layers")
+    assert background is not None and (
+        not background["enabled"] or "namespace: omarchy-background" not in layers), (
+        f"the shell's background is still up while owe's renderer holds the "
+        f"layer: {background}")
+    print("owe: the shell background is off (disabled or suspended) while the renderer holds the layer")
 
     desktop_readings = shot_series("owe-desktop")
     desktop_spread = spread(desktop_readings)
@@ -2432,8 +2463,10 @@ pkgs.testers.runNixOSTest {
     # is the CLI the menu and the doctor both already use to read this back.
     plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
     background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
-    assert background is not None and background["enabled"], (
-        f"the background plugin is not enabled after owe handed the still "
+    layers = aim("hyprctl layers")
+    assert background is not None and background["enabled"] and (
+        "namespace: omarchy-background" in layers), (
+        f"the shell's background is not back after owe handed the still "
         f"back to the shell: {background}")
     print("owe: back to the original still, renderer warm, background "
           "plugin enabled again")

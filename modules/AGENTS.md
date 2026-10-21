@@ -407,6 +407,10 @@ applies to the etc tree (the "Nixarchy" OS line) was applied to a file
 nothing read; and `mise use -g cursor-agent` failed because the alias it
 resolves through lives only in `etc/mise/conf.d/omarchy.toml`.
 
+On edge a fourth row is installed the same way: `mise/conf.d/omarchy-agent-accounts.toml`,
+the `[wrappers]` that make `omarchy agent account use` reach a typed `claude`,
+`codex` or `grok` (#1386).
+
 Mechanism, and why this one:
 
 - **`environment.etc.<path>.source` pointing into `cfg.package`**, the shape

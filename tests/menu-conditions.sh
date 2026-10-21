@@ -72,7 +72,11 @@ if grep -q 'zen\.desktop' <<<"$remove"; then bad "omarchy-remove-browser still n
 ok "Zen shows with $zenBinary, and sets and reads $zenBinary.desktop"
 
 # --- Hibernate: only yes or challenge from logind shows the row -----------
-[ "$(field "$menu" system.hibernate when)" = omarchy-hibernation-available ] || bad "system.hibernate no longer asks omarchy-hibernation-available"
+# upstream may add conditions after the availability probe (#1398)
+case "$(field "$menu" system.hibernate when)" in
+omarchy-hibernation-available | "omarchy-hibernation-available && "*) ;;
+*) bad "system.hibernate no longer asks omarchy-hibernation-available" ;;
+esac
 avail=$(cat "$bin/omarchy-hibernation-available")
 if grep -q mkinitcpio <<<"$avail"; then bad "omarchy-hibernation-available still names mkinitcpio"; fi
 term=$(grep -o '\[\[ \$(busctl [^]]*\]\]' <<<"$avail" || true)

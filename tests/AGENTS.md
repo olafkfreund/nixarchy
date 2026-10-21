@@ -1806,9 +1806,12 @@ exact match such as coredumpctl's `COMM=quickshell-wra` misses it.
 <a id="provision-launchers-runs-two-calls-not-provisioning"></a>
 ## provision-launchers runs two calls, not provisioning (#1319)
 
-`checks.provision-launchers` runs `install/user/mise.sh` the way `all.sh:14`
+`checks.provision-launchers` runs `install/user/mise.sh` the way `all.sh:18`
 runs it, then `omarchy-refresh-applications` (`omarchy-provision-user:118`),
 twice on a dirty home and once on a clean one.
+
+Quattro's `mise.sh` reshims instead of writing launchers into `~/.local/bin`, so
+the check asserts the `mise reshim --system` call, not stub files (#1398).
 
 - **Hole 1.** It does not run the whole of `omarchy-provision-user`, so a third
   writer added upstream to `all.sh` or to provision-user is not seen.

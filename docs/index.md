@@ -37,7 +37,7 @@ upstream release is a source bump, not a re-port.
 
 ## Search everything, install declaratively
 
-The app selection carries 68 applications. **Install ▸ Search** offers the
+The app selection carries 69 applications. **Install ▸ Search** offers the
 rest of NixOS — one fuzzy picker over **about 137,000 rows**: every nixpkgs package,
 every NixOS option, and the app selection, with each entry's type, default and
 documentation in a preview pane.
@@ -123,7 +123,7 @@ the loader story covers Node, Electron and games too.
 ## An agent that knows this machine
 
 Omarchy symlinks its agent skills into every harness's skill directory. Upstream
-ships one, written for Arch; nixarchy ships sixteen, written for NixOS, and eight Nix skills beside them.
+ships one, written for Arch; nixarchy ships seventeen, written for NixOS, and eight Nix skills beside them.
 
 That matters more than it sounds. A model asked how to install a package on
 NixOS will confidently invent an answer; the same model handed the `nixos` skill

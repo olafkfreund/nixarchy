@@ -1825,6 +1825,9 @@ in
         "DefaultLimitNOFILE=65536:524288";
 
     systemd = {
+      # systemd/system.conf.d/20-mount-events.conf: PID 1's mount-event burst.
+      managerEnvironment.SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST = "30";
+
       # upstream's system.conf.d: a 5s stop timeout and a raised descriptor
       # soft limit.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
@@ -1903,6 +1906,11 @@ in
 
       # Why: modules/AGENTS.md#omarchy-path-default-systemd-user-which-upstream-i
       user.services = {
+        # systemd/user/wayland-wm@hyprland.desktop.service.d/10-keep-shell.conf,
+        # on the template: uwsm names the instance start\x2dhyprland, so
+        # upstream's instance name never matches.
+        "wayland-wm@".serviceConfig.KillMode = "mixed";
+
         # Not only "!root": the display manager's user has no subuid range, so
         # rootless Docker fails at every boot for it. mkForce corrects nixpkgs'
         # literal, not a user's choice.
@@ -2179,6 +2187,12 @@ in
         "vm.dirty_background_bytes" = 67108864;
         "vm.dirty_bytes" = 268435456;
         "vm.dirty_writeback_centisecs" = 1500;
+        # sysctl.d/90-omarchy-arp.conf: Wi-Fi must not answer ARP for a dock's
+        # Ethernet address.
+        "net.ipv4.conf.all.arp_ignore" = 1;
+        "net.ipv4.conf.default.arp_ignore" = 1;
+        "net.ipv4.conf.all.arp_announce" = 2;
+        "net.ipv4.conf.default.arp_announce" = 2;
       };
 
       # etc/modprobe.d/omarchy-usb-autosuspend.conf. Lines merge, so plain

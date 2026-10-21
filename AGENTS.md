@@ -867,6 +867,17 @@ That happened to four pull requests in one afternoon; the replay is
 mechanical and takes a minute, but only if you recognise it rather than
 fighting the conflict.
 
+The reverse case is worse, because nothing is stacked to warn you: **a PR
+that merges another long-lived branch into `main` must itself be merged
+with a merge commit, never squashed.** #1405 merged `edge` into `main` (a
+real merge, as its plan required) and was then squash-merged, so `main`
+received edge's carries as one new commit with none of edge's history. The
+next edge run merged `main` and conflicted on every line both sides had
+touched (`installer/cd.nix`, `flake.nix`, `flake.lock`), which stopped edge
+until a hand-resolved merge on `edge-candidate` recorded `main` in edge's
+history again. Use `gh pr merge --merge` for such a PR, and say so in its
+body.
+
 ## 9. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it

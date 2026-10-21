@@ -237,7 +237,7 @@ head_ "Screen sharing"
 screencast=$(
   timeout 5 busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop \
     org.freedesktop.DBus.Properties Get ss org.freedesktop.portal.ScreenCast version 2>/dev/null
-)
+) || true
 case "$screencast" in
   # "v u 6". The version, not just the presence: a backend that drops the
   # interface across a bump is the same silent failure with another cause.
@@ -296,7 +296,7 @@ head_ "Fails in silence"
 # would report a missing lock on a machine whose lock works. The shell's IPC
 # is the source of truth. `lock status` only, never `lock lock`: this script
 # must not lock the screen of the person running it.
-lock=$(timeout 10 omarchy-shell lock status 2>/dev/null)
+lock=$(timeout 10 omarchy-shell lock status 2>/dev/null) || true
 case "$lock" in
   *'"passwordPam":true'*) ok "the lock can authenticate" "PAM answers for it" ;;
   '') maybe_bad "the shell did not answer about the lock" "omarchy-shell lock status said nothing" ;;
@@ -347,7 +347,7 @@ fi
 
 # A value, not a verdict: idle off is a legitimate choice (stay-awake is a
 # menu item), and it is also the reason a machine never locks itself.
-idle=$(timeout 10 omarchy-shell idle status 2>/dev/null)
+idle=$(timeout 10 omarchy-shell idle status 2>/dev/null) || true
 case "$idle" in
   *'"enabled":true'*)
     ok "idle timer on" "locks after $( (grep -o '"lock":[0-9]*' <<<"$idle" | head -1 | cut -d: -f2) || true)s"
@@ -363,7 +363,7 @@ esac
 # process is named for it. polkitd logs the registration, but below the
 # --log-level=notice the unit runs at, so the journal has nothing either.
 # Whether the plugin is enabled is the question that can actually be asked.
-plugins=$(timeout 10 omarchy-shell shell listPlugins 2>/dev/null)
+plugins=$(timeout 10 omarchy-shell shell listPlugins 2>/dev/null) || true
 polkit=$( (grep -o '{"id":"omarchy.polkit"[^}]*}' <<<"$plugins") || true)
 case "$polkit" in
   *'"enabled":true'*) ok "polkit agent enabled" "the shell's own" ;;
@@ -383,7 +383,7 @@ esac
 notifier=$(
   timeout 5 busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
     org.freedesktop.Notifications GetServerInformation 2>/dev/null
-)
+) || true
 if [ -n "$notifier" ]; then
   # busctl prints the signature and quotes every field, and the vendor field
   # is empty on quickshell, which leaves a double space if it is not squeezed.
@@ -469,7 +469,7 @@ if ! command -v ai-mirror >/dev/null 2>&1; then
 elif ! systemctl --user is-active omarchy-voice.service >/dev/null 2>&1; then
   hmm "Voice is not running" "turn it on, say a command, and run this again"
 else
-  aim_owner=$(grep -oE '"owner": ?"[a-z]+"' "$aim_state" 2>/dev/null | grep -oE '[a-z]+"$' | tr -d '"')
+  aim_owner=$(grep -oE '"owner": ?"[a-z]+"' "$aim_state" 2>/dev/null | grep -oE '[a-z]+"$' | tr -d '"') || true
   if [ "${aim_owner:-off}" = agent ]; then
     bad "an agent holds control with Voice running" "did you say yes to it? Voice must not have"
   else
@@ -506,7 +506,7 @@ if [ ! -d /sys/class/bluetooth ] || [ -z "$(ls -A /sys/class/bluetooth 2>/dev/nu
 elif ! systemctl is-active bluetooth.service >/dev/null 2>&1; then
   bad "adapter present, bluetoothd not running" "the bar widget will be inert"
 else
-  adapters=$(timeout 5 bluetoothctl list 2>/dev/null | wc -l)
+  adapters=$(timeout 5 bluetoothctl list 2>/dev/null | wc -l) || true
   if [ "$adapters" -gt 0 ]; then
     ok "bluetoothd sees $adapters adapter(s)" ""
     say_dim "$(timeout 5 bluetoothctl list 2>/dev/null | head -1)"
@@ -544,7 +544,7 @@ head_ "Radios"
 if ! command -v rfkill >/dev/null 2>&1; then
   hmm "rfkill not on PATH" "nothing to check"
 else
-  radios=$(rfkill list -n -o TYPE,SOFT,HARD 2>/dev/null)
+  radios=$(rfkill list -n -o TYPE,SOFT,HARD 2>/dev/null) || true
   if [ -z "$radios" ]; then
     hmm "no radios on this machine" "nothing to test"
   else
@@ -686,7 +686,7 @@ for dir in "$state_dir"/*/ /var/lib/microvms/*/; do
   # reinvented.
   [ -e "$dir/.lock" ] || continue
   locked=0
-  exec 8>"$dir/.lock"
+  { exec 8<"$dir/.lock"; } 2>/dev/null || continue
   flock -n 8 || locked=1
   exec 8>&-
   [ "$locked" = 1 ] || continue
@@ -746,7 +746,7 @@ head_ "Theme"
 scheme=$(
   timeout 5 busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop \
     org.freedesktop.portal.Settings ReadOne ss org.freedesktop.appearance color-scheme 2>/dev/null
-)
+) || true
 case "$scheme" in
   *"u 1"*) ok "portal reports dark" "Chromium and GTK follow this" ;;
   *"u 2"*) ok "portal reports light" "" ;;
@@ -754,7 +754,7 @@ case "$scheme" in
   *) hmm "portal did not answer" "${scheme:-nothing}" ;;
 esac
 
-cursor=$(timeout 5 gsettings get org.gnome.desktop.interface cursor-theme 2>/dev/null | tr -d "'")
+cursor=$(timeout 5 gsettings get org.gnome.desktop.interface cursor-theme 2>/dev/null | tr -d "'") || true
 case "$cursor" in
   Bibata*) ok "cursor follows the theme" "$cursor" ;;
   "" | Adwaita) bad "cursor is the default" "${cursor:-unset}; Omarchy's theme hook did not run" ;;
@@ -1085,7 +1085,7 @@ for key, row in rows.items():
             print("CMD", key, cmd)
 print("ROWS", shown_rows)
 PY
-  )
+  ) || true
 
   # `command -v` in this script and not shutil.which in the probe above: the
   # PATH that matters is the one a session has, writeShellApplication's prefix

@@ -97,3 +97,13 @@ spec: spec/2026-10-21-1406-omarchy-app-skill.md
 
 Revert the PR. The skill ships as upstream wrote it again, and
 `build.yml` still lists it (#1405).
+
+## Deviations during implementation
+
+- **Step 1 also edits `SKILL.md`'s frontmatter** ("installed as an Arch
+  package", trigger "PKGBUILD for my app"), which the guard would refuse, and
+  the `.gitignore` template (makepkg output dirs become `/result`).
+  `package.nix` builds into `build/` explicitly. `install-phase-budget`:
+  120086 of 123000 bytes. Red: one altered context line → `Hunk #1 FAILED`
+  at `--fuzz=0` (a first red attempt whose sed matched nothing was caught
+  by diffing the two patches).

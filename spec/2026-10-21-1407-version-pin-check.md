@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1407
 intent: intent/2026-10-21-1407-version-pin-check.md
 ---

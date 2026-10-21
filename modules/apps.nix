@@ -360,6 +360,17 @@ let
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-search";
           description = "Every package, NixOS option and Omarchy app, in one picker";
         };
+        # Nixarchy's own folder (#1412): the panels and Nixi nixarchy ships,
+        # after Trigger, so they stop reading as Omarchy's. A new root with no
+        # action, like setup.secret; every child names it with `parent`.
+        # Always emitted: "help" below is unconditional, so a folder emitted
+        # "only when a child is" is this same row. The children's `when`
+        # guards hide it at runtime like any parent.
+        "nixarchy" = {
+          icon = "󱄅";
+          label = "Nixarchy";
+          description = "Nixarchy's own panels and Nixi";
+        };
         # The panel that ships on by default (#766). The helper, never a bare
         # `omarchy-shell shell toggle`: toggling a plugin that is off exits 0
         # and does nothing, and `when` hides the row once it is turned off.
@@ -375,6 +386,7 @@ let
         # trigger.ask* and setup.local-ai only; this row is the counter-example
         # if that is ever widened.
         "help" = {
+          parent = "nixarchy";
           icon = "󰙴";
           label = "Nixi";
           aliases = [
@@ -419,6 +431,7 @@ let
         # its copy carries `menu.managed`, so the panel does not also write
         # them into the user's menu extension file.
         "trigger.gitlab-pipelines" = {
+          parent = "nixarchy";
           icon = "";
           label = "GitLab Pipelines";
           action = "nixarchy-plugin olafkfreund.gitlab-pipelines";
@@ -440,6 +453,7 @@ let
 
         # The GitHub Actions panel (#772), the same way.
         "trigger.github-actions" = {
+          parent = "nixarchy";
           icon = "";
           label = "GitHub Actions";
           action = "nixarchy-plugin olafkfreund.github-actions";
@@ -462,6 +476,7 @@ let
         # The herdr sessions widget (#771): its sessions in the bar, and the
         # sheet of keys that only exist while its menu has the keyboard.
         "trigger.herdr" = {
+          parent = "nixarchy";
           icon = "";
           label = "Herdr";
           action = "nixarchy-plugin nixarchy.herdr";
@@ -773,6 +788,7 @@ let
         # toggle, as install.packages: an off plugin is named, not toggled,
         # and `when` hides the row once it is turned off.
         "trigger.devenv" = {
+          parent = "nixarchy";
           icon = "󱄅";
           label = "Dev environments";
           action = "nixarchy-plugin nixarchy.devenv";
@@ -791,6 +807,7 @@ let
         # No `docker` alias, unlike the plugin's own snippet: where the engine is
         # Docker, searching "docker" must not open a podman panel.
         "trigger.podman" = {
+          parent = "nixarchy";
           icon = "";
           label = "Podman";
           action = "nixarchy-plugin nixarchy.podman";
@@ -811,6 +828,7 @@ let
         # writes where the panel reads them. The `box` alias stays: it is how
         # somebody who knew the retired `nixarchy box` finds the panel (#801).
         "trigger.box" = {
+          parent = "nixarchy";
           icon = "󰆧";
           label = "Boxes";
           aliases = [
@@ -827,6 +845,7 @@ let
         # The panel is the Sandbox group now (#766): its five child rows are
         # gone -- each called a verb with no name, so none could succeed (#781).
         "trigger.vm" = {
+          parent = "nixarchy";
           icon = "󰦛";
           label = "Sandbox";
           aliases = [
@@ -840,6 +859,7 @@ let
         };
         # With the panel turned off, the terminal is still a way in.
         "trigger.vm-list" = {
+          parent = "nixarchy";
           icon = "󰆓";
           label = "Sandbox";
           action = "omarchy-launch-floating-terminal-with-presentation nixarchy-vm list";

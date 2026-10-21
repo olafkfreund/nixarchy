@@ -105,3 +105,11 @@ spec: spec/2026-10-21-1412-nixarchy-menu-folder.md
 
 Revert the PR. The rows go back under Trigger, and Nixi goes back to
 the root.
+
+## Deviations during implementation
+
+- **Step 1: the folder row is emitted unconditionally.** Four of its children
+  (`help`, `trigger.herdr`, `trigger.github-actions`,
+  `trigger.gitlab-pipelines`) are in the always-on part of `overrideSpec`, so
+  "only when a child is emitted" could never be false; a comment on the row
+  says so. `tests/options.nix` therefore asserts the on state only.

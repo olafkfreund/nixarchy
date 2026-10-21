@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1398
 spec: spec/2026-10-21-1398-edge-generated-checks.md
 ---

@@ -731,7 +731,7 @@ seconds-long checks. So:
 | local build | when it may run |
 |---|---|
 | cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
-| a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12. In-flight CI does not block it |
+| a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
 | a VM check, or `checks.options` | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
 
 "Is a p620 build running" has a trap of its own. `pgrep -f
@@ -740,6 +740,19 @@ seconds-long checks. So:
 waiting, so it never reaches zero. Anchor it:
 `pgrep -fc '^(nix build|nh os build|nixos-rebuild).*p620'`. Print what a gate
 matches (`pgrep -af`) once before trusting it.
+
+**The load gate alone admitted a stall (#1365).** On 2026-10-21 a `main`
+install froze for five minutes (`clocksource: Watchdog … read timed out`) and
+timed out. It shared p620 with a pull request's install, with edge's `verify`,
+which had finished booting VMs a minute earlier, and with agents' local builds
+that had each passed the load check. Load is a sample: it cannot see a VM job
+about to start. CI now enforces the rule on itself:
+`.github/scripts/vm-host-free.sh` asks GitHub which VM job is running. An
+install waits up to 30 minutes for edge's `verify`, and edge waits before each
+VM check for an install. Before a package-tier build, ask both sides; each must
+print `free`:
+`nix shell nixpkgs#gh nixpkgs#jq -c bash -c 'for a in install edge; do GITHUB_REPOSITORY=olafkfreund/nixarchy .github/scripts/vm-host-free.sh $a; done'`.
+Exit 2 means the API did not answer, which is not "free".
 
 A p620 *switch* still kills every install in flight (see above). The tiers
 govern builds, not deploys.

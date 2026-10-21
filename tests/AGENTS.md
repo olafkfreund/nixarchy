@@ -1847,3 +1847,20 @@ never inside the activation. **systemd expands `$` in that unit's argv**, so a
 `bash -c '…${x%/*}…'` string arrives mangled. The helper runs its own
 `deliver` action instead. `shell-session`'s fake `systemd-run` refuses a `$`,
 so that case can go red.
+
+## A stub that only logs cannot see a loop that runs through it (#1398)
+
+`launch-browser-self-call`'s control (the launcher with its #1342 guard deleted)
+must recurse, or the check is blind. On quattro it stopped at one call: quattro
+probes the browser's `--help` only for `--private`, so an ordinary launch
+recurses through `systemd-run … uwsm-app -- "$browser_exec"` instead, and the
+check stubbed both of those as loggers. The guard had meanwhile moved inside
+the `--private` branch, and the check could not tell. The stubs now run what
+they are handed. Feeding the fixture `--private` would also have recursed, and
+would have passed the broken placement too: vary the path real users take.
+
+The same edge run hid two more reds a different way. `shell-restart-race`
+and `iso-source` failed at **evaluation**, so no derivation failed and the
+failure digest had nothing to name. A check list that only reports failed
+builds reads an evaluation error as silence; build each check by drvPath
+(`nix eval --raw …drvPath` first) and count an evaluation failure as red.

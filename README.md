@@ -256,15 +256,14 @@ Then, in order:
    version means.
 
    ```nix
-   inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.3-2";
+   inputs.nixarchy.url = "github:olafkfreund/nixarchy/release";
    # in your host's modules:
    imports = [ inputs.nixarchy.nixosModules.nixarchy ];
    programs.nixarchy.enable = true;
    ```
 
-   gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
-   after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
-   (main) to get them.
+   `release` follows the newest tagged release; to pin one exactly,
+   use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
 
 2. **Paste what the doctor printed.** On a machine that already runs Hyprland
    behind greetd, that is:
@@ -700,14 +699,13 @@ programs.nixarchy.apps.once.package =
 
 ```nix
 inputs.nixarchy = {
-  url = "github:olafkfreund/nixarchy/v4.0.3-2";
+  url = "github:olafkfreund/nixarchy/release";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
-gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
-after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
-(main) to get them.
+`release` follows the newest tagged release; to pin one exactly,
+use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
 
 From `v4.0.1-3` on, a tag also publishes the two ISOs and a `SHA256SUMS` to
 the [Releases](https://github.com/olafkfreund/nixarchy/releases) page, so a tag

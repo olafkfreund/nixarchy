@@ -14,7 +14,7 @@ used to be the middle of the README, and moved here unchanged.
 
 ```nix
 {
-  inputs.nixarchy.url = "github:olafkfreund/nixarchy/v4.0.3-2";
+  inputs.nixarchy.url = "github:olafkfreund/nixarchy/release";
 
   outputs = { nixpkgs, nixarchy, ... }: {
     nixosConfigurations.mymachine = nixpkgs.lib.nixosSystem {
@@ -32,9 +32,8 @@ used to be the middle of the README, and moved here unchanged.
 }
 ```
 
-gliff, Gliff-Manager and `programs.nixarchy.defaultPlugins` arrive in a release
-after v4.0.4-3; until one is marked Latest, use `github:olafkfreund/nixarchy`
-(main) to get them.
+`release` follows the newest tagged release; to pin one exactly,
+use its tag instead, for example `github:olafkfreund/nixarchy/v4.0.6-1`.
 
 And in Home Manager:
 

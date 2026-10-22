@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1426
 intent: intent/2026-10-22-1426-edge-wait-vm-host.md
 ---

@@ -9,7 +9,7 @@ from it. nixarchy lets you choose which Omarchy your desktop runs:
 
 | channel | what you get | who it is for |
 |---|---|---|
-| **stable** (the default) | Omarchy's latest release | everyone |
+| **stable** (the default) | Omarchy's latest release (on `main`, a pinned release candidate; [see below](#main-carries-omarchy-v450-rc1)) | everyone |
 | **edge** | Omarchy's development branch, `quattro`, after nixarchy has built and booted it | trying what is coming before it is released |
 | **dev** | Omarchy built from your own git checkout | working on Omarchy itself |
 
@@ -52,11 +52,11 @@ nightly job moves forward, **only after** that day's `quattro`:
 2. passes the same checks a release does: the menu, the command ledger, the
    option set, and three booted desktops.
 
-When something upstream breaks on NixOS, edge simply stays where it is. A
+When the newest `quattro` breaks on NixOS, edge keeps taking `main`'s changes
+on the last `quattro` that passed, so only the Omarchy side stops moving. A
 rolling issue labelled
 [`omarchy-edge`](https://github.com/olafkfreund/nixarchy/issues?q=label%3Aomarchy-edge)
-says what broke. So edge can lag `quattro` by a few days, but it does not move
-to something that does not boot.
+says what broke. Edge never moves to something that does not boot.
 
 `nixarchy version` shows the date edge was cut, for example
 `edge-20261015-246f33a (edge)`.
@@ -64,9 +64,15 @@ to something that does not boot.
 **Edge's new Omarchy features are ported**
 ([#1280](https://github.com/olafkfreund/nixarchy/issues/1280)): language
 switching, the fingerprint reader's resume hook, and removing fingerprint
-authentication all work as on stable. The passwordless-sudo toggle is hidden,
+authentication all work as on stable, and `omarchy agent account use` reaches
+the next `claude`, `codex` or `grok` you type in a shell
+([#1386](https://github.com/olafkfreund/nixarchy/issues/1386)). The
+passwordless-sudo toggle is hidden,
 because NixOS declares sudo in the build ([Security](security.md#passwordless-sudo) says how to
 set it). Each port lands on stable with the release that brings it.
+
+On edge, Omarchy's **Style ▸** menu is called **Appearance ▸**, and pages that
+say Style describe stable.
 
 ## Dev: your own checkout
 
@@ -86,7 +92,9 @@ nh os switch
   omarchy update --nixarchy
   ```
 
-  That picks up the new commit along with nixarchy.
+  That picks up the new commit along with nixarchy. `nixarchy version` names
+  the commit of your checkout being built
+  ([#1373](https://github.com/olafkfreund/nixarchy/issues/1373)).
 - **nixarchy's NixOS patches are applied to your checkout**, the same ones
   edge uses. If your change moves something nixarchy patches, the rebuild
   fails and says where. That is the signal to update the patch.

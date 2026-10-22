@@ -86,7 +86,7 @@ a key, keyboard-first, in the desktop's own look:
 - see which coding agent in your herdr sessions needs you;
 - manage MicroVMs and Distrobox boxes;
 - browse the plugin marketplace, and audit a plugin before installing it;
-- open anything from one palette on Super+Space: apps, the whole menu, sums, files;
+- open Omarchy's menu on Super+Space, or switch it to a palette over apps, the menu, sums and files in Setup ▸ Defaults ▸ Menu;
 - tune every Hyprland setting with a live preview, and keep what you save;
 - switch the colour palette across your apps without a rebuild;
 - see which of your machines are ready for gliff, and connect.
@@ -123,7 +123,7 @@ the loader story covers Node, Electron and games too.
 ## An agent that knows this machine
 
 Omarchy symlinks its agent skills into every harness's skill directory. Upstream
-ships one, written for Arch; nixarchy ships seventeen, written for NixOS, and eight Nix skills beside them.
+ships a few, written for Arch; nixarchy ships seventeen, written for NixOS, and eight Nix skills beside them.
 
 That matters more than it sounds. A model asked how to install a package on
 NixOS will confidently invent an answer; the same model handed the `nixos` skill

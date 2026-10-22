@@ -22,6 +22,9 @@ The keys below (Super+Alt+…) are seeded into `~/.config/hypr/bindings.lua` on
 **new** installs. nixarchy never edits that file afterwards, so on an existing
 machine use the menu row, or copy the line from a fresh install.
 
+nixarchy's panels live in the top-level **Nixarchy** folder of the menu, right
+after Trigger.
+
 | Plugin | What it's for | Status | Open it |
 |---|---|---|---|
 | [Package manager](#package-manager) | apps, services, packages and options | **on by default** | Install ▸ Packages · Super+Alt+N <!-- nixarchy.pkg --> |

@@ -27,6 +27,19 @@ actual problem on a NixOS host:
 
 After you upgrade to Omarchy 4.0.5, log out and back in. Until then, links open with the browser your session started with. `~/.config/hyprland-mimeapps.list` appears at your next login (#1342). Restarting the shell does not seed it.
 
+### Check the desktop itself: nixarchy-verify
+
+```sh
+nixarchy-verify
+```
+
+Run it inside a running session: it checks what a VM cannot (graphics, screen
+sharing, the lock, audio, Bluetooth, MicroVM guests). It ends with
+`N passed, N failed, N worth a look`. `✓` is ok, `✗` is a failure, and `·` is
+worth a look, not a failure: for example a guest no longer declared (its state
+can be removed), or a pairable adapter held by a prompting agent such as
+blueman.
+
 ### A rebuild failed and the error is unreadable
 
 ```sh

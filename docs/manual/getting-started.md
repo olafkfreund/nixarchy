@@ -217,7 +217,7 @@ nixarchy manual on your disk, and a tutor that answers about *your* machine
 rather than about Linux in general. It is what a first hour on an unfamiliar
 desktop should have.
 
-It is **on by default**. Click the snowflake in the bar, or run `nixi`; bind a
+It is **on by default**. Click the snowflake in the bar, or run `nixi`, or open Menu ▸ Nixarchy ▸ Nixi; bind a
 key if you like (`o.bind("SUPER + H", "Nixi", "nixi")` in
 `~/.config/hypr/bindings.lua`). The tutor uses **Claude Code** unless you pick
 another agent (SUPER + , in the card: Codex or OpenCode).

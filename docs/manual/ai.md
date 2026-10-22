@@ -39,7 +39,7 @@ mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
 `~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
 reads `~/.agents/skills` too and would list every skill twice — but ships
-seventeen skills instead of one, and eight Nix skills beside them:
+seventeen skills instead of upstream's few, and eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -259,7 +259,7 @@ here a rebuild sits in between, so it asks whether the command exists.
 
 ## Nixi, on SUPER + H
 
-`SUPER + H` (or the ✨ in the bar) opens **Nixi**, the nixarchy guide: a card
+`SUPER + H` (or the ✨ in the bar) opens **Nixi** (as does Menu ▸ Nixarchy ▸ Nixi), the nixarchy guide: a card
 you ask "how do I…" in plain words. Before every question it searches a local,
 hash-verified copy of this manual and Omarchy's, so the answer to "how do I
 install an app" is `apps.nix` and `nixarchy apply`, not `pacman -S`. It can

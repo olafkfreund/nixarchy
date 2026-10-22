@@ -443,8 +443,8 @@ quantity "skills-llms-manual" "$skills_word" \
   's/the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
 readme="$root/docs/manual/ai.md"
 quantity "skills-manual-ai" "$skills_word" \
-  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one[,:].*$' \
-  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of one/'"$skills_word"' skills instead of one/'
+  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of upstream.s few[,:].*$' \
+  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of/'"$skills_word"' skills instead of/'
 # The manual's front page said "thirteen" for three skills' worth of releases
 # (#664) -- the fourth copy of this number, and the only one nothing read.
 readme="$root/docs/index.md"

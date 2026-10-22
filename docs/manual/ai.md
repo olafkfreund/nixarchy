@@ -32,9 +32,9 @@ programs.nixarchy.apps.hey-cli.enable = true;
 
 ## The skills are rewritten, because upstream's would lie
 
-Omarchy ships one agent skill, `omarchy`, and symlinks it into the skill
-directories of Claude Code, Codex, Pi and the generic `~/.agents/skills`
-location, so most harnesses load it automatically. nixarchy keeps the
+Omarchy ships a few agent skills, `omarchy` first, and symlinks them into the
+skill directories of Claude Code, Codex, Pi and the generic `~/.agents/skills`
+location, so most harnesses load them automatically. nixarchy keeps the
 mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
 `~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex

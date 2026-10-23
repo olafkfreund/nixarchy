@@ -23,13 +23,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "owe";
-  version = "0.2.11";
+  version = "0.2.12";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "owe";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-0o+YpXsgz2ibsmzQzOS2wInZcMaZrkUyovoBN6lrk38=";
+    hash = "sha256-h281d5V8UTy+VlruwcyjSun1068gP+RFamflgRTb+6U=";
   };
 
   # No binary here is a Qt app -- owed/owe-render/owe/owe-idle are plain

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1434
 author: olafkfreund
 ---
@@ -75,3 +75,6 @@ main and edge") is days old. Apart from nixi, the docs already match what ships.
    default.
 3. **"The latest features" beyond nixi.** #1425 just aligned the docs with main and edge, so this
    intent covers only nixi and the companion. Say if you want a wider pass.
+
+
+Answered by the user at approval (2026-10-24): the recommendations above, unchanged.

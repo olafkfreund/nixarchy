@@ -150,6 +150,13 @@
       inputs.omarchy.follows = "omarchy";
     };
 
+    # Not in nixpkgs; tracks main like nixi. The fork has no CI, and it is built
+    # only where services.nixi.companion.enable is on.
+    nixi-companion = {
+      url = "github:olafkfreund/nixoarchy-snowflake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Speech into desktop actions (#774). An input on every machine while the
     # app is on none, which is not a contradiction: data/apps.nix is data, and
     # this module only does anything once somebody sets

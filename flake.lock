@@ -1118,6 +1118,26 @@
         "type": "github"
       }
     },
+    "nixi-companion": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792771164,
+        "narHash": "sha256-bjq37BUiwHqJEH2CREISwBEXry0ZWs+OUH7Gl+5sEP0=",
+        "owner": "olafkfreund",
+        "repo": "nixoarchy-snowflake",
+        "rev": "09af56c76fe719e70439c3d7b4de44cd90d67306",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixoarchy-snowflake",
+        "type": "github"
+      }
+    },
     "nixos-hardware": {
       "inputs": {
         "nixpkgs": [
@@ -1302,6 +1322,7 @@
         "nixarchy-podman": "nixarchy-podman",
         "nixarchy-voice": "nixarchy-voice",
         "nixi": "nixi",
+        "nixi-companion": "nixi-companion",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-stable": "nixpkgs-stable",

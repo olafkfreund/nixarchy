@@ -147,7 +147,8 @@ programs.nixarchy.mcp = false;
 
 That switch is only the NixOS server. **ai-mirror**, which lets an agent see and
 drive your desktop, has its own, and it is off:
-`programs.nixarchy.aiMirror.mcp = true;` connects the same agents to it.
+`programs.nixarchy.aiMirror.mcp = true;` connects the same agents to it; it can also
+[work in a window you are not using](plugins#ai-mirror).
 The two are independent. Read [what the yes does not cover](plugins#ai-mirror)
 before you turn it on.
 
@@ -279,6 +280,23 @@ upstream's merge instead.
 [Nixi's own site](https://olafkfreund.github.io/nixi-nixarchy/) walks through a
 first session, and its [README](https://github.com/olafkfreund/nixi-nixarchy#readme)
 covers the options.
+
+There is also a snowflake companion that listens and talks. It asks only
+through Nixi's bridge, so it follows Guide and Mechanic like the card does. It
+is off by default; turn it on in Home Manager:
+
+```nix
+services.nixi.companion.enable = true;
+```
+
+Bind it to keys in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + S", "Nixi companion: show or hide", "nixi-companion")
+o.bind("SUPER + ALT + SHIFT + S", "Nixi companion: listen", "nixi-companion listen")
+```
+
+What it leaves out is in the [README](https://github.com/olafkfreund/nixi-nixarchy#the-snowflake-companion-optional).
 
 ### If you installed Claude some other way
 

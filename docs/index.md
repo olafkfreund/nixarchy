@@ -145,6 +145,27 @@ and the refusal explains why with the measurements behind it.
 
 See **[the AI page](manual/ai)**.
 
+## An agent that uses your desktop without taking it
+
+**ai-mirror** lets an agent drive the dialog or the unlabelled button on your
+real desktop, and it asks you first. Since 3.0.0 it can do that in a window you
+are not using: it sets a slider, picks a list item and saves a form while your
+cursor and your focused terminal stay where you left them.
+
+It still needs your yes, and the bar mark is red the whole time. Super+Shift+Escape
+takes control back. When it cannot confirm a result, it says so: see
+[the page](manual/plugins#ai-mirror).
+
+![An agent sets a slider, picks a list item and saves a form in Chrome while the cursor and the focused terminal never move](video/ai-mirror-background.gif)
+
+[The same, as video (69 KB)](video/ai-mirror-background.mp4)
+
+```nix
+programs.nixarchy.aiMirror.mcp = true;
+```
+
+connects your agents to it. It is off until you set that.
+
 ## Get this machine back on new hardware
 
 `nixarchy reinstall iso` builds a bootable image **from this machine's own

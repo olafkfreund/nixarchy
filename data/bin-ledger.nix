@@ -280,12 +280,12 @@
   };
   "omarchy-install-hermes-cli" = {
     class = "vendor";
-    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service on --now only; stopping a user unit is session state and carries no configuration.";
+    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service only after a --now set-up, before re-running the theme setter; stopping a user unit is session state and carries no configuration.";
     allow = "systemctl-user";
   };
   "omarchy-install-openclaw-cli" = {
     class = "vendor";
-    reason = "Vendored unchanged. Stops, disables and queries the openclaw-<role> user units it installed; user-unit state, not configuration.";
+    reason = "Vendored unchanged. Stops, disables, queries and restarts the openclaw-<role> user units it installed; user-unit state, not configuration.";
     allow = "systemctl-user";
   };
   "omarchy-install-preinstalls" = {
@@ -746,16 +746,6 @@
   "omarchy-install-dictation-voxtype" = {
     class = "vendor";
     reason = "Vendored unchanged. Enables voxtype.service, a user unit the install writes under the user's own tree.";
-    allow = "systemctl-user";
-  };
-  "omarchy-install-hermes-cli" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Stops omarchy-hermes-theme.service before reinstalling; stopping a user unit is session state and carries no configuration.";
-    allow = "systemctl-user";
-  };
-  "omarchy-install-openclaw-cli" = {
-    class = "vendor";
-    reason = "Vendored unchanged. Stops and checks openclaw-<role>.service user units around an upgrade: session state, no configuration.";
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-superwhisper" = {

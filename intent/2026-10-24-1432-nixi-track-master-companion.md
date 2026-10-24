@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1432
 author: olafkfreund
 ---
@@ -64,14 +64,10 @@ defaults to `null`, so the companion can't be turned on anywhere today.
 
 ## Open questions
 
-1. **Should the companion track a branch too?** The fork has no CI, so tracking `main` means any
-   push lands on the next update untested. The alternative is a pinned commit. Recommendation:
-   track `main`, like nixi, since both have the same maintainer and it matches your "update
-   brings the latest" goal.
-2. **Where does the companion package come from?** Options:
-   - (a) nixarchy adds the fork as an input and defaults `services.nixi.companion.package`, so
-     users only set `enable`;
-   - (b) only p620's config adds the input.
-   Recommendation: (a), since you asked for it to be "part of" nixarchy.
-3. **On p620, which keys should start `nixi-companion` and `nixi-companion listen`?** Or does it
-   autostart with the session?
+Answered by the user at approval (2026-10-24):
+
+1. The companion tracks the fork's `main` too, like nixi tracks `master`.
+2. nixarchy adds the fork as an input and defaults `services.nixi.companion.package`, so a
+   user sets only `enable`.
+3. p620 starts it from keys (the recommendation in nixi's README): `SUPER + ALT + H` runs
+   `nixi-companion`, and `SUPER + ALT + J` runs `nixi-companion listen`.

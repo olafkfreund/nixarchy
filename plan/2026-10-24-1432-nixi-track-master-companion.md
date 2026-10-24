@@ -122,6 +122,17 @@ and the hand-off), and runs the fresh Opus review (P8).
   - a link to nixi's README section for what it leaves out.
 - Verify: the repo's docs/link lint, if one runs in `nix flake check`. Otherwise read it.
 
+**P1–P4 results (2026-10-24, the `coder` agent; reviewed and committed by the lead):**
+- **P1:** as planned. The lock is at `39af9e3`. The `# Why:` line follows the 2-line note instead of
+  leading it. The lead fixed one stale phrase in the moved text ("hyprland above").
+- **P2/P3:** as planned. `nixi-companion` is locked at `09af56c`, and no other node moved.
+  Evals: `companion.package` is `nixi-companion-0.1.0`, `enable` is `false`, and there is no
+  companion in `home.packages`. `checks.options` builds, and `nix flake check --no-build` passes
+  on the committed tree.
+  The lead also built the VM config with `companion.enable = true`: `nixi-companion-0.1.0` builds
+  and carries nixi's `nixi-node` and `bridge.js` store paths.
+- **P4:** 18 lines instead of 4–8, because of the two code blocks.
+
 **P5. The PR and merge** (lead)
 - Push, then `gh pr create`:
   - fill in the template;

@@ -90,12 +90,12 @@ stdenv.mkDerivation (finalAttrs: {
     "regression"
   ];
 
-  # CARRIED (#1153): owed gave owe-render 1 s to open its socket, then killed
-  # it and retried 30 s later. Under software GL (llvmpipe) start-up takes about
-  # 1.3 s, so a VM, or a slow first start, never got a renderer at all.
+  # CARRIED (#1153): upstream gives owe-render 1 s (sleep-counted) to open its
+  # socket; llvmpipe start-up in CI's coexist VM took 8.9-10.6 s and was killed
+  # 70 ms short (#1437). The same line bounds stop()'s SIGTERM grace, so 30 s too.
   postPatch = ''
     substituteInPlace src/daemon/supervisor.c \
-      --replace-fail 'while (waited < 1000) {' 'while (waited < 10000) {'
+      --replace-fail 'while (waited < 1000) {' 'while (waited < 30000) {'
 
     # CARRIED (#1359, omacom/owe#18): switch_to_shell() schedules a park 2 s
     # out, and since 0.2.11 the engine stays "shell" through a handoff, so a

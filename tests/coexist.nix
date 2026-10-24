@@ -176,8 +176,10 @@ pkgs.testers.runNixOSTest {
     # machine is: 20 seconds was enough here and not on a CI runner, where this
     # failed with the desktop still black. Retrying converges on whatever the
     # machine actually needs, and still fails if it never draws.
+    # Here first paint waits for the shell to take owe's hand-off: across 12
+    # CI runs it came on try 10 or 11, so 24 tries is ~2x the slowest (#1437).
     delta = None
-    for attempt in range(12):
+    for attempt in range(24):
         machine.sleep(5)
         machine.screenshot("coexist-desktop")
         shot = os.path.join(os.environ["out"], "coexist-desktop.png")
@@ -190,7 +192,7 @@ pkgs.testers.runNixOSTest {
 
     assert delta is not None and delta < 120, (
         f"the Omarchy session came up but never looked like its wallpaper "
-        f"(delta {delta} after 60s) -- the entry point loaded, the desktop "
+        f"(delta {delta} after 120s) -- the entry point loaded, the desktop "
         "did not.")
     print("the Omarchy session renders its desktop beside a foreign hyprland.lua")
   '';

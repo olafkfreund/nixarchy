@@ -131,6 +131,31 @@ Codex `review`, as asked.
 9. **Clean up.** Remove the worktree, delete the local branch, and delete
    `/mnt/data/vmtest/1437-*`.
 
+## Deviations
+
+- **Step 1's comment** is three lines rather than the five drafted, and it
+  adds what review found. The Fable review (verified against `supervisor.c`)
+  showed that the anchor `while (waited < 1000) {` occurs twice: at line 121,
+  the start-up wait, and at line 160, `owed_supervisor_stop`'s SIGTERM grace
+  before the SIGKILL. `substituteInPlace` replaces both, so the stop grace
+  was already 10 s on `main` and is now 30 s.
+  - A healthy renderer exits within one 50 ms tick, so this only lengthens
+    the stall on a wedged renderer.
+  - The anchor is left as it is, as step 1 required. A multi-line anchor
+    would be more fragile across bumps, and the comment now says what the
+    line bounds.
+  - The upstream report includes it.
+
+- **Steps 1, 3 and 4 run in CI, not locally** (asked for on 2026-10-24).
+  For about 40 minutes p620 had an install booting VMs, with load above 12,
+  so §6 never admitted the local owe build or a VM run.
+  - The PR's own CI builds owe (`system-build`, `apps`) and runs `coexist`
+    (`system-checks`) for the green.
+  - The negative control is the same squash commit plus the step 3 line,
+    on the throwaway branch `ci/1437-negative-control`, with `build.yml`
+    dispatched there. That keeps the control off the PR. The branch is
+    deleted afterwards.
+
 ## Tests
 
 | step | check | expected |

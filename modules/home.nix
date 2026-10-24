@@ -878,6 +878,10 @@ in
         package = lib.mkDefault (
           inputs.nixi.packages.${pkgs.stdenv.hostPlatform.system}.nixi.override { omarchySrc = menuModelSrc; }
         );
+        # Off unless the user enables it; nixi pins its bridge into this package.
+        companion.package =
+          lib.mkDefault
+            inputs.nixi-companion.packages.${pkgs.stdenv.hostPlatform.system}.default;
       };
 
       # The one nixi default nixarchy DOES change, and the only one it needs to.

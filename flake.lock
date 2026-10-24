@@ -1105,17 +1105,36 @@
         ]
       },
       "locked": {
-        "lastModified": 1792493912,
-        "narHash": "sha256-RMDecRnkXfQ/O0AF2G2Xa8OGbrxc5FNKooRVwUXWev0=",
+        "lastModified": 1792772877,
+        "narHash": "sha256-spQYo46a+e8YN1a1senFCIqWgsuhdS5JCeczPQxGGyI=",
         "owner": "olafkfreund",
         "repo": "nixi-nixarchy",
-        "rev": "5ae2ca4917cc7c0eabb2c22d4aa7fc0ddfaa06fe",
+        "rev": "39af9e38f3adbd231999a44dbefa0c42f5de33d3",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixi-nixarchy",
-        "rev": "5ae2ca4917cc7c0eabb2c22d4aa7fc0ddfaa06fe",
+        "type": "github"
+      }
+    },
+    "nixi-companion": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792771164,
+        "narHash": "sha256-bjq37BUiwHqJEH2CREISwBEXry0ZWs+OUH7Gl+5sEP0=",
+        "owner": "olafkfreund",
+        "repo": "nixoarchy-snowflake",
+        "rev": "09af56c76fe719e70439c3d7b4de44cd90d67306",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olafkfreund",
+        "repo": "nixoarchy-snowflake",
         "type": "github"
       }
     },
@@ -1303,6 +1322,7 @@
         "nixarchy-podman": "nixarchy-podman",
         "nixarchy-voice": "nixarchy-voice",
         "nixi": "nixi",
+        "nixi-companion": "nixi-companion",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-stable": "nixpkgs-stable",

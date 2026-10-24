@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1433
 spec: spec/2026-10-24-1433-bin-ledger-duplicates.md
 ---

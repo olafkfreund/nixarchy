@@ -74,6 +74,16 @@ becomes a declaration too, not a terminal command the next rebuild forgets.
 See **[Flatpak and Snap](manual/flatpak-and-snap)**, including what Snap
 confinement means on NixOS.
 
+## A guide that knows this machine
+
+Press `SUPER + H`, or click the ✨ in the bar, and **nixi** opens: a card you
+ask "how do I…" in plain words. It answers from the nixarchy manual on your
+disk and can look at your machine. In Guide, the default, it changes nothing;
+in Mechanic it asks before every step. An optional snowflake companion listens
+and talks back, through the same two levels.
+
+See **[Nixi](manual/ai#nixi-on-super--h)**.
+
 ## Panels, not terminals
 
 The jobs nixarchy adds to Omarchy live in the shell itself. Each is a panel on

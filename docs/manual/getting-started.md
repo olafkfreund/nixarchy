@@ -217,10 +217,13 @@ nixarchy manual on your disk, and a tutor that answers about *your* machine
 rather than about Linux in general. It is what a first hour on an unfamiliar
 desktop should have.
 
-It is **on by default**. Click the snowflake in the bar, or run `nixi`, or open Menu ▸ Nixarchy ▸ Nixi; bind a
+It is **on by default**. Click the ✨ in the bar, or run `nixi`, or open Menu ▸ Nixarchy ▸ Nixi; bind a
 key if you like (`o.bind("SUPER + H", "Nixi", "nixi")` in
 `~/.config/hypr/bindings.lua`). The tutor uses **Claude Code** unless you pick
 another agent (SUPER + , in the card: Codex or OpenCode).
+
+It can also come as a snowflake on your desktop that listens and talks back, off
+by default: see [the snowflake companion](ai#the-snowflake-companion).
 
 Unlike other plugins, the card is turned on for you — once, on your first
 rebuild, because a plugin that is installed but off does nothing when summoned.

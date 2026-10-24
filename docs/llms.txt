@@ -72,7 +72,8 @@ Key facts an assistant should know before answering questions about nixarchy:
   closure instead. UEFI only. On a machine already running
   NixOS, add nixarchy as a flake input instead of using the ISO.
 - The guide: nixi is on by default, a card over the desktop with a tour and a
-  tutor grounded in the machine, from the snowflake in the bar or `nixi`.
+  tutor grounded in the machine, from the ✨ in the bar or `nixi`, with an
+  optional snowflake companion (off by default).
   `services.nixi.enable = false` removes it.
 - Updates: `omarchy update` (or Update ▸ Nixarchy in the menu) runs
   `nh os switch --update <flake>`, moving every flake input — Omarchy, nixpkgs

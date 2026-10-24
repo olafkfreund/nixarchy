@@ -98,6 +98,24 @@ spec: spec/2026-10-24-1434-docs-nixi-showcase.md
 - Fill in the PR template, link intent, spec and plan, and embed the GIF.
 - Merge only after the user has seen the GIF in the PR.
 
+## Deviations
+
+- **The GIF is deferred to #1441** (the owner's choice, 2026-10-24).
+  - Recording it needs someone to ask the companion a question aloud, and
+    `screencast-prep` refuses while any window is open, which the owner's
+    p620 session had.
+  - So **D0's GIF precondition and D1 are skipped**.
+  - **D2's** `### The snowflake companion` subsection is written without the
+    image line.
+  - **D4's** guide block is written without the GIF.
+  - **D6's** merge condition ("only after the user has seen the GIF") becomes
+    "once CI is green".
+  - #1441 adds the GIF to both places.
+- **p620 already runs the companion** (olafkfreund/nixos_config#2468), which
+  meets D0's "p620 is rebuilt with the companion on".
+- **Line references after merging `main`:** `docs/index.md`'s
+  `## Panels, not terminals` is at line 77, not 76. The others are unchanged.
+
 ## Tests
 
 | Check | Expected |

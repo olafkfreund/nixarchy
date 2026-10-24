@@ -11,7 +11,7 @@ spec: spec/2026-10-24-1434-docs-nixi-showcase.md
 - **Order:** after #1432 is merged (its P4 adds a short companion paragraph to `ai.md`) and after
   p620 is rebuilt with the companion on.
 - **One GIF, `docs/img/features/companion.gif`:**
-  - SUPER+ALT+H summons the snowflake, it answers a question (caption bubble), and it melts to
+  - SUPER+ALT+S summons the snowflake, it answers a question (caption bubble), and it melts to
     the edge;
   - house style (`docs/AGENTS.md`): a whole desktop at 16:10, 900×563, 4 fps, palette ≤ 96,
     **< 1 MB**, the default theme (Tokyo Night, Winding Road).
@@ -22,7 +22,7 @@ spec: spec/2026-10-24-1434-docs-nixi-showcase.md
   - the #1432 paragraph becomes `### The snowflake companion` with the GIF. It covers:
     - what it is;
     - `services.nixi.companion.enable = true;`;
-    - the `o.bind` lines for SUPER+ALT+H / J;
+    - the `o.bind` lines for SUPER+ALT+S / SUPER+ALT+SHIFT+S;
     - that it follows Guide/Mechanic;
     - herdr sessions by voice (asking and opening; sending needs a click);
     - a link to nixi's README for what it leaves out.

@@ -133,6 +133,24 @@ and the hand-off), and runs the fresh Opus review (P8).
   and carries nixi's `nixi-node` and `bridge.js` store paths.
 - **P4:** 18 lines instead of 4–8, because of the two code blocks.
 
+**P8 results (fresh Opus review of P1–P4, 2026-10-24). Each finding was checked by the lead.**
+- **Deviation, closure:** the "no closure change" claim was wrong for installed machines and ISOs.
+  `installer/host.nix:284` puts every input's source in `system.extraDependencies`
+  (`lib.inputSources`), so the companion's source (~13 MB) is on every install even with it off.
+  The cost is accepted: filtering it out would break an offline evaluation that ever touches the
+  input. CI's `iso-budget` measures it.
+- **Deviation, keys:** SUPER+ALT+H is Herdr in the seeded `bindings.lua`
+  (`pkgs/omarchy/default.nix:2087`). The companion keys are now **SUPER+ALT+S** (show or hide)
+  and **SUPER+ALT+SHIFT+S** (listen). Both are free in the seed and on p620. This applies to
+  `ai.md` here and to P6/P7.
+- **Fixed:** comments that leaned on the old nixi pin (`flake.nix` nixarchy-voice,
+  mcp-servers-nix, `checks.nixi`). The nightly canary comment now lists nixi and nixi-companion as
+  mobile inputs (a comment only, no workflow change). The moved history no longer claims
+  "newest first" and gains the 39af9e3 entry. "Nothing else moves it" and "5 green checks" are
+  corrected (admins can bypass).
+- **Not changed:** the moved section stays an H2 at the end of `docs/internals/flake.md`, not an
+  `###` in input order (low; the anchor resolves).
+
 **P5. The PR and merge** (lead)
 - Push, then `gh pr create`:
   - fill in the template;

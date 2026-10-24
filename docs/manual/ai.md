@@ -291,8 +291,8 @@ services.nixi.companion.enable = true;
 Bind it to keys in `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + ALT + H", "Nixi companion: show or hide", "nixi-companion")
-o.bind("SUPER + ALT + J", "Nixi companion: listen", "nixi-companion listen")
+o.bind("SUPER + ALT + S", "Nixi companion: show or hide", "nixi-companion")
+o.bind("SUPER + ALT + SHIFT + S", "Nixi companion: listen", "nixi-companion listen")
 ```
 
 What it leaves out is in the [README](https://github.com/olafkfreund/nixi-nixarchy#the-snowflake-companion-optional).

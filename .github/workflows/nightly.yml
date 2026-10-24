@@ -487,7 +487,8 @@ jobs:
   # COMMITTED lock, so on the flake inputs it proves nothing a merged PR did
   # not already prove -- the break that reaches people arrives through their
   # own `nix flake update`, resolving every input this repo leaves mobile:
-  # nixpkgs on nixos-unstable, disko on the moving `latest` tag. zen-browser
+  # nixpkgs on nixos-unstable, disko on the moving `latest` tag, nixi and
+  # nixi-companion on their default branches (#1432). zen-browser
   # tracked master the same way until #320, and that is the incident this job
   # exists for: nixpkgs renamed ffmpeg_7 away, every downstream consumer's
   # eval broke, and this repo's CI stayed green the whole time because its

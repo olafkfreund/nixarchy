@@ -1543,13 +1543,16 @@ forfeit. What following buys is one node in every user's lock instead of
 two, and one nodejs and python3 in the closure rather than a second.
 
 Tracks nixi-nixarchy master (#1432). The input names no rev, so `flake.lock`
-is the pin: `nix flake update nixi` moves it, and nothing else does. Nixi's
-master only takes a change after 5 green checks, so a bump lands on a
-tested commit. This replaces the earlier rule, "pinned to a commit, never
+is the pin: `nix flake update nixi` (or a bare `nix flake update`, as the
+nightly canary runs) moves it. Nixi's master requires 5 status checks to
+merge (strict, though an admin can push past them), so a bump normally
+lands on a tested commit. For everyone downstream, "tracks master" means
+"moves when this lock moves": a consumer gets nixi from nixarchy's lock
+unless it declares nixi itself and has nixarchy follow it. This replaces the earlier rule, "pinned to a commit, never
 track a branch", which was written when nixi had one stale tag and no CI
 gate on master.
 
-Pin history, newest first (each was a commit pin before #1432):
+Pin history, in the order the old comment kept it (each was a commit pin before #1432):
 
 1e25cb8 is nixi-nixarchy#32: in the card, install, environment, VM,
 container and other-distro questions now lead with the nixarchy panel
@@ -1647,3 +1650,10 @@ It also carries nixi-nixarchy#36-#83:
 Now master at 5ae2ca4 (#1391): Mechanic edits are backed up, checked and
 undoable with /undo (#90), a learned marker counts only at a line start
 (#89), and the Qt 6.12 Color fix (#1381).
+Then 39af9e3 (#1432, the first lock-only bump): Guide keeps secret files from
+shell commands and refuses Codex, which it cannot fence (#96, #97, so the
+`codex` nixarchy names in `services.nixi.agents` is Mechanic-only); opencode
+answers at Guide without reading secrets, and a silent turn ends instead of
+hanging (#102); herdr writes always ask, and a voice front end can read and
+open agent sessions (#95); the optional snowflake companion (#94); and two
+races, a settings write and YOLO during a switch to Guide (#103, #106).

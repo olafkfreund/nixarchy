@@ -174,8 +174,8 @@
     # change and would hide an upstream regression rather than catch it --
     # checks.options asserts the off state instead.
     #
-    # Pinned to a COMMIT, for the reason the nixi pin above gives at length:
-    # a branch is not a version.
+    # Pinned to a COMMIT: a branch is not a version. (nixi above tracks its
+    # branch by decision, #1432; this input has not been through that call.)
     nixarchy-voice = {
       url = "github:olafkfreund/nixarchy-voice/0231774e529521e158b27d932684871740fcd892";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -317,8 +317,8 @@
     # by a new route.
     #
     # Pinned to a COMMIT because this repository publishes no tags at all
-    # (`git ls-remote --tags` is empty), which is the situation sops-nix and
-    # nixi are already in. Bump it deliberately; never track the branch.
+    # (`git ls-remote --tags` is empty), which is the situation sops-nix is
+    # already in. Bump it deliberately; never track the branch.
     mcp-servers-nix = {
       url = "github:natsukium/mcp-servers-nix/11fe2419e274bb223a86dddc9e4803b01ad359e8";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -1983,8 +1983,8 @@
           # Here rather than left to nixi's CI because modules/home.nix now
           # names it: AGENTS.md's rule is that anything this repo ships which
           # names something else needs something saying that something exists.
-          # The input is pinned to a commit, so this only runs when the pin
-          # moves -- and a pin that moves to a broken nixi would otherwise be
+          # The lock pins the input, so this only runs when the lock moves --
+          # and a lock that moves to a broken nixi would otherwise be
           # discovered by whoever rebuilt first with services.nixi.enable on.
           # Cheap: nothing compiles, the derivation places files.
           nixi = self.packages.${system}.nixi;

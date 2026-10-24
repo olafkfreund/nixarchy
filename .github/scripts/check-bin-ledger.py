@@ -447,6 +447,8 @@ def main():
         ):
             row = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', body))
             if row:
+                if name in ledger:
+                    die(f"{name}: two rows in the ledger; the later one would silently replace the earlier")
                 ledger[name] = row
     elif not args.seed:
         die(f"no ledger at {args.ledger}")

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1437
 intent: intent/2026-10-24-1437-coexist-wallpaper-window.md
 ---

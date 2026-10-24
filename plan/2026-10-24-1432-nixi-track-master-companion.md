@@ -213,6 +213,20 @@ the user says)
 - Back up first, the way the file's own `.bak.*` copies are kept.
 - Give the user the rebuild command and the live checks (Tests, below).
 
+**P5–P7 results (2026-10-24).**
+- P5: merged as PR #1438 (0ca68d9). The first edge dispatch went out before the merge and was
+  cancelled; the second (run 40088471556) waited about 90 min in `wait-idle` for an install
+  check, then published edge 1d39d75 containing 0ca68d9.
+- P6, deviation: the shared-checkout guard keeps `~/.config/nixos` on main, so the work was done
+  in a worktree (`~/.config/nixos-1432`). Meanwhile another session merged the companion into
+  the config as nixos_config#2468 (a shared `hosts/common/nixos/omarchy-nixi-companion.nix` for
+  p620 and razer, same keys, edge 1d39d75). That replaces this step's `hosts/p620` edits, so
+  only the follows went in: nixos_config#2470. Its lock has one `nixi` and one
+  `nixi-companion` node, p620's toplevel is byte-identical to main's, and razer and p510
+  evaluate.
+- P7: `bindings.lua` was backed up as `bindings.lua.bak-1432`, and the `pcall` line was added
+  after `ai-mirror-binds`. Its comment names the shared module. The rebuild is the user's.
+
 **P8. Review (lead):** a fresh Opus agent, given only this plan path and the nixarchy and config
 diffs. Fix what's confirmed and record it here.
 

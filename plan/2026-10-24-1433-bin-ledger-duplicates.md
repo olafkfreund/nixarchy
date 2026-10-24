@@ -61,8 +61,8 @@ threshold, so the lead implements it.
      and the same grep for openclaw each print `1`, that
      `nix-instantiate --parse data/bin-ledger.nix >/dev/null` exits 0, and that
      `checks.bin-ledger` is green. Its summary line reads `… rows, all true`,
-     with the row count two lower than the 170 on edge minus edge's extra
-     row, so 167 on `main`.
+     and the count is unchanged (169 on `main`). The dict already merged the
+     duplicates, which is the bug, so the count never saw them.
    Traps:
    - An editor hook can reformat `.nix` files (§5), so `nix fmt` is the
      final word.

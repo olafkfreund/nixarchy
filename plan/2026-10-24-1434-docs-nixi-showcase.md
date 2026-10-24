@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1434
 spec: spec/2026-10-24-1434-docs-nixi-showcase.md
 ---

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1432
 intent: intent/2026-10-24-1432-nixi-track-master-companion.md
 ---

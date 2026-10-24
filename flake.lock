@@ -1105,17 +1105,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1792493912,
-        "narHash": "sha256-RMDecRnkXfQ/O0AF2G2Xa8OGbrxc5FNKooRVwUXWev0=",
+        "lastModified": 1792772877,
+        "narHash": "sha256-spQYo46a+e8YN1a1senFCIqWgsuhdS5JCeczPQxGGyI=",
         "owner": "olafkfreund",
         "repo": "nixi-nixarchy",
-        "rev": "5ae2ca4917cc7c0eabb2c22d4aa7fc0ddfaa06fe",
+        "rev": "39af9e38f3adbd231999a44dbefa0c42f5de33d3",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixi-nixarchy",
-        "rev": "5ae2ca4917cc7c0eabb2c22d4aa7fc0ddfaa06fe",
         "type": "github"
       }
     },

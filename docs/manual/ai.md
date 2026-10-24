@@ -280,6 +280,23 @@ upstream's merge instead.
 first session, and its [README](https://github.com/olafkfreund/nixi-nixarchy#readme)
 covers the options.
 
+There is also a snowflake companion that listens and talks. It asks only
+through Nixi's bridge, so it follows Guide and Mechanic like the card does. It
+is off by default; turn it on in Home Manager:
+
+```nix
+services.nixi.companion.enable = true;
+```
+
+Bind it to keys in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + H", "Nixi companion: show or hide", "nixi-companion")
+o.bind("SUPER + ALT + J", "Nixi companion: listen", "nixi-companion listen")
+```
+
+What it leaves out is in the [README](https://github.com/olafkfreund/nixi-nixarchy#the-snowflake-companion-optional).
+
 ### If you installed Claude some other way
 
 [Nixi's panel](#nixi-on-super--h) — the one `SUPER + H` opens — talks to agents over **ACP**. Claude

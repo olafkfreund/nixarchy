@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1448
 intent: intent/2026-10-25-1448-release-lookup-redirect.md
 ---
@@ -37,8 +37,9 @@ Files: `pkgs/apps/hey-cli.nix:81-82`, `pkgs/apps/once.nix:94-95`, and the
 - If GitHub changed the redirect, the lookup would come back empty. The
   scripts would then fail with "could not read a release tag", loudly, the
   same way they do now.
-- `jq` stays in `runtimeInputs`, because hey-cli still uses it elsewhere if it
-  does; the plan checks that.
+- `jq` has no other use in either file, so it leaves both the argument list
+  and `runtimeInputs` (hey-cli.nix:7,70; once.nix:10,83). Nothing else reads
+  it there.
 
 ## Verification
 

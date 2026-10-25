@@ -2036,6 +2036,9 @@
             omarchy = self.packages.${system}.omarchy;
           };
 
+          # omarchy-default-agent's nixpkgs mapping, against this nixpkgs (#1452).
+          agent-attrs = import ./tests/agent-attrs.nix { pkgs = pkgsFor.${system}; };
+
           # nixarchy-reinstall-iso's preflights, with a df, git and eval that
           # lie -- plus the #478 honesty strings. See tests/reinstall-iso.nix.
           reinstall-iso = import ./tests/reinstall-iso.nix {

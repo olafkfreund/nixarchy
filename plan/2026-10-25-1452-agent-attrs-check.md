@@ -26,6 +26,18 @@ Traps:
 - §5: `tryEval` does not catch a missing attribute, so test with `?` first.
 - §5: a heredoc in an indented Nix string reindents the file, so use printf.
 
+## Deviations
+
+- Step 3 found a hole in step 1's parse. Splitting on `attr_for() {` also
+  matched `elsewhere_attr_for() {`, so a renamed header parsed that
+  function's three arms. A removed header would have thrown at evaluation
+  (`elemAt 1`). The split is now anchored to a line start and guarded, and
+  both cases fail the build with `parsed 0 arms`.
+- The breaks run: `codex) echo amp` fails with "codex: pkgs.amp installs
+  amp, not codex". `grok-cli-nonexistent` fails with "grok: no
+  pkgs.grok-cli-nonexistent". A renamed or removed header fails with
+  "parsed 0 arms". Restored, it reports "9 attr_for arms resolve".
+
 ## Tests
 
 `nix build .#checks.x86_64-linux.agent-attrs`, `nix fmt -- --ci`, statix and

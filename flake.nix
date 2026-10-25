@@ -339,7 +339,7 @@
     # Pinned to a release tag (release-please); the nightly review flags a newer
     # one. Bump it deliberately.
     mcp-nixarchy = {
-      url = "github:olafkfreund/mcp-nixarchy/v3.2.0";
+      url = "github:olafkfreund/mcp-nixarchy/v3.2.1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

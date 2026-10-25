@@ -630,16 +630,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791034206,
-        "narHash": "sha256-12bqHPK09hTyCqP2Tn9cqVGgXIhOnIY8wZz3tCajDig=",
+        "lastModified": 1792932953,
+        "narHash": "sha256-zING4yVPwsnJCI3E0th2zG0GVnRa3ucZCvZTiNbClTI=",
         "owner": "olafkfreund",
         "repo": "mcp-nixarchy",
-        "rev": "2e76e12044752dd676e1c58e3cf2f87bd91dc5d3",
+        "rev": "a3059f3bafa3b215b97dafa174ceafda44213858",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
-        "ref": "v3.2.0",
+        "ref": "v3.2.1",
         "repo": "mcp-nixarchy",
         "type": "github"
       }

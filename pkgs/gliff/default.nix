@@ -22,7 +22,8 @@
 }:
 rustPlatform.buildRustPackage {
   pname = "gliff";
-  version = "0.4.0";
+  # From the tag's own Cargo.toml, so moving the input is the whole bump.
+  version = (lib.importTOML "${src}/Cargo.toml").workspace.package.version;
   inherit src;
   cargoLock.lockFile = "${src}/Cargo.lock";
 

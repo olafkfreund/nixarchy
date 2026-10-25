@@ -4,7 +4,6 @@
   fetchurl,
   writeShellApplication,
   curl,
-  jq,
   gnused,
   nix,
   coreutils,
@@ -67,7 +66,6 @@ stdenvNoCC.mkDerivation {
     name = "update-hey-cli";
     runtimeInputs = [
       curl
-      jq
       gnused
       nix
       coreutils
@@ -78,10 +76,12 @@ stdenvNoCC.mkDerivation {
       [ -f "$file" ] || { echo "no $file (run from the repo root)" >&2; exit 1; }
 
       current=$(sed -n 's/.*version = "\([^"]*\)".*/\1/p' "$file" | head -1)
-      latest=$(curl -fsSL https://api.github.com/repos/basecamp/hey-cli/releases/latest \
-        | jq -r '.tag_name' | sed 's/^v//')
+      # The web redirect, not api.github.com: unauthenticated REST calls are
+      # rate-limited per IP, which a hosted runner shares (#1448).
+      latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/basecamp/hey-cli/releases/latest \
+        | sed -n 's|.*/releases/tag/v\{0,1\}||p')
 
-      if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+      if [ -z "$latest" ]; then
         echo "hey-cli: could not read a release tag from GitHub" >&2
         exit 1
       fi

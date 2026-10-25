@@ -30,6 +30,15 @@ Traps:
   reformats).
 - Inside `''…''`, `${` would need escaping; the sed has none.
 
+## Deviations
+
+- Step 1's check: the tree pins hey-cli 1.10.0, not 1.10.1, so the script
+  reported `1.10.0 -> 1.10.1` and rewrote a scratch copy (exit 0) instead of
+  printing `already at`. The bump itself is left to the nightly.
+- Step 3 used two breaks: a missing repository (curl 404, exit 22) and one
+  with no releases, `torvalds/linux` (redirects to `/releases`; "could not
+  read a release tag", exit 1).
+
 ## Tests
 
 - `nix fmt -- --ci`, statix, deadnix

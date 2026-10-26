@@ -137,7 +137,7 @@
 
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
-      url = "github:Mic92/sops-nix/5efb5a6f4f5ab192817d28557dd4d650fa14d866";
+      url = "github:Mic92/sops-nix/442449fa7b1fe6c692d0103ac9fc8f9e82931cf3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

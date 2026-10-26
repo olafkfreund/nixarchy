@@ -1360,9 +1360,9 @@ jobs:
     # halves still ran past 45 (vm-toplevel alone 23 min, 7.5 GiB fetched).
     timeout-minutes: 75
     # A nixpkgs bump has no proofs, so the one `system` job ran ~50 minutes and
-    # timed out (#1332). Since #1341 it is two halves: this one and
-    # `system-checks`, with `system` below as the required context that
-    # passes only when both did.
+    # timed out (#1332). Since #1341 it is split: this one, `system-checks`
+    # and, since #1461, `system-session`, with `system` below as the required
+    # context that passes only when all three did.
     # Its own concurrency group, and NOT cancel-in-progress. This job takes
     # ~19 minutes, so under the workflow-level cancel-in-progress it is killed
     # by any push landing within that window -- which meant the most valuable
@@ -1477,14 +1477,6 @@ jobs:
           mapfile -t entries < <(.github/scripts/cache-allowlist.sh system)
           .github/scripts/cachix-push.sh "${entries[@]}"
 
-      - name: Drive a session and the app-selection loop
-        if: needs.gate.outputs.relevant == 'true'
-        # Boots a machine, picks two apps through nixarchy-app-enable, checks
-        # the file still parses, and checks nixarchy-apply copies the
-        # selection into the flake. Nothing else here proves that the Install
-        # menu actually installs anything.
-        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.session
-
       - name: The cache allowlist fits its budget
         if: needs.gate.outputs.relevant == 'true'
         # nixarchy.cachix.org is the free tier: 5 GB, evicted by last download.
@@ -1502,6 +1494,69 @@ jobs:
 
       # What failed, last, where a reader of the log ends up (#1384). Reads the
       # log build-unless-proven.sh keeps; never changes this job's status.
+      - name: Failure digest
+        id: digest
+        if: failure()
+        continue-on-error: true
+        run: .github/scripts/failure-digest.sh
+
+  # The session VM test, split out of system-build (#1461): a nixpkgs bump
+  # builds its own VM toplevel cold, and it ran after everything else there.
+  # A third half of `system` below; 45 = a cold toplevel (~25 min) + the test.
+  system-session:
+    needs: gate
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    timeout-minutes: 45
+    concurrency:
+      group: >-
+        ${{ github.workflow }}-system-session-${{ github.ref }}-${{
+          github.ref == 'refs/heads/main' && github.sha || 'shared' }}
+      cancel-in-progress: false
+    steps:
+      - name: The gate did not succeed, so this check cannot pass
+        if: needs.gate.result != 'success'
+        run: |
+          echo "::error::gate concluded '${{ needs.gate.result }}'; refusing to report this required check as passed (#1134)"
+          exit 1
+
+      - name: Nothing here can affect a build
+        if: needs.gate.outputs.relevant != 'true'
+        run: |
+          echo "Only paths the gate excludes changed; not building." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v5
+        if: needs.gate.outputs.relevant == 'true'
+      - uses: ./.github/actions/setup-nix
+        if: needs.gate.outputs.relevant == 'true'
+      - uses: cachix/cachix-action@v17
+        if: needs.gate.outputs.relevant == 'true'
+        continue-on-error: true
+        with:
+          skipPush: true
+          # Why: .github/actions/setup-nix/action.yml -- `cachix use` would replace its substituters.
+          skipAddingSubstituter: true
+          name: nixarchy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Free disk space
+        if: needs.gate.outputs.relevant == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
+      - name: Drive a session and the app-selection loop
+        if: needs.gate.outputs.relevant == 'true'
+        # Boots a machine, picks two apps through nixarchy-app-enable, checks
+        # the file still parses, and checks nixarchy-apply copies the
+        # selection into the flake. Nothing else here proves that the Install
+        # menu actually installs anything.
+        run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.session
+
       - name: Failure digest
         id: digest
         if: failure()
@@ -1800,25 +1855,26 @@ jobs:
         continue-on-error: true
         run: .github/scripts/failure-digest.sh
 
-  # The required context. Two halves since #1341, so a nixpkgs bump, which has
+  # The required context. Parts since #1341 (three since #1461), so a nixpkgs bump, which has
   # no proofs, fits each 45-minute cap; this passes only when both did. Never
   # skipped: a skipped required check passes the merge gate (#1144).
   # copilot-handoff.sh ignores this job: a half's timeout is a human's (#1341).
   system:
-    needs: [gate, system-build, system-checks]
+    needs: [gate, system-build, system-checks, system-session]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
-      - name: Both halves of the system check passed
+      - name: Every part of the system check passed
         env:
           # Which derivations failed, from the halves' Failure digest steps.
           DIGEST_BUILD: ${{ needs.system-build.outputs.digest }}
           DIGEST_CHECKS: ${{ needs.system-checks.outputs.digest }}
+          DIGEST_SESSION: ${{ needs.system-session.outputs.digest }}
         run: |
           fail=0
-          for r in "gate=${{ needs.gate.result }}" "system-build=${{ needs.system-build.result }}" "system-checks=${{ needs.system-checks.result }}"; do
-            [ "${r#*=}" = success ] || { echo "::error::${r%%=*} concluded '${r#*=}'; refusing to report system as passed (#1341, #1134). Failed: ${DIGEST_BUILD:-}${DIGEST_CHECKS:+ }${DIGEST_CHECKS:-}"; fail=1; }
+          for r in "gate=${{ needs.gate.result }}" "system-build=${{ needs.system-build.result }}" "system-checks=${{ needs.system-checks.result }}" "system-session=${{ needs.system-session.result }}"; do
+            [ "${r#*=}" = success ] || { echo "::error::${r%%=*} concluded '${r#*=}'; refusing to report system as passed (#1341, #1134). Failed: ${DIGEST_BUILD:-}${DIGEST_CHECKS:+ }${DIGEST_CHECKS:-}${DIGEST_SESSION:+ }${DIGEST_SESSION:-}"; fail=1; }
           done
           exit $fail
 

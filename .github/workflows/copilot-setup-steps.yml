@@ -38,7 +38,7 @@ jobs:
       # AGENTS.md 1 asks for a check proven able to fail, and an agent with no
       # nix cannot honour it -- it can only write something plausible and hope.
       # With this it can run the cheap tier itself: nix fmt --ci, statix,
-      # deadnix, checks.options, and the fixture checks that finish in seconds
+      # deadnix, checks.options-shards, and the fixture checks that finish in seconds
       # (bin-ledger, package-delta, config-delta, patched-files). That is
       # exactly the tier covering the data-row and docs work Copilot is
       # actually suited to.

@@ -259,7 +259,8 @@ not see it, for the reason written in its own comment:
 > from outside.
 
 That reasoning is right for what it was written about, and its consequence is
-general: **`checks.options` reads the evaluated config tree and never forces
+general (`checks.options` is now the four `options-*` shards, #1463; the case
+list is `options-system`, `-home`, `-microvm`, and `options-files` holds the rest): **`checks.options` reads the evaluated config tree and never forces
 the closure.** A package that cannot be built -- or, as here, cannot be
 *evaluated* -- is invisible to every case in it, however many there are.
 
@@ -271,8 +272,8 @@ it worth copying:
   `throw`s, so the failure arrives while the activation text is computed. A check
   that needed a booted machine could not have caught this on the pull request
   that introduced it.
-- **It is its own check, not a case in `checks.options`.** That check peaks at
-  12.9 GB on the hosted runner (#747). Its fixtures are tempting; a whole
+- **It is its own check, not a case in `checks.options`.** That check peaked at
+  12.9 GB on the hosted runner (#747), before it was sharded (#1463). Its fixtures are tempting; a whole
   system closure evaluation does not belong in it.
 
 **What it still cannot see.** It proves the closure is describable, and says

@@ -22,7 +22,7 @@ nix run --inputs-from . nixpkgs#deadnix -- .
 nix run --inputs-from . nixpkgs#shellcheck -- <script>
 nix run --inputs-from . nixpkgs#actionlint -- .github/workflows/<file>.yml
 
-nix build .#checks.x86_64-linux.options       # the broad eval check
+nix build .#checks.x86_64-linux.options-{system,home,microvm,files}       # the broad eval check
 nix build .#checks.x86_64-linux.bin-ledger
 nix build .#checks.x86_64-linux.doc-options
 .github/scripts/readme-counts.sh --check

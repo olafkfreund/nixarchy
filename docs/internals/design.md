@@ -389,7 +389,7 @@ The six checks, and what each is for:
 | `options` | no | every option both ways, plus menu coverage and menu commands |
 | `vm-toplevel` | no | the reference machine still builds |
 
-Only the first three boot a machine, so `nix build .#checks.x86_64-linux.options`
+Only the first three boot a machine, so `nix build .#checks.x86_64-linux.options-{system,home,microvm,files}`
 is the quick one to run while editing `data/apps.nix`.
 
 The two apps below are different animals: `#vm` boots a prebuilt smoke-test

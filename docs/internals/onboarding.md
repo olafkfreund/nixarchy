@@ -51,7 +51,7 @@ Then, before touching anything:
 
 ```bash
 nix flake check                                # everything (slow)
-nix build .#checks.x86_64-linux.options        # the fast, broad one
+nix build .#checks.x86_64-linux.options-{system,home,microvm,files}        # the fast, broad one
 nix run .#review                               # what is stale right now
 nix run .#vm                                   # boot the desktop in a VM
 ```

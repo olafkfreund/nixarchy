@@ -100,8 +100,9 @@ let
 
   # The three default fixtures, bound once each. Nix does not memoise a
   # function call, so every `(configWith { })` written out below was another
-  # evaluation of the same machine -- 50 of them across this file, and one
-  # measured 2m51s and 10.6 GB of RSS on its own (#738).
+  # evaluation of the same machine -- 50 of them across this file (#738). One
+  # configuration is about 1.7 GB (#747); the 10.6 GB this comment used to
+  # quote was the whole check, which is why it now runs as shards (#1463).
   #
   # They stay three. `homeOn` supplies a named NixOS configuration and
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
@@ -618,7 +619,7 @@ let
   };
 
   # Each case is (what it should look like on, what it should look like off).
-  cases = {
+  casesA = {
     # #701: an installed machine keeps its flake inputs' sources in its closure,
     # or min-free's collection deletes them and an offline machine cannot
     # evaluate itself. The vm configuration imports installer/host.nix, so it is
@@ -743,6 +744,9 @@ let
       off = builtins.elem "flakes" (loaderOff.nix.settings.experimental-features or [ ]);
     };
 
+  };
+
+  casesB = {
     # ---- #623: the NixOS MCP server, in the agents that have one ---------
     #
     # All three in one case, because "off" has to be all of them and a
@@ -1086,6 +1090,9 @@ let
           ? nixarchyNeovimSpecs;
       off = defaultHome.home.activation ? nixarchyNeovimSpecs;
     };
+  };
+
+  casesC = {
     # ---- upstream's /etc overlay, the part of it that is installed ----------
     #
     # kitty's system half: the seeded ~/.config/kitty/kitty.conf is a stub whose
@@ -1207,6 +1214,9 @@ let
       c: c.virtualisation.docker.rootless.daemon.settings.log-opts.max-size or null
     ) "10m";
 
+  };
+
+  casesD = {
     # ---- nixi, on for everyone, and provably gone when told ----
     #
     # These are the reverse of every other case in this file, and the header's
@@ -1788,6 +1798,9 @@ let
       off = builtins.elem "claude" defaultHome.services.nixi.agents;
     };
 
+  };
+
+  casesE = {
     # ---- the free-space floor is the installer's, never an adopter's ----
     #
     # #583, and the correction that came with it: `programs.nh.clean` ALREADY
@@ -1987,6 +2000,9 @@ let
       off = mentions "no longer has any effect" (failedAssertions defaultMachine);
     };
 
+  };
+
+  casesF = {
     # ---- microvm: #221's inertness table, each row with a real off state --
     #
     # This is the check the PR body's "break it, watch it fail" argument is
@@ -2157,6 +2173,9 @@ let
           (configWith { browserThemeUser = null; }).systemd.tmpfiles.rules;
     };
 
+  };
+
+  casesG = {
     # ---- #622: the cache appears on the NVIDIA path and nowhere else ----
     cudaCacheSubstituter = {
       on = builtins.elem cudaUrl nvidiaHost.nix.settings.substituters;
@@ -3320,22 +3339,125 @@ let
     in
     pkgs.lib.concatStringsSep " " (map (n: builtins.seq c.${n} n) (builtins.attrNames c));
 
-  broken = pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) cases;
+  # The seven case regions above, cut at their section headers so that each
+  # fixture family is forced by one shard only (#1463). A case is in exactly
+  # one region and each region in exactly one shard; checks.options-shards
+  # fails otherwise, and deadnix fails a region listed nowhere.
+  caseRegions = [
+    casesA
+    casesB
+    casesC
+    casesD
+    casesE
+    casesF
+    casesG
+  ];
+  shardRegions = {
+    system = [
+      casesA
+      casesC
+      casesE
+      casesG
+    ];
+    home = [
+      casesB
+      casesD
+    ];
+    microvm = [ casesF ];
+  };
 
-  report = pkgs.lib.concatStringsSep "\n" (
-    pkgs.lib.mapAttrsToList (
-      name: c: "  ${name}: on=${builtins.toString c.on} off=${builtins.toString c.off}"
-    ) cases
-  );
+  mkCases = pkgs.lib.mergeAttrsList;
+  brokenOf = cs: pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) (mkCases cs);
+  reportOf =
+    cs:
+    pkgs.lib.concatStringsSep "\n" (
+      pkgs.lib.mapAttrsToList (
+        name: c: "  ${name}: on=${builtins.toString c.on} off=${builtins.toString c.off}"
+      ) (mkCases cs)
+    );
+
+  # One case shard: prints its own report, and fails if one of its options
+  # does not take effect both ways, or if a gate that lives with its fixtures
+  # (`problems`) is not empty.
+  mkShard =
+    name: cs: problems:
+    pkgs.runCommand "nixarchy-options-${name}"
+      {
+        report = reportOf cs;
+        problems = pkgs.lib.concatStringsSep "\n" problems;
+      }
+      (
+        if problems != [ ] then
+          ''
+            echo "a ${name} invariant does not hold:" >&2
+            echo "$problems" >&2
+            exit 1
+          ''
+        else if brokenOf cs == { } then
+          ''
+            echo "$report"
+            touch $out
+          ''
+        else
+          ''
+            echo "$report"
+            echo "these options do not take effect both ways: ${pkgs.lib.concatStringsSep " " (builtins.attrNames (brokenOf cs))}" >&2
+            echo "an option that cannot be turned off is not an option." >&2
+            exit 1
+          ''
+      );
+
+  shardSystem =
+    assert pkgs.lib.assertMsg (
+      pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
+      && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
+      && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy
+    ) "user unit cleanup missed an escaped normal home, included a system home, or lost wantedBy";
+    mkShard "system" shardRegions.system [ ];
+  shardHome = mkShard "home" shardRegions.home [ ];
+  shardMicrovm = mkShard "microvm" shardRegions.microvm microvmProblems;
+
+  # Names only: no case is evaluated, so this is seconds. Every case must be
+  # in exactly one shard, or a shard split silently drops or doubles coverage.
+  guard =
+    let
+      inherit (pkgs) lib;
+      names = rs: builtins.sort builtins.lessThan (builtins.concatMap builtins.attrNames rs);
+      defined = names caseRegions;
+      assigned = names (lib.concatLists (builtins.attrValues shardRegions));
+      twice = ns: lib.unique (builtins.filter (n: lib.count (m: m == n) ns > 1) ns);
+      list = ns: lib.concatStringsSep " " ns;
+      problems =
+        lib.optional (builtins.filter (n: !builtins.elem n assigned) defined != [ ])
+          "cases in no shard: ${list (builtins.filter (n: !builtins.elem n assigned) defined)}"
+        ++
+          lib.optional (builtins.filter (n: !builtins.elem n defined) assigned != [ ])
+            "cases in a shard but in no region: ${
+              list (builtins.filter (n: !builtins.elem n defined) assigned)
+            }"
+        ++
+          lib.optional (twice defined ++ twice assigned != [ ])
+            "cases in two shards: ${list (lib.unique (twice defined ++ twice assigned))}";
+    in
+    pkgs.runCommand "nixarchy-options-shards" { problems = lib.concatStringsSep "\n" problems; } (
+      if problems == [ ] then
+        ''
+          echo "${toString (builtins.length defined)} cases, each in exactly one shard"
+          touch $out
+        ''
+      else
+        ''
+          echo "the options shards do not partition the cases:" >&2
+          echo "$problems" >&2
+          exit 1
+        ''
+    );
 in
-assert pkgs.lib.assertMsg (
-  pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
-  && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
-  && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy
-) "user unit cleanup missed an escaped normal home, included a system home, or lost wantedBy";
-pkgs.runCommand "nixarchy-options"
+# files: everything that is not a case. The case shards are passthru.optionShards
+# (system, home, microvm, guard) so this expression keeps its indentation.
+
+pkgs.runCommand "nixarchy-options-files"
   {
-    inherit report;
     inherit menuFile vm;
     # #766: the helper rows and binds call, run for real below.
     pluginHelper = pkgs.callPackage ../pkgs/nixarchy-plugin.nix {
@@ -3391,7 +3513,6 @@ pkgs.runCommand "nixarchy-options"
     oursBinaries = pkgs.lib.concatStringsSep " " oursBinaries;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
-    microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
@@ -3552,6 +3673,12 @@ pkgs.runCommand "nixarchy-options"
     splashUpstream = "${(pkgs.extend inputs.self.overlays.default).omarchy.src}/default/plymouth";
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
+    passthru.optionShards = {
+      system = shardSystem;
+      home = shardHome;
+      microvm = shardMicrovm;
+      inherit guard;
+    };
     nativeBuildInputs = [
       pkgs.python3
       # For the secrets round-trip below. A throwaway identity is generated
@@ -3575,15 +3702,8 @@ pkgs.runCommand "nixarchy-options"
         echo "$serviceProblems" >&2
         exit 1
       ''
-    else if microvmProblems != [ ] then
+    else
       ''
-        echo "a microvm invariant does not hold:" >&2
-        echo "$microvmProblems" >&2
-        exit 1
-      ''
-    else if broken == { } then
-      ''
-          echo "$report"
           echo "the services catalogue is well formed ($serviceCount entries)"
           echo "the flatpak catalogue is well formed ($flatpakCount entries)"
 
@@ -6287,12 +6407,5 @@ pkgs.runCommand "nixarchy-options"
         echo "nixarchy-menu's bar button wears the snowflake"
 
           touch $out
-      ''
-    else
-      ''
-        echo "$report"
-        echo "these options do not take effect both ways: ${pkgs.lib.concatStringsSep " " (builtins.attrNames broken)}" >&2
-        echo "an option that cannot be turned off is not an option." >&2
-        exit 1
       ''
   )

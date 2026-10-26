@@ -2572,11 +2572,6 @@
 
           # Every option that adds something, checked with it turned off too --
           # see tests/options.nix for why that half is the one at risk.
-          options = import ./tests/options.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-          };
-
           # Upstream's /etc overlay: data/etc-overlay.nix says what answers each
           # file here (and modules/nixos.nix installs the rows it classes
           # `installed`), and this fails when upstream adds or drops one. See
@@ -2757,6 +2752,23 @@
           import ./tests/${n}.nix {
             inherit inputs;
             pkgs = pkgsFor.${system};
+          }
+        )
+        # checks.options as shards (#1463): tests/options.nix returns the
+        # "files" derivation with the case shards and the guard as passthru.
+        // (
+          let
+            options = import ./tests/options.nix {
+              inherit inputs;
+              pkgs = pkgsFor.${system};
+            };
+          in
+          {
+            options-system = options.optionShards.system;
+            options-home = options.optionShards.home;
+            options-microvm = options.optionShards.microvm;
+            options-files = options;
+            options-shards = options.optionShards.guard;
           }
         )
       );

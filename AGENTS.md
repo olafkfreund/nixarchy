@@ -573,7 +573,8 @@ your question:
 
 | check | what it proves | cost |
 |---|---|---|
-| `options` | every option asserted in both states | evaluation only, but ~8 min and 11.5 GB of RSS |
+| `options-system`, `options-home`, `options-microvm`, `options-files` | every option asserted in both states, as four parallel shards (#1463): three cut by fixture family, `files` is everything that is not a case | evaluation only; peak RSS per shard is measured, not guessed (the whole check was ~11.5 GB) |
+| `options-shards` | every case is in exactly one shard | names only, seconds |
 | `package-delta`, `config-delta`, `patched-files`, `release-notes`, `review-pins` | scripts against fixtures | seconds |
 | `vm-toplevel`, `reference-toplevel` | the closures build | eval plus a fetch |
 | `omarchy` (package) | the vendored tree assembles | minutes |
@@ -706,7 +707,7 @@ the other side — **a guest-side timeout is a hidden concurrency limit**, and
 host-side timeouts scale with the box while guest-side ones do not.
 
 **And "I am only measuring it" is the same load.** The rule above reads as
-being about VM checks, so six runs of `checks.options` -- an *evaluation*
+being about VM checks, so six runs of `checks.options` (now four `options-*` shards) -- an *evaluation*
 check, the cheap row in the table -- were filed under measurement rather than
 under building, and started anyway. They peak at **11.5 GB of RSS each**.
 What makes a local build disruptive is the memory and the cores it takes from
@@ -750,7 +751,7 @@ seconds-long checks. So:
 |---|---|
 | cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
 | a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
-| a VM check, or `checks.options` | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
+| a VM check, or any `options-*` shard | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
 
 "Is a p620 build running" has a trap of its own. `pgrep -f
 'nixosConfigurations.p620'` also matches every `nixd` language server (its
@@ -1100,10 +1101,11 @@ rediscovery: eighty lines above the code being read, the file already says
 out below was another evaluation of the same machine"*, followed by the three
 fixtures bound once each — #738's work.
 
-The same comment carried the number that made the proposal pointless. **One
-configuration measured 10.6 GB of RSS on its own, and the whole check peaks at
-11.5 GB**, so the duplicates cannot be simultaneously live and deduplicating
-them cannot move the peak. Both the technique and the evidence against using
+The same comment carried a number that looked decisive and was wrong: "10.6 GB
+of RSS on its own" was the whole check, not one configuration -- #747 measured
+about 1.7 GB each, and #1463 corrected it. What holds is that live memory is
+set by the fixtures reachable at once, not by how many times a constructor is
+written out, so deduplicating the duplicates cannot move the peak. Both the technique and the evidence against using
 it for this were already written down, in the file being edited.
 
 So before proposing a change to a file, grep **that file** for the concept and

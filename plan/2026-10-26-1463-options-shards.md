@@ -98,3 +98,23 @@ Revert the squash commit. That restores `checks.options` and the
 
 The `coder` agent does steps 1-4. I run steps 3, 5, 6 and 7, commit, and
 review with a fresh Opus agent.
+
+## Deviations recorded during implementation
+
+- **`tests/options.nix` returns the `files` derivation, with the shards as
+  `passthru.optionShards = { system; home; microvm; guard; }`**, not the
+  attrset `{ system; home; microvm; files; shards }` that step 1 names.
+  Wrapping the runCommand in an attrset reindents about 3,000 lines under
+  nixfmt (AGENTS.md section 5). The attribute is `optionShards`, not
+  `system`, because a derivation's own `.system` is its platform string.
+  `flake.nix` maps it into `options-system`, `-home`, `-microvm`, `-files`
+  and `-shards`.
+- **Case count and mapping.** 171 cases in total, the same as before the
+  split (#1462 had removed the hypr-rdp cases): system 68 (A 11, C 22, E 17,
+  G 18), home 85 (B 40, D 45), microvm 18 (F). The regions start at the same
+  headers as the spec's table, at their post-#1462 line numbers.
+- **No digest output on the `options` job.** Matrix outputs are last-writer-wins,
+  so the `system` aggregator reads only `needs.options.result`, not a digest.
+- **Three commands that built the old name** now name the four shards:
+  `.github/copilot-instructions.md`, `docs/internals/onboarding.md` and
+  `docs/internals/design.md`.

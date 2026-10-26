@@ -464,8 +464,15 @@ jobs:
               sleep 60
             done
           }
-          for c in options session coexist plugin; do
-            if [ "$c" != options ] && ! host_free; then
+          # The options shards are derived, not listed (#1463): a shard added
+          # to the flake is run here with no edit. Captured first, and an empty
+          # answer is an error, not "nothing to run".
+          opts=$(nix eval .#checks.x86_64-linux --raw --apply \
+            'c: builtins.concatStringsSep " " (builtins.filter (n: builtins.substring 0 8 n == "options-") (builtins.attrNames c))') || {
+            echo "::error::could not list the options-* checks"; exit 1; }
+          [ -n "$opts" ] || { echo "::error::no options-* checks in the flake"; exit 1; }
+          for c in $opts session coexist plugin; do
+            if [ "${c#options-}" = "$c" ] && ! host_free; then
               echo "::error::$c failed: the host never freed up"
               failed="$failed $c"
               continue

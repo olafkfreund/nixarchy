@@ -38,22 +38,15 @@
 # ## Why this file takes `inputs`, and why the obvious simplification is wrong
 #
 # Almost every module here configures options NixOS already has, so `pkgs` is
-# all it needs. hypr-rdp is the exception: nixpkgs does not carry the daemon,
-# so its package comes from `self.overlays.default` -- and reaching `self`
-# from a NixOS module means being handed it.
+# all it needs. microvm is the exception: it imports
+# `inputs.microvm.nixosModules.host`, the module whose own default is the
+# whole reason it needs the inertness gate documented at its top.
 #
-# The tempting cleanup is to delete this argument and write `pkgs.hypr-rdp`.
-# It does not work, and it does not work in EITHER mode, which is the part
-# worth writing down because it is invisible from inside this directory:
+# A module that needs a package nixpkgs does not carry cannot just write
+# `pkgs.<name>`, and the failure is invisible from inside this directory:
 # nixarchy sets `nixpkgs.overlays` nowhere at all. Not here, not in
 # installer/host.nix, not in the flake the installer generates. Checked, not
-# assumed -- the installer-built host evaluates to
-#
-#   { hasHyprRdp = false; host = "installer-vm"; overlaysSet = [ ]; }
-#
-# and a Mode A machine is the same by construction. `pkgs.hypr-rdp` therefore
-# fails at evaluation with "attribute 'hypr-rdp' missing. Did you mean
-# hyprprop?", which is how this was found.
+# assumed -- `pkgs.<name>` fails at evaluation with "attribute missing".
 #
 # That absence is a decision rather than an oversight. `nixpkgs.overlays` is
 # global: setting it rewrites the package set for every module on the machine,
@@ -61,20 +54,23 @@
 # option needs. So nixarchy reaches overlay packages one at a time instead --
 # `(pkgs.extend inputs.self.overlays.default).<name>` as the default of a
 # `package` option -- which is what modules/nixos.nix and modules/home.nix
-# already do for omarchy and omarchy-nvim-config. hypr-rdp follows them.
+# already do for omarchy and omarchy-nvim-config.
 #
-# hypr-rdp and microvm are the two that take `inputs`, for two different
-# reasons: hypr-rdp reaches `inputs.self.overlays.default` for a package
-# nixpkgs does not carry; microvm.nix imports
-# `inputs.microvm.nixosModules.host`, the module whose own default is the
-# whole reason it needs the inertness gate documented at its top. The others
-# keep the ordinary module signature, because giving them an argument they
-# do not use would suggest they use it.
+# The other modules keep the ordinary module signature, because giving them an
+# argument they do not use would suggest they use it.
+#
+# hypr-rdp, removed in #1462, is declared here only as a removed option, so a
+# host that still sets it fails with the migration text instead of an
+# "option does not exist" error.
 inputs: {
   imports = [
     ./boxes.nix
     ./devenv.nix
-    (import ./hypr-rdp.nix inputs)
+    (inputs.nixpkgs.lib.mkRemovedOptionModule [ "programs" "nixarchy" "services" "hypr-rdp" ] ''
+      hypr-rdp was removed from nixarchy (#1462). For a remote desktop between Hyprland machines use gliff,
+      installed by default (Setup > Remote desktop > Connect with gliff). You can also delete
+      sops.secrets.hypr-rdp-password and its encrypted value; sops-nix itself is unchanged.
+    '')
     (import ./microvm.nix inputs)
     ./open-webui.nix
     ./syncthing.nix

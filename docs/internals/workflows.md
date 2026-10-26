@@ -107,9 +107,7 @@ session check and enforces the cache budget. `system-checks` runs the MicroVM
 and box templates and the option, integration, coexist, installer-screen and
 plugin checks. `system` itself only passes when both halves did, so branch
 protection still names one context. They run in parallel because a nixpkgs bump
-has no proofs and one job timed out at 45 minutes (#1332). Both halves build
-`hypr-rdp` on a bump, `system-checks` because `checks.options` takes it as an
-input. `box` needs `/dev/kvm` and fails loudly at
+has no proofs and one job timed out at 45 minutes (#1332). `box` needs `/dev/kvm` and fails loudly at
 its first step if the runner does not have it.
 
 ---

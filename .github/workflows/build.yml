@@ -1358,9 +1358,9 @@ jobs:
     # halves still ran past 45 (vm-toplevel alone 23 min, 7.5 GiB fetched).
     timeout-minutes: 75
     # A nixpkgs bump has no proofs, so the one `system` job ran ~50 minutes and
-    # timed out (#1332). Since #1341 it is two halves, split by what builds
-    # hypr-rdp: this one and `system-checks`, with `system` below as the
-    # required context that passes only when both did.
+    # timed out (#1332). Since #1341 it is two halves: this one and
+    # `system-checks`, with `system` below as the required context that
+    # passes only when both did.
     # Its own concurrency group, and NOT cancel-in-progress. This job takes
     # ~19 minutes, so under the workflow-level cancel-in-progress it is killed
     # by any push landing within that window -- which meant the most valuable
@@ -1456,17 +1456,11 @@ jobs:
         if: needs.gate.outputs.relevant == 'true'
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.coexistence
 
-      # hypr-rdp is off by default, so no toplevel above carries it and
-      # nothing here has built it -- but checks.session pulls it in, and the
-      # push below refuses a path that is not in the store.
-      # Without this the allowlist entry #739 added is never pushed, the cache
-      # stays empty, and every run compiles 447 crates again (#738). Free in
-      # this job, which builds it either way; the run after substitutes it.
-      # The box image also needs realizing before this push on a cold store;
+      # The box image needs realizing before this push on a cold store;
       # its tests run later, and cachix-push deliberately does not build (#788).
-      - name: Build the allowlisted tools and box image before publishing
+      - name: Build the box image before publishing
         if: needs.gate.outputs.relevant == 'true'
-        run: nix build --no-link .#hypr-rdp .#box-test-image
+        run: nix build --no-link .#box-test-image
 
       # The two closures that decide whether somebody's rebuild downloads or
       # compiles. Same reason as the omarchy push above (#439); this is the
@@ -1601,13 +1595,6 @@ jobs:
         # than moved -- tests/AGENTS.md names the gap, and checks.box-boot
         # observes the same property on a real container instead.
         run: .github/scripts/build-unless-proven.sh .#checks.x86_64-linux.box-template
-
-      # checks.options takes hypr-rdp as a build input (its ExecStart). Built
-      # first so a bump's 447-crate compile is not in the options step's
-      # time, which is the trend #747 and #1150 read. Substituted on a PR.
-      - name: Build hypr-rdp, which checks.options needs
-        if: needs.gate.outputs.relevant == 'true'
-        run: nix build --no-link .#hypr-rdp
 
       - name: Check every option both ways
         if: needs.gate.outputs.relevant == 'true'

@@ -123,12 +123,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Why: docs/internals/flake.md#the-rdp-server-behind-the-remote-desktop-feature-1
-    hypr-rdp = {
-      url = "github:MuNeNiCK/hypr-rdp/v0.1.7";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     # Why: docs/internals/flake.md#gliff-from-a-non-flake-input-pinned-to-a-tag
     gliff = {
       url = "github:omacom/gliff/v0.4.1";
@@ -795,17 +789,6 @@
           inherit omarchyVersion;
         };
 
-        # Why: docs/internals/flake.md#the-rdp-daemon-re-exported-from-its-own-flake-so-t
-        hypr-rdp =
-          inputs.hypr-rdp.packages.${final.stdenv.hostPlatform.system}.hypr-rdp.overrideAttrs
-            (old: {
-              patches = (old.patches or [ ]) ++ [ ./pkgs/hypr-rdp/lua-fallback-on-unknown-request.patch ];
-              # Upstream sets doCheck = false; scoped to the patched module so
-              # the patch's own test runs and nothing upstream chose to skip does.
-              doCheck = true;
-              checkFlags = [ "hyprland::tests" ];
-            });
-
         gliff = final.callPackage ./pkgs/gliff { src = inputs.gliff; };
 
         omarchy = final.callPackage ./pkgs/omarchy {
@@ -1066,8 +1049,7 @@
           # something to name, built against OUR nixpkgs through the `follows`
           # on the input.
           #
-          # Deliberately NOT in the overlay, which is where hypr-rdp and
-          # zen-browser went. The overlay exists to let a module say
+          # Deliberately NOT in the overlay, which is where zen-browser went. The overlay exists to let a module say
           # `pkgs.<name>` and never mention an input, and nothing here needs
           # that: nixi's own Home Manager module already defaults
           # `services.nixi.package` to its flake's package, and because that
@@ -1093,16 +1075,6 @@
           nixarchy-microvm = inputs.nixarchy-microvm.packages.${system}.default;
           nixarchy-distrobox = inputs.nixarchy-distrobox.packages.${system}.default;
 
-          # Exposed so cache-allowlist.sh can name it: the allowlist takes flake
-          # installables, and an overlay attribute is not one.
-          #
-          # checks.options COMPILES this otherwise -- 447 Rust crates, 5.5 to 8.5
-          # minutes, on every run of build.yml's `system` job, for a check whose
-          # own runCommand takes three seconds (#738). It is served by neither
-          # cache.nixos.org nor nixarchy.cachix.org; it was in ours by accident
-          # until #699 stopped every job pushing its whole store diff, and the
-          # first 45-minute timeout on that job is the next day.
-          hypr-rdp = pkgsFor.${system}.hypr-rdp;
           gliff = pkgsFor.${system}.gliff;
 
           nixarchy-vm = pkgsFor.${system}.callPackage ./pkgs/microvm.nix { inherit self; };
@@ -1835,18 +1807,6 @@
             # rather than inspected: #809's collision only exists once something
             # calls buildEnv. See tests/home-profile.nix.
             "home-profile"
-            # A host with remote desktop enabled can be described at all.
-            # hypr-rdp was unbuildable for twelve days behind a green suite
-            # (#1030): it requires a sops secret, and the pinned sops-nix
-            # called a builder nixpkgs had removed. checks.options enables it
-            # WITH a secret and still could not see it, because it reads the
-            # config tree and never forces the closure -- deliberately, per its
-            # own comment. This forces the drvPath, which is where the throw
-            # lives, so it costs an evaluation rather than a VM.
-            "hypr-rdp-builds"
-            # The module's guard renders a private TOML file from the sops
-            # secret. Parse that file, not the template's source (#1087).
-            "hypr-rdp-toml"
             "initrd-pin-guard"
             # No indented python -c program: 3.13 refuses what 3.14 dedents (#1205).
             # Why: tests/inline-python.nix
@@ -1962,6 +1922,7 @@
             # data/skill-parity.nix, held to upstream's own SKILL.md. See
             # tests/skill-parity.nix and #643.
             "skill-parity"
+            "sops-evaluates"
             "swap-guard"
             "switch-indicator"
             "try-nixarchy"
@@ -2314,17 +2275,6 @@
           install-phase-budget = import ./tests/install-phase-budget.nix {
             omarchy = self.packages.${system}.omarchy;
             pkgs = pkgsFor.${system};
-          };
-
-          # connect backgrounds an `ssh -N -L` and must not leave it behind.
-          # The teardown is the one part of connecting that needs no second
-          # machine, so it is the part that gets a check; an actual RDP
-          # connection is named as a hole in tests/AGENTS.md. Carries its own
-          # self-test: an untrapped child must survive, or the trapped case
-          # proves nothing.
-          remote-tunnel = import ./tests/remote-tunnel.nix {
-            pkgs = pkgsFor.${system};
-            omarchy = self.packages.${system}.omarchy;
           };
 
           # enroll's policy append, against real age keys and real sops. It

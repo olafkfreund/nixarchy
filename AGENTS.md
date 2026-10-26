@@ -593,7 +593,7 @@ requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
 (#697). Now:
 
 - every `cachix-action` has `skipPush: true`, and a guard fails otherwise;
-- closures are pushed only from `main`, and only what
+- closures are pushed from `main`, and from the newest dated `update/nixpkgs-*` bump branches minus commit-specific paths (#1461; the free tier evicts by last download, so an unmerged bump goes first), and only what
   `.github/scripts/cache-allowlist.sh` names, each entry with the reason someone
   downloads it. One entry is there for availability rather than build cost:
   the box checks' pinned base images, because Docker Hub is not ours (#788, #800);

@@ -23,8 +23,6 @@ pkgs/verify.sh	if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx kvm; then	one writ
 tests/apply-detach-interface.nix	"$apply" | grep -q 'expect-sha256=' \	one write: the awk that filters to the systemd-run block prints several lines but writes once at exit, under 4 KiB
 tests/apply-staging.nix	git -C "$1" status --porcelain -- "$2" | grep -qE '^[AM]'	one write: git status --porcelain of one path
 tests/apply-staging.nix	if git -C "$PWD/per-host" status --porcelain -- theirs.txt | grep -qE '^ M'; then	one write: git status --porcelain of one path
-tests/cache-budget.nix	"build --no-link") closure_of "\$3" | grep -q . ;;	stub script with no set -o pipefail; jq prints one line
-tests/cache-budget.nix	path-info*) closure_of "\$2" | grep -q . ;;	stub script with no set -o pipefail; jq prints one line
 tests/demo/default.nix	machine.wait_until_succeeds("loginctl list-sessions | grep -q greeter")	one write: loginctl list-sessions, a few lines
 tests/demo/default.nix	"https://registry-1.docker.io/v2/ | grep -qE '401|200'",	one write: curl -w http_code, three bytes
 tests/install-encrypted.nix	installer.succeed("blkid /dev/vdb2 | grep -q crypto_LUKS"	one write: blkid prints one line

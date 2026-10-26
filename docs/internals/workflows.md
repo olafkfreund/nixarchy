@@ -101,11 +101,11 @@ and data from drifting:
 | Verify every desktop entry's command resolves | a launcher entry that does nothing |
 
 ### `devenv-presets`, `apps`, `system`, `box`
-`system` is the big one, and since #1341 it is three jobs. `system-build`
-builds the VM and installed-machine closures, pushes them to cachix, runs the
-session check and enforces the cache budget. `system-checks` runs the MicroVM
+`system` is the big one, and since #1341 it is four jobs. `system-build`
+builds the VM and installed-machine closures, pushes them to cachix and
+enforces the cache budget. `system-session` runs the session check (#1461). `system-checks` runs the MicroVM
 and box templates and the option, integration, coexist, installer-screen and
-plugin checks. `system` itself only passes when both halves did, so branch
+plugin checks. `system` itself only passes when all three did, so branch
 protection still names one context. They run in parallel because a nixpkgs bump
 has no proofs and one job timed out at 45 minutes (#1332). `box` needs `/dev/kvm` and fails loudly at
 its first step if the runner does not have it.

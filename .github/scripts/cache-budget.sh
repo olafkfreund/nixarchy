@@ -14,7 +14,9 @@
 #
 # 2.5 GB per commit, not 5: the cache must hold this commit and the one before.
 # They share the box images, pinned by digest (508 MiB), so the worst case, a
-# nixpkgs bump, costs 2 x 2560 - 508 = 4612 MiB of 5120.
+# nixpkgs bump, costs 2 x 2560 - 508 = 4612 MiB of 5120. Pushes come from main
+# and from the newest dated bump branches (minus commit-specific paths, #1461);
+# the free tier evicts by last download, so an unmerged bump's paths go first.
 # See spec/2026-10-10-1231-cache-budget-headroom.md.
 set -uo pipefail
 
@@ -33,20 +35,47 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# Realise each entry (a substitution on a warm store) and collect its closure,
-# remembering which entries each path came from so a failure can name them.
+# Realise every entry in ONE nix invocation: one evaluation shares the
+# nixpkgs and flake loading that a build per entry repeats (#1461). `--json`
+# lists the results in argument order. If the batch fails, or does not map one
+# out path to each entry, fall back to one build per entry, so the error names
+# the entry that broke.
+# True when no argument is empty. A loop, not `printf | grep -q`: under
+# pipefail that can read a match as a failure (tests/grep-q-pipefail).
+all_set() { local o; for o in "$@"; do [ -n "$o" ] || return 1; done; }
+
+outs=()
+if batch=$(nix build --no-link --json "${entries[@]}" 2>"$work/batch.log") &&
+  # Every output, space-joined: a multi-output package (jq) has no `out`.
+  mapfile -t outs < <(jq -r '.[] | [.outputs[]] | join(" ")' <<<"$batch") &&
+  [ "${#outs[@]}" -eq "${#entries[@]}" ] && all_set "${outs[@]}"; then
+  :
+else
+  outs=()
+  for e in "${entries[@]}"; do
+    if ! nix build --no-link "$e" >"$work/build.log" 2>&1; then
+      echo "::error::$e does not build, so its cost cannot be measured" >&2
+      tail -5 "$work/build.log" >&2
+      exit 2
+    fi
+    outs+=("$e")
+  done
+fi
+
+# Collect each entry's closure, remembering which entries each path came from
+# so a failure can name them. Reading from the out path means no re-evaluation.
 : >"$work/paths.tsv"
-for e in "${entries[@]}"; do
-  if ! nix build --no-link "$e" >"$work/build.log" 2>&1; then
-    echo "::error::$e does not build, so its cost cannot be measured" >&2
-    tail -5 "$work/build.log" >&2
-    exit 2
-  fi
+for i in "${!entries[@]}"; do
+  e=${entries[$i]}
   # pipefail is what makes the || below see a failed nix: jq exits 0 on empty input.
-  nix path-info -r --json "$e" 2>/dev/null |
+  # Word-split on purpose: one entry may name several outputs.
+  set -f # no globbing of the split words
+  # shellcheck disable=SC2086
+  nix path-info -r --json ${outs[$i]} 2>/dev/null |
     jq -r --arg e "$e" 'to_entries[] | [.key, (.value.narSize | tostring), $e] | @tsv' \
       >>"$work/paths.tsv" ||
     { echo "::error::could not read the closure of $e, so its cost cannot be measured" >&2; exit 2; }
+  set +f
 done
 
 # One lookup per distinct path, in parallel: the union of the allowlist is

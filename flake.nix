@@ -370,7 +370,7 @@
 
     # Why: docs/internals/flake.md#221-222
     microvm = {
-      url = "github:microvm-nix/microvm.nix/fdfc1821a0eb76e44a13d206b72e6ca6961fbb7c";
+      url = "github:microvm-nix/microvm.nix/4876e2ae2de6ce225f4ccf664ae441128aa3f03a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

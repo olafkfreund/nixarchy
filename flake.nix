@@ -1922,6 +1922,8 @@
             # tests/package-delta.nix.
             "package-delta"
             "patched-files"
+            # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
+            "pin-fix"
             # Adds a real third-party plugin from a real repo. The plugin system
             # is the one deliberately imperative corner of Omarchy, and the part
             # of it that could break here is the writable ~/.config/omarchy the

@@ -162,7 +162,7 @@ run() {
   failing=$(cut -f1 "$fails" | sed 's/^\.#//')
 
   local -a movable=()
-  declare -A m_old=() m_new=() m_ahead=() m_repo=() m_note=()
+  declare -A m_old=() m_new=() m_ahead=() m_repo=() m_probe=()
   local -a notes=()
 
   restore() { cp "$base/flake.nix" flake.nix && cp "$base/flake.lock" flake.lock; }
@@ -189,7 +189,7 @@ run() {
     case "$d" in
       move*)
         movable+=("$name")
-        m_old[$name]=$old m_new[$name]=$new m_repo[$name]=$repo
+        m_old[$name]=$old m_new[$name]=$new m_repo[$name]=$repo m_probe[$name]=$probe
         m_ahead[$name]=${d##* }
         ;;
       *) notes+=("- \`$name\`: refused: ${d#refuse }") ;;
@@ -208,16 +208,26 @@ run() {
     got=$(moved "$base/flake.lock" flake.lock | sort) || return 1
     want=$(printf '%s\n' "$@" | sort)
     [ "$got" = "$want" ] || { echo "pin-fix: moved set '$got' != '$want'" >&2; return 1; }
-    [ "$gate" = 0 ] || "$here/eval-gate.sh" --batch-only
+    # 3 = the move applied cleanly and only the gate said no.
+    [ "$gate" = 0 ] || "$here/eval-gate.sh" --batch-only || return 3
   }
 
   local -a final=()
-  local m
+  local m rc
   for m in "${movable[@]}"; do
     if past_deadline; then notes+=("- \`$m\`: not tried: deadline"); continue; fi
-    if [ "${#final[@]}" = 0 ] && apply 1 "$m"; then
+    if [ "${#final[@]}" = 0 ]; then
+      apply 1 "$m"
+      rc=$?
+    else
+      rc=skip
+    fi
+    if [ "$rc" = 0 ]; then
       final=("$m")
-    elif [ "${#final[@]}" = 0 ]; then
+    elif [ "$rc" = 3 ] &&
+      nix path-info --derivation --no-eval-cache ".#${m_probe[$m]}" >/dev/null 2>&1; then
+      notes+=("- \`$m\`: moving it fixes \`${m_probe[$m]}\`, but other targets still fail (compare: https://github.com/${m_repo[$m]}/compare/${m_old[$m]}...${m_new[$m]})")
+    elif [ "$rc" != skip ]; then
       notes+=("- \`$m\`: moving it alone does not make every target evaluate")
     else
       notes+=("- \`$m\`: not tried: \`${final[0]}\` already fixes the batch")

@@ -296,12 +296,14 @@ jobs:
     # Warm runs measured 675-878s against the old 900s limit (2026-09-13), and
     # a nixpkgs bump starts cold: #671 timed out at 919s and 1200s. Past the
     # limit the job reports `cancelled`, which reads as an eviction (§6).
-    # 45 since 2026-09-15: the already-proven lookup runs one `nix eval` per
+    # 45 since 2026-09-15: the already-proven lookup ran one `nix eval` per
     # check, which took 9m10s, and #702 made host evaluation fetch every input
     # source, taking it to 16m13s -- all three main runs after #702 timed out at
-    # 30 with 16 checks left to build. Evaluating the checks in one `nix eval`
-    # is the fix that makes this limit stop mattering; this buys the time.
-    timeout-minutes: 45
+    # 30 with 16 checks left to build. 60 since #1460: a nixpkgs bump (#1457)
+    # spent 18 minutes evaluating and 23 building, and timed out twice at 45
+    # with a real failure hidden inside once. already-proven.sh now evaluates
+    # four at a time (905s to 406s cold on p620); this is the margin.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-nix

@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/ec2c94c95846";
+      url = "github:0xc000022070/zen-browser-flake/ed68d814d6cf2e221ba43d84f1e32429f5e2786f";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -131,7 +131,7 @@
 
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
-      url = "github:Mic92/sops-nix/5efb5a6f4f5ab192817d28557dd4d650fa14d866";
+      url = "github:Mic92/sops-nix/442449fa7b1fe6c692d0103ac9fc8f9e82931cf3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -316,7 +316,7 @@
     # (`git ls-remote --tags` is empty), which is the situation sops-nix is
     # already in. Bump it deliberately; never track the branch.
     mcp-servers-nix = {
-      url = "github:natsukium/mcp-servers-nix/11fe2419e274bb223a86dddc9e4803b01ad359e8";
+      url = "github:natsukium/mcp-servers-nix/d1185e993ec51db9e1709250c04def5dc3058132";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -1109,6 +1109,7 @@
             name = "nixarchy-review";
             runtimeInputs = with pkgsFor.${system}; [
               gh
+              jq
               curl
               git
               gnugrep
@@ -1882,6 +1883,8 @@
             # tests/package-delta.nix.
             "package-delta"
             "patched-files"
+            # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
+            "pin-fix"
             # Adds a real third-party plugin from a real repo. The plugin system
             # is the one deliberately imperative corner of Omarchy, and the part
             # of it that could break here is the writable ~/.config/omarchy the

@@ -890,7 +890,9 @@ predates options modules/microvm/guest.nix depends on (`microvm.shares`
 gained fields since); upstream publishes no newer tags and treats
 `main` as its release channel -- the same position sops-nix already
 takes in this file, for the same reason. Bump it deliberately; never
-track a branch.
+track a branch. It is listed in `data/pin-fix.nix`, so a nixpkgs bump that
+breaks it may PROPOSE a move as a draft pull request (`flake-update.yml`,
+#1459); the pin is still never tracked, and the proposal never merges itself.
 
 Lock cost, stated rather than hidden: TWO nodes for this one input, not
 one. microvm.nix declares `nixpkgs` (which follows ours, so nothing

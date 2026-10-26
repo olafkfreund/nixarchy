@@ -773,6 +773,16 @@ govern builds, not deploys.
   harm only because those run as `nixbld` users and the command ran without
   root. Kill the pid you started, and nothing else.
 
+**Three of the four ways to measure parallel memory gave a wrong answer
+(#1460).** `/usr/bin/time -f %M` reports the largest single process, not
+the sum of the workers. `free` on a desktop also counts everything else the
+user is running. A cgroup's `memory.peak` includes file cache, which is
+reclaimable. And nix evaluation reads the store heavily, so the same run
+read 16.4 GB there and 11.6 GB anonymous. What runs a runner out of memory
+is the anonymous part. So run the measured command in its own scope
+(`systemd-run --user --scope`), and sample `anon` from that cgroup's
+`memory.stat`.
+
 ## 7. Code rules the repo has already written down
 
 Do not restate these in new comments; read them where they live, because the

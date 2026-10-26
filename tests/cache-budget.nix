@@ -51,6 +51,8 @@ pkgs.runCommand "nixarchy-cache-budget"
       ".#twin":   { "/nix/store/ccc-twin":  $((5 * MiB)),  "/nix/store/shared-qemu": $((400 * MiB)) },
       ".#huge":   { "/nix/store/ddd-huge":  $((3000 * MiB)) },
       ".#flaky":  { "/nix/store/hhh-flaky": $((7 * MiB)) },
+      ".#omarchy": { "/nix/store/ooo-omarchy": $((1 * MiB)) },
+      ".#bumpy":  { "/nix/store/iii-refsrc": $((1 * MiB)), "/nix/store/jjj-keep": $((1 * MiB)) },
       ".#checks.x86_64-linux.lonely":  { "/nix/store/eee-lonely": 96 },
       ".#checks.x86_64-linux.clingy":  { "/nix/store/fff-clingy": 200, "/nix/store/ggg-dep": 4096 }
     }
@@ -65,16 +67,32 @@ pkgs.runCommand "nixarchy-cache-budget"
       jq -c --arg k "\$1" '.[\$k] // (to_entries | map(select(.value | has(\$k))) | first | .value) // empty' "\$store"
     }
     case "\$1 \$2" in
-      "build --no-link") closure_of "\$3" | grep -q . ;;
+      "build --no-link")
+        if [ "\$3" = --json ]; then
+          # The batch: one result per installable, in argument order.
+          [ -z "\$STUB_BATCH_FAILS" ] || exit 1
+          shift 3
+          for a in "\$@"; do closure_of "\$a" | grep -q . || exit 1; done
+          for a in "\$@"; do closure_of "\$a" | jq -c '{ outputs: { out: keys_unsorted[0] } }'; done | jq -cs .
+        else closure_of "\$3" | grep -q .; fi ;;
       "build --keep-going") exit 0 ;;
+      "flake metadata") echo '{"path":"/nix/store/src-flake"}' ;;
       "eval --raw") jq -r --arg k "\$3" '.[\$k] | keys_unsorted[0]' "\$store" ;;
       "path-info -r")
-        [ "\$4" = .#flaky ] && exit 1
+        case "\$4" in .#flaky|/nix/store/hhh-flaky) exit 1 ;; esac
         if [ "\$3" = --json ]; then closure_of "\$4" | jq -c 'map_values({ narSize: . })'
         else closure_of "\$3" | jq -r 'keys[]'; fi ;;
       path-info*) closure_of "\$2" | grep -q . ;;
       *) echo "stub nix: unexpected \$*" >&2; exit 9 ;;
     esac
+    EOF
+    # nix-store --query --referrers-closure: the roots, and one path that
+    # references the flake source (iii-refsrc), as the real command would say.
+    cat > bin/nix-store <<EOF
+    #!${pkgs.bash}/bin/bash
+    [ "\$1 \$2" = "--query --referrers-closure" ] || { echo "stub nix-store: unexpected \$*" >&2; exit 9; }
+    shift 2
+    printf '%s\n' "\$@" /nix/store/iii-refsrc
     EOF
     # curl: 200 for an up-* narinfo on either upstream, 404 otherwise.
     cat > bin/curl <<EOF
@@ -101,6 +119,23 @@ pkgs.runCommand "nixarchy-cache-budget"
       ok "entries under the budget pass"
     else
       bad "entries under the budget failed:"; printf '%s\n' "$got"
+    fi
+
+    # (a2) The batch and the per-entry fallback must report the same thing, and
+    # the fallback must still name the entry that does not build.
+    want=$(bash $budget .#small .#other .#twin 2>&1)
+    got=$(STUB_BATCH_FAILS=1 bash $budget .#small .#other .#twin 2>&1)
+    if [ "$want" = "$got" ] && grep -q ', 435 MiB of' <<<"$got"; then
+      ok "the per-entry fallback reports what the batch does"
+    else
+      bad "batch and fallback disagree:"; printf '%s\n---\n%s\n' "$want" "$got"
+    fi
+    if got=$(bash $budget .#small .#absent 2>&1); then
+      bad "an entry that does not build passed the budget"
+    elif grep -q '::error::.#absent does not build' <<<"$got"; then
+      ok "a failed batch falls back and names the entry that does not build"
+    else
+      bad "a failed batch did not name the entry:"; printf '%s\n' "$got"
     fi
 
     # (c) The upstream glibc (500 MiB) is not ours, so .#small alone is 10 MiB.
@@ -171,6 +206,37 @@ pkgs.runCommand "nixarchy-cache-budget"
       ok "main pushes the closure"
     else
       bad "main did not push the closure: $(tr '\n' ' ' < calls/pushed 2>/dev/null)"
+    fi
+
+    # (g2) A nixpkgs bump PR from THIS repository pushes the closure minus what
+    # references the source; a fork's branch of the same name, and any other PR,
+    # push nothing.
+    printf '%s\n' '{"pull_request":{"head":{"repo":{"full_name":"o/r"}}}}' > own.json
+    printf '%s\n' '{"pull_request":{"head":{"repo":{"full_name":"fork/r"}}}}' > fork.json
+    pr() { # head-ref event-file
+      GITHUB_REF=refs/pull/1/merge GITHUB_EVENT_NAME=pull_request GITHUB_REPOSITORY=o/r \
+        GITHUB_HEAD_REF=$1 GITHUB_EVENT_PATH=$2 bash $push .#bumpy >/dev/null 2>&1
+    }
+    rm -f calls/pushed
+    pr update/nixpkgs-2026-10-26 own.json
+    if [ "$(cat calls/pushed 2>/dev/null)" = /nix/store/jjj-keep ]; then
+      ok "a bump PR pushes the closure minus what references the source"
+    else
+      bad "a bump PR pushed: $(tr '\n' ' ' < calls/pushed 2>/dev/null)"
+    fi
+    rm -f calls/pushed
+    pr update/nixpkgs-2026-10-26 fork.json
+    if [ ! -s calls/pushed ]; then
+      ok "a fork's bump-named branch pushes nothing"
+    else
+      bad "a fork's branch pushed: $(tr '\n' ' ' < calls/pushed)"
+    fi
+    rm -f calls/pushed
+    pr feature/other own.json
+    if [ ! -s calls/pushed ]; then
+      ok "an ordinary PR pushes nothing"
+    else
+      bad "an ordinary PR pushed: $(tr '\n' ' ' < calls/pushed)"
     fi
 
     # (h) build-unless-proven.sh pushes proofs for what it built, and only

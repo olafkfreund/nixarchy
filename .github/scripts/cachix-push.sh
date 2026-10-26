@@ -27,8 +27,10 @@
 # ## What may be pushed, and from where (#697)
 #
 # The cache is the free tier: 5 GB, evicted by last download. So closures --
-# cache-allowlist.sh's entries -- are pushed from main only, and a check's
-# result is pushed from any ref with --proof:
+# cache-allowlist.sh's entries -- are pushed from main, and from this
+# repository's own nixpkgs bump PRs minus every path only that commit uses
+# (#1461: main then downloads what the bump compiled). A check's result is
+# pushed from any ref with --proof:
 #
 #   cachix-push.sh --proof <check>...
 #
@@ -38,7 +40,7 @@
 set -uo pipefail
 
 usage() {
-  echo "usage: $0 <flake-attr>...   (closures; main only)" >&2
+  echo "usage: $0 <flake-attr>...   (closures; main, and this repo's nixpkgs bump PRs)" >&2
   echo "       $0 --proof <check>...  (one check result each; any ref)" >&2
   exit 2
 }
@@ -131,11 +133,46 @@ if [ "$proof" = true ]; then
   exit 0
 fi
 
-# Closures come from main. A pull request, a bump branch or a tag pushing its
-# builds is what filled the cache with paths nobody would ever download.
-if [ "${GITHUB_REF:-}" != refs/heads/main ]; then
+# Closures come from main, and from a nixpkgs bump branch of this repository
+# minus what is specific to the commit (#1461). A pull request, a fork's branch
+# or a tag pushing its builds is what filled the cache with paths nobody would
+# ever download.
+#
+# Prints main, bump, or nothing. A failed jq prints nothing too: not knowing
+# whose branch this is must read as "no", never as "yes".
+closure_context() {
+  if [ "${GITHUB_REF:-}" = refs/heads/main ]; then
+    echo main
+    return
+  fi
+  [ "${GITHUB_EVENT_NAME:-}" = pull_request ] || return 0
+  case "${GITHUB_HEAD_REF:-}" in update/nixpkgs-*) ;; *) return 0 ;; esac
+  local head
+  head=$(jq -r '.pull_request.head.repo.full_name // empty' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null) || return 0
+  if [ -n "$head" ] && [ "$head" = "${GITHUB_REPOSITORY:-}" ]; then echo bump; fi
+}
+
+ctx=$(closure_context)
+if [ -z "$ctx" ]; then
   echo "not main; closures are pushed from main only (${GITHUB_REF:-no GITHUB_REF})"
   exit 0
+fi
+
+# A global, so the EXIT trap sees it (an exit trap reads its variables late).
+excl=$(mktemp)
+trap 'rm -f "$excl"' EXIT
+
+if [ "$ctx" = bump ]; then
+  # Everything that references the flake source or the omarchy tree changes
+  # with every commit, so nobody downloads it twice. A bump that cannot compute
+  # the set pushes nothing rather than everything.
+  skip_all() { echo "::warning::$1; a nixpkgs bump pushes nothing without the exclusion set" >&2; exit 0; }
+  src=$(nix flake metadata --json . 2>/dev/null | jq -r .path) || skip_all "could not read the flake source path"
+  [ -n "$src" ] && [ "$src" != null ] || skip_all "the flake source path is empty"
+  tree=$(nix path-info .#omarchy 2>/dev/null) || skip_all "could not resolve .#omarchy"
+  refs=$(nix-store --query --referrers-closure "$src" "$tree" 2>/dev/null) || skip_all "could not query referrers"
+  printf '%s\n' "$refs" | sort -u >"$excl"
+  [ -s "$excl" ] || skip_all "the exclusion set is empty"
 fi
 
 fail=0
@@ -149,7 +186,8 @@ for attr in "$@"; do
     continue
   fi
 
-  n=$(nix path-info -r "$attr" 2>/dev/null | wc -l)
+  list=$(nix path-info -r "$attr" 2>/dev/null | sort -u)
+  n=$(grep -c . <<<"$list")
   # A closure of zero is the failure this whole script exists to stop being
   # invisible. `nix path-info` above can succeed while `-r` yields nothing, and
   # piping that into cachix pushes an empty list and reports success -- which is
@@ -159,8 +197,15 @@ for attr in "$@"; do
     fail=1
     continue
   fi
-  echo "pushing $attr ($n paths in its closure)"
-  if ! nix path-info -r "$attr" 2>/dev/null | cachix push nixarchy; then
+  if [ "$ctx" = bump ]; then
+    list=$(comm -23 <(printf '%s\n' "$list") "$excl")
+    kept=$(grep -c . <<<"$list")
+    echo "pushing $attr: $kept paths, $((n - kept)) left out as commit-specific"
+    [ "$kept" -gt 0 ] || continue
+  else
+    echo "pushing $attr ($n paths in its closure)"
+  fi
+  if ! printf '%s\n' "$list" | cachix push nixarchy; then
     # Not fatal on its own: a cache upload failing must not fail a build that
     # succeeded (#235, and the reason every cachix step here is
     # continue-on-error). But it must be VISIBLE, because "pushed nothing" and

@@ -33,17 +33,38 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# Realise each entry (a substitution on a warm store) and collect its closure,
-# remembering which entries each path came from so a failure can name them.
+# Realise every entry in ONE nix invocation: one evaluation shares the
+# nixpkgs and flake loading that a build per entry repeats (#1461). `--json`
+# lists the results in argument order. If the batch fails, or does not map one
+# out path to each entry, fall back to one build per entry, so the error names
+# the entry that broke.
+outs=()
+if batch=$(nix build --no-link --json "${entries[@]}" 2>"$work/batch.log") &&
+  # Every output, space-joined: a multi-output package (jq) has no `out`.
+  mapfile -t outs < <(jq -r '.[] | [.outputs[]] | join(" ")' <<<"$batch") &&
+  [ "${#outs[@]}" -eq "${#entries[@]}" ] && ! printf '%s\n' "${outs[@]}" | grep -qx ''; then
+  :
+else
+  outs=()
+  for e in "${entries[@]}"; do
+    if ! nix build --no-link "$e" >"$work/build.log" 2>&1; then
+      echo "::error::$e does not build, so its cost cannot be measured" >&2
+      tail -5 "$work/build.log" >&2
+      exit 2
+    fi
+    outs+=("$e")
+  done
+fi
+
+# Collect each entry's closure, remembering which entries each path came from
+# so a failure can name them. Reading from the out path means no re-evaluation.
 : >"$work/paths.tsv"
-for e in "${entries[@]}"; do
-  if ! nix build --no-link "$e" >"$work/build.log" 2>&1; then
-    echo "::error::$e does not build, so its cost cannot be measured" >&2
-    tail -5 "$work/build.log" >&2
-    exit 2
-  fi
+for i in "${!entries[@]}"; do
+  e=${entries[$i]}
   # pipefail is what makes the || below see a failed nix: jq exits 0 on empty input.
-  nix path-info -r --json "$e" 2>/dev/null |
+  # Word-split on purpose: one entry may name several outputs.
+  # shellcheck disable=SC2086
+  nix path-info -r --json ${outs[$i]} 2>/dev/null |
     jq -r --arg e "$e" 'to_entries[] | [.key, (.value.narSize | tostring), $e] | @tsv' \
       >>"$work/paths.tsv" ||
     { echo "::error::could not read the closure of $e, so its cost cannot be measured" >&2; exit 2; }

@@ -401,7 +401,7 @@ Two other ways a check stops checking, both found in one week:
   bump evaluated `vm-toplevel` and `reference-toplevel`. A bump removed an
   option `microvm.nix` (a commit pin) sets, which broke all 18 `microvm-*`
   runners and neither toplevel -- the same hole as sops-nix in #1030, where
-  `vm-toplevel` does not reach `hypr-rdp-builds`. The narrow gate passed,
+  `vm-toplevel` does not reach `hypr-rdp-builds` (now `sops-evaluates`, #1462). The narrow gate passed,
   the pull request opened, and its CI went red with the fix left to a human.
   Widening the gate alone would have made it worse: a refusal exited 0 and
   opened nothing, so the bump would have stopped and nobody been told

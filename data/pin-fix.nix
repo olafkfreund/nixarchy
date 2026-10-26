@@ -10,7 +10,7 @@
     why = "every .#microvm-* runner evaluates through it";
   };
   sops-nix = {
-    probe = "checks.x86_64-linux.hypr-rdp-builds";
+    probe = "checks.x86_64-linux.sops-evaluates";
     why = "vm-toplevel does not reach it (#1030), so the check that does is the probe";
   };
   mcp-servers-nix = {

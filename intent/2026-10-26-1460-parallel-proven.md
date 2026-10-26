@@ -52,10 +52,8 @@ Nothing ships to users.
   the floor still hold under parallelism.
 - **Measured:** before and after, cold, on the same commit.
 
-## Open questions
+## Decisions (owner, 2026-10-26: "implement the fix then and make this faster. Use your recommendations")
 
-1. **Also raise the job's timeout from 45 minutes,** as a margin for the
-   build half? That is a CI-gate change and the owner's call.
-2. **Also make the build batches bigger,** to overlap slow builds? The
-   build half is about 23 minutes, and a bigger batch also delays each proof
-   push.
+1. **The timeout goes from 45 to 60 minutes,** as a margin for the build half.
+2. **The build batch size stays at 5:** no measurement shows a gain, and a
+   bigger batch pushes proofs later.

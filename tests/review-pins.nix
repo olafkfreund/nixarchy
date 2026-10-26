@@ -121,7 +121,7 @@ pkgs.runCommand "nixarchy-review-pins"
     #
     # So `hyprland ref` is the assertion, not `hyprland rev`: if someone pins
     # it back to a commit, this fails and says why.
-    for want_line in "omarchy	tag" "sops-nix	rev" "hyprland	ref" "nixpkgs	ref"; do
+    for want_line in "omarchy	tag" "sops-nix	rev" "zen-browser	rev" "nix-skills	rev" "nix-index-database	ref" "hyprland	ref" "nixpkgs	ref"; do
       name=''${want_line%%	*}
       kind=''${want_line##*	}
       got=$(grep -E "^$name	" pins-flake.txt | cut -f2)
@@ -270,6 +270,56 @@ pkgs.runCommand "nixarchy-review-pins"
     cirow build.yml 30 finding "success''${T}2026-09-12T12:00:00Z" "| build.yml | 48h ago | last run passed | **but nothing has run for 48h** |"
     cirow build.yml 30 finding "failure''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | failure | **read the run** |"
     cirow build.yml 30 finding "success''${T}yesterday-ish" "| build.yml | - | unreadable run |"
+
+    # A commit pin that is behind its upstream's default branch (#1459), with
+    # the clock fixed at $now. The first case is microvm today: someone
+    # else's repo, 42 commits ahead of us, the oldest of them 13 days old.
+    SHA=0123456789abcdef0123456789abcdef01234567
+    revrow() { # expected text, then NAME OWNER AT AGE BRANCH STATUS AHEAD OLDEST
+      local want=$1 got
+      shift
+      got=$(bash ${../pkgs/review.sh} --rev-row "$@" "$now" 2>&1)
+      case "$got" in
+        *"$want"*) ;;
+        *)
+          echo "review: rev row for '$*' was: $got" >&2
+          echo "  expected it to contain: $want" >&2
+          fail=1
+          ;;
+      esac
+    }
+    revrow "| microvm | 012345678 (30d) | main | **42 commits behind main since 2026-09-01** |" \
+      microvm microvm-nix $SHA 30 main ahead 42 2026-09-01T08:00:00Z
+    revrow "| microvm | 012345678 (30d) | 42 behind main | ok |" \
+      microvm olafkfreund $SHA 30 main ahead 42 2026-09-01T08:00:00Z
+    revrow "| microvm | 012345678 (30d) | 3 behind main | ok |" \
+      microvm microvm-nix $SHA 30 main ahead 3 2026-09-12T08:00:00Z
+    revrow "| microvm | 012345678 (30d) | at main | ok |" \
+      microvm microvm-nix $SHA 30 main identical 0 ""
+    revrow "| microvm | 012345678 (30d) | main | **pin is not on main** |" \
+      microvm microvm-nix $SHA 30 main diverged 4 ""
+    revrow "| microvm | 012345678 (30d) | not comparable | ok |" \
+      microvm microvm-nix $SHA 30 "" "" "" ""
+
+    # The held nixpkgs bump (#1459): a draft PR is a finding only once it has
+    # sat for more than three days.
+    blockedrow() { # expected text, then NUMBER CREATED APIERR
+      local want=$1 got
+      shift
+      got=$(bash ${../pkgs/review.sh} --blocked-row "$1" "$2" "$now" "$3" 2>&1)
+      case "$got" in
+        *"$want"*) ;;
+        *)
+          echo "review: blocked row for '$*' was: $got" >&2
+          echo "  expected it to contain: $want" >&2
+          fail=1
+          ;;
+      esac
+    }
+    blockedrow "| nixpkgs bump | - | #7 | **nixpkgs bump blocked since 2026-09-10, #7** |" 7 2026-09-10T11:00:00Z 0
+    blockedrow "| nixpkgs bump | - | blocked since 2026-09-13, #7 | ok |" 7 2026-09-13T11:00:00Z 0
+    blockedrow "| nixpkgs bump | - | no blocked bump | ok |" "" "" 0
+    blockedrow "| nixpkgs bump | - | - | **cannot read pull requests** |" "" "" 1
 
     [ "$fail" -eq 0 ] || exit 1
 

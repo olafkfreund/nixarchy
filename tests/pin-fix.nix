@@ -144,6 +144,11 @@ pkgs.runCommand "nixarchy-pin-fix"
     expect_prefix "owner ready pr" "held" "$(owner '{"branch_exists":true,"pr":{"number":7,"isDraft":false,"author":"b","state":"OPEN"},"commits":[],"bot":"b"}')"
     expect_prefix "owner other author" "held" "$(owner '{"branch_exists":true,"pr":{"number":7,"isDraft":true,"author":"h","state":"OPEN"},"commits":[],"bot":"b"}')"
 
+    # ---- --table and --nixpkgs-rev (flake-update.yml's summaries and comment marker)
+    expect "table" "$(printf '| target | error |\n|---|---|\n| `.#a` | x \\| y |')" \
+      "$(printf '.#a\tx | y\n' | bash $P --table)"
+    expect "nixpkgs-rev" "$(jq -r '.nodes.nixpkgs_2.locked.rev' $L)" "$(bash $P --nixpkgs-rev $L)"
+
     [ "$fail" = 0 ] || exit 1
     touch $out
   ''

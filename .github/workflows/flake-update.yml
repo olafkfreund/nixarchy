@@ -34,6 +34,12 @@
 # review records disko as "a ref chosen on purpose that has not moved in 227
 # days". A nightly job that quietly undoes a deliberate pin is worse than no
 # job. Naming the input keeps this to the one that carries the apps.
+#
+# It still moves, and auto-merges, nixpkgs alone. When that bump does not
+# evaluate, it may PROPOSE moving the inputs listed in data/pin-fix.nix -- the
+# commit-pinned ones a nixpkgs bump is known to break -- as a DRAFT pull
+# request that never merges itself (#1459). A person reads that draft, or a
+# later night whose bump evaluates promotes it.
 
 name: flake update
 
@@ -64,7 +70,10 @@ concurrency:
 jobs:
   bump:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    # 45, not 30 (#1459): the gate evaluates every cached output (about 2 minutes)
+    # and a refusal then tries each fixable input in turn. pin-fix.sh stops
+    # trying at PIN_FIX_DEADLINE, so a draft still opens inside the budget.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-nix
@@ -73,6 +82,7 @@ jobs:
         id: before
         run: |
           set -euo pipefail
+          echo "PIN_FIX_DEADLINE=$(($(date +%s) + 28 * 60))" >> "$GITHUB_ENV"
           ./.github/scripts/app-versions.sh > /tmp/before.json
           echo "counted $(jq 'length' /tmp/before.json) apps on the current pin"
 
@@ -87,6 +97,10 @@ jobs:
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             git --no-pager diff --stat -- flake.lock
+            # pin-fix.sh measures every move from this tree, and restores from
+            # it: restoring from git would drop the nixpkgs bump too.
+            mkdir -p "$RUNNER_TEMP/base"
+            cp flake.nix flake.lock "$RUNNER_TEMP/base/"
           fi
 
       - name: What the apps would be on
@@ -130,8 +144,12 @@ jobs:
 
       # Cheap and decisive. #320 broke on exactly this surface: the flake
       # evaluated for the person who changed it and not for a user resolving
-      # inputs fresh. drvPath forces the whole system closure -- every module,
-      # every package in systemPackages -- without building any of it.
+      # inputs fresh. drvPath forces the whole closure without building any of
+      # it. It covers every output the binary cache holds plus the probe
+      # target of each input in data/pin-fix.nix, not just the two toplevels:
+      # on 2026-10-26 a bump broke every microvm runner, and a gate that
+      # evaluated only the toplevels let the job refuse in silence while the
+      # pin stayed broken (#1457, #1459).
       #
       # This is a FAST FAIL, not the gate. The gate is build.yml running on the
       # pull request below, which is why this job does not build anything: a
@@ -140,47 +158,269 @@ jobs:
       #
       # A bump that does not evaluate is this job's NORMAL outcome, not its
       # failure: upstream broke something, the canary caught it, and the right
-      # move is to propose nothing and try again tomorrow. So it records that
-      # and exits 0.
+      # move is to open a DRAFT that says so and try again tomorrow. So the
+      # step records that and exits 0. A draft that stalls is the review's to
+      # report (pkgs/review.sh, "nixpkgs bump").
       #
       # It used to exit 1, which made a working refusal indistinguishable from
       # a broken workflow -- both a red X on the same row of the nightly review
-      # (#195). One of those needs somebody to look and the other does not, and
-      # a signal that cannot tell them apart gets ignored for the commoner
-      # case, which is the one that does not matter. A genuinely broken step
-      # here still fails: `set -euo pipefail` covers everything except the two
-      # evals, which are the only commands whose failure means "upstream", not
-      # "us".
-      - name: Both toplevels still evaluate
-        id: evaluates
+      # (#195). eval-gate.sh's exit 2 means the gate itself could not run, and
+      # that one still fails the job.
+      - name: Every cached output still evaluates
+        id: gate
         if: steps.bump.outputs.changed == 'true'
+        env:
+          EVAL_GATE_LOG_DIR: ${{ runner.temp }}/eval-logs
         run: |
           set -euo pipefail
-          ok=true
-          for attr in vm-toplevel reference-toplevel; do
-            if ! nix eval --raw ".#checks.x86_64-linux.$attr.drvPath"; then
-              echo
-              echo "::warning::$attr does not evaluate against the new pin; not proposing it"
-              ok=false
-            fi
-            echo
-          done
-          echo "ok=$ok" >> "$GITHUB_OUTPUT"
-          if [ "$ok" = true ]; then
-            echo "both toplevels evaluate against the new pin"
+          rc=0
+          ./.github/scripts/eval-gate.sh > "$RUNNER_TEMP/fail.tsv" || rc=$?
+          case "$rc" in
+            0)
+              echo "ok=true" >> "$GITHUB_OUTPUT"
+              echo "every cached output and probe evaluates against the new pin"
+              ;;
+            1)
+              n=$(wc -l < "$RUNNER_TEMP/fail.tsv")
+              echo "ok=false" >> "$GITHUB_OUTPUT"
+              echo "count=$n" >> "$GITHUB_OUTPUT"
+              echo "::warning::$n target(s) do not evaluate against the new pin; opening a draft"
+              {
+                echo "### nixpkgs bump does not evaluate"
+                echo
+                ./.github/scripts/pin-fix.sh --table < "$RUNNER_TEMP/fail.tsv"
+                echo
+                echo "This is the check doing its job -- nothing here is broken."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::eval-gate.sh could not run (exit $rc); this is not an upstream break"
+              exit 1
+              ;;
+          esac
+
+      # Which of the pinned inputs, moved to their upstream default branch,
+      # makes the batch evaluate again? Read-only API calls, so the default
+      # token. The working tree ends as the bump alone, or the bump plus the
+      # minimal moves. A pin-fix that crashes costs the proposal, not the
+      # draft: fall back to the bump alone.
+      - name: Try the allowlisted inputs
+        id: pinfix
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN_FIX_OUT: ${{ runner.temp }}/pinfix
+        run: |
+          set -euo pipefail
+          if ! ./.github/scripts/pin-fix.sh "$RUNNER_TEMP/fail.tsv"; then
+            echo "::warning::pin-fix did not finish; proposing nixpkgs alone"
+            cp "$RUNNER_TEMP/base/flake.nix" "$RUNNER_TEMP/base/flake.lock" .
+            mkdir -p "$PIN_FIX_OUT"
+            echo unfixed > "$PIN_FIX_OUT/status"
+            : > "$PIN_FIX_OUT/moved"
+            echo "pin-fix did not finish; see the run log." > "$PIN_FIX_OUT/body.md"
+          fi
+          {
+            echo "status=$(cat "$PIN_FIX_OUT/status")"
+            echo "moved=$(paste -sd' ' "$PIN_FIX_OUT/moved")"
+          } >> "$GITHUB_OUTPUT"
+
+      # Who may write update/nixpkgs-blocked? Asked just before anything writes
+      # to it, on both paths. A person (or Copilot) who has pushed to the
+      # draft owns it from then on, and this job must not overwrite them. If
+      # the question cannot be answered the job FAILS: a fail-safe that is
+      # silent is a bump that stops, and nobody hears.
+      - name: Who holds the blocked branch
+        id: owner
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          branch=update/nixpkgs-blocked
+          unreadable() {
+            echo "::error::cannot read the state of $branch; refusing to write to it"
+            echo "held cannot read the blocked branch's state" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          rc=0
+          git ls-remote --exit-code --heads origin "$branch" > /dev/null || rc=$?
+          case "$rc" in
+            0) exists=true ;;
+            2) exists=false ;;
+            *) unreadable ;;
+          esac
+          pr=$(gh pr list --head "$branch" --state open --json number,isDraft,author,state \
+            -q '.[0] // null | if . == null then null else {number, isDraft, author: .author.login, state} end') || unreadable
+          commits='[]'
+          if [ "$exists" = true ]; then
+            commits=$(gh api "repos/$GH_REPO/compare/main...$branch" \
+              --jq '[.commits[] | {message: .commit.message}]') || unreadable
+          fi
+          bot=$(gh api user --jq .login) || unreadable
+          jq -n --argjson e "$exists" --argjson pr "$pr" --argjson c "$commits" --arg bot "$bot" \
+            '{branch_exists: $e, pr: $pr, commits: $c, bot: $bot}' > "$RUNNER_TEMP/owner.json"
+          verdict=$(./.github/scripts/pin-fix.sh --owner "$RUNNER_TEMP/owner.json")
+          echo "$verdict"
+          kind=${verdict%% *}
+          rest=${verdict#"$kind"}
+          rest=${rest# }
+          if [ "$kind" = writable ]; then
+            writable=true
+            held_pr=$rest
           else
-            {
-              echo "### nixpkgs bump not proposed"
-              echo
-              echo "The new pin does not evaluate, so no pull request was opened."
-              echo "This is the check doing its job -- nothing here is broken."
-              echo "The next run tries the pin upstream has by then."
-            } >> "$GITHUB_STEP_SUMMARY"
+            writable=false
+            held_pr=$(jq -r '.pr.number // ""' "$RUNNER_TEMP/owner.json")
+          fi
+          {
+            echo "writable=$writable"
+            echo "pr=$held_pr"
+            echo "reason=$rest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write the blocked draft's body
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'false' && steps.owner.outputs.writable == 'true'
+        env:
+          COUNT: ${{ steps.gate.outputs.count }}
+          DELTA: ${{ steps.delta.outputs.delta }}
+          PIN_FIX_OUT: ${{ runner.temp }}/pinfix
+        run: |
+          set -euo pipefail
+          {
+            echo "nixpkgs moves to the newest revision, but $COUNT target(s) do not evaluate against it."
+            echo "So this is a **draft** and **will not merge itself**."
+            echo
+            echo "### Targets that fail"
+            echo
+            ./.github/scripts/pin-fix.sh --table < "$RUNNER_TEMP/fail.tsv"
+            echo
+            cat "$PIN_FIX_OUT/body.md"
+            echo
+            echo "### Apps that move with the pin"
+            echo
+            printf '%s\n' "$DELTA"
+            echo
+            echo "A later night whose bump evaluates promotes this pull request."
+          } | ./.github/scripts/pin-fix.sh --sanitize > "$RUNNER_TEMP/blocked.body.md"
+
+      - name: Open the blocked draft
+        id: blocked
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'false' && steps.owner.outputs.writable == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+          # Constant, not dated: one draft stays open and is updated by each
+          # failing night, so its created date is when the stall began.
+          branch: update/nixpkgs-blocked
+          draft: always-true
+          title: "${{ steps.pinfix.outputs.status == 'fixed' && format('nixpkgs: blocked on {0}, fix proposed', steps.pinfix.outputs.moved) || format('nixpkgs: blocked, {0} target(s) do not evaluate', steps.gate.outputs.count) }}"
+          commit-message: |
+            Move the nixpkgs pin, and with it ${{ steps.delta.outputs.count }} app version(s)
+
+            Generated by .github/workflows/flake-update.yml.
+          body-path: ${{ runner.temp }}/blocked.body.md
+          labels: dependencies
+          delete-branch: true
+
+      # The branch belongs to somebody else tonight. Say what the bump
+      # found, once per nixpkgs revision, and write nothing to the branch.
+      - name: Say so on a draft somebody else holds
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'false' && steps.owner.outputs.writable == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          HELD_PR: ${{ steps.owner.outputs.pr }}
+          REASON: ${{ steps.owner.outputs.reason }}
+        run: |
+          set -euo pipefail
+          rev=$(./.github/scripts/pin-fix.sh --nixpkgs-rev flake.lock)
+          marker="<!-- flake-update:$rev -->"
+          {
+            echo "Tonight's nixpkgs bump ($rev) is blocked too, and this job did not write to the branch ($REASON)."
+            echo
+            ./.github/scripts/pin-fix.sh --table < "$RUNNER_TEMP/fail.tsv"
+            echo
+            echo "$marker"
+          } | ./.github/scripts/pin-fix.sh --sanitize > "$RUNNER_TEMP/held.md"
+          if gh pr view "$HELD_PR" --json comments -q '[.comments[].body]' | jq -e --arg m "$marker" 'any(.[]; contains($m))' > /dev/null; then
+            echo "#$HELD_PR already carries a comment for $rev"
+          else
+            gh pr comment "$HELD_PR" --body-file "$RUNNER_TEMP/held.md"
+          fi
+          cat "$RUNNER_TEMP/held.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write the bump's body
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'true'
+        env:
+          DELTA: ${{ steps.delta.outputs.delta }}
+        run: |
+          set -euo pipefail
+          {
+            echo 'Nightly bump of the `nixpkgs` input. Only that input: the others'
+            echo 'are left where they are, because at least one of them is pinned on'
+            echo 'purpose.'
+            echo
+            printf '%s\n' "$DELTA"
+            echo
+            cat <<'EOF'
+          Verified before this PR was opened: every output the binary cache holds,
+          and the probe target of each input in `data/pin-fix.nix`, evaluates
+          (`.github/scripts/eval-gate.sh`).
+
+          That is an evaluation check, not a build. **The gate is the CI on
+          this pull request**, which runs because the PR was opened with
+          `BUMP_TOKEN`; it merges when the required contexts report green and
+          not before.
+
+          What CI does not cover: an app that builds and then misbehaves at
+          runtime. If a package here is one you rely on, launch it before
+          this lands, or roll back afterwards with `nixos-rebuild --rollback`.
+          EOF
+          } | ./.github/scripts/pin-fix.sh --sanitize > "$RUNNER_TEMP/bump.body.md"
+
+      # A clean night after a blocked one PROMOTES the draft: same branch, so
+      # its history and comments stay. create-pull-request does not change a
+      # PR's draft state on update, hence the explicit `gh pr ready` below.
+      - name: Promote the blocked draft
+        id: promote
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'true' && steps.owner.outputs.writable == 'true' && steps.owner.outputs.pr != ''
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+          branch: update/nixpkgs-blocked
+          draft: false
+          title: "nixpkgs: ${{ steps.delta.outputs.count }} app version(s) move"
+          commit-message: |
+            Move the nixpkgs pin, and with it ${{ steps.delta.outputs.count }} app version(s)
+
+            Generated by .github/workflows/flake-update.yml.
+          body-path: ${{ runner.temp }}/bump.body.md
+          labels: dependencies
+          delete-branch: true
+
+      # create-pull-request leaves the number empty when it had nothing to
+      # push; the draft is still the one to promote, so fall back to it.
+      - name: Mark the promoted draft ready
+        id: ready
+        if: steps.promote.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.promote.outputs.pull-request-number || steps.owner.outputs.pr }}
+          SHA: ${{ steps.promote.outputs.pull-request-head-sha }}
+        run: |
+          set -euo pipefail
+          [ -n "$SHA" ] || SHA=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+          { echo "pr=$PR"; echo "sha=$SHA"; } >> "$GITHUB_OUTPUT"
+          if ! gh pr ready "$PR"; then
+            echo "::error::could not mark #$PR ready for review; it stays a draft and will not merge"
+            exit 1
           fi
 
       - name: Open a pull request
         id: pr
-        if: steps.bump.outputs.changed == 'true' && steps.evaluates.outputs.ok == 'true'
+        if: steps.bump.outputs.changed == 'true' && steps.gate.outputs.ok == 'true' && !(steps.owner.outputs.writable == 'true' && steps.owner.outputs.pr != '')
         uses: peter-evans/create-pull-request@v8
         with:
           # A PR opened with the default GITHUB_TOKEN triggers no workflows at
@@ -201,40 +441,64 @@ jobs:
             Move the nixpkgs pin, and with it ${{ steps.delta.outputs.count }} app version(s)
 
             Generated by .github/workflows/flake-update.yml.
-          body: |
-            Nightly bump of the `nixpkgs` input. Only that input: the others
-            are left where they are, because at least one of them is pinned on
-            purpose.
-
-            ${{ steps.delta.outputs.delta }}
-
-            Verified before this PR was opened:
-
-            - `.#checks.x86_64-linux.vm-toplevel` evaluates
-            - `.#checks.x86_64-linux.reference-toplevel` evaluates
-
-            That is an evaluation check, not a build. **The gate is the CI on
-            this pull request**, which runs because the PR was opened with
-            `BUMP_TOKEN`; it merges when the required contexts report green and
-            not before.
-
-            What CI does not cover: an app that builds and then misbehaves at
-            runtime. If a package here is one you rely on, launch it before
-            this lands, or roll back afterwards with `nixos-rebuild --rollback`.
+          body-path: ${{ runner.temp }}/bump.body.md
           labels: dependencies
           delete-branch: true
 
+      # A blocked draft somebody else holds, and tonight's bump is clean: it
+      # opened as its own PR, and the draft's holder should know.
+      - name: Tell the holder of the blocked draft
+        if: steps.pr.outputs.pull-request-number && steps.owner.outputs.writable == 'false' && steps.owner.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          HELD_PR: ${{ steps.owner.outputs.pr }}
+          NEW_PR: ${{ steps.pr.outputs.pull-request-number }}
+        run: |
+          set -euo pipefail
+          rev=$(./.github/scripts/pin-fix.sh --nixpkgs-rev flake.lock)
+          marker="<!-- flake-update:$rev -->"
+          if gh pr view "$HELD_PR" --json comments -q '[.comments[].body]' | jq -e --arg m "$marker" 'any(.[]; contains($m))' > /dev/null; then
+            echo "#$HELD_PR already carries a comment for $rev"
+          else
+            gh pr comment "$HELD_PR" --body "A clean nixpkgs bump ($rev) opened as #$NEW_PR. This draft was left alone. $marker"
+          fi
+
       - name: Arm auto-merge, gated on the required checks
-        if: steps.bump.outputs.changed == 'true' && steps.pr.outputs.pull-request-number
+        if: steps.ready.outputs.pr || steps.pr.outputs.pull-request-number
         env:
           # The PAT, not GITHUB_TOKEN: an auto-merge is performed as whoever
           # armed it, and a push by GITHUB_TOKEN runs no workflows. #671 merged
           # as github-actions and main's head got no build and no install check.
           GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.ready.outputs.pr || steps.pr.outputs.pull-request-number }}
+          SHA: ${{ steps.ready.outputs.sha || steps.pr.outputs.pull-request-head-sha }}
         run: |
           set -euo pipefail
-          pr=${{ steps.pr.outputs.pull-request-number }}
+          pr=$PR
+          sha=$SHA
+
+          # Only nixpkgs may merge itself. The PR is judged by what it
+          # contains, not by what this job meant to put in it: its lock must
+          # equal main's apart from the root nixpkgs node, and flake.lock must
+          # be the only file it changes. Anything else is a person's to merge.
+          # Against the merge base, not main's tip: a merge that landed after
+          # this bump was cut is not something the bump changes. The checkout
+          # is shallow, so GitHub names the base and the files (three-dot).
+          cmp=$(gh api "repos/$GH_REPO/compare/main...$sha")
+          mb=$(jq -r .merge_base_commit.sha <<<"$cmp")
+          files=$(jq -r '.files[].filename' <<<"$cmp")
+          git fetch --no-tags --depth=1 origin "$mb" "$sha"
+          git show "$mb:flake.lock" > "$RUNNER_TEMP/m.lock"
+          git show "$sha:flake.lock" > "$RUNNER_TEMP/p.lock"
+          if [ "$files" != "flake.lock" ] ||
+            ! ./.github/scripts/pin-fix.sh --only-nixpkgs "$RUNNER_TEMP/m.lock" "$RUNNER_TEMP/p.lock"; then
+            echo "::error::#$pr changes more than nixpkgs, so auto-merge is not armed." \
+              "Files: $(echo "$files" | paste -sd' ')." \
+              "Inputs moved: $(./.github/scripts/pin-fix.sh --moved "$RUNNER_TEMP/m.lock" "$RUNNER_TEMP/p.lock" | paste -sd' ')."
+            exit 1
+          fi
 
           # Needs "Allow auto-merge" (Settings -> General). If it is off, fail
           # here and say so: the PR is open and safe to merge by hand.
@@ -249,8 +513,8 @@ jobs:
           # exist only if opening the PR triggered the workflows. Left
           # undetected that is a bump which silently never lands: green job,
           # armed PR, checks that never arrive. Same guard as omarchy.yml, and
-          # for the same reason.
-          sha=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
+          # for the same reason. Asked of the sha judged above, not of a head
+          # read afterwards.
           n=0
           for _ in 1 2 3 4 5 6; do
             sleep 20

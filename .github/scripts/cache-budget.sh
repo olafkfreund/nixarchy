@@ -40,11 +40,15 @@ trap 'rm -rf "$work"' EXIT
 # lists the results in argument order. If the batch fails, or does not map one
 # out path to each entry, fall back to one build per entry, so the error names
 # the entry that broke.
+# True when no argument is empty. A loop, not `printf | grep -q`: under
+# pipefail that can read a match as a failure (tests/grep-q-pipefail).
+all_set() { local o; for o in "$@"; do [ -n "$o" ] || return 1; done; }
+
 outs=()
 if batch=$(nix build --no-link --json "${entries[@]}" 2>"$work/batch.log") &&
   # Every output, space-joined: a multi-output package (jq) has no `out`.
   mapfile -t outs < <(jq -r '.[] | [.outputs[]] | join(" ")' <<<"$batch") &&
-  [ "${#outs[@]}" -eq "${#entries[@]}" ] && ! printf '%s\n' "${outs[@]}" | grep -qx ''; then
+  [ "${#outs[@]}" -eq "${#entries[@]}" ] && all_set "${outs[@]}"; then
   :
 else
   outs=()

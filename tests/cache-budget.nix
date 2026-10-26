@@ -73,9 +73,9 @@ pkgs.runCommand "nixarchy-cache-budget"
           # The batch: one result per installable, in argument order.
           [ -z "\$STUB_BATCH_FAILS" ] || exit 1
           shift 3
-          for a in "\$@"; do closure_of "\$a" | grep -q . || exit 1; done
+          for a in "\$@"; do [ -n "\$(closure_of "\$a")" ] || exit 1; done
           for a in "\$@"; do closure_of "\$a" | jq -c '{ outputs: { out: keys_unsorted[0] } }'; done | jq -cs .
-        else closure_of "\$3" | grep -q .; fi ;;
+        else [ -n "\$(closure_of "\$3")" ]; fi ;;
       "build --keep-going") exit 0 ;;
       "flake metadata")
         [ -z "\$STUB_META_FAILS" ] || exit 1
@@ -92,7 +92,7 @@ pkgs.runCommand "nixarchy-cache-budget"
       path-info*)
         # The tree is not in the local store when STUB_TREE_ABSENT is set.
         [ -z "\$STUB_TREE_ABSENT" ] || [ "\$2" != /nix/store/ooo-omarchy ] || exit 1
-        closure_of "\$2" | grep -q . ;;
+        [ -n "\$(closure_of "\$2")" ] ;;
       *) echo "stub nix: unexpected \$*" >&2; exit 9 ;;
     esac
     EOF

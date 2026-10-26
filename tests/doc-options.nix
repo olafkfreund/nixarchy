@@ -65,7 +65,8 @@ let
           path = "${prefix}.${name}";
         in
         if lib.isOption value then
-          [ { option = path; } ]
+          # A removed option (visible = false) is not documentable surface.
+          lib.optional ((value.visible or true) != false) { option = path; }
         # `_type` marks a module-system value that is not a nested option set.
         else if lib.isAttrs value && !(value ? _type) then
           [ { group = path; } ] ++ walk path value
@@ -86,6 +87,5 @@ let
 in
 pkgs.runCommand "doc-options" { nativeBuildInputs = [ pkgs.python3 ]; } ''
   python3 ${./doc-option-paths.py} ${known} ${../README.md} ${../docs}
-  bash ${./rdp-docs.sh} ${../modules/secrets.md} ${../docs/internals/flake.md} ${../docs/manual/remote-desktop.md} ${./options.nix}
   touch $out
 ''

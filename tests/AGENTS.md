@@ -177,12 +177,12 @@ So when you wire a new command in:
 3. read the printed `<cli> accepts: ...` line and check your verbs are on it.
    A pass proves nothing until that line is non-empty and right
 
-Found writing `nixarchy-remote` (#1015), which was spelled `"${1:-serve}"`
-first.
+Found writing `nixarchy-remote` (#1015, removed in #1462), which was spelled
+`"${1:-serve}"` first. `nixarchy-secret` is the live example.
 
 ## A drvPath in a derivation's environment is a build INPUT, not a note
 
-`checks.hypr-rdp-builds` was written to prove a configuration **evaluates**,
+`checks.sops-evaluates` (first written as `hypr-rdp-builds`, for the feature removed in #1462) was written to prove a configuration **evaluates**,
 by forcing `config.system.build.toplevel.drvPath`. That is the natural way to
 write it and it is wrong:
 
@@ -242,13 +242,13 @@ hash, after twice concluding something from it.
 
 ## A check that reads the config tree cannot see a closure that will not build
 
-`programs.nixarchy.services.hypr-rdp` was **unbuildable for twelve days**
+The hypr-rdp feature (removed in #1462) was **unbuildable for twelve days**
 behind a green suite (#1030). nixarchy pinned sops-nix at a revision whose
 `sops-install-secrets` called `buildGo125Module`, which nixpkgs removed on
 2026-09-15. The feature requires a sops secret, so every configuration with
 it enabled died -- and the error named **Go**.
 
-`tests/options.nix` was not thin about this. It has a sops fixture, an
+`tests/options.nix` was not thin about this. It had a sops fixture, an
 `rdpOn` fixture enabling hypr-rdp **with a real `passwordSecret`**, and cases
 for the unit, the template, the firewall and both refusals. It still could
 not see it, for the reason written in its own comment:
@@ -263,82 +263,59 @@ general: **`checks.options` reads the evaluated config tree and never forces
 the closure.** A package that cannot be built -- or, as here, cannot be
 *evaluated* -- is invisible to every case in it, however many there are.
 
-`checks.hypr-rdp-builds` closes that for this feature by forcing
-`system.build.toplevel.drvPath`. Two things about it worth copying:
+`checks.sops-evaluates` closes that for sops-nix, the part that stayed, by forcing
+`setupSecrets`'s text, and with it `sops-install-secrets`. Two things about
+it worth copying:
 
 - **It costs an evaluation, not a VM.** `buildGo125Module` is an alias that
-  `throw`s, so the failure arrives while the drvPath is computed. A check
+  `throw`s, so the failure arrives while the activation text is computed. A check
   that needed a booted machine could not have caught this on the pull request
   that introduced it.
 - **It is its own check, not a case in `checks.options`.** That check peaks at
   12.9 GB on the hosted runner (#747). Its fixtures are tempting; a whole
   system closure evaluation does not belong in it.
 
-**What it still cannot see**, and this is the part to read before trusting
-it. It proves the closure is describable. It says nothing about the daemon
-running, and two live defects sit past it:
+**What it still cannot see.** It proves the closure is describable, and says
+nothing about a daemon running. hypr-rdp's two live defects (#1031, a headless
+output Hyprland 0.56 refused; #1033, an enable that took effect only at next
+login) sat past it, which is why hypr-rdp, removed in #1462, is the worked
+example. And since #1462 no check activates a sops secret at all:
+`checks.session` lost its only one with hypr-rdp, `sops-evaluates` only
+evaluates, and `secret-enroll` and `secret-new` drive the `sops` CLI. Anyone
+using `nixarchy secret` relies on a decryption at boot that nothing here
+runs.
 
-- **#1031** -- hypr-rdp could not create its headless output on Hyprland
-  0.56, because it set the resolution with the legacy `keyword` IPC request
-  that 0.56 dropped. Fixed by a carried patch (`pkgs/hypr-rdp/`), and now
-  seen by `checks.session`, which starts the daemon -- see below.
-- **#1033** -- enabling remote desktop takes effect only at next login: the
-  unit is `WantedBy=graphical-session.target`, which is evaluated when the
-  target starts, and the menu row lives in the tree `OMARCHY_PATH` pointed at
-  when the session began. Needs a session that postdates a rebuild.
-
-All three were found by a person configuring three real machines in an
+The defects were found by a person configuring three real machines in an
 afternoon. The generalisable rule is not about sops: **a feature whose tests
 only read its configuration has never been built by anything, and a feature
 nothing starts has never been run.**
 
-## The two-machine one: no check here ever opens an RDP connection
+## The two-machine one: no check here connects a gliff client to a server
 
 `checks.session` boots one desktop. Remote desktop needs two machines -- one
-with a logged-in Hyprland session and one opening an SSH tunnel to it -- and
-nothing in this repository boots a pair. So the thing a user actually does
-with this feature is reached by no layer, at any price.
+with a logged-in Hyprland session and one connecting to it -- and nothing in
+this repository boots a pair. (hypr-rdp, the RDP half, was removed in #1462;
+gliff is the remote desktop.)
 
-What IS covered, and it is more than it sounds:
+What IS covered:
 
 - `checks.secret-enroll` proves the policy append against real age keys and
   real sops: the enrolled host reads back its own secret, the first host
   **cannot** read it, and the first host's rule, anchor and comment survive.
   It carries its own self-test -- before the rule exists, sops must refuse to
   encrypt, or the check cannot show that enrolling did anything.
-- `checks.options` asserts `programs.nixarchy.services.hypr-rdp` in both
-  states, which is where the off state gets defended.
-- `checks.session` **starts the daemon** (#1031) with a real sops secret
-  generated at build time, waits for its `Display prepared` line -- logged
-  only after it has set its headless output's mode -- and asserts its journal
-  has no `unknown request` and the unit is active. It first asserts that the
-  VM's Hyprland answers `unknown request` to `keyword`: the fix is a fallback,
-  and a compositor that still accepted `keyword` would let the probe pass
-  without ever taking it.
+- gliff is covered up to capture: `checks.session` proves its server reaches
+  Hyprland, creates its headless output and negotiates a stream with a client
+  over loopback TCP (#1226). It cannot go further there. The VM has no
+  `/dev/dri/renderD128`, and gliff allocates capture buffers with GBM on it
+  even on the CPU tier, so capture ends in ENOENT. Frames and the GPU tier are
+  `pkgs/verify.sh`'s `gliff-probe` rows, on real hardware; the ssh hop is
+  ssh's, and the session VM runs no sshd.
 
-  **The first version asserted the output's size and was blind.** Hyprland
-  makes a headless output 1920x1080, which is also the daemon's default, so
-  "a `hypr-rdp-N` output at 1920x1080" held with the patch removed and the
-  daemon crash-looping. A journal assertion beside it was blind too: `-o cat`
-  drops the identifier, and the `grep hypr-rdp` that followed discarded every
-  line it was meant to find. Only `is-active` went red. Both were caught by
-  §1's break, not by review -- **a configured value that equals the
-  platform's default cannot vary with the thing that sets it.**
-- the unit's own `ExecStartPre` refuses an empty password at runtime, and
-  `tests/options.nix` drives that guard against both a good and an empty
-  rendered config.
-
-What is left is an RDP client connecting and seeing a desktop. That is tested
-nowhere -- `pkgs/verify.sh` has no RDP step -- and it is written down here
-rather than left implicit because a documented hole gets tested by a person
-and an undocumented one gets tested by a user (#1015; connecting out is
-#1016). gliff, the other remote-desktop tool, is covered up to capture:
-`checks.session` proves its server reaches Hyprland, creates its headless
-output and negotiates a stream with a client over loopback TCP (#1226). It
-cannot go further there. The VM has no `/dev/dri/renderD128`, and gliff
-allocates capture buffers with GBM on it even on the CPU tier, so capture ends
-in ENOENT. Frames and the GPU tier are `pkgs/verify.sh`'s `gliff-probe` rows,
-on real hardware; the ssh hop is ssh's, and the session VM runs no sshd.
+**A configured value that equals the platform's default cannot vary with the
+thing that sets it** (found probing hypr-rdp's headless output, which
+Hyprland sizes at the daemon's own default): assert on a log line that only
+the fixed code path emits, and break the fix to prove it.
 
 Worth knowing before you try to close it: `nixarchy secret enroll` itself
 cannot be driven in a sandbox either. It reads the hostname from

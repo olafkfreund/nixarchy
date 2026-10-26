@@ -1,5 +1,11 @@
 # Secrets, and the convention a bundled service follows
 
+> **hypr-rdp, the service this note was written around, was removed in #1462;
+> gliff is the remote desktop and takes no secret. sops-nix and
+> `nixarchy secret` stay. The hypr-rdp specifics below are history, kept
+> because the convention they taught still applies to the next bundled
+> service that consumes a secret.**
+
 This is the contributor-facing note. The copy-pasteable user instructions
 belong in `docs/manual/`, which is not this file.
 
@@ -13,8 +19,8 @@ product and there is no wizard". #611 made that false, deliberately, and the
 sentence is replaced rather than left standing.** The reasoning for the change
 is worth as much as the reasoning for the original position:
 
-- The mechanism has now proved itself on a real service. hypr-rdp consumes a
-  secret through `sops.templates` and has done since #155 / PR #184, which is the
+- The mechanism proved itself on a real service. hypr-rdp consumed a
+  secret through `sops.templates` and did from #155 / PR #184, which is the
   evidence the original scope cut was waiting for.
 - The cost of using it was five manual steps in
   `docs/manual/remote-desktop.md`, of which two -- `ssh-keyscan | ssh-to-age`
@@ -98,15 +104,15 @@ That is a good failure: it is loud, it is early, and nothing starts. With
 `[/etc/ssh/ssh_host_ed25519_key]` and no assertion fires.
 
 **A module that consumes a secret must assert, because the daemon will not.**
-This matters more than it looks for hypr-rdp specifically. Given an empty
-password it does *not* refuse to start — `src/config.rs` logs
+This mattered more than it looks for hypr-rdp specifically. Given an empty
+password it did *not* refuse to start — `src/config.rs` logs
 
 ```
 No credentials set (-u/-p). Use -u <user> -p <pass> to require authentication.
 ```
 
 and then serves the session **unauthenticated**. It fails open. So the module
-in `modules/services/` is the only thing standing between a missing secret and
+in `modules/services/` was the only thing standing between a missing secret and
 an RDP daemon with no password, and it must assert rather than let a rebuild
 succeed into that state. The message says why the rebuild stopped and the
 one-line shape of the fix, and points at `docs/manual/remote-desktop.md` for
@@ -143,7 +149,7 @@ Only the last of those is the fully open case, which is why it is tempting to
 guard on it alone. Do not: the middle row is a login whose password is the
 empty string, which is not meaningfully better, and it is exactly what a
 secret that exists and renders empty produces. `modules/services/hypr-rdp.nix`
-therefore requires BOTH fields to be non-empty, at runtime, in an
+(removed in #1462) therefore required BOTH fields to be non-empty, at runtime, in an
 `ExecStartPre` that exits non-zero -- an assertion cannot see a secret that
 rendered empty or a template sops-nix failed to write. If someone later
 relaxes that guard to match upstream's `&&`, this table is the reason not to.

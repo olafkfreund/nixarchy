@@ -396,6 +396,24 @@ Two other ways a check stops checking, both found in one week:
   conclusion** — `gh pr view --json mergeStateStatus` on a throwaway PR is
   the whole experiment.
 
+- **A gate that evaluates a subset of what ships cannot see a break outside
+  it, and a refusal nobody hears about stalls for good.** The nightly nixpkgs
+  bump evaluated `vm-toplevel` and `reference-toplevel`. A bump removed an
+  option `microvm.nix` (a commit pin) sets, which broke all 18 `microvm-*`
+  runners and neither toplevel -- the same hole as sops-nix in #1030, where
+  `vm-toplevel` does not reach `hypr-rdp-builds` (now `sops-evaluates`, #1462). The narrow gate passed,
+  the pull request opened, and its CI went red with the fix left to a human.
+  Widening the gate alone would have made it worse: a refusal exited 0 and
+  opened nothing, so the bump would have stopped and nobody been told
+  (#1457, #1459). So:
+  the bump is gated on every output in `cache-allowlist.sh` plus the probe
+  target of each input in `data/pin-fix.nix`, and a refusal is a **draft pull
+  request** (`update/nixpkgs-blocked`) that the review reports once it is three
+  days old. A job that times out can also hide a real failure under
+  `cancelled` (§6): #1457's `omarchy` job hit its limit with
+  `checks.bus-mcp` already failed inside it, so read the log for failed builds
+  before calling a timeout slowness.
+
 ## 5. Git and flake mechanics that bite
 
 - **A heredoc inside an indented Nix string reindents the whole file.**
@@ -772,6 +790,16 @@ govern builds, not deploys.
   meant for one throwaway VM, also names every CI install VM on p620. It did no
   harm only because those run as `nixbld` users and the command ran without
   root. Kill the pid you started, and nothing else.
+
+**Three of the four ways to measure parallel memory gave a wrong answer
+(#1460).** `/usr/bin/time -f %M` reports the largest single process, not
+the sum of the workers. `free` on a desktop also counts everything else the
+user is running. A cgroup's `memory.peak` includes file cache, which is
+reclaimable. And nix evaluation reads the store heavily, so the same run
+read 16.4 GB there and 11.6 GB anonymous. What runs a runner out of memory
+is the anonymous part. So run the measured command in its own scope
+(`systemd-run --user --scope`), and sample `anon` from that cgroup's
+`memory.stat`.
 
 ## 7. Code rules the repo has already written down
 

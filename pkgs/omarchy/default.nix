@@ -156,31 +156,16 @@ let
     "setup.local-ai": {"icon":"󰭹","label":"Local AI","aliases":["ollama","local model"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-local-ai"},
   '';
 
-  # Remote desktop (#1015). A group rather than a row, because #1016 adds
-  # connecting out beside it. From a file for the reason every fragment here
-  # is: one line of JSON containing shell, inside awk, inside bash, inside a
-  # Nix string is four levels of quoting that have to agree, and
-  # builtins.toFile has exactly one.
-  #
-  # No `when`: the row is the thing that tells you what is missing, so hiding
-  # it until nothing is missing would hide it from everyone who needs it.
-  #
-  # `when` on the connect row, and not on the others: a row offering to open
-  # a desktop with no client installed is something we ship naming something
-  # that does not exist. serve needs nothing installed, so it is always shown
-  # -- it is the row that tells you what is missing.
-  #
-  # The gliff row is gated on gliff for the connect row's reason, and opens
-  # gliff's own window (its own address bar) rather than a wizard.
+  # Remote desktop is gliff (#1462; hypr-rdp and nixarchy-remote are gone).
+  # The gliff row is gated on gliff, and opens gliff's own window (its own
+  # address bar) rather than a wizard.
   #
   # The glyphs are copied from setup.network and setup.monitors rather than
   # chosen: they are proven to render with the shipped font. A Private Use
   # Area codepoint the font lacks is a literal empty box in the menu, which
   # is how the branding one was found (U+E900, tofu in the bar).
   remoteMenuRows = builtins.toFile "remote-menu-rows.jsonc" ''
-    "setup.remote": {"icon":"󰛳","label":"Remote desktop","aliases":["rdp","remote","screen share"]},
-    "setup.remote.serve": {"icon":"󰍹","label":"Allow connections","aliases":["rdp","incoming","serve","allow"],"action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote serve"},
-    "setup.remote.connect": {"icon":"󰐲","label":"Connect to a machine","aliases":["rdp","connect","remote","desktop"],"when":"command -v sdl-freerdp >/dev/null || command -v xfreerdp >/dev/null","action":"omarchy-launch-floating-terminal-with-presentation nixarchy-remote connect"},
+    "setup.remote": {"icon":"󰛳","label":"Remote desktop","aliases":["remote","screen share"]},
     "setup.remote.gliff": {"icon":"󰐲","label":"Connect with gliff","aliases":["gliff","remote","connect","omarchy","hyprland"],"when":"command -v gliff >/dev/null","action":"uwsm-app -- gliff"},
     "setup.remote.gliff-manager": {"icon":"󰛳","label":"Manage gliff machines","aliases":["gliff","machines","remote","manager"],"when":"nixarchy-plugin --enabled nixarchy.gliff-manager","action":"nixarchy-plugin nixarchy.gliff-manager"},
   '';

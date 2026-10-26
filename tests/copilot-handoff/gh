@@ -21,6 +21,16 @@ case "$args" in
   *"pr list "*)
     printf '%s\n' "1154"
     ;;
+  *"--json isDraft"*)
+    # GH_DRAFT=fail makes the call fail, as a gh outage would.
+    [ "${GH_DRAFT:-false}" != fail ] || exit 1
+    printf '%s\n' "${GH_DRAFT:-false}"
+    ;;
+  *"--json autoMergeRequest"*)
+    # GH_ARMED=true|false|fail: is auto-merge armed on the PR.
+    [ "${GH_ARMED:-false}" != fail ] || exit 1
+    printf '%s\n' "${GH_ARMED:-false}"
+    ;;
   *"--json headSha"*)
     printf '%s\n' "deadbeef"
     ;;

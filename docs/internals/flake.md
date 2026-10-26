@@ -280,61 +280,6 @@ Bump this routinely alongside `nix flake update`, and expect the bump
 to become MANDATORY the day nixpkgs drops its `ffmpeg_7` formal, when
 this rev's override starts throwing. Never track a branch here.
 
-<a id="the-rdp-server-behind-the-remote-desktop-feature-1"></a>
-### The RDP server behind the remote-desktop feature (#159)
-
-```nix
-hypr-rdp = {
-```
-
-The RDP server behind the remote-desktop feature (#159). Not in nixpkgs
--- nothing under that name as of 2026-09 -- and the two RDP servers that
-are there cannot serve Hyprland: krdp needs the
-org.freedesktop.portal.RemoteDesktop interface, which
-xdg-desktop-portal-hyprland 1.4.1 does not advertise, and xrdp only
-reaches Wayland through a wayvnc chain built from an unreleased commit.
-So nixarchy carries the package until nixpkgs does.
-
-The cost, stated rather than hidden: a flake input lands in EVERY user's
-lock, including the Mode A machine that will never enable RDP. It is one
-more ref `nix flake update` can move and one more repository that has to
-keep existing. That is paid because the thing it buys -- reaching this
-desktop from a Windows machine with nothing installed on it -- has no
-other implementation at all, at any price. See the alternatives survey
-on #159; every other route is closed, not merely worse.
-
-What this project is taking on: pinned v0.1.7, one primary
-author. The protocol stack is not theirs -- it is IronRDP, Devolutions'
-maintained Rust implementation -- so what this author owns is the
-Hyprland glue: capture, input, audio, clipboard. That is a real
-dependency on a small project, and a bad rebuild here breaks the machine
-you are remote to, from where you cannot fix it. Hence a tag. Never a
-branch, and bump it deliberately.
-
-The input has a named exit: when hypr-rdp lands in nixpkgs, delete this
-and point the module at pkgs.hypr-rdp.
-
-That exit is now IN FLIGHT rather than hypothetical -- NixOS/nixpkgs#560204
-("hypr-rdp: init at 0.1.5") is open. When it merges and reaches the nixpkgs
-revision this flake pins, the deletion is:
-
-  1. remove this input and its `follows`
-  2. modules/services/hypr-rdp.nix: `inputs.hypr-rdp.packages.${system}...`
-     becomes `pkgs.hypr-rdp`
-  3. check nothing else reads `inputs.hypr-rdp` (grep; the module is the
-     only consumer today)
-
-Do NOT delete it merely because the nixpkgs PR merged: a merge into
-nixpkgs master is not the same as being present in the revision we pin,
-and removing the input before then leaves the module reaching for an
-attribute that does not exist yet. The condition is `pkgs.hypr-rdp`
-evaluating against OUR lock, not a green tick on a pull request.
-
-`follows` is right here and wrong for hyprland above -- upstream's
-pkg/nix/package.nix is a plain rustPlatform.buildRustPackage whose
-cargoHash does not depend on which nixpkgs supplies ffmpeg, and they
-publish no binary cache to forfeit by overriding it.
-
 <a id="gliff-from-a-non-flake-input-pinned-to-a-tag"></a>
 ### gliff, from a non-flake input pinned to a tag
 
@@ -356,7 +301,7 @@ take `packages` from. The input is a source tree and `pkgs/gliff/default.nix`
 builds it. Its `Cargo.lock` has no git sources, so `cargoLock.lockFile` needs
 no output hashes: nothing here to update by hand except the tag.
 
-**Why a tag.** The same argument as hypr-rdp above: a bad rebuild breaks the
+**Why a tag.** A bad rebuild breaks the
 machine you are remote to. Bump it deliberately, never track a branch. The
 exit is nixpkgs carrying `gliff`: delete the input and the overlay entry, and
 point `modules/nixos.nix` at it.
@@ -393,18 +338,14 @@ general capability. #121 deliberately did not take a secrets mechanism
 got away without one because `hashedPasswordFile` is consumed by NixOS
 itself, so the cleartext could live outside git and be pointed at.
 
-hypr-rdp removed that dodge. When #155 / PR #184 adopted sops-nix, v0.1.5 took a
+hypr-rdp removed that dodge. (hypr-rdp was removed in #1462; sops-nix
+stays, now for `nixarchy-secret`.) When #155 / PR #184 adopted sops-nix, v0.1.5 took a
 password only inline in config.toml or via `-p`; a command-line secret
 was readable in /proc/*/cmdline. That historical need to render TOML
 selected sops-nix over agenix's raw secret files.
 
-The pinned v0.1.7 supports `password_file` from config or CLI and
-refuses a missing or empty named file. It still warns and serves without
-authentication when no credentials are set, or gives only a
-`HalfCredentials` warning for a username with an empty inline password.
-The current module keeps its guard: sops-nix writes a private password
-staging file, and at service start ExecStartPre checks it and writes
-private TOML. Migrating to upstream `password_file` is separate work.
+hypr-rdp and its module were removed in #1462; gliff is the remote
+desktop. sops-nix stays, for every other secret.
 
 Pinned to a COMMIT because sops-nix publishes no release tags at all --
 its only tag, `assets`, is from 2021 and is not a release. master is the
@@ -949,7 +890,9 @@ predates options modules/microvm/guest.nix depends on (`microvm.shares`
 gained fields since); upstream publishes no newer tags and treats
 `main` as its release channel -- the same position sops-nix already
 takes in this file, for the same reason. Bump it deliberately; never
-track a branch.
+track a branch. It is listed in `data/pin-fix.nix`, so a nixpkgs bump that
+breaks it may PROPOSE a move as a draft pull request (`flake-update.yml`,
+#1459); the pin is still never tracked, and the proposal never merges itself.
 
 Lock cost, stated rather than hidden: TWO nodes for this one input, not
 one. microvm.nix declares `nixpkgs` (which follows ours, so nothing
@@ -1079,46 +1022,6 @@ So: every core Omarchy's own picker offers that nixpkgs ships
 under a free licence, minus the two that dwarf the rest.
 snes9x and genesis-plus-gx are unfree, hence bsnes and blastem
 for those systems.
-
-<a id="the-rdp-daemon-re-exported-from-its-own-flake-so-t"></a>
-### The RDP daemon, re-exported from its own flake so the module that
-
-```nix
-hypr-rdp = inputs.hypr-rdp.packages.${final.stdenv.hostPlatform.system}.hypr-rdp;
-```
-
-The RDP daemon, re-exported from its own flake so the module that
-will run it (#156) can say `pkgs.hypr-rdp` and never mention an
-input. Built by upstream's pkg/nix/package.nix against OUR nixpkgs,
-through the `follows` on the input.
-
-This indirection is what makes the input's exit cheap: when nixpkgs
-carries hypr-rdp, delete the input and this attribute, and every
-`pkgs.hypr-rdp` in the tree keeps resolving -- to nixpkgs' own.
-
-Lazy, so a machine that never enables RDP never builds it. Being in
-the overlay is not being on the system.
-
-**It carries one patch, and that is the wrong way round** (#1031).
-Hyprland 0.56 dropped the legacy `keyword` IPC request and answers
-`unknown request`. hypr-rdp already falls back to `eval hl.monitor({...})`
-for exactly this, but its guard, `is_non_legacy_parser_error()`, matched
-only the older refusal (`non-legacy parsers`), so the daemon created its
-headless output, failed to set its mode, and exited.
-`pkgs/hypr-rdp/lua-fallback-on-unknown-request.patch` widens that match
-and adds a test that pins the new message.
-
-The override also sets `doCheck = true` with `checkFlags = [
-"hyprland::tests" ]`. Upstream's package sets `doCheck = false`, so without
-this the patch's test would compile into nothing and a bump that dropped
-the fix would stay green. The filter keeps the run to the module the patch
-touches (15 tests, about a second), and leaves unrun the rest of the
-suite, which upstream chose not to run.
-
-**Retire it** when a hypr-rdp tag carries the wider matcher. Nothing has to
-be remembered: on that bump the patch stops applying and the build fails.
-Delete the file and the `overrideAttrs` together. When the input itself
-goes (see above), the patch goes with it.
 
 <a id="nixpkgs-is-on-0-3-0-whose-session-lock-aborts-on-d"></a>
 ### nixpkgs is on 0.3.0, whose session lock aborts on DPMS
@@ -1534,7 +1437,7 @@ machine it runs on, and an AI tutor (Claude Code by default). An input rather th
 repositories have the same maintainer: nixi has its own release cadence,
 its own two checks and its own Home Manager module, and copying the tree
 in would mean maintaining that module twice and re-deriving the package
-on every bump. zen-browser and hypr-rdp are already here on that argument.
+on every bump. zen-browser is already here on that argument.
 
 `follows` is right here and wrong for the hyprland input in flake.nix. Nixi is QML, a
 small node bridge whose npm dependencies are a fixed-output fetch, and

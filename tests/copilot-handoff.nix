@@ -54,6 +54,36 @@ pkgs.runCommand "nixarchy-copilot-handoff"
       exit 1
     fi
 
+    # A draft is pin-fix's (#1459): not handed off. A draft state that cannot
+    # be read fails safe the same way.
+    for d in true fail; do
+      GH_DRAFT=$d bash sut/copilot-handoff.sh >draft.txt 2>&1 || {
+        echo "copilot-handoff.sh exited non-zero for GH_DRAFT=$d" >&2
+        cat draft.txt >&2
+        exit 1
+      }
+      if grep -q 'would comment' draft.txt || ! grep -q 'not handed off' draft.txt; then
+        echo "copilot-handoff.sh handed off (or said nothing) for GH_DRAFT=$d" >&2
+        cat draft.txt >&2
+        exit 1
+      fi
+    done
+
+    # An armed nixpkgs bump loses auto-merge before Copilot touches it, and a
+    # state that cannot be read is not handed off (#1459).
+    BRANCH=update/nixpkgs-1 GH_ARMED=true bash sut/copilot-handoff.sh >armed.txt 2>&1 || true
+    if ! grep -q 'would disable auto-merge on #1154' armed.txt || ! grep -q 'would comment' armed.txt; then
+      echo "copilot-handoff.sh did not disable auto-merge before handing off a nixpkgs bump" >&2
+      cat armed.txt >&2
+      exit 1
+    fi
+    BRANCH=update/nixpkgs-1 GH_ARMED=fail bash sut/copilot-handoff.sh >armedfail.txt 2>&1 || true
+    if grep -q 'would comment' armedfail.txt || ! grep -q 'not handed off' armedfail.txt; then
+      echo "copilot-handoff.sh handed off a nixpkgs bump whose auto-merge state it could not read" >&2
+      cat armedfail.txt >&2
+      exit 1
+    fi
+
     excerpt=$(sed -n '/^~~~~$/,/^~~~~$/p' out.txt | sed '1d;$d')
     lines=$(printf '%s\n' "$excerpt" | grep -c . || true)
     if [ "$lines" -lt 1 ] || [ "$lines" -gt 100 ]; then

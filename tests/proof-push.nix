@@ -296,5 +296,42 @@ pkgs.runCommand "nixarchy-proof-push"
     grep -q 'does not evaluate here' broken.err
     echo "evaluator statistics survive without changing proof rows or failure fallback"
 
+    # #1460: the checks are evaluated in parallel, and the first to start can be
+    # the last to finish. Rows and messages still come back in argument order,
+    # 12 of them so that a lexical sort of the worker files would be wrong too,
+    # and a memory floor nothing can meet slows the loop rather than stalling it.
+    cat > stubs/nix <<'EOF'
+    #!/usr/bin/env bash
+    case "$1" in
+      eval)
+        n=''${3##*.c}
+        sleep "0.$(( 12 - n ))"
+        printf '/nix/store/out-c%s /nix/store/drv-c%s.drv' "$n" "$n"
+        ;;
+      path-info) case "$4" in */out-c3|*/out-c10) exit 0 ;; *) exit 1 ;; esac ;;
+    esac
+    EOF
+    sed -i "1s|.*|#!$(command -v bash)|" stubs/nix
+    chmod +x stubs/nix
+    args=()
+    : > want.rows
+    for n in 0 1 2 3 4 5 6 7 8 9 10 11; do
+      args+=(".#checks.x86_64-linux.c$n")
+      case $n in 3|10) ;; *) printf 'c%s\t/nix/store/drv-c%s.drv\t/nix/store/out-c%s\n' "$n" "$n" "$n" >> want.rows ;; esac
+    done
+    PROVEN_MIN_FREE_KB=999999999999 bash "$alreadyProven" "''${args[@]}" > par.rows 2> par.err
+    cmp want.rows par.rows || {
+      echo "parallel evaluation changed the rows or their order:" >&2
+      cat par.rows >&2
+      exit 1
+    }
+    [ "$(grep -o '^  c[0-9]*' par.err | tr -d ' ' | paste -sd' ')" = "c3 c10" ] || {
+      echo "the proven messages are missing or out of order:" >&2
+      cat par.err >&2
+      exit 1
+    }
+    grep -q 'proven: 2   to build: 10' par.err
+    echo "parallel evaluation keeps argument order, and an unmeetable memory floor does not stall it"
+
         touch $out
   ''

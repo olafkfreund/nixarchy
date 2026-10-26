@@ -1,13 +1,13 @@
 # `nixarchy secret <verb>` -- the five manual steps in
-# docs/manual/remote-desktop.md, as one command.
+# docs/manual/secrets.md, as one command.
 #
 # Its own file for the same reason as pkgs/microvm.nix:
 # tests/menu-verbs.nix has to read the verbs out of the command
 # the menu actually execs, which means the command has to be a package.
 #
 # WHAT THIS IS BUILT ON, AND WHY IT IS NOT agenix. modules/secrets.md has the
-# long version; the short one is that hypr-rdp reads its password only from
-# inside a TOML file, `sops.templates` is the upstreamed shim that puts it
+# long version; the short one is that hypr-rdp (since removed, #1462) read its
+# password only from inside a TOML file, `sops.templates` is the upstreamed shim that puts it
 # there, and agenix has no templating at all. `sops edit` opens $EDITOR
 # exactly as `agenix -e` does, so nothing about the flow the user sees depends
 # on that choice.
@@ -101,7 +101,7 @@ let
   # §4: a hand-maintained list fails OPEN, and this repository found three
   # doing exactly that in one day.
   #
-  # `refs` answers "what uses this secret". hypr-rdp is the shape to match:
+  # `refs` answers "what uses this secret". hypr-rdp, since removed, was the shape to match:
   # `passwordSecret` is a string NAMING a sops.secrets attribute, so a
   # reference is an option whose name ends in Secret and whose value is the
   # secret's name. The other shape is a template that renders it, and that one

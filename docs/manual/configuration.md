@@ -511,7 +511,7 @@ programs.nixarchy.apps._1password = {
 };
 ```
 
-Services — Tailscale, remote desktop, Syncthing, OpenSSH — are the companion
+Services — Tailscale, Syncthing, OpenSSH — are the companion
 catalogue in `data/services.nix` and a file of their own. A service nixarchy
 only relays gets upstream's own line, `services.openssh.enable = true;`; one it
 integrates gets an option, `programs.nixarchy.services.tailscale.enable`. There
@@ -523,7 +523,7 @@ programs.nixarchy.services.tailscale.enable = true;   # + trusts the interface
 services.tailscale.useRoutingFeatures = "client";     # upstream's option, untouched
 ```
 
-All eleven entries of `data/services.nix`:
+All ten entries of `data/services.nix`:
 
 | Service | Category | What you write |
 |---|---|---|

@@ -264,10 +264,11 @@ the closure.** A package that cannot be built -- or, as here, cannot be
 *evaluated* -- is invisible to every case in it, however many there are.
 
 `checks.sops-evaluates` closes that for sops-nix, the part that stayed, by forcing
-`system.build.toplevel.drvPath`. Two things about it worth copying:
+`setupSecrets`'s text, and with it `sops-install-secrets`. Two things about
+it worth copying:
 
 - **It costs an evaluation, not a VM.** `buildGo125Module` is an alias that
-  `throw`s, so the failure arrives while the drvPath is computed. A check
+  `throw`s, so the failure arrives while the activation text is computed. A check
   that needed a booted machine could not have caught this on the pull request
   that introduced it.
 - **It is its own check, not a case in `checks.options`.** That check peaks at
@@ -278,7 +279,11 @@ the closure.** A package that cannot be built -- or, as here, cannot be
 nothing about a daemon running. hypr-rdp's two live defects (#1031, a headless
 output Hyprland 0.56 refused; #1033, an enable that took effect only at next
 login) sat past it, which is why hypr-rdp, removed in #1462, is the worked
-example.
+example. And since #1462 no check activates a sops secret at all:
+`checks.session` lost its only one with hypr-rdp, `sops-evaluates` only
+evaluates, and `secret-enroll` and `secret-new` drive the `sops` CLI. Anyone
+using `nixarchy secret` relies on a decryption at boot that nothing here
+runs.
 
 The defects were found by a person configuring three real machines in an
 afternoon. The generalisable rule is not about sops: **a feature whose tests

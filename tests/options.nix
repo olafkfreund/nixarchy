@@ -1975,11 +1975,15 @@ let
     # see nothing (Mode A). Without the "off" half an assertion that always
     # fires would pass.
     hyprRdpRemoved = {
-      on = mentions "no longer has any effect" (
-        failedAssertions (configBeside {
-          programs.nixarchy.services.hypr-rdp.enable = true;
-        })
-      );
+      # nixpkgs' wording and ours: an empty replacement text would still
+      # pass the first.
+      on =
+        let
+          failed = failedAssertions (configBeside {
+            programs.nixarchy.services.hypr-rdp.enable = true;
+          });
+        in
+        mentions "no longer has any effect" failed && mentions "#1462" failed;
       off = mentions "no longer has any effect" (failedAssertions defaultMachine);
     };
 

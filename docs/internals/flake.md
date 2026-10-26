@@ -344,13 +344,8 @@ password only inline in config.toml or via `-p`; a command-line secret
 was readable in /proc/*/cmdline. That historical need to render TOML
 selected sops-nix over agenix's raw secret files.
 
-The pinned v0.1.7 supports `password_file` from config or CLI and
-refuses a missing or empty named file. It still warns and serves without
-authentication when no credentials are set, or gives only a
-`HalfCredentials` warning for a username with an empty inline password.
-The current module keeps its guard: sops-nix writes a private password
-staging file, and at service start ExecStartPre checks it and writes
-private TOML. Migrating to upstream `password_file` is separate work.
+hypr-rdp and its module were removed in #1462; gliff is the remote
+desktop. sops-nix stays, for every other secret.
 
 Pinned to a COMMIT because sops-nix publishes no release tags at all --
 its only tag, `assets`, is from 2021 and is not a release. master is the

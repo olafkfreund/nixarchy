@@ -42,9 +42,10 @@ case "${1-}" in
   --ci-row) mode=cirow ;;
   --rev-row) mode=revrow ;;
   --blocked-row) mode=blockedrow ;;
+  --compare-tsv) mode=comparetsv ;;
   "") ;;
   *)
-    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...]" >&2
+    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...|--compare-tsv PIN_ISO]" >&2
     exit 2
     ;;
 esac
@@ -242,6 +243,15 @@ rev_row() {
   esac
 }
 
+# A compare (JSON on stdin) as status<TAB>ahead_by<TAB>oldest-missing date.
+# .commits[0] is topologically first, which can be an old branch commit merged
+# later; the oldest commit we LACK is the earliest dated at or after the pin
+# (PIN_ISO). Falls back to HEAD's date when none qualifies. Pure; non-zero on
+# a body that is not a compare (a 404's {"message": ...}).
+compare_tsv() {
+  jq -r --arg pin "$1" '. as $c | "\($c.status)\t\($c.ahead_by)\t\([$c.commits[].commit.committer.date | select(. >= $pin)] | min // ($c.commits[-1].commit.committer.date // ""))"' 2>/dev/null
+}
+
 # The live path: ask GitHub for the default branch, its head, and how the pin
 # compares. Every call is guarded -- this script runs under errexit.
 rev_verdict() { # name repo at age pin_epoch [note]
@@ -249,11 +259,7 @@ rev_verdict() { # name repo at age pin_epoch [note]
   pin_iso=$(date -u -d "@$pin_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || pin_iso=""
   branch=$(gh api "repos/$repo" --jq .default_branch 2>/dev/null) || branch=""
   [ -z "$branch" ] || sha=$(gh api "repos/$repo/commits/$branch" --jq .sha 2>/dev/null) || sha=""
-  # .commits[0] is topologically first, which can be an old branch commit merged
-  # later; the oldest commit we LACK is the earliest dated at or after the pin.
-  # Falls back to HEAD's date when none qualifies. gh's --jq takes no variables.
-  [ -z "$sha" ] || cmp=$(gh api "repos/$repo/compare/$at...$sha" 2>/dev/null | jq -r --arg pin "$pin_iso" \
-    '. as $c | "\($c.status)\t\($c.ahead_by)\t\([$c.commits[].commit.committer.date | select(. >= $pin)] | min // ($c.commits[-1].commit.committer.date // ""))"') || cmp=""
+  [ -z "$sha" ] || cmp=$(gh api "repos/$repo/compare/$at...$sha" 2>/dev/null | compare_tsv "$pin_iso") || cmp=""
   # By expansion, not `read`: the last field may be empty (#1010).
   st=${cmp%%$'\t'*}
   rest=${cmp#*$'\t'}
@@ -287,6 +293,11 @@ if [ "$mode" = revrow ]; then
   printf '%s' "$rows"
   exit 0
 fi
+if [ "$mode" = comparetsv ]; then
+  compare_tsv "$2"
+  exit
+fi
+
 if [ "$mode" = blockedrow ]; then
   blocked_row "$2" "$3" "$4" "$5"
   printf '%s' "$rows"

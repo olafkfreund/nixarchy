@@ -35,6 +35,7 @@ pkgs.runCommand "nixarchy-review-pins"
       # flake-pins.py reads flake.lock; review.sh --list-pins does not need it,
       # but they are checked together.
       python3
+      jq
     ];
   }
   ''
@@ -308,6 +309,26 @@ pkgs.runCommand "nixarchy-review-pins"
     # GitHub owner names are case-insensitive.
     revrow "| microvm | 012345678 (30d) | 42 behind main | ok |" \
       microvm OlafKFreund $SHA 30 main ahead 42 2026-09-01T08:00:00Z
+
+    # The live compare, reduced (#1459): the oldest commit we lack is the
+    # earliest dated at or after the pin, not the topologically first, which
+    # can be an old branch merged later (microvm read 2026-06-23 for a
+    # September pin). A body that is not a compare fails, and says nothing.
+    ctsv() { # expected, pin, compare JSON
+      local got rc=0
+      got=$(printf '%s' "$3" | bash ${../pkgs/review.sh} --compare-tsv "$2" 2>&1) || rc=$?
+      [ "$got|$rc" = "$1" ] || { echo "review: compare-tsv gave '$got|$rc', expected '$1'" >&2; fail=1; }
+    }
+    c() { printf '{"commit":{"committer":{"date":"%s"}}}' "$1"; }
+    ctsv "ahead''${T}3''${T}2026-09-06T10:00:00Z|0" 2026-09-05T00:00:00Z \
+      "{\"status\":\"ahead\",\"ahead_by\":3,\"commits\":[$(c 2026-06-23T00:00:00Z),$(c 2026-09-06T10:00:00Z),$(c 2026-09-10T00:00:00Z)]}"
+    ctsv "ahead''${T}1''${T}2026-08-01T00:00:00Z|0" 2026-09-05T00:00:00Z \
+      "{\"status\":\"ahead\",\"ahead_by\":1,\"commits\":[$(c 2026-08-01T00:00:00Z)]}"
+    ctsv "identical''${T}0''${T}|0" 2026-09-05T00:00:00Z '{"status":"identical","ahead_by":0,"commits":[]}'
+    case "$(printf '%s' '{"message":"Not Found"}' | bash ${../pkgs/review.sh} --compare-tsv 2026-09-05T00:00:00Z 2>&1; echo "|$?")" in
+      "|0") echo "review: compare-tsv accepted a 404 body" >&2; fail=1 ;;
+      *Cannot*) echo "review: compare-tsv printed jq's error on a 404 body" >&2; fail=1 ;;
+    esac
 
     # The held nixpkgs bump (#1459): a draft PR is a finding only once it has
     # sat for more than three days.

@@ -403,7 +403,7 @@ section 4) and would check nothing more.
    touch `nixarchy-pkg` alone; a second nixpkgs means `follows` broke.
 3. Check that the manifest id is still `nixarchy.pkg`. The build fails if
    it is not, because the default set is keyed by it.
-4. Build `checks.menu-verbs`, `checks.options` and `checks.plugin`. The
+4. Build `checks.menu-verbs`, `checks.options-files` and `checks.plugin`. The
    row, the default and the enable-once hook all name the plugin.
 
 <a id="the-podman-panel-wherever-podman-is-on-766"></a>
@@ -457,7 +457,7 @@ home-manager only in its own check), so nixarchy pulls in nothing extra.
 **Bumping the pin.** nixarchy pins a commit (the release tag's sha). Read the
 diff against both the fork and upstream (`28allday/Gliff-Manager`, whose
 last-synced commit is in the fork's `UPSTREAM` file), confirm the id is still
-`nixarchy.gliff-manager`, and build `checks.options` and `checks.plugin`.
+`nixarchy.gliff-manager`, and build `checks.options-files` and `checks.plugin`.
 
 <a id="the-dev-environments-panel-wherever-devenv-is-802"></a>
 ### The Dev environments panel, wherever devenv is (#802)
@@ -524,7 +524,7 @@ otherwise glibc and friends every system already has), and `python3` and
    fails if not.
 4. If upstream's `menu.py` changed how it decides to `register`, re-read it:
    `menu.managed` only works if it still checks for that file.
-5. Build `checks.options`, `checks.menu-verbs` and `checks.plugin`.
+5. Build `checks.options-files`, `checks.menu-verbs` and `checks.plugin`.
 
 ### The GitHub Actions panel, on by default (#772)
 
@@ -735,7 +735,7 @@ its 71.0 MiB closure, `jq` and `iproute2` are already in the reference system.
 4. Build `checks.menu-verbs`: every `herdr <level> <sub>` the new
    `herdr-sessions` sends must be one the pinned herdr lists. Re-run it on
    a **nixpkgs** bump too, since herdr can rename a subcommand from that side.
-5. Build `checks.options` and `checks.plugin`.
+5. Build `checks.options-files` and `checks.plugin`.
 
 ### The Distrobox panel, wherever Boxes are (#766)
 
@@ -769,7 +769,7 @@ tree on the ISO is **2.9 MiB**, mostly its docs site's screenshots.
 3. The manifest id must still be `nixarchy.distrobox`, and
    `.barWidget.defaults.templatesFile` must still be the setting's key.
    `checks.options` fails if either moved.
-4. Build `checks.options` (the accepted-key read) and `checks.menu-verbs`.
+4. Build `checks.options-files` (the accepted-key read) and `checks.menu-verbs`.
 
 ### The MicroVMs panel, on by default (#766)
 
@@ -804,7 +804,7 @@ system lacks.
 4. Build `checks.menu-verbs`: every `nixarchy-vm <verb>` the new `Model.js`
    runs must be one the CLI accepts. Re-check `nixarchy vm help` against the
    three capability regexes in `Model.js` if either side reworded them.
-5. Build `checks.options` and `checks.plugin`.
+5. Build `checks.options-files` and `checks.plugin`.
 
 ### The Plugin Browser, on by default (#913)
 
@@ -856,7 +856,7 @@ panel is used.
    `nixarchy-plugin-browser` alone, and `follows` keeps it on our nixpkgs.
 3. The manifest id must still be `io.github.olafkfreund.nixarchy-plugin-browser`:
    the menu row, the seeded bind and `tests/options.nix` name it.
-4. Build `checks.options` and `checks.plugin`. The plugin's own
+4. Build `checks.options-files` and `checks.plugin`. The plugin's own
    `checks.default` runs its scanner tests and the pacman/yay grep; ours
    runs the grep again on the installed copy.
 

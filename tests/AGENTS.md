@@ -259,8 +259,7 @@ not see it, for the reason written in its own comment:
 > from outside.
 
 That reasoning is right for what it was written about, and its consequence is
-general (`checks.options` is now the four `options-*` shards, #1463; the case
-list is `options-system`, `-home`, `-microvm`, and `options-files` holds the rest): **`checks.options` reads the evaluated config tree and never forces
+general. **The `options-*` checks read the evaluated config tree and never force
 the closure.** A package that cannot be built -- or, as here, cannot be
 *evaluated* -- is invisible to every case in it, however many there are.
 

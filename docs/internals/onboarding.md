@@ -51,12 +51,12 @@ Then, before touching anything:
 
 ```bash
 nix flake check                                # everything (slow)
-nix build .#checks.x86_64-linux.options-{system,home,microvm,files}        # the fast, broad one
+nix build .#checks.x86_64-linux.options-system   # or -home, -microvm, -files: one per command, each its own evaluation
 nix run .#review                               # what is stale right now
 nix run .#vm                                   # boot the desktop in a VM
 ```
 
-`checks.options` is the one to run while iterating — it evaluates the whole
+The `options-*` shard you touched is the one to run while iterating — it evaluates the whole
 module surface and catches most mistakes in a minute or two.
 
 ## The four linters, and why all four

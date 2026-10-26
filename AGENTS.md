@@ -751,7 +751,7 @@ seconds-long checks. So:
 |---|---|
 | cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
 | a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
-| a VM check, or any `options-*` shard | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
+| a VM check, or an options case shard or `options-files` (`options-shards` is cheap) | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
 
 "Is a p620 build running" has a trap of its own. `pgrep -f
 'nixosConfigurations.p620'` also matches every `nixd` language server (its
@@ -1103,7 +1103,9 @@ fixtures bound once each — #738's work.
 
 The same comment carried a number that looked decisive and was wrong: "10.6 GB
 of RSS on its own" was the whole check, not one configuration -- #747 measured
-about 1.7 GB each, and #1463 corrected it. What holds is that live memory is
+about 1.7 GB each
+(https://github.com/olafkfreund/nixarchy/issues/747#issuecomment-5811288191),
+and #1463 corrected it. What holds is that live memory is
 set by the fixtures reachable at once, not by how many times a constructor is
 written out, so deduplicating the duplicates cannot move the peak. Both the technique and the evidence against using
 it for this were already written down, in the file being edited.

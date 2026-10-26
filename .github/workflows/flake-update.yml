@@ -258,7 +258,13 @@ jobs:
             commits=$(gh api "repos/$GH_REPO/compare/main...$branch" \
               --jq '[.commits[] | {message: .commit.message}]') || unreadable
           fi
-          bot=$(gh api user --jq .login) || unreadable
+          # Only an open PR needs judging by author. /user rejects the default
+          # token, so asking it unconditionally would fail every night that
+          # BUMP_TOKEN is missing, before any PR opened.
+          bot=""
+          if [ "$pr" != null ]; then
+            bot=$(gh api user --jq .login) || unreadable
+          fi
           jq -n --argjson e "$exists" --argjson pr "$pr" --argjson c "$commits" --arg bot "$bot" \
             '{branch_exists: $e, pr: $pr, commits: $c, bot: $bot}' > "$RUNNER_TEMP/owner.json"
           verdict=$(./.github/scripts/pin-fix.sh --owner "$RUNNER_TEMP/owner.json")

@@ -396,6 +396,24 @@ Two other ways a check stops checking, both found in one week:
   conclusion** — `gh pr view --json mergeStateStatus` on a throwaway PR is
   the whole experiment.
 
+- **A gate that evaluates a subset of what ships cannot see a break outside
+  it, and a refusal nobody hears about stalls for good.** The nightly nixpkgs
+  bump evaluated `vm-toplevel` and `reference-toplevel`. A bump removed an
+  option `microvm.nix` (a commit pin) sets, which broke all 18 `microvm-*`
+  runners and neither toplevel -- the same hole as sops-nix in #1030, where
+  `vm-toplevel` does not reach `hypr-rdp-builds`. The narrow gate passed,
+  the pull request opened, and its CI went red with the fix left to a human.
+  Widening the gate alone would have made it worse: a refusal exited 0 and
+  opened nothing, so the bump would have stopped and nobody been told
+  (#1457, #1459). So:
+  the bump is gated on every output in `cache-allowlist.sh` plus the probe
+  target of each input in `data/pin-fix.nix`, and a refusal is a **draft pull
+  request** (`update/nixpkgs-blocked`) that the review reports once it is three
+  days old. A job that times out can also hide a real failure under
+  `cancelled` (§6): #1457's `omarchy` job hit its limit with
+  `checks.bus-mcp` already failed inside it, so read the log for failed builds
+  before calling a timeout slowness.
+
 ## 5. Git and flake mechanics that bite
 
 - **A heredoc inside an indented Nix string reindents the whole file.**

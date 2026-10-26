@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1462
 spec: spec/2026-10-26-1462-remove-hypr-rdp.md
 ---

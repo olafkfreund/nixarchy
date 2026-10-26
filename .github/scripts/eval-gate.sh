@@ -46,7 +46,9 @@ for t in "${targets[@]}"; do
   err=$(pi "$t" 2>&1 >/dev/null) && continue
   failed=1
   nfail=$((nfail + 1))
-  if printf '%s\n' "$err" | grep -qiE 'unable to download|HTTP error [0-9]+|Could not resolve host|SSL (connect )?error|Connection (timed out|refused|reset)|timeout was reached'; then
+  # In bash, not `printf | grep -q`: under pipefail, grep -q exiting on its
+  # first match can SIGPIPE printf and read as no match (tests/grep-q-pipefail).
+  if [[ ${err,,} =~ unable\ to\ download|http\ error\ [0-9]+|could\ not\ resolve\ host|ssl\ (connect\ )?error|connection\ (timed\ out|refused|reset)|timeout\ was\ reached ]]; then
     fetchfail=$((fetchfail + 1))
   fi
   [ -z "${EVAL_GATE_LOG_DIR:-}" ] || printf '%s\n' "$err" >"$EVAL_GATE_LOG_DIR/$(printf '%s' "$t" | tr '/#' '__').log"

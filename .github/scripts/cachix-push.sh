@@ -146,7 +146,12 @@ closure_context() {
     return
   fi
   [ "${GITHUB_EVENT_NAME:-}" = pull_request ] || return 0
-  case "${GITHUB_HEAD_REF:-}" in update/nixpkgs-*) ;; *) return 0 ;; esac
+  # Only the bot's DATED branches (update/nixpkgs-2026-10-26), not
+  # update/nixpkgs-blocked, which people and Copilot push to. Each night's bump
+  # is a separate PR, so an unmerged red bump's pushed paths are never
+  # downloaded again and are evicted first; the nightly repush heals the
+  # allowlist.
+  case "${GITHUB_HEAD_REF:-}" in update/nixpkgs-[0-9]*) ;; *) return 0 ;; esac
   local head
   head=$(jq -r '.pull_request.head.repo.full_name // empty' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null) || return 0
   if [ -n "$head" ] && [ "$head" = "${GITHUB_REPOSITORY:-}" ]; then echo bump; fi
@@ -154,7 +159,7 @@ closure_context() {
 
 ctx=$(closure_context)
 if [ -z "$ctx" ]; then
-  echo "not main; closures are pushed from main only (${GITHUB_REF:-no GITHUB_REF})"
+  echo "not main or this repository's dated nixpkgs bump PR; closures are not pushed (${GITHUB_REF:-no GITHUB_REF})"
   exit 0
 fi
 
@@ -169,10 +174,16 @@ if [ "$ctx" = bump ]; then
   skip_all() { echo "::warning::$1; a nixpkgs bump pushes nothing without the exclusion set" >&2; exit 0; }
   src=$(nix flake metadata --json . 2>/dev/null | jq -r .path) || skip_all "could not read the flake source path"
   [ -n "$src" ] && [ "$src" != null ] || skip_all "the flake source path is empty"
-  tree=$(nix path-info .#omarchy 2>/dev/null) || skip_all "could not resolve .#omarchy"
-  refs=$(nix-store --query --referrers-closure "$src" "$tree" 2>/dev/null) || skip_all "could not query referrers"
+  tree=$(nix eval --raw .#omarchy.outPath 2>/dev/null) || skip_all "could not resolve .#omarchy"
+  roots=("$src")
+  # Not in this store (the apps and system-checks jobs never build it): nothing
+  # here can reference it, so it is not a root.
+  if nix path-info "$tree" >/dev/null 2>&1; then roots+=("$tree"); fi
+  refs=$(nix-store --query --referrers-closure "${roots[@]}" 2>/dev/null) || skip_all "could not query referrers"
   printf '%s\n' "$refs" | sort -u >"$excl"
-  [ -s "$excl" ] || skip_all "the exclusion set is empty"
+  # The source is its own referrer, so empty means the query broke; never
+  # read it as "exclude nothing".
+  grep -q . "$excl" || skip_all "the exclusion set is empty"
 fi
 
 fail=0
@@ -186,7 +197,11 @@ for attr in "$@"; do
     continue
   fi
 
-  list=$(nix path-info -r "$attr" 2>/dev/null | sort -u)
+  if ! list=$(nix path-info -r "$attr" 2>/dev/null | sort -u); then
+    echo "::error::could not read the closure of $attr" >&2
+    fail=1
+    continue
+  fi
   n=$(grep -c . <<<"$list")
   # A closure of zero is the failure this whole script exists to stop being
   # invisible. `nix path-info` above can succeed while `-r` yields nothing, and

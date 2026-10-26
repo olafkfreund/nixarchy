@@ -14,7 +14,9 @@
 #
 # 2.5 GB per commit, not 5: the cache must hold this commit and the one before.
 # They share the box images, pinned by digest (508 MiB), so the worst case, a
-# nixpkgs bump, costs 2 x 2560 - 508 = 4612 MiB of 5120.
+# nixpkgs bump, costs 2 x 2560 - 508 = 4612 MiB of 5120. Pushes come from main
+# and from the newest dated bump branches (minus commit-specific paths, #1461);
+# the free tier evicts by last download, so an unmerged bump's paths go first.
 # See spec/2026-10-10-1231-cache-budget-headroom.md.
 set -uo pipefail
 
@@ -63,11 +65,13 @@ for i in "${!entries[@]}"; do
   e=${entries[$i]}
   # pipefail is what makes the || below see a failed nix: jq exits 0 on empty input.
   # Word-split on purpose: one entry may name several outputs.
+  set -f # no globbing of the split words
   # shellcheck disable=SC2086
   nix path-info -r --json ${outs[$i]} 2>/dev/null |
     jq -r --arg e "$e" 'to_entries[] | [.key, (.value.narSize | tostring), $e] | @tsv' \
       >>"$work/paths.tsv" ||
     { echo "::error::could not read the closure of $e, so its cost cannot be measured" >&2; exit 2; }
+  set +f
 done
 
 # One lookup per distinct path, in parallel: the union of the allowlist is

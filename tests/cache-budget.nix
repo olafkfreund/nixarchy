@@ -13,7 +13,8 @@
 #                        reverse bug reads as fine on one that is full.
 #   cachix-push.sh --proof   one check result, alone. A result with a dependency
 #                        would upload a closure; that is how the cache filled.
-#   cachix-push.sh       closures from main only.
+#   cachix-push.sh       closures from main, and from this repository's dated
+#                        nixpkgs bump PRs minus commit-specific paths.
 #
 # The scripts are the real files; nix, curl and cachix are stubs over a small
 # pretend store described by store.json.
@@ -76,23 +77,36 @@ pkgs.runCommand "nixarchy-cache-budget"
           for a in "\$@"; do closure_of "\$a" | jq -c '{ outputs: { out: keys_unsorted[0] } }'; done | jq -cs .
         else closure_of "\$3" | grep -q .; fi ;;
       "build --keep-going") exit 0 ;;
-      "flake metadata") echo '{"path":"/nix/store/src-flake"}' ;;
-      "eval --raw") jq -r --arg k "\$3" '.[\$k] | keys_unsorted[0]' "\$store" ;;
+      "flake metadata")
+        [ -z "\$STUB_META_FAILS" ] || exit 1
+        echo '{"path":"/nix/store/src-flake"}' ;;
+      "eval --raw")
+        if [ "\$3" = .#omarchy.outPath ]; then
+          [ -z "\$STUB_EVAL_FAILS" ] || exit 1
+          echo /nix/store/ooo-omarchy
+        else jq -r --arg k "\$3" '.[\$k] | keys_unsorted[0]' "\$store"; fi ;;
       "path-info -r")
-        case "\$4" in .#flaky|/nix/store/hhh-flaky) exit 1 ;; esac
+        case "\$3 \$4" in *.#flaky*|*/nix/store/hhh-flaky*) exit 1 ;; esac
         if [ "\$3" = --json ]; then closure_of "\$4" | jq -c 'map_values({ narSize: . })'
         else closure_of "\$3" | jq -r 'keys[]'; fi ;;
-      path-info*) closure_of "\$2" | grep -q . ;;
+      path-info*)
+        # The tree is not in the local store when STUB_TREE_ABSENT is set.
+        [ -z "\$STUB_TREE_ABSENT" ] || [ "\$2" != /nix/store/ooo-omarchy ] || exit 1
+        closure_of "\$2" | grep -q . ;;
       *) echo "stub nix: unexpected \$*" >&2; exit 9 ;;
     esac
     EOF
-    # nix-store --query --referrers-closure: the roots, and one path that
-    # references the flake source (iii-refsrc), as the real command would say.
+    # nix-store --query --referrers-closure: records its roots, and names the
+    # path that references the flake source (iii-refsrc) ONLY when the source is
+    # among them, as the real command would.
     cat > bin/nix-store <<EOF
     #!${pkgs.bash}/bin/bash
     [ "\$1 \$2" = "--query --referrers-closure" ] || { echo "stub nix-store: unexpected \$*" >&2; exit 9; }
+    [ -z "\$STUB_NIXSTORE_FAILS" ] || exit 1
     shift 2
-    printf '%s\n' "\$@" /nix/store/iii-refsrc
+    printf '%s\n' "\$@" >> $work/calls/nixstore-roots
+    printf '%s\n' "\$@"
+    for a in "\$@"; do [ "\$a" != /nix/store/src-flake ] || echo /nix/store/iii-refsrc; done
     EOF
     # curl: 200 for an up-* narinfo on either upstream, 404 otherwise.
     cat > bin/curl <<EOF
@@ -213,11 +227,11 @@ pkgs.runCommand "nixarchy-cache-budget"
     # push nothing.
     printf '%s\n' '{"pull_request":{"head":{"repo":{"full_name":"o/r"}}}}' > own.json
     printf '%s\n' '{"pull_request":{"head":{"repo":{"full_name":"fork/r"}}}}' > fork.json
-    pr() { # head-ref event-file
+    pr() { # head-ref event-file; STUB_* set by the caller reach the stubs
       GITHUB_REF=refs/pull/1/merge GITHUB_EVENT_NAME=pull_request GITHUB_REPOSITORY=o/r \
-        GITHUB_HEAD_REF=$1 GITHUB_EVENT_PATH=$2 bash $push .#bumpy >/dev/null 2>&1
+        GITHUB_HEAD_REF=$1 GITHUB_EVENT_PATH=$2 bash $push .#bumpy >pr.log 2>&1
     }
-    rm -f calls/pushed
+    rm -f calls/pushed calls/nixstore-roots
     pr update/nixpkgs-2026-10-26 own.json
     if [ "$(cat calls/pushed 2>/dev/null)" = /nix/store/jjj-keep ]; then
       ok "a bump PR pushes the closure minus what references the source"
@@ -237,6 +251,64 @@ pkgs.runCommand "nixarchy-cache-budget"
       ok "an ordinary PR pushes nothing"
     else
       bad "an ordinary PR pushed: $(tr '\n' ' ' < calls/pushed)"
+    fi
+
+    # An undated branch (update/nixpkgs-blocked is where people push) is no bump.
+    rm -f calls/pushed
+    pr update/nixpkgs-blocked own.json
+    if [ ! -s calls/pushed ]; then
+      ok "an undated update/nixpkgs-* branch pushes nothing"
+    else
+      bad "an undated branch pushed: $(tr '\n' ' ' < calls/pushed)"
+    fi
+
+    # The tree is a root when it is in the local store ...
+    if grep -qx /nix/store/ooo-omarchy calls/nixstore-roots && grep -qx /nix/store/src-flake calls/nixstore-roots; then
+      ok "the source and the omarchy tree are both referrer roots"
+    else
+      bad "referrer roots were: $(tr '\n' ' ' < calls/nixstore-roots)"
+    fi
+    # ... and dropped, with the push going ahead, when it is not.
+    rm -f calls/pushed calls/nixstore-roots
+    STUB_TREE_ABSENT=1 pr update/nixpkgs-2026-10-26 own.json
+    if [ "$(cat calls/pushed 2>/dev/null)" = /nix/store/jjj-keep ] &&
+      ! grep -q ooo-omarchy calls/nixstore-roots && grep -qx /nix/store/src-flake calls/nixstore-roots; then
+      ok "a tree that is not in the local store is dropped from the roots, and the push proceeds"
+    else
+      bad "tree-absent: pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null), roots $(tr '\n' ' ' < calls/nixstore-roots 2>/dev/null)"
+    fi
+
+    # Every fail-safe pushes NOTHING: not knowing what is commit-specific must
+    # never read as "nothing is".
+    for failure in STUB_META_FAILS STUB_EVAL_FAILS STUB_NIXSTORE_FAILS; do
+      rm -f calls/pushed
+      env "$failure=1" bash -c "$(declare -f pr); push=$push; pr update/nixpkgs-2026-10-26 own.json" || true
+      if [ ! -s calls/pushed ] && grep -q 'pushes nothing without the exclusion set' pr.log; then
+        ok "$failure: a bump pushes nothing"
+      else
+        bad "$failure: pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null); log: $(cat pr.log)"
+      fi
+    done
+    for ev in missing.json empty.json; do
+      : > empty.json
+      rm -f calls/pushed
+      pr update/nixpkgs-2026-10-26 $ev || true
+      if [ ! -s calls/pushed ]; then
+        ok "an unreadable event file ($ev) pushes nothing"
+      else
+        bad "event file $ev: pushed $(tr '\n' ' ' < calls/pushed)"
+      fi
+    done
+
+    # (g3) A closure that cannot be read on main is an error and pushes nothing
+    # for that entry -- not an empty list pushed as success.
+    rm -f calls/pushed
+    rc=0
+    GITHUB_REF=refs/heads/main bash $push .#flaky >pr.log 2>&1 || rc=$?
+    if [ $rc -ne 0 ] && [ ! -s calls/pushed ] && grep -q 'could not read the closure of .#flaky' pr.log; then
+      ok "main: an unreadable closure is an error and pushes nothing"
+    else
+      bad "main with an unreadable closure: rc=$rc, pushed $(tr '\n' ' ' < calls/pushed 2>/dev/null)"
     fi
 
     # (h) build-unless-proven.sh pushes proofs for what it built, and only

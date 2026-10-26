@@ -1502,14 +1502,15 @@ jobs:
 
   # The session VM test, split out of system-build (#1461): a nixpkgs bump
   # builds its own VM toplevel cold, and it ran after everything else there.
-  # A third half of `system` below; 45 = a cold toplevel (~25 min) + the test.
+  # A third part of `system` below. 75 like its siblings: a cold bump
+  # compiles its own VM closure before the test.
   system-session:
     needs: gate
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     outputs:
       digest: ${{ steps.digest.outputs.digest }}
-    timeout-minutes: 45
+    timeout-minutes: 75
     concurrency:
       group: >-
         ${{ github.workflow }}-system-session-${{ github.ref }}-${{
@@ -1631,7 +1632,7 @@ jobs:
       - name: Push the MicroVM template runners to cachix
         if: needs.gate.outputs.relevant == 'true'
         # `nixarchy vm run` downloads the KVM runner; checks.microvm-boot the
-        # -tcg one. main only -- cachix-push.sh says so and exits 0 elsewhere.
+        # -tcg one. main, or a dated bump PR -- cachix-push.sh says so and exits 0 elsewhere.
         continue-on-error: true
         timeout-minutes: 5
         env:
@@ -1856,7 +1857,7 @@ jobs:
         run: .github/scripts/failure-digest.sh
 
   # The required context. Parts since #1341 (three since #1461), so a nixpkgs bump, which has
-  # no proofs, fits each 45-minute cap; this passes only when both did. Never
+  # no proofs, fits each 75-minute cap; this passes only when all three did. Never
   # skipped: a skipped required check passes the merge gate (#1144).
   # copilot-handoff.sh ignores this job: a half's timeout is a human's (#1341).
   system:

@@ -54,6 +54,21 @@ pkgs.runCommand "nixarchy-copilot-handoff"
       exit 1
     fi
 
+    # A draft is pin-fix's (#1459): not handed off. A draft state that cannot
+    # be read fails safe the same way.
+    for d in true fail; do
+      GH_DRAFT=$d bash sut/copilot-handoff.sh >draft.txt 2>&1 || {
+        echo "copilot-handoff.sh exited non-zero for GH_DRAFT=$d" >&2
+        cat draft.txt >&2
+        exit 1
+      }
+      if grep -q 'would comment' draft.txt || ! grep -q 'not handed off' draft.txt; then
+        echo "copilot-handoff.sh handed off (or said nothing) for GH_DRAFT=$d" >&2
+        cat draft.txt >&2
+        exit 1
+      fi
+    done
+
     excerpt=$(sed -n '/^~~~~$/,/^~~~~$/p' out.txt | sed '1d;$d')
     lines=$(printf '%s\n' "$excerpt" | grep -c . || true)
     if [ "$lines" -lt 1 ] || [ "$lines" -gt 100 ]; then

@@ -1137,6 +1137,7 @@
             name = "nixarchy-review";
             runtimeInputs = with pkgsFor.${system}; [
               gh
+              jq
               curl
               git
               gnugrep

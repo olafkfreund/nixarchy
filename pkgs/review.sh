@@ -244,12 +244,16 @@ rev_row() {
 
 # The live path: ask GitHub for the default branch, its head, and how the pin
 # compares. Every call is guarded -- this script runs under errexit.
-rev_verdict() { # name repo at age [note]
-  local name=$1 repo=$2 at=$3 age=$4 note=${5-} branch="" sha="" cmp="" st="" rest="" ahead="" oldest=""
+rev_verdict() { # name repo at age pin_epoch [note]
+  local name=$1 repo=$2 at=$3 age=$4 pin_epoch=$5 note=${6-} branch="" sha="" cmp="" st="" rest="" ahead="" oldest="" pin_iso=""
+  pin_iso=$(date -u -d "@$pin_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || pin_iso=""
   branch=$(gh api "repos/$repo" --jq .default_branch 2>/dev/null) || branch=""
   [ -z "$branch" ] || sha=$(gh api "repos/$repo/commits/$branch" --jq .sha 2>/dev/null) || sha=""
-  [ -z "$sha" ] || cmp=$(gh api "repos/$repo/compare/$at...$sha" \
-    --jq '"\(.status)\t\(.ahead_by)\t\(.commits[0].commit.committer.date // "")"' 2>/dev/null) || cmp=""
+  # .commits[0] is topologically first, which can be an old branch commit merged
+  # later; the oldest commit we LACK is the earliest dated at or after the pin.
+  # Falls back to HEAD's date when none qualifies. gh's --jq takes no variables.
+  [ -z "$sha" ] || cmp=$(gh api "repos/$repo/compare/$at...$sha" 2>/dev/null | jq -r --arg pin "$pin_iso" \
+    '. as $c | "\($c.status)\t\($c.ahead_by)\t\([$c.commits[].commit.committer.date | select(. >= $pin)] | min // ($c.commits[-1].commit.committer.date // ""))"') || cmp=""
   # By expansion, not `read`: the last field may be empty (#1010).
   st=${cmp%%$'\t'*}
   rest=${cmp#*$'\t'}
@@ -518,7 +522,7 @@ while IFS=$'\t' read -r name kind repo at modified; do
         # `assets`, which is why flake.nix pins it by rev in the first place.
         # Tell those apart from a GitHub that is not answering.
         if gh api "repos/$repo/tags" --jq length >/dev/null 2>&1; then
-          rev_verdict "$name" "$repo" "$at" "$age" "upstream publishes no version tags"
+          rev_verdict "$name" "$repo" "$at" "$age" "$modified" "upstream publishes no version tags"
         else
           finding "$name" "${at:0:9} (${age}d)" "?" "cannot reach GitHub"
         fi
@@ -552,7 +556,7 @@ while IFS=$'\t' read -r name kind repo at modified; do
             ok "$name" "${at:0:9} (${age}d)" "at $newest"
             ;;
           ahead)
-            rev_verdict "$name" "$repo" "$at" "$age" "$cmp_ahead commits past $newest"
+            rev_verdict "$name" "$repo" "$at" "$age" "$modified" "$cmp_ahead commits past $newest"
             ;;
           *)
             finding "$name" "${at:0:9} (${age}d)" "$newest" \

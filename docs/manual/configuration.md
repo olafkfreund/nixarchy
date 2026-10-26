@@ -530,7 +530,6 @@ All eleven entries of `data/services.nix`:
 | devenv | Development | `programs.nixarchy.services.devenv.enable = true;` |
 | Flatpak | Desktop | `services.flatpak.enable = true;` |
 | 32-bit graphics | Hardware | `hardware.graphics.enable32Bit = true;` |
-| Remote desktop (RDP) | Network | `programs.nixarchy.services.hypr-rdp.enable = true;` |
 | Sandboxes (MicroVMs) | Development | `programs.nixarchy.services.microvm.enable = true;` |
 | Open WebUI (local chat) | Desktop | `programs.nixarchy.services.open-webui.enable = true;` |
 | OpenSSH server | Network | `services.openssh.enable = true;` |

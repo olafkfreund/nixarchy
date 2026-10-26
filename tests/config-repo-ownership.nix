@@ -110,7 +110,7 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
         'creation_rules:' \
         '  - path_regex: hosts/alpha/secrets\.yaml$' \
         '    age: '"$(age-keygen -y alpha.key)" > .sops.yaml
-      printf '%s\n' 'hypr-rdp-password: s3cret-value' > hosts/alpha/secrets.yaml
+      printf '%s\n' 'example-password: s3cret-value' > hosts/alpha/secrets.yaml
       SOPS_AGE_KEY_FILE=alpha.key sops -e -i hosts/alpha/secrets.yaml
     ) || fail "could not generate the sops fixture"
     grep -q 'ENC\[AES256_GCM' "$TMPDIR/fix/hosts/alpha/secrets.yaml" || fail "sops fixture is not encrypted"
@@ -138,7 +138,7 @@ pkgs.runCommand "nixarchy-config-repo-ownership"
     setup secrets-plain github.com
     export SUDO_MODE=deny
     mkdir -p "$NIXARCHY_FLAKE/hosts/alpha"
-    printf 'hypr-rdp-password: s3cret-value\n' > "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
+    printf 'example-password: s3cret-value\n' > "$NIXARCHY_FLAKE/hosts/alpha/secrets.yaml"
     run_case || true
     grep -q 'NOT encrypted' "$root/output" || fail "plaintext secrets file was not flagged: $(cat "$root/output")"
     if git -C "$NIXARCHY_FLAKE" rev-parse HEAD >/dev/null 2>&1; then fail "plaintext secrets file was committed"; fi

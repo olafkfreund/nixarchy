@@ -78,7 +78,7 @@ service.
 ### Make it
 
 ```sh
-nixarchy secret new hypr-rdp-password
+nixarchy secret new example-password
 ```
 
 That derives this host's age recipient, writes `.sops.yaml` at the root of your
@@ -87,7 +87,7 @@ editor. The file is plain YAML while you are editing it and encrypted the
 moment you save:
 
 ```yaml
-hypr-rdp-password: something-long
+example-password: something-long
 ```
 
 ### Declare it — this part is yours
@@ -97,7 +97,7 @@ matters:
 
 ```nix
 # hosts/<host>/configuration.nix
-sops.secrets.hypr-rdp-password.sopsFile = ./secrets.yaml;
+sops.secrets.example-password.sopsFile = ./secrets.yaml;
 ```
 
 Not in `~/.config/nixarchy/*.nix`. `nixarchy apply` copies those into
@@ -118,20 +118,11 @@ missing, not that it is untracked.
 
 ### Point something at it
 
-A nixarchy service that takes a secret takes the **name**, not the value and
-not a path:
+Anything that wants a file gets the path sops-nix decrypts it to, never the
+value:
 
 ```nix
-programs.nixarchy.services.hypr-rdp = {
-  enable = true;
-  passwordSecret = "hypr-rdp-password";
-};
-```
-
-Anything else that wants a file gets the path sops-nix decrypts it to:
-
-```nix
-services.something.passwordFile = config.sops.secrets.hypr-rdp-password.path;
+services.something.passwordFile = config.sops.secrets.example-password.path;
 ```
 
 ## A user secret
@@ -252,6 +243,6 @@ Once a secret is in git history, deleting it later does not remove it.
 
 ## See also
 
-- [Remote Desktop](remote-desktop) — the service this mechanism was built for
+- [Remote Desktop](remote-desktop) — gliff, which needs no secret of its own
 - [Security](security) — the firewall, disk encryption, and what is exposed
 - The `nixos-secrets` agent skill: *"how do I store an API key here?"*

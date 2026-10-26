@@ -125,7 +125,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
     if grep -qF '"''${1:-}" = omarchy' ${omarchyPkg}/share/omarchy/bin/nixarchy-channel; then
       echo omarchy >> channel-verbs
     fi
-    verbs_of ${omarchyPkg}/share/omarchy/bin/nixarchy-remote  > remote-verbs
     for m in ${pkgs.lib.escapeShellArgs pluginSources}; do
       jq -r .id "$m/manifest.json"
     done | sort -u > plugin-ids
@@ -134,7 +133,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
     echo "nixarchy-secret accepts: $(tr '\n' ' ' < secret-verbs)"
     echo "nixarchy-channel accepts: $(tr '\n' ' ' < channel-verbs)"
     echo "nixarchy-channel omarchy accepts: $(tr '\n' ' ' < omarchy-channel-verbs)"
-    echo "nixarchy-remote accepts: $(tr '\n' ' ' < remote-verbs)"
     echo "installed plugin ids: $(tr '\n' ' ' < plugin-ids)"
 
     # Said out loud rather than left to `test`. A bare `test` that fails
@@ -165,11 +163,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
     floor channel-verbs 2 nixarchy-channel
     # stable, edge, dev, rc, --current, -h, --help, and the empty report.
     floor omarchy-channel-verbs 4 "nixarchy-channel omarchy"
-    # serve, --status, -h, --help. The floor is what turns "the dispatch
-    # stopped parsing" from a green into a red: nixarchy-remote spells its
-    # case block `"''${1:-}"` rather than `"''${1:-serve}"` precisely so
-    # verbs_of can read it, and this is what notices if that is undone.
-    floor remote-verbs 3 nixarchy-remote
 
     fail=0
     checked=0
@@ -241,11 +234,6 @@ pkgs.runCommand "nixarchy-menu-verbs"
       fi
       checked=$((checked + 1))
     done
-
-    # The remote desktop rows (#1015), added with the rows for the same
-    # reason the three groups above were.
-    scan '\bnixarchy-remote +[-a-z]+'  2 nixarchy-remote remote-verbs
-    scan '\bnixarchy +remote +[-a-z]+' 3 nixarchy-remote remote-verbs
 
     # The plugin rows (#766): a row opening a plugin that is not installed
     # does nothing at all, so each id has to be one this machine installs.

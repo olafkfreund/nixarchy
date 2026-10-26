@@ -222,3 +222,22 @@ Revert the squash commit. That brings the module, input and checks back.
 The `coder` agent does steps 1-8, one agent, with later steps sent with
 SendMessage. The session commits, runs the §1 proofs and opens the PR. The
 review is a fresh Opus agent given this plan and the diff.
+
+## Deviations recorded during implementation
+
+- **Step 6 was partly pulled into step 3:** `tests/sops-evaluates.nix` had
+  to exist the moment `uniformChecks` named it.
+- **`tests/doc-options.nix` still ran the deleted `tests/rdp-docs.sh`** (its
+  last build line). The plan missed it; the line is deleted.
+- **`tests/menu-tree.py`:** `"gliff"` already mapped to `setup.remote.gliff`,
+  so only `"connect"` was retargeted and `"rdp"` deleted.
+- **`hyprRdpRemoved` works as a failed assertion,** with no `tryEval`
+  needed. Evaluated on the reference configuration: on, one assertion with
+  the gliff text; off, `[]`.
+- **`nix fmt` reformatted `release-notes-options.nix`** for the new
+  `if`/`else`.
+- **§1 proofs:**
+  - `doc-options` red on a planted `hypr-rdp.enable` mention
+    (`security.md:142: ... is not an option`);
+  - `sops-evaluates` red on sops-nix `a8627b21`
+    (`buildGo125Module has been removed`).

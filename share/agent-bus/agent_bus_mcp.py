@@ -43,7 +43,10 @@ from urllib.parse import quote
 from typing import Any
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+try:  # mcp 2.x renamed FastMCP to MCPServer; same name, tool() and run()
+    from mcp.server.mcpserver import MCPServer as FastMCP
+except ImportError:  # mcp 1.x
+    from mcp.server.fastmcp import FastMCP
 
 HOMESERVER = os.environ.get("MATRIX_HOMESERVER", "http://127.0.0.1:6167")
 SERVER_NAME = os.environ.get("MATRIX_SERVER_NAME", "freundcloud.org.uk")

@@ -95,7 +95,8 @@ pkgs.runCommand "nixarchy-bus-mcp" { nativeBuildInputs = [ python ]; } ''
               listed = await session.list_tools()
       tools = {}
       for t in listed.tools:
-          schema = t.inputSchema or {}
+          # mcp 2.x renamed inputSchema to input_schema
+          schema = getattr(t, "input_schema", None) or getattr(t, "inputSchema", None) or {}
           props = set(schema.get("properties", {}))
           required = set(schema.get("required", []))
           tools[t.name] = {"required": required, "optional": props - required}

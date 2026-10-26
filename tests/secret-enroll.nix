@@ -57,7 +57,7 @@ pkgs.runCommand "nixarchy-secret-enroll"
       '          - *alpha' \
       > .sops.yaml
 
-    printf '%s\n' 'hypr-rdp-password: alpha-only' > hosts/alpha/secrets.yaml
+    printf '%s\n' 'example-password: alpha-only' > hosts/alpha/secrets.yaml
     SOPS_AGE_KEY_FILE=alpha.key sops -e -i hosts/alpha/secrets.yaml
 
     echo "== an anchored first-host rule is already enrolled"
@@ -66,7 +66,7 @@ pkgs.runCommand "nixarchy-secret-enroll"
       echo "FAIL: the anchored first host returned $rc instead of already (2)"; exit 1; }
 
     echo "== self-test: with no rule, beta must NOT be able to encrypt"
-    printf '%s\n' 'hypr-rdp-password: beta-only' > hosts/beta/secrets.yaml
+    printf '%s\n' 'example-password: beta-only' > hosts/beta/secrets.yaml
     if SOPS_AGE_KEY_FILE=beta.key sops -e -i hosts/beta/secrets.yaml 2>/dev/null; then
       echo "FAIL: sops encrypted hosts/beta with no creation rule for it."
       echo "  This check cannot then show that enroll did anything."
@@ -80,7 +80,7 @@ pkgs.runCommand "nixarchy-secret-enroll"
     echo "== beta encrypts and reads back its own file"
     SOPS_AGE_KEY_FILE=beta.key sops -e -i hosts/beta/secrets.yaml
     got=$(SOPS_AGE_KEY_FILE=beta.key sops -d hosts/beta/secrets.yaml)
-    [ "$got" = "hypr-rdp-password: beta-only" ] || {
+    [ "$got" = "example-password: beta-only" ] || {
       echo "FAIL: beta could not read back its own secret; got: $got"; exit 1; }
     echo "  ok"
 
@@ -94,7 +94,7 @@ pkgs.runCommand "nixarchy-secret-enroll"
 
     echo "== alpha's own file still decrypts, and its rule is untouched"
     got=$(SOPS_AGE_KEY_FILE=alpha.key sops -d hosts/alpha/secrets.yaml)
-    [ "$got" = "hypr-rdp-password: alpha-only" ] || {
+    [ "$got" = "example-password: alpha-only" ] || {
       echo "FAIL: alpha's secret changed; got: $got"; exit 1; }
     grep -q '  - &alpha ' .sops.yaml || {
       echo "FAIL: alpha's YAML anchor was rewritten."; exit 1; }

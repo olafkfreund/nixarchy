@@ -3670,7 +3670,7 @@ in
                     channel) shift; exec nixarchy-channel "$@" ;;
                     local-ai) shift; exec nixarchy-local-ai "$@" ;;
                     preview) shift; exec nixarchy-preview "$@" ;;
-                    remote) shift; exec nixarchy-remote "$@" ;;
+                    remote) echo "nixarchy remote is retired (#1462) -- use gliff: Setup > Remote desktop > Connect with gliff." >&2; exit 1 ;;
                     rollback) shift; exec nixarchy-rollback "$@" ;;
                     unfreeze) shift; exec nixarchy-unfreeze "$@" ;;
 

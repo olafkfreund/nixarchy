@@ -4,13 +4,9 @@ title: Remote desktop
 
 # Remote desktop
 
-nixarchy gives you two ways to reach a desktop you are not sitting at. Between
-two nixarchy machines there is [gliff](#between-two-nixarchy-machines-gliff),
-which is installed by default and goes over SSH. From anything else, nixarchy
-can serve the Hyprland session you are already logged into over RDP, so a
-Windows laptop's built-in `mstsc`, or any other RDP client, opens your actual
-desktop. RDP is off, and enabling it is four decisions rather than one switch.
-Most of this page is those decisions.
+Between two nixarchy machines, [gliff](#between-two-nixarchy-machines-gliff)
+reaches the desktop you are not sitting at. It is installed by default and goes
+over SSH. In the menu: Setup > Remote desktop > Connect with gliff.
 
 ## Between two nixarchy machines: gliff
 
@@ -38,7 +34,7 @@ The machine you connect *to* needs:
 services.openssh.enable = true;
 ```
 
-and somebody logged into a Hyprland session, for the same reason as RDP below:
+and somebody logged into a Hyprland session, because
 gliff is a client of a compositor that is already running.
 
 ### Your first session
@@ -109,335 +105,11 @@ protocols, the outputs, the GPU and the codec path, and prints PASS or FAIL for
 each. On a machine without VA-API H.264 encode (NVIDIA, for one) gliff runs on
 the CPU instead, which is slower and not an error.
 
-## From Windows, macOS or a phone: RDP
-
-gliff needs a Hyprland machine running gliff on both ends. For everything else there is RDP,
-served by [hypr-rdp](https://github.com/MuNeNiCK/hypr-rdp). The rest of this
-page is about it.
-
-## What it is not
-
-**It is not remote login.** [hypr-rdp](https://github.com/MuNeNiCK/hypr-rdp)
-is a client of a compositor that is already running. If nobody is logged in at
-that machine, there is no session and nothing to connect to — the daemon is
-not even started, because its unit is part of `graphical-session.target` and
-conditioned on `WAYLAND_DISPLAY`. Reboot the machine remotely and you have
-locked yourself out until someone logs in.
-
-**It is not the way to administer a machine.** For that the answer here is the
-same as it has always been: Tailscale and SSH, both of which nixarchy already
-carries, neither of which needs a desktop to be running. RDP earns its place
-only when you want *the desktop itself* — a browser session, a GUI tool, a
-screen someone else is looking at.
-
-**It is not a privacy boundary.** Left alone, hypr-rdp creates a headless
-output that resizes to your client, so the physical monitors keep showing what
-they showed. That is a convenience, not isolation: it is one session, and
-whoever is sitting at that machine is in it with you.
-
-## What enabling it opens
-
-Nothing beyond the machine itself, until you change `bind`.
-
-| | |
-|---|---|
-| Port | 3389/tcp, the RDP default |
-| Interface | `127.0.0.1` — this machine only |
-| Firewall | unchanged; `openFirewall` is a separate option and defaults to `false` |
-| Authentication | a username and password checked by hypr-rdp, over TLS. hypr-rdp offers NLA when credentials are set, and this module never starts it without them |
-| Runs as | your user, inside your graphical session, and dies with it |
-
-The username defaults to `nixarchy` and is deliberately not your login name —
-a name the client already knows is half of a guess. It is checked by hypr-rdp
-against the password below and has nothing to do with your Linux account.
-
-## The password, and why the rebuild fails without one
-
-Enabling this from the menu and rebuilding **fails**, on purpose, with an
-assertion naming the steps below. That is not a missing feature.
-
-Pinned hypr-rdp v0.1.7 supports `password_file`: a named `password_file`
-that is missing or empty fails startup. But with no credentials named it only
-warns and serves your session without authentication. A username with an
-empty inline password gets only a `HalfCredentials` warning and continues.
-So this module still refuses twice: an assertion at evaluation when no secret
-is named, and an `ExecStartPre` guard at runtime that requires non-empty
-username and password. A secret that renders empty gets past the first and
-not the second.
-
-The password is never placed in your Nix configuration: the Nix store and
-`/proc/*/cmdline` are readable by other users. Instead,
-[sops-nix](https://github.com/Mic92/sops-nix) renders a private `0400`
-password staging file from the encrypted secret. At service start, the guard
-reads that file and atomically writes the final `0400` TOML under the user
-service's runtime directory, outside the store and git. The daemon reads
-that file only after the guard succeeds.
-
-### From the menu, if you would rather not read the rest
-
-**Setup → Remote desktop → Allow connections** opens a terminal that reports
-the four things this needs — an SSH host key, a rule in `.sops.yaml`, the
-encrypted password, the service itself — and offers the next one you are
-missing. It does the mechanical steps and stops at the one edit it will not
-make for you, which is the two lines below.
-
-`nixarchy remote --status` is the same report with nothing offered.
-
-The rest of this section is what that command is doing, and it is worth
-reading once.
-
-### Getting the password there
-
-One command does all of it:
-
-```sh
-nixarchy secret new hypr-rdp-password
-```
-
-That derives this host's age recipient, writes `.sops.yaml` at the root of your
-flake if there is not one, and opens `hosts/<host>/secrets.yaml` in your
-editor. The file is plain YAML while you edit it and encrypted when you save:
-
-```yaml
-hypr-rdp-password: something-long
-```
-
-Double quotes and backslashes keep their literal meaning: nixarchy escapes
-them when it writes the private TOML config. Control characters, including
-newlines, are refused with a clear error before hypr-rdp starts. Non-ASCII
-control characters and invalid UTF-8 fail closed when hypr-rdp parses TOML.
-
-You need sshd enabled first, and one rebuild after it. The secret is encrypted
-to the machine's own SSH host key, and that key is generated on first boot --
-so on a machine installed from the ISO this is always the second rebuild, not
-the first. Without sshd there is no key at all, and `nixarchy secret` says so
-rather than letting you meet it as a build error.
-
-Then **declare the secret and point the service at it**, in
-`hosts/<host>/configuration.nix`:
-
-```nix
-sops.secrets.hypr-rdp-password.sopsFile = ./secrets.yaml;
-
-programs.nixarchy.services.hypr-rdp = {
-  enable = true;
-  passwordSecret = "hypr-rdp-password";
-};
-```
-
-`passwordSecret` is the attribute name under `sops.secrets` -- not the password
-and not a path to it.
-
-Put this in `configuration.nix` rather than in `~/.config/nixarchy/services.nix`.
-The menu's file is copied into `hosts/<host>/nixarchy/` by `nixarchy apply`, so
-a relative `./secrets.yaml` written there would resolve one directory too deep.
-Enabling from the menu is fine; the secret's two lines belong beside the file
-they name.
-
-Finally `git add` the encrypted file and rebuild. A flake in a git worktree
-sees only tracked files, so an unstaged `secrets.yaml` does not exist as far as
-evaluation is concerned, and the error says the path is missing rather than
-that it is untracked.
-
-### The second machine
-
-`.sops.yaml` says which recipients can decrypt which file, and `nixarchy
-secret new` writes it only when it is absent. On your second machine it exists
-and has no rule for that host, so the command stops rather than editing it — a
-creation rule spliced in by pattern-matching is one that can silently stop
-matching, and you would find out when a secret refused to decrypt.
-
-`nixarchy secret enroll` is the supported way through:
-
-```sh
-nixarchy secret enroll
-```
-
-It appends this host's rule structurally, leaves every other host's rule
-alone, and rekeys nothing. That last part is the design rather than a
-limitation: secrets here are **per host**, so `hosts/<host>/secrets.yaml` is
-encrypted to that machine alone, and enrolling only lets this one create its
-own. A machine that is compromised is then one machine's secrets rather than
-every machine's.
-
-A fleet is therefore `enroll`, `new`, the two lines, rebuild — once per
-machine, with a different password on each.
-
-If it reports that the policy already has a rule for this host with a
-*different* recipient, this machine's SSH host key has changed; a reinstall
-that kept the hostname does exactly that. It refuses rather than appending a
-second rule, because sops takes the first one and the machine would then
-encrypt to a key it cannot read back.
-
-### It takes effect at the next login
-
-Enable it, rebuild, and **nothing appears to happen**: the service is not
-running and the menu row is not there. Neither is broken — both are waiting
-for a new session, for two separate reasons.
-
-The unit is pulled in by `graphical-session.target`, which starts at **login**.
-A unit written to disk afterwards is enabled, correct, and never picked up;
-NixOS does not start user units during a rebuild either. It has not failed, it
-has not run:
-
-```sh
-systemctl --user start hypr-rdp
-```
-
-The menu row is the same cause one layer over. `OMARCHY_PATH` is fixed when
-the session starts, so rows added by a later rebuild are in the tree the
-*system* provides and not in the tree the *session* reads. Nothing can change
-that from inside the session — logging out and back in is the fix, and
-`nixarchy remote connect` works from a terminal in the meantime.
-
-`nixarchy remote serve` reports both, and offers to start the unit.
-
-Changing the password later means `nixarchy secret edit`, a rebuild, and then
-`systemctl --user restart hypr-rdp`. sops-nix restarts system units and this is
-a user unit, so nothing restarts it for you.
-
-[The Secrets page](secrets) covers the rest of the command -- what exists on
-this machine, what reads it, and the second kind of secret, which goes to your
-clipboard rather than to a service.
-
-## Reaching it: three shapes
-
-### From the menu, over an SSH tunnel — the one to use
-
-Nothing to configure on the machine being connected to. On the machine you are
-connecting *from*, install a client once:
-
-```nix
-programs.nixarchy.apps.freerdp.enable = true;
-```
-
-then **Setup → Remote desktop → Connect to a machine**. It lists your
-`~/.ssh/config` hosts and the Linux machines on your tailnet, forwards a free
-local port over SSH, and opens the desktop. Zero exposure, one already-open
-port, and the authentication that matters is your SSH key. The tunnel closes
-when you close the client.
-
-The list is machines you can *SSH to* — not machines known to be serving a
-desktop. hypr-rdp shares a session someone is already logged into, so a
-machine with nobody at it has nothing to show.
-
-`sdl-freerdp` is what it launches. FreeRDP ships three clients and deprecated
-its Wayland one in favour of the SDL3 build, which is also the one that needs
-no Xwayland. `xfreerdp` is in the same package if you prefer it, and the menu
-row appears when either is installed.
-
-By hand, if you would rather:
-
-```sh
-ssh -L 3389:localhost:3389 you@desk
-sdl-freerdp /v:localhost:3389 /u:nixarchy /dynamic-resolution
-```
-
-`/dynamic-resolution` is worth the typing: the headless output resizes to your
-window, so the session follows the client instead of letterboxing.
-
-### Over your tailnet — the one to want
-
-```nix
-programs.nixarchy.services.tailscale.enable = true;
-programs.nixarchy.services.hypr-rdp.bind = "0.0.0.0:3389";
-```
-
-The daemon listens on every interface, the firewall still refuses everything
-arriving on the LAN, and `trustInterface` — on by default with Tailscale here
-— trusts `tailscale0`. So your own machines reach it and the coffee shop does
-not, with no port opened anywhere. Connect to the machine's tailnet address on
-3389.
-
-The cost is stated rather than hidden: a trusted interface bypasses the
-firewall for *everything* arriving on it. On a tailnet of machines you own,
-that is the point. On one you share with other people, they can reach 3389 too
-— use Tailscale ACLs, or keep to the SSH tunnel.
-
-### On the LAN
-
-```nix
-programs.nixarchy.services.hypr-rdp.openFirewall = true;
-```
-
-This opens 3389 in `networking.firewall.allowedTCPPorts` — to every device on
-every network this machine joins, which is the part worth pausing on.
-
-3389 is among the most scanned ports that exist. hypr-rdp has no rate limiting
-and no lockout, so a guess costs an attacker nothing and a successful one is
-your whole desktop: your browser sessions, your SSH agent, your sudo prompt.
-There is no `fail2ban` wiring here either — hypr-rdp's logs are not stable
-enough at v0.1.x to write a filter against.
-
-If you do it anyway, scope it to the interface rather than opening it
-everywhere. Leave `openFirewall` off and write the rule yourself:
-
-```nix
-networking.firewall.interfaces.enp3s0.allowedTCPPorts = [ 3389 ];
-```
-
-A laptop that joins other networks should not use either.
-
-## The certificate warning
-
-The first connection shows a certificate warning in every client, and it is
-not a bug. hypr-rdp generates a self-signed pair into `~/.config/hypr-rdp/` on
-first start and reuses it afterwards. Clients trust nothing about it; what they
-can do is remember it, which is why the pair is generated once and left alone —
-regenerating it on every rebuild would change the fingerprint your client
-pinned, and ask you the same question forever.
-
-So: accept it once, on a connection you have reason to trust, and be suspicious
-if it changes. That is pinning, and it is the honest strength of the guarantee
-— it detects a swapped machine on later connections, not a wrong one on the
-first.
-
-nixarchy does not automate trust here, because automating it without a real CA
-is theatre. If you have a certificate, bring it:
-
-```nix
-programs.nixarchy.services.hypr-rdp = {
-  certFile = "/var/lib/certs/desk.pem";
-  keyFile = "/var/lib/certs/desk.key";
-};
-```
-
-Both or neither — hypr-rdp bails on one without the other rather than falling
-back, so the module refuses that pair at evaluation instead of letting the unit
-fail at every start.
-
-## Mirroring a real monitor
-
-The default headless output is usually what you want: it resizes to the
-client's window and does not disappear when a monitor is switched off. To mirror
-a screen someone may be sitting in front of instead:
-
-```nix
-programs.nixarchy.services.hypr-rdp.output = "DP-1";
-```
-
-## What this does not protect against
-
-- **The software itself.** hypr-rdp is a pre-1.0 Rust daemon parsing RDP off
-  the wire, roughly one primary author, unaudited, not in nixpkgs. That is not
-  a slight — it is the only thing that serves this compositor family at all,
-  and it is why the integration is opt-in and tailnet-first rather than on. A
-  listening socket you did not need is the one to be stingy with.
-- **A guessed or reused password.** There is no lockout. On the promoted paths
-  nothing can guess at it; on the LAN, everything can.
-- **Anyone already in your session.** A connected client is you: same
-  clipboard, same keyboard, same browser logins, same sudo.
-- **Someone at the physical machine.** Headless is a second output, not a
-  private one.
-- **A rebooted machine.** No session, no daemon, no way back in without
-  something else — SSH, and a person, or wake-on-LAN and a display manager
-  that autologs in, which is its own trade.
-
 ## Letting an agent drive another machine
 
-Not through RDP. Accessibility does not cross it — the remote desktop arrives
-as pixels, so an agent looking at an RDP window sees the client's own chrome
-and nothing inside the session. It would be reduced to screenshots and
+Not through a remote desktop. Accessibility does not cross it — the desktop
+arrives as pixels, so an agent looking at a gliff window sees the client's own
+chrome and nothing inside the session. It would be reduced to screenshots and
 coordinates.
 
 [ai-mirror](https://github.com/olafkfreund/ai-mirror), which nixarchy already
@@ -465,7 +137,7 @@ shell on that account answers its own dialog — and `ssh desk ai-mirror mcp`
 
 A forced-command key in `authorized_keys` does not fix it either. It
 restricts that key; it does not remove the ordinary key you already have to
-that machine, which is the same key the Connect row tunnels with.
+that machine, which is the same key gliff connects with.
 
 So on the far machine the dialog is a **notice, not a gate**. Read it that
 way.

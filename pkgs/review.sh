@@ -40,9 +40,12 @@ case "${1-}" in
   --list-pins) mode=pins ;;
   --main-install-verdict) mode=verdict ;;
   --ci-row) mode=cirow ;;
+  --rev-row) mode=revrow ;;
+  --blocked-row) mode=blockedrow ;;
+  --compare-tsv) mode=comparetsv ;;
   "") ;;
   *)
-    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW]" >&2
+    echo "usage: review [--report|--list-pins|--main-install-verdict|--ci-row WF HOURS NONE NOW|--rev-row ...|--blocked-row ...|--compare-tsv PIN_ISO]" >&2
     exit 2
     ;;
 esac
@@ -211,6 +214,95 @@ ci_row() {
     ok "$wf" "${age}h ago" "$conclusion"
   fi
 }
+
+# A commit pin whose newest version tag it is not behind (or that has no tags):
+# is a newer upstream HEAD a finding? Only when it is somebody else's repo and
+# the oldest commit we lack has existed for more than a week -- that measures
+# how long we have been behind, not the pin's own age. Pure, for fixtures.
+#   rev_row NAME OWNER AT AGE BRANCH STATUS AHEAD OLDEST_DATE NOW [NOTE]
+rev_row() {
+  local name=$1 owner=$2 at=$3 age=$4 branch=$5 status=$6 ahead=$7 oldest=$8 now=$9 note=${10-}
+  local have="${at:0:9} (${age}d)" pre="${note:+$note; }" oldest_epoch="" days
+  case "$status" in
+    identical) ok "$name" "$have" "${pre}at $branch" ;;
+    ahead)
+      oldest_epoch=$(date -d "$oldest" +%s 2>/dev/null) || oldest_epoch=""
+      if [ -z "$oldest_epoch" ]; then
+        ok "$name" "$have" "${pre}$ahead behind $branch, date unreadable"
+        return 0
+      fi
+      days=$(((now - oldest_epoch) / 86400))
+      if [ "${owner,,}" != olafkfreund ] && [ "$days" -gt 7 ]; then
+        finding "$name" "$have" "$branch" "$ahead commits behind $branch since ${oldest%%T*}"
+      else
+        ok "$name" "$have" "${pre}$ahead behind $branch"
+      fi
+      ;;
+    "") ok "$name" "$have" "${pre}not comparable" ;;
+    *) finding "$name" "$have" "$branch" "pin is not on $branch" ;;
+  esac
+}
+
+# A compare (JSON on stdin) as status<TAB>ahead_by<TAB>oldest-missing date.
+# .commits[0] is topologically first, which can be an old branch commit merged
+# later; the oldest commit we LACK is the earliest dated at or after the pin
+# (PIN_ISO). Falls back to HEAD's date when none qualifies. Pure; non-zero on
+# a body that is not a compare (a 404's {"message": ...}).
+compare_tsv() {
+  jq -r --arg pin "$1" '. as $c | "\($c.status)\t\($c.ahead_by)\t\([$c.commits[].commit.committer.date | select(. >= $pin)] | min // ($c.commits[-1].commit.committer.date // ""))"' 2>/dev/null
+}
+
+# The live path: ask GitHub for the default branch, its head, and how the pin
+# compares. Every call is guarded -- this script runs under errexit.
+rev_verdict() { # name repo at age pin_epoch [note]
+  local name=$1 repo=$2 at=$3 age=$4 pin_epoch=$5 note=${6-} branch="" sha="" cmp="" st="" rest="" ahead="" oldest="" pin_iso=""
+  pin_iso=$(date -u -d "@$pin_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || pin_iso=""
+  branch=$(gh api "repos/$repo" --jq .default_branch 2>/dev/null) || branch=""
+  [ -z "$branch" ] || sha=$(gh api "repos/$repo/commits/$branch" --jq .sha 2>/dev/null) || sha=""
+  [ -z "$sha" ] || cmp=$(gh api "repos/$repo/compare/$at...$sha" 2>/dev/null | compare_tsv "$pin_iso") || cmp=""
+  # By expansion, not `read`: the last field may be empty (#1010).
+  st=${cmp%%$'\t'*}
+  rest=${cmp#*$'\t'}
+  ahead=${rest%%$'\t'*}
+  oldest=${rest#*$'\t'}
+  [ -n "$cmp" ] || st=""
+  rev_row "$name" "${repo%%/*}" "$at" "$age" "$branch" "$st" "$ahead" "$oldest" "$(date +%s)" "$note"
+}
+
+# The blocked nixpkgs bump (flake-update.yml opens a draft PR on
+# update/nixpkgs-blocked when a bump breaks something), as a row. Pure.
+#   blocked_row NUMBER CREATED_AT NOW APIERR(0|1)
+blocked_row() {
+  local number=$1 created=$2 now=$3 apierr=$4 epoch=""
+  if [ "$apierr" = 1 ]; then
+    finding "nixpkgs bump" "-" "-" "cannot read pull requests"
+  elif [ -z "$number" ]; then
+    ok "nixpkgs bump" "-" "no blocked bump"
+  else
+    epoch=$(date -d "$created" +%s 2>/dev/null) || epoch=""
+    if [ -n "$epoch" ] && [ $(((now - epoch) / 86400)) -le 3 ]; then
+      ok "nixpkgs bump" "-" "blocked since ${created%%T*}, #$number"
+    else
+      finding "nixpkgs bump" "-" "#$number" "nixpkgs bump blocked since ${created%%T*}, #$number"
+    fi
+  fi
+}
+
+if [ "$mode" = revrow ]; then
+  rev_row "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11-}"
+  printf '%s' "$rows"
+  exit 0
+fi
+if [ "$mode" = comparetsv ]; then
+  compare_tsv "$2"
+  exit
+fi
+
+if [ "$mode" = blockedrow ]; then
+  blocked_row "$2" "$3" "$4" "$5"
+  printf '%s' "$rows"
+  exit 0
+fi
 
 if [ "$mode" = cirow ]; then
   ci_row "$2" "$3" "$4" "$(cat)" "$5"
@@ -441,7 +533,7 @@ while IFS=$'\t' read -r name kind repo at modified; do
         # `assets`, which is why flake.nix pins it by rev in the first place.
         # Tell those apart from a GitHub that is not answering.
         if gh api "repos/$repo/tags" --jq length >/dev/null 2>&1; then
-          ok "$name" "${at:0:9} (${age}d)" "upstream publishes no version tags"
+          rev_verdict "$name" "$repo" "$at" "$age" "$modified" "upstream publishes no version tags"
         else
           finding "$name" "${at:0:9} (${age}d)" "?" "cannot reach GitHub"
         fi
@@ -475,7 +567,7 @@ while IFS=$'\t' read -r name kind repo at modified; do
             ok "$name" "${at:0:9} (${age}d)" "at $newest"
             ;;
           ahead)
-            ok "$name" "${at:0:9} (${age}d)" "$cmp_ahead commits past $newest"
+            rev_verdict "$name" "$repo" "$at" "$age" "$modified" "$cmp_ahead commits past $newest"
             ;;
           *)
             finding "$name" "${at:0:9} (${age}d)" "$newest" \
@@ -549,6 +641,15 @@ ci build.yml 192
 ci nightly.yml 30
 ci omarchy.yml 30
 ci update.yml 200
+ci flake-update.yml 30
+
+# A nixpkgs bump that broke something is held as a draft PR; a held bump that
+# nobody has dealt with in three days is a finding. created_at is when the
+# stall began: failed nights update the PR rather than recreate it.
+pr_line="" pr_err=0
+pr_line=$(gh api "repos/{owner}/{repo}/pulls?head={owner}:update/nixpkgs-blocked&state=open" \
+  --jq '.[0] // empty | "\(.number)\t\(.created_at)"' 2>/dev/null) || pr_err=1
+blocked_row "${pr_line%%$'\t'*}" "${pr_line#*$'\t'}" "$(date +%s)" "$pr_err"
 # Tag-triggered, so no runs is not a disabled workflow. GitHub kept none for it
 # the day after it published v4.0.3-2 (#690).
 ci release.yml 8760 ok

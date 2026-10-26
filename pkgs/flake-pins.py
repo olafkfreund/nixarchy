@@ -17,6 +17,7 @@ tab separated. Nothing else, so the caller stays a shell loop.
 """
 
 import json
+import re
 import sys
 
 
@@ -39,6 +40,9 @@ def main():
 
         if original.get("rev"):
             kind, at = "rev", original["rev"]
+        elif re.fullmatch(r"[0-9a-f]{7,40}", ref):
+            # A short sha in the url is a commit pin too; `at` is the full one.
+            kind, at = "rev", locked.get("rev", ref)
         elif ref[:1] == "v" and ref[1:2].isdigit():
             kind, at = "tag", ref
         else:

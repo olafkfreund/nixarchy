@@ -74,11 +74,10 @@ in
       defaultText = lib.literalExpression "config.programs.nixarchy.user";
       description = ''
         Who joins the `kvm` group. Defaults to `programs.nixarchy.user`
-        rather than `lib.mkDefault`, so a definition of your own outranks it
-        the way `programs.nixarchy.services.hypr-rdp.user` does.
+        rather than `lib.mkDefault`, so a definition of your own outranks it.
 
         Null skips the group grant entirely -- there is no session to infer a
-        user from any more than hypr-rdp's module can.
+        user from.
       '';
     };
 

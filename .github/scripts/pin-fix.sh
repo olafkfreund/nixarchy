@@ -7,7 +7,8 @@
 #   pin-fix.sh --decide OWNER COMPARE_JSON SHA   print `move <sha> <n>` or `refuse <why>`
 #   pin-fix.sh --replace FLAKE_NIX INPUT OLD_FULL_SHA NEW_SHA
 #   pin-fix.sh --moved BASE_LOCK NEW_LOCK        root inputs whose lock differs
-#   pin-fix.sh --only-nixpkgs MAIN_LOCK PR_LOCK  exit 0 iff only nixpkgs moved
+#   pin-fix.sh --only-nixpkgs MAIN PR [FILES]   exit 0 iff only nixpkgs moved (and FILES is just flake.lock)
+#   pin-fix.sh --intact BASE_LOCK NEW_LOCK INPUT  exit 0 iff INPUT kept its follows and added no nixpkgs
 #   pin-fix.sh --sanitize                        stdin to stdout
 #   pin-fix.sh --quote-subject                   stdin to stdout, one subject per line
 #   pin-fix.sh --owner FIXTURE_JSON              `writable <pr>` or `held <why>`
@@ -38,7 +39,7 @@ decide() {
   local owner=$1 file=$2 sha=$3 status ahead
   jq -e . "$file" >/dev/null 2>&1 || die "unreadable compare JSON: $file"
   [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "refuse new commit is not a 40-hex sha"; return 0; }
-  [ "$owner" != olafkfreund ] || { echo "refuse owner is olafkfreund (our own repo is not moved automatically)"; return 0; }
+  [ "${owner,,}" != olafkfreund ] || { echo "refuse owner is olafkfreund (our own repo is not moved automatically)"; return 0; }
   status=$(jq -r '.status // ""' "$file")
   ahead=$(jq -r '.ahead_by // 0' "$file")
   [ "$status" = ahead ] || { echo "refuse pin is $status relative to the default branch, not ahead"; return 0; }
@@ -104,12 +105,28 @@ moved() {
     | $e.key' -n || return 2
 }
 
+# A move of NAME may change NAME's own subtree, but not what it follows, and
+# may not bring a nixpkgs of its own: every follows list NAME had stays
+# identical, and the lock holds no more nixpkgs nodes than before.
+intact() {
+  jq -e -n --slurpfile a "$1" --slurpfile b "$2" --arg x "$3" "$JQ_RESOLVE"'
+    $a[0] as $A | $b[0] as $B
+    | ($A.nodes.root.inputs[$x] | resolve($A)) as $na
+    | ($B.nodes.root.inputs[$x] | resolve($B)) as $nb
+    | ([($A.nodes[$na].inputs // {}) | to_entries[] | select(.value | type == "array")]
+       | all(. as $e | $B.nodes[$nb].inputs[$e.key] == $e.value))
+      and ([$B.nodes[] | select(.locked.repo? == "nixpkgs")] | length)
+       <= ([$A.nodes[] | select(.locked.repo? == "nixpkgs")] | length)' >/dev/null
+}
+
 only_nixpkgs() {
   jq -e -n --slurpfile m "$1" --slurpfile p "$2" "$JQ_RESOLVE"'
     $m[0] as $M | $p[0] as $P
     | ($M.nodes.root.inputs.nixpkgs | resolve($M)) as $nm
     | ($P.nodes.root.inputs.nixpkgs | resolve($P)) as $np
-    | $nm == $np and (($P | .nodes[$np].locked = $M.nodes[$nm].locked) == $M)' >/dev/null
+    | $nm == $np and (($P | .nodes[$np].locked = $M.nodes[$nm].locked) == $M)' >/dev/null || return 1
+  # With a third argument, the PR's changed files: flake.lock and nothing else.
+  [ $# -lt 3 ] || [ "$(cat "$3")" = flake.lock ]
 }
 
 # The five skip-CI markers are built from parts so the source never holds one.
@@ -223,6 +240,10 @@ run() {
     got=$(moved "$base/flake.lock" flake.lock | sort) || return 1
     want=$(printf '%s\n' "$@" | sort)
     [ "$got" = "$want" ] || { echo "pin-fix: moved set '$got' != '$want'" >&2; return 1; }
+    for n in "$@"; do
+      intact "$base/flake.lock" flake.lock "$n" ||
+        { echo "pin-fix: moving $n changes what it follows, or adds a nixpkgs" >&2; return 1; }
+    done
     # 3 = the move applied cleanly and only the gate said no.
     [ "$gate" = 0 ] || "$here/eval-gate.sh" --batch-only || return 3
   }
@@ -242,6 +263,8 @@ run() {
     elif [ "$rc" = 3 ] &&
       nix path-info --derivation --no-eval-cache ".#${m_probe[$m]}" >/dev/null 2>&1; then
       notes+=("- \`$m\`: moving it fixes \`${m_probe[$m]}\`, but other targets still fail (compare: https://github.com/${m_repo[$m]}/compare/${m_old[$m]}...${m_new[$m]})")
+    elif [ "$rc" = 1 ]; then
+      notes+=("- \`$m\`: refused: the move could not be applied safely (lock, moved-set or follows check; see the run log)")
     elif [ "$rc" != skip ]; then
       notes+=("- \`$m\`: moving it alone does not make every target evaluate")
     else
@@ -257,7 +280,8 @@ run() {
         cand=()
         local c
         for c in "${cur[@]}"; do [ "$c" = "$m" ] || cand+=("$c"); done
-        [ "${#cand[@]}" -gt 0 ] || continue
+        # A single move already failed alone in the loop above.
+        [ "${#cand[@]}" -gt 1 ] || continue
         if apply 1 "${cand[@]}"; then cur=("${cand[@]}"); fi
       done
       final=("${cur[@]}")
@@ -310,7 +334,12 @@ case "${1:-}" in
     [ $# = 3 ] || die "usage: --moved BASE_LOCK NEW_LOCK"
     moved "$2" "$3"
     ;;
-  --only-nixpkgs) [ $# = 3 ] || die "usage: --only-nixpkgs MAIN_LOCK PR_LOCK"; only_nixpkgs "$2" "$3" ;;
+  --only-nixpkgs)
+    { [ $# = 3 ] || [ $# = 4 ]; } || die "usage: --only-nixpkgs MAIN_LOCK PR_LOCK [FILES]"
+    shift
+    only_nixpkgs "$@"
+    ;;
+  --intact) [ $# = 4 ] || die "usage: --intact BASE_LOCK NEW_LOCK INPUT"; intact "$2" "$3" "$4" ;;
   --sanitize) sanitize ;;
   --quote-subject) quote_subject ;;
   --table) table ;;

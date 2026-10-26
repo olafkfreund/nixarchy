@@ -26,6 +26,11 @@ case "$args" in
     [ "${GH_DRAFT:-false}" != fail ] || exit 1
     printf '%s\n' "${GH_DRAFT:-false}"
     ;;
+  *"--json autoMergeRequest"*)
+    # GH_ARMED=true|false|fail: is auto-merge armed on the PR.
+    [ "${GH_ARMED:-false}" != fail ] || exit 1
+    printf '%s\n' "${GH_ARMED:-false}"
+    ;;
   *"--json headSha"*)
     printf '%s\n' "deadbeef"
     ;;

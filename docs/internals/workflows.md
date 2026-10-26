@@ -313,20 +313,30 @@ It moves **nixpkgs only**, and only nixpkgs ever merges itself.
   merges itself.
 - **Promotion.** A later night whose bump evaluates updates that same branch
   with `draft: false`, then runs `gh pr ready`, which fails the job if it
-  cannot. Auto-merge is armed on the promoted PR as on a dated one.
+  cannot. Auto-merge is armed on the promoted PR as on a dated one. A
+  promoted PR that then goes red is no longer a draft, so later blocked nights
+  treat it as held and only comment on it; the review's three-day row is what
+  reports that stall.
 - **Ownership.** The branch is the job's to write only if it is absent, has no
   open PR, or has an open *draft* by the token's own identity whose every
   commit carries the job's trailer. Otherwise a person has taken it, and the
   job comments once per nixpkgs revision instead. If the state cannot be read
   the job fails rather than guess.
 - **The merge guard.** Before arming, the PR must change only `flake.lock`,
-  and its lock must equal main's apart from the root `nixpkgs` node
-  (`pin-fix.sh --only-nixpkgs`).
+  and its lock must equal its merge base's apart from the root `nixpkgs` node
+  (`pin-fix.sh --only-nixpkgs`, with the file list from GitHub's compare, since
+  the checkout is shallow). Auto-merge is bound to that head
+  (`--match-head-commit`), and `copilot-handoff.sh` takes it off a nixpkgs
+  bump before Copilot pushes to it.
+- **Failure kinds.** `eval-gate.sh` exits 2, failing the job, when its lists
+  cannot be read or every failure is a fetch error: the network, not upstream.
+  A pin-fix that crashes still opens the draft with nixpkgs alone, then fails
+  the job so the review sees it.
 - **Time.** The job has 45 minutes; `pin-fix.sh` stops trying new moves 28
   minutes in, so a draft still opens.
 - **Watching it.** `review.yml` reports `flake-update.yml` and a blocked draft
   older than three days (`nix run .#review`). `copilot-handoff.yml` skips
-  drafts.
+  drafts, and PRs from a fork never count as the blocked draft.
 
 ---
 

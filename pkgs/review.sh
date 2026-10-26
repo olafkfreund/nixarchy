@@ -231,7 +231,7 @@ rev_row() {
         return 0
       fi
       days=$(((now - oldest_epoch) / 86400))
-      if [ "$owner" != olafkfreund ] && [ "$days" -gt 7 ]; then
+      if [ "${owner,,}" != olafkfreund ] && [ "$days" -gt 7 ]; then
         finding "$name" "$have" "$branch" "$ahead commits behind $branch since ${oldest%%T*}"
       else
         ok "$name" "$have" "${pre}$ahead behind $branch"

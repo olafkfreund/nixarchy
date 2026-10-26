@@ -33,6 +33,28 @@ if [ "$draft" = true ]; then
   exit 0
 fi
 
+# A nixpkgs bump merges itself only while it moves nixpkgs alone, and
+# flake-update.yml judged one sha. Copilot's fix is a head nobody judged, so
+# auto-merge comes off first and a person merges it (#1459). Fail safe again.
+case "$BRANCH" in
+  update/nixpkgs-*)
+    if ! armed=$(gh pr view "$pr" --repo "$REPO" --json autoMergeRequest -q '.autoMergeRequest != null'); then
+      msg="#$pr: cannot read its auto-merge state -- not handed off"
+      echo "$msg"; echo "$msg" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
+      exit 0
+    fi
+    if [ "$armed" = true ]; then
+      if [ "${DRY_RUN:-}" = 1 ]; then
+        echo "would disable auto-merge on #$pr"
+      elif ! gh pr merge "$pr" --repo "$REPO" --disable-auto; then
+        msg="#$pr: could not disable auto-merge -- not handed off"
+        echo "$msg"; echo "$msg" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
+        exit 0
+      fi
+    fi
+    ;;
+esac
+
 sha=$(gh run view "$RUN_ID" --repo "$REPO" --json headSha -q .headSha)
 comments=$(gh pr view "$pr" --repo "$REPO" --json comments -q '[.comments[].body]')
 if jq -e --arg s "sha=$sha" 'any(.[]; contains($s))' <<<"$comments" >/dev/null; then

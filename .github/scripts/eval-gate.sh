@@ -41,16 +41,27 @@ if pi "${targets[@]}" >/dev/null; then exit 0; fi
 [ "$batch_only" = 1 ] && exit 1
 
 [ -z "${EVAL_GATE_LOG_DIR:-}" ] || mkdir -p "$EVAL_GATE_LOG_DIR"
-failed=0
+failed=0 nfail=0 fetchfail=0
 for t in "${targets[@]}"; do
   err=$(pi "$t" 2>&1 >/dev/null) && continue
   failed=1
+  nfail=$((nfail + 1))
+  if printf '%s\n' "$err" | grep -qiE 'unable to download|HTTP error [0-9]+|Could not resolve host|SSL (connect )?error|Connection (timed out|refused|reset)|timeout was reached'; then
+    fetchfail=$((fetchfail + 1))
+  fi
   [ -z "${EVAL_GATE_LOG_DIR:-}" ] || printf '%s\n' "$err" >"$EVAL_GATE_LOG_DIR/$(printf '%s' "$t" | tr '/#' '__').log"
   msg=$(printf '%s\n' "$err" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' |
     awk '/^[ \t]*error:/ { blk = "" } { blk = blk " " $0 } END { print blk }' |
     tr -s ' \t' ' ' | sed 's/^ //' | cut -c1-300)
   printf '%s\t%s\n' "$t" "$msg"
 done
+# Every failure a fetch that did not complete is the network, not upstream
+# (AGENTS.md section 13: `unable to download` means a fetch was tried and
+# failed). Callers must not turn that into a blocked-bump draft.
+if [ "$failed" = 1 ] && [ "$fetchfail" = "$nfail" ]; then
+  echo "eval-gate: every failure is a fetch error; treating it as infrastructure" >&2
+  exit 2
+fi
 [ "$failed" = 1 ] && exit 1
 echo "eval-gate: batch failed but no single target does" >&2
 exit 2

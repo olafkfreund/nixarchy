@@ -125,6 +125,19 @@ pkgs.runCommand "nixarchy-pin-fix"
     bash $P --only-nixpkgs $L mv.lock;   expect "only-nixpkgs microvm" "1" "$?"
     bash $P --only-nixpkgs $L npmv.lock; expect "only-nixpkgs nixpkgs+microvm" "1" "$?"
     bash $P --only-nixpkgs $L ren.lock;  expect "only-nixpkgs renamed node" "1" "$?"
+    printf 'flake.lock\n' > files-lock; printf 'flake.lock\nflake.nix\n' > files-more; : > files-none
+    bash $P --only-nixpkgs $L np.lock files-lock; expect "only-nixpkgs files lock" "0" "$?"
+    bash $P --only-nixpkgs $L np.lock files-more; expect "only-nixpkgs files +flake.nix" "1" "$?"
+    bash $P --only-nixpkgs $L np.lock files-none; expect "only-nixpkgs files none" "1" "$?"
+
+    # ---- --intact: a moved input keeps what it follows, and brings no nixpkgs
+    jq '.nodes.microvm.inputs.nixpkgs = "nixpkgs_9" | .nodes.nixpkgs_9 = .nodes.nixpkgs_2' mvs.lock > own.lock
+    jq '.nodes.microvm.inputs.nixpkgs = ["nixpkgs-stable"]' mvs.lock > refollow.lock
+    bash $P --intact $L mvs.lock microvm;      expect "intact microvm + spectrum" "0" "$?"
+    bash $P --intact $L own.lock microvm;      expect "intact own nixpkgs" "1" "$?"
+    bash $P --intact $L refollow.lock microvm; expect "intact follows changed" "1" "$?"
+    jq '.nodes.nixpkgs_9 = .nodes.nixpkgs_2 | .nodes.spectrum.inputs = {nixpkgs: "nixpkgs_9"}' mvs.lock > deep.lock
+    bash $P --intact $L deep.lock microvm;     expect "intact nixpkgs added below" "1" "$?"
 
     # ---- --sanitize and --quote-subject. The markers are built from parts so
     # this file never holds one (AGENTS.md section 8).

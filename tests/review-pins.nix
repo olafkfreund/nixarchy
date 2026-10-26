@@ -300,6 +300,14 @@ pkgs.runCommand "nixarchy-review-pins"
       microvm microvm-nix $SHA 30 main diverged 4 ""
     revrow "| microvm | 012345678 (30d) | not comparable | ok |" \
       microvm microvm-nix $SHA 30 "" "" "" ""
+    # The boundary: more than 7 whole days is a finding, 7 days 23 hours is not.
+    revrow "| microvm | 012345678 (30d) | 5 behind main | ok |" \
+      microvm microvm-nix $SHA 30 main ahead 5 2026-09-06T13:00:00Z
+    revrow "| microvm | 012345678 (30d) | main | **5 commits behind main since 2026-09-06** |" \
+      microvm microvm-nix $SHA 30 main ahead 5 2026-09-06T12:00:00Z
+    # GitHub owner names are case-insensitive.
+    revrow "| microvm | 012345678 (30d) | 42 behind main | ok |" \
+      microvm OlafKFreund $SHA 30 main ahead 42 2026-09-01T08:00:00Z
 
     # The held nixpkgs bump (#1459): a draft PR is a finding only once it has
     # sat for more than three days.
@@ -318,6 +326,9 @@ pkgs.runCommand "nixarchy-review-pins"
     }
     blockedrow "| nixpkgs bump | - | #7 | **nixpkgs bump blocked since 2026-09-10, #7** |" 7 2026-09-10T11:00:00Z 0
     blockedrow "| nixpkgs bump | - | blocked since 2026-09-13, #7 | ok |" 7 2026-09-13T11:00:00Z 0
+    # The boundary: 3 days 23 hours is not yet a finding, 4 days is.
+    blockedrow "| nixpkgs bump | - | blocked since 2026-09-10, #7 | ok |" 7 2026-09-10T13:00:00Z 0
+    blockedrow "| nixpkgs bump | - | #7 | **nixpkgs bump blocked since 2026-09-10, #7** |" 7 2026-09-10T12:00:00Z 0
     blockedrow "| nixpkgs bump | - | no blocked bump | ok |" "" "" 0
     blockedrow "| nixpkgs bump | - | - | **cannot read pull requests** |" "" "" 1
 

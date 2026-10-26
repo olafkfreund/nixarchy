@@ -219,6 +219,7 @@ jobs:
             echo unfixed > "$PIN_FIX_OUT/status"
             : > "$PIN_FIX_OUT/moved"
             echo "pin-fix did not finish; see the run log." > "$PIN_FIX_OUT/body.md"
+            echo "crashed=true" >> "$GITHUB_OUTPUT"
           fi
           {
             echo "status=$(cat "$PIN_FIX_OUT/status")"
@@ -251,8 +252,11 @@ jobs:
             2) exists=false ;;
             *) unreadable ;;
           esac
-          pr=$(gh pr list --head "$branch" --state open --json number,isDraft,author,state \
-            -q '.[0] // null | if . == null then null else {number, isDraft, author: .author.login, state} end') || unreadable
+          # --head matches the branch NAME, so a fork's PR could answer; only
+          # a PR from this repository's own branch counts.
+          pr=$(gh pr list --head "$branch" --state open --json number,isDraft,author,state,isCrossRepository \
+            -q '[.[] | select(.isCrossRepository | not)] | .[0] // null
+              | if . == null then null else {number, isDraft, author: .author.login, state} end') || unreadable
           commits='[]'
           if [ "$exists" = true ]; then
             commits=$(gh api "repos/$GH_REPO/compare/main...$branch" \
@@ -494,12 +498,12 @@ jobs:
           # is shallow, so GitHub names the base and the files (three-dot).
           cmp=$(gh api "repos/$GH_REPO/compare/main...$sha")
           mb=$(jq -r .merge_base_commit.sha <<<"$cmp")
-          files=$(jq -r '.files[].filename' <<<"$cmp")
+          jq -r '.files[].filename' <<<"$cmp" > "$RUNNER_TEMP/files"
+          files=$(cat "$RUNNER_TEMP/files")
           git fetch --no-tags --depth=1 origin "$mb" "$sha"
           git show "$mb:flake.lock" > "$RUNNER_TEMP/m.lock"
           git show "$sha:flake.lock" > "$RUNNER_TEMP/p.lock"
-          if [ "$files" != "flake.lock" ] ||
-            ! ./.github/scripts/pin-fix.sh --only-nixpkgs "$RUNNER_TEMP/m.lock" "$RUNNER_TEMP/p.lock"; then
+          if ! ./.github/scripts/pin-fix.sh --only-nixpkgs "$RUNNER_TEMP/m.lock" "$RUNNER_TEMP/p.lock" "$RUNNER_TEMP/files"; then
             echo "::error::#$pr changes more than nixpkgs, so auto-merge is not armed." \
               "Files: $(echo "$files" | paste -sd' ')." \
               "Inputs moved: $(./.github/scripts/pin-fix.sh --moved "$RUNNER_TEMP/m.lock" "$RUNNER_TEMP/p.lock" | paste -sd' ')."
@@ -508,7 +512,10 @@ jobs:
 
           # Needs "Allow auto-merge" (Settings -> General). If it is off, fail
           # here and say so: the PR is open and safe to merge by hand.
-          if ! gh pr merge "$pr" --auto --squash --delete-branch; then
+          # Bound to the head judged above: a later push is not what passed
+          # the guard. copilot-handoff.sh also takes auto-merge off a nixpkgs
+          # bump before Copilot pushes to it.
+          if ! gh pr merge "$pr" --auto --squash --delete-branch --match-head-commit "$sha"; then
             echo "::error::could not arm auto-merge on #$pr -- most likely" \
               "'Allow auto-merge' is off in the repository settings. The PR" \
               "is open and waiting; merge it by hand once its checks pass."
@@ -536,6 +543,15 @@ jobs:
           fi
           echo "auto-merge armed for the nixpkgs bump (#$pr, $n check runs under way)" \
             >> "$GITHUB_STEP_SUMMARY"
+
+      # Last, so the draft has already opened: a pin-fix that crashed still
+      # cost only the proposal, but a run that stays green would hide a
+      # pin-fix that is broken for good from the review's ci row.
+      - name: Fail the run if pin-fix crashed
+        if: steps.pinfix.outputs.crashed == 'true'
+        run: |
+          echo "::error::pin-fix.sh did not finish; the draft carries nixpkgs alone. Read the 'Try the allowlisted inputs' step."
+          exit 1
 
       - name: Say so when there was nothing to do
         if: steps.bump.outputs.changed != 'true'

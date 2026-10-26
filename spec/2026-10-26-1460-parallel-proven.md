@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1460
 intent: intent/2026-10-26-1460-parallel-proven.md
 ---

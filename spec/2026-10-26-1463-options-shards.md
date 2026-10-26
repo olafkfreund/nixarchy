@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1463
 intent: intent/2026-10-26-1463-options-shards.md
 ---

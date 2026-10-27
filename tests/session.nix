@@ -2486,7 +2486,12 @@ pkgs.testers.runNixOSTest {
         machine.sleep(2)
     assert status.get("locked"), f"owed does not see the session as locked: {status}"
 
-    lock_readings = shot_series("owe-lock")
+    # The lock screen blanks the display about 5s after locking, which can land
+    # inside the series; a blank is not playback, and the video has no black.
+    lock_readings = [r for r in shot_series("owe-lock") if not near_black(r)]
+    # Six readings 0.4s apart still span one 2s loop.
+    assert len(lock_readings) >= 6, (
+        f"the lock screen blanked before one video loop could be watched: {lock_readings}")
     lock_spread = spread(lock_readings)
     print(f"owe: lock screen series spread {lock_spread}")
 

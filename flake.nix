@@ -429,7 +429,7 @@
         ) boxImagePins
       );
 
-      omarchyVersion = "edge-20261026-58858ae";
+      omarchyVersion = "edge-20261027-58858ae";
 
       # home-manager, matched to whichever nixpkgs this is being evaluated
       # against (#525).

@@ -35,6 +35,7 @@ pkgs.runCommand "nixarchy-review-pins"
       # flake-pins.py reads flake.lock; review.sh --list-pins does not need it,
       # but they are checked together.
       python3
+      jq
     ];
   }
   ''
@@ -122,7 +123,7 @@ pkgs.runCommand "nixarchy-review-pins"
     # So `hyprland ref` is the assertion, not `hyprland rev`: if someone pins
     # it back to a commit, this fails and says why.
     # edge pins Omarchy by quattro commit, not by tag (#1278).
-    for want_line in "omarchy	rev" "sops-nix	rev" "hyprland	ref" "nixpkgs	ref"; do
+    for want_line in "omarchy	rev" "sops-nix	rev" "zen-browser	rev" "nix-skills	rev" "nix-index-database	ref" "hyprland	ref" "nixpkgs	ref"; do
       name=''${want_line%%	*}
       kind=''${want_line##*	}
       got=$(grep -E "^$name	" pins-flake.txt | cut -f2)
@@ -271,6 +272,87 @@ pkgs.runCommand "nixarchy-review-pins"
     cirow build.yml 30 finding "success''${T}2026-09-12T12:00:00Z" "| build.yml | 48h ago | last run passed | **but nothing has run for 48h** |"
     cirow build.yml 30 finding "failure''${T}2026-09-14T10:00:00Z" "| build.yml | 2h ago | failure | **read the run** |"
     cirow build.yml 30 finding "success''${T}yesterday-ish" "| build.yml | - | unreadable run |"
+
+    # A commit pin that is behind its upstream's default branch (#1459), with
+    # the clock fixed at $now. The first case is microvm today: someone
+    # else's repo, 42 commits ahead of us, the oldest of them 13 days old.
+    SHA=0123456789abcdef0123456789abcdef01234567
+    revrow() { # expected text, then NAME OWNER AT AGE BRANCH STATUS AHEAD OLDEST
+      local want=$1 got
+      shift
+      got=$(bash ${../pkgs/review.sh} --rev-row "$@" "$now" 2>&1)
+      case "$got" in
+        *"$want"*) ;;
+        *)
+          echo "review: rev row for '$*' was: $got" >&2
+          echo "  expected it to contain: $want" >&2
+          fail=1
+          ;;
+      esac
+    }
+    revrow "| microvm | 012345678 (30d) | main | **42 commits behind main since 2026-09-01** |" \
+      microvm microvm-nix $SHA 30 main ahead 42 2026-09-01T08:00:00Z
+    revrow "| microvm | 012345678 (30d) | 42 behind main | ok |" \
+      microvm olafkfreund $SHA 30 main ahead 42 2026-09-01T08:00:00Z
+    revrow "| microvm | 012345678 (30d) | 3 behind main | ok |" \
+      microvm microvm-nix $SHA 30 main ahead 3 2026-09-12T08:00:00Z
+    revrow "| microvm | 012345678 (30d) | at main | ok |" \
+      microvm microvm-nix $SHA 30 main identical 0 ""
+    revrow "| microvm | 012345678 (30d) | main | **pin is not on main** |" \
+      microvm microvm-nix $SHA 30 main diverged 4 ""
+    revrow "| microvm | 012345678 (30d) | not comparable | ok |" \
+      microvm microvm-nix $SHA 30 "" "" "" ""
+    # The boundary: more than 7 whole days is a finding, 7 days 23 hours is not.
+    revrow "| microvm | 012345678 (30d) | 5 behind main | ok |" \
+      microvm microvm-nix $SHA 30 main ahead 5 2026-09-06T13:00:00Z
+    revrow "| microvm | 012345678 (30d) | main | **5 commits behind main since 2026-09-06** |" \
+      microvm microvm-nix $SHA 30 main ahead 5 2026-09-06T12:00:00Z
+    # GitHub owner names are case-insensitive.
+    revrow "| microvm | 012345678 (30d) | 42 behind main | ok |" \
+      microvm OlafKFreund $SHA 30 main ahead 42 2026-09-01T08:00:00Z
+
+    # The live compare, reduced (#1459): the oldest commit we lack is the
+    # earliest dated at or after the pin, not the topologically first, which
+    # can be an old branch merged later (microvm read 2026-06-23 for a
+    # September pin). A body that is not a compare fails, and says nothing.
+    ctsv() { # expected, pin, compare JSON
+      local got rc=0
+      got=$(printf '%s' "$3" | bash ${../pkgs/review.sh} --compare-tsv "$2" 2>&1) || rc=$?
+      [ "$got|$rc" = "$1" ] || { echo "review: compare-tsv gave '$got|$rc', expected '$1'" >&2; fail=1; }
+    }
+    c() { printf '{"commit":{"committer":{"date":"%s"}}}' "$1"; }
+    ctsv "ahead''${T}3''${T}2026-09-06T10:00:00Z|0" 2026-09-05T00:00:00Z \
+      "{\"status\":\"ahead\",\"ahead_by\":3,\"commits\":[$(c 2026-06-23T00:00:00Z),$(c 2026-09-06T10:00:00Z),$(c 2026-09-10T00:00:00Z)]}"
+    ctsv "ahead''${T}1''${T}2026-08-01T00:00:00Z|0" 2026-09-05T00:00:00Z \
+      "{\"status\":\"ahead\",\"ahead_by\":1,\"commits\":[$(c 2026-08-01T00:00:00Z)]}"
+    ctsv "identical''${T}0''${T}|0" 2026-09-05T00:00:00Z '{"status":"identical","ahead_by":0,"commits":[]}'
+    case "$(printf '%s' '{"message":"Not Found"}' | bash ${../pkgs/review.sh} --compare-tsv 2026-09-05T00:00:00Z 2>&1; echo "|$?")" in
+      "|0") echo "review: compare-tsv accepted a 404 body" >&2; fail=1 ;;
+      *Cannot*) echo "review: compare-tsv printed jq's error on a 404 body" >&2; fail=1 ;;
+    esac
+
+    # The held nixpkgs bump (#1459): a draft PR is a finding only once it has
+    # sat for more than three days.
+    blockedrow() { # expected text, then NUMBER CREATED APIERR
+      local want=$1 got
+      shift
+      got=$(bash ${../pkgs/review.sh} --blocked-row "$1" "$2" "$now" "$3" 2>&1)
+      case "$got" in
+        *"$want"*) ;;
+        *)
+          echo "review: blocked row for '$*' was: $got" >&2
+          echo "  expected it to contain: $want" >&2
+          fail=1
+          ;;
+      esac
+    }
+    blockedrow "| nixpkgs bump | - | #7 | **nixpkgs bump blocked since 2026-09-10, #7** |" 7 2026-09-10T11:00:00Z 0
+    blockedrow "| nixpkgs bump | - | blocked since 2026-09-13, #7 | ok |" 7 2026-09-13T11:00:00Z 0
+    # The boundary: 3 days 23 hours is not yet a finding, 4 days is.
+    blockedrow "| nixpkgs bump | - | blocked since 2026-09-10, #7 | ok |" 7 2026-09-10T13:00:00Z 0
+    blockedrow "| nixpkgs bump | - | #7 | **nixpkgs bump blocked since 2026-09-10, #7** |" 7 2026-09-10T12:00:00Z 0
+    blockedrow "| nixpkgs bump | - | no blocked bump | ok |" "" "" 0
+    blockedrow "| nixpkgs bump | - | - | **cannot read pull requests** |" "" "" 1
 
     [ "$fail" -eq 0 ] || exit 1
 

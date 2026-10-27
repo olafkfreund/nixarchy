@@ -28,7 +28,7 @@ gh run watch                          # follow the newest run
 | `omarchy.yml` | 04:00 UTC | hosted | is there a new Omarchy? |
 | `update.yml` | 05:00 UTC | hosted | are the vendored tools behind? |
 | `review.yml` | 06:00 UTC | hosted | write the state into the review issue |
-| `flake-update.yml` | 07:00 UTC | hosted | bump the flake inputs |
+| `flake-update.yml` | 07:00 UTC | hosted | bump nixpkgs; draft a fix when it breaks a pinned input |
 | `release.yml` | a `v*` tag | **self-hosted** | build and publish the images |
 | `wiki.yml` | `docs/internals/**` | hosted | mirror these pages |
 | `copilot-setup-steps.yml` | Copilot | hosted | agent environment |
@@ -101,15 +101,13 @@ and data from drifting:
 | Verify every desktop entry's command resolves | a launcher entry that does nothing |
 
 ### `devenv-presets`, `apps`, `system`, `box`
-`system` is the big one, and since #1341 it is three jobs. `system-build`
-builds the VM and installed-machine closures, pushes them to cachix, runs the
-session check and enforces the cache budget. `system-checks` runs the MicroVM
+`system` is the big one, and since #1341 it is four jobs. `system-build`
+builds the VM and installed-machine closures, pushes them to cachix and
+enforces the cache budget. `system-session` runs the session check (#1461). `system-checks` runs the MicroVM
 and box templates and the option, integration, coexist, installer-screen and
-plugin checks. `system` itself only passes when both halves did, so branch
+plugin checks. `system` itself only passes when all three did, so branch
 protection still names one context. They run in parallel because a nixpkgs bump
-has no proofs and one job timed out at 45 minutes (#1332). Both halves build
-`hypr-rdp` on a bump, `system-checks` because `checks.options` takes it as an
-input. `box` needs `/dev/kvm` and fails loudly at
+has no proofs and one job timed out at 45 minutes (#1332). `box` needs `/dev/kvm` and fails loudly at
 its first step if the runner does not have it.
 
 ---
@@ -205,7 +203,7 @@ in the checks:
 | `microvm` | boot a MicroVM on the `-tcg` runner |
 | `install-iso` | build the ISO, report its size, check both images are inside their budgets, **install from it with no network device present**, then install from the network ISO |
 | `cache` | does cachix hold what `main` last built? **main only** — the omarchy derivation depends on the flake's own rev, so on a branch it probes a path nobody pushed and 404s by construction |
-| `canary` | resolve every input the way a user would tomorrow, and check their machine still evaluates |
+| `canary` | resolve every input the way a user would tomorrow, and run `eval-gate.sh` (every cached output and each pin-fix probe) against it |
 | `report` | open or update an issue when something failed |
 
 `install-iso` is the one that proves the offline image: it installs with **no
@@ -290,9 +288,53 @@ nix run .#review        # the same table, locally
 ## `flake-update.yml` — 07:00 UTC, the inputs
 
 *What the apps are on today* → *Move the pin* → *What the apps would be on* →
-*What actually moved* → *Both toplevels still evaluate* → PR with auto-merge
-armed, both through `BUMP_TOKEN` for the reason given under `omarchy.yml`. It
-says so explicitly when there was nothing to do.
+*What actually moved* → *Every cached output still evaluates* → (on a break)
+*Try the allowlisted inputs* → *Who holds the blocked branch* → one of: the
+blocked draft, the promotion of that draft, or a dated PR → *Arm auto-merge*,
+all through `BUMP_TOKEN` for the reason given under `omarchy.yml`. It says so
+explicitly when there was nothing to do.
+
+It moves **nixpkgs only**, and only nixpkgs ever merges itself.
+
+- **The gate** is `eval-gate.sh`: the `drvPath` of every output
+  `cache-allowlist.sh` names plus the probe target of each input in
+  `data/pin-fix.nix`. Evaluation only, about two minutes. Exit 2 means the
+  gate could not run and fails the job; a target that does not evaluate does
+  not.
+- **A break** opens a **draft** on the constant branch
+  `update/nixpkgs-blocked`, with the failing targets in a table. Before it,
+  `pin-fix.sh` tries each input in the table, moved to its upstream default
+  branch, from the nixpkgs-only baseline. The first single move that makes the
+  batch evaluate is proposed; if none does alone, all together, then
+  minimised. A move is refused unless the pin is strictly ahead of the default
+  branch by 1 to 100 commits and the repository is not ours. The draft never
+  merges itself.
+- **Promotion.** A later night whose bump evaluates updates that same branch
+  with `draft: false`, then runs `gh pr ready`, which fails the job if it
+  cannot. Auto-merge is armed on the promoted PR as on a dated one. A
+  promoted PR that then goes red is no longer a draft, so later blocked nights
+  treat it as held and only comment on it; the review's three-day row is what
+  reports that stall.
+- **Ownership.** The branch is the job's to write only if it is absent, has no
+  open PR, or has an open *draft* by the token's own identity whose every
+  commit carries the job's trailer. Otherwise a person has taken it, and the
+  job comments once per nixpkgs revision instead. If the state cannot be read
+  the job fails rather than guess.
+- **The merge guard.** Before arming, the PR must change only `flake.lock`,
+  and its lock must equal its merge base's apart from the root `nixpkgs` node
+  (`pin-fix.sh --only-nixpkgs`, with the file list from GitHub's compare, since
+  the checkout is shallow). Auto-merge is bound to that head
+  (`--match-head-commit`), and `copilot-handoff.sh` takes it off a nixpkgs
+  bump before Copilot pushes to it.
+- **Failure kinds.** `eval-gate.sh` exits 2, failing the job, when its lists
+  cannot be read or every failure is a fetch error: the network, not upstream.
+  A pin-fix that crashes still opens the draft with nixpkgs alone, then fails
+  the job so the review sees it.
+- **Time.** The job has 45 minutes; `pin-fix.sh` stops trying new moves 28
+  minutes in, so a draft still opens.
+- **Watching it.** `review.yml` reports `flake-update.yml` and a blocked draft
+  older than three days (`nix run .#review`). `copilot-handoff.yml` skips
+  drafts, and PRs from a fork never count as the blocked draft.
 
 ---
 

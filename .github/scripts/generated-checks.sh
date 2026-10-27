@@ -30,6 +30,10 @@ system=${NIXARCHY_SYSTEM:-x86_64-linux}
 # claim that is CHECKED by build.yml in both directions, so the list cannot rot
 # into fiction.
 #
+# options-shards is deliberately NOT here: it reads names only and takes
+# seconds, so the generated step builds it on every pull request. The four
+# others are the `options` job's matrix in build.yml (#1463).
+#
 # wifi-hwsim is a nixosTest and needs /dev/kvm. The generated step runs in the
 # omarchy job, which has no KVM setup -- the udev rule lives in `box` -- so
 # leaving it generated put a VM test in a job that cannot boot one. The
@@ -38,7 +42,8 @@ claimed="wifi-hwsim hibernate-resume install free-space installer-refusal
   install-encrypted install-iso install-iso-net iso-budget microvm-boot
   reinstall-vm
   box-boot box-template coexist coexistence dashboard-clock installer-ui
-  installer-wizard integration microvm-template options plugin
+  installer-wizard integration microvm-template
+  options-system options-home options-microvm options-files plugin
   reference-toplevel session try-nixarchy vm-toplevel"
 
 # Two are covered by a path the grep in build.yml cannot see, and are listed

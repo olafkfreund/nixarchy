@@ -518,16 +518,27 @@ jobs:
 
       - name: Their machine still evaluates
         run: |
-          # drvPath forces the full evaluation of the system closure --
-          # every module, every package in systemPackages, every input the
-          # flake reaches for -- which is exactly the surface #320 broke on.
-          # Both hosts, because they diverge: vm is what checks boot,
-          # reference is what the installer writes.
-          nix eval --raw .#checks.x86_64-linux.vm-toplevel.drvPath
-          echo
-          nix eval --raw .#checks.x86_64-linux.reference-toplevel.drvPath
-          echo
-          echo "both toplevels evaluate against tomorrow's inputs"
+          # drvPath of every output the binary cache holds, plus the probe
+          # target of each input in data/pin-fix.nix -- the same set
+          # flake-update.yml gates a nixpkgs bump on, so the canary and the
+          # bump cannot disagree about what "evaluates" means (#1459). That
+          # forces the full evaluation of both system closures (vm is what
+          # checks boot, reference is what the installer writes) and every
+          # input the flake reaches for, which is the surface #320 broke on.
+          # Non-zero fails the job, as before: exit 1 names the failing
+          # targets, exit 2 means the gate itself could not run.
+          set -euo pipefail
+          rc=0
+          ./.github/scripts/eval-gate.sh | tee "$RUNNER_TEMP/fail.tsv" || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "### canary: targets that do not evaluate against tomorrow's inputs"
+              echo
+              ./.github/scripts/pin-fix.sh --table < "$RUNNER_TEMP/fail.tsv"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$rc"
+          fi
+          echo "every cached output and probe evaluates against tomorrow's inputs"
 
   # The one real run of `nixarchy pkg new`. tests/pkg-new.nix drives the same
   # script against STUB nix-init and nix, because a sandboxed derivation has

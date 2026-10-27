@@ -70,9 +70,9 @@ false`) rather than relying on rate limiting.
 
 ## Remote desktop
 
-Serving the Hyprland session over RDP is off, and turning it on is a security
-decision with more than one part — what listens, on which interface, and where
-the password comes from. [Remote desktop](remote-desktop) is that page.
+gliff, the remote desktop, goes over SSH and opens no port of its own: your SSH
+key is the authentication, so the SSH advice above is the whole story.
+[Remote desktop](remote-desktop) is that page.
 
 ## Fingerprint and FIDO2
 

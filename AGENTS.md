@@ -396,6 +396,24 @@ Two other ways a check stops checking, both found in one week:
   conclusion** — `gh pr view --json mergeStateStatus` on a throwaway PR is
   the whole experiment.
 
+- **A gate that evaluates a subset of what ships cannot see a break outside
+  it, and a refusal nobody hears about stalls for good.** The nightly nixpkgs
+  bump evaluated `vm-toplevel` and `reference-toplevel`. A bump removed an
+  option `microvm.nix` (a commit pin) sets, which broke all 18 `microvm-*`
+  runners and neither toplevel -- the same hole as sops-nix in #1030, where
+  `vm-toplevel` does not reach `hypr-rdp-builds` (now `sops-evaluates`, #1462). The narrow gate passed,
+  the pull request opened, and its CI went red with the fix left to a human.
+  Widening the gate alone would have made it worse: a refusal exited 0 and
+  opened nothing, so the bump would have stopped and nobody been told
+  (#1457, #1459). So:
+  the bump is gated on every output in `cache-allowlist.sh` plus the probe
+  target of each input in `data/pin-fix.nix`, and a refusal is a **draft pull
+  request** (`update/nixpkgs-blocked`) that the review reports once it is three
+  days old. A job that times out can also hide a real failure under
+  `cancelled` (§6): #1457's `omarchy` job hit its limit with
+  `checks.bus-mcp` already failed inside it, so read the log for failed builds
+  before calling a timeout slowness.
+
 ## 5. Git and flake mechanics that bite
 
 - **A heredoc inside an indented Nix string reindents the whole file.**
@@ -555,7 +573,8 @@ your question:
 
 | check | what it proves | cost |
 |---|---|---|
-| `options` | every option asserted in both states | evaluation only, but ~8 min and 11.5 GB of RSS |
+| `options-system`, `options-home`, `options-microvm`, `options-files` | every option asserted in both states, as four parallel shards (#1463): three cut by fixture family, `files` is everything that is not a case | evaluation only; peak RSS per shard is measured, not guessed (the whole check was ~11.5 GB) |
+| `options-shards` | every case is in exactly one shard | names only, seconds |
 | `package-delta`, `config-delta`, `patched-files`, `release-notes`, `review-pins` | scripts against fixtures | seconds |
 | `vm-toplevel`, `reference-toplevel` | the closures build | eval plus a fetch |
 | `omarchy` (package) | the vendored tree assembles | minutes |
@@ -574,7 +593,7 @@ requests included, and on 2026-09-15 that evicted every KVM MicroVM runner and
 (#697). Now:
 
 - every `cachix-action` has `skipPush: true`, and a guard fails otherwise;
-- closures are pushed only from `main`, and only what
+- closures are pushed from `main`, and from the newest dated `update/nixpkgs-*` bump branches minus commit-specific paths (#1461; the free tier evicts by last download, so an unmerged bump goes first), and only what
   `.github/scripts/cache-allowlist.sh` names, each entry with the reason someone
   downloads it. One entry is there for availability rather than build cost:
   the box checks' pinned base images, because Docker Hub is not ours (#788, #800);
@@ -688,7 +707,7 @@ the other side — **a guest-side timeout is a hidden concurrency limit**, and
 host-side timeouts scale with the box while guest-side ones do not.
 
 **And "I am only measuring it" is the same load.** The rule above reads as
-being about VM checks, so six runs of `checks.options` -- an *evaluation*
+being about VM checks, so six runs of `checks.options` (now four `options-*` shards) -- an *evaluation*
 check, the cheap row in the table -- were filed under measurement rather than
 under building, and started anyway. They peak at **11.5 GB of RSS each**.
 What makes a local build disruptive is the memory and the cores it takes from
@@ -732,7 +751,7 @@ seconds-long checks. So:
 |---|---|
 | cheap: `runCommand`, static, evaluation-only, and their break proofs | any time, **one at a time** under `flock /mnt/data/vmtest/codex-build.lock` |
 | a package build that is not cheap (the `omarchy` tree, say) | no p620 system build running, and the 1-minute load below 12, and no `install check` `install` job or `omarchy-edge` `verify` job in flight (#1365). Other in-flight CI does not block it |
-| a VM check, or `checks.options` | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
+| a VM check, or an options case shard or `options-files` (`options-shards` is cheap) | only with nothing in flight: `gh run list --limit 8 --json status -q '[.[]\|select(.status!="completed")]\|length'` prints `0`. Otherwise leave it to CI |
 
 "Is a p620 build running" has a trap of its own. `pgrep -f
 'nixosConfigurations.p620'` also matches every `nixd` language server (its
@@ -772,6 +791,16 @@ govern builds, not deploys.
   meant for one throwaway VM, also names every CI install VM on p620. It did no
   harm only because those run as `nixbld` users and the command ran without
   root. Kill the pid you started, and nothing else.
+
+**Three of the four ways to measure parallel memory gave a wrong answer
+(#1460).** `/usr/bin/time -f %M` reports the largest single process, not
+the sum of the workers. `free` on a desktop also counts everything else the
+user is running. A cgroup's `memory.peak` includes file cache, which is
+reclaimable. And nix evaluation reads the store heavily, so the same run
+read 16.4 GB there and 11.6 GB anonymous. What runs a runner out of memory
+is the anonymous part. So run the measured command in its own scope
+(`systemd-run --user --scope`), and sample `anon` from that cgroup's
+`memory.stat`.
 
 ## 7. Code rules the repo has already written down
 
@@ -1072,10 +1101,13 @@ rediscovery: eighty lines above the code being read, the file already says
 out below was another evaluation of the same machine"*, followed by the three
 fixtures bound once each — #738's work.
 
-The same comment carried the number that made the proposal pointless. **One
-configuration measured 10.6 GB of RSS on its own, and the whole check peaks at
-11.5 GB**, so the duplicates cannot be simultaneously live and deduplicating
-them cannot move the peak. Both the technique and the evidence against using
+The same comment carried a number that looked decisive and was wrong: "10.6 GB
+of RSS on its own" was the whole check, not one configuration -- #747 measured
+about 1.7 GB each
+(https://github.com/olafkfreund/nixarchy/issues/747#issuecomment-5811288191),
+and #1463 corrected it. What holds is that live memory is
+set by the fixtures reachable at once, not by how many times a constructor is
+written out, so deduplicating the duplicates cannot move the peak. Both the technique and the evidence against using
 it for this were already written down, in the file being edited.
 
 So before proposing a change to a file, grep **that file** for the concept and

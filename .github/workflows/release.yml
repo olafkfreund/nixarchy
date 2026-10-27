@@ -76,7 +76,11 @@ jobs:
         env:
           TAG_INPUT: ${{ inputs.tag || github.ref_name }}
         run: |
-          if [[ ! "$TAG_INPUT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+          # An optional -rcN: while the flake vendors a release candidate
+          # (omarchyVersion 4.5.0-rc1), the check below derives the vendored
+          # version from the tag, so v4.5.0-rc1-1 is the only tag that can pass
+          # it, and release-candidate.sh proposes exactly that shape.
+          if [[ ! "$TAG_INPUT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?-[0-9]+$ ]]; then
             echo "::error::invalid release tag"
             exit 1
           fi

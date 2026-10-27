@@ -1093,6 +1093,17 @@ in
 
       sessionVariables.OMARCHY_PATH = omarchyPath;
 
+      # The cursor theme ai-mirror's widget switches to while an agent holds
+      # control (ai-mirror#78). Wherever we install that widget; a user on
+      # ai-mirror's own module gets the theme from it, like the widget (#710).
+      file.".local/share/icons/ai-mirror-agent" =
+        lib.mkIf (cfg.defaultPlugins.ai-mirror && !(config.programs.ai-mirror.enable or false))
+          {
+            source = "${
+              inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system}.cursor
+            }/share/icons/ai-mirror-agent";
+          };
+
       # Same reason as the NixOS module's copy: upstream's default screenshot
       # editor, tensaku-edit, is not in nixpkgs, so the Edit on the screenshot
       # notification was dead (#204). Set here too because this module is also

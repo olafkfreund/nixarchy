@@ -100,8 +100,9 @@ let
 
   # The three default fixtures, bound once each. Nix does not memoise a
   # function call, so every `(configWith { })` written out below was another
-  # evaluation of the same machine -- 50 of them across this file, and one
-  # measured 2m51s and 10.6 GB of RSS on its own (#738).
+  # evaluation of the same machine -- 50 of them across this file (#738). One
+  # configuration is about 1.7 GB (#747); the 10.6 GB this comment used to
+  # quote was the whole check, which is why it now runs as shards (#1463).
   #
   # They stay three. `homeOn` supplies a named NixOS configuration and
   # `homeWith` has no osConfig at all; collapsing them would delete the Mode A
@@ -618,7 +619,7 @@ let
   };
 
   # Each case is (what it should look like on, what it should look like off).
-  cases = {
+  casesA = {
     # #701: an installed machine keeps its flake inputs' sources in its closure,
     # or min-free's collection deletes them and an offline machine cannot
     # evaluate itself. The vm configuration imports installer/host.nix, so it is
@@ -743,6 +744,9 @@ let
       off = builtins.elem "flakes" (loaderOff.nix.settings.experimental-features or [ ]);
     };
 
+  };
+
+  casesB = {
     # ---- #623: the NixOS MCP server, in the agents that have one ---------
     #
     # All three in one case, because "off" has to be all of them and a
@@ -1086,6 +1090,9 @@ let
           ? nixarchyNeovimSpecs;
       off = defaultHome.home.activation ? nixarchyNeovimSpecs;
     };
+  };
+
+  casesC = {
     # ---- upstream's /etc overlay, the part of it that is installed ----------
     #
     # kitty's system half: the seeded ~/.config/kitty/kitty.conf is a stub whose
@@ -1207,6 +1214,9 @@ let
       c: c.virtualisation.docker.rootless.daemon.settings.log-opts.max-size or null
     ) "10m";
 
+  };
+
+  casesD = {
     # ---- nixi, on for everyone, and provably gone when told ----
     #
     # These are the reverse of every other case in this file, and the header's
@@ -1788,6 +1798,9 @@ let
       off = builtins.elem "claude" defaultHome.services.nixi.agents;
     };
 
+  };
+
+  casesE = {
     # ---- the free-space floor is the installer's, never an adopter's ----
     #
     # #583, and the correction that came with it: `programs.nh.clean` ALREADY
@@ -1970,36 +1983,26 @@ let
       off = loaderOff.programs.appimage.enable || loaderOff.programs.appimage.binfmt;
     };
 
-    # The unit itself, both ways. "off" is the half that matters: a nixarchy
-    # machine that never asked for remote desktop must have no RDP daemon
-    # declared for any user.
-    hyprRdpUnit = {
-      on = rdpOn.systemd.user.services ? hypr-rdp;
-      off = rdpOff.systemd.user.services ? hypr-rdp;
+    # hypr-rdp was removed in #1462. A host that still sets it must be told so
+    # at evaluation, with the migration text, and a host that never set it must
+    # see nothing (Mode A). Without the "off" half an assertion that always
+    # fires would pass.
+    hyprRdpRemoved = {
+      # nixpkgs' wording and ours: an empty replacement text would still
+      # pass the first.
+      on =
+        let
+          failed = failedAssertions (configBeside {
+            programs.nixarchy.services.hypr-rdp.enable = true;
+          });
+        in
+        mentions "no longer has any effect" failed && mentions "#1462" failed;
+      off = mentions "no longer has any effect" (failedAssertions defaultMachine);
     };
 
-    # And the sops template. Off, nothing renders -- which also keeps the
-    # sops-nix inertness the block above asserts true for everyone else.
-    hyprRdpTemplate = {
-      on = rdpOn.sops.templates ? "hypr-rdp.toml";
-      off = rdpOff.sops.templates ? "hypr-rdp.toml";
-    };
+  };
 
-    # openFirewall is its own decision and defaults to false, so enabling the
-    # service must NOT open 3389. "off" here is the whole promise of the
-    # option: the promoted path is the tailnet, which needs no firewall change.
-    hyprRdpFirewall = {
-      on = builtins.elem 3389 rdpFirewall.networking.firewall.allowedTCPPorts;
-      off = builtins.elem 3389 rdpOn.networking.firewall.allowedTCPPorts;
-    };
-
-    # The evaluation-time refusal, both ways. Without the "off" half this
-    # would pass just as well against an assertion that always fires.
-    hyprRdpAssertion = {
-      on = mentions "passwordSecret" (failedAssertions rdpNoSecret);
-      off = mentions "passwordSecret" (failedAssertions rdpOn);
-    };
-
+  casesF = {
     # ---- microvm: #221's inertness table, each row with a real off state --
     #
     # This is the check the PR body's "break it, watch it fail" argument is
@@ -2170,6 +2173,9 @@ let
           (configWith { browserThemeUser = null; }).systemd.tmpfiles.rules;
     };
 
+  };
+
+  casesG = {
     # ---- #622: the cache appears on the NVIDIA path and nowhere else ----
     cudaCacheSubstituter = {
       on = builtins.elem cudaUrl nvidiaHost.nix.settings.substituters;
@@ -2721,12 +2727,10 @@ let
 
   # ---- sops-nix, imported by everyone and doing nothing --------------
   #
-  # #155 adopted a declarative secrets mechanism because v0.1.5 accepted a
-  # password only inline in TOML or via `-p`. Pinned v0.1.7 also supports
-  # `password_file`; the current module still stages a secret with sops-nix
-  # and renders private TOML at service start. That decision put an upstream
-  # module into EVERY nixarchy machine, including
-  # every Mode A machine that will never declare a secret -- so what has to
+  # #155 adopted a declarative secrets mechanism (hypr-rdp, its first user,
+  # was removed in #1462; sops-nix stays, for nixarchy-secret). That decision
+  # put an upstream module into EVERY nixarchy machine, including every
+  # Mode A machine that will never declare a secret -- so what has to
   # be asserted is that the module is inert, not that it works.
   #
   # Inertness here is upstream's promise, not ours: sops-nix gates both
@@ -2755,69 +2759,9 @@ let
   hasSops =
     cfg: (cfg.systemd.services ? sops-install-secrets) || (cfg.system.activationScripts ? setupSecrets);
 
-  # ---- hypr-rdp, whose module is the only thing that refuses ----------
-  #
-  # hypr-rdp FAILS OPEN. v0.1.7, src/config.rs:364-424 warns and continues
-  # with no credentials, while src/server/auth/mod.rs:39-45 builds none for the
-  # server. A username with an empty inline password gets only a
-  # `HalfCredentials` warning. A missing or empty named password_file DOES
-  # fail in src/config.rs:536-581; that does not protect the other two paths.
-  #
-  # So every case below is measuring a refusal rather than a feature, and the
-  # halves that break quietly are the "off" ones: a unit that appears on a
-  # machine nobody enabled it on is an RDP daemon somebody did not ask for.
-  rdpSops = {
-    validateSopsFiles = false;
-    age.keyFile = "/var/lib/sops-nix/key.txt";
-    defaultSopsFile = ./options.nix;
-    secrets.rdp-password = { };
-  };
-
-  rdpOff = configBeside {
-    programs.nixarchy.user = "someone";
-    sops = rdpSops;
-  };
-
-  rdpOn = configBeside {
-    programs.nixarchy = {
-      user = "someone";
-      services.hypr-rdp = {
-        enable = true;
-        passwordSecret = "rdp-password";
-      };
-    };
-    sops = rdpSops;
-  };
-
-  rdpFirewall = configBeside {
-    programs.nixarchy = {
-      user = "someone";
-      services.hypr-rdp = {
-        enable = true;
-        passwordSecret = "rdp-password";
-        openFirewall = true;
-      };
-    };
-    sops = rdpSops;
-  };
-
-  # Enabled with no secret named. Read as a list of failed assertions rather
-  # than by forcing system.build.toplevel: the point is that THIS assertion
-  # fires, and a config that fails to build for some unrelated reason would
-  # look identical from outside.
-  rdpNoSecret = configBeside {
-    programs.nixarchy = {
-      user = "someone";
-      services.hypr-rdp.enable = true;
-    };
-    sops = rdpSops;
-  };
-
   failedAssertions = cfg: map (a: a.message) (builtins.filter (a: !a.assertion) cfg.assertions);
 
   mentions = needle: msgs: builtins.any (m: pkgs.lib.hasInfix needle m) msgs;
-
-  rdpUnitOf = cfg: cfg.systemd.user.services.hypr-rdp.serviceConfig or { };
 
   # ---- microvm, whose whole promise is that "off" leaves nothing --------
   #
@@ -3395,22 +3339,125 @@ let
     in
     pkgs.lib.concatStringsSep " " (map (n: builtins.seq c.${n} n) (builtins.attrNames c));
 
-  broken = pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) cases;
+  # The seven case regions above, cut at their section headers so that each
+  # fixture family is forced by one shard only (#1463). A case is in exactly
+  # one region and each region in exactly one shard; checks.options-shards
+  # fails otherwise, and deadnix fails a region listed nowhere.
+  caseRegions = [
+    casesA
+    casesB
+    casesC
+    casesD
+    casesE
+    casesF
+    casesG
+  ];
+  shardRegions = {
+    system = [
+      casesA
+      casesC
+      casesE
+      casesG
+    ];
+    home = [
+      casesB
+      casesD
+    ];
+    microvm = [ casesF ];
+  };
 
-  report = pkgs.lib.concatStringsSep "\n" (
-    pkgs.lib.mapAttrsToList (
-      name: c: "  ${name}: on=${builtins.toString c.on} off=${builtins.toString c.off}"
-    ) cases
-  );
+  mkCases = pkgs.lib.mergeAttrsList;
+  brokenOf = cs: pkgs.lib.filterAttrs (_: c: !(c.on && !c.off)) (mkCases cs);
+  reportOf =
+    cs:
+    pkgs.lib.concatStringsSep "\n" (
+      pkgs.lib.mapAttrsToList (
+        name: c: "  ${name}: on=${builtins.toString c.on} off=${builtins.toString c.off}"
+      ) (mkCases cs)
+    );
+
+  # One case shard: prints its own report, and fails if one of its options
+  # does not take effect both ways, or if a gate that lives with its fixtures
+  # (`problems`) is not empty.
+  mkShard =
+    name: cs: problems:
+    pkgs.runCommand "nixarchy-options-${name}"
+      {
+        report = reportOf cs;
+        problems = pkgs.lib.concatStringsSep "\n" problems;
+      }
+      (
+        if problems != [ ] then
+          ''
+            echo "a ${name} invariant does not hold:" >&2
+            echo "$problems" >&2
+            exit 1
+          ''
+        else if brokenOf cs == { } then
+          ''
+            echo "$report"
+            touch $out
+          ''
+        else
+          ''
+            echo "$report"
+            echo "these options do not take effect both ways: ${pkgs.lib.concatStringsSep " " (builtins.attrNames (brokenOf cs))}" >&2
+            echo "an option that cannot be turned off is not an option." >&2
+            exit 1
+          ''
+      );
+
+  shardSystem =
+    assert pkgs.lib.assertMsg (
+      pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
+      && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
+      && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy
+    ) "user unit cleanup missed an escaped normal home, included a system home, or lost wantedBy";
+    mkShard "system" shardRegions.system [ ];
+  shardHome = mkShard "home" shardRegions.home [ ];
+  shardMicrovm = mkShard "microvm" shardRegions.microvm microvmProblems;
+
+  # Names only: no case is evaluated, so this is seconds. Every case must be
+  # in exactly one shard, or a shard split silently drops or doubles coverage.
+  guard =
+    let
+      inherit (pkgs) lib;
+      names = rs: builtins.sort builtins.lessThan (builtins.concatMap builtins.attrNames rs);
+      defined = names caseRegions;
+      assigned = names (lib.concatLists (builtins.attrValues shardRegions));
+      twice = ns: lib.unique (builtins.filter (n: lib.count (m: m == n) ns > 1) ns);
+      list = ns: lib.concatStringsSep " " ns;
+      problems =
+        lib.optional (builtins.filter (n: !builtins.elem n assigned) defined != [ ])
+          "cases in no shard: ${list (builtins.filter (n: !builtins.elem n assigned) defined)}"
+        ++
+          lib.optional (builtins.filter (n: !builtins.elem n defined) assigned != [ ])
+            "cases in a shard but in no region: ${
+              list (builtins.filter (n: !builtins.elem n defined) assigned)
+            }"
+        ++
+          lib.optional (twice defined ++ twice assigned != [ ])
+            "cases in two shards: ${list (lib.unique (twice defined ++ twice assigned))}";
+    in
+    pkgs.runCommand "nixarchy-options-shards" { problems = lib.concatStringsSep "\n" problems; } (
+      if problems == [ ] then
+        ''
+          echo "${toString (builtins.length defined)} cases, each in exactly one shard"
+          touch $out
+        ''
+      else
+        ''
+          echo "the options shards do not partition the cases:" >&2
+          echo "$problems" >&2
+          exit 1
+        ''
+    );
 in
-assert pkgs.lib.assertMsg (
-  pkgs.lib.hasInfix (pkgs.lib.escapeShellArg unitLinkNormalHome) unitLinkActivation
-  && !(pkgs.lib.hasInfix unitLinkSystemHome unitLinkActivation)
-  && builtins.elem "graphical-session.target" defaultMachine.systemd.user.services.omarchy-sleep-lock.wantedBy
-) "user unit cleanup missed an escaped normal home, included a system home, or lost wantedBy";
-pkgs.runCommand "nixarchy-options"
+# files: everything that is not a case. The case shards are passthru.optionShards
+# (system, home, microvm, guard) so this expression keeps its indentation.
+
+pkgs.runCommand "nixarchy-options-files"
   {
-    inherit report;
     inherit menuFile vm;
     # #766: the helper rows and binds call, run for real below.
     pluginHelper = pkgs.callPackage ../pkgs/nixarchy-plugin.nix {
@@ -3466,7 +3513,6 @@ pkgs.runCommand "nixarchy-options"
     oursBinaries = pkgs.lib.concatStringsSep " " oursBinaries;
     serviceProblems = pkgs.lib.concatStringsSep "\n" serviceProblems;
     flatpakProblems = pkgs.lib.concatStringsSep "\n" flatpakProblems;
-    microvmProblems = pkgs.lib.concatStringsSep "\n" microvmProblems;
     flatpakCount = builtins.toString (builtins.length (builtins.attrNames flatpaks));
     flatpakRemotes = pkgs.lib.concatStringsSep " " flatpakRemotes;
     flatpakExplicitDisable = pkgs.lib.boolToString flatpakDisabled.services.flatpak.enable;
@@ -3489,15 +3535,6 @@ pkgs.runCommand "nixarchy-options"
     flatpakOurs = pkgs.lib.boolToString flatpakDefaults.ours;
     flatpakTheirs = pkgs.lib.boolToString flatpakDefaults.theirs;
     flatpakOn = pkgs.lib.boolToString flatpakDefaults.onWhenAsked;
-    # The two strings the unit is made of. Both carry store-path context, so
-    # naming them here is what makes the guard derivation an input of this
-    # check and therefore something the script below can actually run.
-    rdpGuard = (rdpUnitOf rdpOn).ExecStartPre or "";
-    rdpExecStart = (rdpUnitOf rdpOn).ExecStart;
-    rdpConditionUser = rdpOn.systemd.user.services.hypr-rdp.unitConfig.ConditionUser;
-    # The raw secret template as it exists in the store: only a placeholder.
-    rdpTemplateFile = rdpOn.sops.templates."hypr-rdp.toml".file;
-    rdpStagingPath = rdpOn.sops.templates."hypr-rdp.toml".path;
     # #623 and #630, as the activation scripts that would run on a real home.
     # Both carry store-path context -- the generated MCP configs and the
     # editor settings are derivations named inside them -- so naming them
@@ -3636,6 +3673,12 @@ pkgs.runCommand "nixarchy-options"
     splashUpstream = "${(pkgs.extend inputs.self.overlays.default).omarchy.src}/default/plymouth";
     serviceCount = builtins.toString (builtins.length (builtins.attrNames services));
     notApps = pkgs.lib.concatStringsSep " " notApps;
+    passthru.optionShards = {
+      system = shardSystem;
+      home = shardHome;
+      microvm = shardMicrovm;
+      inherit guard;
+    };
     nativeBuildInputs = [
       pkgs.python3
       # For the secrets round-trip below. A throwaway identity is generated
@@ -3659,15 +3702,8 @@ pkgs.runCommand "nixarchy-options"
         echo "$serviceProblems" >&2
         exit 1
       ''
-    else if microvmProblems != [ ] then
+    else
       ''
-        echo "a microvm invariant does not hold:" >&2
-        echo "$microvmProblems" >&2
-        exit 1
-      ''
-    else if broken == { } then
-      ''
-          echo "$report"
           echo "the services catalogue is well formed ($serviceCount entries)"
           echo "the flatpak catalogue is well formed ($flatpakCount entries)"
 
@@ -3704,118 +3740,6 @@ pkgs.runCommand "nixarchy-options"
             exit 1
           }
           echo "flatpaks are left alone unless the machine's owner asks"
-
-          # ---- hypr-rdp refuses, at both layers -------------------------
-          #
-          # Upstream does not refuse: given an empty password it logs a
-          # warning and serves the desktop. Everything here is checking that
-          # this repo does instead.
-
-          # 1. The password is never on a command line. /proc/*/cmdline is
-          #    world-readable, so `-p` would hand it to every process on the
-          #    machine -- which is exactly why the config file exists.
-          case "$rdpExecStart" in
-            *" -p "*|*"--password"*)
-              echo "the RDP password is passed on the command line:" >&2
-              echo "  $rdpExecStart" >&2
-              echo "/proc/*/cmdline is world-readable. Render it into the" >&2
-              echo "config file instead." >&2
-              exit 1 ;;
-          esac
-          case "$rdpExecStart" in
-            *"--config "*) ;;
-            *) echo "hypr-rdp is not pointed at the rendered config:" >&2
-               echo "  $rdpExecStart" >&2
-               echo "Without --config it reads ~/.config/hypr-rdp/config.toml," >&2
-               echo "tolerates its absence, and serves unauthenticated." >&2
-               exit 1 ;;
-          esac
-          echo "hypr-rdp is given a config file and never a password argument"
-
-          # 2. Only a placeholder is in the store; the raw secret is staged
-          #    under /run, then encoded into private TOML by ExecStartPre.
-          grep -Eq '^<SOPS:[^>]+>$' "$rdpTemplateFile" || {
-            echo "the RDP staging template is not a sops placeholder." >&2
-            echo "A password in that store file would be world-readable." >&2
-            exit 1
-          }
-          echo "the secret staging template holds a placeholder, not a password"
-
-          # 3. The unit belongs to one user. systemd.user.services is declared
-          #    for everybody; the rendered file is 0400 to one account.
-          [ "$rdpConditionUser" = "someone" ] || {
-            echo "the RDP unit is not conditioned on its user:" >&2
-            echo "  ConditionUser = $rdpConditionUser" >&2
-            exit 1
-          }
-
-          # 4. The runtime refusal, RUN rather than read. This is the layer an
-          #    assertion cannot reach: a secret that exists and renders empty,
-          #    or a template sops-nix failed to write, both evaluate fine and
-          #    would otherwise start a daemon that answers.
-          read -r guard staged public runtime <<< "$rdpGuard"
-          test -n "$guard" || {
-            echo "the RDP unit has no ExecStartPre." >&2
-            echo "Nothing writes the private config before hypr-rdp reads it," >&2
-            echo "and hypr-rdp itself does not check: an empty password gets a" >&2
-            echo "warning in the journal and a desktop on the network." >&2
-            exit 1
-          }
-          test -x "$guard" || { echo "no guard at $guard" >&2; exit 1; }
-          [ "$staged" = "$rdpStagingPath" ] || {
-            echo "the RDP guard does not read the rendered secret" >&2
-            exit 1
-          }
-          test -r "$public" || { echo "no public RDP config at $public" >&2; exit 1; }
-          [ "$runtime" = "%t/hypr-rdp/hypr-rdp.toml" ] || {
-            echo "the RDP guard writes an unexpected runtime path: $runtime" >&2
-            exit 1
-          }
-          case "$rdpExecStart" in
-            *"--config $runtime") ;;
-            *) echo "hypr-rdp does not read the guard's runtime config" >&2; exit 1 ;;
-          esac
-
-          rendered=$PWD/rdp-rendered.toml
-          good=$PWD/good-password
-          printf 's3cret' > "$good"
-          "$guard" "$good" "$public" "$rendered" || {
-            echo "the guard rejected a nonempty password." >&2
-            echo "A guard that refuses everything is a service nobody can run." >&2
-            exit 1
-          }
-          grep -qx 'password = "s3cret"' "$rendered" || {
-            echo "the guard did not write the password into its private config" >&2
-            exit 1
-          }
-
-          empty=$PWD/empty-password
-          : > "$empty"
-          rm -f "$rendered"
-          if "$guard" "$empty" "$public" "$rendered" 2>/dev/null; then
-            echo "the guard accepted an EMPTY password." >&2
-            echo "That is the exact state upstream turns into an" >&2
-            echo "unauthenticated remote desktop: config.rs unwrap_or_default()" >&2
-            echo "warns and serves." >&2
-            exit 1
-          fi
-          test ! -e "$rendered" || { echo "empty password left a runtime config" >&2; exit 1; }
-
-          nouser=$PWD/no-username-public.toml
-          printf 'bind = "127.0.0.1:3389"\n' > "$nouser"
-          if "$guard" "$good" "$nouser" "$rendered" 2>/dev/null; then
-            echo "the guard accepted a config with no username." >&2
-            exit 1
-          fi
-          test ! -e "$rendered" || { echo "no username left a runtime config" >&2; exit 1; }
-
-          if "$guard" "$PWD/not-here" "$public" "$rendered" 2>/dev/null; then
-            echo "the guard accepted a password file that does not exist." >&2
-            echo "An unrendered template must fail the unit, not start it." >&2
-            exit 1
-          fi
-          test ! -e "$rendered" || { echo "missing password left a runtime config" >&2; exit 1; }
-          echo "the RDP unit refuses missing or empty passwords and usernames"
 
           # ---- composition: the user's definition wins -------------------
           [ "$syncthingDataDir" = "/srv/sync" ] || {
@@ -6483,12 +6407,5 @@ pkgs.runCommand "nixarchy-options"
         echo "nixarchy-menu's bar button wears the snowflake"
 
           touch $out
-      ''
-    else
-      ''
-        echo "$report"
-        echo "these options do not take effect both ways: ${pkgs.lib.concatStringsSep " " (builtins.attrNames broken)}" >&2
-        echo "an option that cannot be turned off is not an option." >&2
-        exit 1
       ''
   )

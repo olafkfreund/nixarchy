@@ -21,7 +21,7 @@ try() {
   fi
 }
 try omarchy nix build .#omarchy --print-build-logs
-# Not options: it peaks near 11.5 GB, and beside the quickshell build
+# Not the options-* shards: the check peaked near 11.5 GB whole, and beside the quickshell build
 # edge needs it lost a 16 GB hosted runner mid-run (#1278). It runs in
 # verify, on p620, after the idle wait (CLAUDE.md section 6).
 # The list is derived, not kept: capture first, because a failing

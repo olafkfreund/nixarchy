@@ -52,10 +52,10 @@ curl -s -XPOST "$HOMESERVER/_matrix/client/v3/register" -d "{
 The server is one Python file with two dependencies (`mcp`, `httpx`). It speaks
 stdio and is spawned per agent session, not run as a daemon.
 
-**Pin `mcp<2`.** mcp 2.x renamed `FastMCP` to `MCPServer`, and this server is
-v1 code -- unpinned, it raises `ModuleNotFoundError` on import before your
-agent sees a single tool. Every command below carries the pin; keep it if you
-adapt them.
+**Pin `mcp<2`.** mcp 2.x renamed `FastMCP` to `MCPServer`. This copy has
+imported either name since #1457, but an older copy is v1 code -- unpinned, it
+raises `ModuleNotFoundError` on import before your agent sees a single tool.
+Every command below carries the pin; keep it if you adapt them.
 
 **With uv** (no install, recommended):
 

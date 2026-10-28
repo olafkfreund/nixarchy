@@ -761,6 +761,8 @@
           # Not one of Omarchy's preinstalls -- a terminal-effects toy from the
           # same authors, packaged because it was asked for.
           ttfx = final.callPackage ./pkgs/apps/ttfx.nix { };
+          omarchy-speedtest = final.callPackage ./pkgs/apps/omarchy-speedtest.nix { };
+          omarchy-screensaver = final.callPackage ./pkgs/apps/omarchy-screensaver.nix { };
 
           # Why: docs/internals/flake.md#nixpkgs-retroarch-is-retroarch-with-cores-built-wi
           retroarch = final.retroarch.withCores (
@@ -856,7 +858,12 @@
           # The screensaver's text-effects engine, packaged in this repo rather
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
           # lives under nixarchy-apps, which callPackage does not search.
-          inherit (final.nixarchy-apps) ttfx omasnap;
+          inherit (final.nixarchy-apps)
+            ttfx
+            omasnap
+            omarchy-speedtest
+            omarchy-screensaver
+            ;
         };
 
         # Why: docs/internals/flake.md#the-boot-splash-and-nothing-else-on-the-disk-with-
@@ -1206,6 +1213,8 @@
             owe
             aether
             ttfx
+            omarchy-speedtest
+            omarchy-screensaver
             ;
 
           # Re-exported so programs.nixarchy.apps.zen resolves like any other

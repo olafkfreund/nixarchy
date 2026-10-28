@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1479
 intent: intent/2026-10-28-1479-screencast-restore-shell-json.md
 ---
@@ -33,7 +33,7 @@ Disabling a plugin removes its widget object, and `enable` creates a fresh one.
 A second run moved things further. `setEnabled(id, true, placement)` moves a widget that is
 already on the bar, so re-running restore re-appends.
 
-**Proposed — user to confirm at spec review:** this is the cause. No timing change would help.
+**Decided — user approved 2026-10-28:** this is the cause. No timing change would help.
 The shell watches `shell.json` (`shell/shell.qml`, `userConfigFile`, `watchChanges`) and wrote
 back exactly what it was told to.
 
@@ -74,7 +74,7 @@ each widget back exactly.
 Not changed: the theme and idle restore, prep's refusals, the snapshot and checksum, and which
 plugins prep hides.
 
-**Proposed — user to confirm at spec review:** keep prep's hide-by-disabling approach and fix
+**Decided — user approved 2026-10-28:** keep prep's hide-by-disabling approach and fix
 restore. A shell "recording mode" that hides widgets without touching `shell.json` would be
 cleaner, but it's a shell feature (a carried patch to `shell.qml` plus a renderer flag). It is
 a separate issue if wanted. Nothing in the code makes it trivial today.

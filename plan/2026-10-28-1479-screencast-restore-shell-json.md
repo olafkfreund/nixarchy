@@ -96,6 +96,10 @@ runs step 7 with the user.
      - `OMARCHY_PATH` must be the running shell's tree, which `${sessionEnv}` already handles.
        Don't change that.
      - EXIT traps read globals at exit (CLAUDE.md §5).
+- Deviation (implemented): `not ready` is retried up to 11 attempts 0.5s apart, and an IPC answer
+  is compared to `ok` after stripping double quotes (assumed shape; the step 7 round trip shows
+  any other answer in the "could not restore" line).
+
 
 4. **New check `screencast-placement` (`flake.nix`, next to `shot-coverage` at `:2478`), and its
    script `tests/demo/screencast/placement-test.sh`.**

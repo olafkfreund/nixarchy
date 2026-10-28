@@ -304,15 +304,58 @@ rec {
       # A bar-kind plugin takes no placement; a widget does. Passing `right` to
       # a bar leaves it disabled, which is how skal.bar failed to come back the
       # first time this was run for real.
+      # A take from before #1479 has no `placement`: every widget goes to the end of
+      # the right section, the way it always did, and the verify below says so.
+      if jq -e 'has("placement")' "$state/manifest.json" >/dev/null; then
+        legacy=0
+      else
+        legacy=1
+        echo "screencast-restore: this take predates #1479; widget positions may differ." >&2
+      fi
+
       jq -r '.disabled[] | "\(.id)\t\(.kinds | join(","))"' "$state/manifest.json" |
         while IFS=$'\t' read -r id kinds; do
           [ -n "$id" ] || continue
-          echo "  restoring $id"
           case ",$kinds," in
-            *,bar,*) omarchy plugin enable "$id" >/dev/null 2>&1 || echo "  (could not enable $id)" >&2 ;;
-            *) omarchy plugin enable "$id" right >/dev/null 2>&1 || echo "  (could not enable $id)" >&2 ;;
+            *,bar,*)
+              echo "  restoring $id"
+              omarchy plugin enable "$id" >/dev/null 2>&1 || echo "  (could not enable $id)" >&2 ;;
+            *)
+              # With a placement the widget is put back below, where it was.
+              [ "$legacy" = 1 ] || continue
+              echo "  restoring $id"
+              omarchy plugin enable "$id" right >/dev/null 2>&1 || echo "  (could not enable $id)" >&2 ;;
           esac
         done
+
+      # putBarWidget leaves a widget that is already on the bar alone, so a re-run
+      # changes nothing. "not ready" means the registry is still scanning.
+      if [ "$legacy" = 0 ]; then
+        jq -c '.placement | sort_by([.section, .index])[]' "$state/manifest.json" |
+          while IFS= read -r rec; do
+            id=$(jq -r '.id' <<<"$rec")
+            section=$(jq -r '.section' <<<"$rec")
+            index=$(jq -r '.index' <<<"$rec")
+            echo "  restoring $id"
+            answer=""
+            for _ in 1 2 3 4 5 6 7 8 9 10 11; do
+              answer=$(omarchy-shell shell putBarWidget "$id" "{\"section\":\"$section\",\"index\":$index}" 2>&1 | tr -d '"' || true)
+              case "$answer" in *"not ready"*) sleep 0.5 ;; *) break ;; esac
+            done
+            if [ "$answer" != "ok" ]; then
+              echo "  (could not restore $id: $answer)" >&2
+              continue
+            fi
+            # Disabling dropped the widget object with its settings; put them back.
+            where=$(jq -nc --arg s "$section" '{section: $s}')
+            jq -r '.widget | keys_unsorted[] | select(. != "id")' <<<"$rec" |
+              while IFS= read -r key; do
+                value=$(jq -c --arg k "$key" '.widget[$k]' <<<"$rec")
+                answer=$(omarchy-shell shell setBarWidget "$id" "$key" "$value" "$where" 2>&1 | tr -d '"' || true)
+                [ "$answer" = "ok" ] || echo "  (could not restore $id $key: $answer)" >&2
+              done
+          done
+      fi
 
       omarchy-toggle-idle resume >/dev/null 2>&1 || true
 
@@ -353,6 +396,7 @@ rec {
 
       echo "screencast-restore: shell.json did NOT come back." >&2
       echo "The snapshot is kept at $state/shell.json -- nothing has been deleted." >&2
+      echo "Run screencast-recover to try again, or copy the snapshot back by hand." >&2
       echo "Differences:" >&2
       diff "$state/.before.norm" "$state/.after.norm" >&2 || true
       exit 1

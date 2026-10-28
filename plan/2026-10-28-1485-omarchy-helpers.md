@@ -1,0 +1,202 @@
+---
+status: draft
+issue: 1485
+spec: spec/2026-10-28-1485-omarchy-helpers.md
+coders:
+  1: codex   # two new package files from a measured template; no build needed to write them
+  2: agy     # wiring across flake.nix, pkgs/omarchy, modules/apps.nix, tests/session.nix
+  3: codex   # the speed test probe in tests/session.nix
+  6: agy     # the edge carry: one substitution and the screensaver probe
+reviewers:
+  - codex    # owner's request (2026-10-28): independent read of the plan and each diff
+  - agy
+---
+
+# Plan: package Omarchy's speed test client and native screensaver
+
+## Approved decisions, carried over
+
+- **Both packages on `main`** (intent decision 1, option b).
+  `pkgs/apps/omarchy-speedtest.nix` and `pkgs/apps/omarchy-screensaver.nix`
+  follow `pkgs/apps/ttfx.nix`'s shape, including `meta` and
+  `passthru.updateScript` with `nix-update --flake <attr>`.
+- **Measured inputs.** These were trial-built on 2026-10-28; both build.
+  - Speed test: `buildGo127Module`, omacom/omarchy-speedtest tag `v0.2.1`,
+    hash `sha256-q3KJ+FS2xuTNzgRal3rfhXot0aFUkD01+PZtq0sq+YQ=`,
+    `vendorHash = null`. It produces `bin/omarchy-speedtest`.
+  - Screensaver: `rustPlatform.buildRustPackage`, omacom/omarchy-screensaver
+    tag `v1.3.1`, hash
+    `sha256-9uvcYUXPExFEUZq2VdvSZz6n2foqiPqyD9CMphgBCTw=`, `cargoHash =
+    "sha256-GnXuI+ceJpNz9npfLE9KpoQHU7MgYD9SnUKgNwfmTgM="`.
+    - Native input `pkg-config` and `makeWrapper`; build inputs
+      `libxkbcommon` and `wayland`.
+    - `postFixup` wraps `bin/omarchy-launch-screensaver` with
+      `--prefix PATH : ${lib.makeBinPath [ fontconfig ]}`.
+- **The speed test path is substituted**, not set through
+  `OMARCHY_SPEEDTEST_BINARY`. Upstream's `${OMARCHY_SPEEDTEST_BINARY:-…}`
+  override stays.
+- **Remove #1480's dimmed row and the `/usr` exception.** No new exception
+  for either helper.
+- **No option** (intent decision 2). Mode A unchanged, and no coexistence
+  fixture.
+- **The screensaver launcher's `--replace-fail` is an edge carry** on
+  `edge-candidate`, never pushed to `edge` directly.
+- **Team.** Codex and agy implement the steps named in `coders:`. Both
+  review this plan and each PR's diff. Neither can build, so every build,
+  check and §1 proof is run by the session (Claude) after each step.
+- **Merging.** PRs are admin-merged once the local tiers pass, when the
+  owner's permissions allow it; otherwise the owner runs the command. Then
+  watch `main`'s CI and fix what it finds.
+
+## Steps
+
+1. **New `pkgs/apps/omarchy-speedtest.nix` and
+   `pkgs/apps/omarchy-screensaver.nix`** (codex).
+   - Use exactly the inputs above, in `ttfx.nix`'s structure.
+   - Write a `meta` block for each: MIT, `lib.platforms.linux`, and
+     `mainProgram` `omarchy-speedtest` or `omarchy-launch-screensaver`.
+   - Give each an update script named `update-<pname>`.
+   - Add a one-line comment on the screensaver wrapper: the font lookup's
+     `/usr/share` path cannot hit on NixOS, so `fc-match` is the one that
+     must be on PATH.
+
+   **Verify (session):** `nix fmt`, then check `git diff --stat` shows two
+   small new files (§5: a hook may nixpkgs-fmt them).
+
+   **Traps:** `buildGo127Module`, not `buildGoModule`; this nixpkgs' `go` is
+   1.26.10.
+
+2. **Wiring** (agy).
+   - **`flake.nix:763`**: add
+     `omarchy-speedtest = final.callPackage ./pkgs/apps/omarchy-speedtest.nix { };`
+     and the same for `omarchy-screensaver`, beside `ttfx`.
+   - **`flake.nix:859`**: the line becomes
+     `inherit (final.nixarchy-apps) ttfx omasnap omarchy-speedtest;`. The
+     screensaver is not passed to the Omarchy package on `main`; that is
+     step 6.
+   - **`flake.nix:1208`**: add both names to the list that re-exports
+     `ttfx`, so `packages.x86_64-linux.<name>` exists and CI's generated
+     builds reach the screensaver while nothing else uses it.
+   - **`pkgs/omarchy/default.nix:117`**: add `omarchy-speedtest,` to the
+     arguments.
+   - **`pkgs/omarchy/default.nix`**: add a substitution beside the
+     version-channel one (`:632`), with a one-line `#` note naming #1485.
+     It runs `substituteInPlace
+     $out/share/omarchy/bin/omarchy-network-speedtest` with
+     `--replace-fail '/usr/lib/omarchy/speedtest'
+     '${omarchy-speedtest}/bin/omarchy-speedtest'`.
+   - **`modules/apps.nix:912-916`**: delete the
+     `"trigger.tests.network-speedtest"` block.
+   - **`tests/session.nix:1890-1894`**: delete the three comment lines and
+     `"omarchy-network-speedtest"`. Restore `"omarchy-kernel"]` as the
+     list's last element.
+
+   **Verify (session), package tier, gated by `vm-host-free.sh`:**
+   - `nix build .#packages.x86_64-linux.{omarchy-speedtest,omarchy-screensaver}`;
+   - `nix build .#packages.x86_64-linux.omarchy`;
+   - then `grep -c /usr/lib/omarchy/speedtest
+     result/share/omarchy/bin/omarchy-network-speedtest` prints `0`, and
+     the store path it names exists.
+
+   **Traps:**
+   - `find` does not follow `result` (§5); use the full path or `find -L`.
+   - Run `nix fmt`, then check `git diff --stat`.
+
+3. **The speed test probe in `tests/session.nix`** (codex).
+   - Put it next to the `/usr` scan block, as a separate `with
+     subtest("speed test reaches its client (#1485)")` block.
+   - It runs `as_user("timeout 20 omarchy-network-speedtest down; echo rc=$?")`
+     through `machine.execute` and captures stdout and stderr.
+   - It asserts that `speed test client is missing` is absent, and that
+     `rc=` is neither 126 nor 127.
+   - Capture into a variable and match in Python. No `| grep -q` (§1 of
+     tests/AGENTS.md, and `checks.grep-q-pipefail`).
+
+   **Verify (session):**
+   - `nix eval --raw .#checks.x86_64-linux.session.drvPath` evaluates;
+   - `checks.grep-q-pipefail` passes.
+
+   The VM run itself is CI's (§6).
+
+4. **Cheap tier and the §1 setup** (session).
+   - Run each of these one at a time under the flock: `nix fmt -- --ci`,
+     statix, deadnix, then the checks `bin-ledger`, `menu-actions`,
+     `menu-verbs`, `menu-guards`, `grep-q-pipefail` and `options-shards`,
+     then `readme-counts.sh --check` with `OMARCHY_TREE` set.
+   - If `bin-ledger` wants a row for `omarchy-network-speedtest`, add one in
+     its file's shape, and record that here as a deviation.
+   - §1 for the probe:
+     - **Red:** in a scratch worktree (`git worktree add --detach`), remove
+       the step 2 substitution. `git diff` must show it gone, and the built
+       script must still contain `/usr/lib/omarchy/speedtest`. CI's session
+       run on a throwaway draft PR from that tree must fail on the probe's
+       assertion. Then close that PR.
+     - **Green:** this PR's own CI run.
+
+     If the owner prefers to skip the red CI run to save time, record the
+     static half (the built script names `/usr` without the substitution
+     and a store path with it) as the §1 evidence, and say so in the PR.
+
+5. **Reviews, then PR to `main`** (session; codex and agy review).
+   - Run `second-opinion` with Codex and agy on `git diff origin/main`.
+     Answer each finding in the PR, fixing the real ones before merge.
+   - Commit with a full-sentence subject (§8).
+   - Open the PR with the template. Its body links intent, spec and plan;
+     says which steps Codex and agy wrote; and pastes the §1 evidence.
+     `Closes #1481` and `Refs #1485`, each keyword written in full (§8).
+   - Admin-merge, or hand the owner the command. Then watch `main`'s
+     `build` and `install check`.
+
+6. **The edge carry** (agy), on a branch from `origin/edge-candidate`, or
+   from `origin/edge` if no candidate is open.
+   - In `pkgs/omarchy/default.nix`, add `omarchy-screensaver` to the
+     arguments and to `flake.nix:859`'s inherit line.
+   - Add `substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver
+     --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver
+     "$@"' 'exec ${omarchy-screensaver}/bin/omarchy-launch-screensaver
+     "$@"'`.
+   - Add a session probe beside step 3's, run in the background:
+     `as_user("omarchy-launch-screensaver force &")`.
+     - Then `wait_until_succeeds(as_user("hyprctl layers -j"))` until the
+       output contains `org.omarchy.screensaver`, timeout 30.
+     - Then send a key with `machine.send_key("esc")`, and wait until the
+       namespace is gone, timeout 15.
+     - Hold the namespace in one Python variable.
+
+   **Verify (session):**
+   - package tier `nix build .#packages.x86_64-linux.omarchy`;
+   - `grep -c /usr/lib/omarchy-screensaver` on the built launcher prints
+     `0`;
+   - the session check evaluates.
+
+   **§1:** red is edge run 40677049412, the `/usr` scan naming
+   `omarchy-launch-screensaver`. Green is the PR's edge verify.
+
+   Codex and agy review the diff. The PR goes to `edge-candidate`, or to
+   `edge` if that is how the latest edge carries landed: check
+   `git log origin/edge --merges -5` first and follow it. Then dispatch
+   `omarchy-edge.yml` and confirm it promotes, which closes #1475.
+
+7. **Close out** (session).
+   - `main` and edge are green.
+   - #1481, #1485 and #1475 are closed: check that each actually closed
+     (§8).
+   - TaskStop every agent, and remove the scratch worktrees.
+
+## Tests
+
+| command | expected |
+|---|---|
+| `nix build .#packages.x86_64-linux.omarchy-speedtest` | `bin/omarchy-speedtest` |
+| `nix build .#packages.x86_64-linux.omarchy-screensaver` | `bin/omarchy-launch-screensaver`, wrapped |
+| `grep -c /usr/lib/omarchy/speedtest …/bin/omarchy-network-speedtest` | `0` |
+| cheap tier (step 4) | all exit 0 |
+| CI `session` on `main` | the speed test probe passes; the `/usr` scan passes with no speed test exception |
+| edge `verify` | `session` passes, with the screensaver probe and no screensaver exception |
+
+## Rollback
+
+`main`: revert the PR. The row returns to dimmed only if #1480's lines are
+restored too, so revert the whole PR, not the substitution alone. Edge: revert
+the carry on `edge-candidate`, and edge then goes red on the `/usr` scan
+again, as before. That is safe, because edge stays on its last good pin.

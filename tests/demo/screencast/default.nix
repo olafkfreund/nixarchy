@@ -235,9 +235,30 @@ rec {
 
       hide=$(jq -r '.[].id' "$state/disabled.json")
 
+      # Where each hidden widget sits (#1479). Disabling drops the widget object
+      # with its settings, and `enable` can only append, so restore needs the
+      # section, index and settings back. Bar-kind plugins have no widget.
+      jq -f ${./placement.jq} \
+        --argjson ids "$(jq -c '[.[] | select(.kinds | index("bar") | not) | .id]' "$state/disabled.json")" \
+        "$state/shell.json" > "$state/placement.json"
+
+      # putBarWidget skips an id that is already placed, so a second instance of
+      # a hidden id could never come back. Refuse before anything changes.
+      dupes=$(jq -r '.duplicates[]' "$state/placement.json")
+      if [ -n "$dupes" ]; then
+        echo "screencast-prep: these plugins sit on the bar more than once, and restore" >&2
+        echo "could not put the second one back. Remove the extra instance first:" >&2
+        printf '  %s\n' "$dupes" >&2
+        rm -f "$state/shell.json" "$state/shell.json.sha256" "$state/disabled.json" "$state/placement.json"
+        rmdir "$state" 2>/dev/null || true
+        exit 1
+      fi
+
       theme=$(omarchy-theme-current 2>/dev/null || echo unknown)
-      jq -n --slurpfile d "$state/disabled.json" --arg theme "$theme" \
-        '{disabled: $d[0], theme: $theme}' > "$state/manifest.json"
+      jq -n --slurpfile d "$state/disabled.json" --slurpfile p "$state/placement.json" \
+        --arg theme "$theme" \
+        '{disabled: $d[0], placement: $p[0].placement, theme: $theme}' > "$state/manifest.json"
+      rm -f "$state/placement.json"
 
       for id in $hide; do
         echo "  hiding $id"

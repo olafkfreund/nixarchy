@@ -69,6 +69,10 @@ runs step 7 with the user.
      - `writeShellApplication` runs shellcheck, so quote everything.
      - `jq` is already in `common` (`:60`). Add nothing to `runtimeInputs` unless it's missing.
      - Escape `${` in bash as `''${` inside the Nix string, as the file already does.
+- Deviation (implemented): on a duplicate-id refusal prep removes only the files it wrote and
+  then `rmdir`s `$state`, instead of `rm -rf "$state"`, so it can never delete anything it
+  did not write.
+
 
 3. **`tests/demo/screencast/default.nix`, restore (`:286`–`:298` and `:333`): place, then
    set.**

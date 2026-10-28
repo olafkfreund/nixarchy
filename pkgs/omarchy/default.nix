@@ -270,7 +270,7 @@ let
     xdg-terminal-exec
     uwsm
     foot
-    chromium-flags
+    chromium
     nautilus
     neovim
     mise

@@ -45,4 +45,12 @@
     {
       environment.systemPackages = [ pkgs.ffmpeg-full ];
     };
+
+  # A user's own connectivity check, or none: nixarchy's is mkDefault (#1428).
+  nm-connectivity-own = {
+    networking.networkmanager.settings.connectivity = {
+      uri = "http://example.invalid/check";
+      enabled = false;
+    };
+  };
 }

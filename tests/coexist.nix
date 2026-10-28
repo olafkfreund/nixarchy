@@ -31,6 +31,10 @@ pkgs.testers.runNixOSTest {
       displayManager = false;
     };
 
+    # Quattro 1381fa0 forks 23 agent-usage collectors at once at login (#14040);
+    # with the shell that is more than the default 1024 MB guest holds (#1447).
+    virtualisation.memorySize = 2048;
+
     boot.plymouth.enable = pkgs.lib.mkForce false;
     environment.sessionVariables.WLR_RENDERER_ALLOW_SOFTWARE = "1";
 

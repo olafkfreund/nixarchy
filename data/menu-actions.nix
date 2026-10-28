@@ -33,12 +33,18 @@
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
   "remove.service.ssh-agent" =
     "session: disables the user's gcr-ssh-agent socket and removes its own environment.d file";
+  "setup.config.git" =
+    "session: restarts the user's XCompose unit after writing the git identity into ~/.XCompose";
   "setup.config.xcompose" = "session: restarts the user's XCompose unit";
   "setup.default.agent.agy" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.amp" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.claude" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.codex" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.commandcode" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.copilot" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
@@ -46,11 +52,23 @@
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.cursor-agent" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.devin" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.dsh" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.freebuff" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.grok" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.hermes" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.kilo" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.kimi" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.kiro-cli" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.mcode" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.muse" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
@@ -63,6 +81,8 @@
   "setup.default.agent.ori" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.agent.pi" =
+    "session: the OpenClaw branch starts a user unit; other agents never take it";
+  "setup.default.agent.qwen" =
     "session: the OpenClaw branch starts a user unit; other agents never take it";
   "setup.default.browser.brave" =
     "unreached: pacman is omarchy-lifecycle-dispatch reading /var/lib/pacman/local, which x86_64 never reaches (exit 0 first)";
@@ -108,16 +128,11 @@
   "setup.security.ssh-agent" = "session: enables the user's gcr-ssh-agent socket";
   "setup.security.sudoless-docker" =
     "guidance: exits 1 before its writers (decision 6, checks.menu-guidance)";
-  "style.font.cjk.auto" = "session: restarts the user's shell unit";
-  "style.font.cjk.hk" = "session: restarts the user's shell unit";
-  "style.font.cjk.jp" = "session: restarts the user's shell unit";
-  "style.font.cjk.kr" = "session: restarts the user's shell unit";
-  "style.font.cjk.sc" = "session: restarts the user's shell unit";
-  "style.font.cjk.tc" = "session: restarts the user's shell unit";
   "trigger.reminder.clear" = "session: creates, shows or clears the user's reminder timer unit";
   "trigger.reminder.set" = "session: creates, shows or clears the user's reminder timer unit";
   "trigger.reminder.show" = "session: creates, shows or clears the user's reminder timer unit";
-  "trigger.toggle.crash-capture" = "session: toggles the user's crash-capture unit";
+  "trigger.toggle.crash-capture-on" = "session: toggles the user's crash-capture unit";
+  "trigger.toggle.crash-capture-off" = "session: toggles the user's crash-capture unit";
   "update.config.shell" = "session: restarts the user's shell unit";
   "update.firmware" =
     "unreached: the /boot install runs only if /usr/lib/fwupd/efi/fwupdx64.efi exists, which it never does here (decision 11)";

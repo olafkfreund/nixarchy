@@ -1758,11 +1758,18 @@ in
         allowedTCPPorts = [ 53317 ];
         allowedUDPPorts = [ 53317 ];
       };
-      networkmanager.enable = lib.mkDefault true;
-      # etc/NetworkManager/conf.d/omarchy-wifi-powersave.conf: false writes
-      # wifi.powersave = 2.
-      # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
-      networkmanager.wifi.powersave = lib.mkDefault false;
+      networkmanager = {
+        enable = lib.mkDefault true;
+        # etc/NetworkManager/conf.d/omarchy-wifi-powersave.conf: false writes
+        # wifi.powersave = 2.
+        # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+        wifi.powersave = lib.mkDefault false;
+        # etc/NetworkManager/conf.d/omarchy-connectivity.conf, as settings so the
+        # user's own win: upstream's captive-portal flow waits on the check.
+        # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
+        settings.connectivity.uri = lib.mkDefault "http://ping.omacom.io/nm-check.txt";
+        settings.connectivity.response = lib.mkDefault "";
+      };
     };
 
     # Why: modules/AGENTS.md#install-config-lockscreen-pam-sh-whose-one-line-is

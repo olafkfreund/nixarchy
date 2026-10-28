@@ -432,16 +432,13 @@ stdenvNoCC.mkDerivation {
                     # CARRIED (#1192): the panel Loader's error handler called a function Qt 6's Loader lacks.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1192-panel-loader-errorstring.patch}
 
-                    # Bound the Lua source scan so a loop in hyprland.lua cannot pin a CPU when this menu opens.
-                    substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
-                      --replace-fail "    lua -E - <<'LUA'" "    timeout 3 lua -E - <<'LUA'"
                     # Drop undescribed binds in non-default submaps (a hint plugin registers
                     # ~2,800): the list otherwise exceeds the 128 KiB single-argument limit
                     # omarchy-menu-select hands to perl and omarchy-shell, so the menu never opens.
                     substituteInPlace $out/share/omarchy/bin/omarchy-menu-keybindings \
                       --replace-fail '      if (!seen) return' '      if (!seen) return
       if (f["submap"] != "" && f["description"] == "") { seen = 0; return }' \
-                      --replace-fail "printf 'v17\\n'" "printf 'v17-submaps\\n'"
+                      --replace-fail "printf 'v19\\n'" "printf 'v19-submaps\\n'"
                     # Summoned from a key bind, the menu reaches the screen after omarchy-shell's
                     # 2 s IPC timeout; the script then exits and the menu it opened does nothing.
                     # The script waits for the selection anyway, so a longer timeout costs nothing.
@@ -583,21 +580,6 @@ stdenvNoCC.mkDerivation {
                     # No $BROWSER edit: quattro's omarchy-cmd-default-browser runs
                     # xdg-settings under `env -u BROWSER` itself.
 
-                    # omarchy-launch-webapp and omarchy-launch-browser find the browser by
-                    # reading its .desktop out of {~/.local,~/.nix-profile,/usr}/share/
-                    # applications. On NixOS a system package's desktop file is under
-                    # /run/current-system/sw and a per-user one under /etc/profiles/per-user,
-                    # so that search finds nothing, the command substitution collapses to
-                    # empty, and the launcher runs `uwsm-app -- --app=<url>`:
-                    #
-                    #   Error: Path "--app=https://search.nixos.org/options" does not exist!
-                    for f in omarchy-launch-webapp omarchy-launch-browser; do
-                      substituteInPlace $out/share/omarchy/bin/$f \
-                        --replace-fail \
-                          '{~/.local,~/.nix-profile,/usr}/share/applications' \
-                          '{~/.local,~/.nix-profile,/etc/profiles/per-user/$USER,/run/current-system/sw,/usr}/share/applications'
-                    done
-
                     # Why: pkgs/AGENTS.md#launch-browser-refuses-to-launch-itself-1342
                     # quattro moved the MOZ_LOG probe into the --private branch; anchor above it (#1398).
                     substituteInPlace $out/share/omarchy/bin/omarchy-launch-browser \
@@ -648,7 +630,7 @@ stdenvNoCC.mkDerivation {
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version
                     substituteInPlace $out/share/omarchy/bin/omarchy-version-channel \
-                      --replace-fail 'if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then' 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then'
+                      --replace-fail 'if grep -Eq "https://(arm-)?stable-mirror\.omarchy\.org/" /etc/pacman.d/mirrorlist; then' 'version=$(nixos-version 2>/dev/null) || exit 1; version=$(printf "%s" "$version" | cut -d" " -f1); [ -n "$version" ] || exit 1; printf "%s\n" "$version"; exit 0; if grep -Eq "https://(arm-)?stable-mirror\.omarchy\.org/" /etc/pacman.d/mirrorlist; then'
 
                     # The channel switch is nixarchy-channel's, not pacman's.
                     #
@@ -946,23 +928,7 @@ stdenvNoCC.mkDerivation {
               --replace-fail '*) browser="chromium.desktop" ;;' \
               '*) browser="chromium-browser.desktop" ;;'
 
-            # And say so when the browser cannot be resolved at all, rather than
-            # handing uwsm-app an --app= flag to run as a program. The message it
-            # produced named the URL, which reads like the URL is at fault.
             substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
-              --replace-fail 'if ! omarchy-cmd-browser-handoff "$browser_exec" --app=' \
-              'if [ -z "$browser_exec" ]; then
-          echo "omarchy-launch-webapp: no browser found for $browser." >&2
-          echo "Set one with: xdg-settings set default-web-browser <name>.desktop" >&2
-          echo "Installed browsers:" >&2
-          find {~/.local,~/.nix-profile,/etc/profiles/per-user/$USER,/run/current-system/sw}/share/applications \
-            -maxdepth 1 -name "*.desktop" 2>/dev/null |
-            xargs -r grep -l "^Categories=.*WebBrowser" 2>/dev/null |
-            xargs -r -n1 basename | sed "s/^/  /" >&2
-          exit 1
-        fi
-
-        if ! omarchy-cmd-browser-handoff "$browser_exec" --app=' \
               --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
               'exec setsid uwsm-app -- "$browser_exec"'
 
@@ -1115,7 +1081,7 @@ stdenvNoCC.mkDerivation {
                     # Each id is its own command; antigravity is the one that differs.
                     # Why: pkgs/AGENTS.md#default-agent-menu-commands-use-the-id
                     # is absent -- is the one this loop exists to prevent.
-                    for a in agy claude codex copilot crush cursor-agent grok hermes kimi muse omp openclaw opencode ori pi; do
+                    for a in agy amp claude codex commandcode copilot crush cursor-agent devin dsh freebuff grok hermes kilo kimi kiro-cli mcode muse omp openclaw opencode ori pi qwen; do
                       substituteInPlace $menu \
                         --replace-fail "== \\\"$a\\\" ]]" "== \\\"$a\\\" ]] && command -v $a >/dev/null"
                     done
@@ -2036,7 +2002,7 @@ stdenvNoCC.mkDerivation {
 
                     # Why: pkgs/AGENTS.md#the-menu-fits-its-widest-label-1339
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
-                      --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "style.font" || root.activeMenu === "style.font.cjk") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+                      --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
 
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \

@@ -899,10 +899,20 @@ let
           action = "true";
           description = "Not available on NixOS — Omarchy's Windows VM needs rooted Docker and an FHS PATH. Use programs.virt-manager in your configuration";
         };
-        "trigger.hardware.hybrid-gpu" = {
+        "trigger.hardware.hybrid-gpu-on" = {
           disabled = "true";
           action = "true";
           description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
+        };
+        "trigger.hardware.hybrid-gpu-off" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
+        };
+        "trigger.tests.network-speedtest" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS yet — the panel runs /usr/lib/omarchy/speedtest, from omacom/omarchy-speedtest, which nixpkgs does not carry (#1481)";
         };
         "setup.direct-boot" = {
           # quattro's `when` tests a path naming omarchy-dgx-spark, which checks.options reads as a missing command.

@@ -109,7 +109,7 @@ pkgs.runCommand "nixarchy-menu-guidance"
     : > "$writes"
     export PATH=$TMPDIR/s-fp-on:$rec:$bin:$base
     bash "$bin/omarchy-setup-security-fingerprint" > "$TMPDIR/out" 2>&1 </dev/null || true
-    if [ "$(head -n1 "$writes")" = "sudo fprintd-enroll tester" ]; then
+    if grep -qx 'sudo fprintd-enroll tester' "$writes"; then
       ok+=("setup fingerprint, fprintd on: reached sudo fprintd-enroll tester")
     else
       fails+=("menu-guidance: setup fingerprint never reaches fprintd-enroll with fprintd on")

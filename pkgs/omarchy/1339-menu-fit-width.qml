@@ -1,4 +1,4 @@
-  property int cardWidth: Math.min(Math.max(Math.min(root.fitWidth, Style.space(640)), root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "style.font" || root.activeMenu === "style.font.cjk") ? Style.space(520) : Style.space(300))), panel.width - Style.gapsOut * 2)
+  property int cardWidth: Math.min(Math.max(Math.min(root.fitWidth, Style.space(640)), root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300))), panel.width - Style.gapsOut * 2)
   // Width that fits the widest label of the open menu (#1339). The cap applies
   // to this fitted width only, so a caller's own width passes through. It only
   // grows, and starts again at each request, so filtering does not make the

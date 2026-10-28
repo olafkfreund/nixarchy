@@ -64,6 +64,9 @@ let
       failingMessages = map (a: a.message) failing;
     };
 
+  nmConnectivity =
+    (configOf fixtures.nm-connectivity-own).networking.networkmanager.settings.connectivity;
+
   shQuote = lib.escapeShellArg;
 
   graphicsScriptOf =
@@ -114,6 +117,17 @@ let
             ;;
         esac
       '';
+
+  nmScript =
+    if nmConnectivity.uri == "http://example.invalid/check" && nmConnectivity.enabled == false then
+      ''
+        echo "nm-connectivity-own: ok"
+      ''
+    else
+      ''
+        echo ${shQuote "nm-connectivity-own: FAIL the user's connectivity setting lost: ${builtins.toJSON nmConnectivity}"} >&2
+        fail=1
+      '';
 in
 pkgs.runCommand "nixarchy-coexistence"
   {
@@ -125,6 +139,7 @@ pkgs.runCommand "nixarchy-coexistence"
     fail=0
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
+    ${nmScript}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

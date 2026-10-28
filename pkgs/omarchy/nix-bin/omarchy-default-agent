@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # omarchy:summary=Set and launch the default coding agent (declaratively, on NixOS).
-# omarchy:args=[claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|ori|kimi]
+# omarchy:args=[claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode]
 # omarchy:examples=omarchy default agent | omarchy default agent codex | omarchy default agent claude
 
 # Upstream installs the agent with `mise use -g`, which downloads a prebuilt
@@ -52,6 +52,14 @@ attr_for() {
     grok)     echo grok-cli ;;
     openclaw) echo openclaw ;;
     agy)      echo antigravity-cli ;;
+    # Added to quattro's menu by #14040. `amp` in nixpkgs is a text editor;
+    # Sourcegraph's agent is amp-cli.
+    amp)      echo amp-cli ;;
+    qwen)     echo qwen-code ;;
+    kilo)     echo kilocode-cli ;;
+    devin)    echo devin-cli ;;
+    dsh)      echo deepseek-harness ;;
+    kiro-cli) echo kiro-cli ;;
     *)        echo "" ;;
   esac
 }
@@ -64,6 +72,9 @@ mise_pkg_for() {
     omp)         echo "github:can1357/oh-my-pi" ;;
     ori)         echo "github:OpenRouterLabs/ori-releases" ;;
     kimi)        echo "npm:@moonshot-ai/kimi-code" ;;
+    mcode)       echo "npm:@minimax-ai/code" ;;
+    freebuff)    echo "npm:freebuff" ;;
+    commandcode) echo "npm:command-code" ;;
     *)           echo "" ;;
   esac
 }
@@ -110,8 +121,18 @@ muse) agent="muse"; name="Muse" ;;
 openclaw) agent="openclaw"; name="OpenClaw" ;;
 ori | openrouter) agent="ori"; name="Ori" ;;
 kimi | kimi-code) agent="kimi"; name="Kimi" ;;
+# quattro 1381fa0's menu rows (#14040), with upstream's aliases (#1447).
+qwen | qwen-code) agent="qwen"; name="Qwen Code" ;;
+dsh | deepseek | deepseek-harness) agent="dsh"; name="DeepSeek Harness" ;;
+mcode | minimax-code | minimax) agent="mcode"; name="MiniMax Code" ;;
+kiro-cli | kiro) agent="kiro-cli"; name="Kiro CLI" ;;
+freebuff) agent="freebuff"; name="Freebuff" ;;
+kilo | kilocode | kilo-code) agent="kilo"; name="Kilo" ;;
+devin | devin-cli) agent="devin"; name="Devin CLI" ;;
+amp | ampcode) agent="amp"; name="Amp" ;;
+commandcode | command-code | cmdc) agent="commandcode"; name="Command Code" ;;
 *)
-  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|cursor-agent|hermes|muse|openclaw|ori|kimi>" >&2
+  echo "Usage: omarchy-default-agent <claude|codex|opencode|crush|gemini|copilot|grok|agy|pi|omp|cursor-agent|hermes|muse|openclaw|ori|kimi|qwen|dsh|mcode|kiro-cli|freebuff|kilo|devin|amp|commandcode>" >&2
   exit 1
   ;;
 esac

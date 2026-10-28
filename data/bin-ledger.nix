@@ -148,6 +148,11 @@
     reason = "Its root PATH reset points at /usr/bin, which holds nothing here, so it lost tee and getent while writing lock-screen PAM files; and its `-x /usr/bin/fprintd-list` probe was never true. On quattro (#1285) it also copies a resume hook into /usr/lib and a stop timeout into /etc/systemd; modules/nixos.nix declares both, so those copies are dropped.";
     allow = "etc-write";
   };
+  "omarchy-apply-pacman" = {
+    class = "vendor";
+    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
+    pacman = "Renders /etc/pacman.conf and the mirrorlist from channel templates and a regional profile. Not reached by nixarchy's flows: its callers are omarchy-refresh-pacman (unreachable, see its row), the Arch installer's post-install, and omarchy-channel-set, which is patched to delegate to nixarchy-channel (#1431).";
+  };
   "omarchy-apply-system" = {
     class = "vendor";
     reason = "Vendored unchanged, and the account-tools match is prose: `usermod` appears only in the --defer-provisioning paragraph of the usage heredoc, which comment-stripping cannot see. The script is upstream's chroot entry point for an Arch install; the installer here is installer/, which never calls it.";
@@ -313,7 +318,7 @@
   };
   "omarchy-launch-browser" = {
     class = "patch";
-    reason = "It reads the browser's .desktop from {~/.local,~/.nix-profile,/usr}/share/applications. On NixOS those live under /run/current-system/sw and /etc/profiles/per-user, so the lookup found nothing. It also refuses a default browser entry that runs the launcher itself, which recursed without bound when a 4.0.4 session met 4.0.5's mimeapps list (#1342).";
+    reason = "It refuses a default browser entry that runs the launcher itself, which recursed without bound when a 4.0.4 session met 4.0.5's mimeapps list (#1342). The desktop-file search-path edit went with quattro 1381fa0, which reads XDG_DATA_DIRS (#1447).";
   };
   "omarchy-launch-editor" = {
     class = "patch";
@@ -334,7 +339,7 @@
   };
   "omarchy-launch-webapp" = {
     class = "patch";
-    reason = "Four edits: the desktop-file search paths, the chromium-browser.desktop fallback name, `chromium*` added to the browser case, and the no-browser message. The `env -u BROWSER` edit went in 4.0.5: upstream's omarchy-cmd-default-browser does it now.";
+    reason = "Three edits: the chromium-browser.desktop fallback name, `chromium*` added to the browser case, and quoting `$browser_exec` for uwsm-app. The search-path and no-browser edits went with quattro 1381fa0, which reads XDG_DATA_DIRS and refuses an empty browser itself (#1447); the `env -u BROWSER` edit went in 4.0.5.";
   };
   "omarchy-menu" = {
     class = "patch";
@@ -783,6 +788,11 @@
     class = "vendor";
     reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
     pacman = "Called only by omarchy-update-system-pkgs, -refresh-pacman, -reinstall-pkgs and -channel-set. pkgs/omarchy/nix-bin replaces the update entry points and modules/apps.nix overrides the Channel rows, so none reaches it.";
+  };
+  "omarchy-kernel" = {
+    class = "vendor";
+    reason = "Vendored unchanged (#1423, quattro be54892). Switches the kernel Limine boots by default, through /etc/default/limine and an initramfs rebuild: Arch-only. Its one caller, the Update > Kernel menu row, shows only when `omarchy-kernel list` prints more than one kernel, and that list reads /usr/lib/modules/*/pkgbase, which NixOS does not have -- so the row never appears and nothing reaches `set`.";
+    allow = "initrd-boot";
   };
   "omarchy-remove-ai-ollama" = {
     class = "vendor";

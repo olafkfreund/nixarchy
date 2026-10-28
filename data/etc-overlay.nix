@@ -61,6 +61,10 @@
 # zicochaos/omarchy-nix (MIT), an independent port that built the comparison
 # this repository had only written down. The code here is ours.
 {
+  "NetworkManager/conf.d/omarchy-connectivity.conf" = {
+    class = "native";
+    reason = "NetworkManager's connectivity check against http://ping.omacom.io/nm-check.txt (204, empty body), which upstream's captive-portal flow waits on through `nmcli networking connectivity check`. modules/nixos.nix sets networking.networkmanager.settings.connectivity uri and response at mkDefault rather than shipping the conf.d file, which NetworkManager reads after NetworkManager.conf and would override a user's own setting. Off: networking.networkmanager.settings.connectivity.enabled = false (#1428).";
+  };
   "NetworkManager/conf.d/omarchy-wifi-powersave.conf" = {
     class = "native";
     reason = "wifi.powersave = 2 turns the driver's power saving off, which stops the latency spikes and dropped links on idle wifi. modules/nixos.nix sets networking.networkmanager.wifi.powersave = false at mkDefault, which NetworkManager's module writes as that same value.";
@@ -119,6 +123,11 @@
   "mkinitcpio.conf.d/00-omarchy-hooks.conf" = {
     class = "na";
     reason = "The platform's HOOKS baseline for mkinitcpio. NixOS builds its initrd from boot.initrd.*; there is no hook list to set.";
+  };
+
+  "mkinitcpio.conf.d/i2c_hid_of_module.conf" = {
+    class = "na";
+    reason = "MODULES+=(i2c-hid-of) for mkinitcpio, only when omarchy-hw-aarch64-qualcomm detects a Snapdragon laptop, so its internal keyboard can type the disk passphrase. nixarchy builds x86_64-linux only, and NixOS builds its initrd from boot.initrd.*; there is no MODULES list to append to.";
   };
 
   "mkinitcpio.conf.d/omarchy_hooks.conf" = {

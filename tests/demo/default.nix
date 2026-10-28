@@ -1017,7 +1017,7 @@ let
       script = segments.menus;
       expects = [
         "install"
-        "style"
+        "appearance"
       ];
       minDistinct = 4;
     };

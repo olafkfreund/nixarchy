@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1491
 author: x
 ---
@@ -86,3 +86,11 @@ session check.
 2. **Obsidian:** nixpkgs' wrapper already adds `--enable-wayland-ime`, so
    the only flag missing is upstream's `-disable-gpu`. Do the same launcher
    treatment, or leave Obsidian alone and close #1493 with a note?
+
+## Decisions (owner, 2026-10-28)
+
+1. **A launcher** that reads `~/.config/chromium-flags.conf` at every start,
+   the way Arch's does.
+2. **Obsidian is left alone.** #1493 closes with a note: its Xournal++ half
+   is gone upstream in 4.5.0-rc2, and Obsidian is missing only
+   `-disable-gpu`.

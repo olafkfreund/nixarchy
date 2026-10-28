@@ -1887,11 +1887,7 @@ pkgs.testers.runNixOSTest {
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
                # pkgbase lists two kernels, and NixOS has no such files.
-               "omarchy-kernel",
-               # v4.5.0-rc2's Network Speed Test execs /usr/lib/omarchy/speedtest,
-               # a separate Go client nixpkgs lacks. Its row is dimmed with that
-               # reason; run directly, it exits 1 naming the missing client (#1481).
-               "omarchy-network-speedtest"]
+               "omarchy-kernel"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched
@@ -1918,6 +1914,33 @@ pkgs.testers.runNixOSTest {
         + ". Either point them at what NixOS actually uses, or add them to the "
         "named exceptions with a command that explains itself.")
     print("no unexpected command reaches into /usr")
+
+    # ---- the Network Speed Test reaches its packaged client (#1485) -------
+    # The script execs ''${OMARCHY_SPEEDTEST_BINARY:-<path>}; on NixOS the
+    # default must be a store path substituted at build time. The VM is
+    # offline, so the client runs and then fails on the network.
+    with subtest("speed test reaches its client (#1485)"):
+        import re
+
+        script = machine.succeed("cat $(readlink -f /run/current-system/sw/bin/omarchy-network-speedtest)")
+        m = re.search(r'client=\$\{OMARCHY_SPEEDTEST_BINARY:-([^}]+)\}', script)
+        assert m, "omarchy-network-speedtest no longer reads its client from OMARCHY_SPEEDTEST_BINARY; this probe would check nothing"
+        client = m.group(1)
+        assert client.startswith("/nix/store/"), f"the speed test client is not a store path: {client}"
+        machine.succeed(f"test -x {client}")
+
+        # Negative control: the missing-client message the run half refuses must
+        # still be upstream's wording, or that assertion would pass on anything.
+        rc, got = machine.execute(as_user("OMARCHY_SPEEDTEST_BINARY=/nonexistent timeout 20 omarchy-network-speedtest down 2>&1; echo rc=$?"))
+        assert "speed test client is missing" in got, f"the missing-client message changed; update this probe: {got}"
+
+        rc, got = machine.execute(as_user("timeout 20 omarchy-network-speedtest down 2>&1; echo rc=$?"))
+        assert "speed test client is missing" not in got, f"speed test client is missing: {got}"
+        m = re.search(r"rc=(\d+)", got)
+        assert m, f"no rc= line: {got}"
+        code = int(m.group(1))
+        assert code not in (126, 127), f"speed test client could not run (rc={code}): {got}"
+        print("the Network Speed Test reaches its packaged client")
 
     # ---- launchers must look on PATH, not in /usr/bin ---------------------
     # Clicking Spotify offered to install Spotify. Both launchers decide

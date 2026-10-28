@@ -635,6 +635,10 @@ stdenvNoCC.mkDerivation {
                     substituteInPlace $out/share/omarchy/bin/omarchy-network-speedtest \
                       --replace-fail '/usr/lib/omarchy/speedtest' '${omarchy-speedtest}/bin/omarchy-speedtest'
 
+                    # quattro's launcher execs the native screensaver from /usr/lib; it is packaged here (#1485).
+                    substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver \
+                      --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver "$@"' 'exec ${omarchy-screensaver}/lib/omarchy-screensaver/omarchy-screensaver "$@"'
+
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version
                     substituteInPlace $out/share/omarchy/bin/omarchy-version-channel \

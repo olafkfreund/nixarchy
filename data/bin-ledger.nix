@@ -329,6 +329,10 @@
     reason = "Vendored unchanged, and read-only: `systemctl --user is-enabled openclaw-gateway.service` decides whether to launch the gateway or the client.";
     allow = "systemctl-user";
   };
+  "omarchy-launch-screensaver" = {
+    class = "patch";
+    reason = "quattro's launcher is one line, `exec /usr/lib/omarchy-screensaver/omarchy-screensaver`, from Arch's omarchy-screensaver package. It execs the store path of pkgs/apps/omarchy-screensaver.nix instead (#1485).";
+  };
   "omarchy-launch-signal" = {
     class = "patch";
     reason = "It decides Signal is installed by testing `-x /usr/bin/signal-desktop`, never true here, so the menu offered to install an app already on PATH. Uses `command -v` and launches by name.";

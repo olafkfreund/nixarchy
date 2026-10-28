@@ -1942,6 +1942,36 @@ pkgs.testers.runNixOSTest {
         assert code not in (126, 127), f"speed test client could not run (rc={code}): {got}"
         print("the Network Speed Test reaches its packaged client")
 
+    # ---- the native screensaver maps its overlay and dismisses on a key (#1485)
+    # quattro's omarchy-launch-screensaver execs a Wayland layer-shell program.
+    # The namespace is the one its README says Omarchy's tools find it by.
+    with subtest("screensaver maps its overlay (#1485)"):
+        ns = "org.omarchy.screensaver"
+        layers_cmd = (
+            "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
+            " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
+            " hyprctl layers -j' > /tmp/screensaver-layers.json")
+        machine.succeed(layers_cmd)
+        before = machine.succeed("cat /tmp/screensaver-layers.json")
+        assert ns not in before, f"{ns} is mapped before the screensaver was launched"
+        script = (
+            "export XDG_RUNTIME_DIR=/run/user/1000\n"
+            "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
+            "hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-screensaver force\")' "
+            "> /tmp/screensaver-dispatch.txt 2>&1 </dev/null\n"
+        )
+        machine.succeed(
+            "cat > /tmp/screensaver-probe.sh <<'PROBE_EOF'\n" + script + "PROBE_EOF")
+        machine.execute("su omarchy -c 'bash /tmp/screensaver-probe.sh'")
+        reply = machine.execute("cat /tmp/screensaver-dispatch.txt")[1].strip()
+        assert reply == "ok", f"hyprctl dispatch did not accept the launch: {reply!r}"
+        machine.wait_until_succeeds(
+            layers_cmd + f"; grep -q {ns} /tmp/screensaver-layers.json", timeout=30)
+        machine.send_key("esc")
+        machine.wait_until_succeeds(
+            layers_cmd + f"; ! grep -q {ns} /tmp/screensaver-layers.json", timeout=15)
+        print("the native screensaver maps its overlay and leaves on a key")
+
     # ---- launchers must look on PATH, not in /usr/bin ---------------------
     # Clicking Spotify offered to install Spotify. Both launchers decide
     # whether the app is present by testing `-x /usr/bin/<app>`, which is never

@@ -953,6 +953,14 @@ stdenvNoCC.mkDerivation {
               --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
               'exec setsid uwsm-app -- "$browser_exec"'
 
+            # The registered native host must outlive an update's store-path GC (#1491).
+            substituteInPlace $out/share/omarchy/bin/omarchy-install-chromium-copy-url \
+              --replace-fail 'HOST_PATH="$OMARCHY_PATH/bin/omarchy-chromium-copy-url-host"' \
+              'HOST_PATH=/run/current-system/sw/bin/omarchy-chromium-copy-url-host'
+            substituteInPlace $out/share/omarchy/bin/omarchy-install-chromium-ytdlp \
+              --replace-fail 'HOST_PATH="$OMARCHY_PATH/bin/omarchy-chromium-ytdlp-host"' \
+              'HOST_PATH=/run/current-system/sw/bin/omarchy-chromium-ytdlp-host'
+
             # Why: pkgs/AGENTS.md#the-browser-theme-policy-and-why-402-broke-it
             #
             # Short version: 4.0.2 moved the policy write into a helper that runs

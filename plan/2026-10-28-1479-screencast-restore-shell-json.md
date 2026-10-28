@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1479
 spec: spec/2026-10-28-1479-screencast-restore-shell-json.md
 ---

@@ -1560,3 +1560,13 @@ answers at Guide without reading secrets, and a silent turn ends instead of
 hanging (#102); herdr writes always ask, and a voice front end can read and
 open agent sessions (#95); the optional snowflake companion (#94); and two
 races, a settings write and YOLO during a switch to Guide (#103, #106).
+
+## ai-mirror
+
+<a id="ai-mirror"></a>
+
+ai-mirror tracks its master on nixi's terms (#1432; 2026-10-28, after
+ai-mirror#81 sat behind a commit pin when it was merged): the input names
+no rev, `flake.lock` is the pin, and ai-mirror's master requires its
+`check` CI to merge (strict). It drives the real desktop, so that gate is
+the condition: if it is ever dropped, go back to a commit pin.

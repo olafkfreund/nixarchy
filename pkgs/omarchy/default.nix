@@ -115,6 +115,8 @@
   omasnap,
   wl-screenrec,
   ttfx,
+  omarchy-speedtest,
+  omarchy-screensaver,
   # Build-time only: the font the boot splash's animation frames are set in.
   dejavu_fonts,
   # Branding: this is a NixOS port, so the menu button wears the snowflake.
@@ -346,6 +348,8 @@ let
     # went away with this change, because offering to install something that is
     # always present is exactly what the menu's dimming exists to prevent.
     ttfx
+    # quattro's omarchy-launch-screensaver execs this native overlay (#1485).
+    omarchy-screensaver
   ];
   # arch-name<TAB>kind<TAB>attr<TAB>note<TAB>binary, one per line. Apps come from
   # data/apps.nix so the two cannot drift; everything the menu does not select
@@ -626,6 +630,10 @@ stdenvNoCC.mkDerivation {
                     # are worth knowing when something upstream behaves oddly.
                     substituteInPlace $out/share/omarchy/etc/fastfetch/config.jsonc \
                       --replace-fail 'version=$(omarchy-version) && echo \"Omarchy $version\"' 'version=$(omarchy-version) && echo \"Nixarchy (Omarchy $version)\"'
+
+                    # The Network Speed Test panel's client, packaged here rather than at /usr/lib (#1485).
+                    substituteInPlace $out/share/omarchy/bin/omarchy-network-speedtest \
+                      --replace-fail '/usr/lib/omarchy/speedtest' '${omarchy-speedtest}/bin/omarchy-speedtest'
 
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version

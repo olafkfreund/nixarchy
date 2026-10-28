@@ -122,8 +122,15 @@ pkgs.runCommand "nixarchy-review-pins"
     #
     # So `hyprland ref` is the assertion, not `hyprland rev`: if someone pins
     # it back to a commit, this fails and says why.
-    # edge pins Omarchy by quattro commit, not by tag (#1278).
-    for want_line in "omarchy	rev" "sops-nix	rev" "zen-browser	rev" "nix-skills	rev" "nix-index-database	ref" "hyprland	ref" "nixpkgs	ref"; do
+    # main pins Omarchy by tag, edge (omarchyVersion edge-*) by quattro commit
+    # (#1278). Read from flake.nix, so main and edge carry this same line (#1477).
+    [ "$(grep -cE '^ *omarchyVersion = "' ${../flake.nix})" = 1 ] || {
+      echo "review: flake.nix has no single omarchyVersion line to read" >&2
+      exit 1
+    }
+    omarchy_kind=tag
+    if grep -qE '^ *omarchyVersion = "edge-' ${../flake.nix}; then omarchy_kind=rev; fi
+    for want_line in "omarchy	$omarchy_kind" "sops-nix	rev" "zen-browser	rev" "nix-skills	rev" "nix-index-database	ref" "hyprland	ref" "nixpkgs	ref"; do
       name=''${want_line%%	*}
       kind=''${want_line##*	}
       got=$(grep -E "^$name	" pins-flake.txt | cut -f2)

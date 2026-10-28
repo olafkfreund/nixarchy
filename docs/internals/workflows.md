@@ -440,6 +440,22 @@ its timeout.
 Not lower than 60, because a cache miss on a large file can take tens of
 seconds to start sending, which is slow rather than stalled.
 
+And it sets **`fallback = true`** (#1483). The timeout only decides how soon
+nix gives up on a download. With nix's default `fallback = false`, giving up
+fails the build: `path … is required, but there is no substituter that can
+build it`. On 2026-10-28, nixarchy.cachix.org stopped sending NARs for about
+40 minutes while its narinfos kept answering. #1480's `system-session` failed
+on 158 stalls before its VM booted, and its `omarchy` job hit the 1 h cap. No
+retry count outlasts an outage. Building the path does, and most of what
+stalled (unit files, completions, gliff, udiskie) builds in minutes.
+
+The cost is that an outage makes a job slow rather than red, and a large path
+built from source can still reach a job's limit. A path that should be cached
+and is not now builds instead of failing, but the download warnings stay in
+the log, and the nightly's cache probe (`cache-entries.sh`) still names
+missing entries. The self-hosted runners already fall back, through p620's
+own nix.conf.
+
 **On self-hosted runners nix is already installed, so the action skips and
 writes nothing** — those hosts need the keys, and the timeout, in their own
 NixOS config.

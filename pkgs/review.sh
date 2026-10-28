@@ -124,6 +124,8 @@ omawrite	pkgs/apps/omawrite.nix	omacom/omawrite
 owe	pkgs/apps/owe.nix	omacom/owe
 aether	pkgs/apps/aether.nix	omacom/aether
 ttfx	pkgs/apps/ttfx.nix	omacom/ttfx
+omarchy-speedtest	pkgs/apps/omarchy-speedtest.nix	omacom/omarchy-speedtest
+omarchy-screensaver	pkgs/apps/omarchy-screensaver.nix	omacom/omarchy-screensaver
 EOF
 )
 

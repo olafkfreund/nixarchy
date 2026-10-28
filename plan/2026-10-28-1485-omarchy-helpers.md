@@ -274,6 +274,11 @@ again, as before. That is safe, because edge stays on its last good pin.
   bytes were off by about 1% from the TCP window. Almost every test there
   times real TCP over localhost, so the package sets `doCheck = false`,
   and the session probe stays the runtime evidence.
+- **Step 8, CI** (red run 40687585459, `omarchy` job):
+  `checks.review-pins` requires every `pkgs/apps` package with an
+  `updateScript` to be in `pkgs/review.sh`'s pin table, and it holds a
+  hand-written expected list. Both packages are now in both places. Step
+  4's cheap tier had not listed `review-pins`; it passes locally now.
 - **Refuted** (agy #3): nixos-26.05 has `buildGo127Module`, and
   `checks.stable-eval` evaluates on this branch.
 

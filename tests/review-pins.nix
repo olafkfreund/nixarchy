@@ -24,6 +24,8 @@ let
     "owe"
     "aether"
     "ttfx"
+    "omarchy-speedtest"
+    "omarchy-screensaver"
   ];
 in
 pkgs.runCommand "nixarchy-review-pins"

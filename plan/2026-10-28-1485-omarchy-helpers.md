@@ -59,9 +59,14 @@ reviewers:
    - Add a one-line comment on the screensaver wrapper: the font lookup's
      `/usr/share` path cannot hit on NixOS, so `fc-match` is the one that
      must be on PATH.
+   - The screensaver file's argument set must name `fontconfig` and
+     `makeWrapper` as well as `pkg-config`, `libxkbcommon` and `wayland`.
 
-   **Verify (session):** `nix fmt`, then check `git diff --stat` shows two
-   small new files (§5: a hook may nixpkgs-fmt them).
+   **Verify (session):**
+   - `git add` the new files first: a flake cannot see untracked files
+     (§5), and `git diff --stat` does not list them.
+   - Then `nix fmt`, and check `git diff --cached --stat` shows two small
+     files (§5: a hook may nixpkgs-fmt them).
 
    **Traps:** `buildGo127Module`, not `buildGoModule`; this nixpkgs' `go` is
    1.26.10.
@@ -70,15 +75,18 @@ reviewers:
    - **`flake.nix:763`**: add
      `omarchy-speedtest = final.callPackage ./pkgs/apps/omarchy-speedtest.nix { };`
      and the same for `omarchy-screensaver`, beside `ttfx`.
-   - **`flake.nix:859`**: the line becomes
-     `inherit (final.nixarchy-apps) ttfx omasnap omarchy-speedtest;`. The
-     screensaver is not passed to the Omarchy package on `main`; that is
-     step 6.
+   - **`flake.nix:859`**: the line becomes `inherit (final.nixarchy-apps)
+     ttfx omasnap omarchy-speedtest omarchy-screensaver;`, as the spec says.
    - **`flake.nix:1208`**: add both names to the list that re-exports
-     `ttfx`, so `packages.x86_64-linux.<name>` exists and CI's generated
-     builds reach the screensaver while nothing else uses it.
-   - **`pkgs/omarchy/default.nix:117`**: add `omarchy-speedtest,` to the
-     arguments.
+     `ttfx`, so `packages.x86_64-linux.<name>` exists for local builds.
+   - **`pkgs/omarchy/default.nix:117`**: add `omarchy-speedtest,` and
+     `omarchy-screensaver,` to the arguments.
+   - **The runtime list at `:338-348`**: add `omarchy-screensaver` beside
+     `ttfx`, with a one-line note saying quattro's launcher execs it (#1485).
+     That puts it in every system closure, so every system and session
+     check on `main` builds it. A `packages` entry alone is built by no
+     workflow (§4); both reviewers found this. It also leaves no unused
+     argument for deadnix, and edge's carry shrinks to the substitution.
    - **`pkgs/omarchy/default.nix`**: add a substitution beside the
      version-channel one (`:632`), with a one-line `#` note naming #1485.
      It runs `substituteInPlace
@@ -95,8 +103,9 @@ reviewers:
    - `nix build .#packages.x86_64-linux.{omarchy-speedtest,omarchy-screensaver}`;
    - `nix build .#packages.x86_64-linux.omarchy`;
    - then `grep -c /usr/lib/omarchy/speedtest
-     result/share/omarchy/bin/omarchy-network-speedtest` prints `0`, and
-     the store path it names exists.
+     result/share/omarchy/bin/omarchy-network-speedtest || true` prints
+     `0` (`grep -c` exits 1 on no match, so read the count, not the
+     status), and the store path it names exists.
 
    **Traps:**
    - `find` does not follow `result` (§5); use the full path or `find -L`.
@@ -105,12 +114,28 @@ reviewers:
 3. **The speed test probe in `tests/session.nix`** (codex).
    - Put it next to the `/usr` scan block, as a separate `with
      subtest("speed test reaches its client (#1485)")` block.
-   - It runs `as_user("timeout 20 omarchy-network-speedtest down; echo rc=$?")`
-     through `machine.execute` and captures stdout and stderr.
-   - It asserts that `speed test client is missing` is absent, and that
-     `rc=` is neither 126 nor 127.
-   - Capture into a variable and match in Python. No `| grep -q` (§1 of
-     tests/AGENTS.md, and `checks.grep-q-pipefail`).
+   - **Positive half**, so an upstream rewording cannot turn it into a
+     no-op:
+     - read the installed script with `machine.succeed("cat $(readlink -f
+       /run/current-system/sw/bin/omarchy-network-speedtest)")`;
+     - pull the client path out of its
+       `client=${OMARCHY_SPEEDTEST_BINARY:-<path>}` line with a Python
+       regex, and fail if the regex matches nothing;
+     - `machine.succeed(f"test -x {path}")`.
+   - **Run half:** `machine.execute(as_user("timeout 20
+     omarchy-network-speedtest down 2>&1; echo rc=$?"))`.
+     - **`2>&1` is required.** `machine.execute` returns stdout only, and
+       the missing-client message goes to stderr. Without it, the probe is
+       green when the client is missing (agy's finding).
+     - Assert `speed test client is missing` is absent from the output.
+     - Assert an `rc=` line is present and its value is neither 126 nor
+       127.
+     - 124 (the timeout) is accepted: it means a real client ran and waited
+       on a network the VM does not have.
+   - `as_user` wraps its argument in single quotes, so the command must
+     contain none.
+   - Capture into a variable and match in Python. No `| grep -q`
+     (`checks.grep-q-pipefail`).
 
    **Verify (session):**
    - `nix eval --raw .#checks.x86_64-linux.session.drvPath` evaluates;
@@ -120,8 +145,9 @@ reviewers:
 
 4. **Cheap tier and the §1 setup** (session).
    - Run each of these one at a time under the flock: `nix fmt -- --ci`,
-     statix, deadnix, then the checks `bin-ledger`, `menu-actions`,
-     `menu-verbs`, `menu-guards`, `grep-q-pipefail` and `options-shards`,
+     statix, deadnix, then the checks `bin-ledger`, `patched-files`,
+     `menu-actions`, `menu-verbs`, `menu-guards`, `grep-q-pipefail` and
+     `options-shards`,
      then `readme-counts.sh --check` with `OMARCHY_TREE` set.
    - If `bin-ledger` wants a row for `omarchy-network-speedtest`, add one in
      its file's shape, and record that here as a deviation.
@@ -133,9 +159,10 @@ reviewers:
        assertion. Then close that PR.
      - **Green:** this PR's own CI run.
 
-     If the owner prefers to skip the red CI run to save time, record the
-     static half (the built script names `/usr` without the substitution
-     and a store path with it) as the §1 evidence, and say so in the PR.
+     Both reviewers flagged the earlier option to skip this red run as a
+     §1 violation, and it is removed. To save wall time, open the red draft
+     PR at the same moment as the real one, so the two CI runs overlap
+     rather than queue.
 
 5. **Reviews, then PR to `main`** (session; codex and agy review).
    - Run `second-opinion` with Codex and agy on `git diff origin/main`.
@@ -149,19 +176,30 @@ reviewers:
 
 6. **The edge carry** (agy), on a branch from `origin/edge-candidate`, or
    from `origin/edge` if no candidate is open.
-   - In `pkgs/omarchy/default.nix`, add `omarchy-screensaver` to the
-     arguments and to `flake.nix:859`'s inherit line.
+   - The package and the argument are already there from step 2.
    - Add `substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver
      --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver
      "$@"' 'exec ${omarchy-screensaver}/bin/omarchy-launch-screensaver
      "$@"'`.
-   - Add a session probe beside step 3's, run in the background:
-     `as_user("omarchy-launch-screensaver force &")`.
-     - Then `wait_until_succeeds(as_user("hyprctl layers -j"))` until the
-       output contains `org.omarchy.screensaver`, timeout 30.
-     - Then send a key with `machine.send_key("esc")`, and wait until the
-       namespace is gone, timeout 15.
-     - Hold the namespace in one Python variable.
+   - Add a session probe beside step 3's, using the shape the polkit probe
+     already uses (`tests/session.nix:586-590`). `wait_until_succeeds`
+     polls an exit status, not output. So each poll writes `hyprctl layers
+     -j` to a file, then greps the file, which `grep-q-pipefail` allows,
+     unlike a pipe.
+     - **Precondition:** the namespace is absent before launch, so a stale
+       layer cannot satisfy the probe.
+     - **Launch** through the compositor, as the shell-restart probe at
+       `:619-640` does with `hyprctl dispatch`, so the program inherits the
+       session's Wayland environment. Background it with stdio closed
+       (`</dev/null >/dev/null 2>&1`), or `machine.execute` blocks until it
+       exits (agy's finding).
+     - **Wait** for the namespace to be present (timeout 30), then
+       `machine.send_key("esc")`, then wait for it to be absent (timeout
+       15).
+     - Hold the namespace string in one Python variable.
+   - Run `checks.bin-ledger` on the carry branch, and add a row for
+     `omarchy-launch-screensaver` if it asks, as step 4 does for the speed
+     test.
 
    **Verify (session):**
    - package tier `nix build .#packages.x86_64-linux.omarchy`;
@@ -169,8 +207,13 @@ reviewers:
      `0`;
    - the session check evaluates.
 
-   **§1:** red is edge run 40677049412, the `/usr` scan naming
-   `omarchy-launch-screensaver`. Green is the PR's edge verify.
+   **§1:** run 40677049412 proves only the `/usr` scan, not this probe
+   (both reviewers). For the probe itself:
+   - **Red:** a throwaway carry that substitutes a path which passes the
+     scan but runs nothing, `${omarchy-screensaver}/bin/does-not-exist`.
+     Its edge verify must fail on the layer probe, not on the scan.
+   - **Green:** the real carry's verify.
+   - Both runs overlap.
 
    Codex and agy review the diff. The PR goes to `edge-candidate`, or to
    `edge` if that is how the latest edge carries landed: check

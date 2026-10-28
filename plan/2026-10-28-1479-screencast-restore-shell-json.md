@@ -128,6 +128,10 @@ runs step 7 with the user.
    - Verify: `jq -e '.bar.layout' fixtures/p620-shell.json`, and a read-through: no location,
      account or path.
    - Traps: `git add` the new files before `nix build`, because flakes only see tracked files.
+- Deviation (implemented): the p620 fixture gives 9 placement records, not 12. Three of the 12
+  hidden plugins have no bar widget (`accent-hold` service, `vimarchy` overlay, `voxtype-osd`
+  panel); the test asserts the 9 and names the 3. The device path in the fixture is redacted.
+
 
 6. **Review (lead).** A fresh Opus reviewer gets this plan and `git diff origin/edge`. The lead
    fixes what it finds and records deviations here in the same commit as the fix.

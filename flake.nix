@@ -2483,6 +2483,19 @@
             bash ${./tests/demo/screencast/shot-coverage.sh} "$root"
             touch $out
           '';
+          # #1479: screencast-restore puts each hidden widget back where it was. The
+          # placement extraction and a model of the restore run over a redacted p620 snapshot.
+          screencast-placement =
+            pkgsFor.${system}.runCommand "nixarchy-screencast-placement"
+              {
+                nativeBuildInputs = [ pkgsFor.${system}.jq ];
+              }
+              ''
+                bash ${./tests/demo/screencast/placement-test.sh} \
+                  ${./tests/demo/screencast/placement.jq} \
+                  ${./tests/demo/screencast/fixtures/p620-shell.json}
+                touch $out
+              '';
           # #953: a restart never ends with zero shells, against stubs that make
           # teardown slower than upstream's `timeout 5`; upstream's own script is
           # the negative control.

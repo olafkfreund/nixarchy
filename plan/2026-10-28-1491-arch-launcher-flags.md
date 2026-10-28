@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1491
 spec: spec/2026-10-28-1491-arch-launcher-flags.md
 coders:

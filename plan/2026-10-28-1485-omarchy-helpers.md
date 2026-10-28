@@ -200,3 +200,15 @@ reviewers:
 restored too, so revert the whole PR, not the substitution alone. Edge: revert
 the carry on `edge-candidate`, and edge then goes red on the `/usr` scan
 again, as before. That is safe, because edge stays on its last good pin.
+
+## Review findings applied (Codex gpt-6-sol and agy, model not reported, 2026-10-28)
+
+Both reviews reached the same conclusion: as first written, both probes could stay green with the thing broken. Verified against `tests/session.nix` and the driver, then fixed above:
+
+- the speed test probe lacked `2>&1`, and `machine.execute` returns stdout only (agy);
+- `wait_until_succeeds` polls an exit status, not output (both);
+- a backgrounded launch with stdio open blocks `execute` (agy);
+- both §1 red proofs were the wrong check, or skippable (both);
+- a `packages` entry is built by no workflow (agy, §4);
+- `grep -c` exits 1 on no match, and untracked files are invisible to a flake and to `git diff` (Codex, §5);
+- missing `fontconfig` argument, `patched-files`, and the edge `bin-ledger` row (both).

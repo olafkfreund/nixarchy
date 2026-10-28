@@ -1375,6 +1375,21 @@ the real handler runs) and reads state over IPC.
 
 ## Working here
 
+- **`pgrep -f <pattern>` in a VM check matches the driver's own shell.**
+  The driver runs every command as `bash -c '…'`, and that shell's command
+  line contains the pattern. So `machine.succeed("pgrep -f X")` passes with no
+  X running, and `wait_until_fails` on it never ends. Write the pattern as
+  `[X]rest` (`pgrep -f [l]ib/omarchy-screensaver/…`): the regex still matches
+  the process, and no longer matches its own literal text. #1485's screensaver
+  probe had the plain form until it was measured from a script file.
+- **A check keyed on a layer namespace breaks when upstream reuses the
+  name.** quattro 9a90b5e gave the suspended background plugin a second
+  `omarchy-background` layer, a clear click-catcher on the Bottom level over
+  owe's video. "No `omarchy-background` layer" then failed with the shell not
+  drawing, and "an `omarchy-background` layer" passed while it was still
+  suspended (#1485). Read the level you mean from `hyprctl layers -j`
+  (`{monitor: {levels: {"0": [...]}}}`, where `"0"` is Background) rather than
+  grepping for the name.
 - **`machine: output:` is the whole command's stdout, not the probe's.**
   `session`'s unlock check is `out=$(… lock status); python3 -c … <<<"$out"`,
   and on failure the driver printed an empty `output:`. That reads as "lock

@@ -1774,7 +1774,9 @@ in
 
     # Why: modules/AGENTS.md#install-config-lockscreen-pam-sh-whose-one-line-is
     security.pam.services = {
-      omarchy-lock-password = { };
+      # Upstream's autologin uses an unencrypted default keyring; here the first
+      # unlock after an autologin boot opens the encrypted login keyring (#1492).
+      omarchy-lock-password.enableGnomeKeyring = lib.mkDefault config.services.gnome.gnome-keyring.enable;
     }
     # Upstream writes omarchy-lock-fingerprint only when fprintd-list reports
     # enrolled fingers, and the shell gates on that same pair (the file plus

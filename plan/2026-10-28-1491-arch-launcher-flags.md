@@ -181,6 +181,18 @@ reviewers:
    - In the PR body, a release-notes line that flags in
      `~/.config/chromium-flags.conf` now take effect.
 
+## Deviations recorded during implementation
+
+- Step 5: the policy entry sits inside `modules/nixos.nix`'s existing
+  `environment.etc` attrset (next to `omarchy/xcompose`), not beside the
+  tmpfiles rules, because a second `environment.etc =` in the module would
+  clash. nixpkgs' `programs.chromium` writes `extra.json` for `extraOpts`, and
+  `default.json` only for `defaultProfile`, so the fixture asserts `extra.json`
+  and `omarchy.json`. Red: pointing ours at `extra.json` prints
+  `chromium-own-policy: FAIL extra.json and omarchy.json are not both in etc`.
+- Step 4: the activation prefixes `PATH` with coreutils and gnused
+  unconditionally rather than probing Home Manager's activation PATH.
+
 ## Tests
 
 - Cheap tier (`flock`):

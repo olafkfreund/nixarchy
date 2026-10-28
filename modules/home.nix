@@ -1492,6 +1492,25 @@ in
         /etc/profiles/per-user/${config.home.username}/bin /run/current-system/sw/bin
     '';
 
+    # #1491: register the copy-url and yt-dlp native hosts. The scripts write
+    # ~/.config/<browser>/NativeMessagingHosts/*.json pointing at the
+    # /run/current-system/sw/bin host (patched in the omarchy package); standalone
+    # Home Manager has no such path, so it skips.
+    home.activation.nixarchyChromiumHosts = lib.hm.dag.entryAfter [ "nixarchySeed" ] ''
+      if [ -x /run/current-system/sw/bin/omarchy-chromium-copy-url-host ]; then
+        for s in copy-url ytdlp; do
+          PATH=${
+            lib.makeBinPath [
+              pkgs.coreutils
+              pkgs.gnused
+            ]
+          }:$PATH \
+            run env OMARCHY_PATH=${omarchyPath} ${omarchyPath}/bin/omarchy-install-chromium-$s ||
+            echo "nixarchy: omarchy-install-chromium-$s failed; the browser extension host is not registered" >&2
+        done
+      fi
+    '';
+
     # #1386: upstream's installer and migration 1791112479 run `mise reshim` to
     # build the [wrappers] dispatch links; nixarchy runs neither.
     home.activation.nixarchyAgentWrappers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

@@ -1663,6 +1663,12 @@ in
       {
         "omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
 
+        # Omarchy's managed Chromium policy (#1491). A file, not programs.chromium,
+        # so a user's own programs.chromium (extra.json, default.json) merges beside it
+        # rather than colliding; the dir's tmpfiles rule stays for the theme script.
+        "chromium/policies/managed/omarchy.json".source =
+          "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
+
         # The flake nixarchy-apply rebuilds, for the tools and plugins that
         # cannot ask the module system and cannot rely on the session
         # environment (#950). environment.sessionVariables carries

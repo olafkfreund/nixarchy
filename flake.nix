@@ -180,13 +180,14 @@
     # ai-mirror (#773): the binary and its bar widget on every machine, no agent
     # connected to it unless programs.nixarchy.aiMirror.mcp says so. Pinned to a
     # commit like voice above; this one is v3.1.0.
+    # ai-mirror#81: survives a Hyprland restart; revokes a grant whose Hyprland is gone
     # 3.1.0 (ai-mirror#78): Agent cursor badge + screen frame during a grant;
     # needs packages.cursor installed (modules/home.nix)
     # 3.0.0 (#1436): every mutating call needs generation;
     # a11y_act set_value/select, read back
     # Why: spec/2026-09-22-773-ai-mirror-default.md
     ai-mirror = {
-      url = "github:olafkfreund/ai-mirror/4edc198fb50b48ee961453092fd98af1b3d70cde";
+      url = "github:olafkfreund/ai-mirror/b4a9ae6ebbf27f6b286a87ddf118c578d73b62c1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

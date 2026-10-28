@@ -14,7 +14,8 @@ if [[ -f "$config" ]]; then
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" || "$line" == \#* ]] && continue
-    line="${line//\/usr\/share\/omarchy\//$omarchy_path/}"
+    # Quoted: bash 5.2 would expand an & in the replacement to the match.
+    line="${line//\/usr\/share\/omarchy\//"$omarchy_path"/}"
 
     if [[ "$line" == --enable-features=* ]]; then
       has_features=true
@@ -35,8 +36,9 @@ if [[ "$has_features" == true ]]; then
   if [[ -n "${NIXOS_OZONE_WL:-}" && -n "${WAYLAND_DISPLAY:-}" && -z "${seen[WaylandWindowDecorations]+x}" ]]; then
     features+=(WaylandWindowDecorations)
   fi
-  IFS=,
-  flags+=("--enable-features=${features[*]}")
+  if ((${#features[@]})); then
+    flags+=("--enable-features=$(IFS=,; echo "${features[*]}")")
+  fi
 fi
 
 exec "${CHROMIUM_REAL:-@chromium@}" "${flags[@]}" "$@"

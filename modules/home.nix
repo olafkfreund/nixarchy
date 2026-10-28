@@ -1499,13 +1499,12 @@ in
     home.activation.nixarchyChromiumHosts = lib.hm.dag.entryAfter [ "nixarchySeed" ] ''
       if [ -x /run/current-system/sw/bin/omarchy-chromium-copy-url-host ]; then
         for s in copy-url ytdlp; do
-          PATH=${
+          run env PATH=${
             lib.makeBinPath [
               pkgs.coreutils
               pkgs.gnused
             ]
-          }:$PATH \
-            run env OMARCHY_PATH=${omarchyPath} ${omarchyPath}/bin/omarchy-install-chromium-$s ||
+          }:$PATH OMARCHY_PATH=${omarchyPath} ${omarchyPath}/bin/omarchy-install-chromium-$s ||
             echo "nixarchy: omarchy-install-chromium-$s failed; the browser extension host is not registered" >&2
         done
       fi

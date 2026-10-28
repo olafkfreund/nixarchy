@@ -1915,6 +1915,27 @@ pkgs.testers.runNixOSTest {
         "named exceptions with a command that explains itself.")
     print("no unexpected command reaches into /usr")
 
+    # ---- the Network Speed Test reaches its packaged client (#1485) -------
+    # The script execs ''${OMARCHY_SPEEDTEST_BINARY:-<path>}; on NixOS the
+    # default must be a store path substituted at build time. The VM is
+    # offline, so the client runs and then fails on the network.
+    with subtest("speed test reaches its client (#1485)"):
+        import re
+
+        script = machine.succeed("cat $(readlink -f /run/current-system/sw/bin/omarchy-network-speedtest)")
+        m = re.search(r'client=\$\{OMARCHY_SPEEDTEST_BINARY:-([^}]+)\}', script)
+        assert m, "omarchy-network-speedtest no longer reads its client from OMARCHY_SPEEDTEST_BINARY; this probe would check nothing"
+        client = m.group(1)
+        machine.succeed(f"test -x {client}")
+
+        rc, got = machine.execute(as_user("timeout 20 omarchy-network-speedtest down 2>&1; echo rc=$?"))
+        assert "speed test client is missing" not in got, f"speed test client is missing: {got}"
+        m = re.search(r"rc=(\d+)", got)
+        assert m, f"no rc= line: {got}"
+        code = int(m.group(1))
+        assert code not in (126, 127), f"speed test client could not run (rc={code}): {got}"
+        print("the Network Speed Test reaches its packaged client")
+
     # ---- launchers must look on PATH, not in /usr/bin ---------------------
     # Clicking Spotify offered to install Spotify. Both launchers decide
     # whether the app is present by testing `-x /usr/bin/<app>`, which is never

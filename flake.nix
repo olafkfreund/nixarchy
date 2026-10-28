@@ -2493,7 +2493,8 @@
               ''
                 bash ${./tests/demo/screencast/placement-test.sh} \
                   ${./tests/demo/screencast/placement.jq} \
-                  ${./tests/demo/screencast/fixtures/p620-shell.json}
+                  ${./tests/demo/screencast/fixtures/p620-shell.json} \
+                  ${./tests/demo/screencast/restore-plugins.sh}
                 touch $out
               '';
           # #953: a restart never ends with zero shells, against stubs that make

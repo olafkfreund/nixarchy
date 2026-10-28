@@ -166,3 +166,19 @@ Revert the PR. Prep and restore go back to appending on the right, and the new c
 fixture disappear. Nothing on a user's machine depends on the new manifest field. A snapshot
 written by the new prep still restores with the old restore, via its legacy path (it ignores
 `placement`).
+
+## Opus review fixes (implemented 2026-10-28)
+
+- Plugins with no bar widget (p620: accent-hold, vimarchy, voxtype-osd) are re-enabled with
+  `omarchy plugin enable "$id"`; only ids in `.placement` are left to `putBarWidget`.
+- **User decision:** `plugins[]` order is ignored. Re-enabling appends and no IPC repositions, so
+  restore's verify compares both files with `plugins` sorted by id; `bar.layout` and everything
+  else stay exact.
+- The restore sequence lives in `tests/demo/screencast/restore-plugins.sh`, inlined into restore
+  with `builtins.readFile` and sourced by the `screencast-placement` check. The check runs it
+  against stub `omarchy-shell`/`omarchy` on a JSON file, compares the whole file, re-runs it,
+  injects a failed `putBarWidget`, and has a negative control (the legacy `enable … right`).
+- After a failed `putBarWidget`, nothing more goes into that section; skipped ids are reported
+  and a re-run (`screencast-recover`) places them in order.
+- Assumption (from the p620 fixture): a bar widget's plugin is not listed in `plugins[]`; only
+  the three widget-less plugins are. Step 7 confirms it live, with the IPC's `ok` shape.

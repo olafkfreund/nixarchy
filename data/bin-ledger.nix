@@ -370,6 +370,10 @@
     class = "new";
     reason = "Not in upstream. Run on every activation: removes upstream's exact mise wrapper from ~/.local/bin when a Nix profile has the same command, for launchers written before omarchy-mise-install's patch (#707).";
   };
+  "omarchy-network-speedtest" = {
+    class = "patch";
+    reason = "Its default client path, /usr/lib/omarchy/speedtest from Arch's omarchy-speedtest package, is the store path of pkgs/apps/omarchy-speedtest.nix. OMARCHY_SPEEDTEST_BINARY still overrides it (#1485).";
+  };
   "omarchy-openclaw-onboard" = {
     class = "vendor";
     reason = "Vendored unchanged, and read-only: reads MainPID off openclaw-gateway.service with `systemctl --user show`.";

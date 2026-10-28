@@ -244,6 +244,12 @@ restored too, so revert the whole PR, not the substitution alone. Edge: revert
 the carry on `edge-candidate`, and edge then goes red on the `/usr` scan
 again, as before. That is safe, because edge stays on its last good pin.
 
+## Deviations
+
+- **Step 4:** `checks.bin-ledger` reported `omarchy-network-speedtest:
+  shipped as \`patch\` and has no row`, the case step 4 provides for. The
+  row is added in `data/bin-ledger.nix`, after `omarchy-mise-unshadow`.
+
 ## Review findings applied (Codex gpt-6-sol and agy, model not reported, 2026-10-28)
 
 Both reviews reached the same conclusion: as first written, both probes could stay green with the thing broken. Verified against `tests/session.nix` and the driver, then fixed above:

@@ -2497,6 +2497,13 @@
             bash ${./tests/demo/screencast/shot-coverage.sh} "$root"
             touch $out
           '';
+
+          # #1491: the Chromium launcher rewrites /usr/share/omarchy paths and merges --enable-features from chromium-flags.conf.
+          chromium-flags = pkgsFor.${system}.runCommand "nixarchy-chromium-flags" { } ''
+            bash ${./tests/chromium-flags-test.sh} ${./pkgs/omarchy/chromium-flags.sh}
+            touch $out
+          '';
+
           # #953: a restart never ends with zero shells, against stubs that make
           # teardown slower than upstream's `timeout 5`; upstream's own script is
           # the negative control.

@@ -126,8 +126,21 @@
   # guaranteed to be installed, so it has to be carried here.
   nh,
   callPackage,
+  symlinkJoin,
 }:
 let
+  # Why: pkgs/AGENTS.md#chromium-reads-its-flags-through-our-launcher-1491
+  chromium-flags = symlinkJoin {
+    name = "chromium-flags-${chromium.version}";
+    paths = [ chromium ];
+    postBuild = ''
+      rm -f "$out/bin/chromium" "$out/bin/chromium-browser"
+      substitute ${./chromium-flags.sh} chromium-flags.sh --replace-fail @chromium@ ${chromium}/bin/chromium
+      install -m 755 chromium-flags.sh "$out/bin/chromium"
+      install -m 755 chromium-flags.sh "$out/bin/chromium-browser"
+    '';
+  };
+
   # Everything the 438 scripts in bin/ invoke. Kept explicit rather than
   # pulled from a generated file: a missing entry should be a readable diff,
   # not a silent PATH lookup that only fails on someone else's machine.
@@ -257,7 +270,7 @@ let
     xdg-terminal-exec
     uwsm
     foot
-    chromium
+    chromium-flags
     nautilus
     neovim
     mise

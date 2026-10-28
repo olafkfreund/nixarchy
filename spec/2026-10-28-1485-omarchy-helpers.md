@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1485
 intent: intent/2026-10-28-1485-omarchy-helpers.md
 ---

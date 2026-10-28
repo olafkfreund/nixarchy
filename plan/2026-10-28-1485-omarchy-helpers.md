@@ -268,6 +268,12 @@ again, as before. That is safe, because edge stays on its last good pin.
   path, and runs a negative control with `OMARCHY_SPEEDTEST_BINARY=/nonexistent`.
   That proves the missing-client message it refuses is still upstream's
   wording.
+- **Step 8, CI** (run 40687585459): `omarchy-speedtest`'s upstream
+  `go test` suite flaked on a hosted runner. In
+  `TestAWorkerThatEndsAfterTheWindowKeepsTheWindowsCount`, the counted
+  bytes were off by about 1% from the TCP window. Almost every test there
+  times real TCP over localhost, so the package sets `doCheck = false`,
+  and the session probe stays the runtime evidence.
 - **Refuted** (agy #3): nixos-26.05 has `buildGo127Module`, and
   `checks.stable-eval` evaluates on this branch.
 

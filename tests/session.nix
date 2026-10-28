@@ -1926,7 +1926,13 @@ pkgs.testers.runNixOSTest {
         m = re.search(r'client=\$\{OMARCHY_SPEEDTEST_BINARY:-([^}]+)\}', script)
         assert m, "omarchy-network-speedtest no longer reads its client from OMARCHY_SPEEDTEST_BINARY; this probe would check nothing"
         client = m.group(1)
+        assert client.startswith("/nix/store/"), f"the speed test client is not a store path: {client}"
         machine.succeed(f"test -x {client}")
+
+        # Negative control: the missing-client message the run half refuses must
+        # still be upstream's wording, or that assertion would pass on anything.
+        rc, got = machine.execute(as_user("OMARCHY_SPEEDTEST_BINARY=/nonexistent timeout 20 omarchy-network-speedtest down 2>&1; echo rc=$?"))
+        assert "speed test client is missing" in got, f"the missing-client message changed; update this probe: {got}"
 
         rc, got = machine.execute(as_user("timeout 20 omarchy-network-speedtest down 2>&1; echo rc=$?"))
         assert "speed test client is missing" not in got, f"speed test client is missing: {got}"

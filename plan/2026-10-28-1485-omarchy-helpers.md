@@ -179,8 +179,8 @@ reviewers:
    - The package and the argument are already there from step 2.
    - Add `substituteInPlace $out/share/omarchy/bin/omarchy-launch-screensaver
      --replace-fail 'exec /usr/lib/omarchy-screensaver/omarchy-screensaver
-     "$@"' 'exec ${omarchy-screensaver}/bin/omarchy-launch-screensaver
-     "$@"'`.
+     "$@"' 'exec ${omarchy-screensaver}/lib/omarchy-screensaver/omarchy-screensaver
+     "$@"'` (the binary's path since step 5's review).
    - Add a session probe beside step 3's, using the shape the polkit probe
      already uses (`tests/session.nix:586-590`). `wait_until_succeeds`
      polls an exit status, not output. So each poll writes `hyprctl layers
@@ -249,6 +249,27 @@ again, as before. That is safe, because edge stays on its last good pin.
 - **Step 4:** `checks.bin-ledger` reported `omarchy-network-speedtest:
   shipped as \`patch\` and has no row`, the case step 4 provides for. The
   row is added in `data/bin-ledger.nix`, after `omarchy-mise-unshadow`.
+
+- **Step 5, the PR diff review** (Codex gpt-6-sol P1, and agy #1,
+  independently): the screensaver package's `bin/omarchy-launch-screensaver`
+  collides with the Omarchy package's script of the same name in any
+  profile that holds both. Standalone Home Manager adds the runtime list
+  (`modules/home.nix:1074`), so `buildEnv` refuses. A probe `buildEnv`
+  reproduced it.
+  - Fix: install the binary at Arch's own path,
+    `$out/lib/omarchy-screensaver/omarchy-screensaver`, with nothing in
+    `bin/`.
+  - The edge carry (step 6) therefore substitutes `exec
+    ${omarchy-screensaver}/lib/omarchy-screensaver/omarchy-screensaver "$@"`.
+  - §2: the new `checks.runtime-profile` builds that profile with
+    collisions refused. It is green with the fix, and red (`conflicting
+    subpath`) with the binary moved back to `bin/`.
+- **Step 5** (agy #2): the probe also requires the client to be a store
+  path, and runs a negative control with `OMARCHY_SPEEDTEST_BINARY=/nonexistent`.
+  That proves the missing-client message it refuses is still upstream's
+  wording.
+- **Refuted** (agy #3): nixos-26.05 has `buildGo127Module`, and
+  `checks.stable-eval` evaluates on this branch.
 
 ## Review findings applied (Codex gpt-6-sol and agy, model not reported, 2026-10-28)
 

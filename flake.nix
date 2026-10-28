@@ -1930,6 +1930,9 @@
             # `nix run .#review` watches the pinned packages; this watches that
             # it can still see them. See tests/review-pins.nix.
             "review-pins"
+            # The standalone Home Manager profile: the package plus every runtime
+            # dependency, built with collisions refused (#1485).
+            "runtime-profile"
             "session-journal-race"
             # A WebP loads through the plugin path the shell is launched with (#1284).
             "shell-image-formats"

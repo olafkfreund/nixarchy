@@ -32,9 +32,16 @@ rustPlatform.buildRustPackage (finalAttrs: {
     wayland
   ];
 
+  # Arch's path, not bin/: the Omarchy package already ships an
+  # omarchy-launch-screensaver script, and a second one collides in buildEnv.
+  postInstall = ''
+    install -Dm755 $out/bin/omarchy-launch-screensaver $out/lib/omarchy-screensaver/omarchy-screensaver
+    rm -r $out/bin
+  '';
+
   # The /usr/share/fonts lookup cannot work on NixOS, so fc-match must be on PATH.
   postFixup = ''
-    wrapProgram $out/bin/omarchy-launch-screensaver --prefix PATH : ${lib.makeBinPath [ fontconfig ]}
+    wrapProgram $out/lib/omarchy-screensaver/omarchy-screensaver --prefix PATH : ${lib.makeBinPath [ fontconfig ]}
   '';
 
   passthru.updateScript = writeShellApplication {
@@ -51,6 +58,5 @@ rustPlatform.buildRustPackage (finalAttrs: {
     homepage = "https://github.com/omacom/omarchy-screensaver";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-    mainProgram = "omarchy-launch-screensaver";
   };
 })

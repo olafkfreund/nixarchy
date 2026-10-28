@@ -1,0 +1,207 @@
+{
+  "bar": {
+    "layout": {
+      "center": [
+        {
+          "hidden": "hover",
+          "id": "omarchy.indicators"
+        },
+        {
+          "hidden": "hover",
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "hidden": "hover",
+          "id": "omarchy.weather"
+        },
+        {
+          "format": "ddd d MMM HH:mm",
+          "id": "promaa.clock"
+        },
+        {
+          "hidden": "hover",
+          "id": "io.github.olafkfreund.nixi-button"
+        },
+        {
+          "id": "io.github.cempack.omaspotify"
+        }
+      ],
+      "centerBegin": [],
+      "centerEnd": [
+        {
+          "id": "omateams"
+        },
+        {
+          "id": "nixarchy.meetingai"
+        }
+      ],
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        },
+        {
+          "id": "io.github.qempexe.altscape"
+        },
+        {
+          "id": "yogeshojha.omafob",
+          "showRing": true
+        },
+        {
+          "id": "nixarchy.gliff-manager"
+        }
+      ],
+      "right": [
+        {
+          "id": "nixarchy.devenv"
+        },
+        {
+          "icon": "󰇘",
+          "iconOpen": "󰇙",
+          "id": "io.github.arikisonfire.bar-folder",
+          "widgetSettings": {
+            "io.github.huey-holdings-llc.omarecorder": {
+              "hidden": "hover"
+            },
+            "io.github.kristoferlund.webcam": {
+              "device": "/dev/video0",
+              "hidden": "hover"
+            },
+            "olafkfreund.govee": {
+              "hidden": "hover"
+            },
+            "omarchy.agents": {
+              "hidden": "hover"
+            },
+            "omarchy.bluetooth": {
+              "hidden": "hover"
+            },
+            "omarchy.network": {
+              "hidden": "hover"
+            },
+            "onelegdave.omadroid": {
+              "hidden": "hover",
+              "quality": "Balanced"
+            }
+          },
+          "widgets": [
+            "io.github.kristoferlund.webcam",
+            "onelegdave.omadroid",
+            "omarchy.agents",
+            "olafkfreund.govee",
+            "nixarchy.podman",
+            "nixarchy.distrobox",
+            "nixarchy.microvm",
+            "nixarchy.devenv",
+            "omarchy.monitor",
+            "io.github.nobledoodle.omarchroma",
+            "io.github.olafkfreund.nixarchy-plugin-browser",
+            "nixarchy.pixelbuds",
+            "omarchy.network",
+            "nixarchy.pkg",
+            "omarchy.bluetooth",
+            "io.github.huey-holdings-llc.omarecorder",
+            "io.github.data-goblin.omgato",
+            "ronnie.worldradio"
+          ]
+        },
+        {
+          "hidden": "hover",
+          "id": "nixarchy.herdr",
+          "pinScreen": "DP-2",
+          "pinned": false
+        },
+        {
+          "id": "voice.indicator"
+        },
+        {
+          "contentDirection": "Auto",
+          "defaultQuery": "in:inbox",
+          "heavyMessageRendering": "Always render",
+          "hidden": "hover",
+          "id": "omamail",
+          "markReadDelaySec": 2,
+          "maxMessages": 25,
+          "notifyNewMail": "On",
+          "oauthPort": 9481,
+          "previewOnCursor": false,
+          "refreshIntervalSec": 120,
+          "showBarIcon": true,
+          "undoSendSeconds": 10,
+          "unifiedCalendarView": true,
+          "unifiedMailboxes": false
+        },
+        {
+          "hidden": "hover",
+          "id": "omarchy.system-update"
+        },
+        {
+          "hidden": "always",
+          "id": "omarchy.power"
+        },
+        {
+          "id": "nixarchy.podman"
+        },
+        {
+          "id": "nixarchy.microvm"
+        },
+        {
+          "id": "nixarchy.rebuild"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "olafkfreund.ai-mirror"
+        },
+        {
+          "id": "shavanced.notification-center"
+        },
+        {
+          "directoryRefresh": true,
+          "extensionDownloads": true,
+          "id": "io.github.jondkinney.omapop"
+        },
+        {
+          "id": "nixarchy.meeting-mode"
+        },
+        {
+          "id": "io.github.nobledoodle.omarchroma"
+        }
+      ],
+      "tray": []
+    }
+  },
+  "plugins": [
+    {
+      "id": "rmacy.voxtype-osd"
+    },
+    {
+      "id": "vimarchy"
+    },
+    {
+      "id": "io.github.olafkfreund.nixi"
+    },
+    {
+      "id": "olafkfreund.github-actions"
+    },
+    {
+      "id": "olafkfreund.gitlab-pipelines"
+    },
+    {
+      "id": "nixarchy.flatsnap"
+    },
+    {
+      "id": "nixarchy.winvm"
+    },
+    {
+      "id": "io.github.n1c01a5.accent-hold"
+    },
+    {
+      "id": "nixarchy.hyprlandsettings"
+    }
+  ],
+  "version": 1
+}

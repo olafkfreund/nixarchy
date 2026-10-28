@@ -4245,6 +4245,9 @@ pkgs.runCommand "nixarchy-options-files"
         }
         grep -q 'pam_unix.so' "$vm/etc/pam.d/omarchy-lock-password" || {
           echo "the lock PAM stack has no pam_unix auth" >&2; exit 1; }
+        # #1492: autologin leaves the login keyring locked; the lock screen opens it.
+        grep -q 'pam_gnome_keyring.so' "$vm/etc/pam.d/omarchy-lock-password" || {
+          echo "the lock PAM stack does not unlock the login keyring" >&2; exit 1; }
         if [ -e "$vm/etc/pam.d/hyprlock" ]; then
           echo "still declaring PAM for hyprlock, which Omarchy 4 does not run" >&2
           exit 1

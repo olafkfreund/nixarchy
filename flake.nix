@@ -2497,7 +2497,20 @@
             bash ${./tests/demo/screencast/shot-coverage.sh} "$root"
             touch $out
           '';
-
+          # #1479: screencast-restore puts each hidden widget back where it was. The
+          # placement extraction and a model of the restore run over a redacted p620 snapshot.
+          screencast-placement =
+            pkgsFor.${system}.runCommand "nixarchy-screencast-placement"
+              {
+                nativeBuildInputs = [ pkgsFor.${system}.jq ];
+              }
+              ''
+                bash ${./tests/demo/screencast/placement-test.sh} \
+                  ${./tests/demo/screencast/placement.jq} \
+                  ${./tests/demo/screencast/fixtures/p620-shell.json} \
+                  ${./tests/demo/screencast/restore-plugins.sh}
+                touch $out
+              '';
           # #1491: the Chromium launcher rewrites /usr/share/omarchy paths and merges --enable-features from chromium-flags.conf.
           chromium-flags = pkgsFor.${system}.runCommand "nixarchy-chromium-flags" { } ''
             bash ${./tests/chromium-flags-test.sh} ${./pkgs/omarchy/chromium-flags.sh}

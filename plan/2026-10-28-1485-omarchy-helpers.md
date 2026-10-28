@@ -279,6 +279,16 @@ again, as before. That is safe, because edge stays on its last good pin.
   `updateScript` to be in `pkgs/review.sh`'s pin table, and it holds a
   hand-written expected list. Both packages are now in both places. Step
   4's cheap tier had not listed `review-pins`; it passes locally now.
+- **Step 6, the carry review** (Codex found nothing; agy found four
+  problems, all real). The screensaver probe now:
+  - chains each poll with `&&`, so a failed `hyprctl` cannot read as
+    "the layer is gone";
+  - requires the process alive after mapping, and gone after the key;
+  - resends Esc up to five times;
+  - matches the namespace with `grep -F`.
+  - `pgrep` uses `[l]ib/…`. The driver runs commands through `bash -c`,
+    whose own command line would otherwise match. That was shown here
+    from a script file.
 - **Refuted** (agy #3): nixos-26.05 has `buildGo127Module`, and
   `checks.stable-eval` evaluates on this branch.
 

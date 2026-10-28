@@ -1965,11 +1965,27 @@ pkgs.testers.runNixOSTest {
         machine.execute("su omarchy -c 'bash /tmp/screensaver-probe.sh'")
         reply = machine.execute("cat /tmp/screensaver-dispatch.txt")[1].strip()
         assert reply == "ok", f"hyprctl dispatch did not accept the launch: {reply!r}"
+        # && throughout: a failed hyprctl leaves an empty file, which must fail
+        # the poll rather than read as "the layer is gone".
         machine.wait_until_succeeds(
-            layers_cmd + f"; grep -q {ns} /tmp/screensaver-layers.json", timeout=30)
-        machine.send_key("esc")
-        machine.wait_until_succeeds(
-            layers_cmd + f"; ! grep -q {ns} /tmp/screensaver-layers.json", timeout=15)
+            layers_cmd + f" && grep -qF {ns} /tmp/screensaver-layers.json", timeout=30)
+        # Still running once mapped, so a client that maps and then crashes
+        # cannot pass for one that left because of the key.
+        machine.sleep(2)
+        machine.succeed("pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver")
+        # A key sent before the overlay takes keyboard focus can be lost, so
+        # it is resent; the probe fails only if none of them dismisses it.
+        for _ in range(5):
+            machine.send_key("esc")
+            gone, _ = machine.execute(
+                layers_cmd + f" && ! grep -qF {ns} /tmp/screensaver-layers.json")
+            if gone == 0:
+                break
+            machine.sleep(2)
+        else:
+            raise Exception(f"{ns} was still mapped after five Esc presses")
+        machine.wait_until_fails(
+            "pgrep -f [l]ib/omarchy-screensaver/omarchy-screensaver", timeout=15)
         print("the native screensaver maps its overlay and leaves on a key")
 
     # ---- launchers must look on PATH, not in /usr/bin ---------------------

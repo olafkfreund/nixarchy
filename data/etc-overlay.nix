@@ -125,6 +125,11 @@
     reason = "The platform's HOOKS baseline for mkinitcpio. NixOS builds its initrd from boot.initrd.*; there is no hook list to set.";
   };
 
+  "mkinitcpio.conf.d/i2c_hid_of_module.conf" = {
+    class = "na";
+    reason = "MODULES+=(i2c-hid-of) for mkinitcpio, only when omarchy-hw-aarch64-qualcomm detects a Snapdragon laptop, so its internal keyboard can type the disk passphrase. nixarchy builds x86_64-linux only, and NixOS builds its initrd from boot.initrd.*; there is no MODULES list to append to.";
+  };
+
   "mkinitcpio.conf.d/omarchy_hooks.conf" = {
     class = "na";
     reason = "HOOKS for mkinitcpio, including dropping kms on an NVIDIA-only machine. NixOS builds its initrd from boot.initrd.*; there is no hook list to order.";

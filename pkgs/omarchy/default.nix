@@ -633,7 +633,7 @@ stdenvNoCC.mkDerivation {
 
                     # The Network Speed Test panel's client, packaged here rather than at /usr/lib (#1485).
                     substituteInPlace $out/share/omarchy/bin/omarchy-network-speedtest \
-                      --replace-fail '/usr/lib/omarchy/speedtest' '${omarchy-speedtest}/bin/omarchy-speedtest'
+                      --replace-fail '/usr/lib/omarchy/speedtest' '${omarchy-speedtest}/bin/does-not-exist'
 
                     # The channel splice goes in front of the FIRST pacman grep, not before the final comparison.
                     # Why: pkgs/AGENTS.md#version-channel-reads-nixos-version

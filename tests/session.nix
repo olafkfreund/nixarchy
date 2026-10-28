@@ -2436,9 +2436,15 @@ pkgs.testers.runNixOSTest {
     # quattro's background plugin takes `background setSuspended true`, which
     # owe tries first, so it stays enabled and hides its layer instead (#1278
     # edge). Either way the property is the same: the shell is not drawing.
-    layers = aim("hyprctl layers")
+    # Read the Background level (0) only: since quattro 9a90b5e the suspended
+    # plugin maps a clear click-catcher, also namespace omarchy-background, on
+    # the Bottom level above the video (#1485).
+    def background_drawn():
+        levels = [mon["levels"] for mon in json.loads(aim("hyprctl layers -j")).values()]
+        return any(l.get("namespace") == "omarchy-background"
+                   for lv in levels for l in lv.get("0", []))
     assert background is not None and (
-        not background["enabled"] or "namespace: omarchy-background" not in layers), (
+        not background["enabled"] or not background_drawn()), (
         f"the shell's background is still up while owe's renderer holds the "
         f"layer: {background}")
     print("owe: the shell background is off (disabled or suspended) while the renderer holds the layer")
@@ -2480,9 +2486,8 @@ pkgs.testers.runNixOSTest {
     # is the CLI the menu and the doctor both already use to read this back.
     plugins = json.loads(aim("OMARCHY_SHELL_IPC_TIMEOUT=10s omarchy-plugin-list --json"))
     background = next((p for p in plugins if p["id"] == "omarchy.background"), None)
-    layers = aim("hyprctl layers")
     assert background is not None and background["enabled"] and (
-        "namespace: omarchy-background" in layers), (
+        background_drawn()), (
         f"the shell's background is not back after owe handed the still "
         f"back to the shell: {background}")
     print("owe: back to the original still, renderer warm, background "

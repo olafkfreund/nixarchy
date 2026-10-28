@@ -257,6 +257,8 @@ jobs:
           pr=$(gh pr list --head "$branch" --state open --json number,isDraft,author,state,isCrossRepository \
             -q '[.[] | select(.isCrossRepository | not)] | .[0] // null
               | if . == null then null else {number, isDraft, author: .author.login, state} end') || unreadable
+          # gh's --jq prints a null result as nothing, which --argjson rejects.
+          pr=${pr:-null}
           commits='[]'
           if [ "$exists" = true ]; then
             commits=$(gh api "repos/$GH_REPO/compare/main...$branch" \

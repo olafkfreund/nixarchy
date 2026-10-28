@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1485
 author: olafkfreund
 ---
@@ -107,3 +107,10 @@ release would inherit it.
 2. **Network.** The speed test client talks to `speed.omarchy.org`, as it
    does on Arch, and only when the user opens the panel. I propose keeping
    it as upstream ships it, with no option.
+
+## Decisions (owner, 2026-10-28)
+
+1. **(b)**: both packages on `main`; only the screensaver's `--replace-fail`
+   and its probe are an edge carry.
+2. **No option**: the speed test client talks to `speed.omarchy.org` only when
+   the panel is opened, as upstream ships it.

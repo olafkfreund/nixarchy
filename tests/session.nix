@@ -1887,7 +1887,11 @@ pkgs.testers.runNixOSTest {
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
                # pkgbase lists two kernels, and NixOS has no such files.
-               "omarchy-kernel"]
+               "omarchy-kernel",
+               # v4.5.0-rc2's Network Speed Test execs /usr/lib/omarchy/speedtest,
+               # a separate Go client nixpkgs lacks. Its row is dimmed with that
+               # reason; run directly, it exits 1 naming the missing client (#1481).
+               "omarchy-network-speedtest"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

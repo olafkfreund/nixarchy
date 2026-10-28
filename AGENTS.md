@@ -920,6 +920,23 @@ until a hand-resolved merge on `edge-candidate` recorded `main` in edge's
 history again. Use `gh pr merge --merge` for such a PR, and say so in its
 body.
 
+**A real merge of edge also brings edge's own adaptations of checks, not
+only its pin.** Edge's workflow un-pins Omarchy before it merges `main`
+(`flake.nix` and `flake.lock`), and nothing else. #1477 was the first real
+edge→main merge, and two of edge's carries were edge-specific:
+
+- `tests/review-pins.nix` expected a quattro `rev`, which is false for
+  `main`'s tag pin. Flipping the line back on `main` would have flowed into
+  edge at its next merge. The check now derives the kind from
+  `omarchyVersion`, so both branches carry one line.
+- A `modules/nixos.nix` edit failed statix. `omarchy-edge.yml` runs no
+  statix, and `build.yml` does, so the first place it could fail was this
+  PR.
+
+Before a merge like this, run `main`'s cheap tier on the merged tree. For
+any line edge changed only because it pins a commit, make the line hold
+under both pins rather than choosing a side.
+
 ## 9. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it

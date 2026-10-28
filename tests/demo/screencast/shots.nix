@@ -251,7 +251,7 @@ in
     {
       label = "theme";
       action = "menu";
-      route = "style.theme";
+      route = "appearance.theme";
       # The switcher is a coverflow carousel (namespace omarchy-image-selector)
       # -- screenshots of each theme, with ONE name under the centred one.
       # Arrowing is therefore both the nicest footage in the take and the only

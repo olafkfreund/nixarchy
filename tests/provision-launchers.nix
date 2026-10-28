@@ -2,7 +2,7 @@
 # First login adds only missing launchers and stubs; it replaces nothing (#1319).
 #
 # Two paths wrote over a user's files: install/user/mise.sh (all.sh:14), and
-# omarchy-provision-user:118 -> omarchy-refresh-applications, which cp -f'd the
+# omarchy-provision-user:126 -> omarchy-refresh-applications, which cp -f'd the
 # launchers and ran mise.sh again. A copy at the store's 444 once left files the
 # next run could not rewrite, which aborted provisioning under set -euo pipefail
 # before finalize-user was marked. The fix is to skip existing files, and this

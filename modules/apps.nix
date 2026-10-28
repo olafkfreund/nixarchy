@@ -899,7 +899,12 @@ let
           action = "true";
           description = "Not available on NixOS — Omarchy's Windows VM needs rooted Docker and an FHS PATH. Use programs.virt-manager in your configuration";
         };
-        "trigger.hardware.hybrid-gpu" = {
+        "trigger.hardware.hybrid-gpu-on" = {
+          disabled = "true";
+          action = "true";
+          description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";
+        };
+        "trigger.hardware.hybrid-gpu-off" = {
           disabled = "true";
           action = "true";
           description = "Not available on NixOS — Omarchy's switch writes /usr/lib/systemd/system-sleep. Use services.supergfxd in your configuration";

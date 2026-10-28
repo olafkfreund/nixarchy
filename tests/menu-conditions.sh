@@ -63,6 +63,10 @@ PATH=$stubbed omarchy-default-browser zen || bad "omarchy-default-browser zen ex
 wrote=$(cat "$HOME/xdg-set" 2>/dev/null || echo nothing)
 [ "$wrote" = "$zenBinary.desktop" ] || bad "setter wrote $wrote, expected $zenBinary.desktop"
 echo "$zenBinary.desktop" >"$HOME/xdg-get"
+# The reader only reports an entry that is installed and whose Exec= resolves
+# (quattro 1381fa0, #1447), as the package's own .desktop does on a real system.
+mkdir -p "$XDG_DATA_HOME/applications"
+printf '%s\n' '[Desktop Entry]' "Exec=$zenBinary %u" >"$XDG_DATA_HOME/applications/$zenBinary.desktop"
 read_back=$(PATH=$stubbed omarchy-default-browser) || bad "omarchy-default-browser (read) exited non-zero"
 [ "$read_back" = zen ] || bad "reader printed $read_back, expected zen"
 checked=$(field "$menu" setup.default.browser.zen checked)

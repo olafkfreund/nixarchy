@@ -146,3 +146,22 @@ overlaps heavily with `checks.reference-toplevel`.
 5. **Clean exit.** No core dumps from qemu after `nixarchy vm stop` (#1506).
 6. **CI.** `nix flake check`, or at minimum `checks.microvm-template`, plus
    fmt, statix and deadnix pass on the PR.
+
+## Results (plan step 3, p620, 2026-10-29)
+
+Cold boot, with a probe connecting as early as it can:
+
+| Check | Result |
+|---|---|
+| vsock listener reachable | 42 s after start (it waits for the settle gate) |
+| control granted, no human | 1.2 s after asking |
+| `launch foot`, then `input` typing | delivered to the focused window, first time, no `wrong_target` |
+| screenshot | omarchy bar, wallpaper, the ai-mirror agent frame, the typed text; no toasts; the DND icon is on the bar |
+| `index` | nixarchy's own bindings (e.g. SUPER+ALT+N Packages) and plugins |
+| leftover confirm dialog | none in `hyprctl layers` after the grant |
+| monitor | `Virtual-1`, 1280x800 (nixarchy's default rule; nobody needs a different size yet) |
+| qemu core dumps after stop | 0 (SIGTERM to qemu, 3 boots) |
+
+Two fixes were needed to get there. Both are recorded in the plan as
+deviations: the writable store overlay, which lets Home Manager activate,
+and the settle gate before the auto-grant.

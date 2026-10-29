@@ -49,6 +49,22 @@
 
   services.gnome.at-spi2-core.enable = true;
 
+  # Grant only once the desktop has settled. Omarchy's first run shows toasts
+  # after the shell is up, and ai-mirror refuses typing while any surface that
+  # mapped after the grant is on screen (ai-mirror#78), so an early grant left
+  # the first agent unable to type. Do-not-disturb keeps the later toasts
+  # (Wi-Fi, updates) from mapping mid-session; an agent testing notifications
+  # turns it off with `omarchy-shell notifications setDnd off`.
+  systemd.user.services.ai-mirror-autoconfirm = {
+    path = [ "/etc/profiles/per-user/dev" ];
+    preStart = ''
+      until [ -f ~/.local/state/omarchy/done/first-run-user ]; do sleep 1; done
+      omarchy-shell notifications setDnd on || true
+      omarchy-shell notifications dismissAll || true
+    '';
+    serviceConfig.TimeoutStartSec = "infinity";
+  };
+
   microvm = {
     qemu.extraArgs = [
       "-device"
@@ -56,5 +72,11 @@
     ];
     mem = 8192;
     vcpu = 4;
+
+    # Home Manager's activation registers a GC root through the nix daemon,
+    # and microvm.nix masks the daemon unless the store is writable. Without
+    # this, the dev user gets no ~/.config/hypr and no bar. The overlay's
+    # upper layer is on the tmpfs root, so it is gone at the next boot.
+    writableStoreOverlay = "/nix/.rw-store";
   };
 }

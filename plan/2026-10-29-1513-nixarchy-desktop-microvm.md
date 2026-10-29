@@ -126,6 +126,20 @@ Coders:
    - Don't touch the host's ai-mirror state. Compare `ai-mirror status` on
      the host before and after.
 
+   **Deviations, made in step 3 (session, 2026-10-29):**
+   1. `microvm.writableStoreOverlay = "/nix/.rw-store"`. With a read-only
+      store, microvm.nix masks `nix-daemon`. Home Manager's activation then
+      failed with `creating directory "/nix/var/nix/temproots": Permission
+      denied`, so there was no `~/.config/hypr`, a `hypr.monitors` config
+      error, and no bar.
+   2. The auto-grant waits for the desktop to settle. A `preStart` on
+      `ai-mirror-autoconfirm` waits for omarchy's
+      `done/first-run-user` marker, then sets do-not-disturb on and
+      dismisses all toasts. Before this, the first grant came at about 20 s,
+      before the bar and the first-run toasts had mapped. ai-mirror then
+      refused all typing (`wrong_target`, ai-mirror#78), and the toasts
+      covered the top-right of the screen.
+
 4. **Catalogue exception and docs.**
    - `data/microvm-templates.nix`, under "## The bar": add a paragraph
      naming `nixarchy-desktop` as the single exception. Its purpose *is* the

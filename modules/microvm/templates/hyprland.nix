@@ -20,7 +20,9 @@
       wl-clipboard
       foot # something to open, and the smallest thing that proves a window works
 
-      # Chromium, forced to expose its render tree. Chromium builds the AT-SPI
+      # Chromium, forced to expose its render tree and to run on Wayland: without
+      # `--ozone-platform=wayland` Chromium tries X11, and this guest has no
+      # Xwayland (#1509). Chromium builds the AT-SPI
       # tree lazily and a headless guest gives it nothing to react to, so an
       # unwrapped one answers an a11y query with an empty tree and no error --
       # the same zero-element failure the session variables above were measured
@@ -34,7 +36,7 @@
       # application added by a caller needs the same flag passed itself --
       # Electron is a runtime bundled per application, not a package here to
       # wrap.
-      (chromium.override { commandLineArgs = "--force-renderer-accessibility"; })
+      (chromium.override { commandLineArgs = "--force-renderer-accessibility --ozone-platform=wayland"; })
     ];
 
     # The other two thirds of the accessibility story; the third,
@@ -45,26 +47,19 @@
       QT_ACCESSIBILITY = "1";
       GTK_MODULES = "gail:atk-bridge";
     };
-    etc."hypr/hyprland.conf".text = ''
-      # Name the connector. A catch-all `monitor = ,` does not match it -- the
-      # guest's output is Virtual-1 ("Red Hat, Inc. QEMU Monitor"), and Hyprland
-      # warns "No rule found for Virtual-1" and picks its own size, which
-      # silently changes every OCR measurement taken against this VM.
-      monitor = Virtual-1, 1920x1080@60, 0x0, 1
+    etc."hypr/hyprland.lua".text = ''
+      -- Name the connector: a catch-all rule does not match Virtual-1 ("Red Hat,
+      -- Inc. QEMU Monitor"), so Hyprland warns "No rule found for Virtual-1" and
+      -- picks its own size, silently changing every OCR measurement.
+      hl.monitor({ output = "Virtual-1", mode = "1920x1080@60", position = "0x0", scale = 1 })
 
-      misc {
-        disable_hyprland_logo = true
-        disable_splash_rendering = true
-      }
-
-      # Hyprland disables stdout logs by default and writes to a file in a tmpfs
-      # that dies with the VM. Under a systemd user service stdout is the
-      # journal, so this is what makes `journalctl --user -u hyprland` say why a
-      # dead compositor died -- the one question a caller will actually ask.
-      debug {
-        disable_logs = false
-        enable_stdout_logs = true
-      }
+      -- Hyprland disables stdout logs by default and writes to a tmpfs file that
+      -- dies with the VM. Under a systemd user service stdout is the journal, so
+      -- this makes `journalctl --user -u hyprland` say why a dead compositor died.
+      hl.config({
+        misc = { disable_hyprland_logo = true, disable_splash_rendering = true },
+        debug = { disable_logs = false, enable_stdout_logs = true },
+      })
     '';
   };
 
@@ -139,11 +134,12 @@
     unitConfig.ConditionUser = "dev";
 
     serviceConfig = {
-      ExecStart = "${pkgs.hyprland}/bin/Hyprland --config /etc/hypr/hyprland.conf";
+      ExecStart = "${pkgs.hyprland}/bin/start-hyprland -- --config /etc/hypr/hyprland.lua";
 
-      # Deliberately not Restart=always. A compositor that flaps looks exactly
-      # like one that works until a capture comes back empty; a failure that
-      # stays failed is discoverable with `systemctl --user status hyprland`.
+      # The unit itself does not restart; start-hyprland (#1510) restarts a
+      # compositor that exits uncleanly, possibly in --safe-mode, which drops
+      # the monitor rule -- so a crash shows as a restart in
+      # `journalctl --user -u hyprland` and as a wrong output size.
       Restart = "no";
     };
   };

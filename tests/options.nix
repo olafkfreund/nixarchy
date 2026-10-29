@@ -1202,6 +1202,10 @@ let
       c.services.pipewire.extraConfig.client."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled"
         or null
     ) false;
+    etcNativeRtportalJack = etcNative (
+      c:
+      c.services.pipewire.extraConfig.jack."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" or null
+    ) false;
     etcNativeOomd = etcNative (c: c.systemd.oomd.settings.OOM.DefaultMemoryPressureLimit or null) "50%";
     etcNativeStopTimeout = etcNative (c: c.systemd.settings.Manager.DefaultTimeoutStopSec or null) "5s";
     etcNativeUserStopTimeout = etcNative (

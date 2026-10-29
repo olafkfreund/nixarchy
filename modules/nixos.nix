@@ -1597,8 +1597,6 @@ in
         jack.enable = lib.mkDefault true;
         # Clients ask rtkit directly: a portal started before rtkit reports a zero realtime budget.
         extraConfig = {
-          client."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;
-          jack."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;
         };
       };
 

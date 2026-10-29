@@ -110,3 +110,28 @@ Expected: all green. Step 3 is the behavioural test. CI boots no guest.
 
 Revert the commit. That puts back `graphics.enable = true;` and
 `graphics.backend = "headless"`, and with them GL and the crash on exit.
+
+## Results
+
+- **Steps 1-2:** the `coder` agent made the edits and I committed them
+  (`0eb7d3b`), after one wording change: the software-rendering sentence is
+  its own sentence in the note and the docs row.
+  - All three runners build.
+  - `egl-headless|virtio-gpu-gl` count 0 and `virtio-gpu-pci` count 1 in
+    each `microvm-run`.
+  - fmt, statix, deadnix and `checks.microvm-template` exit 0.
+- **Step 3 (2026-10-29, p620):** the branch's `nixarchy-vm` was built at
+  `0eb7d3b`, with a scratch `XDG_STATE_HOME`. Two runs of
+  `vm create`, `vm run --detach`, the probe, then `vm stop` (QMP):
+  - granted after 6.8 s and 6.9 s;
+  - `launch foot` worked, typing was acked, and the screenshot came back;
+  - run 1: Chromium (`--ozone-platform=wayland`) opened its window, and
+    `a11y_find` returned its tree;
+  - **0** qemu core dumps across both stops. Before the change, every
+    exit crashed: 16 out of 16 on 2026-10-29.
+  - Both VMs were removed.
+- **Step 4:**
+  - nixarchy#1509 (Chromium needs Wayland ozone) and #1510 (`.conf`
+    removed in Hyprland 0.57) are open.
+  - The Mesa report is drafted for the owner to file. It needs a
+    gitlab.freedesktop.org account.

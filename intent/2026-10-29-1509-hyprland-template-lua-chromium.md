@@ -7,9 +7,9 @@ author: x
 # Intent: the hyprland template uses Lua config, and its Chromium opens a window
 
 Covers #1509 and #1510. Both are defects in one file,
-`modules/microvm/templates/hyprland.nix`, which `hyprland-ai-mirror` (and
-#1513's `nixarchy-desktop`, if it lands first, does not) imports. One branch,
-so the file is edited and re-measured once.
+`modules/microvm/templates/hyprland.nix`, which `hyprland-ai-mirror` imports
+(#1513's `nixarchy-desktop` does not). One branch, so the file is edited and
+re-measured once.
 
 ## Problem
 

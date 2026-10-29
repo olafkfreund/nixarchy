@@ -549,6 +549,12 @@ Two other ways a check stops checking, both found in one week:
   `nix fmt -- --ci` failing once and then passing: that is `nixfmt` reverting
   the hook, not a flaky formatter. After any edit to a `.nix` file, run
   `nix fmt` and read `git diff --stat` before committing.
+- **In a Nix `''` string, `\$` is a literal backslash, not an escape.** Only
+  `${` interpolates there (escape it as `''${`); `$(…)` and `$VAR` are already
+  literal. A script edited by a tool that "escaped" every `$` built a unit
+  whose shell died on a syntax error, the runner's `--out-link` silently kept
+  the previous build, and four test boots ran the old guest (#1504). Check
+  `nix build`'s exit status, never just its last line of output.
 - **An EXIT trap reads its variables when the shell exits, not when the trap
   is set.** `trap 'rm -f "$tmp"' EXIT` inside a function whose `tmp` is
   `local` removes nothing: by exit the local is gone, and `rm -f ""` succeeds

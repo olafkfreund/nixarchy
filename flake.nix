@@ -1886,6 +1886,8 @@
             # running guest. See tests/microvm-boot.nix for why the KVM runner --
             # the one nearly every user runs -- cannot be proved here.
             "microvm-boot"
+            # The per-VM vsock CID and the autoconfirm loop of hyprland-ai-mirror; boots nothing (#1508).
+            "microvm-ai-mirror"
             "offline-hardware-packages"
             # Evaluation against stable, ~20s and no VM (#527). `stableVm` is
             # passed in rather than reached through `inputs.self`, because it is

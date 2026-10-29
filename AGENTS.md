@@ -937,6 +937,15 @@ Before a merge like this, run `main`'s cheap tier on the merged tree. For
 any line edge changed only because it pins a commit, make the line hold
 under both pins rather than choosing a side.
 
+**A carry on `edge-candidate` that classifies a new quattro commit must
+also pin it.** A `from_candidate=true` dispatch keeps the candidate's own
+quattro pin (`sha=$HAVE` in `omarchy-edge.yml`). Only a scheduled run, which
+starts from `edge`, asks upstream for the newest commit. #1498 pushed rows
+for quattro `8478247` and dispatched, and the run built the old `d11c3c7`,
+where every new row reads as stale. So: rows plus `flake.nix`'s two copies
+(the input `url` and `omarchyVersion`) plus `flake.lock`, in the carry, and
+then dispatch.
+
 ## 9. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it

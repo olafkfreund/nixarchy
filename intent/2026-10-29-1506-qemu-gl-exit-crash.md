@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1506
 author: olafkfreund
 ---
@@ -76,3 +76,9 @@ The guest works while it runs. The harm is twofold:
    aquamarine's GBM needs a DRM device. If plain `virtio-gpu` (no `-gl`)
    is enough for Hyprland with software rendering, a slower but crash-free
    guest is acceptable. The spec measures that before deciding.
+
+## Decisions (owner, 2026-10-29)
+
+Approved with the proposed answers: 1. measure cheap qemu options first,
+report upstream either way; 2. a non-GL GPU is acceptable if Hyprland runs
+on it.

@@ -1096,6 +1096,31 @@ template's `virtio-gpu-gl` attached, `-display gtk` never reaches a window at
 all -- qemu refuses with `OpenGL is not supported by display backend 'gtk'`,
 because this qemu is built without GL in its gtk backend.
 
+## hyprland-ai-mirror: the scripts are checked, the round trip is not (#1508)
+
+`checks.microvm-ai-mirror` runs the template's own CID script, chosen once
+and then stable. It refuses a symlinked, non-numeric or wrapping `vsock-cid`:
+2^64+3 wraps to 3 under `$((…))`, which is why there is a length guard. It
+runs the autoconfirm unit's own `script` against a fixture `state.json` and a
+stub that logs only `confirm`. And it reads the wiring as values, including
+that `microvm.vsock.cid` is null, so a fixed CID cannot come back unnoticed.
+
+**What nothing here runs:** an MCP call over vsock into a booted guest, or two
+guests at once. The guest is the `hyprland` one, which wedges `runNixOSTest`
+(the section above). Both were measured by hand on p620 for #1508, and the
+transcript is in its PR.
+
+**`microvm.extraArgsScript` is how a per-VM value reaches qemu.** The runner
+is one closure per template, so anything compiled into it (a vsock CID, a
+forwarded port) is shared by every VM of that template. `microvm-run` runs the
+script from the VM's own directory, `$dir` for `nixarchy vm` and
+`/var/lib/microvms/<name>` for a declared machine, and appends its stdout to
+qemu's arguments under `set -eou pipefail`, so a refusal stops qemu. A file
+there, beside `share/` and not in it, is per-VM and out of the guest's reach.
+The device suffix is microvm.nix's `devType`: `pci` once `graphics.enable` is
+set, and otherwise `device` on the `microvm` machine, where a template needs
+`vhost-vsock-device`.
+
 ## The screencast harness is scripts, and only its coverage is a check
 
 `tests/demo/screencast/` (#930) sits beside `tests/demo/`, and inherits that

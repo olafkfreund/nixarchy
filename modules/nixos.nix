@@ -1595,6 +1595,11 @@ in
         alsa.support32Bit = lib.mkDefault true;
         pulse.enable = lib.mkDefault true;
         jack.enable = lib.mkDefault true;
+        # Clients ask rtkit directly: a portal started before rtkit reports a zero realtime budget.
+        extraConfig = {
+          client."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;
+          jack."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;
+        };
       };
 
       # install/config/locate.sh
@@ -1804,6 +1809,9 @@ in
     '';
 
     security = {
+      # Upstream's base package list adds rtkit (omacom/omarchy#9390).
+      rtkit.enable = lib.mkDefault true;
+
       # etc/sudoers.d/omarchy-passwd-tries.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
       sudo.extraConfig = "Defaults passwd_tries=10";

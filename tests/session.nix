@@ -1477,6 +1477,18 @@ pkgs.testers.runNixOSTest {
     print(machine.succeed("curl -s localhost:9223/json/list | grep chrome-extension://"))
     machine.succeed("kill $(cat /tmp/chromium-1491.pid)")
 
+    # #1498: PipeWire clients, the shell among them, get their hard RLIMIT_RTTIME
+    # from rtkit's budget; without rtkit the portal hands out 0 and the kernel
+    # SIGKILLs the first realtime thread.
+    # The limit first: with rtkit off the unit does not exist, and the red
+    # proof must fail on the zero, not on a missing unit.
+    pid = machine.succeed("pgrep -o quickshell").strip()
+    hard = machine.succeed(f"awk '/^Max realtime timeout/ {{print $5}}' /proc/{pid}/limits").strip()
+    if hard == "0":
+        raise AssertionError(f"#1498: quickshell hard RLIMIT_RTTIME is {hard!r}")
+    print(f"#1498: quickshell hard RLIMIT_RTTIME: {hard}")
+    machine.wait_until_succeeds("systemctl is-active rtkit-daemon", timeout=60)
+
     # ---- the gaming rows --------------------------------------------------
     # Three rows, three different shapes. Battle.net and GeForce NOW route
     # through omarchy-pkg-add and are answered from the table; Xbox Cloud is a

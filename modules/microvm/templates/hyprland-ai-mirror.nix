@@ -7,18 +7,24 @@
 #   user service confirms every pending request through the guest's own CLI.
 #   It is a polling loop, not a path unit -- a path unit missed the first
 #   request after a cold boot, before Hyprland was up.
-# - The host reaches the guest over vsock only, CID 1504 port 7000. There is
-#   no SSH. The CID is fixed, so only one of these runs at a time.
+# - The host reaches the guest over vsock only, port 7000. There is no SSH.
+#   The CID is per VM, chosen at run time by vsock-cid.sh and kept in the VM's
+#   directory, so several of these can run at once. #1508.
 # - The listener's `path` is /run/current-system/sw: without it `launch`
 #   cannot find the guest's apps.
 { pkgs, inputs, ... }:
 let
   am = inputs.ai-mirror.packages.${pkgs.stdenv.hostPlatform.system};
   path = [ "/run/current-system/sw" ];
+  vsockCid = pkgs.writeShellApplication {
+    name = "nixarchy-vsock-cid";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = builtins.readFile ./vsock-cid.sh;
+  };
 in
 {
   imports = [ ./hyprland.nix ];
-  microvm.vsock.cid = 1504;
+  microvm.extraArgsScript = "${vsockCid}/bin/nixarchy-vsock-cid";
   environment.systemPackages = [
     am.ai-mirror
     am.ai-mirror-input

@@ -81,7 +81,7 @@ is the same catalogue, `data/microvm-templates.nix`.
 | `agent-claude` | `agent` plus codex and opencode, with the model endpoints and GitHub pre-allowed | `claude-code` only when unfree is allowed — `NIXPKGS_ALLOW_UNFREE=1 nixarchy vm run <name>`, or `allowUnfree` on a permanent machine; never in the public cache |
 | `k3s` | single-node k3s server, 4 GiB RAM, 2 vCPU | `/var/lib/rancher` is a 20 GiB volume, so the cluster and its generated token survive a restart; traefik and servicelb off; `kubectl` inside the guest only |
 | `hyprland` | a Wayland compositor with `grim`, `tesseract`, `wtype` and an accessibility-forced Chromium, on one 1920x1080 virtual monitor | for testing desktop tooling without a real session. No omarchy shell — this is plain NixOS. The first template that asks for a GPU, and the largest: about 5.2 GiB to realise, so the first run is a long one. The guest renders in software (no host GPU is behind its virtio GPU, #1506), so WebGL and other GL-heavy apps are slow. The compositor is a user service — `systemctl --user status hyprland` from the ttyS0 console if a capture comes back empty |
-| `hyprland-ai-mirror` | `hyprland` plus ai-mirror, listening on vsock port 7000 | an MCP agent on the host drives this desktop instead of yours. Control is granted without asking — starting the VM is the consent. One at a time (fixed vsock CID 1504). The first grant after a cold boot takes up to ~20 s, while Hyprland starts. Its ai-mirror still words things as "your real desktop" and "human-confirmed" |
+| `hyprland-ai-mirror` | `hyprland` plus ai-mirror, listening on vsock port 7000 | an MCP agent on the host drives this desktop instead of yours. Control is granted without asking — starting the VM is the consent. Each VM picks its own vsock CID, so several can run at once. The first grant after a cold boot takes up to ~20 s, while Hyprland starts. Its ai-mirror still words things as "your real desktop" and "human-confirmed" |
 
 Every template is a plain NixOS module — nothing here invents nixarchy
 vocabulary. If you outgrow one, copy `module` out of the catalogue entry
@@ -94,12 +94,19 @@ Your real desktop and the sandbox are two MCP servers with the same tools.
 Add the sandbox next to the one you already have:
 
 ```sh
-claude mcp add ai-mirror-sandbox -- socat - VSOCK-CONNECT:1504:7000
+claude mcp add ai-mirror-<name> -- socat - VSOCK-CONNECT:$(cat ~/.local/state/nixarchy/microvm/<name>/vsock-cid):7000
 ```
+
+Run it after the VM's first start, which is when it picks its vsock CID and
+writes it to that file. A declared machine keeps it in
+`/var/lib/microvms/<name>/vsock-cid`. The CID never changes after that, so a
+VM you delete and create again under the same name gets a new one: add the
+server again. If two VMs ever share a CID (a copied VM directory does), qemu
+refuses to start the second. Delete its `vsock-cid` and it picks a new one.
 
 Inside the guest, control is granted without asking: starting the VM is the
 consent. Your real desktop still asks every time. Stopping the VM is the kill
-switch. Only one of these runs at a time, because the vsock CID is fixed.
+switch. Several can run at once, each on its own CID.
 
 Any local user on the host can reach its port, and whoever connects is
 granted control: that is `dev` in the guest, with passwordless sudo, the

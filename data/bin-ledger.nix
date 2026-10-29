@@ -439,6 +439,12 @@
     class = "patch";
     reason = "Two edits: `xdg-settings set default-web-browser chromium.desktop` exits 2 under `set -euo pipefail` and aborted provisioning, and the shipped HEY.desktop is installed prefixed as omarchy-HEY.desktop.";
   };
+  "omarchy-realtime-repair" = {
+    class = "vendor";
+    reason = "Vendored unchanged (#1498, quattro 8478247). Installs rtkit and raises the hard RLIMIT_RTTIME of 0 that processes took from a portal started without it. Its callers are a migration and omarchy-upgrade-to-quattro, and nixarchy runs neither; modules/nixos.nix turns security.rtkit.enable on from boot, so the zero never arises on a fresh boot.";
+    pacman = "Installs rtkit with pacman. Unreachable here: no migration runs, and security.rtkit.enable stands in for the install.";
+    allow = "systemctl-system systemctl-user";
+  };
   "omarchy-refresh-applications" = {
     class = "replace";
     reason = "Upstream's cp -f replaces an edited launcher or a home-manager link, and it reruns install/user/mise.sh, whose stubs replaced a home-manager ~/.local/bin entry. Copies only missing launchers and runs no mise.sh; provisioning already runs it from install/user/all.sh (#1319).";

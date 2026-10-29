@@ -160,6 +160,16 @@
     reason = "NixOS generates /etc/nsswitch.conf from system.nssModules and system.nssDatabases. services.avahi.nssmdns4 in modules/nixos.nix adds the mdns entry this file's hosts line exists for.";
   };
 
+  "pipewire/client.conf.d/50-omarchy-rtkit.conf" = {
+    class = "native";
+    reason = "module.rt.args rtportal.enabled = false, so PipeWire clients ask rtkit for realtime directly rather than through xdg-desktop-portal, whose budget reads 0 when it started before rtkit. modules/nixos.nix declares the same key through services.pipewire.extraConfig.client.\"50-omarchy-rtkit\", which nixpkgs writes to this path; nixpkgs asserts against environment.etc.\"pipewire/...\", so the shipped file cannot be installed as it is (#1498).";
+  };
+
+  "pipewire/jack.conf.d/50-omarchy-rtkit.conf" = {
+    class = "native";
+    reason = "module.rt.args rtportal.enabled = false, so JACK clients ask rtkit for realtime directly rather than through xdg-desktop-portal, whose budget reads 0 when it started before rtkit. modules/nixos.nix declares the same key through services.pipewire.extraConfig.jack.\"50-omarchy-rtkit\", which nixpkgs writes to this path; nixpkgs asserts against environment.etc.\"pipewire/...\", so the shipped file cannot be installed as it is (#1498).";
+  };
+
   "plymouth/plymouthd.conf" = {
     class = "native";
     reason = "boot.plymouth.theme = \"omarchy\" in modules/nixos.nix, with themePackages naming the package that carries share/plymouth/themes/omarchy. programs.nixarchy.bootSplash chooses between mkDefault and mkForce for it.";

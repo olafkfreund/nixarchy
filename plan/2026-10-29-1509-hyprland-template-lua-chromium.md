@@ -40,7 +40,7 @@ worktree `/mnt/data/vmtest/nixarchy-1509-1510`.
   and `checks.coexist` guards it.
 - `tests/microvm-ai-mirror.nix` gains two parts:
   - (d) `Hyprland --verify-config` on the evaluated Lua text, requiring
-    `config ok` (the exit code is 0 either way), plus the four settings in the
+    `config ok` and exit 0 (see Deviations), plus the four settings in the
     text and no `hypr/hyprland.conf`;
   - (e) values: ExecStart and Chromium's `buildCommand` flags.
 
@@ -134,7 +134,7 @@ worktree `/mnt/data/vmtest/nixarchy-1509-1510`.
    - Never name a variable `out`.
    - No `| grep -q`.
    - printf, not heredocs, inside `''`.
-   - `--verify-config` exits 0 on a bad config, so match the text (§1).
+   - `--verify-config` exits 1 on a bad config (see Deviations); check both the status and the text.
    - If it needs more than `HOME` and `XDG_RUNTIME_DIR` in the sandbox,
      record that here as a deviation. Never drop the parse.
 
@@ -182,3 +182,16 @@ worktree `/mnt/data/vmtest/nixarchy-1509-1510`.
 
 Revert the PR. Guests go back to the `.conf` config, the direct `Hyprland`
 launch and X11 Chromium. Nothing on the host changes either way.
+
+## Deviations found while implementing
+
+- **`--verify-config`'s exit status is meaningful.** The spec said it "exits
+  0 both ways". That came from `… | tail; echo $?`, which reads `tail`'s
+  status, the pipeline trap in AGENTS.md §1. Measured directly with Hyprland
+  0.56.2, it exits 0 with `config ok` on a good file and 1 with `unknown
+  config key '…'` on a bad one. Inside the build sandbox, too, the bad case
+  failed the derivation. So (d) checks both: `|| fail` on the exit status, and
+  `config ok` in the text. Break (i) went red on the status
+  (`unknown config key 'misc.disable_splash_renderingX'`).
+- **The sandbox needs nothing beyond `HOME` and `XDG_RUNTIME_DIR`** for
+  `--verify-config`, as the spec hoped.

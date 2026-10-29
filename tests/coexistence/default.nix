@@ -67,6 +67,21 @@ let
   nmConnectivity =
     (configOf fixtures.nm-connectivity-own).networking.networkmanager.settings.connectivity;
 
+  chromiumEtc = (configOf fixtures.chromium-own-policy).environment.etc;
+  chromiumScript =
+    if
+      chromiumEtc ? "chromium/policies/managed/extra.json"
+      && chromiumEtc ? "chromium/policies/managed/omarchy.json"
+    then
+      ''
+        echo "chromium-own-policy: ok"
+      ''
+    else
+      ''
+        echo "chromium-own-policy: FAIL extra.json and omarchy.json are not both in etc" >&2
+        fail=1
+      '';
+
   shQuote = lib.escapeShellArg;
 
   graphicsScriptOf =
@@ -140,6 +155,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
     ${nmScript}
+    ${chromiumScript}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

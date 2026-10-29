@@ -1746,6 +1746,7 @@
           }:
           (nixpkgs.lib.nixosSystem {
             inherit system;
+            specialArgs = { inherit inputs; };
             modules = [
               inputs.microvm.nixosModules.microvm
               ./modules/microvm/guest.nix

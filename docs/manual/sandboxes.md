@@ -99,7 +99,10 @@ claude mcp add ai-mirror-<name> -- socat - VSOCK-CONNECT:$(cat ~/.local/state/ni
 
 Run it after the VM's first start, which is when it picks its vsock CID and
 writes it to that file. A declared machine keeps it in
-`/var/lib/microvms/<name>/vsock-cid`.
+`/var/lib/microvms/<name>/vsock-cid`. The CID never changes after that, so a
+VM you delete and create again under the same name gets a new one: add the
+server again. If two VMs ever share a CID (a copied VM directory does), qemu
+refuses to start the second. Delete its `vsock-cid` and it picks a new one.
 
 Inside the guest, control is granted without asking: starting the VM is the
 consent. Your real desktop still asks every time. Stopping the VM is the kill

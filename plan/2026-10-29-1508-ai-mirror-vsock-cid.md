@@ -152,3 +152,20 @@ this plan and `git diff`.
 Revert the PR. That restores the fixed CID 1504 and the "one at a time" docs.
 A VM started meanwhile keeps a stray `vsock-cid` file in its directory, which
 nothing then reads.
+
+## Deviations found while implementing
+
+- **The check (step 3), after the Opus review:**
+  - Two VM directories must get different CIDs. Red with the random draw
+    replaced by `cid=1504`: `FAIL: two VM directories got the same CID`.
+  - The non-number fixture is `3+4`, not `abc`. bash refuses `$((10#abc))` on
+    its own, so `abc` passed without the guard. `3+4` evaluates to 7, which is
+    what the guard stops. Red with the guard removed:
+    `FAIL: accepted arithmetic in vsock-cid`.
+  - Both CID runs name their failure (`|| fail`), so break (i) reads
+    `FAIL: the CID script failed on its first run` rather than a bare `cat`
+    error.
+- **The manual (step 2):** two sentences from the review.
+  - A recreated VM gets a new CID, so its MCP server is added again.
+  - A clash, such as from a copied VM directory, is fixed by deleting
+    `vsock-cid`.

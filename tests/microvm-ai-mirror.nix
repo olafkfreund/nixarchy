@@ -75,10 +75,13 @@ pkgs.runCommand "microvm-ai-mirror"
     [ "$first" = "-device vhost-vsock-pci,guest-cid=$cid" ] || fail "bad line: $first"
     [ "$cid" -ge 3 ] && [ "$cid" -le 4294967294 ] || fail "CID $cid out of range"
     [ "$(cat vsock-cid)" = "$cid" ] || fail "vsock-cid file does not hold $cid"
+    # A second VM's directory must get its own CID: the point of #1508.
+    other=$(mkdir other && cd other && ${cfg.microvm.extraArgsScript}) || fail "the CID script failed in a second directory"
+    [ "$other" != "$first" ] || fail "two VM directories got the same CID: $first"
 
     mkdir bad
-    (cd bad && printf 'abc\n' > vsock-cid && ${vsockCid}/bin/nixarchy-vsock-cid) \
-      && fail "accepted a non-numeric vsock-cid"
+    (cd bad && printf '3+4\n' > vsock-cid && ${vsockCid}/bin/nixarchy-vsock-cid) \
+      && fail "accepted arithmetic in vsock-cid"
     mkdir long
     (cd long && printf '18446744073709551619\n' > vsock-cid && ${vsockCid}/bin/nixarchy-vsock-cid) \
       && fail "accepted a 20-digit vsock-cid that wraps to 3"

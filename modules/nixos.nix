@@ -1810,7 +1810,7 @@ in
 
     security = {
       # Upstream's base package list adds rtkit (omacom/omarchy#9390).
-      rtkit.enable = lib.mkDefault true;
+      rtkit.enable = lib.mkDefault false;
 
       # etc/sudoers.d/omarchy-passwd-tries.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options

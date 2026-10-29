@@ -100,8 +100,8 @@
   # Without this the device opens and `gbm_create_device` fails: GBM is
   # aquamarine's only allocator and it needs a mesa driver, which a NixOS guest
   # has none of under /run/opengl-driver until this option provides one.
-  # There is no virgl behind the device, so Mesa renders in software (llvmpipe)
-  # on the virtio_gpu KMS device.
+  # There is no virgl behind the device, so Mesa renders in software on the
+  # virtio_gpu KMS device.
   hardware.graphics.enable = true;
 
   users.users.dev = {

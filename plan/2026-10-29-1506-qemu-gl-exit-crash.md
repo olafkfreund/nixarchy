@@ -135,3 +135,24 @@ Revert the commit. That puts back `graphics.enable = true;` and
     removed in Hyprland 0.57) are open.
   - The Mesa report is drafted for the owner to file. It needs a
     gitlab.freedesktop.org account.
+
+### Independent review (Opus)
+
+Nothing material. Acted on:
+
+- **`tests/AGENTS.md`** ("A window on the host") still said
+  `graphics.backend = "headless"` keeps the window away and that the
+  template attaches `virtio-gpu-gl`. It is rewritten to the `-nographic` and
+  `virtio-gpu-pci` reason, and it records why going back to the GL path
+  needs an exit measured first. The plan did not list this file, so this is
+  a deviation, made in this same commit.
+- **`hyprland.nix`:** "(llvmpipe)" is dropped. The guest's renderer was not
+  measured; "software" was.
+
+Left as is:
+
+- `graphics.enable = false` blacklists `drm` and stops force-loading
+  `virtio_gpu`. Neither has any effect today: `drm` is built in, and
+  `virtio_gpu` autoloads on the device, as the live runs confirm.
+- The header's pointer to the missing `modules/microvm/AGENTS.md` was
+  already wrong on main.

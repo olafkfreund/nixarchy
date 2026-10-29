@@ -1076,8 +1076,10 @@ which is what §3 asks for.
 **A dead compositor.** Hyprland runs as a *user* service in that guest, so it
 never appears on the system console a VM check reads. Its unit has
 `Restart=no`, `enable_stdout_logs = true` and a note telling the reader to run
-`systemctl --user status hyprland` -- all asserted by evaluation, so the
-mechanism that makes a failure discoverable is guarded. **Whether a killed
+`journalctl --user -u hyprland` -- all asserted by evaluation, so the
+mechanism that makes a failure discoverable is guarded. Not the unit state:
+since #1510 it runs under start-hyprland, which exits 0 when Hyprland fails,
+so the unit reads `inactive (dead)`, never `failed`. **Whether a killed
 compositor is actually noticed by a person is not.** Two `runNixOSTest`
 attempts to kill it and look wedged: the driver reported the test running with
 no qemu process at all and a log untouched for 26 minutes -- CLAUDE.md §6's

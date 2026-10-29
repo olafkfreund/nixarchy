@@ -1,7 +1,9 @@
 # The CID script, the autoconfirm loop and the guest wiring of the
-# `hyprland-ai-mirror` template.
+# `hyprland-ai-mirror` template, plus its `hyprland` half (Lua config,
+# start-hyprland, Chromium's Wayland flag).
 # Boots nothing: no CI check boots a guest (#929 wedged twice), so the MCP round
-# trip over vsock is proven live, not here. See tests/AGENTS.md. #1504, #1508.
+# trip over vsock is proven live, not here. See tests/AGENTS.md. #1504, #1508,
+# #1509, #1510.
 { inputs, pkgs }:
 let
   inherit (pkgs) lib;
@@ -39,6 +41,9 @@ let
       ];
     }).config;
   units = cfg.systemd.user.services;
+  chromium = lib.findFirst (
+    p: (p.pname or "") == "chromium"
+  ) (throw "no chromium in the hyprland template's systemPackages") cfg.environment.systemPackages;
 in
 pkgs.runCommand "microvm-ai-mirror"
   {
@@ -50,6 +55,10 @@ pkgs.runCommand "microvm-ai-mirror"
     confirmWanted = toString units.ai-mirror-autoconfirm.wantedBy;
     listenWanted = toString units.ai-mirror-vsock.wantedBy;
     autoconfirmScript = noCtx units.ai-mirror-autoconfirm.script;
+    luaText = cfg.environment.etc."hypr/hyprland.lua".text or "";
+    hasConf = lib.boolToString (cfg.environment.etc ? "hypr/hyprland.conf");
+    hyprExec = noCtx units.hyprland.serviceConfig.ExecStart;
+    chromiumCmd = noCtx chromium.buildCommand;
   }
   ''
     fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -63,6 +72,22 @@ pkgs.runCommand "microvm-ai-mirror"
     done
     for w in "$confirmWanted" "$listenWanted"; do
       [[ " $w " == *" default.target "* ]] || fail "a unit is not wanted by default.target: '$w'"
+    done
+
+    # (d) hyprland Lua config
+    [ "$hasConf" = false ] || fail "the hyprland template still writes hyprland.conf"
+    hd=$(mktemp -d)
+    printf '%s' "$luaText" > "$hd/hyprland.lua"
+    verify=$(env -i HOME="$hd" XDG_RUNTIME_DIR="$hd" ${pkgs.hyprland}/bin/Hyprland --verify-config --config "$hd/hyprland.lua" 2>&1) || fail "Hyprland rejects the template's Lua: $verify"
+    [[ $verify == *"config ok"* ]] || fail "Hyprland did not say config ok: $verify"
+    for k in Virtual-1 1920x1080 disable_splash_rendering enable_stdout_logs; do
+      [[ $luaText == *"$k"* ]] || fail "the hyprland Lua lacks $k"
+    done
+
+    # (e) hyprland wiring
+    [[ $hyprExec == */bin/start-hyprland\ --path\ /nix/store/*/bin/Hyprland\ --\ --config\ /etc/hypr/hyprland.lua ]] || fail "hyprland unit runs '$hyprExec', not start-hyprland --path <Hyprland> with the Lua config"
+    for f in --ozone-platform=wayland --force-renderer-accessibility; do
+      [[ $chromiumCmd == *"$f"* ]] || fail "Chromium's wrapper lacks $f"
     done
 
     # (a) vsock CID: chosen once, then stable

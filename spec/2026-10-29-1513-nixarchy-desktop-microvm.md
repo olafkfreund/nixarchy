@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1513
 intent: intent/2026-10-29-1513-nixarchy-desktop-microvm.md
 ---

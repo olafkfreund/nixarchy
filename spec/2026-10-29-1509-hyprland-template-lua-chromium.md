@@ -34,8 +34,8 @@ the same way (`modules/nixos.nix:135`).
 Measured on 2026-10-29 with the guest's Hyprland 0.56.2: `Hyprland
 --verify-config --config <file>.lua` prints `config ok` for the file above.
 With one key misspelt, it prints `unknown config key
-'misc.disable_splash_renderingX'`. (Corrected while implementing: it exits 1 on the bad file; the "exit 0" reading was a pipe's status. See the plan's Deviations.) A check must
-match the text, not the status.
+'misc.disable_splash_renderingX'`. (Corrected while implementing: it exits 1 on the bad file; the "exit 0" reading was a pipe's status. See the plan's Deviations.) The check
+matches both the text and the status.
 
 ### 2. start-hyprland (#1510, the owner's decision)
 

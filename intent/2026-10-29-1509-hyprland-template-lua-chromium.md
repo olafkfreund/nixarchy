@@ -63,10 +63,15 @@ re-measured once.
 
 ## Open questions
 
-1. Is `start-hyprland` right under a systemd user service, or does it expect
-   a login session? Default: try it; if it does not fit, keep `Hyprland` and
-   suppress only the start-hyprland warning if that's possible. The spec
-   decides after reading `start-hyprland`.
+1. **Decided by the owner (2026-10-29): the guest uses `start-hyprland`.** The
+   owner also sees this warning when logging into the host desktop. On `main`
+   the host session already runs `uwsm … start-hyprland -- --config …`
+   (`modules/nixos.nix:133`). On p620 on 2026-10-29 the running Hyprland had
+   `--watchdog-fd 4`, and neither its log nor the user journal held the
+   warning. So which host path shows it is still unknown: the stock
+   `hyprland-uwsm.desktop` entry (`uwsm start -e -D Hyprland hyprland.desktop`)
+   or a restart that execs `Hyprland` directly are the candidates. In scope:
+   find it, and fix it if it is nixarchy's.
 2. Chromium flag in the wrapper (`commandLineArgs`) or `NIXOS_OZONE_WL`?
    Default: the wrapper flag, because it reaches every caller regardless of
    environment.

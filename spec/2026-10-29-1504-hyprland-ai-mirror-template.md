@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1504
 intent: intent/2026-10-29-1504-hyprland-ai-mirror-template.md
 ---

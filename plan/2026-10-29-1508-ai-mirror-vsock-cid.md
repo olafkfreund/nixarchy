@@ -169,3 +169,11 @@ nothing then reads.
   - A recreated VM gets a new CID, so its MCP server is added again.
   - A clash, such as from a copied VM directory, is fixed by deleting
     `vsock-cid`.
+- **Merging `main` after #1511 (#1506).** #1511 turned `graphics.enable` off in
+  `hyprland.nix` and adds `virtio-gpu-pci` itself. `vhost-vsock-pci` is still
+  right, because microvm.nix's `requirePci` is also true whenever a VM has shares,
+  and `guest.nix` always has them. The merged runner was rebuilt and booted: qemu
+  took `vhost-vsock-pci` beside `virtio-gpu-pci`, and the MCP round trip passed
+  (control granted, `foot` launched and listed). `tests/AGENTS.md` now gives that
+  reason instead of `graphics.enable`. The `sandboxes.md` conflict kept
+  `main`'s `hyprland` row and this branch's `hyprland-ai-mirror` row.

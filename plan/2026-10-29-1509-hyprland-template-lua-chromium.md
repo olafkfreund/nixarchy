@@ -195,3 +195,12 @@ launch and X11 Chromium. Nothing on the host changes either way.
   (`unknown config key 'misc.disable_splash_renderingX'`).
 - **The sandbox needs nothing beyond `HOME` and `XDG_RUNTIME_DIR`** for
   `--verify-config`, as the spec hoped.
+- **start-hyprland exits 0 when Hyprland fails** (found by the Opus review,
+  reproduced by the session). With `--path` pointing at a child that exits 1,
+  start-hyprland 0.56.2 logged `Hyprland exit cleanly.` and exited 0. So
+  under systemd the unit reads `inactive (dead)`, never `failed`, and the old
+  advice to check `systemctl --user status hyprland` first is wrong. The unit
+  comment and the template's note in `data/microvm-templates.nix` now say to
+  check `journalctl --user -u hyprland`; so do the manual row in `docs/manual/sandboxes.md` and `tests/AGENTS.md`. Step 4 records the unit's
+  `Result`/`ExecMainStatus` after the real crash. The Chromium comment's
+  broken reflow was fixed in the same commit.

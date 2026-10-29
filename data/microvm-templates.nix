@@ -59,7 +59,7 @@
   hyprland = {
     label = "Hyprland";
     module = ../modules/microvm/templates/hyprland.nix;
-    note = "A Wayland compositor with grim, tesseract, wtype and foot, plus Chromium forced to expose its accessibility tree and to run on Wayland, on one 1920x1080 virtual monitor. No omarchy shell -- this is plain NixOS, so none of the omarchy commands are here. The first template that asks for a GPU device, and the largest: about 5.2 GiB to realise, roughly a sixth of it Chromium, so the first run is a long one. The guest renders in software (no host GPU is behind its virtio GPU, #1506), so WebGL and other GL-heavy apps are slow. The compositor is a user service: reach it with 'systemctl --user status hyprland' from the ttyS0 console, and check there first if a capture comes back empty.";
+    note = "A Wayland compositor with grim, tesseract, wtype and foot, plus Chromium forced to expose its accessibility tree and to run on Wayland, on one 1920x1080 virtual monitor. No omarchy shell -- this is plain NixOS, so none of the omarchy commands are here. The first template that asks for a GPU device, and the largest: about 5.2 GiB to realise, roughly a sixth of it Chromium, so the first run is a long one. The guest renders in software (no host GPU is behind its virtio GPU, #1506), so WebGL and other GL-heavy apps are slow. The compositor is a user service started through start-hyprland, which exits 0 even when Hyprland fails, so the unit never reads failed: if a capture comes back empty, check 'journalctl --user -u hyprland' from the ttyS0 console first.";
   };
 
   hyprland-ai-mirror = {

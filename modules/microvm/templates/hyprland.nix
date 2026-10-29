@@ -21,9 +21,9 @@
       foot # something to open, and the smallest thing that proves a window works
 
       # Chromium, forced to expose its render tree and to run on Wayland: without
-      # `--ozone-platform=wayland` Chromium tries X11, and this guest has no
-      # Xwayland (#1509). Chromium builds the AT-SPI
-      # tree lazily and a headless guest gives it nothing to react to, so an
+      # `--ozone-platform=wayland` it tries X11, and this guest has no Xwayland
+      # (#1509). Chromium builds the AT-SPI tree lazily and a headless guest
+      # gives it nothing to react to, so an
       # unwrapped one answers an a11y query with an empty tree and no error --
       # the same zero-element failure the session variables above were measured
       # against, one layer up. `commandLineArgs` is nixpkgs' own argument; it
@@ -138,8 +138,9 @@
 
       # The unit itself does not restart; start-hyprland (#1510) restarts a
       # compositor that exits uncleanly, possibly in --safe-mode, which drops
-      # the monitor rule -- so a crash shows as a restart in
-      # `journalctl --user -u hyprland` and as a wrong output size.
+      # the monitor rule. And it exits 0 even when Hyprland failed, so the unit
+      # reads `inactive (dead)`, never `failed`: a dead or restarted compositor
+      # shows only in `journalctl --user -u hyprland` and as a wrong output size.
       Restart = "no";
     };
   };

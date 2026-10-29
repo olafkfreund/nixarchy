@@ -549,6 +549,12 @@ Two other ways a check stops checking, both found in one week:
   `nix fmt -- --ci` failing once and then passing: that is `nixfmt` reverting
   the hook, not a flaky formatter. After any edit to a `.nix` file, run
   `nix fmt` and read `git diff --stat` before committing.
+- **In a Nix `''` string, `\$` is a literal backslash, not an escape.** Only
+  `${` interpolates there (escape it as `''${`); `$(…)` and `$VAR` are already
+  literal. A script edited by a tool that "escaped" every `$` built a unit
+  whose shell died on a syntax error, the runner's `--out-link` silently kept
+  the previous build, and four test boots ran the old guest (#1504). Check
+  `nix build`'s exit status, never just its last line of output.
 - **An EXIT trap reads its variables when the shell exits, not when the trap
   is set.** `trap 'rm -f "$tmp"' EXIT` inside a function whose `tmp` is
   `local` removes nothing: by exit the local is gone, and `rm -f ""` succeeds
@@ -936,6 +942,15 @@ edge→main merge, and two of edge's carries were edge-specific:
 Before a merge like this, run `main`'s cheap tier on the merged tree. For
 any line edge changed only because it pins a commit, make the line hold
 under both pins rather than choosing a side.
+
+**A carry on `edge-candidate` that classifies a new quattro commit must
+also pin it.** A `from_candidate=true` dispatch keeps the candidate's own
+quattro pin (`sha=$HAVE` in `omarchy-edge.yml`). Only a scheduled run, which
+starts from `edge`, asks upstream for the newest commit. #1498 pushed rows
+for quattro `8478247` and dispatched, and the run built the old `d11c3c7`,
+where every new row reads as stale. So: rows plus `flake.nix`'s two copies
+(the input `url` and `omarchyVersion`) plus `flake.lock`, in the carry, and
+then dispatch.
 
 ## 9. Territory, and the failure no single PR can see
 

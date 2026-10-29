@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1509
 intent: intent/2026-10-29-1509-hyprland-template-lua-chromium.md
 ---

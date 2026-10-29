@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1504
 author: olafkfreund
 ---
@@ -94,3 +94,10 @@ Measured on 2026-10-29 against `origin/main` `85b84dd`:
 4. **Is Chromium needed?** It is roughly a sixth of the `hyprland`
    template's 5.2 GiB. The new template inherits it by importing that
    template. Proposed: keep it, because a browser is a common thing to test.
+
+## Decisions (owner, 2026-10-29)
+
+Approved with the proposed defaults: 1. vsock, measured in the spec before
+it is relied on; 2. the disposable path first, one sandbox at a time;
+3. a guest-only confirming service, with no ai-mirror change; 4. Chromium
+kept.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1508
 intent: intent/2026-10-29-1508-ai-mirror-vsock-cid.md
 ---

@@ -1877,3 +1877,14 @@ build time. The two cannot drift. Two breaks proved it: a template with
 installs the `.desktop` file elsewhere fails the `grep` on
 `share/applications/tally.desktop`. It does not run the template's tests, the
 `bin/` scripts, or evaluate the template `flake.nix`.
+
+## The rtkit switch: no VM boots through the change that adds it (#1498)
+
+The `50-omarchy-rtkit` client/jack drop-in (`rtportal.enabled = false`) matters
+only for a session that was already running when a switch added rtkit: its
+portal read a zero budget at start and hands clients a hard `RLIMIT_RTTIME` of
+0, which the kernel enforces with SIGKILL once rtkit makes a thread realtime.
+Every VM here boots with rtkit from the start, so `checks.session`'s probe (the
+shell's hard `Max realtime timeout` is not 0) proves rtkit is on, not the
+drop-in; `tests/options.nix` asserts the drop-in is declared (`etcNativeRtkit`,
+`etcNativeRtportal`). The switch itself is tested by a human.

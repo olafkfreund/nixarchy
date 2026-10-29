@@ -1196,6 +1196,16 @@ let
     etcNativePasswdTries = etcNative (
       c: pkgs.lib.hasInfix "Defaults passwd_tries=10" c.security.sudo.extraConfig
     ) true;
+    etcNativeRtkit = etcNative (c: c.security.rtkit.enable) true;
+    etcNativeRtportal = etcNative (
+      c:
+      c.services.pipewire.extraConfig.client."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled"
+        or null
+    ) false;
+    etcNativeRtportalJack = etcNative (
+      c:
+      c.services.pipewire.extraConfig.jack."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" or null
+    ) false;
     etcNativeOomd = etcNative (c: c.systemd.oomd.settings.OOM.DefaultMemoryPressureLimit or null) "50%";
     etcNativeStopTimeout = etcNative (c: c.systemd.settings.Manager.DefaultTimeoutStopSec or null) "5s";
     etcNativeUserStopTimeout = etcNative (

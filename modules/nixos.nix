@@ -1595,6 +1595,11 @@ in
         alsa.support32Bit = lib.mkDefault true;
         pulse.enable = lib.mkDefault true;
         jack.enable = lib.mkDefault true;
+        # Clients ask rtkit directly: a portal started before rtkit reports a zero realtime budget.
+        extraConfig = {
+          client."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;
+          jack."50-omarchy-rtkit"."module.rt.args"."rtportal.enabled" = false;
+        };
       };
 
       # install/config/locate.sh
@@ -1662,6 +1667,12 @@ in
       # regenerated with the system and always points at the current package.
       {
         "omarchy/xcompose".source = "${cfg.package}/share/omarchy/default/xcompose";
+
+        # Omarchy's managed Chromium policy (#1491). A file, not programs.chromium,
+        # so a user's own programs.chromium (extra.json, default.json) merges beside it
+        # rather than colliding; the dir's tmpfiles rule stays for the theme script.
+        "chromium/policies/managed/omarchy.json".source =
+          "${cfg.package}/share/omarchy/default/chromium/policies/omarchy.json";
 
         # The flake nixarchy-apply rebuilds, for the tools and plugins that
         # cannot ask the module system and cannot rely on the session
@@ -1798,6 +1809,9 @@ in
     '';
 
     security = {
+      # Upstream's base package list adds rtkit (omacom/omarchy#9390).
+      rtkit.enable = lib.mkDefault true;
+
       # etc/sudoers.d/omarchy-passwd-tries.
       # Why: modules/AGENTS.md#the-rest-of-upstreams-etc-overlay-as-nixos-options
       sudo.extraConfig = "Defaults passwd_tries=10";

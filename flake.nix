@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/ed68d814d6cf2e221ba43d84f1e32429f5e2786f";
+      url = "github:0xc000022070/zen-browser-flake/4434539379bc839480edb8b919de9b67f70cb520";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -2511,6 +2511,12 @@
                   ${./tests/demo/screencast/restore-plugins.sh}
                 touch $out
               '';
+          # #1491: the Chromium launcher rewrites /usr/share/omarchy paths and merges --enable-features from chromium-flags.conf.
+          chromium-flags = pkgsFor.${system}.runCommand "nixarchy-chromium-flags" { } ''
+            bash ${./tests/chromium-flags-test.sh} ${./pkgs/omarchy/chromium-flags.sh}
+            touch $out
+          '';
+
           # #953: a restart never ends with zero shells, against stubs that make
           # teardown slower than upstream's `timeout 5`; upstream's own script is
           # the negative control.

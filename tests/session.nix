@@ -1444,6 +1444,51 @@ pkgs.testers.runNixOSTest {
             f"policy has the fallback colour, not the theme's: {policy}")
         print(f"accent matches the theme: {expected}")
 
+    # ---- Chromium's seeded flags and native hosts (#1491) -------------------
+    # nixpkgs' chromium wrapper ignores ~/.config/chromium-flags.conf, so the
+    # extensions it names never loaded; and hosts registered at a store path
+    # dangle after a GC. Asserted on what Chromium actually runs: the policy
+    # file, the host manifests, and the extensions' service workers.
+    machine.succeed("test -s /etc/chromium/policies/managed/omarchy.json")
+    for manifest in ("com.omarchy.copy_url", "com.omarchy.ytdlp"):
+        f = f"/home/omarchy/.config/chromium/NativeMessagingHosts/{manifest}.json"
+        host = machine.succeed(f"${pkgs.jq}/bin/jq -r .path {f}").strip()
+        assert host.startswith("/run/current-system/sw/bin/"), (
+            f"#1491: {manifest} registers {host!r}, a path that dangles after a GC")
+        machine.succeed(f"test -x {host}")
+        print(f"{manifest}: host {host}")
+
+    # Backgrounded with every fd redirected, or machine.succeed hangs on them.
+    machine.succeed(user % (
+        "d=$(mktemp -d); chromium --headless=new --remote-debugging-port=9223"
+        " --user-data-dir=$d --no-first-run about:blank"
+        " >/tmp/chromium-1491.log 2>&1 </dev/null & echo $! >/tmp/chromium-1491.pid"))
+    try:
+        machine.wait_until_succeeds(
+            "targets=$(curl -s localhost:9223/json/list) && "
+            "grep -q chrome-extension://bgpiichlckmfanooecilcjemknkcpngb/ <<<\"$targets\" && "
+            "grep -q chrome-extension://dedjgknigfeelejglamclffonmophnfl/ <<<\"$targets\"",
+            timeout=90)
+    except Exception:
+        print(machine.execute("tail -20 /tmp/chromium-1491.log; curl -s localhost:9223/json/list")[1])
+        raise AssertionError(
+            "#1491: Chromium did not load the copy-url and yt-dlp extensions; "
+            "chromium-flags.conf is not reaching it")
+    print(machine.succeed("curl -s localhost:9223/json/list | grep chrome-extension://"))
+    machine.succeed("kill $(cat /tmp/chromium-1491.pid)")
+
+    # #1498: PipeWire clients, the shell among them, get their hard RLIMIT_RTTIME
+    # from rtkit's budget; without rtkit the portal hands out 0 and the kernel
+    # SIGKILLs the first realtime thread.
+    # The limit first: with rtkit off the unit does not exist, and the red
+    # proof must fail on the zero, not on a missing unit.
+    pid = machine.succeed("pgrep -o quickshell").strip()
+    hard = machine.succeed(f"awk '/^Max realtime timeout/ {{print $5}}' /proc/{pid}/limits").strip()
+    if hard == "0":
+        raise AssertionError(f"#1498: quickshell hard RLIMIT_RTTIME is {hard!r}")
+    print(f"#1498: quickshell hard RLIMIT_RTTIME: {hard}")
+    machine.wait_until_succeeds("systemctl is-active rtkit-daemon", timeout=60)
+
     # ---- the gaming rows --------------------------------------------------
     # Three rows, three different shapes. Battle.net and GeForce NOW route
     # through omarchy-pkg-add and are answered from the table; Xbox Cloud is a

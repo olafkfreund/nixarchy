@@ -693,6 +693,41 @@ current browser. omarchy-remove-browser only writes the fallback, and
 its `|| true` swallowed the failure, so removing Chrome quietly left
 the machine with a default browser that resolves to nothing.
 
+## Chromium reads its flags through our launcher (#1491)
+
+Omarchy configures Chromium through `~/.config/chromium-flags.conf`. Arch's
+`/usr/bin/chromium` reads that file; nixpkgs' wrapper reads none. So for as
+long as nixarchy shipped plain `chromium`, none of upstream's six flags
+applied: no copy-url, yt-dlp or whatsapp-slim extension, and no
+`--password-store=gnome-libsecret`.
+
+`chromium-flags` (`chromium-flags.sh`, wrapped by a `symlinkJoin` in
+`default.nix`) replaces `bin/chromium` and `bin/chromium-browser`. Each start:
+
+- one flag per line, blank and `#` lines skipped, as Arch does;
+- `/usr/share/omarchy/` becomes `$OMARCHY_PATH`, or
+  `/run/current-system/sw/share/omarchy` outside the session. It is
+  rewritten at read time rather than in the seeded file, because the seed
+  never overwrites (`cp --update=none`), and every home seeded before this
+  holds the `/usr` paths;
+- every `--enable-features=` folds into one. Chromium keeps only the last,
+  and nixpkgs' wrapper puts its own `WaylandWindowDecorations` first under
+  `NIXOS_OZONE_WL`, so the fold adds that back;
+- the caller's own arguments come last, so they win.
+
+The native hosts: `omarchy-install-chromium-{copy-url,ytdlp}` wrote
+`$OMARCHY_PATH/bin/...`, a store path, into each browser's
+`NativeMessagingHosts/*.json`. The next update's garbage collection left the
+manifest pointing at nothing. They are patched to `/run/current-system/sw/bin`,
+and Home Manager's activation runs both at every switch, standing in for
+upstream's `install/user/chromium.sh`, which nothing here runs. **Standalone
+Home Manager has no `/run/current-system`, so the activation skips there.**
+That is a known gap.
+
+Checks: `checks.chromium-flags` (the launcher against a stub), and
+`checks.session` (both manifests, the policy file, and headless Chromium
+listing both extensions' service workers).
+
 ## Nothing may sed /etc/pam.d
 
 Nothing may sed /etc/pam.d.

@@ -16,13 +16,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omasnap";
-  version = "1.21.0";
+  version = "1.24.0";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omasnap";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-kpoPb5F5yqcczBRUfENsEfv+BD67zQsTG9Ur6Bi3viE=";
+    hash = "sha256-ntlb7Nwrg7nuvBsTsbv9Va3TOSyPLqzEimP4tGb5rAE=";
   };
 
   # Omarchy's screenshot tool from quattro on: omarchy-capture-screenshot,

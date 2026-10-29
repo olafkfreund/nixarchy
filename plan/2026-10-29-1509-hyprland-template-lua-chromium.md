@@ -204,3 +204,13 @@ launch and X11 Chromium. Nothing on the host changes either way.
   check `journalctl --user -u hyprland`; so do the manual row in `docs/manual/sandboxes.md` and `tests/AGENTS.md`. Step 4 records the unit's
   `Result`/`ExecMainStatus` after the real crash. The Chromium comment's
   broken reflow was fixed in the same commit.
+- **start-hyprland needs `--path` under a user unit** (found by the step 4
+  live boot). The first boot had no compositor: start-hyprland looks up
+  `Hyprland` on `PATH`, which the unit's PATH lacks. It logged
+  `fork(): execvp failed: No such file or directory`, then
+  `Hyprland exit cleanly.`, and the unit sat `inactive (dead)` with
+  `status=0/SUCCESS`, exactly as the review's finding predicted. The host session
+  never hit this because uwsm's PATH has Hyprland. ExecStart now passes
+  `--path ${pkgs.hyprland}/bin/Hyprland`, and check (e) requires it. §1: with
+  `--path` dropped, the check is red with `hyprland unit runs '…/start-hyprland
+  -- --config /etc/hypr/hyprland.lua', not start-hyprland --path <Hyprland>`.

@@ -85,7 +85,7 @@ pkgs.runCommand "microvm-ai-mirror"
     done
 
     # (e) hyprland wiring
-    [[ $hyprExec == *"/bin/start-hyprland -- --config /etc/hypr/hyprland.lua"* ]] || fail "hyprland unit runs '$hyprExec', not start-hyprland with the Lua config"
+    [[ $hyprExec == */bin/start-hyprland\ --path\ /nix/store/*/bin/Hyprland\ --\ --config\ /etc/hypr/hyprland.lua ]] || fail "hyprland unit runs '$hyprExec', not start-hyprland --path <Hyprland> with the Lua config"
     for f in --ozone-platform=wayland --force-renderer-accessibility; do
       [[ $chromiumCmd == *"$f"* ]] || fail "Chromium's wrapper lacks $f"
     done

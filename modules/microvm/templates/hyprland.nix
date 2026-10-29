@@ -134,7 +134,9 @@
     unitConfig.ConditionUser = "dev";
 
     serviceConfig = {
-      ExecStart = "${pkgs.hyprland}/bin/start-hyprland -- --config /etc/hypr/hyprland.lua";
+      # --path: start-hyprland finds Hyprland on PATH, which a user unit lacks;
+      # without it, it fails execvp and still exits 0 (measured live, #1510).
+      ExecStart = "${pkgs.hyprland}/bin/start-hyprland --path ${pkgs.hyprland}/bin/Hyprland -- --config /etc/hypr/hyprland.lua";
 
       # The unit itself does not restart; start-hyprland (#1510) restarts a
       # compositor that exits uncleanly, possibly in --safe-mode, which drops

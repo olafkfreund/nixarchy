@@ -138,11 +138,13 @@
       # without it, it fails execvp and still exits 0 (measured live, #1510).
       ExecStart = "${pkgs.hyprland}/bin/start-hyprland --path ${pkgs.hyprland}/bin/Hyprland -- --config /etc/hypr/hyprland.lua";
 
-      # The unit itself does not restart; start-hyprland (#1510) restarts a
-      # compositor that exits uncleanly, possibly in --safe-mode, which drops
-      # the monitor rule. And it exits 0 even when Hyprland failed, so the unit
-      # reads `inactive (dead)`, never `failed`: a dead or restarted compositor
-      # shows only in `journalctl --user -u hyprland` and as a wrong output size.
+      # The unit itself does not restart; start-hyprland (#1510) does. Measured
+      # on 0.56.2: after a SIGSEGV it relaunched Hyprland with --safe-mode, which
+      # ignores this config -- the output fell to 1280x800 and a "Safe Mode"
+      # dialog covered the desktop -- while the unit read active/success. And
+      # when Hyprland cannot start it exits 0, so the unit never reads
+      # `failed`. Either shows only in `journalctl --user -u hyprland` and as a
+      # wrong output size.
       Restart = "no";
     };
   };

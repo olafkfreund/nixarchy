@@ -214,3 +214,29 @@ launch and X11 Chromium. Nothing on the host changes either way.
   `--path ${pkgs.hyprland}/bin/Hyprland`, and check (e) requires it. §1: with
   `--path` dropped, the check is red with `hyprland unit runs '…/start-hyprland
   -- --config /etc/hypr/hyprland.lua', not start-hyprland --path <Hyprland>`.
+
+## Results of step 4 (live on p620, 2026-10-29, CI idle)
+
+A fresh `hyprland-ai-mirror` VM (`t1509`, CID 446272498), built from the
+branch at `7775ce5c`, driven over vsock. The owner's `ai-mirror` VM was left
+running throughout.
+
+1. **No toast.** The boot screenshot is an empty desktop, with neither the
+   `.conf` notice nor the start-hyprland notice. The process is
+   `Hyprland --watchdog-fd 4 --config /etc/hypr/hyprland.lua` under
+   `start-hyprland --path …/bin/Hyprland`.
+2. **Monitor:** `hyprctl monitors -j` gives `Virtual-1`, 1920x1080@60.
+   The grant came without a click (`owner: agent`).
+3. **Chromium:** `launch chromium about:blank` with no flags gives a
+   `chromium-browser` window in 7.3 s, which renders. `a11y_find
+   name=Reload` and `role=button` return its toolbar controls (Close, Back,
+   Forward, Reload). `role="push button"` matches nothing; that is the role's
+   name, not a missing tree.
+4. **Crash:** `kill -SEGV` on Hyprland's pid. start-hyprland logged
+   `Hyprland exit not-cleanly, restarting` and relaunched with `--safe-mode`,
+   which ignores the config. The output became 1280x800@75, and
+   `hyprland-dialog --title Safe Mode` covered the desktop. The unit read
+   `ActiveState=active`, `Result=success`, `ExecMainStatus=0`. The unit
+   comment now states this as measured rather than "possibly".
+5. **Before the `--path` fix** (see Deviations) the same boot had no
+   compositor, and the unit read `inactive (dead)` with `status=0/SUCCESS`.

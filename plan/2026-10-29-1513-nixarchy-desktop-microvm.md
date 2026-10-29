@@ -50,7 +50,10 @@ Coders:
      That means the header comment, the `am`/`path`/`vsockCid` let-bindings,
      `microvm.extraArgsScript`, the three packages and both user services.
    - Reduce `hyprland-ai-mirror.nix` to its header plus
-     `imports = [ ./hyprland.nix ./ai-mirror-guest.nix ];`.
+     `imports = [ ./ai-mirror-guest.nix ./hyprland.nix ];`.
+   Deviation, made while implementing: this import order is required.
+   The order sets the order of `environment.systemPackages`, which reaches
+   buildEnv. With `./hyprland.nix` first, the toplevel changed.
 
    → Verify:
    - Before editing, run

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1506
 spec: spec/2026-10-29-1506-qemu-gl-exit-crash.md
 ---

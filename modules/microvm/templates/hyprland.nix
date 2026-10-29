@@ -68,15 +68,19 @@
     '';
   };
 
-  # A GPU, and no window on the host. `enable` alone is not enough: the backend
-  # enum defaults to `gtk` on Linux, which opens a GTK window on the host's
-  # desktop and defeats a VM meant to run unattended. `headless` is
-  # `-display egl-headless -device virtio-gpu-gl` (microvm.nix
-  # lib/runners/qemu.nix), which upstream documents as the value that exists so
-  # a VM can run under a systemd job.
+  # A GPU for the guest, and no GL on the host. The guest needs a DRM device for
+  # aquamarine/GBM, but nothing behind it. The host-GL path
+  # (`graphics.backend = "headless"`: `-display egl-headless -device
+  # virtio-gpu-gl`) crashed qemu in radeonsi on every exit on p620, and each
+  # crash raised a notification (#1506). `graphics.enable` stays at microvm.nix's
+  # default `false`, which is `-nographic`: no host window, and the serial
+  # console on stdio. So the device is added by hand. The guest renders in
+  # software, so GL-heavy apps under test are slow.
   microvm = {
-    graphics.enable = true;
-    graphics.backend = "headless";
+    qemu.extraArgs = [
+      "-device"
+      "virtio-gpu-pci"
+    ];
 
     # microvm.nix's own default is 512 and modules/microvm/guest.nix does not
     # raise it, so a template that wants more says so itself. A compositor plus a
@@ -96,7 +100,8 @@
   # Without this the device opens and `gbm_create_device` fails: GBM is
   # aquamarine's only allocator and it needs a mesa driver, which a NixOS guest
   # has none of under /run/opengl-driver until this option provides one.
-  # mesa ships virtio_gpu_dri.so, which is the driver this device wants.
+  # There is no virgl behind the device, so Mesa renders in software (llvmpipe)
+  # on the virtio_gpu KMS device.
   hardware.graphics.enable = true;
 
   users.users.dev = {

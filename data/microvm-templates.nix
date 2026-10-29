@@ -68,6 +68,12 @@
     note = "The Hyprland template with ai-mirror inside, so an MCP agent can drive this desktop; control is granted without asking, because starting the VM is the consent. Connect from the host with 'claude mcp add ai-mirror-<name> -- socat - VSOCK-CONNECT:$(cat ~/.local/state/nixarchy/microvm/<name>/vsock-cid):7000' after the first start; each VM picks its own CID, so several can run at once (a declared machine keeps it in /var/lib/microvms/<name>/vsock-cid). The first grant after a cold boot takes up to ~20 s, while Hyprland starts. Its ai-mirror still words things as \"your real desktop\" and \"human-confirmed\".";
   };
 
+  nixarchy-desktop = {
+    label = "Nixarchy desktop + ai-mirror";
+    module = ../modules/microvm/templates/nixarchy-desktop.nix;
+    note = "The stock nixarchy desktop with ai-mirror inside, for an MCP agent to drive. Placeholder until measured.";
+  };
+
   python = {
     label = "Python";
     module = ../modules/microvm/templates/python.nix;

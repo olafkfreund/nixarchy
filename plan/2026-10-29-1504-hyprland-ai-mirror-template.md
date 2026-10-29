@@ -196,3 +196,29 @@ paragraph, so that paragraph stays with the table.
   - Host `ai-mirror status` was `{"owner":"off","generation":103}` before
     and after: the real desktop was untouched.
   - Both VMs were stopped and removed.
+
+### Independent review (Opus, after steps 1-4)
+
+Nothing blocking. Acted on:
+
+- **The docs now say what "any local user can reach the port" means.** A
+  connection is granted control as `dev`, with passwordless sudo, `share/`
+  and the network. They also say not to run it on a shared machine.
+- **The docs row** carries the catalogue note's "real desktop" /
+  "human-confirmed" caveat, as step 4 asked.
+- **SSH over vsock:** vsock port 22 resets the connection, the same answer
+  as an unbound port, so nothing listens. Listing the guest's sockets
+  through ai-mirror's clipboard came back empty, so that cross-check is
+  inconclusive.
+
+Left as they are:
+
+- **Cold boot vs the 30 s request lifetime under TCG.** The note and docs
+  state the ~20 s KVM figure, and TCG is unmeasured. A request that lapses
+  is answered by asking again.
+- **About 40 false `confirmed` audit lines during a cold boot.** ai-mirror's
+  `_answer` audits before it checks the instance. That is an ai-mirror bug,
+  for a separate ai-mirror issue. The audit dies with the VM.
+- **The listener has no `Restart`**, matching `hyprland.nix`'s
+  `Restart = "no"`.
+- **Host socat** comes in through omarchy's runtime dependencies.

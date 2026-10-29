@@ -182,6 +182,8 @@
     # ai-mirror master like nixi; the lock is the pin (`nix flake update ai-mirror`
     # moves it). Its master requires the check CI to merge.
     # ai-mirror#81: survives a Hyprland restart; revokes a grant whose Hyprland is gone
+    # ai-mirror#83: typing into an overlay panel beside always-mapped surfaces;
+    # ai-mirror#85: a confirm that cannot grant is no longer audited as confirmed
     # 3.1.0 (ai-mirror#78): Agent cursor badge + screen frame during a grant;
     # needs packages.cursor installed (modules/home.nix)
     # 3.0.0 (#1436): every mutating call needs generation;

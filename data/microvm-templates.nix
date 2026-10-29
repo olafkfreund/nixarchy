@@ -37,6 +37,11 @@
 #     serve `~/.local/state/nixarchy/microvm/alice/` and
 #     `~/.local/state/nixarchy/microvm/bob/` with two different disks.
 #
+# One entry breaks the first rule of that bar: `nixarchy-desktop` imports
+# inputs.self.nixosModules.nixarchy. Its purpose IS the nixarchy desktop, so it
+# cannot be plain NixOS. A user who outgrows it starts from the flake the
+# installer generates, not from this template.
+#
 # ## Fields
 #   label    Shown by whatever names a template (the trigger.vm menu group in
 #            #226; nothing reads this field yet).
@@ -71,7 +76,7 @@
   nixarchy-desktop = {
     label = "Nixarchy desktop + ai-mirror";
     module = ../modules/microvm/templates/nixarchy-desktop.nix;
-    note = "The stock nixarchy desktop with ai-mirror inside, for an MCP agent to drive. Placeholder until measured.";
+    note = "The stock nixarchy desktop -- its keybindings, bar and omarchy-* commands -- for the guest's dev user, with ai-mirror inside so an MCP agent can drive it; control is granted without asking, because starting the VM is the consent. Connect from the host with 'claude mcp add ai-mirror-<name> -- socat - VSOCK-CONNECT:$(cat ~/.local/state/nixarchy/microvm/<name>/vsock-cid):7000' after the first start; each VM picks its own CID, so several can run at once. The monitor is Virtual-1 at 1280x800, 8 GiB of RAM and 4 vCPUs. The guest renders in software (no host GPU is behind its virtio GPU, #1506), so GL-heavy apps are slow. Notifications start on do-not-disturb: an agent testing them runs 'omarchy-shell notifications setDnd off'. The largest template: the guest closure is 17.7 GiB, most of which a nixarchy host built from the same revision already has in its store, so the first run on a host without those paths is long. The first grant after a cold boot takes about 45 s, because ai-mirror waits for omarchy's first run to finish. Its ai-mirror still words things as \"your real desktop\" and \"human-confirmed\".";
   };
 
   python = {

@@ -82,11 +82,14 @@ is the same catalogue, `data/microvm-templates.nix`.
 | `k3s` | single-node k3s server, 4 GiB RAM, 2 vCPU | `/var/lib/rancher` is a 20 GiB volume, so the cluster and its generated token survive a restart; traefik and servicelb off; `kubectl` inside the guest only |
 | `hyprland` | a Wayland compositor with `grim`, `tesseract`, `wtype` and an accessibility-forced Chromium, on one 1920x1080 virtual monitor | for testing desktop tooling without a real session. No omarchy shell — this is plain NixOS. The first template that asks for a GPU, and the largest: about 5.2 GiB to realise, so the first run is a long one. The guest renders in software (no host GPU is behind its virtio GPU, #1506), so WebGL and other GL-heavy apps are slow. The compositor is a user service — `systemctl --user status hyprland` from the ttyS0 console if a capture comes back empty |
 | `hyprland-ai-mirror` | `hyprland` plus ai-mirror, listening on vsock port 7000 | an MCP agent on the host drives this desktop instead of yours. Control is granted without asking — starting the VM is the consent. Each VM picks its own vsock CID, so several can run at once. The first grant after a cold boot takes up to ~20 s, while Hyprland starts. Its ai-mirror still words things as "your real desktop" and "human-confirmed" |
+| `nixarchy-desktop` | the stock nixarchy desktop for `dev`, plus ai-mirror on vsock port 7000 | an MCP agent drives nixarchy itself: its keybindings, bar and `omarchy-*` commands. Control is granted without asking — starting the VM is the consent. 8 GiB of RAM, 4 vCPUs, software rendering, a 1280x800 monitor. The largest template (17.7 GiB closure, most of it already in the store of a nixarchy host on the same revision), and the first grant after a cold boot takes about 45 s. Notifications start on do-not-disturb. Its ai-mirror still words things as "your real desktop" and "human-confirmed" |
 
-Every template is a plain NixOS module — nothing here invents nixarchy
-vocabulary. If you outgrow one, copy `module` out of the catalogue entry
-into a flake of your own and grow it from the NixOS manual and microvm.nix's
-own options reference from there.
+Every template but one is a plain NixOS module — nothing there invents
+nixarchy vocabulary. If you outgrow one, copy `module` out of the catalogue
+entry into a flake of your own and grow it from the NixOS manual and
+microvm.nix's own options reference from there. The exception is
+`nixarchy-desktop`, which is nixarchy itself: outgrow that one from the
+flake the installer generates.
 
 ### Driving one with ai-mirror
 
@@ -107,6 +110,10 @@ refuses to start the second. Delete its `vsock-cid` and it picks a new one.
 Inside the guest, control is granted without asking: starting the VM is the
 consent. Your real desktop still asks every time. Stopping the VM is the kill
 switch. Several can run at once, each on its own CID.
+
+`nixarchy-desktop` gives the agent nixarchy's own keybindings, bar and
+`omarchy-*` commands, so `ai-mirror index` there describes nixarchy rather
+than a bare compositor.
 
 Any local user on the host can reach its port, and whoever connects is
 granted control: that is `dev` in the guest, with passwordless sudo, the

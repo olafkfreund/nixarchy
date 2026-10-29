@@ -126,8 +126,21 @@
   # guaranteed to be installed, so it has to be carried here.
   nh,
   callPackage,
+  symlinkJoin,
 }:
 let
+  # Why: pkgs/AGENTS.md#chromium-reads-its-flags-through-our-launcher-1491
+  chromium-flags = symlinkJoin {
+    name = "chromium-flags-${chromium.version}";
+    paths = [ chromium ];
+    postBuild = ''
+      rm -f "$out/bin/chromium" "$out/bin/chromium-browser"
+      substitute ${./chromium-flags.sh} chromium-flags.sh --replace-fail @chromium@ ${chromium}/bin/chromium
+      install -m 755 chromium-flags.sh "$out/bin/chromium"
+      install -m 755 chromium-flags.sh "$out/bin/chromium-browser"
+    '';
+  };
+
   # Everything the 438 scripts in bin/ invoke. Kept explicit rather than
   # pulled from a generated file: a missing entry should be a readable diff,
   # not a silent PATH lookup that only fails on someone else's machine.
@@ -257,7 +270,7 @@ let
     xdg-terminal-exec
     uwsm
     foot
-    chromium
+    chromium-flags
     nautilus
     neovim
     mise
@@ -939,6 +952,14 @@ stdenvNoCC.mkDerivation {
             substituteInPlace $out/share/omarchy/bin/omarchy-launch-webapp \
               --replace-fail 'exec setsid uwsm-app -- $browser_exec' \
               'exec setsid uwsm-app -- "$browser_exec"'
+
+            # The registered native host must outlive an update's store-path GC (#1491).
+            substituteInPlace $out/share/omarchy/bin/omarchy-install-chromium-copy-url \
+              --replace-fail 'HOST_PATH="$OMARCHY_PATH/bin/omarchy-chromium-copy-url-host"' \
+              'HOST_PATH=/run/current-system/sw/bin/omarchy-chromium-copy-url-host'
+            substituteInPlace $out/share/omarchy/bin/omarchy-install-chromium-ytdlp \
+              --replace-fail 'HOST_PATH="$OMARCHY_PATH/bin/omarchy-chromium-ytdlp-host"' \
+              'HOST_PATH=/run/current-system/sw/bin/omarchy-chromium-ytdlp-host'
 
             # Why: pkgs/AGENTS.md#the-browser-theme-policy-and-why-402-broke-it
             #

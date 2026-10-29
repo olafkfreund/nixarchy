@@ -265,6 +265,14 @@
     class = "patch";
     reason = "It looks in /usr/share/vulkan/icd.d, which does not exist on NixOS -- hardware.graphics puts the ICD manifests under /run/opengl-driver -- so it answered no Vulkan on every machine.";
   };
+  "omarchy-install-chromium-copy-url" = {
+    class = "patch";
+    reason = "It registers the native-messaging host at $OMARCHY_PATH/bin, a store path that is garbage-collected after an Omarchy update, so the registered host dangles. Registers /run/current-system/sw/bin instead (#1491).";
+  };
+  "omarchy-install-chromium-ytdlp" = {
+    class = "patch";
+    reason = "It registers the native-messaging host at $OMARCHY_PATH/bin, a store path that is garbage-collected after an Omarchy update, so the registered host dangles. Registers /run/current-system/sw/bin instead (#1491).";
+  };
   "omarchy-install-font" = {
     class = "replace";
     reason = "Upstream runs `omarchy-pkg-add <package> && sleep 2 && omarchy-font-set`, so the && meant the switch never ran either. Asks fontconfig first, and defers to omarchy-pkg-add only if the family is absent; on the missing-font path with no terminal it reopens itself in one (#1304).";

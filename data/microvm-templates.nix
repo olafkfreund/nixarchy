@@ -59,13 +59,13 @@
   hyprland = {
     label = "Hyprland";
     module = ../modules/microvm/templates/hyprland.nix;
-    note = "A Wayland compositor with grim, tesseract, wtype and foot, plus Chromium forced to expose its accessibility tree, on one 1920x1080 virtual monitor. No omarchy shell -- this is plain NixOS, so none of the omarchy commands are here. The first template that asks for a GPU device, and the largest: about 5.2 GiB to realise, roughly a sixth of it Chromium, so the first run is a long one. The compositor is a user service: reach it with 'systemctl --user status hyprland' from the ttyS0 console, and check there first if a capture comes back empty.";
+    note = "A Wayland compositor with grim, tesseract, wtype and foot, plus Chromium forced to expose its accessibility tree, on one 1920x1080 virtual monitor. No omarchy shell -- this is plain NixOS, so none of the omarchy commands are here. The first template that asks for a GPU device, and the largest: about 5.2 GiB to realise, roughly a sixth of it Chromium, so the first run is a long one. The guest renders in software (no host GPU is behind its virtio GPU, #1506), so WebGL and other GL-heavy apps are slow. The compositor is a user service: reach it with 'systemctl --user status hyprland' from the ttyS0 console, and check there first if a capture comes back empty.";
   };
 
   hyprland-ai-mirror = {
     label = "Hyprland + ai-mirror";
     module = ../modules/microvm/templates/hyprland-ai-mirror.nix;
-    note = "The Hyprland template with ai-mirror inside, so an MCP agent can drive this desktop; control is granted without asking, because starting the VM is the consent. Connect from the host with 'claude mcp add ai-mirror-sandbox -- socat - VSOCK-CONNECT:1504:7000'. One at a time: the vsock CID is fixed. The first grant after a cold boot takes up to ~20 s, while Hyprland starts. Its ai-mirror still words things as \"your real desktop\" and \"human-confirmed\".";
+    note = "The Hyprland template with ai-mirror inside, so an MCP agent can drive this desktop; control is granted without asking, because starting the VM is the consent. Connect from the host with 'claude mcp add ai-mirror-<name> -- socat - VSOCK-CONNECT:$(cat ~/.local/state/nixarchy/microvm/<name>/vsock-cid):7000' after the first start; each VM picks its own CID, so several can run at once (a declared machine keeps it in /var/lib/microvms/<name>/vsock-cid). The first grant after a cold boot takes up to ~20 s, while Hyprland starts. Its ai-mirror still words things as \"your real desktop\" and \"human-confirmed\".";
   };
 
   python = {

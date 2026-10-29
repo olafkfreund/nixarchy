@@ -1084,17 +1084,45 @@ no qemu process at all and a log untouched for 26 minutes -- CLAUDE.md §6's
 "a wedged `nix build` looks exactly like a working one", exactly. The harness
 was what failed, not the template.
 
-**A window on the host.** `microvm.graphics.backend = "headless"` exists so
-the VM opens nothing on the desktop of whoever runs it, and no check here has
-a desktop to look at. What *is* measured is the property that makes a window
-impossible: with `DISPLAY` and `WAYLAND_DISPLAY` stripped, `egl-headless` runs
-and `gtk` fails with `gtk initialization failed`. Headless is not a window
-nobody looked at; it is a configuration that runs where no display exists.
+**A window on the host.** The template opens nothing on the desktop of whoever
+runs it because it never enables `microvm.graphics`: microvm.nix's default
+`graphics.enable = false` makes the runner pass `-nographic`, and the GPU is a
+plain `-device virtio-gpu-pci` added through `qemu.extraArgs`, with no host
+display or GL behind it. No check here has a desktop to look at; what is
+checked is the runner's command line (`-nographic`, no `-display`).
 
-A related trap for anyone tempted to check the other half by hand: with the
-template's `virtio-gpu-gl` attached, `-display gtk` never reaches a window at
-all -- qemu refuses with `OpenGL is not supported by display backend 'gtk'`,
-because this qemu is built without GL in its gtk backend.
+It used to be `graphics.backend = "headless"` (`-display egl-headless -device
+virtio-gpu-gl`). That runs with no display too, but on p620 (radeonsi, Mesa
+26.2.4) qemu segfaulted in `eglTerminate` on every exit and each crash raised a
+desktop notification (#1506). Do not move back to it to get host GL without
+measuring an exit first: `coredumpctl list | grep qemu` after a `vm stop`.
+
+## hyprland-ai-mirror: the scripts are checked, the round trip is not (#1508)
+
+`checks.microvm-ai-mirror` runs the template's own CID script, chosen once
+and then stable. It refuses a symlinked, non-numeric or wrapping `vsock-cid`:
+2^64+3 wraps to 3 under `$((…))`, which is why there is a length guard. It
+runs the autoconfirm unit's own `script` against a fixture `state.json` and a
+stub that logs only `confirm`. And it reads the wiring as values, including
+that `microvm.vsock.cid` is null, so a fixed CID cannot come back unnoticed.
+
+**What nothing here runs:** an MCP call over vsock into a booted guest, or two
+guests at once. The guest is the `hyprland` one, which wedges `runNixOSTest`
+(the section above). Both were measured by hand on p620 for #1508, and the
+transcript is in its PR.
+
+**`microvm.extraArgsScript` is how a per-VM value reaches qemu.** The runner
+is one closure per template, so anything compiled into it (a vsock CID, a
+forwarded port) is shared by every VM of that template. `microvm-run` runs the
+script from the VM's own directory, `$dir` for `nixarchy vm` and
+`/var/lib/microvms/<name>` for a declared machine, and appends its stdout to
+qemu's arguments under `set -eou pipefail`, so a refusal stops qemu. A file
+there, beside `share/` and not in it, is per-VM and out of the guest's reach.
+The device suffix is microvm.nix's `devType`, and it is `pci` for every guest
+here: `requirePci` is true when the VM has shares, and `guest.nix` always 9p-shares
+the store and `share/`. It is not `graphics.enable` that forces it: #1506 turned
+that off and `vhost-vsock-pci` was re-measured working. Only a guest with no
+shares and no graphics on the `microvm` machine needs `vhost-vsock-device`.
 
 ## The screencast harness is scripts, and only its coverage is a check
 

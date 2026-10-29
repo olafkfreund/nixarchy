@@ -165,3 +165,34 @@ Revert the branch's commits. The template is new and only listed in the
 catalogue. The `specialArgs` line changes no existing output (step 1's
 check). A VM someone already created from the template keeps its runner
 link until they run `nixarchy vm destroy` on it.
+
+## Results
+
+Steps 1-4 were implemented by the `coder` agent and committed after review
+(`d5d0432`, `7eb051d`, `e02d68d`). One change from step 4's hand-off: the
+"Driving one with ai-mirror" subsection sits below the table's closing
+paragraph, so that paragraph stays with the table.
+
+- **Step 1:** `microvm-hyprland` outPath is unchanged
+  (`l7gisjic…-microvm-qemu-nixos`, before and after).
+- **Steps 2-3:**
+  - `nix fmt`, `statix` and `deadnix` are clean.
+  - Both runners build.
+  - `checks.microvm-template` failed only on the missing manual row until
+    step 4, then passed.
+- **Step 5 (2026-10-29, p620):** the branch's `nixarchy-vm` was built at
+  `e02d68d`, with a scratch `XDG_STATE_HOME`.
+  - `vm create s1 --template hyprland-ai-mirror`, then `vm run --detach s1`:
+    the CLI returned after 13 s, and the vsock listener came up 13 s after
+    that.
+  - MCP probe:
+    - `ai-mirror 3.1.0`;
+    - granted 18.6 s after the request (cold boot);
+    - `launch foot` opened the window `dev@s1: ~`;
+    - `input` typed, `acked 3`, and the screenshot shows the echoed text;
+    - `control off`.
+  - A second sandbox (`s2`) refused to start, with exit 1:
+    `vhost-vsock: unable to set guest cid: Address already in use`.
+  - Host `ai-mirror status` was `{"owner":"off","generation":103}` before
+    and after: the real desktop was untouched.
+  - Both VMs were stopped and removed.

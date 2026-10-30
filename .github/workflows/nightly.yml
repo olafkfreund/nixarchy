@@ -528,6 +528,16 @@ jobs:
           # Non-zero fails the job, as before: exit 1 names the failing
           # targets, exit 2 means the gate itself could not run.
           set -euo pipefail
+          # One line every 20 s of what the runner has left, so a runner that dies
+          # mid-gate says whether memory or disk ran out (#1518).
+          (
+            while :; do
+              echo "canary-resources: $(free -m | awk '/^Mem:/ {printf "mem_used=%sM mem_avail=%sM ", $3, $7} /^Swap:/ {printf "swap_used=%sM ", $3}')disk_nix=$(df -BG --output=avail /nix | tail -1 | tr -d ' ') disk_root=$(df -BG --output=avail / | tail -1 | tr -d ' ')"
+              sleep 20 >/dev/null 2>&1 # a killed loop orphans its sleep; keep it off the step's stdout
+            done
+          ) &
+          sampler=$!
+          trap 'kill "$sampler" 2>/dev/null || true' EXIT
           rc=0
           ./.github/scripts/eval-gate.sh | tee "$RUNNER_TEMP/fail.tsv" || rc=$?
           if [ "$rc" -ne 0 ]; then

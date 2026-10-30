@@ -119,9 +119,39 @@ All local runs are cheap tier (§6): run them one at a time under
 - **Hosted:** the first nightly after merge. Green closes #1518. If it's red,
   the `canary-resources:` lines go into #1518.
 
+## Deviations
+
+- Step 2: `sleep 20` became `sleep 20 >/dev/null 2>&1`, with a one-line
+  comment. Killing the loop orphans its `sleep`, which held the step's stdout
+  open. Piped through `cat`, a 25 s test script took 40.04 s with the planned
+  line, and 25.01 s after the change. A runner reading the step's output to
+  EOF would have waited up to 20 s past the end of every step.
+
 ## Results
 
-(filled in during implementation)
+All local runs used tomorrow's lock (`nix flake update` in a detached
+scratch worktree), one at a time under the flock.
+
+| | peak `anon` | time |
+|---|---|---|
+| old `eval-gate.sh --batch-only` (one batch) | 8.42 GiB | 196 s |
+| new `eval-gate.sh --batch-only` (chunks of 8) | 4.68 GiB | 201 s |
+
+§1 contract proof (`.#does-not-exist` appended after the target list, so
+it lands in the last chunk):
+
+```
+BROKEN old normal: rc=1 rows=1 first=[.#does-not-exist	error: flake '…' does not provide attribute 'packages.x…]
+BROKEN old batch: rc=1 rows=0 first=[]
+BROKEN new normal: rc=1 rows=1 first=[.#does-not-exist	error: flake '…' does not provide attribute 'packages.x…]
+BROKEN new batch: rc=1 rows=0 first=[]
+CLEAN new normal: rc=0 rows=0          (break removed; grep -c does-not-exist = 0)
+```
+
+The new `--batch-only` passed clean in the measurement above. The sampler
+printed 2 lines in 25 s and released the pipe with the script. `bash -n`,
+shellcheck, actionlint, `nix fmt -- --ci` and `checks.grep-q-pipefail` are
+clean.
 
 ## Rollback
 

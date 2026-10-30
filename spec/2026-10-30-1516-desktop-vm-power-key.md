@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1516
 intent: intent/2026-10-30-1516-desktop-vm-power-key.md
 ---

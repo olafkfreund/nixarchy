@@ -403,6 +403,16 @@ pkgs.runCommand "nixarchy-microvm-template"
         fail=1
       fi
     ''}
+    ${lib.optionalString (templates ? nixarchy-desktop) ''
+      echo "== nixarchy-desktop: the power key powers off =="
+      # nixosModules.nixarchy sets the power key to "ignore" for Omarchy's menu;
+      # in the guest the only press is 'nixarchy vm stop', which then hangs (#1516).
+      sys=$(readlink -f ${templates.nixarchy-desktop.kvm}/share/microvm/system)
+      if ! grep -qx 'HandlePowerKey=poweroff' "$sys/etc/systemd/logind.conf"; then
+        echo "nixarchy-desktop: logind does not power off on the power key: $(grep HandlePowerKey "$sys/etc/systemd/logind.conf" || echo unset)" >&2
+        fail=1
+      fi
+    ''}
 
     echo "== nixarchy vm: launch and locking =="
 

@@ -6,7 +6,7 @@
 # stdout is an interface: one `target<TAB>message` row per failing target.
 # Everything else goes to stderr. Exit 0: all evaluate. Exit 1: failures
 # (rows on stdout; none with --batch-only). Exit 2: infrastructure -- the
-# allowlist or table failed or came back empty, or the batch failed but no
+# allowlist or table failed or came back empty, or a chunk failed but no
 # single target could be confirmed failing. Callers must not turn 2 into an
 # "upstream broke it" report.
 # Why: docs/internals/workflows.md (flake-update.yml). Capture lists with
@@ -72,5 +72,5 @@ if [ "$failed" = 1 ] && [ "$fetchfail" = "$nfail" ]; then
   exit 2
 fi
 [ "$failed" = 1 ] && exit 1
-echo "eval-gate: batch failed but no single target does" >&2
+echo "eval-gate: a chunk failed but no single target does" >&2
 exit 2

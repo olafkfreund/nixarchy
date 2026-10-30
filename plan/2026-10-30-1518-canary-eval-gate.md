@@ -127,6 +127,9 @@ All local runs are cheap tier (§6): run them one at a time under
   line, and 25.01 s after the change. A runner reading the step's output to
   EOF would have waited up to 20 s past the end of every step.
 
+- `eval-gate.sh` lines 9 and 75 say "a chunk failed" rather than "the batch
+  failed" (Opus review). The stderr line has no reader (`grep -rn`).
+
 ## Results
 
 All local runs used tomorrow's lock (`nix flake update` in a detached

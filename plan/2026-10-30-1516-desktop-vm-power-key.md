@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1516
 spec: spec/2026-10-30-1516-desktop-vm-power-key.md
 coders:      # the owner asked for agy and codex on these issues

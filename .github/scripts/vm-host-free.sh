@@ -2,10 +2,11 @@
 # Is p620 free of the OTHER workflow's VM job? (#1365) Needs gh and jq; $GH is stubbable.
 # Prints "free" (exit 0), "busy: <workflow> run <id> job <name>" (exit 1), exit 2 if unknown.
 # install asks about omarchy-edge's `verify`; edge asks about install-check's `install`.
+# An install still in its wait step does not count for edge (#1524), so the two cannot wait on each other.
 set -euo pipefail
 case ${1:-} in
-  install) wf=omarchy-edge.yml job=verify ;;
-  edge) wf=install-check.yml job=install ;;
+  install) wf=omarchy-edge.yml job=verify wait="" ;;
+  edge) wf=install-check.yml job=install wait="Wait for edge's VM checks to leave this host" ;;
   *) echo "usage: vm-host-free.sh <install|edge>" >&2; exit 2 ;;
 esac
 repo=${GITHUB_REPOSITORY:?}
@@ -17,7 +18,8 @@ ids=$(jq -r --arg p ".github/workflows/$wf" --arg me "${GITHUB_RUN_ID:-}" \
   '.workflow_runs[] | select(.path == $p and (.id|tostring) != $me) | .id' <<<"$runs") || unknown "run list unreadable"
 for id in $ids; do
   jobs=$(${GH:-gh} api "repos/$repo/actions/runs/$id/jobs") || unknown "job list for run $id failed"
-  hit=$(jq -r --arg j "$job" '.jobs[] | select(.name == $j and .status == "in_progress") | .name' <<<"$jobs") ||
+  hit=$(jq -r --arg j "$job" --arg w "$wait" '.jobs[] | select(.name == $j and .status == "in_progress"
+    and ([.steps[]? | select(.name == $w and .status == "in_progress")] | length) == 0) | .name' <<<"$jobs") ||
     unknown "job list for run $id unreadable"
   [ -z "$hit" ] || { echo "busy: $wf run $id job $hit"; exit 1; }
 done

@@ -1918,3 +1918,9 @@ Every VM here boots with rtkit from the start, so `checks.session`'s probe (the
 shell's hard `Max realtime timeout` is not 0) proves rtkit is on, not the
 drop-in; `tests/options.nix` asserts the drop-in is declared (`etcNativeRtkit`,
 `etcNativeRtportal`). The switch itself is tested by a human.
+
+## A break-proof helper can be the green light (#1524)
+
+`checks.vm-host-free`'s `red()` printed `ok  any-state-is-caught` and `ok  fail-open-is-caught` from #1365 onward, and neither proof had ever run a broken copy. `red()` did `name=$1; shift` and then `verdict "$@"`. But `verdict` reads the case name as `$1`, so after the shift it ran `bash install …` against the wrong arguments, failed for that reason, and `red()` read the failure as "caught". codex found it in review, two breaks after the fact.
+
+A negative-test helper inverts its result, so any way it can fail at all turns into a pass. That is §1's "a check that cannot fail", one level up. When you write or reuse one, **prove the prover**: hand it the *unbroken* subject once, and watch it say "not caught". If it still prints `ok`, it was never running what you gave it.

@@ -104,3 +104,16 @@ Expected: all exit 0. The `vm-host-free` log shows the new cases and breaks 3–
 ## Rollback
 
 Revert the squash commit. The only behaviour change is the jq filter in `edge` mode, and reverting it restores today's job-level view, with the standoff but with #1365 intact.
+
+## Deviations
+
+- **`red()` never ran a broken copy (found by codex; it was already there before this change).** It did `name=$1; shift` and then `verdict "$@"`, but `verdict` reads the case name as `$1`. Every break proof therefore ran `bash <asker>` and passed whether or not anything was caught. That includes breaks 1 and 2 from #1365. Fixed by dropping the `shift`. Proof: with break 3 handed the unbroken `$script`, the check now fails with `FAILED no-exemption-is-caught: broken copy was not caught`.
+- **The guard is anchored (found by the Opus review).** `grep -qF -- "- name: $name"` matched a substring, so a rename that only appended text passed. It is now `grep -qE -- "^ *- name: $name\$"`, and break 5 appends ` (v2)` and no longer truncates. Proof: with the old `-F` grep, the check fails with `FAILED step-rename-is-caught`.
+- **Not changed:** break 1's `sed` now also strips the step-level clause, because it runs once per line. It is still caught through the job-level clause in `install` mode.
+
+## Results
+
+- `checks.vm-host-free`: 19 `ok` lines; five breaks caught.
+- With the old `vm-host-free.sh`, the new check fails at `edge-vs-waiting-install` (`busy: install-check.yml run 22 job install`): the standoff.
+- `nix fmt -- --ci`, shellcheck, actionlint and `checks.grep-q-pipefail` all pass, each read with its own exit status.
+- Step 4 (live step status) has not been observed yet. Open risk, from the Opus review: if GitHub reports the wait step as `in_progress` for longer than `verify`'s start-up (checkout plus `nix eval`), both sides could boot. Step 4 shows only that the state exists, not how long it lags.

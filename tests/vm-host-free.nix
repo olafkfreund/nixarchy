@@ -63,7 +63,7 @@ pkgs.runCommand "nixarchy-vm-host-free"
       fi
     }
     red() {
-      name=$1; shift
+      name=$1
       if verdict "$@"; then echo "FAILED  $name: broken copy was not caught" >&2; exit 1; fi
       echo "ok  $name"
     }
@@ -100,7 +100,7 @@ pkgs.runCommand "nixarchy-vm-host-free"
     guard() {
       name=$(sed -n 's/.*edge) .* wait="\([^"]*\)".*/\1/p' "$script")
       [ -n "$name" ] || { echo "FAILED  guard: wait step name empty in $script" >&2; return 1; }
-      grep -qF -- "- name: $name" "$1" || {
+      grep -qE -- "^ *- name: $name\$" "$1" || {
         echo "FAILED  guard: step '$name' missing from $1" >&2
         return 1
       }
@@ -128,8 +128,8 @@ pkgs.runCommand "nixarchy-vm-host-free"
     if cmp -s "$script" queued-wait.sh; then echo "break 4 did not land" >&2; exit 1; fi
     fixture "$INST" "$INSTALL_BEFORE_WAIT"
     red queued-wait-exempt-is-caught queued-wait.sh edge 1 busy
-    # Break 5: renaming the step in install-check.yml is caught by the guard.
-    sed "s/- name: Wait for edge's VM checks to leave this host/- name: Wait for edge/" "$workflow" > renamed-wf.yml
+    # Break 5: a rename that only appends to the step name is caught by the guard.
+    sed "s/- name: Wait for edge's VM checks to leave this host/& (v2)/" "$workflow" > renamed-wf.yml
     if cmp -s "$workflow" renamed-wf.yml; then echo "break 5 did not land" >&2; exit 1; fi
     if guard renamed-wf.yml 2>/dev/null; then
       echo "FAILED  step-rename-is-caught: broken workflow was not caught" >&2

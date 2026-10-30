@@ -1,7 +1,7 @@
 { pkgs, ... }:
-# Install and edge's VM checks never share p620 (#1365). The real script
-# against a stub `gh` serving fixture JSON, plus two broken copies that must
-# be caught: any job state counts, and a failed API call read as "free".
+# Install and edge's VM checks never share p620 (#1365, #1524). The real script
+# against a stub `gh` serving fixture JSON, the step-name guard against
+# install-check.yml, and five broken copies that must be caught.
 pkgs.runCommand "nixarchy-vm-host-free"
   {
     nativeBuildInputs = with pkgs; [
@@ -13,6 +13,7 @@ pkgs.runCommand "nixarchy-vm-host-free"
       diffutils
     ];
     script = ../.github/scripts/vm-host-free.sh;
+    workflow = ../.github/workflows/install-check.yml;
   }
   ''
     printf '%s\n' '#!${pkgs.bash}/bin/bash' \
@@ -37,6 +38,11 @@ pkgs.runCommand "nixarchy-vm-host-free"
     VERIFY_UP='{"name":"verify","status":"in_progress"}'
     PREPARE_UP='{"name":"prepare","status":"in_progress"},{"name":"verify","status":"queued"}'
     INSTALL_UP='{"name":"install","status":"in_progress"}'
+    INSTALL_WAITING='{"name":"install","status":"in_progress","steps":[{"name":"Run actions/checkout@v5","status":"completed"},{"name":"Wait for edge'"'"'s VM checks to leave this host","status":"in_progress"},{"name":"Install onto a blank disk, and into free space beside a neighbour","status":"queued"}]}'
+    INSTALL_BOOTING='{"name":"install","status":"in_progress","steps":[{"name":"Run actions/checkout@v5","status":"completed"},{"name":"Wait for edge'"'"'s VM checks to leave this host","status":"completed"},{"name":"Install onto a blank disk, and into free space beside a neighbour","status":"in_progress"}]}'
+    INSTALL_BEFORE_WAIT='{"name":"install","status":"in_progress","steps":[{"name":"Run actions/checkout@v5","status":"in_progress"},{"name":"Wait for edge'"'"'s VM checks to leave this host","status":"queued"},{"name":"Install onto a blank disk, and into free space beside a neighbour","status":"queued"}]}'
+    INSTALL_BETWEEN='{"name":"install","status":"in_progress","steps":[{"name":"Run actions/checkout@v5","status":"completed"},{"name":"Wait for edge'"'"'s VM checks to leave this host","status":"completed"},{"name":"Install onto a blank disk, and into free space beside a neighbour","status":"queued"}]}'
+    VERIFY_WAITING='{"name":"verify","status":"in_progress","steps":[{"name":"Wait for edge'"'"'s VM checks to leave this host","status":"in_progress"}]}'
 
     # try <script> <asker> -> sets rc and got
     try() {
@@ -74,6 +80,33 @@ pkgs.runCommand "nixarchy-vm-host-free"
     run nothing-running "$script" install 0 free
     fixture "$EDGE" "$VERIFY_UP"; touch fix/fail
     run api-fails "$script" install 2 ""
+    fixture "$INST" "$INSTALL_WAITING"
+    run edge-vs-waiting-install "$script" edge 0 free
+    fixture "$INST" "$INSTALL_BOOTING"
+    run edge-vs-booting-install "$script" edge 1 "busy: install-check.yml run 22 job install"
+    fixture "$INST" "$INSTALL_BEFORE_WAIT"
+    run edge-vs-install-before-wait "$script" edge 1 busy
+    fixture "$INST" "$INSTALL_BETWEEN"
+    run edge-vs-install-between-steps "$script" edge 1 busy
+    fixture "$EDGE" "$VERIFY_WAITING"
+    run install-vs-verify-with-wait-named-step "$script" install 1 "busy: omarchy-edge.yml run 11 job verify"
+    rm -rf fix; mkdir fix
+    printf '{"workflow_runs":[%s,%s]}\n' "$EDGE" "$INST" > fix/runs.json
+    printf '{"jobs":[%s]}\n' "$VERIFY_UP" > fix/jobs-11.json
+    printf '{"jobs":[%s]}\n' "$INSTALL_WAITING" > fix/jobs-22.json
+    run standoff-install "$script" install 1 "busy: omarchy-edge.yml run 11 job verify"
+    run standoff-edge "$script" edge 0 free
+
+    guard() {
+      name=$(sed -n 's/.*edge) .* wait="\([^"]*\)".*/\1/p' "$script")
+      [ -n "$name" ] || { echo "FAILED  guard: wait step name empty in $script" >&2; return 1; }
+      grep -qF -- "- name: $name" "$1" || {
+        echo "FAILED  guard: step '$name' missing from $1" >&2
+        return 1
+      }
+    }
+    guard "$workflow"
+    echo "ok  step-name-guard"
 
     # Break 1: any job state counts. Must misreport the not-yet-started verify.
     sed 's/ and \.status == "in_progress"//' "$script" > any-state.sh
@@ -85,6 +118,24 @@ pkgs.runCommand "nixarchy-vm-host-free"
     if cmp -s "$script" fail-open.sh; then echo "break 2 did not land" >&2; exit 1; fi
     fixture "$EDGE" "$VERIFY_UP"; touch fix/fail
     red fail-open-is-caught fail-open.sh install 2 ""
+    # Break 3: no step exemption in edge mode. Must misreport waiting install as busy.
+    sed 's/wait="Wait for edge[^"]*"/wait=""/' "$script" > any.sh
+    if cmp -s "$script" any.sh; then echo "break 3 did not land" >&2; exit 1; fi
+    fixture "$INST" "$INSTALL_WAITING"
+    red no-exemption-is-caught any.sh edge 0 free
+    # Break 4: a queued wait step also exempts the job. Must misreport before-wait as free.
+    sed 's/and \.status == "in_progress")\]/and .status != "completed")]/' "$script" > queued-wait.sh
+    if cmp -s "$script" queued-wait.sh; then echo "break 4 did not land" >&2; exit 1; fi
+    fixture "$INST" "$INSTALL_BEFORE_WAIT"
+    red queued-wait-exempt-is-caught queued-wait.sh edge 1 busy
+    # Break 5: renaming the step in install-check.yml is caught by the guard.
+    sed "s/- name: Wait for edge's VM checks to leave this host/- name: Wait for edge/" "$workflow" > renamed-wf.yml
+    if cmp -s "$workflow" renamed-wf.yml; then echo "break 5 did not land" >&2; exit 1; fi
+    if guard renamed-wf.yml 2>/dev/null; then
+      echo "FAILED  step-rename-is-caught: broken workflow was not caught" >&2
+      exit 1
+    fi
+    echo "ok  step-rename-is-caught"
 
     touch $out
   ''

@@ -131,6 +131,14 @@ flake, that value is reapplied at every rebuild unless
 `users.mutableUsers` is `true` (the default). Check before wondering why a
 password change did not stick.
 
+With autologin, no password is typed at boot, so the login keyring stays
+locked. Until something unlocks it, the first app that stores secrets there
+(Chromium, for one) asks for the keyring password. Unlocking the lock screen
+with your password also unlocks the keyring. The keyring stays encrypted;
+upstream Omarchy uses an unencrypted default keyring instead (#1492). To turn
+this off, set
+`security.pam.services.omarchy-lock-password.enableGnomeKeyring = false`.
+
 ## Passing on a machine, and signing keys
 
 *Setup > Reset Computer* restores the baseline snapshot the Omarchy ISO takes,

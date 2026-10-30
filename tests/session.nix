@@ -1061,6 +1061,17 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds(
         "test \"$(" + as_user("omarchy-shell notifications activateKey " + key) + ")\" = none",
         timeout=40)
+    # Give-back: a row the companion took but could not show pops up when it asks
+    # (showKey). History has it already, so it is counted on screen, not in live.json.
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- giveback-133 hi"))
+    back = machine.wait_until_succeeds(as_user(delegate) + " | " + jq
+        + " -e -r '.[] | select(.summary == \"giveback-133\") | .key'", timeout=30).strip()
+    assert machine.succeed(as_user("omarchy-shell notifications showKey " + back)).strip() == "ok"
+    machine.wait_until_succeeds(
+        "test \"$(" + as_user("omarchy-shell notifications count") + ")\" -ge 1", timeout=30)
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
     # Lapse: a 2 s lease, a row nobody collects, and the row appears as a popup.
     machine.succeed(as_user("omarchy-shell notifications delegate 2000"))
     machine.succeed(as_user(

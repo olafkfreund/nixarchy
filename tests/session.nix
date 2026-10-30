@@ -1034,6 +1034,83 @@ pkgs.testers.runNixOSTest {
         + state + "/history.json", timeout=30)
     print("a critical notification closed by its sender left the screen, into history")
 
+    # ---- the companion can take notifications over (#133) -------------------
+    # While Nixi's snowflake holds a lease (`delegate <ms>`, renewed over the
+    # shell's IPC) an ordinary notification is queued for it instead of popping
+    # up; the call prints the queued rows as JSON and clears the queue. The
+    # lease is what the companion renews every second, so each poll below also
+    # renews it. History still gets the row, a critical one still pops up, and
+    # a lapsed lease puts the queued rows back on screen.
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    delegate = "omarchy-shell notifications delegate 8000"
+    live_mentions = lambda s_: "test -s " + state + "/live.json && grep -q " + s_ + " " + state + "/live.json"
+    assert machine.succeed(as_user(delegate)).strip() == "[]", "nothing was queued yet"
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- delegated-133 hi"))
+    # The poll that drains the row prints its key; 30 s is a floor, not a measurement.
+    key = machine.wait_until_succeeds(as_user(delegate) + " | " + jq
+        + " -e -r '.[] | select(.summary == \"delegated-133\" and .category == \"chat\") | .key'",
+        timeout=30).strip()
+    # In history (batched write: wait), and never on screen.
+    machine.wait_until_succeeds(
+        "test -s " + state + "/history.json && grep -q delegated-133 " + state + "/history.json",
+        timeout=30)
+    machine.fail(live_mentions("delegated-133"))
+    # Drained and never shown, its live slot expires like a card's would (else
+    # 100 of them would make the shell drop new notifications). One probe, after
+    # the 12 s deadline: activateKey closes a live row, so polling it would
+    # pass with expiry broken.
+    machine.sleep(16)
+    assert machine.succeed(as_user("omarchy-shell notifications activateKey " + key)).strip() == "none", \
+        "a drained row's live slot never expired"
+    # (The lease ran out during that wait: take it again.)
+    assert machine.succeed(as_user(delegate)).strip() == "[]", "nothing was queued while it lapsed"
+    # Give-back: a row the companion took but could not show pops up when it asks
+    # (showKey). History has it already, so it is counted on screen, not in live.json.
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- giveback-133 hi"))
+    back = machine.wait_until_succeeds(as_user(delegate) + " | " + jq
+        + " -e -r '.[] | select(.summary == \"giveback-133\") | .key'", timeout=30).strip()
+    assert machine.succeed(as_user("omarchy-shell notifications showKey " + back)).strip() == "ok"
+    machine.wait_until_succeeds(
+        "test \"$(" + as_user("omarchy-shell notifications count") + ")\" -ge 1", timeout=30)
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    # Lapse: a lease, a row nobody collects, and the row appears as a popup.
+    # Long enough that the row is queued first, not shown because the lease was already gone.
+    machine.succeed(as_user("omarchy-shell notifications delegate 8000"))
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- lapse-133 hi"))
+    machine.sleep(3)    # (live.json is a batched write: give a popup time to land)
+    machine.fail(live_mentions("lapse-133"))
+    machine.sleep(5)
+    machine.wait_until_succeeds(live_mentions("lapse-133"), timeout=30)
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    # A sender's update replaces its queued row (one row, the new text), and a row
+    # its sender withdraws before the companion polls never reaches it.
+    assert machine.succeed(as_user(delegate)).strip() == "[]", "the lapse left nothing queued"
+    nid = machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -p -a teams-for-linux -- upd-133-old hi")).strip()
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -r " + nid + " -a teams-for-linux -- upd-133-new hi"))
+    gone = machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -p -a teams-for-linux -- gone-133 hi")).strip()
+    machine.succeed(as_user(
+        "${pkgs.glib.bin}/bin/gdbus call --session --dest org.freedesktop.Notifications"
+        + " --object-path /org/freedesktop/Notifications"
+        + " --method org.freedesktop.Notifications.CloseNotification " + gone))
+    for_companion = machine.succeed(as_user(delegate) + " | " + jq + " -c '[.[] | .summary]'").strip()
+    assert for_companion == '["upd-133-new"]', "queued for the companion: " + for_companion
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    # A critical one keeps its popup even under a lease.
+    machine.succeed(as_user(delegate))
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -u critical -a teams-for-linux -- crit-133 x"))
+    machine.wait_until_succeeds(live_mentions("crit-133"), timeout=30)
+    machine.succeed(as_user("omarchy-shell notifications delegate 0"))
+    machine.succeed(as_user("omarchy-shell notifications dismissAll"))
+    print("a notification is queued for the companion under a lease, and pops up when it lapses")
+
     # ---- power ----------------------------------------------------------
     # omarchy-powerprofiles-set autodetect reads this exact property, and it
     # reads it as `2>/dev/null` with a fallback: with no UPower the call fails

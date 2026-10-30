@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1518
 spec: spec/2026-10-30-1518-canary-eval-gate.md
 coders:      # the owner asked for agy and codex on these issues

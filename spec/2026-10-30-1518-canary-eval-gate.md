@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1518
 intent: intent/2026-10-30-1518-canary-eval-gate.md
 ---

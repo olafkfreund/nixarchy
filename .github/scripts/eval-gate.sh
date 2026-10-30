@@ -6,7 +6,7 @@
 # stdout is an interface: one `target<TAB>message` row per failing target.
 # Everything else goes to stderr. Exit 0: all evaluate. Exit 1: failures
 # (rows on stdout; none with --batch-only). Exit 2: infrastructure -- the
-# allowlist or table failed or came back empty, or the batch failed but no
+# allowlist or table failed or came back empty, or a chunk failed but no
 # single target could be confirmed failing. Callers must not turn 2 into an
 # "upstream broke it" report.
 # Why: docs/internals/workflows.md (flake-update.yml). Capture lists with
@@ -36,8 +36,15 @@ done < <(printf '%s\n%s\n' "$allow" "$probes")
 
 pi() { nix path-info --derivation --no-eval-cache "$@"; }
 
-echo "eval-gate: ${#targets[@]} targets, batch" >&2
-if pi "${targets[@]}" >/dev/null; then exit 0; fi
+# Chunks, not one batch: each process hands its evaluator heap back when it
+# exits, and all targets in one process is where hosted runners died (#1518).
+chunk=8
+echo "eval-gate: ${#targets[@]} targets, in chunks of $chunk" >&2
+ok=1
+for ((i = 0; i < ${#targets[@]}; i += chunk)); do
+  pi "${targets[@]:i:chunk}" >/dev/null || { ok=0; break; }
+done
+[ "$ok" = 1 ] && exit 0
 [ "$batch_only" = 1 ] && exit 1
 
 [ -z "${EVAL_GATE_LOG_DIR:-}" ] || mkdir -p "$EVAL_GATE_LOG_DIR"
@@ -65,5 +72,5 @@ if [ "$failed" = 1 ] && [ "$fetchfail" = "$nfail" ]; then
   exit 2
 fi
 [ "$failed" = 1 ] && exit 1
-echo "eval-gate: batch failed but no single target does" >&2
+echo "eval-gate: a chunk failed but no single target does" >&2
 exit 2

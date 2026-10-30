@@ -2010,6 +2010,11 @@ stdenvNoCC.mkDerivation {
                     # the bump that rewords it fails here. checks.session closes one and watches.
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./902-notification-sender-close.patch}
 
+                    # The companion shows notifications itself while it holds a lease (#133). CARRIED until
+                    # omacom/omarchy takes it; --fuzz=0 so a bump that rewords the handler fails here.
+                    # Sits on 902: same file. checks.session delegates one and watches.
+                    patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./903-notification-delegate.patch}
+
                     # Why: pkgs/AGENTS.md#nixarchy-menu-loads-synchronously-1313
                     substituteInPlace $out/share/omarchy/shell/shell.qml \
                       --replace-fail "$(cat ${./1313-panel-loader.old.qml})" "$(cat ${./1313-panel-loader.new.qml})"

@@ -1,0 +1,168 @@
+# nixarchy #133: the companion (Nixi's snowflake) can show notifications itself.
+# While it holds a lease (renewed over the shell's IPC, never by forking) eligible rows are queued
+# for it instead of popping up; a lapsed lease pops them all. Critical, code and Nixi rows keep
+# their popup. Drop when upstream grows a way to hand notifications to another client.
+--- a/shell/plugins/notifications/Service.qml
++++ b/shell/plugins/notifications/Service.qml
+@@ -51,6 +51,77 @@
+   // ------------------------------------------------------------- quiet
+   //
+   property bool doNotDisturb: false
++
++  // #133: the companion (Nixi's snowflake) shows eligible rows itself while it
++  // holds a lease, renewed over IPC. A lapsed lease puts every queued row back.
++  property double delegateUntil: 0
++  property var delegatedQueue: []
++  // Handed-over rows have no card to expire them, so they keep their own clock:
++  // without it they would hold live slots (maxLiveNotifications) for good.
++  property var delegatedExpiry: ({})
++  function delegated() { return Date.now() < delegateUntil }
++
++  function categoryOf(row) {
++    var app = String(row.app || "").toLowerCase()
++    var src = String(row.source || "").toLowerCase()
++    var sum = String(row.summary || "").toLowerCase()
++    var teams = app.indexOf("teams") >= 0 || src.indexOf("teams.microsoft.com") >= 0
++    if (/meeting|invitation|starting|calendar/.test(sum) && (teams || /calendar/.test(app + " " + src))) return "meeting"
++    if (src.indexOf("mail.google.com") >= 0 || /thunderbird|geary/.test(app) || /^outlook\./.test(src)) return "mail"
++    if (teams || /slack|discord|signal|element|telegram/.test(app + " " + src)) return "chat"
++    if (/youtube\.com|twitch/.test(src) || /twitch|grayjay/.test(app)) return "video"
++    if (/firefox|chrom|brave|zen|librewolf/.test(app) && sum.indexOf("download") >= 0) return "download"
++    return "other"
++  }
++
++  // Every queued row back on screen as a normal popup.
++  function lapse() {
++    delegateUntil = 0
++    var queued = delegatedQueue
++    delegatedQueue = []
++    for (var i = 0; i < queued.length; i++) {
++      var reservation = liveKeys[queued[i].key]
++      if (reservation && reservation.row) showDelegated(reservation.row)
++    }
++  }
++
++  // Back to the normal path: the card expires it from here.
++  function showDelegated(row) {
++    var rest = {}
++    for (var k in delegatedExpiry) if (k !== row.key) rest[k] = delegatedExpiry[k]
++    delegatedExpiry = rest
++    // Never put while delegated: live.json and the close record need it, unless the
++    // companion took it, when history has it already and its close must not add it again.
++    var reservation = liveKeys[row.key]
++    if (!reservation || !reservation.recorded) storePut(row)
++    showRow(row)
++  }
++
++  // Taken by the companion and shown there for a while: expire it as a card would.
++  function expireDelegated(now) {
++    var rest = {}, gone = [], queued = {}
++    for (var q = 0; q < delegatedQueue.length; q++) queued[delegatedQueue[q].key] = true
++    for (var k in delegatedExpiry) {
++      if (!liveKeys[k] || rowIndexFor(k) >= 0) continue
++      if (delegatedExpiry[k] <= now && !queued[k]) gone.push(k)
++      else rest[k] = delegatedExpiry[k]
++    }
++    delegatedExpiry = rest
++    for (var i = 0; i < gone.length; i++) {
++      releaseLive(gone[i])
++      release(gone[i], "expired")
++    }
++  }
++
++  Timer {
++    interval: 1000
++    repeat: true
++    running: service.delegateUntil > 0 || Object.keys(service.delegatedExpiry).length > 0
++    onTriggered: {
++      if (service.delegateUntil > 0 && !service.delegated()) service.lapse()
++      service.expireDelegated(Date.now())
++    }
++  }
+   function setDoNotDisturb(value) {
+     var on = !!value
+     if (on === doNotDisturb) return
+@@ -614,6 +685,23 @@
+       return
+     }
+ 
++    // The companion shows it: history and the sender stay as they are, only the popup is skipped.
++    // Not one already on screen or on its way there (held, scheduled): those finish as cards.
++    if (delegated() && !Delivery.bypassesQuiet(row) && !String(row.code || "")
++        && notification.urgency !== NotificationUrgency.Critical && row.app !== "Nixi"
++        && rowIndexFor(key) < 0 && !liveKeys[key].scheduled && !liveKeys[key].held) {
++      liveKeys[key].row = row
++      var queued = delegatedQueue.concat([{ key: key, app: row.app, source: row.source, summary: String(row.summary || "").slice(0, 200),
++        body: String(row.bodyLine || "").slice(0, 200), urgency: row.urgency, category: categoryOf(row) }])
++      if (queued.length > 32) {
++        var oldest = liveKeys[queued[0].key]
++        if (oldest && oldest.row) showDelegated(oldest.row)
++        queued.shift()
++      }
++      delegatedQueue = queued
++      return
++    }
++
+     storePut(row)
+ 
+     // Only a new card waits while the deck is held; an update changes a card in place.
+@@ -1068,7 +1156,7 @@
+   // action, then its window, then its site.
+   function activate(key, instant) {
+     var at = rowIndexFor(key)
+-    var row = at >= 0 ? toasts.get(at) : null
++    var row = at >= 0 ? toasts.get(at) : ((liveKeys[key] && liveKeys[key].row) || null)
+     var argv = Security.parseExecArgv(row ? row.execArgv : "")
+     if (argv) {
+       // Detached through bash positional parameters, never a shell string, and
+@@ -1389,6 +1477,50 @@
+ 
+     function ping(): string { return "ok" }
+ 
++    // #133: the companion's lease. ms > 0 renews it and takes the queued rows;
++    // ms <= 0 gives it up, and the queued rows pop up.
++    function delegate(ms: int): string {
++      if (ms <= 0) { service.lapse(); return "[]" }
++      service.delegateUntil = Date.now() + Math.min(ms, 10000)
++      // Taken by the companion: into history now, once per key (updates come again).
++      // A row that pops up instead is recorded when its card closes, as any card is.
++      // Its clock starts now, long enough for the companion to show it and be clicked.
++      var expiry = {}, now = Date.now()
++      for (var e in service.delegatedExpiry) expiry[e] = service.delegatedExpiry[e]
++      for (var i = 0; i < service.delegatedQueue.length; i++) {
++        var reservation = service.liveKeys[service.delegatedQueue[i].key]
++        if (!reservation || !reservation.row) continue
++        expiry[service.delegatedQueue[i].key] = now + Math.max(reservation.row.duration || 0, 12000)
++        if (reservation.recorded) continue
++        reservation.recorded = true
++        if (!Delivery.isEphemeral(reservation.row)) service.storeRecord(reservation.row, "delegated")
++      }
++      service.delegatedExpiry = expiry
++      var rows = JSON.stringify(service.delegatedQueue)
++      service.delegatedQueue = []
++      return rows
++    }
++
++    // The companion could not show it in time: the shell's own popup instead.
++    function showKey(key: string): string {
++      var reservation = service.liveKeys[key]
++      if (!reservation || !reservation.row || service.rowIndexFor(key) >= 0) return "none"
++      service.showDelegated(reservation.row)
++      return "ok"
++    }
++
++    function activateKey(key: string): string {
++      if (!service.liveKeys[key]) return "none"
++      service.activate(key, true)
++      return "ok"
++    }
++
++    function dismissKey(key: string): string {
++      if (!service.liveKeys[key]) return "none"
++      service.closeToast(key, "dismissed", true)
++      return "ok"
++    }
++
+     function isDnd(): string { return service.doNotDisturb ? "on" : "off" }
+ 
+     function toggleDnd(): string {

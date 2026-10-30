@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1524
 spec: spec/2026-10-30-1524-vm-host-mutual-wait.md
 coders:

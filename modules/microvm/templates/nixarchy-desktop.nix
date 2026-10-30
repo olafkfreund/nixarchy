@@ -49,6 +49,10 @@
 
   services.gnome.at-spi2-core.enable = true;
 
+  # nixarchy ignores the power key so it reaches Omarchy's power menu, but the
+  # only press a VM gets is 'nixarchy vm stop', which waits for a shutdown (#1516).
+  services.logind.settings.Login.HandlePowerKey = "poweroff";
+
   # Grant only once the desktop has settled. Omarchy's first run shows toasts
   # after the shell is up, and ai-mirror refuses typing while any surface that
   # mapped after the grant is on screen (ai-mirror#78), so an early grant left

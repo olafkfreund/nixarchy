@@ -4,7 +4,7 @@
 # their popup. Drop when upstream grows a way to hand notifications to another client.
 --- a/shell/plugins/notifications/Service.qml
 +++ b/shell/plugins/notifications/Service.qml
-@@ -51,6 +51,77 @@
+@@ -51,6 +51,85 @@
    // ------------------------------------------------------------- quiet
    //
    property bool doNotDisturb: false
@@ -42,11 +42,19 @@
 +    }
 +  }
 +
++  // Out of the companion's hands: neither queued for it nor expiring after it took it.
++  function undelegate(key) {
++    if (delegatedQueue.some(function(q) { return q.key === key }))
++      delegatedQueue = delegatedQueue.filter(function(q) { return q.key !== key })
++    if (delegatedExpiry[key] === undefined) return
++    var rest = {}
++    for (var k in delegatedExpiry) if (k !== key) rest[k] = delegatedExpiry[k]
++    delegatedExpiry = rest
++  }
++
 +  // Back to the normal path: the card expires it from here.
 +  function showDelegated(row) {
-+    var rest = {}
-+    for (var k in delegatedExpiry) if (k !== row.key) rest[k] = delegatedExpiry[k]
-+    delegatedExpiry = rest
++    undelegate(row.key)
 +    // Never put while delegated: live.json and the close record need it, unless the
 +    // companion took it, when history has it already and its close must not add it again.
 +    var reservation = liveKeys[row.key]
@@ -82,17 +90,26 @@
    function setDoNotDisturb(value) {
      var on = !!value
      if (on === doNotDisturb) return
-@@ -614,6 +685,23 @@
+@@ -185,6 +264,7 @@
+ 
+   function releaseLive(key) {
+     if (!liveKeys[key]) return
++    undelegate(key)
+     delete liveKeys[key]
+     held = held.filter(function(heldKey) { return heldKey !== key })
+   }
+@@ -614,7 +694,27 @@
        return
      }
  
+-    storePut(row)
 +    // The companion shows it: history and the sender stay as they are, only the popup is skipped.
 +    // Not one already on screen or on its way there (held, scheduled): those finish as cards.
 +    if (delegated() && !Delivery.bypassesQuiet(row) && !String(row.code || "")
 +        && notification.urgency !== NotificationUrgency.Critical && row.app !== "Nixi"
 +        && rowIndexFor(key) < 0 && !liveKeys[key].scheduled && !liveKeys[key].held) {
 +      liveKeys[key].row = row
-+      var queued = delegatedQueue.concat([{ key: key, app: row.app, source: row.source, summary: String(row.summary || "").slice(0, 200),
++      var queued = delegatedQueue.filter(function(q) { return q.key !== key }).concat([{ key: key, app: row.app, source: row.source, summary: String(row.summary || "").slice(0, 200),
 +        body: String(row.bodyLine || "").slice(0, 200), urgency: row.urgency, category: categoryOf(row) }])
 +      if (queued.length > 32) {
 +        var oldest = liveKeys[queued[0].key]
@@ -103,10 +120,14 @@
 +      return
 +    }
 +
-     storePut(row)
++    // An update the companion can no longer have (critical, a code, the lease gone) pops up instead;
++    // one it already took is in history, and its close must not add it again.
++    undelegate(key)
++    if (!liveKeys[key].recorded) storePut(row)
  
      // Only a new card waits while the deck is held; an update changes a card in place.
-@@ -1068,7 +1156,7 @@
+     if (service.holding() && service.rowIndexFor(key) < 0) {
+@@ -1068,7 +1168,7 @@
    // action, then its window, then its site.
    function activate(key, instant) {
      var at = rowIndexFor(key)
@@ -115,7 +136,7 @@
      var argv = Security.parseExecArgv(row ? row.execArgv : "")
      if (argv) {
        // Detached through bash positional parameters, never a shell string, and
-@@ -1389,6 +1477,50 @@
+@@ -1397,6 +1497,50 @@
  
      function ping(): string { return "ok" }
  

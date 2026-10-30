@@ -428,8 +428,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Edge re-checks before each VM check, so an install only waits out the
-          # one already running (~15-20 min); 30 + ~25 fits the job's 90-min cap.
+          # Waits out the whole of edge's verify (~20 min); edge does not wait on an
+          # install still in this step (#1524). 30 + ~25 fits the 90-min cap.
           deadline=$((SECONDS + 1800))
           while :; do
             rc=0

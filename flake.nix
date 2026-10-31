@@ -1232,10 +1232,29 @@
             in
             pkgsFor.${system}.writeShellApplication {
               name = "nixarchy-update";
+              runtimeInputs = with pkgsFor.${system}; [
+                git
+                gnugrep
+              ];
+              # A failed updater can leave half a bump that still builds, so
+              # whatever it changed goes back to HEAD (#1537).
               text = ''
                 rc=0
+                run() {
+                  local before after f
+                  before=$(git diff --name-only) || return 1
+                  "$1" && return 0
+                  after=$(git diff --name-only) || return 1
+                  while IFS= read -r f; do
+                    [ -n "$f" ] || continue
+                    grep -qxF -- "$f" <<<"$before" && continue
+                    echo "reverting $f: $1 failed partway" >&2
+                    git checkout HEAD -- "$f"
+                  done <<<"$after"
+                  return 1
+                }
                 ${lib.concatMapStrings (p: ''
-                  ${lib.getExe p.updateScript} || rc=1
+                  run ${lib.getExe p.updateScript} || rc=1
                 '') (lib.attrValues pinned)}
                 exit "$rc"
               '';

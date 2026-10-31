@@ -131,12 +131,24 @@ flake, that value is reapplied at every rebuild unless
 `users.mutableUsers` is `true` (the default). Check before wondering why a
 password change did not stick.
 
-With autologin, no password is typed at boot, so the login keyring stays
-locked. Until something unlocks it, the first app that stores secrets there
-(Chromium, for one) asks for the keyring password. Unlocking the lock screen
-with your password also unlocks the keyring. The keyring stays encrypted;
-upstream Omarchy uses an unencrypted default keyring instead (#1492). To turn
-this off, set
+With autologin, no password is typed at boot, so the keyring named *login*
+stays locked. The first time you unlock the lock screen with your password,
+that unlocks it too.
+
+If an app (Chromium, for one) asked you to *create* a keyring before that
+first unlock, the keyring it made is a separate one. It is not *login*, so it
+stays locked at every boot, whatever its password and even if it is the
+default: login unlocks only the keyring named *login*. To stop the prompt,
+open Seahorse (*Passwords and Keys*) and delete that keyring. Deleting it
+destroys everything stored in it. If Chromium made it, that includes the key
+for its saved passwords and cookies, so you sign in to sites again. Seahorse
+is not installed; `nix run nixpkgs#seahorse` opens it once.
+
+After `passwd`, the keyring keeps your old password. The next prompt asks for
+it once. Seahorse's *Change password* on the keyring brings it in line.
+
+The keyring stays encrypted; upstream Omarchy uses an unencrypted default
+keyring instead (#1492). To turn this off, set
 `security.pam.services.omarchy-lock-password.enableGnomeKeyring = false`.
 
 ## Passing on a machine, and signing keys

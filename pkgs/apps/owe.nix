@@ -65,6 +65,11 @@ stdenv.mkDerivation (finalAttrs: {
 
   doCheck = true;
 
+  # CARRIED (#1537): owe >= 0.2.13 waits 7 s, then refuses IPC to a late renderer
+  # and process_shell_handoff stops it. Wait the whole 30 s, as before #1535.
+  # Drop when upstream stops killing a late renderer.
+  env.NIX_CFLAGS_COMPILE = "-DRENDER_START_MS=30000";
+
   # "daemon" (test/daemon.py) starts owed for real and waits for it to spawn
   # owe-render, which needs a live Wayland display -- there is none in the
   # sandbox, so supervisor.c's spawn fails and the test times out waiting for

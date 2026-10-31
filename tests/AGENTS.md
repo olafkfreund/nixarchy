@@ -478,6 +478,13 @@ set up (set a video, run `nixarchy verify`, read the value); the battery
 half additionally needs the config file written and AC physically pulled,
 which nothing here can do for you.
 
+`tests/coexist.nix`'s #1537 assertion (the journal never says `owe-render has
+no socket after`) can fail only on a guest whose renderer needs more than
+upstream's stock 7 s to start. CI's coexist guest does, at about 11.5 s, so
+it fails there with the carried 30 s wait removed. A fast KVM guest would
+pass it with the bug present: a local green run of `checks.coexist` says
+nothing about this line.
+
 ## The plugin shadow check: a state no VM can reach, and a limit it admits
 
 `checks.doctor-plugins` fakes six homes because the state it is about cannot be
@@ -1924,3 +1931,14 @@ drop-in; `tests/options.nix` asserts the drop-in is declared (`etcNativeRtkit`,
 `checks.vm-host-free`'s `red()` printed `ok  any-state-is-caught` and `ok  fail-open-is-caught` from #1365 onward, and neither proof had ever run a broken copy. `red()` did `name=$1; shift` and then `verdict "$@"`. But `verdict` reads the case name as `$1`, so after the shift it ran `bash install …` against the wrong arguments, failed for that reason, and `red()` read the failure as "caught". codex found it in review, two breaks after the fact.
 
 A negative-test helper inverts its result, so any way it can fail at all turns into a pass. That is §1's "a check that cannot fail", one level up. When you write or reuse one, **prove the prover**: hand it the *unbroken* subject once, and watch it say "not caught". If it still prints `ok`, it was never running what you gave it.
+
+## The keyring one: an app that creates a keyring before the first unlock (#1537)
+
+`docs/manual/security.md` says that with autologin, an app that asks to
+*create* a keyring before the first lock-screen unlock leaves a separate
+keyring that stays locked at every boot. That claim comes from reading
+gnome-keyring 50.0 (`daemon/login/gkd-login.c` unlocks only the collection
+whose ID is `login`; `daemon/dbus/gkd-secret-create.c` makes a new one), not from a run.
+No check here starts Chromium before the first unlock. Checked by hand: boot
+with autologin, open Chromium before locking the screen, reboot, and count the
+prompts. One prompt at every boot means the claim holds.

@@ -180,8 +180,9 @@ pkgs.testers.runNixOSTest {
     # machine is: 20 seconds was enough here and not on a CI runner, where this
     # failed with the desktop still black. Retrying converges on whatever the
     # machine actually needs, and still fails if it never draws.
-    # Here first paint waits for the shell to take owe's hand-off: across 12
-    # CI runs it came on try 10 or 11, so 24 tries is ~2x the slowest (#1437).
+    # Here first paint waits for owed's shell enable/disable cycle after the
+    # renderer is ready: the last ten CI runs painted on tries 9-16, the
+    # slowest 16 of 24 (#1537).
     delta = None
     for attempt in range(24):
         machine.sleep(5)
@@ -198,6 +199,10 @@ pkgs.testers.runNixOSTest {
         f"the Omarchy session came up but never looked like its wallpaper "
         f"(delta {delta} after 120s) -- the entry point loaded, the desktop "
         "did not.")
+
+    # #1537: the late-start window kills a renderer owed cannot reach; never open it.
+    late = machine.succeed("journalctl -b --no-pager | grep -c 'owe-render has no socket after' || true").strip()
+    assert late == "0", f"owed opened owe's late-start window {late} time(s) (#1537)"
     print("the Omarchy session renders its desktop beside a foreign hyprland.lua")
   '';
 }

@@ -44,7 +44,9 @@ jobs:
       - name: Bump pinned packages
         id: bump
         run: |
-          nix run .#update
+          # The app exits 1 if any updater failed, and restores from HEAD what
+          # a failed one changed, so the bumps that did land still go on (#1537).
+          nix run .#update || echo "update_failed=true" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "nothing to bump"
@@ -54,6 +56,7 @@ jobs:
           fi
 
       - name: Build every bumped package
+        id: build
         if: steps.bump.outputs.changed == 'true'
         env:
           NIXPKGS_ALLOW_UNFREE: "1"
@@ -65,35 +68,62 @@ jobs:
           # Derived from the same set the updater ran, not named by hand: the
           # old list here named a package this job could never change (it had
           # no updateScript) and skipped one it could (hey-cli). Building every
-          # covered package rather than only what changed is deliberate -- the
-          # set is two small binary
-          # repacks, and it avoids trusting a filename-to-attribute convention
+          # package with an updateScript rather than only what changed is
+          # deliberate -- it avoids trusting a filename-to-attribute convention
           # nothing enforces.
           mapfile -t attrs < <(nix eval --json .#update.pinned | jq -r '.[] | ".#" + .')
 
           # mapfile returns 0 whatever the process substitution did -- a failed
           # eval, a renamed output, a jq that is not there -- and an empty
-          # array then makes the line below `nix build --impure
-          # --print-build-logs` with no installables, which builds .#default
-          # and exits GREEN. The one step that proves the rewritten packages
-          # still build would have built none of them and said nothing.
+          # array would then build nothing and report every bump as built.
           #
-          # Six is what .#update.pinned holds today (hey-cli, omacalc, omacut,
-          # omawrite, once, ttfx). The floor is 1 rather than 6 so removing a
-          # package from the set is an ordinary edit and not a CI break, while
-          # "the list came back empty" still stops the job.
+          # The set is every package with an updateScript (ten today). The
+          # floor is 1 so removing a package from the set is an ordinary edit
+          # and not a CI break, while "the list came back empty" still stops
+          # the job.
           if [ "${#attrs[@]}" -eq 0 ]; then
             echo "::error::.#update.pinned produced no attributes, so this step" \
-                 "would build .#default and pass without checking the packages" \
-                 "the bump just rewrote" >&2
+                 "would pass without checking the packages the bump just" \
+                 "rewrote" >&2
             exit 1
           fi
 
-          echo "building: ${attrs[*]}"
-          nix build --impure --print-build-logs "${attrs[@]}"
+          # One build per package, so one broken upstream neither hides nor
+          # cancels the others (#1537). A package that does not build has its
+          # file restored from HEAD -- not the index (CLAUDE.md §5) -- and the
+          # bumps that built still reach the pull request.
+          failed=()
+          for a in "${attrs[@]}"; do
+            echo "building: $a"
+            nix build --impure --print-build-logs "$a" || failed+=("${a#.#}")
+          done
+
+          for name in "${failed[@]}"; do
+            pos=$(nix eval --raw ".#$name.meta.position") || {
+              echo "::error::cannot find the file that defines $name" >&2
+              exit 1
+            }
+            file=${pos#*-source/}
+            file=${file%:*}
+            # Refuse rather than guess: a revert outside pkgs/ is not ours to make.
+            if [[ $file != pkgs/* || ! -f $file ]]; then
+              echo "::error::$name is defined at '$pos', not in a pkgs/ file;" \
+                   "refusing to revert it" >&2
+              exit 1
+            fi
+            echo "reverting $name: $file did not build"
+            git checkout HEAD -- "$file"
+          done
+
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "failed=${failed[*]}" >> "$GITHUB_OUTPUT"
 
       - name: Open a pull request
-        if: steps.bump.outputs.changed == 'true'
+        if: steps.build.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
           # Opened under BUMP_TOKEN so build.yml actually runs on it. With the
@@ -123,5 +153,21 @@ jobs:
             proprietary Electron bundles that can compile fine and crash at
             launch, so this is deliberately not auto-merged — please launch
             anything that changed before merging.
+
+            ${{ steps.build.outputs.failed && format('Reverted, did not build: {0}. See the run log.', steps.build.outputs.failed) || '' }}
           labels: dependencies
           delete-branch: true
+
+      # The pull request above carries what built; this keeps the run red so
+      # review.yml's row still shows the night something broke (#1537).
+      - name: Fail when anything did not update or build
+        if: always() && (steps.bump.outputs.update_failed == 'true' || steps.build.outputs.failed != '')
+        env:
+          UPDATE_FAILED: ${{ steps.bump.outputs.update_failed }}
+          BUILD_FAILED: ${{ steps.build.outputs.failed }}
+        run: |
+          [ "$UPDATE_FAILED" = true ] &&
+            echo "::error::at least one updater failed; its package was not bumped (see 'Bump pinned packages')"
+          [ -n "$BUILD_FAILED" ] &&
+            echo "::error::reverted, did not build: $BUILD_FAILED"
+          exit 1

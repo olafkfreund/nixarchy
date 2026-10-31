@@ -941,7 +941,10 @@ edge→main merge, and two of edge's carries were edge-specific:
 
 Before a merge like this, run `main`'s cheap tier on the merged tree. For
 any line edge changed only because it pins a commit, make the line hold
-under both pins rather than choosing a side.
+under both pins rather than choosing a side. After restoring `main`'s
+Omarchy pin on the merged tree, run `.github/scripts/readme-counts.sh --fix`
+and commit what it writes: those numbers are derived from the pin, so
+neither side's README is right for the other (#1537).
 
 **A carry on `edge-candidate` that classifies a new quattro commit must
 also pin it.** A `from_candidate=true` dispatch keeps the candidate's own

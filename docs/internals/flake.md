@@ -1202,6 +1202,17 @@ builds exactly those after a rewrite, off the same set. A package
 pinned by hand WITHOUT an updateScript is still invisible to this.
 The one there was, grok-bot, was removed in #1201.
 
+A failed updater has every file it changed restored from HEAD
+(#1537). Before that, nothing could reach the pull request after a
+failure, so a partial write did not matter. Now the bumps that landed
+go on, and a partial write can pass the build: `once` rewrites the
+x86_64 hash before it prefetches aarch64, and its asset URL carries no
+version, so a failed second fetch left the old version, a new x86
+hash, and a fixed-output path the prefetch had just put in the store.
+nix-update writes the version before it computes the hashes, which
+has the same shape. Only files the updater newly dirtied are
+restored, so a local `nix run .#update` keeps a user's own edits.
+
 <a id="a-vm-that-installs-onto-a-blank-disk-with-a-networ"></a>
 ### A VM that installs onto a blank disk, WITH a network -- which
 

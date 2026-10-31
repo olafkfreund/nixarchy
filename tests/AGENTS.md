@@ -478,6 +478,13 @@ set up (set a video, run `nixarchy verify`, read the value); the battery
 half additionally needs the config file written and AC physically pulled,
 which nothing here can do for you.
 
+`tests/coexist.nix`'s #1537 assertion (the journal never says `owe-render has
+no socket after`) can fail only on a guest whose renderer needs more than
+upstream's stock 7 s to start. CI's coexist guest does, at about 11.5 s, so
+it fails there with the carried 30 s wait removed. A fast KVM guest would
+pass it with the bug present: a local green run of `checks.coexist` says
+nothing about this line.
+
 ## The plugin shadow check: a state no VM can reach, and a limit it admits
 
 `checks.doctor-plugins` fakes six homes because the state it is about cannot be

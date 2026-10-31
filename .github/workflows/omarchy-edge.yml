@@ -48,7 +48,7 @@ jobs:
       expected: ${{ steps.start.outputs.expected }}
       candidate: ${{ steps.candidate.outputs.sha }}
       fallback: ${{ steps.build2.outcome == 'success' }}
-      failed: ${{ steps.build.outputs.failed || steps.candidate.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed || steps.start.outputs.failed }}
+      failed: ${{ steps.counts.outputs.failed || steps.build.outputs.failed || steps.candidate.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed || steps.start.outputs.failed }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -147,7 +147,10 @@ jobs:
             sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/$old_url|" flake.nix
             sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$old_ver\"|" flake.nix
             git restore --source="$base" -- flake.lock
-            git add flake.nix flake.lock
+            # README's derived counts follow edge's pin too (#1537), so they
+            # conflict the same way; the counts step rewrites them after.
+            git restore --source="$base" -- README.md
+            git add flake.nix flake.lock README.md
             git diff --cached --quiet || git commit -q -m "Edge: unpin Omarchy before merging main"
           fi
 
@@ -358,9 +361,11 @@ jobs:
           cat "$RUNNER_TEMP/patched.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Write the README numbers this pin computes
+        id: counts
         if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')
         # #1537: derived from edge's pin, never hand-edited; publish's `git add -A` takes it.
-        run: .github/scripts/readme-counts.sh --fix
+        # A refusal (a count with no word yet, AGENTS.md §4) holds the candidate, by name.
+        run: .github/scripts/readme-counts.sh --fix || { echo "failed=readme-counts" >> "$GITHUB_OUTPUT"; exit 1; }
 
       - name: Publish the candidate
         id: candidate

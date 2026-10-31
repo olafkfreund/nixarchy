@@ -357,6 +357,11 @@ jobs:
           } > "$RUNNER_TEMP/patched.md"
           cat "$RUNNER_TEMP/patched.md" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Write the README numbers this pin computes
+        if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')
+        # #1537: derived from edge's pin, never hand-edited; publish's `git add -A` takes it.
+        run: .github/scripts/readme-counts.sh --fix
+
       - name: Publish the candidate
         id: candidate
         if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')

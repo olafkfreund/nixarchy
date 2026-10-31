@@ -204,8 +204,10 @@ Nothing is filed upstream; the owner can decide that separately.
     lock-screen unlock, which opens it.
   - If an app asked you to *create* a keyring before that first unlock, the
     keyring it created is separate and stays locked every boot. Fix it in
-    Seahorse: delete that keyring, or give it your login password and make
-    it the default.
+    Seahorse: delete that keyring, warning that this destroys what it holds.
+    (*Corrected in review:* "give it your login password and make it the
+    default" does not work; `gkd-login.c` unlocks only the collection whose
+    ID is `login`, whatever the default alias says.)
   - After `passwd`, the keyring still has the old password, so the next
     prompt asks for it once. Seahorse's *Change password* brings it in
     line.

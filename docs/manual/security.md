@@ -137,9 +137,12 @@ that unlocks it too.
 
 If an app (Chromium, for one) asked you to *create* a keyring before that
 first unlock, the keyring it made is a separate one. It is not *login*, so it
-stays locked at every boot. Open Seahorse (*Passwords and Keys*) and delete
-it, or give it your login password and make it the default. Seahorse is not
-installed; `nix run nixpkgs#seahorse` opens it once.
+stays locked at every boot, whatever its password and even if it is the
+default: login unlocks only the keyring named *login*. To stop the prompt,
+open Seahorse (*Passwords and Keys*) and delete that keyring. Deleting it
+destroys everything stored in it. If Chromium made it, that includes the key
+for its saved passwords and cookies, so you sign in to sites again. Seahorse
+is not installed; `nix run nixpkgs#seahorse` opens it once.
 
 After `passwd`, the keyring keeps your old password. The next prompt asks for
 it once. Seahorse's *Change password* on the keyring brings it in line.

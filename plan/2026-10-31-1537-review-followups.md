@@ -85,8 +85,8 @@ after any reset check `git merge-base origin/main HEAD` (§5).
      lock-screen unlock, which opens it.
    - If an app (Chromium, for one) asked you to *create* a keyring before
      that first unlock, the keyring it made is separate and stays locked
-     every boot. In Seahorse, delete it, or give it your login password and
-     make it the default.
+     every boot. In Seahorse, delete it, warning that this destroys what it
+     holds (for Chromium, the key to its saved passwords and cookies).
    - After `passwd`, the keyring keeps the old password. The next prompt
      asks for it once; Seahorse's *Change password* brings it in line.
    - The keyring stays encrypted, unlike upstream's (#1492). The existing
@@ -95,6 +95,14 @@ after any reset check `git merge-base origin/main HEAD` (§5).
      installs Seahorse (no reference in the tree; upstream's
      `omarchy-base.packages` has `gnome-keyring` only), so the paragraph
      also says `nix run nixpkgs#seahorse` opens it once.
+   - *Deviation, from review:* the spec's second remedy, "give it your login
+     password and make it the default", does not stop the prompt.
+     gnome-keyring 50.0 `daemon/login/gkd-login.c` looks up and unlocks only
+     the object whose `CKA_ID` is `login` (lines 128, 157), and nothing there
+     reads the default alias. The paragraph says so and keeps only the delete.
+   - *Carried over from the spec, missed at first:* `tests/AGENTS.md` gets a
+     section naming the Chromium-first separate keyring as a hole tested by
+     hand.
 
    House style is in `docs/AGENTS.md`: short sentences, no hedging.
    Verify by building the docs check that `docs/AGENTS.md` names, and

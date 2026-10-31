@@ -1918,3 +1918,14 @@ Every VM here boots with rtkit from the start, so `checks.session`'s probe (the
 shell's hard `Max realtime timeout` is not 0) proves rtkit is on, not the
 drop-in; `tests/options.nix` asserts the drop-in is declared (`etcNativeRtkit`,
 `etcNativeRtportal`). The switch itself is tested by a human.
+
+## The keyring one: an app that creates a keyring before the first unlock (#1537)
+
+`docs/manual/security.md` says that with autologin, an app that asks to
+*create* a keyring before the first lock-screen unlock leaves a separate
+keyring that stays locked at every boot. That claim comes from reading
+gnome-keyring 50.0 (`daemon/login/gkd-login.c` unlocks only the collection
+whose ID is `login`; `daemon/dbus/gkd-secret-create.c` makes a new one), not from a run.
+No check here starts Chromium before the first unlock. Checked by hand: boot
+with autologin, open Chromium before locking the screen, reboot, and count the
+prompts. One prompt at every boot means the claim holds.

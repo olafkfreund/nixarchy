@@ -207,7 +207,8 @@ Nothing is filed upstream; the owner can decide that separately.
     Seahorse: delete that keyring, warning that this destroys what it holds.
     (*Corrected in review:* "give it your login password and make it the
     default" does not work; `gkd-login.c` unlocks only the collection whose
-    ID is `login`, whatever the default alias says.)
+    ID is `login`, whatever the default alias says. Re-approved by the
+    owner with this correction, 2026-10-31.)
   - After `passwd`, the keyring still has the old password, so the next
     prompt asks for it once. Seahorse's *Change password* brings it in
     line.

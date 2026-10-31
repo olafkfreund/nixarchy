@@ -1,10 +1,9 @@
 ---
-status: draft
+status: approved
 issue: 1537
 spec: spec/2026-10-31-1537-review-followups.md
-coders:
-  2: agy     # prose only; agy drafts docs well and needs no build
-  3: codex   # one workflow file, shell logic; the session runs actionlint and the dispatch
+# coders: owner directed (2026-10-31) that workflow agent teams implement every
+# step, replacing agy (step 2) and codex (step 3) as coders; both stay reviewers.
 reviewers:
   - codex    # owner asked for Codex and agy reviews of these changes
   - agy

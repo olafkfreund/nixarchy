@@ -180,6 +180,15 @@ after any reset check `git merge-base origin/main HEAD` (§5).
      merged tree, run `.github/scripts/readme-counts.sh --fix` and commit
      what it writes: those numbers are derived from the pin, so neither
      side's README is right for the other (#1537)."
+   - *Deviation, from review:* the new step takes `id: counts` and writes
+     `failed=readme-counts` on refusal, and `prepare`'s `failed` output
+     reads it first, so the edge issue names the cause. It stays fail-closed
+     (§4): a count with no word yet holds a green candidate until the word
+     is added.
+   - *Deviation, from review:* "Merge main" also restores `README.md` from
+     the merge base before `git merge origin/main`, beside `flake.nix` and
+     `flake.lock`, so edge's derived numbers never conflict with main's. The
+     cost: an edge-only README carry would be dropped.
 
    Verify:
    - `actionlint` on the workflow.

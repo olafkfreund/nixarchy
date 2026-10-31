@@ -10,13 +10,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "omacalc";
-  version = "0.3.1";
+  version = "0.2.2";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "omacalc";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-Q1LGLTmMz8jqPGptyp8oZKr3iCM2YTR0f/NbmPY8AFQ=";
+    hash = "sha256-I+WxkMz/2hCf4OpJKu99+30c0CxyxFD0M6eSLFDLs1I=";
   };
 
   # Sibling of pkgs/apps/omawrite.nix, and the same reasoning: one of the four

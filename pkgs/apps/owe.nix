@@ -23,13 +23,13 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "owe";
-  version = "0.2.13";
+  version = "0.2.12";
 
   src = fetchFromGitHub {
     owner = "omacom";
     repo = "owe";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-VQmoE05xMXLdbXhZaRL/My90o7bszwo8hI0++Jb9a8Q=";
+    hash = "sha256-h281d5V8UTy+VlruwcyjSun1068gP+RFamflgRTb+6U=";
   };
 
   # No binary here is a Qt app -- owed/owe-render/owe/owe-idle are plain
@@ -89,6 +89,29 @@ stdenv.mkDerivation (finalAttrs: {
     "decode"
     "regression"
   ];
+
+  # CARRIED (#1153): upstream gives owe-render 1 s (sleep-counted) to open its
+  # socket; llvmpipe start-up in CI's coexist VM took 8.9-10.6 s and was killed
+  # 70 ms short (#1437). The same line bounds stop()'s SIGTERM grace, so 30 s too.
+  postPatch = ''
+    substituteInPlace src/daemon/supervisor.c \
+      --replace-fail 'while (waited < 1000) {' 'while (waited < 30000) {'
+
+    # CARRIED (#1359, omacom/owe#18): switch_to_shell() schedules a park 2 s
+    # out, and since 0.2.11 the engine stays "shell" through a handoff, so a
+    # video set inside those 2 s had its loading renderer parked and never
+    # showed. Clear the pending park when the handoff starts. Drop once owe has it.
+    # Captured rather than a quiet grep in a pipe: postPatch runs under pipefail.
+    beside=$(sed -n '/app->handoff_pending = true;/,/^        }/p' src/daemon/main.c | grep shell_stop_at_ms || true)
+    in_park=$(sed -n '/^static void process_shell_handoff/,/^}/p' src/daemon/main.c | grep handoff_pending || true)
+    if [ -n "$beside$in_park" ]; then
+      echo "owe already clears the pending park during a handoff (omacom/owe#18): drop the #1359 substitution" >&2
+      exit 1
+    fi
+    substituteInPlace src/daemon/main.c \
+      --replace-fail 'app->handoff_pending = true;' \
+                     'app->handoff_pending = true; app->shell_stop_at_ms = 0;'
+  '';
 
   # The qml-plugin/ subtree is a second, separate CMake project (the LockFeed
   # QML module) that meson does not build. Configured and built here, into its

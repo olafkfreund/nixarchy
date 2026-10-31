@@ -91,6 +91,10 @@ after any reset check `git merge-base origin/main HEAD` (§5).
      asks for it once; Seahorse's *Change password* brings it in line.
    - The keyring stays encrypted, unlike upstream's (#1492). The existing
      opt-out line stays as it is.
+   - *Deviation, made while implementing:* neither nixarchy nor upstream
+     installs Seahorse (no reference in the tree; upstream's
+     `omarchy-base.packages` has `gnome-keyring` only), so the paragraph
+     also says `nix run nixpkgs#seahorse` opens it once.
 
    House style is in `docs/AGENTS.md`: short sentences, no hedging.
    Verify by building the docs check that `docs/AGENTS.md` names, and

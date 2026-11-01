@@ -423,7 +423,7 @@ package.path = home.."/.local/state/?.lua;"..home.."/.config/?.lua;"
 ```
 
 Point `OMARCHY_PATH` at a store path and the bins, the QML shell, the themes and
-the Lua defaults all follow. Only **40 of 558 scripts** actually run
+the Lua defaults all follow. Only **41 of 558 scripts** actually run
 `pacman`/`yay` — that's the entire distro-coupling surface.
 
 Nine of those are replaced outright, in `pkgs/omarchy/nix-bin/`: package

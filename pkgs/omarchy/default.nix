@@ -1331,9 +1331,13 @@ stdenvNoCC.mkDerivation {
                         '[[ $editor == helix ]] && editor=hx; omarchy-cmd-present "$editor" || editor="nvim"'
 
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
+                    # The tag names the file; quattro (#1543) names it $RESUME_CONF_PATH. The grep
+                    # stands in for --replace-fail, which one of the two always fails.
+                    canHibernate='[[ $(busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanHibernate 2>/dev/null) =~ ^s\ \"(yes|challenge)\"$ ]]'
                     substituteInPlace $out/share/omarchy/bin/omarchy-hibernation-available \
-                      --replace-fail '[[ -f /etc/mkinitcpio.conf.d/omarchy_resume.conf ]]' \
-                        '[[ $(busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanHibernate 2>/dev/null) =~ ^s\ \"(yes|challenge)\"$ ]]'
+                      --replace-quiet '[[ -f /etc/mkinitcpio.conf.d/omarchy_resume.conf ]]' "$canHibernate" \
+                      --replace-quiet '[[ -f $RESUME_CONF_PATH ]]' "$canHibernate"
+                    grep -qF CanHibernate $out/share/omarchy/bin/omarchy-hibernation-available
 
                     # #1303: tests/AGENTS.md#menu-conditions-and-hibernate-resume
                     substituteInPlace $out/share/omarchy/bin/omarchy-font-list \

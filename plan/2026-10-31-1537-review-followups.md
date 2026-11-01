@@ -139,6 +139,13 @@ after any reset check `git merge-base origin/main HEAD` (§5).
    - d. New last step, `name: Fail when anything did not update or build`,
      with `if: always() && (steps.bump.outputs.update_failed == 'true' || steps.build.outputs.failed != '')`.
      It runs `echo "::error::…"` naming both, then `exit 1`.
+   - *Deviation, from review:* a failed updater can leave its file half
+     written. `once`'s updater rewrites the x86_64 hash, then dies on the
+     aarch64 prefetch before it writes the version, and the build still
+     passes on the prefetched path. So `nixarchy-update` in `flake.nix` now
+     wraps each updater and restores from `HEAD` every file a failed one
+     dirtied, which also covers the nix-update updaters. `docs/internals/flake.md`
+     says why.
 
    Verify:
    - `nix run nixpkgs#actionlint -- .github/workflows/update.yml`.

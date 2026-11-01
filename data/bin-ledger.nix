@@ -765,9 +765,19 @@
     reason = "Vendored unchanged. Asks whether superwhisper.service, a user unit, is active before toggling it: session state, no configuration.";
     allow = "systemctl-user";
   };
+  "omarchy-install-dictation-hex" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Enables hex.service, a user unit the install writes under the user's own tree.";
+    allow = "systemctl-user";
+  };
   "omarchy-install-dictation-voxtype" = {
     class = "vendor";
     reason = "Vendored unchanged. Enables voxtype.service, a user unit the install writes under the user's own tree.";
+    allow = "systemctl-user";
+  };
+  "omarchy-remove-dictation-hex" = {
+    class = "vendor";
+    reason = "Vendored unchanged. Disables hex.service, a user unit installed under the user's own tree, and reloads the user manager.";
     allow = "systemctl-user";
   };
   "omarchy-remove-dictation-superwhisper" = {
@@ -779,6 +789,11 @@
     class = "vendor";
     reason = "Vendored unchanged. Disables voxtype.service, a user unit installed under the user's own tree.";
     allow = "systemctl-user";
+  };
+  "omarchy-remove-service-dropbox" = {
+    class = "vendor";
+    reason = "Vendored unchanged. This row exists only to record why an Arch-only package path is carried and unreachable -- see `pacman` below.";
+    pacman = "`pacman -Qqtt libappindicator` only asks whether nothing else needs that library before dropping it. There is no pacman here, so the test is false and the extra drop never runs; Dropbox itself goes through omarchy-pkg-drop.";
   };
   "omarchy-remove-service-ssh-agent" = {
     class = "vendor";

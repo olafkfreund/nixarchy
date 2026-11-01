@@ -119,7 +119,7 @@
 
     # Why: docs/internals/flake.md#zen-is-not-in-nixpkgs-and-upstream-maintains-its-o
     zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake/4434539379bc839480edb8b919de9b67f70cb520";
+      url = "github:0xc000022070/zen-browser-flake/e152a4cd523e946333f0ddc13fca3178d53b905a";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -370,7 +370,7 @@
 
     # Why: docs/internals/flake.md#221-222
     microvm = {
-      url = "github:microvm-nix/microvm.nix/4876e2ae2de6ce225f4ccf664ae441128aa3f03a";
+      url = "github:microvm-nix/microvm.nix/b7bd556974fa8a171b5b639200e81d52244dfde4";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

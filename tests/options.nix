@@ -2934,8 +2934,8 @@ let
         rules = builtins.filter (l: builtins.match "[ \t]*#.*" l == null) (
           pkgs.lib.splitString "\n" agent.networking.nftables.ruleset
         );
-        rule = mvOn.systemd.tmpfiles.settings."10-nixarchy-microvm"."${sd}/plain/share".d or null;
-        policyRule = mvOn.systemd.tmpfiles.settings."10-nixarchy-microvm"."${sd}/agent/policy".d or null;
+        rule = mvOn.systemd.tmpfiles.settings."09-nixarchy-microvm"."${sd}/plain/share".d or null;
+        policyRule = mvOn.systemd.tmpfiles.settings."09-nixarchy-microvm"."${sd}/agent/policy".d or null;
       in
       pkgs.lib.optional (builtins.any
         (

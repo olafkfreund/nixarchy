@@ -83,3 +83,11 @@ spec: spec/2026-11-02-1549-microvm-tmpfiles-order.md
 
 Revert the PR. Hosts go back to upstream's `0775` modes at their next
 tmpfiles run.
+
+## Deviations
+
+- Step 1: red at `10-` names two paths, `/var/lib/microvms/sandbox` and
+  `/share`, not three. Upstream does not declare `policy/`, so nothing beats
+  ours there; the VM assertion in step 3 still covers its mode.
+- Step 2: `tests/options.nix:2937-2938` read the old key, so they move to
+  `09-` too, as the step said for any hit.

@@ -2078,6 +2078,9 @@ pkgs.testers.runNixOSTest {
     # The namespace is the one its README says Omarchy's tools find it by.
     with subtest("screensaver maps its overlay (#1485)"):
         ns = "org.omarchy.screensaver"
+        # The screensaver exits as "already running" when any process's
+        # cmdline contains its app id, so no guest command may spell it out.
+        ns_re = "org[.]omarchy[.]screensaver"
         layers_cmd = (
             "su omarchy -c 'XDG_RUNTIME_DIR=/run/user/1000"
             " HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)"
@@ -2088,7 +2091,7 @@ pkgs.testers.runNixOSTest {
         script = (
             "export XDG_RUNTIME_DIR=/run/user/1000\n"
             "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr | head -1)\n"
-            "hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-screensaver force\")' "
+            "hyprctl dispatch 'hl.dsp.exec_cmd(\"omarchy-launch-screensaver force 2>/tmp/screensaver.err\")' "
             "> /tmp/screensaver-dispatch.txt 2>&1 </dev/null\n"
         )
         machine.succeed(
@@ -2098,8 +2101,12 @@ pkgs.testers.runNixOSTest {
         assert reply == "ok", f"hyprctl dispatch did not accept the launch: {reply!r}"
         # && throughout: a failed hyprctl leaves an empty file, which must fail
         # the poll rather than read as "the layer is gone".
-        machine.wait_until_succeeds(
-            layers_cmd + f" && grep -qF {ns} /tmp/screensaver-layers.json", timeout=30)
+        try:
+            machine.wait_until_succeeds(
+                layers_cmd + f" && grep -q '{ns_re}' /tmp/screensaver-layers.json", timeout=30)
+        except Exception:
+            print("screensaver stderr: " + machine.execute("cat /tmp/screensaver.err")[1])
+            raise
         # Still running once mapped, so a client that maps and then crashes
         # cannot pass for one that left because of the key.
         machine.sleep(2)
@@ -2109,7 +2116,7 @@ pkgs.testers.runNixOSTest {
         for _ in range(5):
             machine.send_key("esc")
             gone, _ = machine.execute(
-                layers_cmd + f" && ! grep -qF {ns} /tmp/screensaver-layers.json")
+                layers_cmd + f" && ! grep -q '{ns_re}' /tmp/screensaver-layers.json")
             if gone == 0:
                 break
             machine.sleep(2)

@@ -1995,11 +1995,20 @@
           # Cheap: nothing compiles, the derivation places files.
           nixi = self.packages.${system}.nixi;
 
-          session = import ./tests/session.nix {
-            inherit inputs;
-            pkgs = pkgsFor.${system};
-            inherit (self.packages.${system}) doctor;
-          };
+          # Why: tests/AGENTS.md#a-test-script-over-128-kib-breaks-the-stable-driver
+          session =
+            let
+              test = import ./tests/session.nix {
+                inherit inputs;
+                pkgs = pkgsFor.${system};
+                inherit (self.packages.${system}) doctor;
+              };
+            in
+            test.extend {
+              modules = [
+                { driver = lib.mkForce (test.driver.overrideAttrs { __structuredAttrs = true; }); }
+              ];
+            };
           # The installer's interactive screens, at every width worth caring
           # about. Nothing else draws them: every other harness passes
           # --answers, which is exactly how #133 shipped.

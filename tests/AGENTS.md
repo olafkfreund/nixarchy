@@ -1942,3 +1942,20 @@ whose ID is `login`; `daemon/dbus/gkd-secret-create.c` makes a new one), not fro
 No check here starts Chromium before the first unlock. Checked by hand: boot
 with autologin, open Chromium before locking the screen, reboot, and count the
 prompts. One prompt at every boot means the claim holds.
+
+<a id="a-test-script-over-128-kib-breaks-the-stable-driver"></a>
+## A test script over 128 KiB breaks the stable driver
+
+nixos-26.05's test driver hands the whole `testScript` to its builder as
+one environment variable, and Linux caps a single one at 128 KiB
+(`MAX_ARG_STRLEN`). `checks.session`'s script passed that around
+2026-11-01 (141,630 bytes), and `weekly.yml`'s stable boot died before the
+VM started: `executing '.../bash': Argument list too long`. Unstable's
+driver no longer passes it that way, so every other job stayed green.
+The `session` entry in `flake.nix` overrides the driver with
+`__structuredAttrs = true`, so bash reads the script from a file rather
+than from the environment, and the type check still sees all of it. An
+override of `driver` inside the test module recurses (it has to read its
+own option's definitions); `test.extend` takes the driver from a finished
+evaluation instead. Any other check that grows past 128 KiB needs the same
+four lines.

@@ -1888,7 +1888,7 @@ pkgs.testers.runNixOSTest {
     # one only because pkgs/omarchy/default.nix rewrites it.
     machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle back"))
     machine.wait_until_succeeds(
-        on_desktop("hyprctl plugin list | grep -q hyprbars"), timeout=60)
+        on_desktop("hyprctl plugin list | grep hyprbars >/dev/null"), timeout=60)
     # Back to tiling, so what follows sees the layout it always saw.
     machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle"))
     print("hype, monologue, signed and disktree are on PATH, dua is not, and a floating workspace loads hyprbars")

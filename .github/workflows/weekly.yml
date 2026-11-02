@@ -10,14 +10,16 @@ name: weekly
 # `stable-session` boots a session on nixos-26.05. stable-eval proves only that
 # the expression evaluates there; this is the VM it said it could not afford.
 # Weekly rather than nightly: stable closures are not in nixarchy.cachix, so a
-# run builds a lot locally.
+# run builds a lot locally. It runs Sunday morning, after edge's 06:00 run has
+# merged main (under 1.5 h so far): at 22:00 the edge boot tested an edge up to
+# 16 h behind main, and failed on a fix main already had (#1553, 2026-11-02).
 #
 # github.event.schedule is the exact cron string, so each job's `if:` must
 # match its entry below character for character.
 
 on:
   schedule:
-    - cron: "0 22 * * 0" # stable-session, Sunday night
+    - cron: "0 9 * * 0" # stable-session, Sunday after edge's 06:00 run
     - cron: "0 6 * * 1" # propose, Monday after the 03:00 nightly
   workflow_dispatch:
     inputs:
@@ -86,7 +88,7 @@ jobs:
           cat body.md >> "$GITHUB_STEP_SUMMARY"
 
   stable-session:
-    if: github.event.schedule == '0 22 * * 0' || inputs.job == 'stable-session'
+    if: github.event.schedule == '0 9 * * 0' || inputs.job == 'stable-session'
     runs-on: [self-hosted, nixos, kvm, big]
     # The first run builds most of a stable closure locally. Revisit once a few
     # runs show the real figure.

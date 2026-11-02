@@ -2704,6 +2704,12 @@
           # collides with nixarchy's, in buildEnv, once both are force-set --
           # evaluation only, against modules/nixos.nix's assertions. See
           # tests/graphics-mesa-clash.nix.
+          # A declared machine's directory modes are ours, not upstream's 10-microvm (#1549).
+          microvm-tmpfiles-order = import ./tests/microvm-tmpfiles-order.nix {
+            pkgs = pkgsFor.${system};
+            reference = self.nixosConfigurations.reference;
+          };
+
           graphics-mesa-clash = import ./tests/graphics-mesa-clash.nix {
             pkgs = pkgsFor.${system};
             reference = self.nixosConfigurations.reference;

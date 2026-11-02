@@ -2410,3 +2410,16 @@ already sets `enableDefaultPath = false` on the unit, which is why the unstable
 session never saw it. The weekly stable boot found it on 2026-11-02, the first
 week its driver could run. When you add a setting to a unit you do not own, set
 `enableDefaultPath = false` with it, unless the unit really needs that PATH.
+
+## Two tmpfiles.d files naming one path: the first file wins
+
+When two `systemd.tmpfiles.settings` keys declare the same path, systemd-tmpfiles
+applies the entry from the file whose name sorts first and logs the rest as
+conflicts. A key we pick by habit, `10-nixarchy-…`, sorts after an upstream
+`10-microvm`, so ours silently loses. That is how #1549 happened: microvm.nix
+`c60daaef` began declaring our relative `share` path at `0775`, and the
+nightly found `share/` group-writable. Upstream's `0775` on the VM directory
+itself had been beating our `0750` all along, with nothing to notice it. Our
+key is now `09-nixarchy-microvm`, and `checks.microvm-tmpfiles-order` fails if
+any earlier key declares one of its paths. A nixarchy tmpfiles entry that has
+to beat upstream's sorts first, and it needs a check, because the loss is silent.

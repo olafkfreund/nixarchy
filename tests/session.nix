@@ -1110,6 +1110,19 @@ pkgs.testers.runNixOSTest {
     machine.succeed(as_user(
         "${pkgs.libnotify}/bin/notify-send -u critical -a teams-for-linux -- crit-133 x"))
     machine.wait_until_succeeds(live_mentions("crit-133"), timeout=30)
+    # #1558: one with a named action keeps its card, since the companion can
+    # only fire "default"; a plain one in the same lease is still handed over.
+    # -A waits for a reply, so it is backgrounded with every fd redirected.
+    machine.succeed(as_user(delegate))
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -t 3000 -a teams-for-linux -A more=More -- actions-1558 hi"
+        + " >/dev/null 2>&1 </dev/null &"))
+    machine.wait_until_succeeds(live_mentions("actions-1558"), timeout=30)
+    machine.succeed(as_user(
+        "${pkgs.libnotify}/bin/notify-send -a teams-for-linux -- plain-1558 hi"))
+    for_companion = machine.wait_until_succeeds(as_user(delegate) + " | " + jq
+        + " -e -c '[.[] | .summary] | select(index(\"plain-1558\"))'", timeout=30).strip()
+    assert "actions-1558" not in for_companion, "a row with buttons went to the companion: " + for_companion
     machine.succeed(as_user("omarchy-shell notifications delegate 0"))
     machine.succeed(as_user("omarchy-shell notifications dismissAll"))
     print("a notification is queued for the companion under a lease, and pops up when it lapses")

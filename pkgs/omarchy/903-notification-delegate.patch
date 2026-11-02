@@ -98,7 +98,7 @@
      delete liveKeys[key]
      held = held.filter(function(heldKey) { return heldKey !== key })
    }
-@@ -614,7 +694,27 @@
+@@ -614,7 +694,29 @@
        return
      }
  
@@ -107,7 +107,9 @@
 +    // Not one already on screen or on its way there (held, scheduled): those finish as cards.
 +    if (delegated() && !Delivery.bypassesQuiet(row) && !String(row.code || "")
 +        && notification.urgency !== NotificationUrgency.Critical && row.app !== "Nixi"
-+        && rowIndexFor(key) < 0 && !liveKeys[key].scheduled && !liveKeys[key].held) {
++        && rowIndexFor(key) < 0 && !liveKeys[key].scheduled && !liveKeys[key].held
++        // A row with buttons stays a card: the companion can only fire "default" (#1558).
++        && actionsOf(key, refsRevision).length === 0 && !row.execActions) {
 +      liveKeys[key].row = row
 +      var queued = delegatedQueue.filter(function(q) { return q.key !== key }).concat([{ key: key, app: row.app, source: row.source, summary: String(row.summary || "").slice(0, 200),
 +        body: String(row.bodyLine || "").slice(0, 200), urgency: row.urgency, category: categoryOf(row) }])
@@ -127,7 +129,7 @@
  
      // Only a new card waits while the deck is held; an update changes a card in place.
      if (service.holding() && service.rowIndexFor(key) < 0) {
-@@ -1068,7 +1168,7 @@
+@@ -1068,7 +1170,7 @@
    // action, then its window, then its site.
    function activate(key, instant) {
      var at = rowIndexFor(key)
@@ -136,7 +138,7 @@
      var argv = Security.parseExecArgv(row ? row.execArgv : "")
      if (argv) {
        // Detached through bash positional parameters, never a shell string, and
-@@ -1397,6 +1497,50 @@
+@@ -1397,6 +1499,50 @@
  
      function ping(): string { return "ok" }
  

@@ -134,8 +134,12 @@ pkgs.testers.runNixOSTest {
     machine.succeed("${ssh} sudo touch /mnt/host/probe-1076")
     machine.succeed("test -f /var/lib/microvms/sandbox/share/probe-1076")
     machine.fail("test -e /var/lib/microvms/sandbox/probe-1076")
-    owner = machine.succeed("stat -c '%U:%G %a' /var/lib/microvms/sandbox/share").strip()
-    assert owner == "microvm:kvm 770", f"#1076: the share is {owner!r}, not microvm:kvm 770"
+    # #1549: ours, not upstream's 10-microvm 0775. A group-writable VM
+    # directory lets kvm replace `current`, which ExecStopPost runs as root.
+    vm = "/var/lib/microvms/sandbox"
+    modes = machine.succeed(f"stat -c '%n %U:%G %a' {vm} {vm}/share {vm}/policy").strip().splitlines()
+    want = [f"{vm} microvm:kvm 750", f"{vm}/share microvm:kvm 770", f"{vm}/policy microvm:kvm 750"]
+    assert modes == want, f"#1076/#1549: the sandbox directories are {modes!r}, not {want!r}"
 
     # The store is shared, not imaged -- asserted from inside the guest.
     mounts = machine.succeed("${ssh} mount")

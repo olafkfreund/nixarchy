@@ -133,7 +133,7 @@ the loader story covers Node, Electron and games too.
 ## An agent that knows this machine
 
 Omarchy symlinks its agent skills into every harness's skill directory. Upstream
-ships a few, written for Arch; nixarchy ships seventeen, written for NixOS, and eight Nix skills beside them.
+ships a few, written for Arch; nixarchy ships eighteen, written for NixOS, and eight Nix skills beside them.
 
 That matters more than it sounds. A model asked how to install a package on
 NixOS will confidently invent an answer; the same model handed the `nixos` skill

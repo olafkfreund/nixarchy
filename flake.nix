@@ -1937,6 +1937,8 @@
             # tests/package-delta.nix.
             "package-delta"
             "patched-files"
+            # Every package Omarchy installs has a decision in data/omarchy-packages.nix (#1572).
+            "omarchy-package-ledger"
             # The pure modes of pin-fix.sh, and that each probe in data/pin-fix.nix exists.
             "pin-fix"
             # Adds a real third-party plugin from a real repo. The plugin system

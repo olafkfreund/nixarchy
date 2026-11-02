@@ -222,7 +222,8 @@ in
       # microvm) -> <state>/<name> (owned by root)" -- so share/ never exists
       # and every microvm@<name>.service start fails on its 9p fsdev. Owning
       # <state>/<name> ourselves keeps every step of the walk microvm:kvm.
-      systemd.tmpfiles.settings."10-nixarchy-microvm" = lib.concatMapAttrs (
+      # 09: tmpfiles applies the lexically first file; upstream's 10-microvm declares these paths 0775 (#1549).
+      systemd.tmpfiles.settings."09-nixarchy-microvm" = lib.concatMapAttrs (
         name: _:
         let
           vmDir = "${config.microvm.stateDir}/${name}";

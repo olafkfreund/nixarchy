@@ -212,7 +212,7 @@
 
   "sudoers.d/omarchy-sudo-timeout" = {
     class = "divergent";
-    reason = "`Defaults timestamp_timeout=10`, one sudo password for ten minutes (upstream 56a910b). Not adopted: it would change a security default on every machine, so sudo keeps its own timeout and a user who wants Omarchy's sets it in security.sudo.extraConfig (#1543).";
+    reason = "`Defaults timestamp_timeout=10`, upstream's ten-minute sudo grace period (v4.5.0-rc3, omacom/omarchy#17000). Not adopted, by the owner's choice: nixarchy keeps sudo's own default. A user who wants upstream's period sets it in security.sudo.extraConfig.";
   };
 
   "sudoers.d/omarchy-theme-browser" = {

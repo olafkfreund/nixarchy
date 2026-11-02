@@ -127,8 +127,11 @@ jobs:
             echo "::notice::no edge branch yet; skipping"
             exit 0
           fi
-          git fetch -q origin refs/heads/edge
-          git worktree add --detach "$RUNNER_TEMP/edge" FETCH_HEAD
+          # A clone of its own, not a worktree: a self-hosted runner keeps its
+          # shallow .git between jobs, and edge's history fetched into it left
+          # nix reading a commit that was not there (2026-11-01).
+          rm -rf "$RUNNER_TEMP/edge"
+          git clone -q --depth 1 --branch edge "https://github.com/$GITHUB_REPOSITORY" "$RUNNER_TEMP/edge"
           cd "$RUNNER_TEMP/edge"
           locked() {
             jq -r --arg n "$1" '.nodes[.nodes.root.inputs[$n]].locked | "github:\(.owner)/\(.repo)/\(.rev)"' flake.lock

@@ -55,6 +55,7 @@ stdenv.mkDerivation (finalAttrs: {
       $out/share/applications/hype.desktop
     install -Dm644 $src/pkgbuild/hype.svg \
       $out/share/icons/hicolor/scalable/apps/hype.svg
+    install -Dm644 $src/LICENSE $out/share/licenses/hype/LICENSE
 
     runHook postInstall
   '';

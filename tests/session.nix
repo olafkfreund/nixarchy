@@ -1875,7 +1875,9 @@ pkgs.testers.runNixOSTest {
     # ---- Omarchy 4.5's default apps and floating-workspace titlebars (#1572) --
     # The apps come with programs.nixarchy.omarchyApps.enable, set above; dua is
     # gone because upstream replaced Disk Usage with disktree.
-    machine.succeed(user % "command -v hype monologue signed disktree")
+    # One name per call: `command -v a b` succeeds if ANY of them resolves.
+    for app in ["hype", "monologue", "signed", "disktree"]:
+        machine.succeed(user % f"command -v {app}")
     machine.fail(user % "command -v dua")
     # LC_ALL and QT_QPA_PLATFORM only on this command (pkgs/AGENTS.md: a parsed
     # tool run in the C locale warns on stdout).

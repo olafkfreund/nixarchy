@@ -760,9 +760,15 @@
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
           signed = final.callPackage ./pkgs/apps/signed.nix { };
           disktree = final.callPackage ./pkgs/apps/disktree.nix { };
-          # Built against the overlay's Hyprland, which is the flake input's.
+          # Against the flake's Hyprland, the one Omarchy's session runs; final.hyprland
+          # is nixpkgs' and fails the plugin's commit check. The module builds its own (#1572).
           omarchy-hyprland-titlebars = final.callPackage ./pkgs/apps/omarchy-hyprland-titlebars.nix {
-            inherit (final.hyprlandPlugins.override { inherit (final) hyprland; }) mkHyprlandPlugin;
+            inherit
+              (final.hyprlandPlugins.override {
+                inherit (hyprland.packages.${final.stdenv.hostPlatform.system}) hyprland;
+              })
+              mkHyprlandPlugin
+              ;
           };
 
           # owe, omacom's wallpaper engine: video and GIF desktop backgrounds

@@ -45,6 +45,7 @@ stdenv.mkDerivation (finalAttrs: {
       $out/share/applications/monologue.desktop
     install -Dm644 $src/pkgbuild/monologue.svg \
       $out/share/icons/hicolor/scalable/apps/monologue.svg
+    install -Dm644 $src/LICENSE $out/share/licenses/monologue/LICENSE
 
     runHook postInstall
   '';

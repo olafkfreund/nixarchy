@@ -47,6 +47,7 @@ stdenv.mkDerivation (finalAttrs: {
       $out/share/applications/signed.desktop
     install -Dm644 $src/pkgbuild/signed.svg \
       $out/share/icons/hicolor/scalable/apps/signed.svg
+    install -Dm644 $src/LICENSE $out/share/licenses/signed/LICENSE
 
     runHook postInstall
   '';

@@ -565,6 +565,7 @@ So eighteen skills ship here instead, with eight Nix skills beside them:
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 | **`omarchy-app`** | Upstream's, new in 4.5: scaffolds a C++ and Qt Quick app that follows the Omarchy theme. Nixarchy rewrites its packaging half, so the app gets a `flake.nix` and `package.nix`, runs with `nix run`, and installs by adding the flake to your configuration |
+| **`ai-mirror`** | Testing an app or driving a desktop with ai-mirror. It asks first: a disposable microVM from the `nixarchy-desktop` template, or this host's real desktop with a human-granted control. Then it runs that path end to end, with `mirror-vm` driving the guest over vsock |
 
 What each skill corrects, how **Menu ▸ Trigger ▸ Ask** routes to them, and
 running them against a local model with no account and no network:

@@ -544,7 +544,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So seventeen skills ship here instead, with eight Nix skills beside them:
+So eighteen skills ship here instead, with eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -562,6 +562,7 @@ So seventeen skills ship here instead, with eight Nix skills beside them:
 | **`nixos-binaries`** | Why a downloaded binary, an AppImage or a pip wheel will not run, and the ladder out: nix-ld's curated library set, envfs, an FHS environment, a box, packaging it — including the correction that nix-ld cannot help an interpreter nixpkgs built |
 | **`nixos-gaming`** | Steam as a module rather than a package, Proton per title, the 32-bit graphics stack that is the usual cause, controllers, gamescope, and thirteen libretro cores that live in the package rather than `/usr/lib` |
 | **`nixos-fleet`** | One flake, several machines: the `hosts/<name>/` layout, what is shared and what is per-machine, `nixarchy-apply`'s hostname match, pulling on a timer, and where `--target-host` stops |
+| **`ai-mirror`** | Driving a graphical desktop with the ai-mirror MCP tools: it asks first whether to test in a disposable microVM or on your real desktop |
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 | **`omarchy-app`** | Upstream's, new in 4.5: scaffolds a C++ and Qt Quick app that follows the Omarchy theme. Nixarchy rewrites its packaging half, so the app gets a `flake.nix` and `package.nix`, runs with `nix run`, and installs by adding the flake to your configuration |

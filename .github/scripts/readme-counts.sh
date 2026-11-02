@@ -336,8 +336,8 @@ quantity "pacman-replaced" "$repl_word" \
   '^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced.*' \
   's/^(Six|Seven|Eight|Nine|Ten|Eleven|Twelve) of those are replaced/'"$repl_word"' of those are replaced/'
 quantity "skills" "$skills_word" \
-  '^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead[,:].*$' \
-  's/^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills ship here instead/So '"$skills_word"' skills ship here instead/'
+  '^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen) skills ship here instead[,:].*$' \
+  's/^So (twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen) skills ship here instead/So '"$skills_word"' skills ship here instead/'
 # One per place that states it, so a page that drifts is named rather than a
 # number merely being wrong somewhere (#888).
 quantity "nix-skills-readme" "$nix_skills_word" \
@@ -436,21 +436,21 @@ quantity "installer-questions-iso" "$questions_word" \
 readme_saved=$readme
 readme="$root/docs/llms.txt"
 quantity "skills-llms" "$skills_cap" \
-  '^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen) AI agent skills written.*' \
-  's/^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen) AI agent skills written/- '"$skills_cap"' AI agent skills written/'
+  '^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen) AI agent skills written.*' \
+  's/^- (Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen) AI agent skills written/- '"$skills_cap"' AI agent skills written/'
 quantity "skills-llms-manual" "$skills_word" \
-  '.*the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) NixOS agent skills.*' \
-  's/the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
+  '.*the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen) NixOS agent skills.*' \
+  's/the (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen) NixOS agent skills/the '"$skills_word"' NixOS agent skills/'
 readme="$root/docs/manual/ai.md"
 quantity "skills-manual-ai" "$skills_word" \
-  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of upstream.s few[,:].*$' \
-  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen) skills instead of/'"$skills_word"' skills instead of/'
+  '^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen) skills instead of upstream.s few[,:].*$' \
+  's/^(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen) skills instead of/'"$skills_word"' skills instead of/'
 # The manual's front page said "thirteen" for three skills' worth of releases
 # (#664) -- the fourth copy of this number, and the only one nothing read.
 readme="$root/docs/index.md"
 quantity "skills-index" "$skills_word" \
-  '.*nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen), written for NixOS.*' \
-  's/nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen), written for NixOS/nixarchy ships '"$skills_word"', written for NixOS/'
+  '.*nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen), written for NixOS.*' \
+  's/nixarchy ships (ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen), written for NixOS/nixarchy ships '"$skills_word"', written for NixOS/'
 
 # The app total, stated in four more places. It drifted to 56, 59 and 64 while
 # the README's checked copies said 66 -- the same #506 shape, for apps.

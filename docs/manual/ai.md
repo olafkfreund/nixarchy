@@ -39,7 +39,7 @@ mechanism — every directory under `$OMARCHY_PATH/default/agents/skills/` is
 symlinked into `~/.claude/skills`, `~/.agents/skills` and
 `~/.pi/agent/skills`, leaving out upstream's `~/.codex/skills` because Codex
 reads `~/.agents/skills` too and would list every skill twice — but ships
-seventeen skills instead of upstream's few, and eight Nix skills beside them:
+eighteen skills instead of upstream's few, and eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -57,6 +57,7 @@ seventeen skills instead of upstream's few, and eight Nix skills beside them:
 | `nixos-binaries` | why a downloaded binary or a pip wheel will not run, and the ladder out: nix-ld, envfs, AppImages, an FHS environment, a box |
 | `nixos-gaming` | Steam and Proton, the 32-bit graphics stack, controllers, gamescope, RetroArch and the launchers |
 | `nixos-fleet` | one flake and several machines: the `hosts/<name>/` layout, sharing without coupling, pulling on a timer, deploying with `--target-host` |
+| `ai-mirror` | driving a desktop with the ai-mirror MCP tools, after asking whether to use a disposable microVM or your real desktop |
 | `devenv` | per-project environments: `devenv.nix`, the lockfile, and whether a tool belongs to the project or the machine |
 | `diagnose-crash` | working out why a process dumped core, and where to report it if it is a distribution bug |
 | `omarchy-app` | scaffolding a C++ and Qt Quick desktop app that follows the Omarchy theme (upstream's, new in 4.5; nixarchy rewrites its packaging half so the app is built with Nix: `nix develop`, `nix run`, and a flake you add to your configuration) |

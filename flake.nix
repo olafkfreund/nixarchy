@@ -754,6 +754,17 @@
           omacut = final.callPackage ./pkgs/apps/omacut.nix { };
           omasnap = final.callPackage ./pkgs/apps/omasnap.nix { };
 
+          # Omarchy 4.5's other default apps (#1572). Opt-in through
+          # programs.nixarchy.omarchyApps.enable.
+          hype = final.callPackage ./pkgs/apps/hype.nix { };
+          monologue = final.callPackage ./pkgs/apps/monologue.nix { };
+          signed = final.callPackage ./pkgs/apps/signed.nix { };
+          disktree = final.callPackage ./pkgs/apps/disktree.nix { };
+          # Built against the overlay's Hyprland, which is the flake input's.
+          omarchy-hyprland-titlebars = final.callPackage ./pkgs/apps/omarchy-hyprland-titlebars.nix {
+            inherit (final.hyprlandPlugins.override { inherit (final) hyprland; }) mkHyprlandPlugin;
+          };
+
           # owe, omacom's wallpaper engine: video and GIF desktop backgrounds
           # and the lock screen's video feed. Not in nixpkgs. #1153.
           owe = final.callPackage ./pkgs/apps/owe.nix { };
@@ -863,6 +874,7 @@
           # than nixpkgs. Passed explicitly for the same reason hyprland is: it
           # lives under nixarchy-apps, which callPackage does not search.
           inherit (final.nixarchy-apps)
+            disktree
             ttfx
             omasnap
             omarchy-speedtest
@@ -1219,6 +1231,11 @@
             ttfx
             omarchy-speedtest
             omarchy-screensaver
+            hype
+            monologue
+            signed
+            disktree
+            omarchy-hyprland-titlebars
             ;
 
           # Re-exported so programs.nixarchy.apps.zen resolves like any other

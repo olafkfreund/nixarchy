@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793371150,
-        "narHash": "sha256-HU6Oym0XLiwBI3AR6pdHrOtq+svmdqqUmQ0MOHIp0sk=",
+        "lastModified": 1793621348,
+        "narHash": "sha256-GQQV1y0mjtCD0udYeTdRZb9SoztoLSuF6eEcgG300YQ=",
         "owner": "olafkfreund",
         "repo": "ai-mirror",
-        "rev": "c4b69d0c6e6e2eca9d9b37fefd3a89384b1e0152",
+        "rev": "531c18de3f0f992f38a35b0f877864edfbfd8b72",
         "type": "github"
       },
       "original": {

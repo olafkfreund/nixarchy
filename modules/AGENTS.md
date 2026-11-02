@@ -2396,3 +2396,17 @@ changed until it was told.
     rebuild is running or has failed. `nixarchy.distrobox`'s `hideWhenEmpty`
     is the same trick. `SystemSwitch.qml`, the indicator #873 taught to open
     the rebuild's log, is untouched; merging the two is a follow-up.
+
+## Declaring an upstream user unit gives it a PATH
+
+Setting one attribute on a unit that a package ships, such as
+`systemd.user.services."wayland-wm@".serviceConfig.KillMode`, makes NixOS write
+a drop-in for it, and that drop-in carries the module system's default
+`Environment="PATH=coreutils:findutils:grep:sed:systemd"`. It replaces the PATH
+the user manager holds. For `wayland-wm@` that hid `Hyprland` from
+`start-hyprland`, and the session died at login on nixos-26.05 with
+`fork(): execvp failed: No such file or directory`. Unstable's uwsm module
+already sets `enableDefaultPath = false` on the unit, which is why the unstable
+session never saw it. The weekly stable boot found it on 2026-11-02, the first
+week its driver could run. When you add a setting to a unit you do not own, set
+`enableDefaultPath = false` with it, unless the unit really needs that PATH.

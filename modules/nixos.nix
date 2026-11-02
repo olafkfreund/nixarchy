@@ -1932,7 +1932,13 @@ in
         # systemd/user/wayland-wm@hyprland.desktop.service.d/10-keep-shell.conf,
         # on the template: uwsm names the instance start\x2dhyprland, so
         # upstream's instance name never matches.
-        "wayland-wm@".serviceConfig.KillMode = "mixed";
+        # enableDefaultPath: declaring the unit otherwise writes a coreutils-only
+        # PATH that hides Hyprland from start-hyprland. Unstable's uwsm module
+        # sets it; 26.05's does not, and the session died at login there.
+        "wayland-wm@" = {
+          serviceConfig.KillMode = "mixed";
+          enableDefaultPath = false;
+        };
 
         # Not only "!root": the display manager's user has no subuid range, so
         # rootless Docker fails at every boot for it. mkForce corrects nixpkgs'

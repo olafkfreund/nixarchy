@@ -200,6 +200,11 @@
     reason = "`Defaults passwd_tries=10`, the sudo half of the lockout Omarchy loosens, so a mistyped password does not end the attempt at three. modules/nixos.nix carries the same line through security.sudo.extraConfig.";
   };
 
+  "sudoers.d/omarchy-sudo-timeout" = {
+    class = "divergent";
+    reason = "`Defaults timestamp_timeout=10`, upstream's ten-minute sudo grace period (v4.5.0-rc3, omacom/omarchy#17000). Not adopted, by the owner's choice: nixarchy keeps sudo's own default. A user who wants upstream's period sets it in security.sudo.extraConfig.";
+  };
+
   "sudoers.d/omarchy-theme-browser" = {
     class = "covered";
     reason = "NOPASSWD for omarchy-theme-set-browser-policy, which writes an accent colour into each browser's policy directory. modules/nixos.nix creates those directories owned by programs.nixarchy.browserThemeUser through systemd.tmpfiles instead, so the script needs no root at all.";

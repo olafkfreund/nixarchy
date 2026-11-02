@@ -592,7 +592,7 @@
   };
   "omarchy-setup-security-sshd" = {
     class = "vendor";
-    reason = "Vendored unchanged. `systemctl enable --now sshd.service` and `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach.";
+    reason = "Vendored unchanged. Since v4.5.0-rc3 it enables and (re)starts sshd.service only once a key is authorized, then runs `ufw limit 22/tcp`. services.openssh and networking.firewall are the declarative route, and there is no ufw here for the second half to reach.";
     allow = "systemctl-system ufw";
   };
   "omarchy-setup-security-sudoless-docker" = {

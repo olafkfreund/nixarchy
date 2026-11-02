@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1566
 author: olafkfreund
 ---
@@ -77,18 +77,11 @@ connect).
   notes) and must be checked by running them once.
 - The skill is text; no new package, dependency or service.
 
-## Open questions
+## Decisions (approved 2026-11-02)
 
-1. **Where it ships.** Recommended: nixarchy (`pkgs/omarchy/skills/`), next to
-   the `nixarchy`/`nixos` skills, because the microVM templates and `nixarchy vm`
-   live here. The other choice is the ai-mirror repo's Home Manager module,
-   which ties it to ai-mirror's own versions.
-2. **Using the VM's ai-mirror from the same session.** An MCP server added with
-   `claude mcp add` mid-session may not appear until Claude Code restarts
-   (unmeasured). Recommended: the spec measures this. If it does need a
-   restart, the skill drives the guest through its ai-mirror CLI over the same
-   vsock socket instead, a JSON-RPC script as `tests/smoke.py`-style checks do,
-   so the work does not need a restart.
-3. **Default template.** Recommended: `nixarchy-desktop` (it is the person's
-   desktop: same keys, bar, `omarchy-*` commands), and `hyprland-ai-mirror` only
-   when the app needs nothing from the shell and a smaller guest matters.
+1. Ships in nixarchy, `pkgs/omarchy/skills/ai-mirror/`.
+2. The spec measures whether a server added with `claude mcp add` mid-session is
+   usable without a restart; if not, the skill drives the guest's ai-mirror
+   over the vsock socket with a JSON-RPC script.
+3. Default template `nixarchy-desktop`; `hyprland-ai-mirror` only when the app
+   needs nothing from the shell.

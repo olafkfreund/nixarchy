@@ -14,20 +14,30 @@
 let
   inherit (pkgs) lib;
   ledger = import ../data/omarchy-packages.nix;
-  oneOf =
+  # Exactly one key, nix/module/skip, holding a non-empty string: a typo'd extra
+  # key or an empty reason is not a decision.
+  wellFormed =
     r:
-    lib.count (k: r ? ${k}) [
+    let
+      ks = lib.attrNames r;
+    in
+    lib.length ks == 1
+    && lib.elem (lib.head ks) [
       "nix"
       "module"
       "skip"
-    ];
-  malformed = lib.filter (n: oneOf ledger.${n} != 1) (lib.attrNames ledger);
+    ]
+    && lib.isString r.${lib.head ks}
+    && r.${lib.head ks} != "";
+  malformed = lib.filter (n: !wellFormed ledger.${n}) (lib.attrNames ledger);
+  # A `nix` row must name a package, not merely an attribute (`lib` exists too).
   resolved = lib.mapAttrs (
-    _: r: if r ? nix then lib.hasAttrByPath (lib.splitString "." r.nix) pkgs else true
+    _: r:
+    if r ? nix then lib.isDerivation (lib.attrByPath (lib.splitString "." r.nix) null pkgs) else true
   ) ledger;
 in
 assert lib.assertMsg (malformed == [ ])
-  "data/omarchy-packages.nix: rows with not exactly one of nix/module/skip: ${lib.concatStringsSep ", " malformed}";
+  "data/omarchy-packages.nix: rows that are not exactly one non-empty nix/module/skip string: ${lib.concatStringsSep ", " malformed}";
 pkgs.runCommand "nixarchy-omarchy-package-ledger"
   {
     nativeBuildInputs = [ pkgs.jq ];
@@ -43,7 +53,7 @@ pkgs.runCommand "nixarchy-omarchy-package-ledger"
     lists=$(ls ${pkgs.omarchy}/share/omarchy/install/*.packages)
     [ -n "$lists" ] || { echo "no *.packages lists in the omarchy tree" >&2; exit 1; }
     # shellcheck disable=SC2086
-    grep -hvE '^\s*(#|$)' $lists | sort -u > wanted
+    sed -E 's/#.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' $lists | grep -v '^$' | sort -u > wanted
     [ -s wanted ] || { echo "the lists named no packages" >&2; exit 1; }
     jq -r '.[]' "$ledgerNamesPath" | sort -u > have
     jq -r 'to_entries[] | select(.value == false) | .key' "$resolvedJsonPath" | sort -u > unresolvable

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1549
 spec: spec/2026-11-02-1549-microvm-tmpfiles-order.md
 ---

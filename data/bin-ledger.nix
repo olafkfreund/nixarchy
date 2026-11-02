@@ -831,6 +831,11 @@
     reason = "Vendored unchanged (#1423, quattro be54892). Switches the kernel Limine boots by default, through /etc/default/limine and an initramfs rebuild: Arch-only. Its one caller, the Update > Kernel menu row, shows only when `omarchy-kernel list` prints more than one kernel, and that list reads /usr/lib/modules/*/pkgbase, which NixOS does not have -- so the row never appears and nothing reaches `set`.";
     allow = "initrd-boot";
   };
+  "omarchy-keyboard-toprow" = {
+    class = "vendor";
+    reason = "Vendored unchanged (#1552, quattro a69b19f). Writes /etc/modprobe.d/omarchy-toprow.conf for hid_apple, hid_asus and asus_wmi, sets hid_apple's live fnmode, and reruns limine-mkinitcpio, which NixOS does not have, so a run on a machine with one of those drivers stops at the boot-image rebuild. No menu row calls it; upstream's other caller is install/hardware/fix-fkeys.sh, which nixarchy does not run. The declarative equivalent is boot.extraModprobeConfig.";
+    allow = "initrd-boot modprobe";
+  };
   "omarchy-remove-ai-ollama" = {
     class = "vendor";
     reason = "Vendored unchanged. Reached only by upstream's remove.ai.ollama row, which modules/apps.nix hides: Ollama here is services.ollama under programs.nixarchy.localAi, and disabling its unit by hand would only last until the next switch.";

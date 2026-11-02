@@ -66,7 +66,7 @@
   btop,
   ripgrep,
   fd,
-  dua,
+  disktree,
   bat,
   fzf,
   tmux,
@@ -246,12 +246,8 @@ let
     btop
     ripgrep
     fd
-    # applications/Disk Usage.desktop runs `dua i /`. It is the only command any
-    # shipped .desktop entry needs that no script in bin/ also calls, which is
-    # exactly why it was missed: this list was built by grepping bin/, and the
-    # launcher entries were never part of that sweep. The entry opened a
-    # terminal that closed instantly.
-    dua
+    # rc3 replaced the Disk Usage TUI (dua) with disktree: migrations/1791345484.sh.
+    disktree
     bat
     fzf
     tmux
@@ -2042,6 +2038,11 @@ stdenvNoCC.mkDerivation {
                     # Why: pkgs/AGENTS.md#the-menu-fits-its-widest-label-1339
                     substituteInPlace $out/share/omarchy/shell/plugins/menu/Menu.qml \
                       --replace-fail '  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "appearance.font" || root.activeMenu === "update.kernel") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)' "$(cat ${./1339-menu-fit-width.qml})"
+
+                    # The plugin lives in the system profile, not /usr/lib (#1572).
+                    substituteInPlace $out/share/omarchy/default/hypr/workspace-modes.lua \
+                      --replace-fail '/usr/lib/omarchy-hyprland-titlebars/titlebars.so' \
+                      '/run/current-system/sw/lib/omarchy-hyprland-titlebars/titlebars.so'
 
                     # Wear the snowflake.
                     substitute ${./menu-bar-widget.qml} \

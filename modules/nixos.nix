@@ -1381,7 +1381,9 @@ in
       pathsToLink = [
         "/share/omarchy"
         "/share/hypr"
-      ];
+      ]
+      # workspace-modes.lua loads the plugin from /run/current-system/sw/lib (#1572).
+      ++ lib.optional cfg.session "/lib/omarchy-hyprland-titlebars";
 
       # Omarchy's scripts are unwrapped by design (wrapping breaks the CLI's
       # metadata scan), so their dependencies have to be on the session PATH.
@@ -1398,6 +1400,15 @@ in
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
         ++ map lib.lowPrio (lib.optional cfg.session omarchySession)
+        # Not lowPrio: nothing else ships this path. Built against the session's
+        # own Hyprland, so a plugin ABI mismatch cannot happen (#1572).
+        ++ lib.optional cfg.session (
+          pkgs.callPackage ../pkgs/apps/omarchy-hyprland-titlebars.nix {
+            inherit (pkgs.hyprlandPlugins.override { hyprland = config.programs.hyprland.package; })
+              mkHyprlandPlugin
+              ;
+          }
+        )
         ++ map lib.lowPrio (
           with pkgs;
           [

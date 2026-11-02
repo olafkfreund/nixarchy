@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1558
 spec: spec/2026-11-02-1558-delegate-actions.md
 ---

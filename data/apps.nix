@@ -20,6 +20,8 @@
 #              build failure nobody can read -- it still matters to anyone who
 #              turns the default back off.
 #   note       Anything a reader would otherwise have to discover the hard way.
+#   preinstall Omarchy itself installs this app by default; turned on together
+#              by programs.nixarchy.omarchyApps.enable (#1572).
 #   arch       Upstream's Arch package name. Kept solely so the CI cross-check
 #              can match rows; nothing at runtime reads it.
 {
@@ -511,6 +513,8 @@
     category = "Utility";
     attr = "omawrite";
     ours = true;
+    preinstall = true;
+    arch = "omawrite";
   };
   omacalc = {
     # As omawrite. Ships no .desktop of its own, so the package writes one --
@@ -519,6 +523,34 @@
     category = "Utility";
     attr = "omacalc";
     ours = true;
+    preinstall = true;
+    arch = "omacalc";
+  };
+  hype = {
+    # Omarchy 4.5's presentation app; see programs.nixarchy.omarchyApps.enable
+    # for the whole preinstall set (#1572).
+    label = "Hype";
+    category = "Utility";
+    attr = "hype";
+    ours = true;
+    preinstall = true;
+    arch = "hype";
+  };
+  monologue = {
+    label = "Monologue";
+    category = "Utility";
+    attr = "monologue";
+    ours = true;
+    preinstall = true;
+    arch = "monologue";
+  };
+  signed = {
+    label = "Signed";
+    category = "Utility";
+    attr = "signed";
+    ours = true;
+    preinstall = true;
+    arch = "signed";
   };
   android-tools = {
     # adb, for the wireless pairing dance scrcpy needs over Wi-Fi (#364).
@@ -594,6 +626,8 @@
     category = "Utility";
     attr = "omacut";
     ours = true;
+    preinstall = true;
+    arch = "omacut";
   };
   aether = {
     # The fourth of the four in the note on omawrite, and the only one that is
@@ -608,6 +642,8 @@
     category = "Utility";
     attr = "aether";
     ours = true;
+    preinstall = true;
+    arch = "aether";
   };
   hey-cli = {
     # No menuId: Omarchy v4.0.1 ships no HEY row at all -- hey.com/agents asks

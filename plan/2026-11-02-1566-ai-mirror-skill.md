@@ -125,3 +125,10 @@ present and executable; `checks.session` (CI); step 4 live.
 
 Revert the merge commit; the skill directory disappears at the next rebuild.
 Nothing else depends on it.
+
+## Deviations during implementation
+
+- Step 1 (coder): stdout read as bytes with `os.read` and its own buffer, so
+  `select` sees every byte (a text `readline` buffer would defeat the 60 s
+  limit). `--out` defaults to the current directory, not a temp directory.
+  `control off` also runs after a failed grant (harmless).

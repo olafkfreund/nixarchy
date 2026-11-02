@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Run a batch of ai-mirror tool calls inside a nixarchy microVM over vsock."""
+import argparse, base64, json, os, select, subprocess, sys, time, traceback
+
+PORT = 7000
+TIMEOUT = 60  # seconds per response
+
+
+def main():
+    ap = argparse.ArgumentParser(description=(
+        'Run steps against the ai-mirror MCP server in a nixarchy microVM. '
+        'steps is a JSON array of {"tool": str, "args": {...}}; "-" reads stdin. '
+        'args.frame "@last" means the latest screenshot. One JSON line per step. '
+        'Exit: 0 ok, 1 tool error, 2 VM not running, 3 no grant.'))
+    ap.add_argument('name', help='VM name')
+    ap.add_argument('steps', help='steps.json path or -')
+    ap.add_argument('--out', default='.', help='directory for screenshot PNGs')
+    a = ap.parse_args()
+
+    cid_file = os.path.expanduser(f'~/.local/state/nixarchy/microvm/{a.name}/vsock-cid')
+    try:
+        cid = open(cid_file).read().strip()
+    except OSError:
+        print(f'start the VM first: nixarchy vm run --detach {a.name}', file=sys.stderr)
+        sys.exit(2)
+    steps = json.load(sys.stdin if a.steps == '-' else open(a.steps))
+    os.makedirs(a.out, exist_ok=True)
+
+    if not isinstance(steps, list) or not all(isinstance(s, dict) and 'tool' in s for s in steps):
+        print('steps must be a JSON array of {"tool": ..., "args": {...}}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        srv = subprocess.Popen(['socat', '-', f'VSOCK-CONNECT:{cid}:{PORT}'],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    except FileNotFoundError:
+        print('socat is not installed', file=sys.stderr)
+        sys.exit(1)
+    buf, n = b'', 0
+
+    def rpc(method, params=None):
+        nonlocal buf, n
+        n += 1
+        srv.stdin.write((json.dumps({'jsonrpc': '2.0', 'id': n, 'method': method, 'params': params or {}}) + '\n').encode())
+        srv.stdin.flush()
+        end = time.monotonic() + TIMEOUT
+        while b'\n' not in buf:
+            left = end - time.monotonic()
+            if left <= 0 or not select.select([srv.stdout], [], [], left)[0]:
+                raise TimeoutError(f'no response to {method} in {TIMEOUT}s')
+            chunk = os.read(srv.stdout.fileno(), 1 << 20)
+            if not chunk:
+                raise EOFError('socat closed the connection')
+            buf += chunk
+        line, buf = buf.split(b'\n', 1)
+        return json.loads(line)
+
+    def call(tool, args):
+        r = rpc('tools/call', {'name': tool, 'arguments': args})['result']
+        return json.loads(r['content'][0]['text']), r.get('isError', False), r['content']
+
+    code, last = 0, None
+    try:
+        rpc('initialize', {'protocolVersion': '2025-11-25'})
+        call('control', {'mode': 'agent'})
+        deadline = time.monotonic() + 30
+        while True:
+            if call('status', {})[0].get('owner') == 'agent':
+                break
+            if time.monotonic() > deadline:
+                print('no grant within 30s', file=sys.stderr)
+                code = 3
+                return
+            time.sleep(0.5)
+        for i, step in enumerate(steps, 1):
+            args = dict(step.get('args', {}))
+            if args.get('frame') == '@last':
+                if last is None:
+                    raise ValueError(f'step {i}: "@last" before any screenshot')
+                args['frame'] = last
+            body, err, content = call(step['tool'], args)
+            if step['tool'] == 'screenshot' and not err:
+                last = body.get('frame')
+                for item in content:
+                    if item.get('type') == 'image':
+                        path = os.path.join(a.out, f'{i:02d}-screenshot.png')
+                        open(path, 'wb').write(base64.b64decode(item['data']))
+                        body['png'] = path
+            print(json.dumps({'step': i, 'tool': step['tool'], 'isError': err, 'result': body}, ensure_ascii=False), flush=True)
+            if err:
+                code = 1
+                break
+    except (TimeoutError, EOFError, ValueError) as e:
+        print(e, file=sys.stderr)
+        code = 1
+    except Exception:  # anything else is a failed batch too, never exit 0
+        traceback.print_exc()
+        code = 1
+    finally:
+        try:
+            call('control', {'mode': 'off'})
+        except Exception:
+            pass
+        try:
+            srv.stdin.close()
+        except OSError:  # socat already gone
+            pass
+        srv.kill()
+        srv.wait()
+        sys.exit(code)
+
+
+main()

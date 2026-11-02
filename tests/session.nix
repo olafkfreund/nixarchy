@@ -1253,7 +1253,7 @@ pkgs.testers.runNixOSTest {
     skills = ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
               "nixos-services", "nixos-secrets", "nixos-performance",
               "nixos-security", "nixos-doctor", "nixos-config-repo",
-              "devenv", "diagnose-crash"]
+              "devenv", "diagnose-crash", "ai-mirror"]
     for home in [".agents/skills", ".claude/skills", ".pi/agent/skills"]:
         for skill in skills:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")

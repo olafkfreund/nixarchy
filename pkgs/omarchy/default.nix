@@ -1161,6 +1161,9 @@ stdenvNoCC.mkDerivation {
 
                     skills=$out/share/omarchy/default/agents/skills
 
+                    # cp --no-preserve=mode above drops the executable bit.
+                    chmod +x $skills/ai-mirror/mirror-vm
+
                     # Why: pkgs/AGENTS.md#the-agent-skills-upstream-writes-for-arch (#1406)
                     patch -d "$out/share/omarchy" -p1 --forward --fuzz=0 < ${./1406-omarchy-app-nix.patch}
 

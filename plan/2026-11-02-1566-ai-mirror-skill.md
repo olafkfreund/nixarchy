@@ -133,3 +133,4 @@ Nothing else depends on it.
   limit). `--out` defaults to the current directory, not a temp directory.
   `control off` also runs after a failed grant (harmless).
 - Step 2 (coder + me): I added the full path to `mirror-vm` (it is not on PATH). Two hints taken from the template text: `hyprland-ai-mirror` when no shell is needed, and `-` for steps on stdin.
+- Step 3 (coder): the build dropped the executable bit (`-r--r--r--`), so the plan's fallback `chmod +x` was added after the `cp`; the rebuilt package has `-r-xr-xr-x mirror-vm`. `checks.session` left to CI.

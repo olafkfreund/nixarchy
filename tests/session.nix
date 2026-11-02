@@ -2009,7 +2009,13 @@ pkgs.testers.runNixOSTest {
                # Upstream's Limine default-kernel switcher (#1423). Its one
                # caller, Update > Kernel, shows only when /usr/lib/modules/*/
                # pkgbase lists two kernels, and NixOS has no such files.
-               "omarchy-kernel"]
+               "omarchy-kernel",
+               # quattro a69b19f's Slack theme chain (#1552): the Install >
+               # Service > Slack row runs nixarchy's app toggle (data/apps.nix),
+               # so nothing reaches install-service-slack, the setup that
+               # writes the launcher override, or the launcher it points at.
+               "omarchy-install-service-slack", "omarchy-setup-slack",
+               "omarchy-launch-slack"]
     # The offender list comes back from one plain shell command and the
     # filtering happens here. A first version did the allowlisting in shell
     # too, with a grep -v -x -F against a generated list, and it matched

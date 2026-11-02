@@ -132,3 +132,4 @@ Nothing else depends on it.
   `select` sees every byte (a text `readline` buffer would defeat the 60 s
   limit). `--out` defaults to the current directory, not a temp directory.
   `control off` also runs after a failed grant (harmless).
+- Step 2 (coder + me): I added the full path to `mirror-vm` (it is not on PATH). Two hints taken from the template text: `hyprland-ai-mirror` when no shell is needed, and `-` for steps on stdin.

@@ -1959,3 +1959,14 @@ override of `driver` inside the test module recurses (it has to read its
 own option's definitions); `test.extend` takes the driver from a finished
 evaluation instead. Any other check that grows past 128 KiB needs the same
 four lines.
+
+## Read a large guest file with copy_from_machine, not cat
+
+`machine.succeed("cat <file>")` streams the output back over the test
+driver's shell. For `checks.session`'s 111 KB `omarchy-menu.jsonc` that stream came
+back mangled under load twice on 2026-11-01/02. `json.loads` failed with
+`JSONDecodeError` near character 74,000, with byte-identical files, and a re-run
+passed each time. `machine.copy_from_machine(path, dir)` copies through the
+shared directory instead, and the test reads `machine.out_dir / dir / name`. It
+exists in both the 26.05 and the unstable driver; `copy_from_vm` is deprecated
+on 26.05, and the test script is type-checked.

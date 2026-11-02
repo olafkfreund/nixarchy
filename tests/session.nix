@@ -800,7 +800,10 @@ pkgs.testers.runNixOSTest {
     import base64
     # OMARCHY_PATH is a login-session variable, as the #210 block above reads it.
     menu_tree = machine.succeed("su - omarchy -c 'echo $OMARCHY_PATH'").strip()
-    menu_text = machine.succeed(f"cat {menu_tree}/default/omarchy/omarchy-menu.jsonc")
+    # Through the shared dir, not `cat`: 111 KB over the shell came back
+    # mangled under load twice (JSONDecodeError at char ~74k).
+    machine.copy_from_machine(f"{menu_tree}/default/omarchy/omarchy-menu.jsonc", "menu")
+    menu_text = (machine.out_dir / "menu" / "omarchy-menu.jsonc").read_text()
     rows = json.loads("\n".join(
         l for l in menu_text.splitlines() if not l.lstrip().startswith("//")))
     def click(row):

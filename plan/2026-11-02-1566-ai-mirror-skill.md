@@ -134,3 +134,15 @@ Nothing else depends on it.
   `control off` also runs after a failed grant (harmless).
 - Step 2 (coder + me): I added the full path to `mirror-vm` (it is not on PATH). Two hints taken from the template text: `hyprland-ai-mirror` when no shell is needed, and `-` for steps on stdin.
 - Step 3 (coder): the build dropped the executable bit (`-r--r--r--`), so the plan's fallback `chmod +x` was added after the `cp`; the rebuilt package has `-r-xr-xr-x mirror-vm`. `checks.session` left to CI.
+- Step 4 (live, p620, 2026-11-02):
+  - `nixarchy vm create mirror-test --template nixarchy-desktop` then
+    `run --detach`: the guest built quickly (shared store) and the vsock port
+    opened about 40 s later.
+  - `mirror-vm mirror-test steps.json` (`status`, `windows`, `shell_state`,
+    `screenshot`, `input` move with `"frame": "@last"`): exit 0 in 5.0 s. The
+    grant was automatic, all five steps returned `isError: false`, and a
+    1280x800 PNG was written showing the guest's bar and the agent cursor.
+  - Cleanup found one thing the skill now says: `nixarchy vm stop` returns
+    before the VM is down, and `rm` right after it refuses ("already
+    running"). It stopped within seconds; `rm` then worked.
+  - The stale `ai-mirror-ai-mirror` MCP entry on p620 was removed.

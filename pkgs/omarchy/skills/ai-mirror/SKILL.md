@@ -60,7 +60,7 @@ nixarchy vm run --detach mirror-test                         # then wait ~45 s f
 
 ## 4. Cleanup
 
-`nixarchy vm stop <name>` and `nixarchy vm rm <name>`, unless the person wants to keep it. If an `ai-mirror-<name>` MCP entry was registered, `claude mcp remove ai-mirror-<name>`.
+`nixarchy vm stop <name>`, then `nixarchy vm rm <name>`, unless the person wants to keep it. `stop` returns before the VM is down, and `rm` refuses a running VM: wait until `nixarchy vm list` shows it `stopped`. If an `ai-mirror-<name>` MCP entry was registered, `claude mcp remove ai-mirror-<name>`.
 
 ## 5. Limits
 

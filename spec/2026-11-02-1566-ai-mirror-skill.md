@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1566
 intent: intent/2026-11-02-1566-ai-mirror-skill.md
 ---

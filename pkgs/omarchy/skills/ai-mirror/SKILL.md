@@ -56,7 +56,7 @@ nixarchy vm run --detach mirror-test                         # then wait ~45 s f
 ]
 ```
 
-`"@last"` is the latest screenshot's frame id. Each screenshot is saved as `--out/NN-screenshot.png` (default `.`) and printed as a path; look at it with your image reader. Output is one JSON line per step. A tool error stops the batch (exit 1); exit 2 means the VM is not running, 3 means no grant within 30 s.
+`"@last"` is the latest screenshot's frame id. Each screenshot is saved as `--out/NN-screenshot.png` (default `.`) and printed as a path; look at it with your image reader. Output is one JSON line per step. A tool error or any other failure stops the batch (exit 1); exit 2 means the VM was never started (no CID file), 3 means no grant within 30 s. A VM that was started and then stopped still has its CID file: that fails as exit 1, "socat closed the connection". Screenshots overwrite earlier `NN-screenshot.png` files in `--out`; give each run its own directory.
 
 ## 4. Cleanup
 

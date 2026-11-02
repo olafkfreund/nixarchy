@@ -146,3 +146,13 @@ Nothing else depends on it.
     before the VM is down, and `rm` right after it refuses ("already
     running"). It stopped within seconds; `rm` then worked.
   - The stale `ai-mirror-ai-mirror` MCP entry on p620 was removed.
+- Review (fresh Opus): one must-fix. An unexpected exception exited 0,
+  because `sys.exit` in `finally` swallowed it. Fixed: any other exception
+  prints its traceback and exits 1. `"@last"` before a screenshot is refused
+  locally, a steps file that is not a list of `{"tool": …}` objects exits 1
+  before connecting, a missing `socat` gets a plain message, and socat's
+  stdin is closed quietly. `SKILL.md`: exit 2 means *never started*, and a
+  stopped VM keeps its CID and fails as exit 1. Screenshots overwrite within
+  `--out`. Checked against a dead CID: exit 1, "socat closed the connection".
+  Left: replies are matched by order, not by `id` (ai-mirror answers one
+  request at a time).

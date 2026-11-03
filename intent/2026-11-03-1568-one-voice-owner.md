@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1568
 author: olafkfreund
 ---
@@ -131,3 +131,10 @@ With both products enabled:
    directions. The alternative, each product commanding the other's daemon,
    fails three ways (premise 2). I recommend the lock-as-signal. The spec
    measures the tail on p620's speakers.
+
+## Decisions (approved 2026-11-03)
+
+All four recommendations above were accepted: no `voiceOwner` option (a warning
+when both wake words are on instead), no presets (a line in `docs/manual/ai.md`
+instead), wait for the lock with no timeout, and the speak lock doubles as the
+"someone else is speaking" signal for both listeners.

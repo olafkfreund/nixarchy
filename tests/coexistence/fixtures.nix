@@ -46,6 +46,21 @@
       environment.systemPackages = [ pkgs.ffmpeg-full ];
     };
 
+  # A user who swaps Hyprland (their own pin, a patched build). The titlebars
+  # plugin loads into the session's compositor, so it must be built against
+  # THAT one, not the flake's input (#1572). Only the pname changes, so the
+  # package is distinguishable without a rebuild.
+  hyprland-own-package =
+    { lib, pkgs, ... }:
+    {
+      # mkForce: the reference config sets it plainly, as a user's flake would.
+      programs.hyprland.package = lib.mkForce (
+        pkgs.hyprland.overrideAttrs (o: {
+          pname = o.pname + "-coexist";
+        })
+      );
+    };
+
   # A user's own connectivity check, or none: nixarchy's is mkDefault (#1428).
   nm-connectivity-own = {
     networking.networkmanager.settings.connectivity = {

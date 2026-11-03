@@ -13,10 +13,10 @@ pacman. None of that applies here, and the reasons are on the
 
 The Install menu still exists and still has every row Omarchy ships. Each row
 has been mapped to how NixOS installs the thing, beside a few apps upstream does
-not list. There are 69 apps in total:
+not list. There are 72 apps in total:
 51 are plain nixpkgs packages,
 7 are NixOS modules,
-8 are built by nixarchy itself because nixpkgs does not carry them,
+11 are built by nixarchy itself because nixpkgs does not carry them,
 and 3 have no equivalent and say so in the menu.
 
 Picking a row does not install anything. It uncomments one line in
@@ -53,6 +53,24 @@ with `journalctl --user -fu nixarchy-rebuild`. The password still comes up in
 the same dialog. A second detached rebuild is refused while one is running.
 Once its log says "Activating", let it finish: stopping it then can leave the
 system partly changed.
+
+## Omarchy's own apps
+
+Omarchy installs seven applications of its own on every machine: Omawrite,
+Omacalc, Omacut, Aether, and, since 4.5, Hype (Markdown presentations),
+Monologue (a webcam recorder) and Signed (sign and fill PDFs). nixpkgs carries
+none of them, so nixarchy builds them, and they stay off until you ask:
+
+```nix
+programs.nixarchy.omarchyApps.enable = true;
+```
+
+That turns on all seven as defaults. A line in `apps.nix` still turns any one of
+them off, and any one can be turned on alone with `programs.nixarchy.apps.hype.enable`.
+
+Two things from 4.5 come without asking: Disktree, which replaces the Disk Usage
+launcher, and the titlebars on floating workspaces. Both are part of the
+session itself.
 
 ## Finding it in the first place
 

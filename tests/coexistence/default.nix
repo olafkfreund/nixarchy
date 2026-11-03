@@ -8,6 +8,7 @@
 #   graphics.nix) use buildEnv with no ignoreCollisions -- a clash fails the
 #   BUILD, and any nixarchy assertion firing on one of these fixtures is
 #   itself a failure here: these are configurations we promise work.
+# - hyprland-own-package: the titlebars plugin follows programs.hyprland.package.
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
@@ -64,6 +65,19 @@ let
       failingMessages = map (a: a.message) failing;
     };
 
+  # The plugin must be built against the user's Hyprland. Compared by drvPath
+  # with the context discarded: this check must not build either Hyprland.
+  hyprlandCheck =
+    let
+      c = configOf fixtures.hyprland-own-package;
+      plugin = lib.findFirst (
+        p: (p.pname or "") == "omarchy-hyprland-titlebars"
+      ) null c.environment.systemPackages;
+      theirs = builtins.unsafeDiscardStringContext c.programs.hyprland.package.drvPath;
+    in
+    plugin != null
+    && lib.any (p: builtins.unsafeDiscardStringContext (p.drvPath or "") == theirs) plugin.buildInputs;
+
   nmConnectivity =
     (configOf fixtures.nm-connectivity-own).networking.networkmanager.settings.connectivity;
 
@@ -83,6 +97,17 @@ let
       '';
 
   shQuote = lib.escapeShellArg;
+
+  hyprlandScript =
+    if hyprlandCheck then
+      ''
+        echo "hyprland-own-package: ok"
+      ''
+    else
+      ''
+        echo "hyprland-own-package: FAIL omarchy-hyprland-titlebars is not built against the user's programs.hyprland.package" >&2
+        fail=1
+      '';
 
   graphicsScriptOf =
     gc:
@@ -155,6 +180,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${lib.concatMapStringsSep "\n" graphicsScriptOf graphicsChecks}
     ${ffmpegScript}
     ${nmScript}
+    ${hyprlandScript}
     ${chromiumScript}
     if [ "$fail" = 1 ]; then
       exit 1

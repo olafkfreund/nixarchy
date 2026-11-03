@@ -1339,6 +1339,8 @@ in
         }
       ) unavailable;
 
+    omarchyApps.enable = lib.mkEnableOption "Omarchy's own preinstalled applications (Omawrite, Omacalc, Omacut, Aether, Hype, Monologue, Signed), as defaults a line in apps.nix can still turn off";
+
     # ---- the per-package escape (#530) --------------------------------
     #
     # The machine follows one channel; this is how a single package comes
@@ -1505,6 +1507,11 @@ in
     (lib.mkIf cfg.enable (
       lib.mkMerge [
         appModuleConfig
+        (lib.mkIf cfg.omarchyApps.enable {
+          programs.nixarchy.apps = lib.mapAttrs (_: _: { enable = lib.mkDefault true; }) (
+            lib.filterAttrs (_: a: a.preinstall or false) available
+          );
+        })
         (lib.mkIf cfg.apps.retroarch.enable {
           environment.pathsToLink = [
             "/share/retroarch/cores"

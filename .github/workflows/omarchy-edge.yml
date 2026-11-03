@@ -481,7 +481,7 @@ jobs:
             'c: builtins.concatStringsSep " " (builtins.filter (n: builtins.substring 0 8 n == "options-") (builtins.attrNames c))') || {
             echo "::error::could not list the options-* checks"; exit 1; }
           [ -n "$opts" ] || { echo "::error::no options-* checks in the flake"; exit 1; }
-          for c in $opts session coexist plugin; do
+          for c in $opts session coexist plugin omarchy-package-ledger; do
             if [ "${c#options-}" = "$c" ] && ! host_free; then
               echo "::error::$c failed: the host never freed up"
               failed="$failed $c"

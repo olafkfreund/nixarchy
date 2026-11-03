@@ -5,9 +5,11 @@
 # places.json beside it holds Home, Work and the Wi-Fi networks linked to them.
 # Never touches the network.
 
-dir=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/settings
+# $HOME, not XDG_STATE_HOME: upstream's omarchy-weather-location and the weather panel read this exact path.
+dir=$HOME/.local/state/omarchy/settings
 weather=$dir/weather.json
 places=$dir/places.json
+netfile=$dir/location-net   # the network apply last acted on
 coords='^(-?[0-9]+(\.[0-9]+)?),(-?[0-9]+(\.[0-9]+)?)$'
 # The only keys weather.json may carry; null ones (no coordinates) are dropped.
 keep='{name,latitude,longitude} | with_entries(select(.value != null))'
@@ -37,14 +39,15 @@ place_ok() { [[ ${1:-} == home || ${1:-} == work ]] || die "expected home or wor
 
 read_places() {
   [[ -f $places ]] || { echo '{}'; return 0; }
-  jq -c 'if type == "object" then . else error("not an object") end' "$places" 2>/dev/null ||
+  jq -c 'if type == "object" and ((.wifi // {}) | type) == "object" then . else error("bad shape") end' "$places" 2>/dev/null ||
     die "$places is not valid JSON; fix or remove it"
 }
 
-# A weather.json somebody picked before places.json existed becomes Home, once.
+# A weather.json somebody picked before places.json existed becomes Home. Only
+# then: once places.json exists, a picked Work must not turn into Home.
 migrate() {
   local p new
-  [[ -f $weather ]] || return 0
+  if [[ ! -f $weather || -f $places ]]; then return 0; fi
   p=$(read_places)
   new=$(jq -c --slurpfile w "$weather" '
     if .home or ($w[0] | type) != "object" or ($w[0].name | type) != "string" or $w[0].source == "wifi"
@@ -52,16 +55,17 @@ migrate() {
   [[ -z $new ]] || write "$places" "$new"
 }
 
-# First connected Wi-Fi network's name (nmcli escapes ":" as "\:").
+# First connected Wi-Fi network's name (nmcli -t escapes ":" and "\" with a backslash).
+# LC_ALL=C: the STATE words are translated otherwise.
 current_network() {
   local line
   while IFS= read -r line; do
     if [[ $line == wifi:connected:* ]]; then
       line=${line#wifi:connected:}
-      echo "${line//\\:/:}"
+      printf '%s\n' "$line" | jq -Rr 'gsub("\\\\(?<c>.)"; .c)'
       return 0
     fi
-  done < <(nmcli -t -f TYPE,STATE,CONNECTION device 2>/dev/null || true)
+  done < <(LC_ALL=C nmcli -t -f TYPE,STATE,CONNECTION device 2>/dev/null || true)
 }
 
 show_json() {
@@ -89,6 +93,8 @@ cmd_set() {
   [[ -n ${2:-} ]] || die "a name is needed"
   if [[ -n $coord ]]; then
     [[ $coord =~ $coords ]] || die "invalid coordinates: $coord (expected lat,lon)"
+    jq -ne --argjson la "${coord%,*}" --argjson lo "${coord#*,}" '($la | fabs) <= 90 and ($lo | fabs) <= 180' >/dev/null 2>&1 ||
+      die "coordinates out of range: $coord (latitude -90..90, longitude -180..180)"
     entry=$(jq -nc --arg n "$2" --argjson la "${coord%,*}" --argjson lo "${coord#*,}" '{name: $n, latitude: $la, longitude: $lo}')
   else
     entry=$(jq -nc --arg n "$2" '{name: $n}')
@@ -119,9 +125,14 @@ cmd_now() {
 
 # On a linked network: that place, marked "source":"wifi". Anywhere else: undo
 # only what Wi-Fi wrote. A place somebody picked is never touched.
+# Only when the network CHANGED since the last time (location-net), so a place
+# picked on a linked network holds until the user really moves. `force` (link
+# and unlink) ignores that.
 cmd_apply() {
-  local net link="" e=""
+  local net last="" link="" e=""
   net=$(current_network)
+  if [[ -f $netfile ]]; then last=$(<"$netfile"); fi
+  if [[ ${1:-} != force && -f $netfile && $net == "$last" ]]; then return 0; fi
   [[ -z $net ]] || link=$(read_places | jq -r --arg n "$net" '.wifi[$n] // empty')
   [[ -z $link ]] || e=$(read_places | jq -c --arg k "$link" ".[\$k] // empty | $keep | .source = \"wifi\"")
   if [[ -n $e ]]; then
@@ -129,6 +140,7 @@ cmd_apply() {
   elif [[ -f $weather && $(jq -r '.source // empty' "$weather" 2>/dev/null || true) == wifi ]]; then
     rm -f "$weather"
   fi
+  write "$netfile" "$net"
 }
 
 cmd_wifi() {
@@ -141,24 +153,25 @@ cmd_wifi() {
     p=$(read_places)
     jq -e --arg k "$2" '.[$k]' <<<"$p" >/dev/null || die "$2 is not set"
     write "$places" "$(jq -c --arg n "$net" --arg k "$2" '.wifi[$n] = $k' <<<"$p")"
-    cmd_apply
+    cmd_apply force
     ;;
   unlink)
     [[ -n ${2:-} ]] || die "a network name is needed"
     p=$(read_places)
     write "$places" "$(jq -c --arg n "$2" 'del(.wifi[$n])' <<<"$p")"
-    cmd_apply
+    cmd_apply force
     ;;
   *) die "expected link or unlink" ;;
   esac
 }
 
 # Follows NetworkManager and re-applies when a connection comes or goes. A wired
-# desktop has no Wi-Fi device, so it exits 0 at once. The monitor ending is a
-# failure (NetworkManager restarted), so systemd starts it again.
+# desktop has no Wi-Fi device, so it exits 0 at once; nmcli itself failing is a
+# failure. The monitor ending is a failure too (NetworkManager restarted), so
+# systemd starts it again.
 cmd_watch() {
   local line types
-  types=$(nmcli -t -f TYPE device 2>/dev/null || true)
+  types=$(LC_ALL=C nmcli -t -f TYPE device 2>/dev/null) || die "nmcli failed"
   [[ $'\n'$types$'\n' == *$'\n'wifi$'\n'* ]] || exit 0
   cmd_apply
   while IFS= read -r line; do
@@ -166,7 +179,7 @@ cmd_watch() {
     # Debounce: one apply once the burst has been quiet for 2 s.
     while IFS= read -r -t 2 line; do :; done
     cmd_apply
-  done < <(nmcli -t monitor)
+  done < <(LC_ALL=C nmcli -t monitor)
   die "nmcli monitor ended"
 }
 

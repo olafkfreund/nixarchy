@@ -45,6 +45,8 @@ assert pkgs.lib.assertMsg (
   && unit.Service.Restart == "on-failure"
   && unit.Service.RestartSec == 30
   && unit.Install.WantedBy == [ "graphical-session.target" ]
+  && unit.Unit.StartLimitBurst == 5
+  && unit.Unit.StartLimitIntervalSec == 600
 ) "nixarchy-location-watch unit is wrong: ${builtins.toJSON unit}";
 pkgs.runCommand "nixarchy-location-runs"
   {
@@ -65,13 +67,13 @@ pkgs.runCommand "nixarchy-location-runs"
     nmcli() {
       case "$*" in
         "-t monitor") [ -z "$FLIP" ] || echo "$FLIP" >"$TMPDIR/flip"; printf '%b' "$MON" ;;
-        "-t -f TYPE device") echo ethernet; [ -z "$HASWIFI" ] || echo wifi ;;
-        *) n=$NET; [ ! -e "$TMPDIR/flip" ] || n=$(cat "$TMPDIR/flip")
+        "-t -f TYPE device") [ -z "$NMFAIL" ] || return 8; echo ethernet; [ -z "$HASWIFI" ] || echo wifi ;;
+        *) echo x >>"$TMPDIR/calls"; n=$NET; [ ! -e "$TMPDIR/flip" ] || n=$(cat "$TMPDIR/flip")
            echo "ethernet:connected:Wired"; [ -z "$n" ] || echo "wifi:connected:$n" ;;
       esac
     }
     export -f nmcli
-    export NET="" HASWIFI=1 MON=""
+    export NET="" HASWIFI=1 MON="" NMFAIL=""
 
     fails=0
     eq() { # eq <what> <got> <want>
@@ -134,8 +136,29 @@ pkgs.runCommand "nixarchy-location-runs"
     $loc --json >/dev/null
     eq "a wifi-written file is not a Home" "$([ -e $s/places.json ] && echo yes || echo no)" no
 
-    # apply
+    # a picked Work is not turned into Home once places.json exists
     rm -f $s/weather.json $s/places.json
+    $loc set work Porto
+    $loc now work
+    eq "picked Work does not become Home" "$($loc --json | jq -c '[.home,.work.name,.now.name]')" '[null,"Porto","Porto"]'
+
+    # coordinates out of range, a places.json of the wrong shape, a weather.json that is not JSON
+    before=$(cat $s/places.json)
+    for bad in 91,0 -91,0 0,181 0,-181; do
+      if $loc set home Nowhere $bad 2>/dev/null; then echo "  FAILED   out-of-range $bad accepted"; fails=$((fails + 1)); fi
+    done
+    eq "out-of-range coordinates leave places.json alone" "$(cat $s/places.json)" "$before"
+    $loc set home Edge 90,-180
+    eq "the limits themselves are fine" "$(j .home.latitude $s/places.json)" 90
+    echo '{"wifi":[1]}' > $s/places.json
+    if $loc --json 2>/dev/null; then echo "  FAILED   a places.json with a non-object wifi was accepted"; fails=$((fails + 1)); fi
+    echo 'not json' > $s/weather.json
+    rm -f $s/places.json
+    eq "weather.json that is not JSON is not chosen" "$($loc --json | jq -c '[.chosen,.how]')" '[false,"auto"]'
+    rm -f $s/weather.json
+
+    # apply
+    rm -f $s/weather.json $s/places.json $s/location-net
     $loc set home Lisbon 38.72,-9.14
     $loc set work Porto
     NET="Casa Wi-Fi"
@@ -145,8 +168,13 @@ pkgs.runCommand "nixarchy-location-runs"
     NET="Hotspot"; $loc apply
     eq "unlinked network clears a wifi place" "$([ -e $s/weather.json ] && echo yes || echo no)" no
     $loc now work; NET="Hotspot"; $loc apply
-    eq "unlinked network leaves a picked place" "$(j . $s/weather.json)" '{"name":"Porto"}'
+    eq "same network again leaves a picked place" "$(j . $s/weather.json)" '{"name":"Porto"}'
+    NET="Hotspot2"; $loc apply
+    eq "a new unlinked network leaves a picked place" "$(j . $s/weather.json)" '{"name":"Porto"}'
     NET="Casa Wi-Fi"; $loc apply
+    $loc now work; $loc apply
+    eq "a pick on the linked network holds (same network)" "$(j . $s/weather.json)" '{"name":"Porto"}'
+    NET="Hotspot"; $loc apply; NET="Casa Wi-Fi"; $loc apply
     eq "linked network overrides with source wifi" "$(j .source $s/weather.json)" '"wifi"'
     NET=""; $loc apply
     eq "off Wi-Fi clears a wifi place" "$([ -e $s/weather.json ] && echo yes || echo no)" no
@@ -160,21 +188,30 @@ pkgs.runCommand "nixarchy-location-runs"
     rm -f $s/weather.json $s/places.json
     $loc set home Lisbon 38.72,-9.14
     NET="Casa Wi-Fi"; $loc wifi link home; rm -f $s/weather.json
-    HASWIFI="" $loc watch; rc=$?
+    rc=0; HASWIFI="" $loc watch || rc=$?
     eq "watch: no Wi-Fi device exits 0" "$rc $([ -e $s/weather.json ] && echo applied || echo idle)" "0 idle"
+    rc=0; NMFAIL=1 $loc watch 2>/dev/null || rc=$?
+    eq "watch: nmcli failing exits 1" "$rc" 1
+    rm -f $s/location-net
     # watch: applies at start, again on a connection event, and exits 1 when the monitor ends
     rc=0; MON="Networkmanager is now in the 'connecting' state\nwlan0: connecting (prepare)\n" $loc watch 2>/dev/null || rc=$?
     eq "watch: applies once at start; monitor ending is a failure" "$rc $(j .source $s/weather.json)" '1 "wifi"'
     # the sample lines of a connection change: the network changes when the monitor
     # starts, so only the event-triggered apply (one, for the whole burst) can see it
     rm -f $s/weather.json "$TMPDIR/flip"; NET="Hotspot"
+    rm -f "$TMPDIR/calls"
     rc=0; FLIP="Casa Wi-Fi" MON="wlan0: disconnected\nwlan0: using connection 'Casa Wi-Fi'\nwlan0: connected\n'Casa Wi-Fi' is now the primary connection\nConnectivity is now 'full'\n" $loc watch 2>/dev/null || rc=$?
     eq "watch: a connection event re-applies" "$rc $(j .name $s/weather.json)" '1 "Lisbon"'
+    eq "watch: a burst of 5 lines is one apply (plus the one at start)" "$(wc -l < "$TMPDIR/calls")" 2
     # lines that are not connection changes do not
     rm -f $s/weather.json "$TMPDIR/flip"
     rc=0; FLIP="Casa Wi-Fi" MON="wlan0: device state change\nsomething else\n" $loc watch 2>/dev/null || rc=$?
     eq "watch: unrelated lines do not apply" "$rc $([ -e $s/weather.json ] && echo applied || echo idle)" "1 idle"
-    rm -f "$TMPDIR/flip"; NET=""
+    # a place picked on a linked network holds through events on that same network
+    rm -f "$TMPDIR/flip"; NET="Casa Wi-Fi"; $loc set work Porto; $loc wifi link home; $loc now work
+    rc=0; MON="wlan0: connected\n'Casa Wi-Fi' is now the primary connection\n" $loc watch 2>/dev/null || rc=$?
+    eq "watch: a pick holds through events on the same network" "$rc $(j . $s/weather.json)" '1 {"name":"Porto"}'
+    NET=""
     $loc set work Porto
 
     # a network name with a colon survives nmcli's escaping
@@ -182,6 +219,10 @@ pkgs.runCommand "nixarchy-location-runs"
     export -f nmcli
     $loc wifi link work
     eq "colon in the network name" "$(j '.wifi|keys' $s/places.json)" '["Cafe: Main","Casa Wi-Fi"]'
+    nmcli() { echo 'wifi:connected:Back\\slash\: and colon'; }
+    export -f nmcli
+    $loc wifi link home
+    eq "backslash in the network name" "$(j '.wifi|keys|map(select(startswith("Back")))' $s/places.json)" '["Back\\slash: and colon"]'
 
     # a damaged places.json is reported, not overwritten
     echo 'not json' > $s/places.json

@@ -1403,6 +1403,9 @@ in
       nixarchy-location-watch = {
         Unit = {
           Description = "Set the location from the Wi-Fi network (nixarchy-location)";
+          # A machine without NetworkManager fails each start; give up after five.
+          StartLimitIntervalSec = 600;
+          StartLimitBurst = 5;
           After = [ "graphical-session.target" ];
           PartOf = [ "graphical-session.target" ];
         };

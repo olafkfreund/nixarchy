@@ -503,7 +503,7 @@ let
         "setup.location" = {
           icon = "󰍎";
           label = "Location";
-          action = "[ \"$(omarchy-shell shell summon omarchy.weather)\" != unknown ] || omarchy-launch-floating-terminal-with-presentation nixarchy-location";
+          action = "out=$(omarchy-shell shell summon omarchy.weather) && [ \"$out\" != unknown ] || omarchy-launch-floating-terminal-with-presentation nixarchy-location";
           description = "Where the weather and Nixi think you are";
           aliases = [
             "weather"

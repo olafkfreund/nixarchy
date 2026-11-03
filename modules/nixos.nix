@@ -1400,14 +1400,16 @@ in
         # /run/current-system/sw/share/wayland-sessions, and that is where greetd
         # greeters actually look -- so the session package goes here as well.
         ++ map lib.lowPrio (lib.optional cfg.session omarchySession)
-        # Not lowPrio: nothing else ships this path. Built against the session's
-        # own Hyprland, so a plugin ABI mismatch cannot happen (#1572).
+        # Built against the session's own Hyprland, so its ABI matches (#1572).
+        # lowPrio like everything else here: a user's own copy wins (#1167).
         ++ lib.optional cfg.session (
-          pkgs.callPackage ../pkgs/apps/omarchy-hyprland-titlebars.nix {
-            inherit (pkgs.hyprlandPlugins.override { hyprland = config.programs.hyprland.package; })
-              mkHyprlandPlugin
-              ;
-          }
+          lib.lowPrio (
+            pkgs.callPackage ../pkgs/apps/omarchy-hyprland-titlebars.nix {
+              inherit (pkgs.hyprlandPlugins.override { hyprland = config.programs.hyprland.package; })
+                mkHyprlandPlugin
+                ;
+            }
+          )
         )
         ++ map lib.lowPrio (
           with pkgs;

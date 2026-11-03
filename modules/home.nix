@@ -1022,6 +1022,16 @@ in
         # Why: modules/AGENTS.md#whether-there-is-an-omarchy-session-entry-to-log-i
         hasOmarchySession =
           (osConfig.programs.nixarchy.enable or false) && (osConfig.programs.nixarchy.session or true);
+
+        # `or` does not catch a null value, so the wake word is bound and tested.
+        bothWake =
+          config.services.nixi.companion.enable
+          && (
+            let
+              w = config.programs.omarchy-voice.settings.ears.wake_word or null;
+            in
+            w != null && w != ""
+          );
       in
       lib.optional (ownsHyprConfig && !hasOmarchySession) ''
         nixarchy: ~/.config/hypr is already managed by Home Manager
@@ -1056,7 +1066,19 @@ in
 
             Follow home-manager's unstable branch (see the manual's "Stable or
             unstable"), or turn programs.nixarchy.dictation off.
-          '';
+          ''
+      ++ lib.optional bothWake ''
+        nixarchy: Oma and Nixi's companion are both listening for a wake word.
+
+        That is two idle microphones and two speech-to-text models, and the
+        companion listens for its own word by default (from its config.json).
+        They share one floor, so only one speaks at a time and each ignores
+        what it hears during the other's turn -- but both still listen.
+
+        If you want one voice, turn off programs.omarchy-voice's
+        ears.wake_word or services.nixi.companion.enable. The manual's
+        "Both voices on one desktop" has the rest.
+      '';
 
     home = {
       # The runtime dependencies go in only when the NixOS module is not

@@ -1564,6 +1564,20 @@ let
         on = !(hasVoice defaultHomeOn) && defaultHomeOn.programs ? omarchy-voice;
         off = hasVoice noDefaultsHome || hasVoice defaultHome || hasVoice fixtureNixarchyOff;
       };
+    # Both wake words on is a choice worth a warning, not an error (#1568).
+    # `off` varies each half in turn, so neither alone may trigger it.
+    bothVoicesWarn =
+      let
+        warned = h: builtins.any (w: pkgs.lib.hasInfix "both listening for a wake word" w) h.warnings;
+        hm = companion: wake: {
+          services.nixi.companion.enable = companion;
+          programs.omarchy-voice.settings.ears.wake_word = wake;
+        };
+      in
+      {
+        on = warned (homeOn { } (hm true "oma"));
+        off = warned (homeOn { } (hm false "oma")) || warned (homeOn { } (hm true ""));
+      };
     # #942: dictation installed voxtype and created no daemon, so F9 fired
     # into nothing. Two cases: the daemon exists and its config stays the
     # user's, and the ExecStart is a path that survives an upgrade.

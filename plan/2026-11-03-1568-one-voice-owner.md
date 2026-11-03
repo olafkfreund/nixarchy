@@ -313,6 +313,15 @@ re-locate each by the named function before editing.
   - nothing persists on a machine except the lock file in
     `$XDG_RUNTIME_DIR`, which disappears at logout.
 
+## Deviations
+
+- Step 7, `pkgs/verify.sh`: the script sees runtime state, not Nix options, so
+  "both enabled" is read as `omarchy-voice.service` active and
+  `nixi-companion` on PATH.
+- Step 7, `modules/home.nix`: the coder's `++` followed the dictation
+  warning's closing `'';`, which failed to parse. Fixed by moving the `;` to
+  the end of the list.
+
 ## Review
 
 Draft plan, codex (gpt-6-sol) and agy (model not reported). Every finding was

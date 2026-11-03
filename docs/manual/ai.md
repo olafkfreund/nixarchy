@@ -310,6 +310,26 @@ o.bind("SUPER + ALT + SHIFT + S", "Nixi companion: listen", "nixi-companion list
 
 What it leaves out is in the [README](https://github.com/olafkfreund/nixi-nixarchy#the-snowflake-companion-optional).
 
+### Both voices on one desktop
+
+Oma (`programs.nixarchy.voice`) and the snowflake companion can both listen
+for a wake word:
+
+```nix
+programs.omarchy-voice.settings.ears.wake_word = "oma";
+services.nixi.companion.enable = true;
+```
+
+They share one floor, a lock file in `$XDG_RUNTIME_DIR`
+(`nixarchy-voice-floor.lock`). Whoever is speaking holds it, so only one voice
+talks at a time, and each ignores what it hears during the other's turn. If a
+speaker crashes, the floor frees itself.
+
+Both are still listening, which costs two idle microphones and two
+speech-to-text models, and the companion listens for its own word by default.
+With both on, nixarchy warns at build time. For one voice, switch off one of
+the two options above.
+
 ### If you installed Claude some other way
 
 [Nixi's panel](#nixi-on-super--h) — the one `SUPER + H` opens — talks to agents over **ACP**. Claude

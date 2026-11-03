@@ -477,6 +477,14 @@ else
   fi
 fi
 
+# Information only: the floor both voices share (#1568). Never a failure.
+if systemctl --user is-active omarchy-voice.service >/dev/null 2>&1 \
+  && command -v nixi-companion >/dev/null 2>&1; then
+  floor="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nixarchy-voice-floor.lock"
+  say_dim "voice floor: $floor"
+  say_dim "floor line: $(cat "$floor" 2>/dev/null || echo '(no file yet)')"
+fi
+
 # ---- bluetooth -----------------------------------------------------------
 # The checks cover the service configuration; only hardware can show whether
 # BlueZ returns to non-pairable after the temporary pair agent exits.

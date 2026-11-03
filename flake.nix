@@ -171,7 +171,7 @@
     # Pinned to a COMMIT: a branch is not a version. (nixi above tracks its
     # branch by decision, #1432; this input has not been through that call.)
     nixarchy-voice = {
-      url = "github:olafkfreund/nixarchy-voice/0231774e529521e158b27d932684871740fcd892";
+      url = "github:olafkfreund/nixarchy-voice/2bcba434b9fc402117db0c482fb9277bcbb8ea7d";
       inputs.nixpkgs.follows = "nixpkgs";
       # Voice types through ai-mirror's input helper; one ai-mirror, not two.
       inputs.ai-mirror.follows = "ai-mirror";

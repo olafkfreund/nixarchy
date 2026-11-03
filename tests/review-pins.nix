@@ -26,6 +26,11 @@ let
     "ttfx"
     "omarchy-speedtest"
     "omarchy-screensaver"
+    "hype"
+    "monologue"
+    "signed"
+    "omarchy-hyprland-titlebars"
+    "disktree"
   ];
 in
 pkgs.runCommand "nixarchy-review-pins"

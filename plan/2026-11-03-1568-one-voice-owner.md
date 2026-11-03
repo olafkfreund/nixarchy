@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1568
 spec: spec/2026-11-03-1568-one-voice-owner.md
 coders:

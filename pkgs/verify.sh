@@ -1368,6 +1368,50 @@ else
   if [ -n "${ps_error:-}" ]; then rm -f "$ps_error"; fi
 fi
 
+# ---- Local model runner (agent-local) --------------------------------------
+# Whether a rootless container reaches the GPU the way omarchy-local-ai starts
+# its engines (#1577). No VM can answer this: it needs a real card. Each vendor
+# runs only where its hardware is present, and the images are pinned by digest
+# so a moved tag cannot turn a pass into a fail.
+head_ "Local model runner"
+if ! command -v podman >/dev/null 2>&1; then
+  hmm "podman not on PATH" "turn on programs.nixarchy.services.agent-local.enable to test the GPU path"
+else
+  rocm_image="docker.io/rocm/rocm-terminal@sha256:72b323c5d56c511ea75f7353d0fee04e637390dd4874d414020284627a658014"
+  cuda_image="docker.io/nvidia/cuda@sha256:c87e78933f4c16e3272123bf2f75537306596d0fbaa395a29696a22786e5ee0e"
+  ran_gpu=0
+
+  if [ -e /dev/kfd ]; then
+    ran_gpu=1
+    if out=$(timeout 600 podman run --rm --device /dev/kfd --device /dev/dri --group-add keep-groups "$rocm_image" rocminfo 2>&1); then
+      targets=$(printf '%s\n' "$out" | awk '/Name:[[:space:]]+gfx/ { print $2 }' | sort -u | tr '\n' ' ')
+      if [ -n "$targets" ]; then
+        ok "AMD: rocminfo in a container" "$targets"
+      else
+        bad "AMD: rocminfo listed no gfx target" "$(printf '%s' "$out" | tail -1)"
+      fi
+    else
+      bad "AMD: rocminfo in a container" "$(printf '%s' "$out" | tail -1)"
+    fi
+  fi
+
+  if [ -e /proc/driver/nvidia ]; then
+    ran_gpu=1
+    if out=$(timeout 600 podman run --rm --read-only --cap-drop all --security-opt no-new-privileges \
+      --ulimit memlock=-1:-1 --device nvidia.com/gpu=all "$cuda_image" \
+      sh -c 'nvidia-smi && ls /dev/nvidia-uvm' 2>&1); then
+      ok "NVIDIA: nvidia-smi in a container" "$(printf '%s\n' "$out" | awk '/NVIDIA-SMI/ { print $3 " " $4 " " $5; exit }')"
+    else
+      bad "NVIDIA: nvidia-smi in a container" "$(printf '%s' "$out" | tail -1)"
+      say_dim "needs the CDI spec (nvidia.com/gpu): hardware.nvidia-container-toolkit, written at boot"
+    fi
+  fi
+
+  if [ "$ran_gpu" = 0 ]; then
+    hmm "no AMD (/dev/kfd) or NVIDIA (/proc/driver/nvidia) GPU here" "nothing to test"
+  fi
+fi
+
 # ---- summary -------------------------------------------------------------
 printf '\n%s%s passed, %s failed, %s worth a look%s\n' \
   "$bold" "$pass" "$fail" "$note" "$off"

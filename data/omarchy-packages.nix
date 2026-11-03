@@ -213,6 +213,9 @@
   "omarchy-nvim" = {
     nix = "omarchy-nvim-config";
   };
+  "omarchy-screensaver" = {
+    nix = "nixarchy-apps.omarchy-screensaver";
+  };
   "omasnap" = {
     nix = "nixarchy-apps.omasnap";
   };
@@ -424,6 +427,9 @@
   };
 
   # ── Arch-only tooling and packaging ───────────────────────────────────────
+  "omarchy-local-ai" = {
+    skip = "Not packaged yet: the local model runner needs Podman and NVIDIA CDI as NixOS options. Tracked in #1577.";
+  };
   "autoconf-archive" = {
     skip = "Arch build dependency; not installed by default.";
   };
@@ -468,6 +474,21 @@
   };
 
   # ── Hardware this port does not target ────────────────────────────────────
+  "asus-zenbook-a16-audio" = {
+    skip = "ASUS Zenbook A16 speaker quirk from Omarchy's Arch repo; a host with one carries it in its own config or nixos-hardware.";
+  };
+  "asus-zenbook-a16-firmware" = {
+    skip = "ASUS Zenbook A16 firmware from Omarchy's Arch repo; not targeted.";
+  };
+  "iptsd" = {
+    skip = "Surface touch and pen daemon; a Surface host gets it from nixos-hardware's microsoft-surface modules, not from this port.";
+  };
+  "surface-pro-11-sensors" = {
+    skip = "Surface Pro 11 (Snapdragon) sensors; aarch64 hardware, not targeted.";
+  };
+  "surface-pro-11-support" = {
+    skip = "Surface Pro 11 (Snapdragon) board support; aarch64 hardware, not targeted.";
+  };
   "apple-bcm-firmware-fetcher" = {
     skip = "Apple Silicon hardware; this port targets x86_64.";
   };

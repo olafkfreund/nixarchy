@@ -9,6 +9,8 @@
 #   BUILD, and any nixarchy assertion firing on one of these fixtures is
 #   itself a failure here: these are configurations we promise work.
 # - hyprland-own-package: the titlebars plugin follows programs.hyprland.package.
+# - podman-own-config, nvidia-ctk-own: agent-local yields to the user's podman
+#   and toolkit settings (#1577).
 # - systempkg-own-ffmpeg: environment.systemPackages' buildEnv sets
 #   ignoreCollisions = true, so a clash resolves silently by meta.priority
 #   then order. The user's own ffmpeg-full must win over nixarchy's ffmpeg.
@@ -96,6 +98,35 @@ let
         fail=1
       '';
 
+  # agent-local (#1577): their podman and their toolkit choice stand, and no
+  # nixarchy assertion fires on either machine.
+  agentLocalCheck =
+    name: holds:
+    let
+      c = configOf fixtures.${name};
+      failing = builtins.filter (a: !a.assertion) c.assertions;
+    in
+    if failing != [ ] then
+      ''
+        echo ${shQuote "${name}: FAIL nixarchy assertion fired: ${lib.concatStringsSep "; " (map (a: a.message) failing)}"} >&2
+        fail=1
+      ''
+    else if holds c then
+      ''
+        echo ${shQuote "${name}: ok"}
+      ''
+    else
+      ''
+        echo ${shQuote "${name}: FAIL the user's own setting did not stand"} >&2
+        fail=1
+      '';
+  agentLocalScripts = [
+    (agentLocalCheck "podman-own-config" (
+      c: c.virtualisation.podman.enable && c.virtualisation.podman.dockerCompat
+    ))
+    (agentLocalCheck "nvidia-ctk-own" (c: !c.hardware.nvidia-container-toolkit.enable))
+  ];
+
   shQuote = lib.escapeShellArg;
 
   hyprlandScript =
@@ -182,6 +213,7 @@ pkgs.runCommand "nixarchy-coexistence"
     ${nmScript}
     ${hyprlandScript}
     ${chromiumScript}
+    ${lib.concatStrings agentLocalScripts}
     if [ "$fail" = 1 ]; then
       exit 1
     fi

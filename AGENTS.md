@@ -955,6 +955,16 @@ where every new row reads as stale. So: rows plus `flake.nix`'s two copies
 (the input `url` and `omarchyVersion`) plus `flake.lock`, in the carry, and
 then dispatch.
 
+**And a run that does not start from the candidate deletes the carry.** A
+scheduled run, or a dispatch without `from_candidate=true`, starts from
+`edge`, and when it publishes it force-pushes `edge-candidate`. Any carry
+pushed there and not yet promoted is gone, and nothing says so. On #1578, two
+carries (the quattro `ae64a4b` pin and the Herdr menu rows) vanished under a
+plain dispatch, and that run fell back to the old pin for the very reason the
+carries fixed. While a carry waits, dispatch only with `from_candidate=true`.
+Before trusting a candidate, `git show origin/edge-candidate:<file>` the carry,
+and cherry-pick it back if it is gone.
+
 ## 9. Territory, and the failure no single PR can see
 
 When several agents work this repo at once, each PR should name the files it

@@ -544,6 +544,16 @@
     preinstall = true;
     arch = "monologue";
   };
+  omarchy-local-ai = {
+    # Omarchy's local model runner (rootless Podman); the system side is
+    # programs.nixarchy.services.agent-local (#1577).
+    label = "Omarchy Local AI";
+    category = "Utility";
+    attr = "omarchy-local-ai";
+    ours = true;
+    preinstall = true;
+    arch = "omarchy-local-ai";
+  };
   signed = {
     label = "Signed";
     category = "Utility";

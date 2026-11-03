@@ -28,6 +28,7 @@ let
     "omarchy-screensaver"
     "hype"
     "monologue"
+    "omarchy-local-ai"
     "signed"
     "omarchy-hyprland-titlebars"
     "disktree"

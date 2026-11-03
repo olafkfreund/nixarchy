@@ -446,6 +446,7 @@ let
     "hype"
     "monologue"
     "signed"
+    "omarchy-local-ai"
   ];
 
   hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;
@@ -2218,6 +2219,43 @@ let
   };
 
   casesG = {
+    # ---- #1577: Omarchy's local model runner, both ways ----
+    agentLocalGroups = {
+      on = agentLocalGroups agentLocalAmd;
+      off = agentLocalGroups agentLocalOff;
+    };
+    agentLocalMemlockLogin = {
+      on = agentLocalMemlock agentLocalAmd;
+      off = agentLocalMemlock agentLocalOff;
+    };
+    agentLocalEngine = {
+      on = hasPname agentLocalAmd "omarchy-local-ai";
+      off = hasPname agentLocalOff "omarchy-local-ai";
+    };
+    agentLocalVerifyMarker = {
+      on = agentLocalAmd.environment.etc ? "nixarchy/agent-local";
+      off = agentLocalOff.environment.etc ? "nixarchy/agent-local";
+    };
+    agentLocalPodman = {
+      on = agentLocalAmd.virtualisation.podman.enable;
+      off = agentLocalOff.virtualisation.podman.enable;
+    };
+    # No NVIDIA driver declared (amdgpu): no CDI generator, which nixpkgs would assert on.
+    agentLocalToolkitOnNvidia = {
+      on = agentLocalNvidia.hardware.nvidia-container-toolkit.enable;
+      off = agentLocalAmd.hardware.nvidia-container-toolkit.enable;
+    };
+    agentLocalToolkitOnDatacenter = {
+      on = agentLocalDatacenter.hardware.nvidia-container-toolkit.enable;
+      off = agentLocalOff.hardware.nvidia-container-toolkit.enable;
+    };
+    # The user's own `false` wins over our mkDefault, and says so.
+    agentLocalToolkitTheirs = {
+      on =
+        !agentLocalToolkitOff.hardware.nvidia-container-toolkit.enable
+        && agentLocalWarned agentLocalToolkitOff;
+      off = agentLocalWarned agentLocalNvidia || agentLocalWarned agentLocalAmd;
+    };
     # ---- #622: the cache appears on the NVIDIA path and nowhere else ----
     cudaCacheSubstituter = {
       on = builtins.elem cudaUrl nvidiaHost.nix.settings.substituters;
@@ -3087,6 +3125,45 @@ let
     services.xserver.videoDrivers = [ "nvidia" ];
     programs.nixarchy.binaryCaches = false;
   };
+
+  # ---- agent-local: Omarchy's local model runner (#1577) ----
+  #
+  # One machine per row of the plan. The user is set because every grant names
+  # one; the NVIDIA rows differ only in how the driver is declared.
+  agentLocalWith =
+    extra:
+    configBeside {
+      imports = [
+        {
+          programs.nixarchy = {
+            user = "someone";
+            services.agent-local.enable = true;
+          };
+        }
+        extra
+      ];
+    };
+  agentLocalOff = configBeside { programs.nixarchy.user = "someone"; };
+  agentLocalAmd = agentLocalWith { services.xserver.videoDrivers = [ "amdgpu" ]; };
+  agentLocalNvidia = agentLocalWith { services.xserver.videoDrivers = [ "nvidia" ]; };
+  agentLocalDatacenter = agentLocalWith { hardware.nvidia.datacenter.enable = true; };
+  agentLocalToolkitOff = agentLocalWith {
+    services.xserver.videoDrivers = [ "nvidia" ];
+    hardware.nvidia-container-toolkit.enable = false;
+  };
+  agentLocalMemlock =
+    cfg:
+    builtins.any (
+      l: l.domain == "someone" && l.item == "memlock" && l.type == "-" && l.value == "unlimited"
+    ) cfg.security.pam.loginLimits;
+  agentLocalGroups =
+    cfg:
+    builtins.all (g: builtins.elem g cfg.users.users.someone.extraGroups) [
+      "render"
+      "video"
+    ];
+  agentLocalWarned =
+    cfg: builtins.any (w: pkgs.lib.hasInfix "NVIDIA models cannot start" w) cfg.warnings;
 
   # ---- models off the root filesystem (#624) ----
   #

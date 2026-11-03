@@ -673,6 +673,22 @@
           text = builtins.readFile ./pkgs/explain.sh;
         };
 
+        # `nixarchy-location` -- Home, Work and the Wi-Fi networks linked to
+        # them, written into the weather.json the bar already reads. In the
+        # overlay for the same reason as nixarchy-explain.
+        nixarchy-location = final.writeShellApplication {
+          name = "nixarchy-location";
+          # jq for every JSON read and write, nmcli for the current network;
+          # undeclared, a machine without them would report "no network", not
+          # "missing command" (the vainfo trap in pkgs/AGENTS.md).
+          runtimeInputs = with final; [
+            coreutils
+            jq
+            networkmanager
+          ];
+          text = builtins.readFile ./pkgs/location.sh;
+        };
+
         nixarchy-verify = final.writeShellApplication {
           name = "nixarchy-verify";
           runtimeInputs = with final; [
@@ -1183,6 +1199,9 @@
           # the moment someone needs it is the moment their rebuild will not
           # complete.
           explain = pkgsFor.${system}.nixarchy-explain;
+
+          # `nixarchy-location` -- see pkgs/location.sh.
+          location = pkgsFor.${system}.nixarchy-location;
 
           # `nix run .#devenv-presets` -- every template the Dev environments
           # plugin ships, scaffolded with a real devenv and evaluated (#802).
@@ -2207,6 +2226,15 @@
 
           # The packaged nixarchy-verify reaches its summary on a machine with
           # nothing (#1416). See tests/verify-runs.nix.
+          # The packaged nixarchy-location against a fake nmcli and a private
+          # HOME. See tests/location.nix.
+          location = import ./tests/location.nix {
+            inherit inputs;
+            pkgs = pkgsFor.${system};
+            inherit (self.packages.${system}) location;
+            omarchy = self.packages.${system}.omarchy;
+          };
+
           verify-runs = import ./tests/verify-runs.nix {
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) verify;
@@ -2402,6 +2430,9 @@
           # back out of the three agent configs, and leaves one the user wrote
           # (#773). The real package against fixtures, both cases.
           ai-mirror-mcp-remove = import ./tests/ai-mirror-mcp-remove.nix { pkgs = pkgsFor.${system}; };
+          # Run mirror-vm against a fake guest to check batch references and
+          # control release without booting a VM (#1580).
+          mirror-vm = import ./tests/mirror-vm.nix { pkgs = pkgsFor.${system}; };
           skills-relink = import ./tests/skills-relink.nix { pkgs = pkgsFor.${system}; };
           robustness-modules = import ./tests/robustness-modules.nix { pkgs = pkgsFor.${system}; };
           home-writers-dry-run = import ./tests/home-writers-dry-run.nix {

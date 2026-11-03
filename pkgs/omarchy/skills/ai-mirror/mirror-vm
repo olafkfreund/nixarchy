@@ -4,13 +4,19 @@ import argparse, base64, json, os, select, subprocess, sys, time, traceback
 
 PORT = 7000
 TIMEOUT = 60  # seconds per response
+MARKERS = {'frame': '@last', 'generation': '@generation', 'window': '@window'}
+# Arg keys that take a marker, and which ref fills them: the window tool names
+# its target `address`, so "@window" fills that too.
+SLOTS = {**{k: k for k in MARKERS}, 'address': 'window'}
 
 
 def main():
     ap = argparse.ArgumentParser(description=(
         'Run steps against the ai-mirror MCP server in a nixarchy microVM. '
         'steps is a JSON array of {"tool": str, "args": {...}}; "-" reads stdin. '
-        'args.frame "@last" means the latest screenshot. One JSON line per step. '
+        'Markers: args.frame "@last" is the latest screenshot, args.generation '
+        '"@generation" the latest generation seen, args.window (and the address of a window step) '
+        '"@window" the window the latest launch returned. One JSON line per step. '
         'Exit: 0 ok, 1 tool error, 2 VM not running, 3 no grant.'))
     ap.add_argument('name', help='VM name')
     ap.add_argument('steps', help='steps.json path or -')
@@ -58,13 +64,24 @@ def main():
         r = rpc('tools/call', {'name': tool, 'arguments': args})['result']
         return json.loads(r['content'][0]['text']), r.get('isError', False), r['content']
 
-    code, last = 0, None
+    code = 0
+    refs = {k: None for k in MARKERS}
+    why = {'frame': 'before any screenshot', 'generation': 'no generation seen yet',
+           'window': 'before any launch'}
+
+    def see_generation(body):
+        g = body.get('generation')
+        if isinstance(g, int) and not isinstance(g, bool):
+            refs['generation'] = g
+
     try:
         rpc('initialize', {'protocolVersion': '2025-11-25'})
         call('control', {'mode': 'agent'})
         deadline = time.monotonic() + 30
         while True:
-            if call('status', {})[0].get('owner') == 'agent':
+            body, err, _ = call('status', {})
+            if not err and isinstance(body, dict) and body.get('owner') == 'agent':
+                see_generation(body)
                 break
             if time.monotonic() > deadline:
                 print('no grant within 30s', file=sys.stderr)
@@ -73,13 +90,30 @@ def main():
             time.sleep(0.5)
         for i, step in enumerate(steps, 1):
             args = dict(step.get('args', {}))
-            if args.get('frame') == '@last':
-                if last is None:
-                    raise ValueError(f'step {i}: "@last" before any screenshot')
-                args['frame'] = last
-            body, err, content = call(step['tool'], args)
-            if step['tool'] == 'screenshot' and not err:
-                last = body.get('frame')
+            for key, ref in SLOTS.items():
+                marker = MARKERS[ref]
+                if args.get(key) == marker:
+                    if refs[ref] is None:
+                        raise ValueError(f'step {i}: "{marker}" {why[ref]}')
+                    args[key] = refs[ref]
+            tool = step['tool']
+            body, err, content = call(tool, args)
+            if not err and isinstance(body, dict):
+                see_generation(body)
+                if tool == 'screenshot' and isinstance(body.get('frame'), str):
+                    refs['frame'] = body['frame']
+                elif tool == 'launch':
+                    w = body.get('window')
+                    if isinstance(w, str) and w.strip():
+                        refs['window'] = w
+                    else:
+                        refs['window'] = None
+                        why['window'] = 'after a launch that did not return exactly one window'
+                elif (tool == 'window' and args.get('action') == 'close'
+                      and refs['window'] is not None and args.get('address') == refs['window']):
+                    refs['window'] = None
+                    why['window'] = 'after that window was closed'
+            if tool == 'screenshot' and not err:
                 for item in content:
                     if item.get('type') == 'image':
                         path = os.path.join(a.out, f'{i:02d}-screenshot.png')

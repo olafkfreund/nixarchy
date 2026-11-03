@@ -497,6 +497,14 @@ stdenvNoCC.mkDerivation {
                         --replace-fail "  \"\$download\" --appimage-extract 'usr/share/icons/hicolor/*/apps/t3code.png' >/dev/null" ""
                     fi
 
+                    # The local model runner installs podman with pacman on first use. Here
+                    # the module provides it; check that before any download (#1577). Edge only:
+                    # main's tag has no omarchy-agent-local.
+                    if [ -e $out/share/omarchy/bin/omarchy-agent-local ]; then
+                      substituteInPlace $out/share/omarchy/bin/omarchy-agent-local \
+                        --replace-fail "$(cat ${./agent-local-use.upstream.sh})" "$(cat ${./agent-local-preflight.sh})"
+                    fi
+
                     # CARRIED (#1370): nixpkgs wraps kitty (and may wrap ghostty), so the running
                     # process is .kitty-wrapped, and an exact match on the bare name misses it.
                     substituteInPlace $out/share/omarchy/bin/omarchy-restart-terminal \

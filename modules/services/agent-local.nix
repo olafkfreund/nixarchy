@@ -45,6 +45,12 @@ in
 
         virtualisation.podman.enable = lib.mkDefault true;
 
+        # What pkgs/verify.sh reads to know the GPU probes were asked for: its
+        # own PATH always has podman, so podman cannot be the signal.
+        environment.etc."nixarchy/agent-local".text = ''
+          programs.nixarchy.services.agent-local is on: rootless Podman should reach the GPU.
+        '';
+
         # lowPrio: a user's own copy wins any binary it shares (#1167).
         environment.systemPackages = [
           (lib.lowPrio (pkgs.extend inputs.self.overlays.default).nixarchy-apps.omarchy-local-ai)

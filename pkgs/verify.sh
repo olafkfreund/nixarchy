@@ -1374,8 +1374,10 @@ fi
 # runs only where its hardware is present, and the images are pinned by digest
 # so a moved tag cannot turn a pass into a fail.
 head_ "Local model runner"
-if ! command -v podman >/dev/null 2>&1; then
-  hmm "podman not on PATH" "turn on programs.nixarchy.services.agent-local.enable to test the GPU path"
+# Gated on the module's own marker, not on podman: this command carries podman
+# in its runtimeInputs, so a podman check would always pass.
+if [ ! -e /etc/nixarchy/agent-local ]; then
+  hmm "services.agent-local is off" "turn on programs.nixarchy.services.agent-local.enable to test the GPU path"
 else
   rocm_image="docker.io/rocm/rocm-terminal@sha256:72b323c5d56c511ea75f7353d0fee04e637390dd4874d414020284627a658014"
   cuda_image="docker.io/nvidia/cuda@sha256:c87e78933f4c16e3272123bf2f75537306596d0fbaa395a29696a22786e5ee0e"

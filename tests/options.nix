@@ -2228,6 +2228,10 @@ let
       on = agentLocalMemlock agentLocalAmd;
       off = agentLocalMemlock agentLocalOff;
     };
+    agentLocalVerifyMarker = {
+      on = agentLocalAmd.environment.etc ? "nixarchy/agent-local";
+      off = agentLocalOff.environment.etc ? "nixarchy/agent-local";
+    };
     agentLocalPodman = {
       on = agentLocalAmd.virtualisation.podman.enable;
       off = agentLocalOff.virtualisation.podman.enable;

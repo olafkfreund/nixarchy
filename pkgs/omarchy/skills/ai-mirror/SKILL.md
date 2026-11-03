@@ -49,14 +49,14 @@ nixarchy vm run --detach mirror-test                         # then wait ~45 s f
 ```
 ```json
 [
-  {"tool": "status"},
-  {"tool": "windows"},
-  {"tool": "screenshot"},
-  {"tool": "input", "args": {"actions": [{"type": "move", "x": 10, "y": 10}], "frame": "@last"}}
+  {"tool": "launch", "args": {"argv": ["uwsm-app", "--", "foot"], "timeout": 10, "generation": "@generation"}},
+  {"tool": "input", "args": {"generation": "@generation", "window": "@window",
+    "actions": [{"type": "type", "text": "echo ok\n"}]}},
+  {"tool": "screenshot"}
 ]
 ```
 
-`"@last"` is the latest screenshot's frame id. Each screenshot is saved as `--out/NN-screenshot.png` (default `.`) and printed as a path; look at it with your image reader. Output is one JSON line per step. A tool error or any other failure stops the batch (exit 1); exit 2 means the VM was never started (no CID file), 3 means no grant within 30 s. A VM that was started and then stopped still has its CID file: that fails as exit 1, "socat closed the connection". Screenshots overwrite earlier `NN-screenshot.png` files in `--out`; give each run its own directory.
+`"@last"` is the latest screenshot's frame id. `"@generation"` is the latest generation seen; `"@window"` is the window the latest launch returned, cleared by a launch that did not return exactly one window or by closing it in the batch (a window that exits on its own stays set, and typing then fails `wrong_target`). Each screenshot is saved as `--out/NN-screenshot.png` (default `.`) and printed as a path; look at it with your image reader. Output is one JSON line per step. A tool error or any other failure stops the batch (exit 1); exit 2 means the VM was never started (no CID file), 3 means no grant within 30 s. A VM that was started and then stopped still has its CID file: that fails as exit 1, "socat closed the connection". Screenshots overwrite earlier `NN-screenshot.png` files in `--out`; give each run its own directory.
 
 ## 4. Cleanup
 

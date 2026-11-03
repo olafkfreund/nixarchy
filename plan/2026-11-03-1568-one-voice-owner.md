@@ -321,6 +321,18 @@ re-locate each by the named function before editing.
 - Step 7, `modules/home.nix`: the coder's `++` followed the dictation
   warning's closing `'';`, which failed to parse. Fixed by moving the `;` to
   the end of the list.
+- Step 1 (codex): `floor_overlaps` returned true during our own release tail,
+  because it checked the key set rather than the held lock. Codex's test
+  asserted that behaviour. Fixed, and the assertion flipped; it fails on
+  codex's version. Also fixed a `KeyError` at import with `XDG_RUNTIME_DIR`
+  unset. The suite runs as `nix develop -c bash -c 'cd tests && python -m
+  pytest'`: 1394 passed.
+- Step 4 (codex): `hold()` polled while holding the object lock, so a waiting
+  Nixi blocked its own wake thread's `floor_overlaps` and `Speaker.stop()`'s
+  `drop()`. The poll now runs outside the lock. A new test,
+  `test_waiting_speaker_does_not_block_listener`, hangs on codex's version (a
+  deadlock: drop waits behind the poll) and passes on the fix. Codex ran the
+  tests with `unittest`, because pytest was not on its PATH.
 
 ## Review
 

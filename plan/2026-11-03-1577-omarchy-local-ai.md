@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1577
 spec: spec/2026-11-03-1577-omarchy-local-ai.md
 reviewers:

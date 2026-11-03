@@ -213,6 +213,9 @@
   "omarchy-nvim" = {
     nix = "omarchy-nvim-config";
   };
+  "omarchy-local-ai" = {
+    nix = "nixarchy-apps.omarchy-local-ai";
+  };
   "omarchy-screensaver" = {
     nix = "nixarchy-apps.omarchy-screensaver";
   };
@@ -427,9 +430,6 @@
   };
 
   # ── Arch-only tooling and packaging ───────────────────────────────────────
-  "omarchy-local-ai" = {
-    skip = "Not packaged yet: the local model runner needs Podman and NVIDIA CDI as NixOS options. Tracked in #1577.";
-  };
   "autoconf-archive" = {
     skip = "Arch build dependency; not installed by default.";
   };

@@ -20,7 +20,7 @@ usage: nixarchy-location [--json]
        nixarchy-location set home|work <name> [lat,lon]
        nixarchy-location now home|work|auto
        nixarchy-location wifi link home|work | wifi unlink <network>
-       nixarchy-location apply
+       nixarchy-location apply | watch
 USAGE
 }
 
@@ -153,6 +153,23 @@ cmd_wifi() {
   esac
 }
 
+# Follows NetworkManager and re-applies when a connection comes or goes. A wired
+# desktop has no Wi-Fi device, so it exits 0 at once. The monitor ending is a
+# failure (NetworkManager restarted), so systemd starts it again.
+cmd_watch() {
+  local line types
+  types=$(nmcli -t -f TYPE device 2>/dev/null || true)
+  [[ $'\n'$types$'\n' == *$'\n'wifi$'\n'* ]] || exit 0
+  cmd_apply
+  while IFS= read -r line; do
+    [[ $line == *connected* || $line == *"using connection"* || $line == *"primary connection"* ]] || continue
+    # Debounce: one apply once the burst has been quiet for 2 s.
+    while IFS= read -r -t 2 line; do :; done
+    cmd_apply
+  done < <(nmcli -t monitor)
+  die "nmcli monitor ended"
+}
+
 case ${1:-} in
 -h | --help) usage; exit 0 ;;
 esac
@@ -163,6 +180,7 @@ case ${1:-} in
 set) shift; cmd_set "$@" ;;
 now) shift; cmd_now "$@" ;;
 apply) cmd_apply ;;
+watch) cmd_watch ;;
 wifi) shift; cmd_wifi "$@" ;;
 *) usage >&2; exit 1 ;;
 esac

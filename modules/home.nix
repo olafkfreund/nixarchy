@@ -1397,6 +1397,23 @@ in
         Install.WantedBy = [ "graphical-session.target" ];
       };
 
+      # Follows NetworkManager so a Wi-Fi network linked to Home or Work sets the
+      # weather place (#152). Exits 0 at once on a machine with no Wi-Fi device.
+      # The store path, not PATH: a user unit does not inherit the login PATH.
+      nixarchy-location-watch = {
+        Unit = {
+          Description = "Set the location from the Wi-Fi network (nixarchy-location)";
+          After = [ "graphical-session.target" ];
+          PartOf = [ "graphical-session.target" ];
+        };
+        Service = {
+          ExecStart = "${(pkgs.extend inputs.self.overlays.default).nixarchy-location}/bin/nixarchy-location watch";
+          Restart = "on-failure";
+          RestartSec = 30;
+        };
+        Install.WantedBy = [ "graphical-session.target" ];
+      };
+
       # #1153, backported onto v4.0.4 from omacom/omarchy #6792 and #12429.
       # Modelled on omarchy-theme-gnome just above: a user unit, because owed
       # draws through the graphical session rather than needing one of its own.

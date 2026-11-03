@@ -1,4 +1,5 @@
 {
+  inputs,
   pkgs,
   location,
   omarchy,
@@ -6,6 +7,45 @@
 # The PACKAGED nixarchy-location (errexit and a declared PATH, which `bash
 # pkgs/location.sh` would not have) against a private HOME and a fake nmcli.
 # nmcli is an exported function: a declared runtimeInput beats a PATH stub.
+let
+  # The module's unit, evaluated: it must run `watch` by store path and
+  # restart on failure.
+  unit =
+    (inputs.nixpkgs.lib.nixosSystem {
+      inherit (pkgs.stdenv.hostPlatform) system;
+      modules = [
+        inputs.self.nixosModules.nixarchy
+        inputs.home-manager.nixosModules.home-manager
+        {
+          programs.nixarchy = {
+            enable = true;
+            user = "someone";
+          };
+          users.users.someone = {
+            isNormalUser = true;
+            home = "/home/someone";
+          };
+          home-manager.users.someone = {
+            imports = [ inputs.self.homeManagerModules.nixarchy ];
+            programs.nixarchy.enable = true;
+            home.stateVersion = "25.05";
+          };
+          boot.loader.grub.device = "/dev/sda";
+          fileSystems."/" = {
+            device = "/dev/sda1";
+            fsType = "ext4";
+          };
+          system.stateVersion = "25.05";
+        }
+      ];
+    }).config.home-manager.users.someone.systemd.user.services.nixarchy-location-watch;
+in
+assert pkgs.lib.assertMsg (
+  unit.Service.ExecStart == [ "${location}/bin/nixarchy-location watch" ]
+  && unit.Service.Restart == "on-failure"
+  && unit.Service.RestartSec == 30
+  && unit.Install.WantedBy == [ "graphical-session.target" ]
+) "nixarchy-location-watch unit is wrong: ${builtins.toJSON unit}";
 pkgs.runCommand "nixarchy-location-runs"
   {
     nativeBuildInputs = [
@@ -20,9 +60,18 @@ pkgs.runCommand "nixarchy-location-runs"
     s=$HOME/.local/state/omarchy/settings
     mkdir -p "$s"
     loc=${location}/bin/nixarchy-location
-    nmcli() { if [ -n "$NET" ]; then echo "ethernet:connected:Wired"; echo "wifi:connected:$NET"; else echo "ethernet:connected:Wired"; fi; }
+    # HASWIFI: a Wi-Fi device exists. MON: what `nmcli -t monitor` prints, one
+    # line per entry; the sample lines are NetworkManager's own wording.
+    nmcli() {
+      case "$*" in
+        "-t monitor") [ -z "$FLIP" ] || echo "$FLIP" >"$TMPDIR/flip"; printf '%b' "$MON" ;;
+        "-t -f TYPE device") echo ethernet; [ -z "$HASWIFI" ] || echo wifi ;;
+        *) n=$NET; [ ! -e "$TMPDIR/flip" ] || n=$(cat "$TMPDIR/flip")
+           echo "ethernet:connected:Wired"; [ -z "$n" ] || echo "wifi:connected:$n" ;;
+      esac
+    }
     export -f nmcli
-    export NET=""
+    export NET="" HASWIFI=1 MON=""
 
     fails=0
     eq() { # eq <what> <got> <want>
@@ -107,11 +156,32 @@ pkgs.runCommand "nixarchy-location-runs"
     NET=""
     if $loc wifi link home 2>/dev/null; then echo "  FAILED   link without Wi-Fi accepted"; fails=$((fails + 1)); fi
 
+    # watch: no Wi-Fi device -> exits 0 and applies nothing
+    rm -f $s/weather.json $s/places.json
+    $loc set home Lisbon 38.72,-9.14
+    NET="Casa Wi-Fi"; $loc wifi link home; rm -f $s/weather.json
+    HASWIFI="" $loc watch; rc=$?
+    eq "watch: no Wi-Fi device exits 0" "$rc $([ -e $s/weather.json ] && echo applied || echo idle)" "0 idle"
+    # watch: applies at start, again on a connection event, and exits 1 when the monitor ends
+    rc=0; MON="Networkmanager is now in the 'connecting' state\nwlan0: connecting (prepare)\n" $loc watch 2>/dev/null || rc=$?
+    eq "watch: applies once at start; monitor ending is a failure" "$rc $(j .source $s/weather.json)" '1 "wifi"'
+    # the sample lines of a connection change: the network changes when the monitor
+    # starts, so only the event-triggered apply (one, for the whole burst) can see it
+    rm -f $s/weather.json "$TMPDIR/flip"; NET="Hotspot"
+    rc=0; FLIP="Casa Wi-Fi" MON="wlan0: disconnected\nwlan0: using connection 'Casa Wi-Fi'\nwlan0: connected\n'Casa Wi-Fi' is now the primary connection\nConnectivity is now 'full'\n" $loc watch 2>/dev/null || rc=$?
+    eq "watch: a connection event re-applies" "$rc $(j .name $s/weather.json)" '1 "Lisbon"'
+    # lines that are not connection changes do not
+    rm -f $s/weather.json "$TMPDIR/flip"
+    rc=0; FLIP="Casa Wi-Fi" MON="wlan0: device state change\nsomething else\n" $loc watch 2>/dev/null || rc=$?
+    eq "watch: unrelated lines do not apply" "$rc $([ -e $s/weather.json ] && echo applied || echo idle)" "1 idle"
+    rm -f "$TMPDIR/flip"; NET=""
+    $loc set work Porto
+
     # a network name with a colon survives nmcli's escaping
     nmcli() { echo 'wifi:connected:Cafe\: Main'; }
     export -f nmcli
     $loc wifi link work
-    eq "colon in the network name" "$(j '.wifi|keys' $s/places.json)" '["Cafe: Main"]'
+    eq "colon in the network name" "$(j '.wifi|keys' $s/places.json)" '["Cafe: Main","Casa Wi-Fi"]'
 
     # a damaged places.json is reported, not overwritten
     echo 'not json' > $s/places.json

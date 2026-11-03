@@ -2229,6 +2229,7 @@
           # The packaged nixarchy-location against a fake nmcli and a private
           # HOME. See tests/location.nix.
           location = import ./tests/location.nix {
+            inherit inputs;
             pkgs = pkgsFor.${system};
             inherit (self.packages.${system}) location;
             omarchy = self.packages.${system}.omarchy;

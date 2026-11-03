@@ -77,4 +77,31 @@
       extraOpts.BookmarkBarEnabled = true;
     };
   };
+
+  # Omarchy's local model runner on a machine whose owner already runs podman
+  # their way (#1577). agent-local only mkDefaults podman on, so their
+  # dockerCompat must stand and nothing may assert.
+  podman-own-config =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.agent-local.enable = true;
+      virtualisation.podman = {
+        enable = true;
+        dockerCompat = true;
+      };
+    };
+
+  # The same service on an NVIDIA machine whose owner turned the container
+  # toolkit off: theirs wins over agent-local's mkDefault (#1577).
+  nvidia-ctk-own =
+    { lib, ... }:
+    {
+      programs.nixarchy.user = lib.mkDefault "omarchy";
+      programs.nixarchy.services.agent-local.enable = true;
+      services.xserver.videoDrivers = [ "nvidia" ];
+      # nixpkgs' NVIDIA module asserts this is chosen, as a real machine does.
+      hardware.nvidia.open = true;
+      hardware.nvidia-container-toolkit.enable = false;
+    };
 }

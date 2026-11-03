@@ -109,6 +109,13 @@
     note = "Permanent NixOS sandboxes from a template, booted with no image build and no bootloader -- the host's own /nix/store, shared read-only. Bundled because declaring a machine is what turns on the system user, the kvm group grant, the kernel modules and the microvm CLI; a machine you never declare gets none of them.";
   };
 
+  agent-local = {
+    label = "Local AI agent models (Omarchy)";
+    category = "Development";
+    kind = "bundled";
+    note = "Omarchy's local model runner in rootless Podman. Bundled because it needs the render and video groups, raised memlock, and the NVIDIA container toolkit on NVIDIA. The models need a large GPU (the smallest needs 38 GiB of GPU memory); for small cards use programs.nixarchy.localAi (Ollama) instead.";
+  };
+
   waydroid = {
     label = "Waydroid (Android apps)";
     # Development, as microvm and devenv: the categories in use are Desktop,

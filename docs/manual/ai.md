@@ -514,6 +514,36 @@ lists the skills and calls tools correctly, then answers from memory while
 saying it used them — which is worse than no local model, because the mistake
 arrives looking sourced.
 
+## Large models, in Omarchy's runner
+
+```nix
+programs.nixarchy.services.agent-local.enable = true;
+```
+
+This is the other way to run a model locally, and it is for big cards.
+Omarchy ships a runner, `omarchy-local-ai`, that starts a model engine in a
+rootless Podman container and hands it your GPU. Turning the option on gives
+that runner what it needs: Podman, the `render` and `video` groups for your
+user, an unlimited memory-lock limit (the engines pin their weights), the
+NVIDIA container toolkit when an NVIDIA driver is declared, and the runner
+itself. Nothing is installed on first use, and `omarchy agent local use` checks
+these before it downloads anything.
+
+Which to use depends on the card:
+
+| Your GPU | Use |
+|---|---|
+| About 8 GB (a laptop RTX, say) | `programs.nixarchy.localAi` (Ollama), above |
+| A large discrete card | `services.agent-local` |
+
+The runner's catalog is sized for large cards: the smallest recipe needs 38 GiB
+of GPU memory, so an 8 GB card cannot run any of it. A discrete AMD card with
+less than that can try `omarchy agent local use --unqualified`, but expect it to
+run mostly out of GTT (system memory the GPU maps), which is slow.
+
+The two do not conflict: `localAi` is Ollama's server and provider files,
+`agent-local` is containers, and you can turn on both.
+
 ## Putting the configuration in git
 
 ```

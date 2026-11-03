@@ -2016,6 +2016,14 @@ the user's own configuration is not this menu's to take away.
 
 <a id="the-services-catalogue-as-menu-rows"></a>
 
+### Why agent-local is a service and not under `localAi`
+
+`programs.nixarchy.services.agent-local` (#1577) is the container route for
+Omarchy's `omarchy-local-ai`; `localAi` is Ollama and the agents' provider
+files. They share nothing -- different runtime, different catalog (38 GiB GPU
+memory at the smallest, against Ollama's 8 GB cards), and an option under
+`localAi` would read as a flavour of Ollama and switch on the wrong half.
+
 ### The services catalogue, as menu rows
 
 ```nix

@@ -82,7 +82,7 @@ jobs:
           if [ -n "$open" ]; then
             gh issue edit "$open" -R "$GITHUB_REPOSITORY" --title "Release candidate: $tag" --body-file body.md
           else
-            gh issue create -R "$GITHUB_REPOSITORY" -l release-candidate \
+            gh issue create -R "$GITHUB_REPOSITORY" -l release-candidate --milestone "Keeping the lights on" \
               --title "Release candidate: $tag" --body-file body.md
           fi
           cat body.md >> "$GITHUB_STEP_SUMMARY"

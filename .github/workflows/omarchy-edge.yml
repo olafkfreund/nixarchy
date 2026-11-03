@@ -587,7 +587,7 @@ jobs:
           gh label create omarchy-edge --force \
             --description "The nightly edge publish is failing" --color d93f0b
           if [ -z "$num" ]; then
-            gh issue create --label omarchy-edge \
+            gh issue create --label omarchy-edge --milestone "Keeping the lights on" \
               --title "The Omarchy edge channel is not publishing" --body "$body"
             exit 0
           fi

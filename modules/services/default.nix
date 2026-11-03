@@ -64,6 +64,7 @@
 # "option does not exist" error.
 inputs: {
   imports = [
+    (import ./agent-local.nix inputs)
     ./boxes.nix
     ./devenv.nix
     (inputs.nixpkgs.lib.mkRemovedOptionModule [ "programs" "nixarchy" "services" "hypr-rdp" ] ''

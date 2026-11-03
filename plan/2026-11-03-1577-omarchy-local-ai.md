@@ -192,3 +192,22 @@ does is unchanged.
 Revert the PR. The option is off by default, so no machine changes unless it
 turned it on. The edge ledger row goes back to `skip` with its issue
 reference.
+
+## Deviations
+
+- **Step 1:** shebangs are patched in `postPatch`, not after install.
+  `engine-test.sh` runs the source tree's entry script through a symlink, and
+  `#!/usr/bin/python3` does not exist in the sandbox. `tests/` is dropped from
+  the install with `bench/` and `tools/`, and the install check sets
+  `PYTHONDONTWRITEBYTECODE`, so no `__pycache__` lands in `$out`.
+  `tests/options.nix`'s hand-kept `omarchyAppPnames` gains
+  `omarchy-local-ai`, so the `omarchyApps` case covers it.
+- **Step 2:**
+  - the module takes `inputs`, as `microvm.nix` does, because the engine comes
+    from the overlay: `(pkgs.extend inputs.self.overlays.default).nixarchy-apps.omarchy-local-ai`,
+    the way `modules/nixos.nix` reaches `owe`;
+  - it asserts that `programs.nixarchy.user` is set, as `syncthing.nix`
+    does. The groups and limits are that user's;
+  - `docs/manual/configuration.md` gains the option's row in its services
+    table ("All eleven entries"), here rather than in step 9, because
+    `checks.docs-lists` fails without it.

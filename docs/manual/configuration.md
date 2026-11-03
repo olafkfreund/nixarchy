@@ -523,10 +523,11 @@ programs.nixarchy.services.tailscale.enable = true;   # + trusts the interface
 services.tailscale.useRoutingFeatures = "client";     # upstream's option, untouched
 ```
 
-All ten entries of `data/services.nix`:
+All eleven entries of `data/services.nix`:
 
 | Service | Category | What you write |
 |---|---|---|
+| Local AI agent models (Omarchy) | Development | `programs.nixarchy.services.agent-local.enable = true;` |
 | devenv | Development | `programs.nixarchy.services.devenv.enable = true;` |
 | Flatpak | Desktop | `services.flatpak.enable = true;` |
 | 32-bit graphics | Hardware | `hardware.graphics.enable32Bit = true;` |

@@ -2228,6 +2228,10 @@ let
       on = agentLocalMemlock agentLocalAmd;
       off = agentLocalMemlock agentLocalOff;
     };
+    agentLocalEngine = {
+      on = hasPname agentLocalAmd "omarchy-local-ai";
+      off = hasPname agentLocalOff "omarchy-local-ai";
+    };
     agentLocalVerifyMarker = {
       on = agentLocalAmd.environment.etc ? "nixarchy/agent-local";
       off = agentLocalOff.environment.etc ? "nixarchy/agent-local";
@@ -3150,7 +3154,7 @@ let
   agentLocalMemlock =
     cfg:
     builtins.any (
-      l: l.domain == "someone" && l.item == "memlock" && l.value == "unlimited"
+      l: l.domain == "someone" && l.item == "memlock" && l.type == "-" && l.value == "unlimited"
     ) cfg.security.pam.loginLimits;
   agentLocalGroups =
     cfg:

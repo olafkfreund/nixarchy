@@ -227,3 +227,22 @@ reference.
   (`agentLocalMemlockUserManager`) goes with it, and decision 2 says so. The
   reviewers disagreed on exactly this (codex: `user@`; agy: PAM), and agy's
   answer is the one measured.
+- **Step 6:** the match and the replacement live in two files,
+  `pkgs/omarchy/agent-local-use.upstream.sh` and `agent-local-preflight.sh`,
+  read with `$(cat ${./…})` as the menu-fit-width substitution does. A
+  multi-line match inside the `''` string would have broken nixfmt's indent
+  stripping and needed `''${` escapes.
+- **Step 8:** the AMD probe prints whatever `gfx*` targets `rocminfo` lists,
+  not just `gfx1100`, so it reads the same on any AMD card. It runs only when
+  `/etc/nixarchy/agent-local` exists. The module writes that marker because
+  `nixarchy-verify` always has podman on its own PATH, so podman could not be
+  the signal (codex review). `tests/options.nix` gains `agentLocalVerifyMarker`.
+- **Step 10 (agy review):**
+  - `agentLocalEngine` asserts that the module installs the engine (the
+    plain off fixture has `omarchyApps` off, so it can fail);
+  - the memlock predicate also requires `type = "-"`, so a soft limit would
+    not pass;
+  - agy's `set -e` finding about the CDI loop was refuted by running it under
+    `set -euo pipefail`, and is unchanged.
+- **AGENTS.md §8** gains the edge-candidate lesson from #1578. That is the PR
+  template's "write back what cost you an hour", not a plan step.

@@ -131,6 +131,11 @@
     class = "patch";
     reason = "Its mise install fallback refuses with exit 127 instead: nixarchy installs claude, codex and grok through Nix, and one it did not install (unfree off) stays not installed (#1386).";
   };
+  "omarchy-agent-local" = {
+    class = "patch";
+    reason = "Upstream's `use` installs the omarchy-local-ai package with omarchy-pkg-add, which does not exist here. Replaced by a preflight that names programs.nixarchy.services.agent-local when Podman, the unlimited memlock limit, or an NVIDIA CDI spec is missing (#1577).";
+    allow = "systemctl-user";
+  };
   "omarchy-install-ai-chatgpt" = {
     class = "patch";
     reason = "The install command launches /usr/bin/chatgpt, which is absent on NixOS; launch the installed command from PATH.";

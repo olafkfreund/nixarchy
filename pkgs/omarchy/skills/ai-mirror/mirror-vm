@@ -5,6 +5,9 @@ import argparse, base64, json, os, select, subprocess, sys, time, traceback
 PORT = 7000
 TIMEOUT = 60  # seconds per response
 MARKERS = {'frame': '@last', 'generation': '@generation', 'window': '@window'}
+# Arg keys that take a marker, and which ref fills them: the window tool names
+# its target `address`, so "@window" fills that too.
+SLOTS = {**{k: k for k in MARKERS}, 'address': 'window'}
 
 
 def main():
@@ -12,8 +15,8 @@ def main():
         'Run steps against the ai-mirror MCP server in a nixarchy microVM. '
         'steps is a JSON array of {"tool": str, "args": {...}}; "-" reads stdin. '
         'Markers: args.frame "@last" is the latest screenshot, args.generation '
-        '"@generation" the latest generation seen, args.window "@window" the window '
-        'the latest launch returned. One JSON line per step. '
+        '"@generation" the latest generation seen, args.window (and the address of a window step) '
+        '"@window" the window the latest launch returned. One JSON line per step. '
         'Exit: 0 ok, 1 tool error, 2 VM not running, 3 no grant.'))
     ap.add_argument('name', help='VM name')
     ap.add_argument('steps', help='steps.json path or -')
@@ -87,11 +90,12 @@ def main():
             time.sleep(0.5)
         for i, step in enumerate(steps, 1):
             args = dict(step.get('args', {}))
-            for k, marker in MARKERS.items():
-                if args.get(k) == marker:
-                    if refs[k] is None:
-                        raise ValueError(f'step {i}: "{marker}" {why[k]}')
-                    args[k] = refs[k]
+            for key, ref in SLOTS.items():
+                marker = MARKERS[ref]
+                if args.get(key) == marker:
+                    if refs[ref] is None:
+                        raise ValueError(f'step {i}: "{marker}" {why[ref]}')
+                    args[key] = refs[ref]
             tool = step['tool']
             body, err, content = call(tool, args)
             if not err and isinstance(body, dict):

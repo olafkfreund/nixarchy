@@ -66,11 +66,14 @@ pkgs.runCommand "nixarchy-mirror-vm"
       calls '[.[] | select(.name=="input")] == []'
     done
 
-    run 5 1 'step 3: "@window" after that window was closed' '{"launch":[{"window":"0x1"}]}' '[{"tool":"launch"},{"tool":"window","args":{"action":"close","address":"0x1"}},{"tool":"input","args":{"window":"@window"}}]'
+    run 5 1 'step 3: "@window" after that window was closed' '{"launch":[{"window":"0x1"}]}' '[{"tool":"launch"},{"tool":"window","args":{"action":"close","address":"@window"}},{"tool":"input","args":{"window":"@window"}}]'
     calls '[.[] | select(.name=="window")] == [{"name":"window","arguments":{"action":"close","address":"0x1"}}]'
     calls '[.[] | select(.name=="input")] == []'
     run 5-other 0 "" '{"launch":[{"window":"0x1"}]}' '[{"tool":"launch"},{"tool":"window","args":{"action":"close","address":"0x2"}},{"tool":"input","args":{"window":"@window"}}]'
     calls '[.[] | select(.name=="input")][0].arguments.window == "0x1"'
+    # Only a close clears it: a focus on the launched window must leave it set.
+    run 5-focus 0 "" '{"launch":[{"window":"0x1"}]}' '[{"tool":"launch"},{"tool":"window","args":{"action":"focus","address":"@window"}},{"tool":"input","args":{"window":"@window"}}]'
+    calls '[.[] | select(.name=="window" or .name=="input")] == [{"name":"window","arguments":{"action":"focus","address":"0x1"}},{"name":"input","arguments":{"window":"0x1"}}]'
 
     run 6 0 "" '{}' '[{"tool":"input","args":{"generation":5,"window":"0xabc"}}]'
     calls '[.[] | select(.name=="input")][0].arguments == {"generation":5,"window":"0xabc"}'

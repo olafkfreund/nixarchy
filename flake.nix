@@ -758,6 +758,7 @@
           # programs.nixarchy.omarchyApps.enable.
           hype = final.callPackage ./pkgs/apps/hype.nix { };
           monologue = final.callPackage ./pkgs/apps/monologue.nix { };
+          omarchy-local-ai = final.callPackage ./pkgs/apps/omarchy-local-ai.nix { };
           signed = final.callPackage ./pkgs/apps/signed.nix { };
           disktree = final.callPackage ./pkgs/apps/disktree.nix { };
           # Against the flake's Hyprland, the one Omarchy's session runs; final.hyprland
@@ -1239,6 +1240,7 @@
             omarchy-screensaver
             hype
             monologue
+            omarchy-local-ai
             signed
             disktree
             omarchy-hyprland-titlebars

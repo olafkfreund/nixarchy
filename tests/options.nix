@@ -446,6 +446,7 @@ let
     "hype"
     "monologue"
     "signed"
+    "omarchy-local-ai"
   ];
 
   hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;

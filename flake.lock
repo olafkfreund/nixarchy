@@ -1059,17 +1059,17 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1792493907,
-        "narHash": "sha256-7wZHie4yVL38cMTOEA6oXnHuSwmi6mUfOw0yjPRDuAE=",
+        "lastModified": 1793727707,
+        "narHash": "sha256-I7WjkD8YotmrXGCPzmEO0odUsAH1VgbK8+TZg1wut9I=",
         "owner": "olafkfreund",
         "repo": "nixarchy-voice",
-        "rev": "0231774e529521e158b27d932684871740fcd892",
+        "rev": "2bcba434b9fc402117db0c482fb9277bcbb8ea7d",
         "type": "github"
       },
       "original": {
         "owner": "olafkfreund",
         "repo": "nixarchy-voice",
-        "rev": "0231774e529521e158b27d932684871740fcd892",
+        "rev": "2bcba434b9fc402117db0c482fb9277bcbb8ea7d",
         "type": "github"
       }
     },

@@ -496,6 +496,22 @@ let
           description = "The keys of the herdr sessions menu";
         };
 
+        # Opens the bar's weather popup, where the place is picked: upstream's own
+        # `omarchy-notification-weather` reaches it the same way. Needs the weather
+        # widget on the bar: without it the shell answers "unknown" (exit 0), and the
+        # row falls back to the command, which prints the place and its usage.
+        "setup.location" = {
+          icon = "󰍎";
+          label = "Location";
+          action = "out=$(omarchy-shell shell summon omarchy.weather) && [ \"$out\" != unknown ] || omarchy-launch-floating-terminal-with-presentation nixarchy-location";
+          description = "Where the weather and Nixi think you are";
+          aliases = [
+            "weather"
+            "city"
+            "where"
+          ];
+        };
+
         # The Secrets group (#611). A new parent with no action of its own,
         # which is legitimate for a submenu -- Menu.qml renders the children.
         # Every row here is a new id upstream does not ship, so every one of
@@ -1562,6 +1578,7 @@ in
               (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
               (pkgs.extend inputs.self.overlays.default).nixarchy-verify
               (pkgs.extend inputs.self.overlays.default).nixarchy-explain
+              (pkgs.extend inputs.self.overlays.default).nixarchy-location
 
             ]
             # The default agent's own package, when the configuration names one.

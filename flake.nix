@@ -2402,6 +2402,9 @@
           # back out of the three agent configs, and leaves one the user wrote
           # (#773). The real package against fixtures, both cases.
           ai-mirror-mcp-remove = import ./tests/ai-mirror-mcp-remove.nix { pkgs = pkgsFor.${system}; };
+          # Run mirror-vm against a fake guest to check batch references and
+          # control release without booting a VM (#1580).
+          mirror-vm = import ./tests/mirror-vm.nix { pkgs = pkgsFor.${system}; };
           skills-relink = import ./tests/skills-relink.nix { pkgs = pkgsFor.${system}; };
           robustness-modules = import ./tests/robustness-modules.nix { pkgs = pkgsFor.${system}; };
           home-writers-dry-run = import ./tests/home-writers-dry-run.nix {

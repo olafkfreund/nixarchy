@@ -1305,3 +1305,18 @@ The anchor is asserted before the insert: awk inserting
 nothing would leave a shell that still works and silently
 lacks the verbs, which is the shape AGENTS.md section 4
 warns about.
+
+## The package ledger is the decision record (#1572)
+
+`omarchy-package-delta.sh` reports that an install list changed. It records no
+decision, so when Omarchy 4.5 added Hype, Monologue, Signed, Disktree and the
+titlebars plugin, five new names went unpackaged from rc1 to rc3 with every
+check green. `data/omarchy-packages.nix` is the record: every name in
+`install/*.packages` has a row (`nix`, `module` or `skip` with a reason), and
+`checks.omarchy-package-ledger` fails on a name with no row, a row with no
+name, and a `nix` attribute that does not evaluate. A bump that adds a package
+now fails until somebody decides about it.
+
+Disk Usage is one of those decisions. Upstream replaced `dua i /` with
+Disktree (`migrations/1791345484.sh`), so `dua` left `runtimeDeps` and
+`disktree` took its place.

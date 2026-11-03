@@ -141,6 +141,8 @@ pkgs.testers.runNixOSTest {
 
       nixarchy = {
         enable = true;
+        # Omarchy 4.5's default apps (#1572), asserted below.
+        omarchyApps.enable = true;
         # Off by default; on here so the accent path is actually exercised.
         # Without it omarchy-theme-set-browser skips every policy directory
         # and the accent silently never applies -- which is what shipped.
@@ -1253,7 +1255,7 @@ pkgs.testers.runNixOSTest {
     skills = ["nixarchy", "nixos", "nixos-gpu", "nixos-ai",
               "nixos-services", "nixos-secrets", "nixos-performance",
               "nixos-security", "nixos-doctor", "nixos-config-repo",
-              "devenv", "diagnose-crash"]
+              "devenv", "diagnose-crash", "ai-mirror"]
     for home in [".agents/skills", ".claude/skills", ".pi/agent/skills"]:
         for skill in skills:
             machine.succeed(f"test -L /home/omarchy/{home}/{skill}")
@@ -1869,6 +1871,27 @@ pkgs.testers.runNixOSTest {
         "Add them where the session's packages are (modules/nixos.nix), or "
         "name them here with the reason.")
     print("every binary the seeded config names is on the session PATH")
+
+    # ---- Omarchy 4.5's default apps and floating-workspace titlebars (#1572) --
+    # The apps come with programs.nixarchy.omarchyApps.enable, set above; dua is
+    # gone because upstream replaced Disk Usage with disktree.
+    # One name per call: `command -v a b` succeeds if ANY of them resolves.
+    for app in ["hype", "monologue", "signed", "disktree"]:
+        machine.succeed(user % f"command -v {app}")
+    machine.fail(user % "command -v dua")
+    # LC_ALL and QT_QPA_PLATFORM only on this command (pkgs/AGENTS.md: a parsed
+    # tool run in the C locale warns on stdout).
+    machine.succeed(user % "LC_ALL=C.UTF-8 QT_QPA_PLATFORM=offscreen hype check --help")
+
+    # Floating a workspace is what loads the plugin: SUPER+ALT+L runs this from
+    # dwindle, and workspace-modes.lua's TITLEBARS path is the /run/current-system
+    # one only because pkgs/omarchy/default.nix rewrites it.
+    machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle back"))
+    machine.wait_until_succeeds(
+        on_desktop("hyprctl plugin list | grep hyprbars >/dev/null"), timeout=60)
+    # Back to tiling, so what follows sees the layout it always saw.
+    machine.succeed(on_desktop("omarchy-hyprland-workspace-layout-toggle"))
+    print("hype, monologue, signed and disktree are on PATH, dua is not, and a floating workspace loads hyprbars")
 
     # ---- the shell rc files know where they live --------------------------
     # All three opened with a fallback to /usr/share/omarchy for when

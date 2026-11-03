@@ -126,6 +126,11 @@ aether	pkgs/apps/aether.nix	omacom/aether
 ttfx	pkgs/apps/ttfx.nix	omacom/ttfx
 omarchy-speedtest	pkgs/apps/omarchy-speedtest.nix	omacom/omarchy-speedtest
 omarchy-screensaver	pkgs/apps/omarchy-screensaver.nix	omacom/omarchy-screensaver
+hype	pkgs/apps/hype.nix	omacom/hype
+monologue	pkgs/apps/monologue.nix	omacom/monologue
+signed	pkgs/apps/signed.nix	omacom/signed
+omarchy-hyprland-titlebars	pkgs/apps/omarchy-hyprland-titlebars.nix	omacom/omarchy-hyprland-titlebars
+disktree	pkgs/apps/disktree.nix	tobi/disktree
 EOF
 )
 

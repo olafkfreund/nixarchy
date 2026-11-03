@@ -21,7 +21,7 @@ the parts that assume Arch, rather than reimplementing it in Nix.
 Tracking an upstream release is a source bump, not a re-port.
 
 What that buys you: the Install menu writes to a Nix config instead of running
-pacman, **69 applications** are selectable that way, **every other package and
+pacman, **72 applications** are selectable that way, **every other package and
 NixOS option is one `Install ▸ Search` away**, plugins and themes still install
 from a git URL at runtime the way upstream intends, and every command that
 assumed `/usr` either points at what NixOS uses or says why it cannot.
@@ -136,7 +136,7 @@ The notification is clickable and runs the rebuild.
 
 ### Anything the menu does not offer
 
-The 69 apps in the selection are the ones Omarchy's own menu lists, and a few
+The 72 apps in the selection are the ones Omarchy's own menu lists, and a few
 it does not. Everything else in nixpkgs —
 and every NixOS option — is behind **`Install ▸ Search`**, or `nixarchy-search`
 from a terminal:
@@ -161,7 +161,7 @@ from a terminal:
 ```
 
 **About 137,000 rows on a default install: some 25,000 NixOS options, 112,000
-packages, and 66 of the 69 apps** (the three with no nixpkgs equivalent cannot be
+packages, and 69 of the 72 apps** (the three with no nixpkgs equivalent cannot be
 indexed). The exact count is each machine's own, because the index is built from
 that system's options and package set. Three kinds,
 one picker, because you should not have to know which kind you want before you
@@ -507,7 +507,7 @@ is on [the site](https://olafkfreund.github.io/nixarchy/).
 | **`nixarchy` command** | this port's own commands, and a way through to Omarchy's 559 |
 | **Remove menu** | deselects apps, never touches your own config |
 | **Update menu** | `nh os switch --update <flake>` |
-| 69 apps in the selection | 51 from nixpkgs, 7 as NixOS modules, 8 built here, 3 with no equivalent |
+| 72 apps in the selection | 51 from nixpkgs, 7 as NixOS modules, 11 built here, 3 with no equivalent |
 | Learn menu | NixOS wiki, `search.nixos.org` packages and options |
 | Shell functions | bash and zsh source the chain; fish derives it from the same files |
 | RetroArch | 13 libretro cores, resolved from the store rather than `/usr/lib` |
@@ -544,7 +544,7 @@ this repo replaced with one that deliberately refuses. Shipping them unchanged m
 an agent confidently doing imperative things the next rebuild wipes, which is the
 one failure mode that looks like success.
 
-So seventeen skills ship here instead, with eight Nix skills beside them:
+So eighteen skills ship here instead, with eight Nix skills beside them:
 
 | skill | owns |
 |---|---|
@@ -565,6 +565,7 @@ So seventeen skills ship here instead, with eight Nix skills beside them:
 | **`devenv`** | Per-project environments: `devenv.nix`, the lockfile, and the judgement call of whether a requested tool belongs to the project or to the machine |
 | **`diagnose-crash`** | Upstream's, patched. Keeps its name because `omarchy-agent-crash` reads that path literally |
 | **`omarchy-app`** | Upstream's, new in 4.5: scaffolds a C++ and Qt Quick app that follows the Omarchy theme. Nixarchy rewrites its packaging half, so the app gets a `flake.nix` and `package.nix`, runs with `nix run`, and installs by adding the flake to your configuration |
+| **`ai-mirror`** | Testing an app or driving a desktop with ai-mirror. It asks first: a disposable microVM from the `nixarchy-desktop` template, or this host's real desktop with a human-granted control. Then it runs that path end to end, with `mirror-vm` driving the guest over vsock |
 
 What each skill corrects, how **Menu ▸ Trigger ▸ Ask** routes to them, and
 running them against a local model with no account and no network:
@@ -576,7 +577,7 @@ behind the split, and the measurements behind refusing a CPU-only model, are in
 
 Almost nothing here waits on a maintainer.
 
-**58 of the 69 apps never touch this repo.** Brave, VSCode, Signal and the rest
+**58 of the 72 apps never touch this repo.** Brave, VSCode, Signal and the rest
 are installed as `pkgs.<name>` from **your** nixpkgs, and the five
 module-backed ones (Steam, 1Password, Tailscale, Firefox, Xbox controllers)
 come from there too — the module is NixOS', not this repo's. Your own

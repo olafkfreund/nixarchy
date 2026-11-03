@@ -137,4 +137,12 @@
     kind = "package";
     note = "ollama-cuda and ollama-rocm exist too, for NVIDIA and AMD.";
   };
+
+  # ── Utilities ───────────────────────────────────────────────────────────
+  # Omarchy 4.5 installs it for every user, in place of dua (#1572).
+  disktree-bin = {
+    attr = "disktree";
+    kind = "package";
+    binary = "disktree";
+  };
 }

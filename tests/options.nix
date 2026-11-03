@@ -438,6 +438,16 @@ let
 
   # By pname, exactly, for the one name a prefix would over-match: "sops"
   # is also the prefix of sops-nix's own sops-install-secrets.
+  omarchyAppPnames = [
+    "omawrite"
+    "omacalc"
+    "omacut"
+    "aether"
+    "hype"
+    "monologue"
+    "signed"
+  ];
+
   hasPname = cfg: name: builtins.any (p: (p.pname or "") == name) cfg.environment.systemPackages;
 
   # homeOn, for a machine where some other module has an opinion -- here a
@@ -1964,6 +1974,28 @@ let
       off =
         builtins.any (p: (p.pname or "") == "Pinta")
           (configWith { preinstalls = false; }).environment.systemPackages;
+    };
+
+    # ---- #1572: Omarchy 4.5's default apps are one switch ----
+    # All seven rows with preinstall = true, by pname. The on half needs every
+    # one, so a row dropped from data/apps.nix fails here; the off half is a
+    # machine that never asked. The titlebars plugin rides on the session.
+    omarchyApps = {
+      on =
+        let
+          cfg = configWith { omarchyApps.enable = true; };
+        in
+        builtins.all (hasPname cfg) omarchyAppPnames;
+      off =
+        let
+          cfg = configWith { };
+        in
+        builtins.any (hasPname cfg) omarchyAppPnames;
+    };
+
+    titlebarsPluginFollowsTheSession = {
+      on = hasPname (configWith { session = true; }) "omarchy-hyprland-titlebars";
+      off = hasPname (configWith { session = false; }) "omarchy-hyprland-titlebars";
     };
 
     # ---- #566: the loader set, probed by entries nixpkgs' base list ----

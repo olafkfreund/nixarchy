@@ -1026,6 +1026,7 @@ in
         # `or` does not catch a null value, so the wake word is bound and tested.
         bothWake =
           config.services.nixi.companion.enable
+          && (config.programs.omarchy-voice.enable or false)
           && (
             let
               w = config.programs.omarchy-voice.settings.ears.wake_word or null;

@@ -1562,6 +1562,7 @@ in
               (pkgs.extend inputs.self.overlays.default).nixarchy-doctor
               (pkgs.extend inputs.self.overlays.default).nixarchy-verify
               (pkgs.extend inputs.self.overlays.default).nixarchy-explain
+              (pkgs.extend inputs.self.overlays.default).nixarchy-location
 
             ]
             # The default agent's own package, when the configuration names one.

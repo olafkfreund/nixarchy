@@ -29,9 +29,10 @@ build and check, keeps steps 7 and 10, and commits each step by path.
    - `virtualisation.podman.enable = lib.mkDefault true`;
    - `users.users.<user>.extraGroups = [ "render" "video" ]`, always, for
      both vendors;
-   - memlock raised for the one user, both ways:
-     `security.pam.loginLimits` and `systemd.services."user@".serviceConfig.LimitMEMLOCK
-     = "infinity"`. A VM check decides whether both are needed;
+   - memlock raised for the one user through `security.pam.loginLimits`,
+     which reaches both the user manager and login shells (measured in step
+     5; the `user@` `LimitMEMLOCK` the spec also proposed was redundant and is
+     gone);
    - `hardware.nvidia-container-toolkit.enable = lib.mkDefault true`, exactly
      when nixpkgs' own assertion would hold: `"nvidia"` in
      `services.xserver.videoDrivers`, or `hardware.nvidia.datacenter.enable`;
@@ -211,3 +212,18 @@ reference.
   - `docs/manual/configuration.md` gains the option's row in its services
     table ("All eleven entries"), here rather than in step 9, because
     `checks.docs-lists` fails without it.
+- **Step 5, measured.** `checks.agent-local-memlock` on four trees:
+
+  | tree | user manager | login shell | result |
+  |---|---|---|---|
+  | as built | `infinity` | `unlimited` | pass |
+  | option off | `8388608` | `8192` | fail (both) |
+  | `loginLimits` removed | `infinity` | `8192` | fail (login shell) |
+  | `user@` `LimitMEMLOCK` removed | `infinity` | `unlimited` | **pass** |
+
+  PAM's limit alone reaches the user manager, which logs in as
+  `systemd-user`. So `systemd.services."user@".serviceConfig.LimitMEMLOCK` was
+  redundant: it is deleted from the module, its `tests/options.nix` case
+  (`agentLocalMemlockUserManager`) goes with it, and decision 2 says so. The
+  reviewers disagreed on exactly this (codex: `user@`; agy: PAM), and agy's
+  answer is the one measured.

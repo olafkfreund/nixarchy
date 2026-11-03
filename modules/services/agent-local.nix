@@ -45,10 +45,6 @@ in
 
         virtualisation.podman.enable = lib.mkDefault true;
 
-        # A scalar, so mkDefault. user@.service is the user manager, whose limit
-        # the rootless containers inherit.
-        systemd.services."user@".serviceConfig.LimitMEMLOCK = lib.mkDefault "infinity";
-
         # lowPrio: a user's own copy wins any binary it shares (#1167).
         environment.systemPackages = [
           (lib.lowPrio (pkgs.extend inputs.self.overlays.default).nixarchy-apps.omarchy-local-ai)

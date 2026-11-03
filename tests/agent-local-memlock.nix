@@ -3,9 +3,10 @@
 # Podman cannot exceed its parent's limit. The NixOS default is 8 MB (razer
 # measured 8388608), which fails every model container at start (#1577).
 #
-# Two settings carry it: the PAM login limit and user@.service's LimitMEMLOCK.
-# This boots a guest and reads what each place actually gets, which is the
-# question the spec left to measurement.
+# One setting carries both places: the PAM login limit. The user manager logs
+# in through PAM as systemd-user, so it gets the limit too. Measured here: with
+# user@.service's LimitMEMLOCK also set and then removed, both places still read
+# unlimited, and with loginLimits removed the login shell falls back to 8192.
 { inputs, pkgs }:
 pkgs.testers.runNixOSTest {
   name = "nixarchy-agent-local-memlock";

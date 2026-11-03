@@ -2228,10 +2228,6 @@ let
       on = agentLocalMemlock agentLocalAmd;
       off = agentLocalMemlock agentLocalOff;
     };
-    agentLocalMemlockUserManager = {
-      on = agentLocalAmd.systemd.services."user@".serviceConfig.LimitMEMLOCK == "infinity";
-      off = agentLocalOff.systemd.services."user@".serviceConfig ? LimitMEMLOCK;
-    };
     agentLocalPodman = {
       on = agentLocalAmd.virtualisation.podman.enable;
       off = agentLocalOff.virtualisation.podman.enable;

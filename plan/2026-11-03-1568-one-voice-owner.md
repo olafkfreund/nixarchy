@@ -334,6 +334,22 @@ re-locate each by the named function before editing.
   deadlock: drop waits behind the poll) and passes on the fix. Codex ran the
   tests with `unittest`, because pytest was not on its PATH.
 
+- Step 2 (coder, finished by the session after the agent was lost in a
+  restart). Holds: `_say` takes `say` and, inside an answer, `answer` at the
+  first sentence, not during thinking. `answer` is released when the turn
+  ends. Announcements and one-shot `say` are covered by `say`, which the
+  speech loop releases when its queue drains, so `_announce` needed no key of
+  its own and still returns at once. The coder's `_answer` released `answer`
+  without ever taking it; the stalled-sentence test caught this.
+- Step 2 review (the Codex PR bot, local codex, agy), fixed in nixarchy-voice
+  `2ba211f`:
+  - muting mid-sentence no longer drops the floor while a line plays;
+  - taking the floor records the other holder's release time
+    (`foreign_release`), so a capture that spanned its turn is still dropped;
+  - a `_say` cancelled before queueing releases `say`;
+  - the daemon's stop path drops the floor.
+
+  The same `foreign_release` fix goes into the companion's `app/floor.py`.
 ## Review
 
 Draft plan, codex (gpt-6-sol) and agy (model not reported). Every finding was

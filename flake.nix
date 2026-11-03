@@ -1813,6 +1813,7 @@
           # here counts as registered; one that needs other arguments stays
           # an explicit entry below.
           uniformChecks = [
+            "agent-local-memlock"
             "app-selection"
             "apply-detach-interface"
             "apply-imports"

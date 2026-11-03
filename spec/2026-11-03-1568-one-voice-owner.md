@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1568
 intent: intent/2026-11-03-1568-one-voice-owner.md
 ---
@@ -256,6 +256,9 @@ collide.
    would drop *their* words too. I recommend **exempting push-to-talk**, as
    this spec does, and narrowing the intent's outcome to the hands-free
    listeners (wake word, follow-up, and Oma's active session).
+
+   **Decided (approved 2026-11-03):** exempt. The outcome covers the hands-free
+   listeners only.
 
 ## Review
 

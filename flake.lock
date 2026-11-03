@@ -1233,17 +1233,17 @@
     "omarchy": {
       "flake": false,
       "locked": {
-        "lastModified": 1793559985,
-        "narHash": "sha256-qZQhH8r4YNLXmyeE3RS3bhgSFQNhJo6MW0cdvCvYvX8=",
+        "lastModified": 1793669201,
+        "narHash": "sha256-f5Nq7qjMsb8+NXVVtiYucVJ0tLpRo5cNrhMdHqNCZvQ=",
         "owner": "basecamp",
         "repo": "omarchy",
-        "rev": "8d19ad75ace59af8b6ded52f8b2bec1b15adda7c",
+        "rev": "ae64a4be796239a86f40de4b3cc5bd7f43866296",
         "type": "github"
       },
       "original": {
         "owner": "basecamp",
-        "ref": "v4.5.0-rc3",
         "repo": "omarchy",
+        "rev": "ae64a4be796239a86f40de4b3cc5bd7f43866296",
         "type": "github"
       }
     },

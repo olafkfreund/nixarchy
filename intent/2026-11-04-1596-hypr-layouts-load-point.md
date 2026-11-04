@@ -20,7 +20,9 @@ to load **after** `looknfeel`, so they beat a theme's `looknfeel` block such as
 Atmos's. They also need to load **before** `default.hypr.toggles`, so the
 choices SUPER+L saved still win.
 
-`autostart.lua` is the only user file in that window. So
+Two user files sit in that window. `hypr.hyprforge` is Hyprforge's own save
+file, written by its GUI. `autostart.lua` is the only one a person or a
+downstream config can take over. So
 olafkfreund/nixos_config#2686 had to take over the whole of
 `~/.config/hypr/autostart.lua` to `require("hypr.layouts")` from it. A
 downstream config now owns a file the user is meant to edit for autostart, so
@@ -39,11 +41,16 @@ designed.
   immediately after `require("hypr.looknfeel")` and before
   `require("hypr.autostart")`. It uses Omarchy's own `require_optional`
   helper, as the Hyprforge line already does.
+- **Precedence, stated:** `looknfeel` < `layouts` < Hyprforge's saves <
+  SUPER+L's saved toggles. A declarative default loses to a choice made in a
+  GUI or with a key.
 - A machine with no `layouts.lua` behaves exactly as today.
 - A downstream config can write `layouts.lua` and stop owning `autostart.lua`.
-- `checks.session` proves that a value in `layouts.lua` reaches Hyprland,
-  read back with `hyprctl`. This follows the Hyprforge precedent: "saved but
-  never loaded" is only visible at that layer (§2).
+- `checks.session` proves the **order**, not just the load. It sets the same
+  option to different values in `looknfeel.lua` and `layouts.lua` and reads
+  back `layouts`' value with `hyprctl`. That fails if the require is missing,
+  and also if it lands before `looknfeel` (codex and agy). The Hyprforge
+  probe's "saved but never loaded" is the half this subsumes (§2).
 
 ## Affected users and systems
 
@@ -65,6 +72,8 @@ designed.
 - **Leave Hyprforge's line alone.** Hyprforge's Connect button matches its
   exact text (`pkgs/AGENTS.md#hyprforge-…`).
 - Upstream files are not filed against unprompted (§11).
+- **`checks.install-phase-budget`:** the in-phase comment is a `# Why:`
+  pointer, and the explanation goes in `pkgs/AGENTS.md`.
 
 ## Open questions
 

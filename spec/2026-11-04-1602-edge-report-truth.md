@@ -20,16 +20,19 @@ the run (§4).
 
 | Run outcome | "not publishing" issue | "quattro is held back" issue |
 |---|---|---|
-| promoted on newest quattro | closed | closed |
-| promoted on an older quattro through `from_candidate` | closed | **left open** |
+| promoted, and the pin is upstream's newest | closed | closed |
+| promoted on an older quattro through `from_candidate` | closed | **left as it is**, and none is filed |
 | promoted on the fallback pin | closed | filed or updated |
 | skipped, edge is already current | **closed** (today it's left open) | closed |
 | anything else, edge did not publish | filed or updated, as today | untouched |
 
-"Newest" needs a new `prepare` output from the pin step, because a `from_candidate`
-run keeps the candidate's pin and never asks upstream. #1543 had to be reopened by
-hand for that reason: a promotion on the old pin closed it while the new commit
-was still red.
+"Newest" is a new `prepare` output from the pin step. A `from_candidate` run keeps
+the candidate's pin, so the step now also asks upstream for quattro's head and
+compares; a failed lookup is `failed=quattro-sha`, as it is on a normal run. #1543
+had to be reopened by hand for lack of this: a promotion on the old pin closed it
+while the new commit was still red. On the older-pin row no refusal has been
+measured, so nothing is filed, and the next scheduled run tests the newest commit
+and settles the held issue either way.
 
 The held issue:
 
@@ -38,62 +41,76 @@ The held issue:
 - **Label:** `omarchy-edge-held`, separate from `omarchy-edge`. The README and the
   manual link that label as "what broke", which a held commit isn't.
 - **Milestone:** `Keeping the lights on` (§12).
-- **First line:** `held-sig: <sha7>: <checks>`, deduplicated like `edge-sig`, so a
-  new comment appears only when the refused commit or the checks change.
+- **First line:** `held-sig: <sha7>: <checks>`, so a new comment appears only when
+  the refused commit or the checks change. Deduplication compares the newest line
+  with that prefix across the body and all comments, for `edge-sig` too. Today it
+  reads only the last comment, so any other comment would defeat it.
 - **Wording:** says "needs a classification row" only when **every** named check
   is in a fixed list: `bin-ledger`, `etc-overlay`, `menu-actions`, `menu-conditions`,
   `menu-verbs`, `omarchy-package-ledger`, `skill-parity`, `stale-scripts`. Anything
   else, or no name at all, reads "upstream candidate failed; investigate".
 - **Escalation:** one comment beginning `held-escalated:` once the issue is more
-  than 20 h old. The threshold is 20 h and not 24 h because the schedule is daily
+  than 20 h old, skipped if any comment already starts that way. The threshold is 20 h and not 24 h because the schedule is daily
   and a report lands at about the same time each day, so 24 h could slip to a third
   run, 48 h later. In practice it escalates at the second daily run.
 
 ### 2. Every signature names what failed
 
 - `edge-build.sh` keeps one `try` for the generated checks, then, if that fails,
-  takes the root failures from the part of the build log this invocation wrote.
-  It uses a new `failure-digest.sh --names <log>` mode, which reuses the existing
+  takes the root failures from the log lines written since just before that `try`,
+  so a red `omarchy` isn't named twice. It uses a new `failure-digest.sh --names <log>` mode, which reuses the existing
   awk that separates roots from cascades. The names are written as check names, with
   `nixarchy-` removed. If it finds no names, the entry stays `generated-checks`,
-  which names the step.
-- The log offset is needed because `build` and `build2` share one log.
+  which names the step. A name that doesn't match the classification list, such as
+  `vm-test-run-nixarchy-session`, reads "investigate", which is the safe direction.
 - `edge-build.sh` writes `failed=` on its two early exits as well, which today
   leave the signature empty.
 - `pin2` writes `failed=fallback-pin` on error.
 - `prepare` gets separate outputs: `held_by` (`build`'s names), `held_sha`, and
   `failed`. `failed` now lists later steps first, so a failure after a good
   fallback reports that step and not the earlier refusal:
-  `candidate || build2 || pin2 || build || pin || merge || start`.
+  `candidate || build2 || pin2 || build || pin || merge || start`. When `build` and
+  `build2` both fail, the signature names both.
 - `verify` writes `failed=` after each red check rather than after the loop, writes
   it on its two early exits, and includes `promote` when the promotion step fails.
   Today a failed promotion reads `verify: failure`, and the `promote: not promoted`
   branch can't run for it.
 - `report` writes a job result of `cancelled` as `timed out`, which is what it
-  means there (the existing comment says so).
+  means there (the existing comment says so), and adds it after any names already
+  written, so an earlier red check and a later hang both show.
 
 ### 3. The reason survives the run
 
-**Failed runs vanish.** Of the last 60 edge runs, only one with a `failure`
-conclusion is still listed, and every run I tried among those named in the issues
-returned 404, including one from today. Successful runs from the same hours are
-still there. Nothing in this repo deletes runs, so the cause is outside it and
-isn't established here. Whatever the cause, the reason can't live only in the log.
+**Failed runs vanish.** Of 14 runs named in the issues that I sampled, 8 return 404,
+including one from today, while successful runs from the same hours remain. The newest
+`failure` conclusion listed for this workflow is from 10-30, though the issues record
+failures since. Nothing in this repo, `~/.config/nixos` or the skills deletes runs, so
+the cause isn't established. Whatever it is, the reason can't live only in the log.
 
-So the digest goes in the issue. `failure-digest.sh` adds a bounded `report` output
-of at most 60 lines, and both digest steps expose it as a job output. `edge-report.sh`
-appends it to the body in a `text` fence, below the signature line, so the
-first-line deduplication is unchanged. `prepare`'s digest step also runs when `build`
-failed and the fallback rescued the job, because that job ends green and today's
-`if: failure()` skips it.
+So the digest goes in the issue. `failure-digest.sh` adds a bounded `report` output of
+at most 60 lines. Each issue uses the digest of what it reports:
+
+| Issue state | Digest |
+|---|---|
+| held | a new step straight after `build`, run if `build` failed, which then moves the log aside so `build2` starts a fresh one. It's needed because a rescued job ends green and `if: failure()` skips the existing step |
+| not publishing, `prepare` failed | the existing final step, which now sees only what came after the refusal |
+| not publishing, `verify` failed | `verify`'s own digest step |
+
+`edge-report.sh` puts it below the signature line in a `text` fence, so a signature
+stays the first line.
 
 ### 4. `readme-counts` gets the fallback
 
 `readme-counts.sh --fix` moves from its own step into `edge-build.sh`, after the
 checks and only if they all passed. A count word the script doesn't know then fails
 the attempt by name, and the existing fallback takes over. It needs `result`, which
-that script has just built. The throwaway commit is unaffected, and `Publish the
-candidate` still takes the edit with `git add -A`.
+that script has just built and git ignores. `Publish the candidate` still takes the
+edit with `git add -A`.
+
+`readme-counts.sh` edits with `sed -i` as it goes, so a refusal can leave a partial
+README, and the fallback's throwaway commit would take it. On refusal `edge-build.sh`
+runs `git checkout HEAD -- README.md` before exiting, which restores the throwaway
+commit's copy, and only then does its trap undo that commit.
 
 This is a deliberate behaviour change: a run that publishes nothing today would
 publish `main` on the last good pin, while the refused commit is reported as held.
@@ -106,14 +123,25 @@ A new `.github/scripts/edge-carry.sh` prints one of three answers, from
 
 | Answer | When | What the run does |
 |---|---|---|
-| `none` | nothing there, or only the bot's commits | as today |
-| `carry` | a non-bot commit, and `origin/edge` is an ancestor of the candidate | starts from the candidate, as if `from_candidate=true` |
+| `none` | no `origin/edge` or `origin/edge-candidate`, which keeps today's first-publish path; or nothing there; or only the bot's commits | as today |
+| `carry` | a non-bot commit, and `origin/edge` is an ancestor of the candidate | starts from the candidate, keeping its pin, exactly as `from_candidate=true` does |
 | `diverged` | a non-bot commit, and edge has moved past it | stops with `failed=candidate-diverged`, pushes nothing |
 
 `--not origin/main` is what makes this work: a failed candidate contains `main`'s
 merged commits, whose authors aren't the bot. `diverged` stops rather than
 overwriting. It's an outage alert by design, naming the commit and the two ways out:
 rebase the carry onto `edge`, or delete it from `edge-candidate`.
+
+A carry keeps §8's existing rule: it pins the quattro commit it classifies. A carry
+that forgets still fails as #1498 did, loudly, and the pin isn't moved for it, because
+guessing which quattro a carry was written for is how it would get tested against the
+wrong one. While a carry keeps failing, runs stay on its pin, and that's reported as
+an outage until someone fixes or removes it.
+
+**A known limit:** this trusts the author. A hand-made commit with the bot's own
+identity reads as disposable. In the 46 commits on edge since 11-01, the bot's 36 and
+the carries' 10 separate cleanly, and git's default identity is never the bot's. The
+script carries a `shortcut:` comment saying so.
 
 `from_candidate=true` stays for its existing use. §8's warning about a plain dispatch
 deleting a carry is retargeted in the same PR.
@@ -125,8 +153,8 @@ deleting a carry is retargeted in the same PR.
 never gets there fails with its own message. The comparison uses the first 15
 characters, since `comm` truncates and `.ghostty-wrapped` is 16.
 
-**This is still unproven as the cause of #1601.** The check's own sequence hit 260 of
-260 on p620, including 60 of 60 pinned to one busy CPU. What the evidence does support:
+**This is still unproven as the cause of #1601.** The check's own sequence, without a
+barrier, hit 260 of 260 on p620, including 60 of 60 pinned to one busy CPU. What the evidence does support:
 the failed log shows `.ghostty-wrapped` signalled and `.kitty-wrapped` not, and the
 script tests kitty first, so a miss that closes within milliseconds looks like exactly
 that. The barrier is a few lines and costs nothing if the theory is wrong, and a
@@ -178,15 +206,22 @@ All of it local before any push, per §6's tiers, and each new check shown faili
   per table row, plus label, deduplication, classification wording, escalation before
   and after 20 h, the digest in the body, and a `gh` failure failing the script. Breaks:
   restore today's fallback behaviour, drop the skip close, treat an older-pin promotion
-  as newest, and treat an unknown check as classification. Each must go red.
+  as newest, and treat an unknown check as classification. Each must go red. It also
+  runs a third report after an escalation, with the same and with a changed signature,
+  which must post no duplicate escalation or unchanged signature.
 - **`checks.edge-carry` (new, cheap):** a real git repo for each answer, including a
-  failed bot candidate with merged human `main` commits, which must read `none`. Break:
-  remove `--not origin/main`.
+  failed bot candidate with merged human `main` commits, which must read `none`, and
+  each ref being absent. Break: remove `--not origin/main`.
 - **`checks.failure-digest` extended:** `--names` against the existing fixtures, and the
   `report` output bound. Break: count cascades as roots.
 - **`checks.restart-terminal-wrapped`:** still green, and still red when the
-  `.kitty-wrapped` pattern patch is reverted. A stand-in with a delayed exec goes red
-  without the barrier and green with it.
+  `.kitty-wrapped` pattern patch is reverted. One deterministic, temporary §1 proof:
+  hold the kitty stand-in with `(sleep 1; exec ./.kitty-wrapped ...) &`. That's red
+  without the barrier and green with it. It goes in the PR and isn't kept, because it
+  proves the barrier closes the gap, not that the gap caused #1601.
+- **`README.md` on a refusal:** `checks.edge-report` also runs `edge-build.sh` with
+  `nix` and `readme-counts.sh` stubbed. A stub that edits and then refuses must leave
+  `README.md` as it was. Break: drop the restore.
 - **`actionlint`,** and every `generated-checks.sh` target plus `grep-q-pipefail`,
   `nix fmt -- --ci`, `statix` and `deadnix`.
 - **Not reachable locally:** the workflow's wiring only runs on GitHub. The first real

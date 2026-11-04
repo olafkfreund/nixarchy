@@ -1870,6 +1870,7 @@
             # tests/doc-options.nix and #214.
             "doc-options"
             "edge-carry"
+            "edge-report"
             "edge-promote"
             "firmware-guard"
             # The dangerous one. Installs into free space on a disk that already

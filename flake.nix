@@ -1845,6 +1845,8 @@
             # tests/bin-ledger.nix and #447.
             "bin-ledger"
             "bluetooth-pairing"
+            # A hung install-target boot fails fast with a monitor dump (#1594). Needs KVM.
+            "boot-hang-detect"
             "branch-guard"
             # Boots the Omarchy session on a machine whose hyprland.lua belongs to
             # somebody else -- the case the session entry exists for.

@@ -15,6 +15,10 @@ wait = ns["wait_for_multi_user"]
 class Stub:
     def __init__(self, console, execute):
         self._console, self._execute, self.executed = console, execute, False
+        self.full_console_log = []
+
+    def send_monitor_command(self, command):
+        return "CPU#0\nEIP=000ebd8b"
 
     def wait_for_console_text(self, pattern, timeout):
         self._console()
@@ -73,3 +77,21 @@ if not isinstance(raised, TimeoutError):
 if "no answer from the guest within 1 s" not in out:
     fail("the silent guest was not reported")
 print(f"PASS 3: bounded ({elapsed:.1f} s)")
+
+# 4: no console growth across windows fails on silence, with the monitor dump
+def window_ends():
+    time.sleep(0.2)
+    raise ns["RequestedAssertionFailed"]("window")
+
+
+m = Stub(window_ends, lambda: (0, ""))
+start = time.monotonic()
+raised, out = run(m, silence=1, probe_timeout=1)
+elapsed = time.monotonic() - start
+if not isinstance(raised, ns["BootHang"]) or "console silent" not in str(raised):
+    fail(f"silence was not detected: {raised!r}")
+if "EIP=" not in raised.monitor_dump:
+    fail("the monitor dump was not attached")
+if elapsed >= 15:
+    fail(f"silence took {elapsed:.1f} s to fire")
+print(f"PASS 4: silence detected with registers ({elapsed:.1f} s)")

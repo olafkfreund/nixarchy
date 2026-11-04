@@ -39,10 +39,12 @@ intent: intent/2026-11-04-1594-boot-hang-diagnostics.md
 All changes are in `tests/vm-cleanup.py`. The callers stay as they are.
 
 1. **A windowed wait with a silence detector.** `wait_for_multi_user` gains
-   `silence=120`. It loops over `machine.wait_for_console_text(regex,
-   timeout=timedelta(seconds=15))` and catches only the driver's timeout
-   error. After each empty window it compares `len(machine.full_console_log)`
-   with the last length it saw:
+   `silence=120`. It reads `len(machine.full_console_log)` on entry, then
+   loops over `machine.wait_for_console_text(regex, timeout=w)`, where
+   `w = min(15, silence left, budget left)`, so neither limit overshoots by
+   a window. It catches only `test_driver.errors.RequestedAssertionFailed`,
+   which `retry` raises (driver 197). After each empty window it compares
+   the log length with the last one it saw:
    - if the log grew, the silence clock resets;
    - if there has been no growth for `silence` seconds, it fails with
      "console silent for N s";
@@ -59,8 +61,12 @@ All changes are in `tests/vm-cleanup.py`. The callers stay as they are.
 
    Two samples tell a vCPU spinning in one place (same RIP, not halted) from
    halted vCPUs (an idle wait that is blocked) or a moving RIP (a livelock).
-   If the monitor doesn't answer, it prints "monitor did not answer within
-   30 s" and goes on.
+   It **prints each response**, because monitor output never reaches the
+   console log (driver 1120–1129, 1531). If the monitor doesn't answer, it
+   prints "monitor did not answer within 30 s" and goes on. A thread
+   orphaned by that join can't race a later monitor user: the helper always
+   raises next, and the callers' `reap_owned_vms` does no monitor RPC
+   (`vm-cleanup.py:8`).
 3. **Then the #1365 systemd probe, unchanged,** still bounded at 90 s,
    because it names the unit when the guest is alive but blocked.
 4. **Raise with the reason** (silence or overall timeout), so the failure
@@ -73,10 +79,14 @@ The cost of a hang drops from 990 s to about 120 + 35 + 90 ≈ 245 s.
 that loads `vm-cleanup.py`:
 
 - **Case A:** start the machine, `stop` it on the monitor before multi-user,
-  and call `wait_for_multi_user(m, timeout=120, silence=20)`. It must
-  raise "console silent" in under 60 s, and the log must hold an `info
-  registers` dump from the paused vCPU.
-- **Case B:** a normal boot through the same helper returns.
+  and call `wait_for_multi_user(m, timeout=120, silence=20,
+  probe_timeout=5)`. It must raise "console silent" in under 60 s (expected
+  about 20 + 5 + 5 s). The text the helper printed must hold `info
+  registers` output from the paused vCPU, captured by having the helper
+  return or attach it to the exception rather than by scraping the log.
+- **Case B:** a separate, fresh machine boots normally through the same
+  helper and returns. It is never the stopped one resumed, because that
+  machine may still hold an orphaned probe thread on its shell.
 
 The break that must turn A red: disable the silence branch. A then reaches
 the 120 s overall timeout, so the message and the elapsed-time assertions
@@ -104,8 +114,10 @@ both fail.
   nothing to ttyS0 for 120 s before multi-user. None does today (6.4 s
   max). If one appears, the failure names silence and the fix is raising
   the argument at that call site.
-- **Log noise.** Each empty 15 s window logs a "waiting for …" line. A
-  healthy boot takes one or two windows.
+- **Log noise.** Each empty window logs a "waiting for …" section whose
+  timeout exception the helper catches. The driver's `nested()` only
+  yields (`logger.py`), so a caught timeout records no failure. A healthy
+  boot takes one or two windows.
 - **Raw RIPs need a symbol map** to read. The reference closure's kernel
   output has `System.map`. The plan decides whether the test has it in
   scope to symbolise inline, or whether `tests/AGENTS.md` gets the one-line

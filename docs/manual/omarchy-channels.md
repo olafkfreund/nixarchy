@@ -55,8 +55,11 @@ nightly job moves forward, **only after** that day's `quattro`:
 When the newest `quattro` breaks on NixOS, edge keeps taking `main`'s changes
 on the last `quattro` that passed, so only the Omarchy side stops moving. A
 rolling issue labelled
+[`omarchy-edge-held`](https://github.com/olafkfreund/nixarchy/issues?q=label%3Aomarchy-edge-held)
+names the refused commit and check; an
 [`omarchy-edge`](https://github.com/olafkfreund/nixarchy/issues?q=label%3Aomarchy-edge)
-says what broke. Edge never moves to something that does not boot.
+issue means edge itself did not publish. Edge never moves to something that
+does not boot.
 
 `nixarchy version` shows the date edge was cut, for example
 `edge-20261015-246f33a (edge)`.

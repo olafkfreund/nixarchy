@@ -48,7 +48,13 @@ jobs:
       expected: ${{ steps.start.outputs.expected }}
       candidate: ${{ steps.candidate.outputs.sha }}
       fallback: ${{ steps.build2.outcome == 'success' }}
-      failed: ${{ steps.counts.outputs.failed || steps.build.outputs.failed || steps.candidate.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed || steps.start.outputs.failed }}
+      newest: ${{ steps.pin.outputs.newest }}
+      held_by: ${{ steps.build.outputs.failed }}
+      held_sha: ${{ steps.pin.outputs.sha }}
+      held_digest: ${{ steps.held_digest.outputs.report }}
+      digest: ${{ steps.digest.outputs.report }}
+      build2: ${{ steps.build2.outcome }}
+      failed: ${{ steps.candidate.outputs.failed || steps.build2.outputs.failed || steps.pin2.outputs.failed || steps.build.outputs.failed || steps.pin.outputs.failed || steps.merge.outputs.failed || steps.start.outputs.failed }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -103,7 +109,29 @@ jobs:
             echo "::error::from_candidate was set but there is no edge-candidate branch"
             exit 1
           fi
-          if [ -n "$have_candidate" ] && { [ "$FROM_CANDIDATE" = true ] || [ "$expected" = none ]; }; then
+          # A carry waiting on edge-candidate is picked up, not deleted by the
+          # next scheduled run (#1602); a diverged one stops the run. Captured
+          # first: a git error must fail the step, not read as "none".
+          from_candidate=$FROM_CANDIDATE
+          if [ "$from_candidate" != true ]; then
+            carry=$(bash .github/scripts/edge-carry.sh)
+            case "$carry" in
+              carry)
+                echo "edge-candidate carries commits edge does not have; starting from it"
+                from_candidate=true
+                ;;
+              diverged)
+                echo "failed=candidate-diverged" >> "$GITHUB_OUTPUT"
+                echo "::error::edge-candidate carries commits and edge has moved past them."
+                echo "::error::Rebase the carry onto edge and push it to edge-candidate, or delete edge-candidate"
+                echo "::error::to drop the carry; either way nothing was pushed."
+                exit 1
+                ;;
+            esac
+          fi
+          if [ "$from_candidate" = true ]; then fc=true; else fc=false; fi
+          echo "from_candidate=$fc" >> "$GITHUB_OUTPUT"
+          if [ -n "$have_candidate" ] && { [ "$from_candidate" = true ] || [ "$expected" = none ]; }; then
             start=origin/edge-candidate
           elif [ "$expected" != none ]; then
             start=origin/edge
@@ -155,7 +183,7 @@ jobs:
             sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$old_ver\"|" flake.nix
             git restore --source="$base" -- flake.lock
             # README's derived counts follow edge's pin too (#1537), so they
-            # conflict the same way; the counts step rewrites them after.
+            # conflict the same way; edge-build.sh rewrites them after.
             git restore --source="$base" -- README.md
             git add flake.nix flake.lock README.md
             git diff --cached --quiet || git commit -q -m "Edge: unpin Omarchy before merging main"
@@ -180,25 +208,28 @@ jobs:
           MAIN_IN: ${{ steps.start.outputs.main_in }}
           START: ${{ steps.start.outputs.start }}
           EXPECTED: ${{ steps.start.outputs.expected }}
-          FROM_CANDIDATE: ${{ inputs.from_candidate }}
+          FROM_CANDIDATE: ${{ steps.start.outputs.from_candidate }}
         run: |
           set -euo pipefail
           # Authenticated, and refuses anything but a full SHA: a 403 once made
           # the answer empty and the sed pinned upstream's default branch
           # (omarchy.yml). The SHA is pasted into later steps' shell, so the
-          # 40-hex test is also what makes that safe.
+          # 40-hex test is also what makes that safe. Always asked, so the
+          # report can tell "held back" from "newest" (#1602).
+          upstream=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
+            { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
+          if ! [[ "$upstream" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"
+            echo "::error::no commit SHA from the API for quattro: '$upstream'"
+            exit 1
+          fi
           if [ "$FROM_CANDIDATE" = true ] && [[ $HAVE =~ ^[0-9a-f]{40}$ ]]; then
             sha=$HAVE # carry main to the candidate's quattro; a scheduled run moves quattro
           else
-            sha=$(gh api repos/basecamp/omarchy/commits/quattro --jq .sha) ||
-              { echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"; exit 1; }
-          fi
-          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "failed=quattro-sha" >> "$GITHUB_OUTPUT"
-            echo "::error::no commit SHA from the API for quattro: '$sha'"
-            exit 1
+            sha=$upstream
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$sha" = "$upstream" ]; then echo "newest=true" >> "$GITHUB_OUTPUT"; else echo "newest=false" >> "$GITHUB_OUTPUT"; fi
 
           # Only when edge exists and we started from it: a candidate that was
           # never promoted has not been published, however current it looks.
@@ -238,6 +269,13 @@ jobs:
         continue-on-error: true
         run: bash .github/scripts/edge-build.sh
 
+      # The refused attempt's digest, read before a fallback starts a new log.
+      - name: Failure digest of the refused attempt
+        id: held_digest
+        if: steps.build.outcome == 'failure' && steps.pin.outputs.skip != 'true'
+        continue-on-error: true
+        run: .github/scripts/failure-digest.sh
+
       - name: Find the pin edge already publishes
         id: good
         if: steps.build.outcome == 'failure' && steps.pin.outputs.skip != 'true'
@@ -261,6 +299,10 @@ jobs:
           SHA: ${{ steps.good.outputs.sha }}
         run: |
           set -euo pipefail
+          trap 'echo "failed=fallback-pin" >> "$GITHUB_OUTPUT"' ERR
+          # Only a fallback that really runs starts a new log; with none, the
+          # final digest still reads the refusal.
+          [ ! -e "$RUNNER_TEMP/build.log" ] || mv "$RUNNER_TEMP/build.log" "$RUNNER_TEMP/build-refused.log"
           ver="edge-$(date -u +%Y%m%d)-${SHA:0:7}"
           sed -i "s|github:basecamp/omarchy/[^\"]*|github:basecamp/omarchy/$SHA|" flake.nix
           sed -i "s|omarchyVersion = \"[^\"]*\"|omarchyVersion = \"$ver\"|" flake.nix
@@ -367,13 +409,6 @@ jobs:
           } > "$RUNNER_TEMP/patched.md"
           cat "$RUNNER_TEMP/patched.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Write the README numbers this pin computes
-        id: counts
-        if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')
-        # #1537: derived from edge's pin, never hand-edited; publish's `git add -A` takes it.
-        # A refusal (a count with no word yet, AGENTS.md §4) holds the candidate, by name.
-        run: .github/scripts/readme-counts.sh --fix || { echo "failed=readme-counts" >> "$GITHUB_OUTPUT"; exit 1; }
-
       - name: Publish the candidate
         id: candidate
         if: steps.pin.outputs.skip != 'true' && (steps.build.outcome == 'success' || steps.build2.outcome == 'success')
@@ -446,8 +481,9 @@ jobs:
     # Three VM builds, each ~10-20 minutes warm; the wait is in wait-idle.
     timeout-minutes: 240
     outputs:
-      failed: ${{ steps.vms.outputs.failed }}
+      failed: ${{ steps.vms.outputs.failed || (steps.promote.outcome == 'failure' && 'promote') || '' }}
       promoted: ${{ steps.promote.outputs.promoted }}
+      digest: ${{ steps.digest.outputs.report }}
     steps:
       # The candidate SHA, not the branch: what is booted is exactly what is
       # promoted, even if edge-candidate is rewritten meanwhile.
@@ -486,12 +522,14 @@ jobs:
           # answer is an error, not "nothing to run".
           opts=$(nix eval .#checks.x86_64-linux --raw --apply \
             'c: builtins.concatStringsSep " " (builtins.filter (n: builtins.substring 0 8 n == "options-") (builtins.attrNames c))') || {
-            echo "::error::could not list the options-* checks"; exit 1; }
-          [ -n "$opts" ] || { echo "::error::no options-* checks in the flake"; exit 1; }
+            echo "::error::could not list the options-* checks"
+            echo "failed=options-list" >> "$GITHUB_OUTPUT"; exit 1; }
+          [ -n "$opts" ] || { echo "::error::no options-* checks in the flake"; echo "failed=options-list" >> "$GITHUB_OUTPUT"; exit 1; }
           for c in $opts session coexist plugin omarchy-package-ledger; do
             if [ "${c#options-}" = "$c" ] && ! host_free; then
               echo "::error::$c failed: the host never freed up"
               failed="$failed $c"
+              echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
               continue
             fi
             echo "::group::$c"
@@ -499,6 +537,7 @@ jobs:
               echo "::endgroup::"
               echo "::error::$c failed"
               failed="$failed $c"
+              echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
             fi
           done
           echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
@@ -535,7 +574,10 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - name: Update the omarchy-edge issue
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+      - name: Update the omarchy-edge issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -548,63 +590,12 @@ jobs:
           VERIFY_FAILED: ${{ needs.verify.outputs.failed }}
           PROMOTED: ${{ needs.verify.outputs.promoted }}
           FALLBACK: ${{ needs.prepare.outputs.fallback }}
+          NEWEST: ${{ needs.prepare.outputs.newest }}
+          BUILD2: ${{ needs.prepare.outputs.build2 }}
+          HELD_BY: ${{ needs.prepare.outputs.held_by }}
+          HELD_SHA: ${{ needs.prepare.outputs.held_sha }}
+          HELD_DIGEST: ${{ needs.prepare.outputs.held_digest }}
+          PREPARE_DIGEST: ${{ needs.prepare.outputs.digest }}
+          VERIFY_DIGEST: ${{ needs.verify.outputs.digest }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          # A plain variable, never `read` into fields: --jq renders null as
-          # nothing, and a whitespace IFS drops the empty field (section 13).
-          num=$(gh issue list --label omarchy-edge --state open --json number,title \
-            --jq '[.[] | select(.title == "The Omarchy edge channel is not publishing")][0].number // empty')
-
-          # A cancel after edge-promote pushed but before it wrote promoted=true
-          # would report a failure for a promoted edge. Ask the remote.
-          if [ "$PROMOTED" != true ] && [ -n "$CANDIDATE" ] && [ "$VERIFY" != success ]; then
-            current=$(gh api "repos/$GH_REPO/git/ref/heads/edge" --jq .object.sha 2>/dev/null || true)
-            [ "$current" != "$CANDIDATE" ] || PROMOTED=true
-          fi
-
-          # A promotion on the fallback pin must not hide that new quattro is red.
-          if [ "$PROMOTED" = true ] && [ "$FALLBACK" != true ]; then
-            if [ -n "$num" ]; then
-              gh issue close "$num" --comment "edge was promoted by $RUN_URL"
-            fi
-            echo "promoted; issue ${num:-none open}"
-            exit 0
-          fi
-          if [ "$PREPARE" = success ] && [ "$SKIP" = true ]; then
-            echo "edge is current; nothing to report"
-            exit 0
-          fi
-
-          # A cancelled job result here is a timeout, not a person: a cancelled
-          # workflow does not reach this job.
-          if [ "$PROMOTED" = true ]; then
-            sig="quattro red, edge kept on its last good pin: ${PREPARE_FAILED:-unknown}"
-          elif [ "$PREPARE" != success ]; then
-            sig="prepare: ${PREPARE_FAILED:-$PREPARE}"
-          elif [ "$WAIT" != success ]; then
-            sig="wait-idle: $WAIT"
-          elif [ "$VERIFY" != success ]; then
-            sig="verify: ${VERIFY_FAILED:-$VERIFY}"
-          else
-            sig="promote: not promoted"
-          fi
-          body=$(printf '%s\n\n%s\n' "edge-sig: $sig" "Run: $RUN_URL")
-
-          gh label create omarchy-edge --force \
-            --description "The nightly edge publish is failing" --color d93f0b
-          if [ -z "$num" ]; then
-            gh issue create --label omarchy-edge --milestone "Keeping the lights on" \
-              --title "The Omarchy edge channel is not publishing" --body "$body"
-            exit 0
-          fi
-
-          # Comment only when the failure changed: the same red every night is
-          # one comment, not thirty.
-          last=$(gh issue view "$num" --json body,comments \
-            --jq '((.comments | last) // {body: .body}).body // "" | split("\n")[0]')
-          if [ "$last" = "edge-sig: $sig" ]; then
-            echo "same failure as the last comment ($sig); not commenting"
-          else
-            gh issue comment "$num" --body "$body"
-          fi
+        run: .github/scripts/edge-report.sh

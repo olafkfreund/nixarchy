@@ -555,6 +555,13 @@ Two other ways a check stops checking, both found in one week:
   whose shell died on a syntax error, the runner's `--out-link` silently kept
   the previous build, and four test boots ran the old guest (#1504). Check
   `nix build`'s exit status, never just its last line of output.
+- **`set -e` does not reach inside `$(...)`.** Bash clears it in a command
+  substitution, so a function called as `x=$(f)` runs past a failed command
+  and returns the status of its last line. `edge-report.sh`'s `find_issue` did
+  `out=$(gh issue list ...)` then `jq`, so a failed listing returned empty with
+  status 0 and read as "no open issue". Its test passed, because its stub failed
+  every `gh` call and a later one tripped the script; only a stub failing the
+  listing alone could see it (#1602). Write `out=$(cmd) || return`.
 - **An EXIT trap reads its variables when the shell exits, not when the trap
   is set.** `trap 'rm -f "$tmp"' EXIT` inside a function whose `tmp` is
   `local` removes nothing: by exit the local is gone, and `rm -f ""` succeeds
@@ -974,15 +981,19 @@ where every new row reads as stale. So: rows plus `flake.nix`'s two copies
 (the input `url` and `omarchyVersion`) plus `flake.lock`, in the carry, and
 then dispatch.
 
-**And a run that does not start from the candidate deletes the carry.** A
-scheduled run, or a dispatch without `from_candidate=true`, starts from
-`edge`, and when it publishes it force-pushes `edge-candidate`. Any carry
-pushed there and not yet promoted is gone, and nothing says so. On #1578, two
-carries (the quattro `ae64a4b` pin and the Herdr menu rows) vanished under a
-plain dispatch, and that run fell back to the old pin for the very reason the
-carries fixed. While a carry waits, dispatch only with `from_candidate=true`.
-Before trusting a candidate, `git show origin/edge-candidate:<file>` the carry,
-and cherry-pick it back if it is gone.
+**A waiting carry on `edge-candidate` is picked up by author, and a diverged
+one stops the run.** On #1578, two carries vanished under a plain dispatch
+because any run without `from_candidate=true` started from `edge` and
+force-pushed `edge-candidate`. `.github/scripts/edge-carry.sh` (#1602) now
+checks `origin/edge..origin/edge-candidate --not origin/main`: when a non-bot
+commit descends from `origin/edge`, a plain run starts from `edge-candidate`
+and keeps its pin just as `from_candidate=true` does; when `origin/edge` has
+moved past the carry (`diverged`), the run stops with
+`failed=candidate-diverged` and pushes nothing until the carry is rebased onto
+`edge` or `edge-candidate` is deleted. That check trusts the commit author (a
+hand-made commit with `github-actions[bot]`'s identity reads as disposable).
+Keep `from_candidate=true` for starting from `edge-candidate` after resolving a
+merge conflict by hand.
 
 ## 9. Territory, and the failure no single PR can see
 
@@ -1315,6 +1326,12 @@ thing and meant another. None of them was a bug in this repo.
   measurement is the run log, not the config:
   `grep -oE "from 'https://[^']*'" | sort | uniq -c` counts downloads per
   cache, and a cache at zero is a cache nobody asked.
+- **A workflow run named in an issue can 404, so the digest in the issue is
+  the evidence.** Failed `omarchy-edge.yml` runs have vanished while passing
+  runs from the same hours remain; nothing in this repo deletes runs, so the
+  cause is not established (#1602).
+  `edge-report.sh` puts the bounded `failure-digest.sh` excerpt in the issue
+  body or comment so the failure reason survives when the run link is dead.
 
 ## 14. Coexist with the user's own config
 

@@ -2005,3 +2005,30 @@ passed each time. `machine.copy_from_machine(path, dir)` copies through the
 shared directory instead, and the test reads `machine.out_dir / dir / name`. It
 exists in both the 26.05 and the unstable driver; `copy_from_vm` is deprecated
 on 26.05, and the test script is type-checked.
+
+## The edge report and carry checks (#1602)
+
+- **`checks.edge-carry`** runs `.github/scripts/edge-carry.sh` in a real git
+  repo across `none`, `carry` and `diverged`: absent refs, candidate equal to
+  `edge`, bot-only commits, a bot candidate that merged a human commit from
+  `main` (`--not origin/main` keeps it `none`), a human carry descending from
+  `edge`, a human merge commit, and a human carry that `edge` has moved past. It
+  cannot catch a hand-made commit written under `github-actions[bot]`'s email,
+  because the script trusts the author.
+- **`checks.edge-report`** runs `.github/scripts/edge-report.sh` against a stub
+  `gh` for every row of the report outcome table (promoted on newest, promoted
+  on an older pin via `from_candidate`, promoted on the fallback pin, skipped as
+  current, and failed), plus `omarchy-edge-held` creation, signature
+  deduplication across the body and all comments even after a human comment,
+  classification-list wording versus `upstream candidate failed; investigate`,
+  the single `held-escalated:` comment after 20 hours, the per-outcome failure
+  digest fence, `cancelled` rendered as `timed out`, and `gh` failures failing
+  the script. It also drives `.github/scripts/edge-build.sh` in a scratch repo
+  with stubbed `nix`, `generated-checks.sh`, `build-unless-proven.sh` and
+  `readme-counts.sh` to verify root-failure names from the log without
+  duplicating `omarchy`, `failed=` on early exits, and `README.md` restored when
+  `readme-counts.sh --fix` refuses.
+
+**What neither check reaches:** `omarchy-edge.yml`'s wiring is asserted only by
+variable name in the `report` step (and whether a timed-out job keeps its step
+outputs cannot be tested locally). Its first real run is after merge.

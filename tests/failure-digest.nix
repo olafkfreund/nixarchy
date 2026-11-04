@@ -53,12 +53,14 @@ pkgs.runCommand "nixarchy-failure-digest"
     has c-cascade '5 checks failed only because linux-7.2.11-modules failed'
     lacks c-cascade '✗ initrd'
     lacks c-cascade '✗ nixos-system'
+    [ "$(bash sut/failure-digest.sh --names ${./failure-digest}/c-cascade.log)" = linux-7.2.11-modules ] || fail "c-cascade: names must contain only the root"
 
     run e-substitute
     has e-substitute '✗ omarchy-edge-20261021-087f73d'
     has e-substitute "doesn't match anything in file"
     has e-substitute '✗ nixarchy-menu-guidance'
     has e-substitute 'did not name Nothing on this machine was changed'
+    [ "$(bash sut/failure-digest.sh --names ${./failure-digest}/e-substitute.log)" = "$(printf '%s\n' omarchy-edge-20261021-087f73d menu-guidance)" ] || fail "e-substitute: names must strip nixarchy-"
 
     # A log captured twice (edge prepare's tee plus the script's) is one failure.
     cat ${./failure-digest}/c-cascade.log ${./failure-digest}/c-cascade.log > twice.log
@@ -69,6 +71,12 @@ pkgs.runCommand "nixarchy-failure-digest"
     run d-clean
     has d-clean 'no failed derivation found'
     grep -qx 'digest=' out-d-clean.txt || fail "d-clean: GITHUB_OUTPUT"
+    [ -z "$(bash sut/failure-digest.sh --names ${./failure-digest}/d-clean.log)" ] || fail "d-clean: names must be empty"
+
+    awk '/^report<</ { marker = substr($0, 9); in_report = 1; next }
+      in_report && $0 == marker { closed = 1; exit }
+      in_report { if (++lines > 60 || length($0) > 300) exit 1 }
+      END { if (!in_report || !closed || !lines) exit 1 }' out-a-session.txt || fail "a-session: report missing or unbounded"
 
     # Never a status: a missing log, and a nix that dies, both still exit 0.
     bash sut/failure-digest.sh $PWD/does-not-exist.log >/dev/null || fail "missing log exited non-zero"

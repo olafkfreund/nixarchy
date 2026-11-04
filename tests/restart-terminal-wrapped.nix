@@ -19,6 +19,20 @@ pkgs.runCommand "nixarchy-restart-terminal-wrapped"
     ./.ghostty-wrapped -c 'read -t 1000 <>hold' & ghostty=$!
     ./kitten -c 'read -t 1000 <>hold' & kitten=$!
 
+    # A forked stand-in carries its parent's comm until it execs; the script
+    # must not look before then. comm truncates at 15 characters.
+    for pair in "$kitty:.kitty-wrapped" "$ghostty:.ghostty-wrapped" "$kitten:kitten"; do
+      pid=''${pair%%:*}
+      name=''${pair#*:}
+      want=$(printf %.15s "$name")
+      ok=0
+      for i in $(seq 100); do
+        if [ "$(cat /proc/$pid/comm 2>/dev/null)" = "$want" ]; then ok=1; break; fi
+        sleep 0.1
+      done
+      [ "$ok" = 1 ] || { echo "$name never exec'd as $want" >&2; exit 1; }
+    done
+
     HOME=$TMPDIR bash ${omarchy}/share/omarchy/bin/omarchy-restart-terminal || true
 
     for i in $(seq 50); do

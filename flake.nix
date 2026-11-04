@@ -1869,6 +1869,7 @@
             # quote, checked against the option set they claim to describe. See
             # tests/doc-options.nix and #214.
             "doc-options"
+            "edge-carry"
             "edge-promote"
             "firmware-guard"
             # The dangerous one. Installs into free space on a disk that already

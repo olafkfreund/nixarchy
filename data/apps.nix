@@ -343,6 +343,15 @@
     unfree = true;
     arch = "openai-codex-desktop";
   };
+  amp-desktop = {
+    # New on quattro (upstream #17446). nixpkgs has amp-cli, the terminal agent,
+    # and not this Electron app; mapping the CLI would install a different thing.
+    menuId = "install.ai.amp";
+    label = "Amp Desktop";
+    category = "AI";
+    unavailable = "Amp Desktop is an AUR binary with no nixpkgs package; the Amp CLI is in nixpkgs as amp-cli.";
+    arch = "amp-desktop-bin";
+  };
   # The terminal coding agents. Four entries that share one shape, so the
   # reasoning is here once rather than repeated four times.
   #

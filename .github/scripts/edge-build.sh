@@ -26,12 +26,39 @@ try omarchy nix build .#omarchy --print-build-logs
 # verify, on p620, after the idle wait (CLAUDE.md section 6).
 # The list is derived, not kept: capture first, because a failing
 # command inside mapfile < <(...) is invisible (CLAUDE.md section 4).
-out=$(.github/scripts/generated-checks.sh) || { echo "::error::generated-checks.sh failed"; exit 1; }
+out=$(.github/scripts/generated-checks.sh) || {
+  echo "::error::generated-checks.sh failed"
+  failed="$failed generated-checks-list"
+  echo "failed=${failed# }" >> "$GITHUB_OUTPUT" || exit 1
+  exit 1
+}
 mapfile -t targets <<<"$out"
-[ "${#targets[@]}" -ge 5 ] || { echo "::error::only ${#targets[@]} generated checks"; exit 1; }
+[ "${#targets[@]}" -ge 5 ] || {
+  echo "::error::only ${#targets[@]} generated checks"
+  failed="$failed generated-checks-list"
+  echo "failed=${failed# }" >> "$GITHUB_OUTPUT" || exit 1
+  exit 1
+}
 # The same script build.yml's omarchy job uses: slices of 5 with
 # --keep-going, cache-proven checks skipped, and it continues past a
 # failed slice, so an eval error hides at most its own slice.
+log=${RUNNER_TEMP:-/tmp}/build.log
+offset=$(wc -l <"$log" 2>/dev/null || echo 0)
 try generated-checks .github/scripts/build-unless-proven.sh "${targets[@]}"
-echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+if [[ " $failed " == *" generated-checks "* ]]; then
+  if names=$(tail -n +$((offset + 1)) "$log" | .github/scripts/failure-digest.sh --names /dev/stdin); then
+    if [[ " $failed " == *" omarchy "* ]]; then
+      names=$(printf '%s\n' "$names" | sed '/^omarchy-edge-/d') || names=""
+    fi
+    [ -z "$names" ] || failed=${failed/ generated-checks/ ${names//$'\n'/ }}
+  fi
+fi
+if [ -z "$failed" ]; then
+  if ! .github/scripts/readme-counts.sh --fix; then
+    echo "::error::readme-counts failed"
+    git checkout HEAD -- README.md || echo "::error::could not restore README.md"
+    failed=readme-counts
+  fi
+fi
+echo "failed=${failed# }" >> "$GITHUB_OUTPUT" || exit 1
 [ -z "$failed" ] || { echo "::error::red:$failed"; exit 1; }

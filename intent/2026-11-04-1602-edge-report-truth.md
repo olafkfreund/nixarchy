@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1602
 author: x
 ---
@@ -117,6 +117,8 @@ lands.
 - Every check I add has to be shown failing first (§1).
 
 ## Open questions
+
+The owner approved all four recommendations below on 2026-11-04.
 
 1. **Where does the held-commit state live?** I recommend a second rolling issue,
    "Omarchy quattro is held back", which is quiet, deduplicated, and closed once

@@ -2,9 +2,10 @@
 # Edge's report says what happened (#1602): the real edge-report.sh against a
 # stub `gh` serving fixture JSON, and the real edge-build.sh in a scratch repo
 # with stubbed nix and sub-scripts. Every case is a row of the plan's outcome
-# table or a rule of the held issue. Not covered here: the workflow's wiring.
+# table or a rule of the held issue, plus the workflow's report step naming what the script reads.
 pkgs.runCommand "edge-report"
   {
+    workflowFile = ../.github/workflows/omarchy-edge.yml;
     nativeBuildInputs = with pkgs; [
       bash
       coreutils
@@ -23,6 +24,7 @@ pkgs.runCommand "edge-report"
     git config --global user.email test@example.invalid
     git config --global init.defaultBranch main
     report=${../.github/scripts/edge-report.sh}
+    workflow=$workflowFile
     fails=0
     NOW=1800000000
     NOT_PUB='The Omarchy edge channel is not publishing'
@@ -297,6 +299,16 @@ pkgs.runCommand "edge-report"
     [ "$rc" = 0 ] || fail "readme-ok: exit $rc"
     failed_is readme-ok ""
     grep -qx edited b-readme-ok/README.md || fail 'readme-ok: the edit was lost'
+
+    # --- the workflow hands the script what it reads ---
+    # Only asserted by name: the workflow's first real run is after merge.
+    step=$(sed -n '/- name: Update the omarchy-edge issues/,$p' "$workflow")
+    [ -n "$step" ] || fail 'wiring: the report step is gone from the workflow'
+    vars=$(grep -oE '[A-Z][A-Z0-9_]*=\$\{[A-Z0-9_]*:-' "$report" | cut -d= -f1)
+    [ "$(echo "$vars" | wc -l)" -ge 15 ] || fail "wiring: found too few variables in the script: $vars"
+    for v in $vars RUN_URL GH_REPO GH_TOKEN; do
+      grep -qE "^ +$v: [$][{][{]" <<<"$step" || fail "wiring: the report step does not set $v"
+    done
 
     echo
     if [ "$fails" -gt 0 ]; then echo "$fails failed"; exit 1; fi

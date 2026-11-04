@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1594
 intent: intent/2026-11-04-1594-boot-hang-diagnostics.md
 ---

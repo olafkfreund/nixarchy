@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1596
 spec: spec/2026-11-04-1596-hypr-layouts-load-point.md
 coders:

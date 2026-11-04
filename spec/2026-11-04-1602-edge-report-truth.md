@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1602
 intent: intent/2026-11-04-1602-edge-report-truth.md
 ---

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1596
 intent: intent/2026-11-04-1596-hypr-layouts-load-point.md
 ---

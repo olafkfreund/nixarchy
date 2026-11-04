@@ -131,7 +131,7 @@
 
     # Why: docs/internals/flake.md#declarative-secrets-adopted-for-one-concrete-reaso
     sops-nix = {
-      url = "github:Mic92/sops-nix/442449fa7b1fe6c692d0103ac9fc8f9e82931cf3";
+      url = "github:Mic92/sops-nix/b18e01ce148eb3efff5de2f2d3181ca53b2b2a54";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -322,7 +322,7 @@
     # (`git ls-remote --tags` is empty), which is the situation sops-nix is
     # already in. Bump it deliberately; never track the branch.
     mcp-servers-nix = {
-      url = "github:natsukium/mcp-servers-nix/d1185e993ec51db9e1709250c04def5dc3058132";
+      url = "github:natsukium/mcp-servers-nix/094e3ba3ee36c5c0bb2bfc4e97ad30d84041ff89";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

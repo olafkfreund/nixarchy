@@ -22,7 +22,11 @@ reviewers:
   works like this:
   - It reads `n = len(machine.full_console_log)` on entry.
   - It loops over `machine.wait_for_console_text(regex, timeout=timedelta(seconds=w))`
-    with `w = max(1, min(15, silence_left, budget_left))`.
+    with `w = min(15, silence_left, budget_left)`, computed from
+    `time.monotonic()` deadlines. When `w <= 0`, the detector whose
+    deadline passed fires, so there are no extra 1 s windows past a limit.
+    The timeout is a `datetime.timedelta`, which the pinned driver's
+    `Duration` takes; a bare int warns as deprecated.
   - It catches only `RequestedAssertionFailed`, imported from
     `test_driver.errors`.
   - If the log grew, the silence clock resets. If there has been no growth
@@ -42,12 +46,22 @@ reviewers:
 - 120 s is about 19× the longest healthy gap measured (6.4 s over 65 waits).
 - No sysrq, no retry, no change to the shipped closure.
 - `checks.boot-hang-detect` has two nodes:
-  - **`frozen`:** started, then `stop`ped on the monitor at once. It calls
-    `wait_for_multi_user(frozen, timeout=120, silence=20, probe_timeout=5)`
-    and must raise with "console silent" in under 60 s, with the dump
-    holding register output (`RIP=` or `RIP `).
-  - **`healthy`:** a separate fresh node, never the stopped one resumed. It
-    must return from the same helper.
+  - **`frozen`:**
+    - `frozen.start()`, then `frozen.send_monitor_command("stop")`, then
+      `time.sleep(1)` so in-flight serial lines land before the helper
+      samples the log length.
+    - It calls `wait_for_multi_user(frozen, timeout=120, silence=20,
+      probe_timeout=5)` and must raise with "console silent" in under
+      60 s, with the dump holding register output (`RIP=`).
+    - **Guard:** assert that "Reached target Multi-User System" is not in
+      `frozen.full_console_log`. That proves the stop landed before
+      multi-user, so case A can't pass by accident (codex).
+    - Then `frozen.process.kill(); frozen.process.wait()`, because the
+      driver's `crash()` is a no-op on a guest that never booted, and
+      teardown must not try a clean shutdown of a stopped VM.
+  - **`healthy`:** a separate fresh node, never the stopped one resumed.
+    `healthy.start()` comes explicitly, because `wait_for_console_text` does
+    not auto-start. It must return from the same helper.
 - CI placement: claimed in `generated-checks.sh` and built in `build.yml`'s
   KVM job, beside `hibernate-resume`. Both are CI-gate edits, and a human
   merges (§11).
@@ -95,8 +109,8 @@ reviewers:
      `build-unless-proven.sh .#checks.x86_64-linux.boot-hang-detect`, with a
      one-line comment (a nixosTest that needs this job's /dev/kvm).
    → verify: the claim-consistency checks that `build.yml` runs on the lists,
-   locally (`bash .github/scripts/generated-checks.sh generated` must not
-   list it), plus `actionlint`.
+   locally (`bash .github/scripts/generated-checks.sh` (no argument; it prints the
+   targets) must not list it), plus `actionlint`.
    Traps:
    - §4: claimed and built must agree in both directions.
    - Relevance is already right: `pr-touches-build.sh` is a denylist
@@ -123,7 +137,8 @@ reviewers:
      `deadnix`.
    - VM tier only when `gh run list` shows nothing in flight:
      `boot-hang-detect` must be green.
-   - **Break:** comment out the silence branch, commit as temporary, build
+   - **Break:** make the silence branch unreachable (`if False and …`, which
+     keeps the clamp arithmetic as it is), commit as temporary, build
      `boot-hang-detect` and capture the red (elapsed ≥ 60 s or wrong
      reason). Restore with `git checkout HEAD~ -- tests/vm-cleanup.py` (§5:
      not `git checkout --`), then green again.
@@ -131,7 +146,8 @@ reviewers:
      passes, or leave it to the PR's install job and say so.
    - Squash to a real subject (§8), open the PR linking all three artifacts,
      post "@codex review", and arm `--auto --squash`. The PR body says it is
-     a CI-gate change for a human to merge.
+     a CI-gate change for a human to merge, and **includes the captured red
+     output** of the break run (§1, the template's section).
 
 ## Tests
 

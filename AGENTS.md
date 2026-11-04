@@ -782,6 +782,25 @@ Exit 2 means the API did not answer, which is not "free".
 A p620 *switch* still kills every install in flight (see above). The tiers
 govern builds, not deploys.
 
+**Run the checks locally before you push, all of them (owner, 2026-11-04).**
+CI is the confirmation, not the first run. A red found locally is rewritten
+in a minute; a red found by CI costs a push, a queue and an install slot.
+Before every push, including an `edge-candidate` carry, build every check the
+change can reach:
+
+- every target `.github/scripts/generated-checks.sh` prints, plus each claimed
+  check whose files you touched. The runners share p620's store, so whatever
+  CI already built is a cache hit, and "all" costs only what your change
+  rebuilds;
+- by the tiers above: cheap now, package tier when its gate is free, VM checks
+  and options shards when CI is idle. Wait for the gate rather than skip it
+  and push;
+- what cannot run here (the `install` job, a hosted runner's limits) is named
+  in the PR as not run locally, with the reason.
+
+The edge carry for #1589 was pushed with only the package ledger built; the
+rest of edge's checks met the new quattro commit first in CI.
+
 **Two ways a local VM outlives your attention, both from 2026-09-22.**
 
 - **A wedged `nix build` looks exactly like a working one.** An

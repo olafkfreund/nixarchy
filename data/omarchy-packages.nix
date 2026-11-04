@@ -567,6 +567,9 @@
   "linux-omarchy-headers" = {
     skip = "As linux-omarchy.";
   };
+  "linux-omarchy-nvidia-open" = {
+    skip = "Prebuilt NVIDIA modules for linux-omarchy; nixarchy uses the NixOS kernel, and the driver is the user own hardware.nvidia choice.";
+  };
   "linux-t2" = {
     skip = "Intel T2 Mac kernel; not targeted.";
   };

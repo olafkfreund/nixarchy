@@ -37,14 +37,20 @@ Work in `/mnt/data/vmtest/wt-1602`, branch `fix/1602-edge-report-truth`.
 - **Held issue:** title exactly `Omarchy quattro is held back`; label
   `omarchy-edge-held`; milestone `Keeping the lights on`; first line
   `held-sig: <sha7>: <checks>`.
-- **Classification wording** only when every name is in `bin-ledger etc-overlay
-  menu-actions menu-conditions menu-verbs omarchy-package-ledger skill-parity
-  stale-scripts`. Otherwise, and with no names, "upstream candidate failed;
-  investigate".
+- **Wording of the held body:** `needs a classification row` only when every name is
+  in `bin-ledger etc-overlay menu-actions menu-conditions menu-verbs
+  omarchy-package-ledger skill-parity stale-scripts`. Otherwise, and with no names,
+  `upstream candidate failed; investigate`. With no names the first line reads
+  `held-sig: <sha7>: unknown`, with `<sha7>` as `${HELD_SHA:0:7}`.
 - **Dedupe:** the newest line with the prefix (`edge-sig:` or `held-sig:`), across
   the body and all comments, in comment order.
 - **Escalation:** one comment starting `held-escalated:`, when the issue is more than
-  72000 s (20 h) old and no comment already starts that way.
+  72000 s (20 h) old and no comment already starts that way. It's checked on every
+  held report, independently of whether `held-sig` changed. `createdAt` comes from
+  `gh issue view --json body,comments,createdAt`.
+- **Closing comments:** `edge was promoted by $RUN_URL` for a promotion;
+  `edge is current as of $RUN_URL` for a skip; `quattro is adopted as of $RUN_URL` for
+  the held issue.
 - **Digest in the issue,** below the signature, in a `text` fence: held uses the
   refused attempt's digest; `prepare` failure uses the final digest; `verify` failure
   uses `verify`'s.
@@ -103,10 +109,13 @@ Commit after each step, naming it. Each deviation updates this file in the same 
      `offset=$(wc -l <"$log" 2>/dev/null || echo 0)`.
    - After it, if `generated-checks` is in `$failed`: `names=$(tail -n +$((offset + 1))
      "$log" | .github/scripts/failure-digest.sh --names /dev/stdin)`. If `omarchy` is
-     already in `$failed`, drop lines matching `^omarchy-edge-`. If names remain, replace
-     the `generated-checks` word in `$failed` with them, space-separated. Otherwise leave it.
-   - Both early exits (`generated-checks.sh failed`, `only N generated checks`) write
-     `failed=generated-checks-list` first.
+     already in `$failed`, drop lines matching `^omarchy-edge-`, the form that derivation's
+     name takes on edge (see `tests/failure-digest/e-substitute.log`). If names remain,
+     replace the `generated-checks` word in `$failed` with them, space-separated.
+     Otherwise leave it.
+   - Both early exits (`generated-checks.sh failed`, `only N generated checks`) append
+     `generated-checks-list` to `$failed` and write the whole list, so a red `omarchy`
+     before them is kept.
    - After the checks, when `$failed` is empty, run `.github/scripts/readme-counts.sh
      --fix`. On refusal: `::error::`, `git checkout HEAD -- README.md`, and
      `failed=readme-counts`.
@@ -120,13 +129,17 @@ Commit after each step, naming it. Each deviation updates this file in the same 
    Moves the inline shell from `omarchy-edge.yml:555-609`, keeping its comments that
    still apply. `set -euo pipefail`, no `continue-on-error` anywhere (§4). Reads from the
    environment: `PREPARE WAIT VERIFY CANDIDATE SKIP PROMOTED FALLBACK NEWEST
-   PREPARE_FAILED HELD_BY HELD_SHA VERIFY_FAILED RUN_URL PREPARE_DIGEST HELD_DIGEST
+   BUILD2 PREPARE_FAILED HELD_BY HELD_SHA VERIFY_FAILED RUN_URL PREPARE_DIGEST HELD_DIGEST
    VERIFY_DIGEST GH_REPO`, and `EDGE_REPORT_NOW`, defaulting to `date +%s`, for the test.
    - Implement the outcome table above, with two small functions: one finds an open issue
      by label and exact title, and `post` files or comments with deduplication.
-   - Signature: `prepare: X`, and when `HELD_BY` is set and differs from `X`,
-     `prepare: fallback also red: X; quattro red: HELD_BY`. A `cancelled` job result reads
-     `timed out`, appended after any names: `verify: options-a; timed out`.
+   - `prepare` signature, where `X` is `PREPARE_FAILED`. `BUILD2` is `build2`'s outcome,
+     not an inference from the names, since both attempts can fail on the same check:
+     - `BUILD2=failure`: `prepare: fallback also red: X; quattro red: HELD_BY`;
+     - otherwise, `HELD_BY` set and different from `X`: `prepare: X; quattro red: HELD_BY`;
+     - otherwise `prepare: X`.
+   - A `cancelled` result for any of `prepare`, `wait-idle` or `verify` reads `timed out`,
+     after any names: `verify: options-a; timed out`, and `verify: timed out` with none.
    - Every first line stays alone on line 1; the digest follows a blank line, in a `text`
      fence, and is left out when empty.
    - `gh label create <label> --force` before filing, as today.
@@ -146,13 +159,15 @@ Commit after each step, naming it. Each deviation updates this file in the same 
    exits write `failed=`; a readme stub that edits and refuses leaves `README.md`
    byte-identical and writes `failed=readme-counts`; a readme success keeps its edit.
 
-   It also asserts wiring, the part no local run can reach: each variable the script reads
-   has a `VAR: ${{` line in the workflow's `report` step.
+   Stubs write to `$RUNNER_TEMP/build.log` directly, as the real `build-unless-proven.sh`
+   does, with a fresh `RUNNER_TEMP` per case. A log-only `omarchy` fixture must use the
+   `omarchy-edge-<ver>` derivation name. Also cover a red `omarchy` followed by an early exit,
+   which keeps both names, and `build` and `build2` red on the same check, which still says
+   `fallback also red`.
    → verify: `nix build .#checks.x86_64-linux.edge-report`. **§1 breaks, each must go red,
    each proven to land with `git diff`:** (a) file the "not publishing" issue on fallback;
    (b) drop the close on skip; (c) treat `NEWEST` as always true; (d) treat an unknown name
-   as classification; (e) dedupe on the last comment only; (f) drop the README restore;
-   (g) remove one env line from the workflow.
+   as classification; (e) dedupe on the last comment only; (f) drop the README restore.
    Traps: `red()` helpers can be a green light (`tests/AGENTS.md`, #1524): every break runs
    by hand against the real check. No `''${` slips: escape as `''${` in the `''` string, and
    `\$` isn't an escape there (§5). Use `printf`, not heredocs (§5). `gh --jq` renders null
@@ -163,34 +178,42 @@ Commit after each step, naming it. Each deviation updates this file in the same 
    - **Outputs, `:47-51`:** add `newest: ${{ steps.pin.outputs.newest }}`,
      `held_by: ${{ steps.build.outputs.failed }}`, `held_sha: ${{ steps.pin.outputs.sha }}`,
      `held_digest: ${{ steps.held_digest.outputs.report }}`,
-     `digest: ${{ steps.digest.outputs.report }}`. Replace `failed` with
+     `digest: ${{ steps.digest.outputs.report }}`, `build2: ${{ steps.build2.outcome }}`.
+     Replace `failed` with
      `steps.candidate.outputs.failed || steps.build2.outputs.failed ||
      steps.pin2.outputs.failed || steps.build.outputs.failed || steps.pin.outputs.failed ||
      steps.merge.outputs.failed || steps.start.outputs.failed`.
    - **`start`, `:106`:** when `FROM_CANDIDATE` isn't `true`, run `edge-carry.sh`, captured
      first. `diverged` → `failed=candidate-diverged` and an `::error::` naming both ways out,
-     then `exit 1`. `carry` → use the candidate as `from_candidate` does, and log it.
-     Write `from_candidate=true|false` as a step output.
+     then `exit 1` (an explicit exit doesn't fire the step's `ERR` trap, so `failed=start`
+     can't overwrite it). `carry` → set `FROM_CANDIDATE=true` before the `start=` choice, and
+     log it. Write `from_candidate=true|false` as a step output, reading empty as `false`.
    - **`pin`, `:183-195`:** env from `steps.start.outputs.from_candidate`. Always ask
      upstream, captured, with the existing refusal for a failure or non-SHA. Keep
      `sha=$HAVE` for a candidate start. Write `newest=true|false` from `sha = upstream`.
      The skip condition at `:205` stays as it is.
    - **New step after `build`, `id: held_digest`:** `if: steps.build.outcome == 'failure'
      && steps.pin.outputs.skip != 'true'`, `continue-on-error: true`, runs
-     `failure-digest.sh`, then moves `$RUNNER_TEMP/build.log` to `build-refused.log`.
-   - **`pin2`:** `trap 'echo "failed=fallback-pin" >> "$GITHUB_OUTPUT"' ERR`.
+     `failure-digest.sh`. It doesn't touch the log.
+   - **`pin2`:** `trap 'echo "failed=fallback-pin" >> "$GITHUB_OUTPUT"' ERR`. Its first
+     action moves `$RUNNER_TEMP/build.log` to `build-refused.log`, so only a fallback that
+     really runs starts a new log. With no fallback, the final digest still reads the refusal.
    - **Delete the `Write the README numbers` step, `:370-375`.**
    - **`verify`, `:449`:** `failed: ${{ steps.vms.outputs.failed || (steps.promote.outcome
      == 'failure' && 'promote') || '' }}`; add `digest: ${{ steps.digest.outputs.report }}`.
-     Write `failed=` after each red check. The two `options` exits write
-     `failed=options-list`.
+     Write `failed=` right after each of the two places `$failed` grows in the loop. The
+     two `options` exits write `failed=options-list`.
    - **`report`, `:538-609`:** add a sparse checkout of `.github/scripts`, as `wait-idle`
      has, and replace the inline shell with `run: .github/scripts/edge-report.sh`, adding
      the new env.
+   - **`tests/edge-report.nix`, wiring, added here because it needs these edits:** each
+     variable the script reads, except `EDGE_REPORT_NOW`, has a `VAR: ${{` line in the
+     workflow's `report` step.
    - **`:14`, the job diagram comment:** still correct; leave it.
 
    → verify: `nix run nixpkgs#actionlint -- .github/workflows/omarchy-edge.yml`,
-   `checks.edge-report`'s wiring assertion, and `grep -rn 'steps.counts' .github/` empty.
+   `checks.edge-report`, and `grep -rn 'steps.counts' .github/` empty. **§1 break:** remove
+   one env line from the `report` step; the wiring assertion goes red.
    Traps: `outcome` not `conclusion` for a `continue-on-error` step, as the file already
    does. `readme-counts` is named in `tests/` or docs only as a script; grep before deleting
    the step (§4, widening a format). A repeated key in `GITHUB_OUTPUT`: last wins. The
@@ -247,7 +270,7 @@ Commit after each step, naming it. Each deviation updates this file in the same 
 |---|---|
 | `nix build .#checks.x86_64-linux.edge-carry` | green; red on its break |
 | `nix build .#checks.x86_64-linux.failure-digest` | green; red on its break |
-| `nix build .#checks.x86_64-linux.edge-report` | green; red on all seven breaks |
+| `nix build .#checks.x86_64-linux.edge-report` | green; red on steps 4 and 5's seven breaks |
 | `nix build .#checks.x86_64-linux.restart-terminal-wrapped` | green; red on both breaks |
 | `nix run nixpkgs#actionlint -- .github/workflows/omarchy-edge.yml` | no findings |
 

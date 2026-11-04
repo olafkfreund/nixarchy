@@ -32,17 +32,34 @@ intent: intent/2026-11-04-1596-hypr-layouts-load-point.md
    It carries a 2-line comment ending
    `# Why: pkgs/AGENTS.md#layouts-load-point`. It sits after `looknfeel` and
    before `autostart`, so the declarative config files stay together before
-   `autostart` spawns anything. Precedence becomes `looknfeel` < `layouts` <
-   Hyprforge's saves < SUPER+L's saved toggles.
+   `autostart` spawns anything.
+   - **Load order:** `looknfeel` < `layouts` < Hyprforge's saves < SUPER+L's
+     saved toggles.
+   - **Measured:** only `looknfeel` < `layouts`, by the probe below.
+   - **Expected, not measured:** the other two follow from require order,
+     because a later `hl.config` overrides an earlier one. Hyprforge's own
+     probe and `looknfeel.lua`'s defaults rely on the same behaviour (codex).
+   - **The seeded copy gets the line too.** A fresh home's seeded
+     `~/.config/hypr/hyprland.lua` comes from this patched store file
+     (`modules/home.nix:1195`), exactly as Hyprforge's line already does
+     (agy).
 
 2. **`tests/session.nix`:** a probe after the Hyprforge one, in the same
-   shape. It appends `hl.config({ general = { border_size = 5 } })` to the
-   user's `~/.config/hypr/looknfeel.lua` (keeping a copy) and writes
-   `~/.config/hypr/layouts.lua` with `border_size = 9`. Then it runs
-   `hyprctl reload` and polls `hyprctl getoption general:border_size -j` for 9.
-   - 9 proves the file loads **after** `looknfeel`.
-   - 5 means it loaded before, or not at all.
-   - 2, Omarchy's default, means neither loaded, which is a broken probe.
+   shape. It runs in two stages, so 9 can't come from a looknfeel edit that
+   never took effect (codex):
+   1. Append `hl.config({ general = { border_size = 5 } })` to the user's
+      `~/.config/hypr/looknfeel.lua`, keeping a `cp -p` copy so the restore
+      keeps `omarchy:` ownership (agy). Reload, and poll for **5**.
+   2. Write `~/.config/hypr/layouts.lua` containing
+      `hl.config({ general = { border_size = 9 } })`, `chown omarchy:` it, and
+      reload. Poll for **9**.
+
+   What the second poll reads:
+   - 9 proves `layouts` loaded **after** `looknfeel`.
+   - 5 means it loaded before `looknfeel`, or not at all.
+
+   A reload re-reads both files, because `bootstrap.lua:4-29` evicts every
+   `hypr.*` module from `package.loaded`.
 
    It restores `looknfeel.lua`, removes `layouts.lua` and reloads. Its §1
    break: move the require above `require("hypr.looknfeel")`, then delete it.
@@ -52,9 +69,14 @@ intent: intent/2026-11-04-1596-hypr-layouts-load-point.md
    Hyprforge's: what the hook is, the precedence, why it isn't in
    `autostart.lua`, and the coexistence note below.
 
-4. **`docs/manual/configuration.md`:** add `layouts` (optional, Omarchy
-   session only) to both shared-file lists, plus one sentence on what it is
-   for and its precedence.
+4. **`docs/manual/configuration.md`:** leave the two brace lists alone,
+   because those five files are seeded and shared. After the first list, add
+   a separate sentence covering:
+   - `~/.config/hypr/layouts.lua` is optional and never seeded;
+   - the Omarchy session loads it automatically after `looknfeel`;
+   - the user's own session loads it only if their own `hyprland.lua`
+     requires it;
+   - the precedence (codex, agy).
 
 ## Alternatives rejected
 
